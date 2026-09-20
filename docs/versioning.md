@@ -1,6 +1,6 @@
 # Versioning
 
-ServiceTag's `versionName` follows **semantic versioning**, `MAJOR.MINOR.PATCH`, in its product sense (adopted 2026-09-18, owner ruling). Classify the change first; only then choose the number.
+ServiceTag's `versionName` follows **semantic versioning**, `MAJOR.MINOR.PATCH`, in its product sense (owner ruling 2026-09-18; lineage reset to 1.0.0 on 2026-09-20). Classify the change first; only then choose the number.
 
 | Change | Bump | ServiceTag meaning |
 |---|---|---|
@@ -16,18 +16,19 @@ ServiceTag's `versionName` follows **semantic versioning**, `MAJOR.MINOR.PATCH`,
 Rules:
 
 - A MINOR increment resets PATCH to 0. A MAJOR increment resets MINOR and PATCH to 0.
-- Android's `versionCode` is independent: a monotonically increasing integer, +1 on every release whatever the `versionName` bump.
+- Android's `versionCode` is independent: a monotonically increasing integer, +1 on every released APK whatever the `versionName` bump. It is never reset — a smaller code cannot install over a larger one without an uninstall.
 - A release is the tag `servicetag-v<versionName>` on the exact green commit; the release workflow refuses to publish when the APK's `versionName` differs from the tag.
-- Released versions are never renamed or re-cut. The releases published before this policy stand as history and are read as `2.5.0`, `2.6.0` and `2.7.0` without their tags being rewritten.
+- Released versions are never renamed or re-cut.
 
-Worked sequence:
+History:
 
-| versionName | versionCode | what it was |
+Before the first public baseline, ServiceTag used temporary 2.x development release numbers during the product split and release-pipeline bring-up. Those release tags were retired before external distribution. The supported release history begins at 1.0.0. The retired development builds used `versionCode` 7 to 10, which is why 1.0.0 carries code 11 and installs over any of them in place; their engineering evidence stands in `docs/architecture/product-split-evidence.md` as pre-1.0 development-release evidence.
+
+Supported release history:
+
+| versionName | versionCode | what |
 |---|---|---|
-| 2.5 (= 2.5.0) | 7 | first ServiceTag release after the product split |
-| 2.6 (= 2.6.0) | 8 | note-link functionality removed |
-| 2.7 (= 2.7.0) | 9 | dashboard search and components; one activity-owned reader mode |
-| 2.7.1 | 10 | #40 empty-store restore prompt, #41 inspect mode — corrective, so PATCH |
-| next bug fix | 11 | 2.7.2 |
-| schedules and reminders | 12 | 2.8.0 |
-| an incompatible backup or protocol redesign | later | 3.0.0 |
+| 1.0.0 | 11 | first supported baseline: NFC asset identity, asset hierarchy, maintenance journal, typed measurements, event profiles, attachments, backup and restore, inspect and write NFC workflows, local-first persistence, a tested upgrade and signing path |
+| next compatible fix | 12 | 1.0.1 |
+| schedules and reminders | after that | 1.1.0 |
+| an incompatible backup or protocol change | after that | 2.0.0 |
