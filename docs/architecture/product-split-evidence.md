@@ -3,6 +3,8 @@
 Commits, builds, test runs and device observations, one section per phase. Fingerprints only —
 no secrets, no physical-device ids, no owner paths.
 
+*Note (2026-09-20): the sections below for ServiceTag 2.5, 2.6, 2.7 and 2.7.1 describe **pre-1.0 development releases**. Their GitHub Releases and tags were retired on 2026-09-20 and the supported lineage starts at 1.0.0 (see the last section and `docs/versioning.md`). The sections themselves are unchanged — they remain the engineering evidence for those builds.*
+
 ## Phase D — ServiceTag identity conversion (§A.1)
 
 **Commits.** Phase D runs from `1a93b55` through `4c79418` on `product-split` — twenty-four
@@ -1120,3 +1122,36 @@ Verified from a fresh download of each release: `apksigner verify` ok; **exactly
 **Physical rows.** None required as a gate: the foreign-tag coexistence (R2's first half) was proven on hardware at 2.7 and 2.7.1 does not touch that path. **R2, bound-tag half — PASS on hardware (owner, 2026-09-18, on the installed 2.7.1):** with Read / inspect tag open, a tag bound to a ServiceTag asset was read; nothing launched; the sheet named it as a ServiceTag tag with the asset listed and the Open asset button shown. Issues #40 and #41 closed.
 
 **ServiceTag 2.7.1 released; the first release under the semantic-versioning policy; the data contract of the migration proof stands unchanged.**
+
+## Version lineage reset — ServiceTag 1.0.0, 2026-09-20
+
+**Ruling (owner, 2026-09-20).** With no external users, the 2.x public release numbers used during the product split and release-pipeline bring-up were development-era numbering. The supported public lineage restarts at **1.0.0** under the semantic-versioning policy (`docs/versioning.md`); Android's `versionCode` stays monotonic (the installed 2.7.1 is code 10, so 1.0.0 is **11**) so the upgrade is in place. Git history, schema and backup-format history, issue history, the signing identity and this evidence file are not rewritten; the 2.x sections above are historical evidence for pre-1.0 development releases.
+
+**Inventory before deletion** (recorded, then archived beside the checkout in `noteNFC-releases/retired-servicetag-2.x/` — APKs, checksum files, release metadata, the annotated tag objects and their commits, with a manifest; every checksum verified):
+
+| retired tag | tag object | commit | APK SHA-256 | published |
+|---|---|---|---|---|
+| `servicetag-v2.5` | `38caf04` | `92d4123` | `ce08aac0b5657880ba92a07be42aa8351235ddd7a67961d994208f484f72f7a0` | 2026-09-18 12:56Z |
+| `servicetag-v2.6` | `6888819` | `769e879` | `053854d4e494b120763fe177057d7c0598cf392b191a7a283a157916a7f5de5c` | 2026-09-18 16:02Z |
+| `servicetag-v2.7` | `9c168e5` | `6643d93` | `d5b4f704c6189e6276bbcbfab6faa41d031af91a05f74fb697236aded71f0891` | 2026-09-18 18:14Z |
+| `servicetag-v2.7.1` | `86d340f` | `584f99a` | `1d4b09c55be03bdc5a2a8c869c316633fea199815e3caf653c72e238eb328bf7` | 2026-09-18 21:11Z |
+
+No `servicetag-v2.8` tag or release existed (cancelled unpublished on 2026-09-18). The four GitHub Releases and their tags were deleted, remote then local, each by exact name; the four commits remain reachable on `master`. Untouched: the tag `pre-split-checkpoint` (→ `ac523d7`), NoteTag's `notetag-v2.0`, `nfc-tag-core-v0.1.0`, and a tagless 2023 draft release ("initial working", no assets, noteNFC-era) left for the owner's decision.
+
+**Commit on `master`**: `6764d1e` — `versionCode` 10 → 11, `versionName` "2.7.1" → "1.0.0"; `docs/versioning.md` rewritten (the historical note verbatim, the supported history from 1.0.0); README's release example and its note-links sentence; the runbook's R2 row ("since issue #41, every build from 1.0.0 on"). No file under `app/src`, `core/src` or `libs` changed: **1.0.0 is byte-identical in code to the retired 2.7.1 build**. Independently reviewed (clean).
+
+| proof | how | result |
+|---|---|---|
+| 1 unit gate from scratch | `--rerun-tasks` at `6764d1e` | 656 tests, 0 failures (app 37 classes/258, core 31/338, nfc-core 6/50, nfc-android 3/10) |
+| 2 connected suite on `emulator-5554` | preserved pre-split set staged so the format-5 restore executed | 83 tests, 0 failures, 23 classes; every class at its 2.7.1 count |
+| 3 structural facts | `git diff --stat 584f99a HEAD -- app/src core/src libs`; submodule status; pin script; version history | code diff empty; gitlink `7e0377a`; pin ok; `versionCode` 7, 8, 9, 10, 11 for 2.5, 2.6, 2.7, 2.7.1, 1.0.0 |
+| 4 built artifact | `aapt2 dump badging` | `versionCode='11' versionName='1.0.0'` |
+| 5 release signing dry run | `tools/release-dry-run.sh` with the published fingerprint | `RELEASE DRY RUN: PASS`, `fingerprint compare: matches`, `version: 1.0.0 matches 1.0.0` |
+| 6 hygiene | the diff `584f99a..6764d1e` | no device id, e-mail, home path, tag UID or note id; single-line commit subject |
+| 7 ordinary CI green | run 35538188301 on `6764d1e` | success |
+
+**Release.** `servicetag-v1.0.0` (annotated, `7b907cb`) → `6764d1e`; run 35538277476 success after the owner's environment review; `ServiceTag-1.0.0.apk` 9,609,605 B, SHA-256 `202540d885cf272141258342f4950124da94b7de3531f997d12c7b9dfcd212ec`; download checksum == published checksum; one signer; certificate == `RELEASE_CERT_SHA256` (read from the repository) and identical to the retired 2.7.1 build's certificate — the signing identity is unchanged across the reset; `versionName` 1.0.0 == tag; `versionCode` 11.
+
+**Phone.** Pending at the time of this entry: the phone was not attached when the release was verified. The install is `adb install -r` of the verified APK over the phone's 2.7.1 (code 10 → 11, same key, in place); recorded below when done.
+
+**ServiceTag 1.0.0 published: the first supported release; the 2.x development line retired and archived; the signing identity and the data contract unchanged.**
