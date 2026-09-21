@@ -75,8 +75,20 @@ NFC back — the ambient tap still opens a bound tag straight away.
   deletes nothing. Restoring the data replaces everything on the phone and makes you type `REPLACE`
   first — unless the phone has no records yet, in which case there is nothing to replace and it only
   asks you to confirm.
+- **A local automation API** — a workstation can drive this phone's records without a screen.
+  Settings > Utilities > Developer API shows a port and an eight-character pairing code; while that
+  screen is open, and only while it is open, the app answers JSON requests on the phone's own
+  loopback address that carry the code. There is one endpoint per thing the app can already do —
+  read and write assets, components, readings, quick actions and journal entries, read tag bindings
+  — and nothing that bypasses one. A wipe, a replace-restore, an export, an NFC write and an
+  attachment's bytes have no endpoint at all. Two more endpoints merge a backup's data archive into
+  this phone *additively*: one returns a **plan** and writes nothing, the other applies it — and
+  only when the plan has no conflicts, because a row that is already here is never overwritten and
+  nothing is ever deleted. `tools/servicetag-mcp/` is the workstation side, an MCP server with one
+  tool per operation, and `docs/api/v1.md` is the contract.
 - **Settings** — appearance (system / light / dark), the palette's name, the attachment folder and
-  the provider behind it, Read / inspect tag, the build's version and a link to the project.
+  the provider behind it, Read / inspect tag, Developer API, the build's version and a link to the
+  project.
 
 ### Note links are NoteTag's
 
@@ -88,6 +100,44 @@ Old data is kept, not discarded. A backup written by any earlier version still c
 `externalLinks` rows and restores them unchanged — the format is untouched at 5 — but nothing in
 ServiceTag creates, shows or opens one. A tag written by an older version to point at a link reads
 as a tag from before the split and does nothing else.
+
+### The automation API is loopback-only and lives as long as its screen
+
+The API exists so an agent or a script on a workstation can do in one call what would otherwise be
+an afternoon of tapping: load a season's worth of readings, rename every component of a system,
+check what the phone actually holds. It is deliberately the narrowest thing that can do that.
+
+- **It answers on `127.0.0.1` and nowhere else**, on port 17337, and it checks the peer's address a
+  second time on every accepted connection. There is no server, no service and no background work:
+  the listener is started by the Developer API screen and stopped when that screen pauses or goes
+  away, so the honest answer to "when is my phone accepting commands?" is "while you are looking at
+  the screen that says so".
+- **Every request must carry `Authorization: Bearer <code>`** with the code on that screen. The code
+  is eight characters from a 32-character unambiguous alphabet, drawn from the platform's CSPRNG, and
+  **new every time the screen opens** — it is never saved, never persisted and never logged. Anything
+  without it gets a 401 with an empty body: no code, no message, no hint about what exists.
+- **The workstation reaches it with `adb forward tcp:17337 tcp:17337`**, which the MCP server runs
+  itself. The app declares `android.permission.INTERNET` because Android gates TCP socket *creation*
+  on it even for a loopback address. `INTERNET` gives the process network capability, but ServiceTag
+  1.1.0 introduces no outbound networking and the Developer API listens only on localhost; future
+  cloud features may make intentional outbound use of the permission under their own designs.
+- **Every endpoint is one of the app's own use cases.** None of them reaches past one, and the
+  destructive ones have no endpoint: no wipe, no replace-restore, no export, no NFC write, no NFC
+  bind, no attachment bytes, and nothing at all for the pre-split link tombstones.
+- **The additive merge import is planned before it writes.** `POST /v1/import-merge/plan` reads an
+  ordinary format-5 data archive, compares it with what this phone holds, and answers with a plan —
+  writing nothing. Per row: not here → **insert**, with the UUID preserved; here and identical →
+  **no-op**; here and different → **conflict**. NFC tags are matched on their payload identity as
+  well as their row id, so the same physical tag cannot end up bound to two assets. `POST
+  /v1/import-merge/apply` writes the plan, and **only when it has no conflicts** — one conflict
+  anywhere and nothing at all is written, with the conflict list returned instead. So a merge can
+  never overwrite or delete a row this phone already had. An attachment row is written only when its
+  bytes are already in the attachment folder. Resolving conflicts, and mapping an imported asset
+  onto a local one, are a later release; there is no screen for any of it in 1.1.0.
+
+The full contract — endpoints, request and response shapes, status codes and limits — is
+[`docs/api/v1.md`](docs/api/v1.md). The workstation side is
+[`tools/servicetag-mcp/`](tools/servicetag-mcp/README.md).
 
 ## Building
 

@@ -29,6 +29,7 @@ Supported release history:
 | versionName | versionCode | what |
 |---|---|---|
 | 1.0.0 | 11 | first supported baseline: NFC asset identity, asset hierarchy, maintenance journal, typed measurements, event profiles, attachments, backup and restore, inspect and write NFC workflows, local-first persistence, a tested upgrade and signing path |
-| next compatible fix | 12 | 1.0.1 |
-| schedules and reminders | after that | 1.1.0 |
+| 1.1.0 | 12 | local automation API: a loopback JSON API behind a per-session pairing code, alive only while the Developer API screen is open; a workstation MCP server at `tools/servicetag-mcp/`; an additive backup import that inserts what is new and never updates or deletes. No schema and no backup-format change. Contract: `docs/api/v1.md` |
+| next compatible fix | 13 | 1.1.1 |
+| schedules and reminders | after that | 1.2.0 |
 | an incompatible backup or protocol change | after that | 2.0.0 |
