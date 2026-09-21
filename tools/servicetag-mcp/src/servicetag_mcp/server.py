@@ -23,6 +23,7 @@ from urllib.parse import quote
 import httpx
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from pydantic import ValidationError
 
 from .client import ApiError, Device, MAX_IMPORT_BYTES, NotPaired
 
@@ -889,6 +890,12 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     )
 
 
+_GUARD_PROBE_KEY = "__servicetag_guard_probe__"
+"""A key no real tool could ever have — `func_metadata.py` raises `InvalidSignature` for any
+parameter starting with `_` (see `test_argument_guard.py`'s G6 note) — used only to *validate* that
+`extra="forbid"` actually took effect (G3), never sent to a tool or logged anywhere a value would be."""
+
+
 def _forbid_unknown_arguments(tools: list[Any], *, expected_count: int | None = None) -> None:
     """Applied once, right below, after every `@mcp.tool()` registration above — to all of them at
     once, not as a per-tool check. Two things, per tool:
@@ -897,8 +904,15 @@ def _forbid_unknown_arguments(tools: list[Any], *, expected_count: int | None = 
        2.2.0's default — silently ignoring an extra key, since `ArgModelBase.model_config =
        ConfigDict(arbitrary_types_allowed=True)` sets no `extra=`
        (`mcp/server/mcpserver/utilities/func_metadata.py:96`-ish) — to `extra="forbid"`, then
-       rebuilt so the new config takes effect on the model's next validation. (G3: the rebuild is
-       then *verified*, not just performed — see below.)
+       rebuilt so the new config takes effect on the model's next validation. (G3: the rebuild's
+       *effect on validation* is then verified by actually validating a probe payload — see below.
+       A first attempt at this checked `model_json_schema()` instead, which is unsound: pydantic's
+       schema generator reads `model_config` live regardless of whether `model_rebuild` ever ran, so
+       that check reports `additionalProperties: false` even in the exact silent-degradation mode
+       it was meant to catch — confirmed by mutating `model_config` on a plain model with no rebuild
+       at all and reading its schema. Kept below anyway, since it is still what makes the
+       *published* schema say `additionalProperties: false` — see point 2 — but it proves nothing
+       about condition 6 on its own now.)
     2. The already-computed, published JSON schema (`Tool.parameters`, a plain dict frozen at
        registration time and never auto-refreshed by a later `model_config` change) is given
        `additionalProperties: False` directly, so a client reading `tools/list` sees the same
@@ -919,13 +933,15 @@ def _forbid_unknown_arguments(tools: list[Any], *, expected_count: int | None = 
 
     Leans on `mcp` 2.2.0 internals that are not part of its public contract: `Tool.fn_metadata`,
     `FuncMetadata.arg_model` as a pydantic model *class* with a mutable `model_config` dict, a
-    `model_rebuild` classmethod and a `model_json_schema` classmethod, and `Tool.parameters` as a
+    `model_rebuild` classmethod, a `model_json_schema` classmethod and a `model_validate` classmethod
+    whose failure is a pydantic `ValidationError` with an `errors()` list, and `Tool.parameters` as a
     plain, later-mutable dict. `uv.lock` pins the resolved version, so this is stable until the next
     deliberate dependency bump. If any of that shape is gone — or present but inert, the
-    silent-degradation mode G3 closes, where the mutation runs without error but no longer changes
-    what `model_json_schema()` reports — this raises here, loudly, at *import* time, since the call
-    below runs at module load, rather than silently registering an unguarded tool: a guard that
-    quietly stops guarding after a dependency bump is worse than none (owner ruling, 2026-09-21).
+    silent-degradation mode G3 closes, where `model_rebuild` runs without error but validation
+    against the rebuilt model keeps accepting an extra key anyway — this raises here, loudly, at
+    *import* time, since the call below runs at module load, rather than silently registering an
+    unguarded tool: a guard that quietly stops guarding after a dependency bump is worse than none
+    (owner ruling, 2026-09-21).
     """
     if not tools:
         raise RuntimeError("_forbid_unknown_arguments: no tools were registered — call it last")
@@ -940,12 +956,27 @@ def _forbid_unknown_arguments(tools: list[Any], *, expected_count: int | None = 
             arg_model.model_config["extra"] = "forbid"
             arg_model.model_rebuild(force=True)
             tool.parameters["additionalProperties"] = False
-            # G3: condition 6 is "never a silent skip" — checking the internals are *shaped* right
-            # is not the same as checking the mutation *worked*. A pydantic release that caches the
-            # core schema could make `model_config["extra"]` + `model_rebuild(force=True)` a no-op
-            # without either call raising; this is what still catches that.
+            # This is necessary but not sufficient for condition 6 (see the docstring above): the
+            # schema generator reads `model_config` live, so it can say `false` even when the
+            # *validator* was never rebuilt. It still matters, because it is what a client reading
+            # `tools/list` actually sees.
             if arg_model.model_json_schema().get("additionalProperties") is not False:
-                raise TypeError("extra=forbid did not take effect after model_rebuild")
+                raise TypeError("extra=forbid is not reflected in the published schema")
+            # G3, the effect check: validate an inert probe payload and require pydantic to refuse
+            # the extra key *specifically* — a missing-required error alone (which a degraded model
+            # would also raise, if the tool has any required field) does not count, and neither does
+            # no error at all (which a degraded, all-optional tool would produce).
+            try:
+                arg_model.model_validate({_GUARD_PROBE_KEY: None})
+            except ValidationError as validation_error:
+                refused_as_extra = any(
+                    error.get("type") == "extra_forbidden" and error.get("loc") == (_GUARD_PROBE_KEY,)
+                    for error in validation_error.errors()
+                )
+                if not refused_as_extra:
+                    raise TypeError("extra=forbid rejected the probe but not as an extra field") from None
+            else:
+                raise TypeError("extra=forbid did not take effect on validation")
         except (AttributeError, TypeError, KeyError) as exc:
             raise RuntimeError(
                 f"the guard's assumptions about mcp's internals do not hold for tool "

@@ -258,13 +258,14 @@ def test_the_guard_refuses_to_run_over_an_empty_tool_list() -> None:
         server_module._forbid_unknown_arguments([])
 
 
-def test_the_guard_raises_when_the_config_mutation_has_no_effect_on_the_schema() -> None:
-    """G3, the gap the scoped re-review's condition-6 probe actually found: a tool whose shape is
-    completely intact — `model_config` is a real dict, `model_rebuild` and `model_json_schema` are
-    both callable — but where setting `extra="forbid"` and rebuilding silently fails to change what
-    `model_json_schema()` reports (the pydantic-release-caches-the-core-schema scenario). Every
-    individual statement in the guard's per-tool block succeeds; only the after-the-fact check
-    catches it."""
+def test_the_guard_raises_when_the_published_schema_never_gets_additional_properties_false() -> None:
+    """The *schema* assertion specifically (point 2 of `_forbid_unknown_arguments`'s docstring): a
+    hand-made fake whose `model_json_schema()` never reports `additionalProperties: false` at all,
+    however `model_config`/`model_rebuild` behave. This is the guard's schema check working; it is
+    **not** a proof of condition 6 on its own — that check reads `model_config` live and can pass
+    even when the validator itself was never rebuilt, which is exactly what
+    `test_the_guard_raises_when_a_genuine_arg_models_rebuild_does_not_change_validation`, directly
+    below, reproduces for real (round 2 of this guard round)."""
 
     class DegradedArgModel:
         model_config: dict = {}
@@ -284,6 +285,34 @@ def test_the_guard_raises_when_the_config_mutation_has_no_effect_on_the_schema()
     )
     with pytest.raises(RuntimeError, match="degraded_tool"):
         server_module._forbid_unknown_arguments([fake_tool])
+
+
+def test_the_guard_raises_when_a_genuine_arg_models_rebuild_does_not_change_validation() -> None:
+    """G3, round 2: the schema-only check the first G3 fix relied on is unsound. Controller
+    evidence: `pydantic`'s `model_json_schema()` reads `model_config` live regardless of whether
+    `model_rebuild` ever ran, so mutating `model_config["extra"] = "forbid"` on a plain model with
+    **no rebuild at all** already makes its schema say `additionalProperties: false` — while
+    `model_validate` on that same, never-rebuilt model still silently *accepts* an unknown key. So
+    this reproduces the real failure mode instead of a hand-made one: a genuine pydantic arg model,
+    built by the SDK itself for a throwaway tool, whose `model_rebuild` is turned into a no-op
+    afterwards — patched on this one generated class only, never on the shared `ArgModelBase`, so no
+    other test and none of the real server's 21 already-guarded tools are affected. The guard must
+    still raise, because the *effect check* (validating a probe payload) catches what the schema
+    check cannot."""
+    throwaway = server_module._StrictMCPServer("throwaway-guard-probe-g3-round-2")
+
+    @throwaway.tool()
+    def demo_tool(a: str = "x") -> dict:
+        return {"a": a}
+
+    tool = throwaway._tool_manager.get_tool("demo_tool")
+    tool.fn_metadata.arg_model.model_rebuild = classmethod(lambda cls, **kwargs: None)
+
+    with pytest.raises(RuntimeError, match="demo_tool"):
+        server_module._forbid_unknown_arguments([tool])
+
+    assert len(server_module.TOOL_NAMES) == 21
+    assert len(server_module.mcp._tool_manager.list_tools()) == 21
 
 
 # --- G5: a tool registered (or dropped) around the guard's call site must not go unnoticed ---------
