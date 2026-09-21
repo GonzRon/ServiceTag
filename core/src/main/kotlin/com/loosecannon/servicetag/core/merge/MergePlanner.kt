@@ -16,7 +16,7 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
-import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.AttachmentStore
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
@@ -345,6 +345,13 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
     // Four questions in one fixed order (decision 11). The locator check comes first on purpose:
     // when a local row already claims a locator its bytes are of course present, so asking "are the
     // bytes here?" first would answer yes and produce an INSERT the unique index refuses.
+    //
+    // That locator arm is a **planner guard** in 1.1.0, not a live path: `BackupCodec.kt:392`
+    // requires `AttachmentLocator.matchesShape`, and that shape embeds the row's own id
+    // (`model/Attachment.kt:78`–`80`), so through the API a locator collision implies an id
+    // collision — which the `local != null` pair two arms above has already answered. The check is
+    // kept because it is one map lookup, because a hand-built archive is not obliged to be
+    // codec-shaped, and because slice B's owner remapping makes it live.
     val attachmentWrites = mutableListOf<Attachment>()
     for (dto in data.attachments) {
         val row = dto.toDomain()
@@ -466,23 +473,36 @@ private fun AssetEventDto.ordered() = copy(
  *
  * Each file is hashed and sized in one streaming pass with a 64 KiB buffer, exactly as
  * `AttachmentSweep.kt:45`–`65`'s `sha256Of` does and for the same reason: an attachment can be
- * hundreds of megabytes and is never materialised. A locator that is absent, or that opens and then
- * cannot be read, is simply not in the result — which the planner reports as
+ * hundreds of megabytes and is never materialised. A locator that is absent, that **fails to open**,
+ * or that opens and then cannot be read, is simply not in the result — which the planner reports as
  * `ATTACHMENT_BYTES_ABSENT`, the same answer `sha256Of` gives an unreadable file.
  *
- * Returns an empty map when there is no attachment folder at all; the caller passes that fact
- * separately, because "no folder" and "no bytes" are different answers.
+ * The open is inside the `try` on purpose, and that is the difference from `sha256Of`'s shape:
+ * `SafTreeAttachmentStore.open` goes through `ContentResolver.openInputStream`, which raises
+ * `FileNotFoundException` — an `IOException` — for a document that went away between the tree walk
+ * and the open, or for a grant revoked in between. `sha256Of` feeds a best-effort sweep, so letting
+ * that escape costs a sweep; this feeds the whole plan and the whole apply, where it would turn one
+ * raced file into a failed merge. One raced file is a missing-bytes answer for one row.
+ *
+ * Takes the [store] the caller already resolved rather than asking [AttachmentStorage] again, so
+ * "is there a folder?" and "what is in it?" are one answer and not two (review nit 11). A null
+ * [store] is no attachment folder at all and yields an empty map; the caller passes that fact to
+ * the planner separately, because "no folder" and "no bytes" are different answers.
  */
 internal suspend fun storedBytesOf(
     backup: Backup,
-    storage: AttachmentStorage,
+    store: AttachmentStore?,
 ): Map<String, StoredBytes> {
-    val store = storage.store() ?: return emptyMap()
+    if (store == null) return emptyMap()
     val answers = LinkedHashMap<String, StoredBytes>()
     for (locator in backup.data.attachments.map { it.storageLocator }.distinct()) {
         val digest = MessageDigest.getInstance("SHA-256")
         var size = 0L
-        val source = store.open(locator) ?: continue
+        val source = try {
+            store.open(locator)
+        } catch (e: IOException) {
+            null
+        } ?: continue
         val readable = try {
             source.use { input ->
                 val buffer = ByteArray(64 * 1024)

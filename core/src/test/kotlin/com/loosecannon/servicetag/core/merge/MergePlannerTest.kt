@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.PayloadFormat
+import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileField
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.TagBinding
@@ -48,8 +49,12 @@ import org.junit.jupiter.api.Test
  *
  * Two cases are deliberate **negative controls** — `the physical uid is never identity` and
  * `a matching name alone is neither identity nor a hint` — and they are labelled so, because a
- * reader should not mistake them for behaviour tests. Two more assert snapshots the schema or the
- * codec would not allow, and are labelled as planner guards for the same reason.
+ * reader should not mistake them for behaviour tests. **Seven** more are **planner guards**: they
+ * assert a rule against an archive or a snapshot the codec or the schema would not allow, so they
+ * cannot fire through the API in 1.1.0. Each one says so in its own KDoc and names the line that
+ * refuses it, because a reader should not mistake a guard for a live path either — and the guards
+ * are kept because the planner must not depend on the codec for its own invariants, and because
+ * #44's slice B makes several of them live.
  *
  * The end-to-end half — the real codec, the fakes, one transaction, the refusals — is
  * `ImportBackupMergeTest`.
@@ -115,15 +120,21 @@ class MergePlannerTest {
     private fun field(id: String, definitionId: String, sortOrder: Int = 0) =
         ProfileField(id = id, definitionId = DefinitionId(definitionId), required = false, sortOrder = sortOrder)
 
+    /** A profile's consumable: the fourth child list, and the second of the four durable child ids. */
+    private fun consumable(id: String, sortOrder: Int = 0) = ProfileConsumable(
+        id = id, name = "Cartridge", defaultQuantity = 1.0, unit = "ea", sortOrder = sortOrder,
+    )
+
     private fun profile(
         id: String,
         assetId: String,
         fields: List<ProfileField> = emptyList(),
+        consumables: List<ProfileConsumable> = emptyList(),
     ) = EventProfile(
         id = ProfileId(id), assetId = AssetId(assetId), name = "Action $id",
         eventKind = EventKind.MEASUREMENT, defaultTitle = "Action $id", templateKey = null,
         sortOrder = 0, archivedAt = null, createdAt = 1L, updatedAt = 2L,
-        fields = fields, consumables = emptyList(),
+        fields = fields, consumables = consumables,
     )
 
     private fun measurement(id: String, definitionId: String) = Measurement(
@@ -131,16 +142,23 @@ class MergePlannerTest {
         unit = "", sortOrder = 0,
     )
 
+    /** An event's consumable use: the last of the four durable child ids. */
+    private fun usage(id: String, sortOrder: Int = 0) = ConsumableUsage(
+        id = id, name = "Cartridge", quantity = 1.0, unit = "ea", sortOrder = sortOrder,
+    )
+
     private fun event(
         id: String,
         assetId: String,
         title: String = "Filter change",
         sourceRef: String? = null,
+        profileId: String? = null,
         measurements: List<Measurement> = emptyList(),
         consumables: List<ConsumableUsage> = emptyList(),
     ) = AssetEvent(
         id = EventId(id), assetId = AssetId(assetId), kind = EventKind.MAINTENANCE, title = title,
-        profileId = null, occurredOn = "2026-09-21", occurredTime = null, tzId = "UTC", notes = "",
+        profileId = profileId?.let(::ProfileId),
+        occurredOn = "2026-09-21", occurredTime = null, tzId = "UTC", notes = "",
         source = EventSource.MANUAL, sourceRef = sourceRef, createdAt = 7L, updatedAt = 8L,
         measurements = measurements, consumables = consumables,
     )
@@ -160,6 +178,22 @@ class MergePlannerTest {
         id = AttachmentId(id), owner = AttachmentOwner.OfAsset(AssetId(assetId)),
         kind = AttachmentKind.DOCUMENT, displayName = "Manual.pdf",
         mimeType = "application/pdf", sizeBytes = sizeBytes, sha256 = sha256,
+        storageLocator = locator, capturedOn = null, createdAt = 9L, updatedAt = 10L,
+    )
+
+    /**
+     * The other arm of [AttachmentOwner], which the asset-owned fixture above cannot reach: a row
+     * that belongs to an **event**. `AttachmentLocator.dirFor` puts those under `events/<id>`, so
+     * the default locator is the codec-shaped one for this owner.
+     */
+    private fun eventAttachment(
+        id: String,
+        eventId: String,
+        locator: String = "events/$eventId/$id.pdf",
+    ) = Attachment(
+        id = AttachmentId(id), owner = AttachmentOwner.OfEvent(EventId(eventId)),
+        kind = AttachmentKind.DOCUMENT, displayName = "Manual.pdf",
+        mimeType = "application/pdf", sizeBytes = 4L, sha256 = bytesSha,
         storageLocator = locator, capturedOn = null, createdAt = 9L, updatedAt = 10L,
     )
 
@@ -256,15 +290,22 @@ class MergePlannerTest {
 
     // --- the same id ------------------------------------------------------------------------
 
-    /** #44 acceptance 4: the same archive twice is a no-op. */
+    /**
+     * #44 acceptance 4: the same archive twice is a no-op.
+     *
+     * The row carries a full manufacturer/model/serial signature on purpose, so this also pins the
+     * one line that stops an asset being reported as a duplicate of *itself* — without which every
+     * idempotent re-import would hand the owner a review hint per asset.
+     */
     @Test
     fun `rows already here with identical content are IDENTICAL and nothing is written`() {
-        val rows = listOf(asset("a1", "Hot tub"))
+        val rows = listOf(asset("a1", "Hot tub", manufacturer = "Cub Cadet", model = "XT1", serial = "SN-7"))
         val plan = mergePlanOf(backupOf(assets = rows), snapshotOf(assets = rows))
 
         assertTrue(plan.applicable)
         assertEquals(MergeTally(0, 1, 0, 0), plan.tally(MergeTable.ASSETS))
         assertEquals(emptyList(), plan.writes.assets)
+        assertEquals(emptyList(), plan.duplicateCandidates)
     }
 
     /** #44 acceptance 5: divergence is a conflict, and `updatedAt` never picks a winner. */
@@ -573,7 +614,18 @@ class MergePlannerTest {
         assertEquals(MergeTally(2, 0, 0, 0), plan.tally(MergeTable.PROFILES))
     }
 
-    /** #44: "never overwrite different local bytes merely because a locator collides". */
+    /**
+     * #44: "never overwrite different local bytes merely because a locator collides".
+     *
+     * **Planner guard.** Through the API this arm cannot fire: `BackupCodec.kt:392` requires
+     * `AttachmentLocator.matchesShape`, and that shape embeds the row's own id
+     * (`model/Attachment.kt:78`–`80`), so a locator collision implies an id collision — which the
+     * `local != null` pair answers two arms earlier — and an archive-internal duplicate locator is
+     * refused by `BackupCodec.kt:397`–`399`. The fixture's shared locator is therefore *deliberately
+     * not* codec-shaped, and cannot be: two different rows sharing a codec-shaped locator is the
+     * very thing the shape makes impossible. Kept, and tested, because the planner must not depend
+     * on the codec for its own invariants and because slice B's owner remapping makes it live.
+     */
     @Test
     fun `an attachment whose locator is claimed by another row is a CONFLICT`() {
         val locator = "assets/a1/shared.pdf"
@@ -657,6 +709,76 @@ class MergePlannerTest {
         )
     }
 
+    /** The third durable child id, `profile_consumable.id`, and its own claim map. */
+    @Test
+    fun `a profile whose consumable id is held by another local profile is a CONFLICT`() {
+        val plan = mergePlanOf(
+            backupOf(
+                assets = listOf(asset("a1", "Hot tub")),
+                profiles = listOf(profile("p-import", "a1", consumables = listOf(consumable("pc-shared")))),
+            ),
+            snapshotOf(
+                assets = listOf(asset("a1", "Hot tub")),
+                profiles = listOf(profile("p-local", "a1", consumables = listOf(consumable("pc-shared")))),
+            ),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(
+            MergeDecision(
+                MergeTable.PROFILES, "p-import", MergeVerdict.CONFLICT,
+                MergeReason.CHILD_ROW_ID_TAKEN, "pc-shared",
+            ),
+            plan.decision(MergeTable.PROFILES, "p-import"),
+        )
+    }
+
+    /** The fourth, `consumable_usage.id`. Four child keys, four claim maps, four cases. */
+    @Test
+    fun `an event whose consumable usage id is held by another local event is a CONFLICT`() {
+        val plan = mergePlanOf(
+            backupOf(
+                assets = listOf(asset("a1", "Hot tub")),
+                events = listOf(event("e-import", "a1", consumables = listOf(usage("cu-shared")))),
+            ),
+            snapshotOf(
+                assets = listOf(asset("a1", "Hot tub")),
+                events = listOf(event("e-local", "a1", consumables = listOf(usage("cu-shared")))),
+            ),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(
+            MergeDecision(
+                MergeTable.EVENTS, "e-import", MergeVerdict.CONFLICT,
+                MergeReason.CHILD_ROW_ID_TAKEN, "cu-shared",
+            ),
+            plan.decision(MergeTable.EVENTS, "e-import"),
+        )
+    }
+
+    // --- the links table, which travels in every real archive as a 2.6 tombstone ------------
+
+    /**
+     * The tombstone rows merge like any other table's, and diverge like any other table's. Both
+     * arms in one case, because a table with only an INSERT case has no divergence coverage at all.
+     */
+    @Test
+    fun `a link already here is IDENTICAL, and a diverged one is a CONFLICT`() {
+        val plan = mergePlanOf(
+            backupOf(links = listOf(link("l1"), link("l2"))),
+            snapshotOf(links = listOf(link("l1").copy(label = "Spa manual"), link("l2"))),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(MergeTally(insert = 0, identical = 1, conflict = 1, skipped = 0), plan.tally(MergeTable.LINKS))
+        assertEquals(
+            MergeDecision(MergeTable.LINKS, "l1", MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, "l1"),
+            plan.decision(MergeTable.LINKS, "l1"),
+        )
+        assertEquals(MergeVerdict.IDENTICAL, plan.decision(MergeTable.LINKS, "l2").verdict)
+    }
+
     // --- foreign keys and the tree ----------------------------------------------------------
 
     @Test
@@ -727,6 +849,162 @@ class MergePlannerTest {
                 MergeReason.OWNER_NOT_AVAILABLE, "a-missing",
             ),
             plan.decision(MergeTable.DEFINITIONS, "d1"),
+        )
+    }
+
+    /**
+     * A second **live** cascade: the event names a profile that *is* in the archive — which is what
+     * `decode` requires — and that profile was refused for listing one reading twice. So the event
+     * has no profile to point at, and says so with the profile's id.
+     */
+    @Test
+    fun `an event whose profile was not accepted is OWNER_NOT_AVAILABLE`() {
+        val plan = mergePlanOf(
+            backupOf(
+                assets = listOf(asset("a1", "Hot tub")),
+                definitions = listOf(definition("d1", "a1")),
+                profiles = listOf(profile("p1", "a1", listOf(field("pf1", "d1"), field("pf2", "d1", sortOrder = 1)))),
+                events = listOf(event("e1", "a1", profileId = "p1")),
+            ),
+            snapshotOf(),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(MergeReason.PROFILE_FIELD_DEFINITION_TAKEN, plan.decision(MergeTable.PROFILES, "p1").reason)
+        assertEquals(
+            MergeDecision(
+                MergeTable.EVENTS, "e1", MergeVerdict.CONFLICT,
+                MergeReason.OWNER_NOT_AVAILABLE, "p1",
+            ),
+            plan.decision(MergeTable.EVENTS, "e1"),
+        )
+    }
+
+    /**
+     * The third **live** cascade, and the reason a measurement's definition is checked separately
+     * from the event's asset: the definition's key is taken, so the reading the event carries names
+     * something that will not exist.
+     */
+    @Test
+    fun `an event whose measurement names a conflicted definition is OWNER_NOT_AVAILABLE`() {
+        val plan = mergePlanOf(
+            backupOf(
+                assets = listOf(asset("a1", "Hot tub")),
+                definitions = listOf(definition("d1", "a1", key = "ph")),
+                events = listOf(event("e1", "a1", measurements = listOf(measurement("m1", "d1")))),
+            ),
+            snapshotOf(
+                assets = listOf(asset("a1", "Hot tub")),
+                definitions = listOf(definition("d-local", "a1", key = "ph")),
+            ),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(MergeReason.DEFINITION_KEY_TAKEN, plan.decision(MergeTable.DEFINITIONS, "d1").reason)
+        assertEquals(
+            MergeDecision(
+                MergeTable.EVENTS, "e1", MergeVerdict.CONFLICT,
+                MergeReason.OWNER_NOT_AVAILABLE, "d1",
+            ),
+            plan.decision(MergeTable.EVENTS, "e1"),
+        )
+    }
+
+    /**
+     * **Planner guard.** A DERIVED row reads two other definitions, and `d-missing` is in neither
+     * the archive nor the destination. `BackupCodec.kt:287`–`295` refuses that archive outright
+     * (`journal/Derived.kt:51` will not even accept a source that is not ENTERED), so this cannot
+     * arrive through the API — but the ENTERED-before-DERIVED ordering is only *safe* because the
+     * planner checks rather than assumes.
+     */
+    @Test
+    fun `a derived definition whose source is nowhere is OWNER_NOT_AVAILABLE`() {
+        val plan = mergePlanOf(
+            backupOf(
+                assets = listOf(asset("a1", "Hot tub")),
+                definitions = listOf(
+                    definition("d1", "a1", derived = DerivedSpec(DerivedFormula.PERCENT_DROP, DefinitionId("d2"), DefinitionId("d-missing"))),
+                    definition("d2", "a1"),
+                ),
+            ),
+            snapshotOf(),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(MergeVerdict.INSERT, plan.decision(MergeTable.DEFINITIONS, "d2").verdict)
+        assertEquals(
+            MergeDecision(
+                MergeTable.DEFINITIONS, "d1", MergeVerdict.CONFLICT,
+                MergeReason.OWNER_NOT_AVAILABLE, "d-missing",
+            ),
+            plan.decision(MergeTable.DEFINITIONS, "d1"),
+        )
+    }
+
+    /**
+     * **Planner guard.** A 2.6 tombstone row still carries an owning asset, and the same rule
+     * applies to it as to every other table. `BackupCodec.kt:256`–`261` refuses a link whose asset
+     * is not in the file, so through the API this arm is unreachable — and through slice B's
+     * remapping it is not.
+     */
+    @Test
+    fun `a link whose owning asset is nowhere is OWNER_NOT_AVAILABLE`() {
+        val plan = mergePlanOf(
+            backupOf(links = listOf(link("l1", assetId = "a-missing"))),
+            snapshotOf(),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(
+            MergeDecision(
+                MergeTable.LINKS, "l1", MergeVerdict.CONFLICT,
+                MergeReason.OWNER_NOT_AVAILABLE, "a-missing",
+            ),
+            plan.decision(MergeTable.LINKS, "l1"),
+        )
+    }
+
+    /**
+     * **Planner guard.** A tag's asset, checked after every payload question — so a tag with an
+     * unavailable owner is reported as an owner problem and not as a payload one. `decode` refuses
+     * a dangling tag target (`BackupCodec.kt:200`).
+     */
+    @Test
+    fun `a tag whose asset is nowhere is OWNER_NOT_AVAILABLE`() {
+        val plan = mergePlanOf(
+            backupOf(tags = listOf(tag("t1", "key-1", "a-missing"))),
+            snapshotOf(),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(
+            MergeDecision(
+                MergeTable.TAGS, "t1", MergeVerdict.CONFLICT,
+                MergeReason.OWNER_NOT_AVAILABLE, "a-missing",
+            ),
+            plan.decision(MergeTable.TAGS, "t1"),
+        )
+    }
+
+    /**
+     * **Planner guard**, and the only case that exercises `TagTarget.LinkTarget` at all: a tag may
+     * point at a link instead of an asset, and that reference gets the same rule. `decode` refuses
+     * a dangling one; the arm exists because the planner owns its own invariants.
+     */
+    @Test
+    fun `a tag whose link is nowhere is OWNER_NOT_AVAILABLE`() {
+        val plan = mergePlanOf(
+            backupOf(tags = listOf(tag("t1", "key-1", assetId = null, linkId = "l-missing"))),
+            snapshotOf(),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(
+            MergeDecision(
+                MergeTable.TAGS, "t1", MergeVerdict.CONFLICT,
+                MergeReason.OWNER_NOT_AVAILABLE, "l-missing",
+            ),
+            plan.decision(MergeTable.TAGS, "t1"),
         )
     }
 
@@ -824,6 +1102,61 @@ class MergePlannerTest {
             plan.decision(MergeTable.ATTACHMENTS, "att1"),
         )
         assertEquals(MergeTally(1, 0, 0, 0), plan.tally(MergeTable.ASSETS))
+    }
+
+    /**
+     * The other arm of the owner sum type, which every other attachment case leaves untouched: a
+     * row owned by an **event**, whose availability is answered against the events pass rather than
+     * the assets pass. It is also the only case that reaches `dto.assetId ?: dto.eventId!!`.
+     */
+    @Test
+    fun `an event-owned attachment row is INSERTed when the store holds its bytes`() {
+        val plan = mergePlanOf(
+            backupOf(
+                assets = listOf(asset("a1", "Hot tub")),
+                events = listOf(event("e1", "a1")),
+                attachments = listOf(eventAttachment("att1", "e1")),
+            ),
+            snapshotOf(storedBytes = mapOf("events/e1/att1.pdf" to storedFour)),
+        )
+
+        assertTrue(plan.applicable)
+        assertEquals(MergeTally(1, 0, 0, 0), plan.tally(MergeTable.ATTACHMENTS))
+        assertEquals(
+            AttachmentOwner.OfEvent(EventId("e1")),
+            plan.writes.attachments.single().owner,
+        )
+    }
+
+    /**
+     * The cascade on that arm: the owning event is in the archive and was refused, so the row that
+     * hangs off it is `OWNER_NOT_AVAILABLE` and names the **event**. Reachable through the API,
+     * because an event can conflict on `(source, sourceRef)` while being absent locally.
+     */
+    @Test
+    fun `an event-owned attachment whose event was not accepted is OWNER_NOT_AVAILABLE`() {
+        val plan = mergePlanOf(
+            backupOf(
+                assets = listOf(asset("a1", "Hot tub")),
+                events = listOf(event("e1", "a1", sourceRef = "ref-1")),
+                attachments = listOf(eventAttachment("att1", "e1")),
+            ),
+            snapshotOf(
+                assets = listOf(asset("a1", "Hot tub")),
+                events = listOf(event("e-local", "a1", sourceRef = "ref-1")),
+                storedBytes = mapOf("events/e1/att1.pdf" to storedFour),
+            ),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(MergeReason.EVENT_SOURCE_REF_TAKEN, plan.decision(MergeTable.EVENTS, "e1").reason)
+        assertEquals(
+            MergeDecision(
+                MergeTable.ATTACHMENTS, "att1", MergeVerdict.CONFLICT,
+                MergeReason.OWNER_NOT_AVAILABLE, "e1",
+            ),
+            plan.decision(MergeTable.ATTACHMENTS, "att1"),
+        )
     }
 
     // --- hints, and the shape of the report -------------------------------------------------

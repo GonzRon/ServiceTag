@@ -37,9 +37,12 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * [UnitOfWork.read]'s own contract says writing inside it is illegal, and a write transaction
  * already gives one consistent view. The two store questions are asked before the transaction
  * opens, for the same reason [BuildBackupMergePlan] asks them there — `open` is a provider round
- * trip. One consequence, stated rather than hidden: a file that vanishes between that read and the
- * write still yields an INSERT, because there is no transaction that spans Room and a document
- * provider. `docs/api/v1.md` records it.
+ * trip, and it asks `store()` once so both questions are about one state of the store. One
+ * consequence, stated rather than hidden: a file that vanishes **or is replaced** between that read
+ * and the write still yields an INSERT — a replacement being the likelier of the two on a synced
+ * folder, and the one that leaves a row whose recorded sha256 no longer describes what is stored —
+ * because there is no transaction that spans Room and a document provider. `docs/api/v1.md`
+ * records it.
  *
  * Every refusal happens before the first row is written, and any that did not would roll back with
  * the transaction. So a refused merge leaves this install byte for byte as it was, which is #44's
@@ -61,8 +64,9 @@ class ApplyBackupMergePlan(
         // transaction at all.
         if (!plan.applicable) throw MergeRefused(plan.report())
 
-        val configured = storage.store() != null
-        val stored = storedBytesOf(plan.backup, storage)
+        val store = storage.store()
+        val configured = store != null
+        val stored = storedBytesOf(plan.backup, store)
         return uow.write {
             val fresh = mergePlanOf(
                 plan.backup,

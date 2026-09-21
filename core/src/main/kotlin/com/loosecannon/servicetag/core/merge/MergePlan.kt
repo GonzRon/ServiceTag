@@ -60,12 +60,23 @@ enum class MergeReason {
     /** `asset_event(source, source_ref)` is unique and something else holds this one. */
     EVENT_SOURCE_REF_TAKEN,
 
-    /** `attachment(storage_provider, storage_locator)` is unique and another row claims it. */
+    /**
+     * `attachment(storage_provider, storage_locator)` is unique and another row claims it.
+     *
+     * A **planner guard** in 1.1.0: the codec requires a locator whose shape embeds the row's own
+     * id (`BackupCodec.kt:392`, `model/Attachment.kt:78`–`80`), so through the API a locator
+     * collision implies an id collision and is answered as `CONTENT_DIFFERS` or `IDENTICAL` first.
+     * Reachable from a hand-built archive, and live the moment slice B remaps owners.
+     */
     ATTACHMENT_LOCATOR_TAKEN,
 
     /**
      * `profile_field(profile_id, definition_id)` is unique and this profile offers one reading
      * twice — the fifth unique index, which `BackupCodec.decode` does not check.
+     *
+     * The one reason whose [MergeDecision.detail] is **not** a row id: it is the definition id the
+     * pair names, because in the only live case the holder is the incoming profile itself and its
+     * own id would say nothing.
      */
     PROFILE_FIELD_DEFINITION_TAKEN,
 
@@ -100,7 +111,9 @@ enum class MergeHint { SAME_MANUFACTURER_MODEL_SERIAL }
 
 /**
  * One row's outcome. [detail] carries what it collided with — a local row's id, a taken key, a
- * child row's id, a locator — and **never** a display field.
+ * child row's id, a locator — and **never** a display field. It is the *holder's* row id for every
+ * "taken" reason but one: [MergeReason.PROFILE_FIELD_DEFINITION_TAKEN] reports the definition id of
+ * the pair, for the reason that reason's own doc gives.
  */
 data class MergeDecision(
     val table: MergeTable,
@@ -143,7 +156,9 @@ data class MergeWrites(
  * [storedBytes] maps each locator the archive names — and only those — to the size and sha256 of
  * what is actually there, so the planner can answer #44's *"verify size + SHA-256 before writing"*
  * without opening a file itself. [attachmentStoreConfigured] is false when the owner has picked no
- * folder at all, which is a different fact from "the bytes are missing" and gets its own reason.
+ * folder at all, which is a different fact from "the bytes are missing" and gets its own reason —
+ * and it carries **no default**, so a caller cannot forget it and have a configuration state
+ * reported as absent bytes, which is the confusion decision 12 exists to prevent.
  */
 data class MergeSnapshot(
     val assets: List<Asset> = emptyList(),
@@ -154,7 +169,7 @@ data class MergeSnapshot(
     val events: List<AssetEvent> = emptyList(),
     val attachments: List<Attachment> = emptyList(),
     val storedBytes: Map<String, StoredBytes> = emptyMap(),
-    val attachmentStoreConfigured: Boolean = true,
+    val attachmentStoreConfigured: Boolean,
 )
 
 /**

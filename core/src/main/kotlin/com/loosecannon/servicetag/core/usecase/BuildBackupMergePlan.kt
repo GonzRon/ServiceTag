@@ -43,8 +43,11 @@ class BuildBackupMergePlan(
         val backup = BackupCodec.decode(bytes)
         // Both store questions before the transaction: `store()` resolves a preference and a grant,
         // and `open` is a document-provider round trip. Neither belongs inside a Room transaction.
-        val configured = storage.store() != null
-        val stored = storedBytesOf(backup, storage)
+        // And `store()` is asked exactly once, so "is there a folder?" and "what is in it?" cannot
+        // answer about two different states of the store.
+        val store = storage.store()
+        val configured = store != null
+        val stored = storedBytesOf(backup, store)
         val snapshot = uow.read {
             mergeSnapshotOf(
                 assets, tags, links, definitions, profiles, events, attachments, stored, configured,

@@ -3,9 +3,11 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
+import com.loosecannon.servicetag.core.merge.MergeDecision
 import com.loosecannon.servicetag.core.merge.MergeReason
 import com.loosecannon.servicetag.core.merge.MergeTable
 import com.loosecannon.servicetag.core.merge.MergeTally
+import com.loosecannon.servicetag.core.merge.MergeVerdict
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.Attachment
@@ -16,8 +18,14 @@ import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.AttachmentStore
+import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.StoreIoException
+import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.testing.FakeAttachmentStorage
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
@@ -28,6 +36,8 @@ import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
+import com.loosecannon.servicetag.core.testing.RiggedFailure
+import java.io.InputStream
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -47,7 +57,13 @@ import org.junit.jupiter.api.Test
  */
 class ImportBackupMergeTest {
 
-    private class Fakes {
+    /**
+     * One install. [storage] is a parameter rather than a field a case reaches in and mutates,
+     * because the three store answers the merge distinguishes — no folder, a folder without these
+     * bytes, a folder that refuses to open them — are three *different installs* and not three
+     * states of one.
+     */
+    private class Fakes(val storage: AttachmentStorage = FakeAttachmentStorage()) {
         val assets = InMemoryAssetRepository()
         val tags = InMemoryTagRepository()
         val links = InMemoryLinkRepository()
@@ -55,7 +71,6 @@ class ImportBackupMergeTest {
         val profiles = InMemoryProfileRepository()
         val events = InMemoryEventRepository()
         val attachments = InMemoryAttachmentRepository()
-        val storage = FakeAttachmentStorage()
         val uow = FakeUnitOfWork(assets, tags, links, definitions, profiles, events, attachments)
 
         val build = BuildBackupMergePlan(
@@ -78,6 +93,29 @@ class ImportBackupMergeTest {
                 attachments.all().sortedBy { it.id.value },
             )
         }
+    }
+
+    /**
+     * A store that is *Ready* and whose `open` **fails** — the shape a document provider gives when
+     * the file went away between the tree walk and the open, or when the tree grant was revoked in
+     * between (`ContentResolver.openInputStream` raises `FileNotFoundException`). Written here
+     * rather than in `core/src/test/.../testing/`, which the brief declares untouched, and it is a
+     * local fake because the in-memory store cannot be made to throw.
+     */
+    private class RefusingStorage(private val failing: String) : AttachmentStorage {
+        private val store = object : AttachmentStore {
+            override suspend fun put(locator: String, source: ByteSource): StoredBytes =
+                throw StoreIoException("this fake is only ever read")
+
+            override suspend fun open(locator: String): InputStream? =
+                if (locator == failing) throw StoreIoException("open refused at $locator") else null
+
+            override suspend fun exists(locator: String): Boolean = locator == failing
+            override suspend fun delete(locator: String) = Unit
+        }
+
+        override fun state(): StoreState = StoreState.Ready("Attachments", "com.example.provider")
+        override fun store(): AttachmentStore = store
     }
 
     private fun asset(id: String, name: String, parent: String? = null) = Asset(
@@ -134,6 +172,9 @@ class ImportBackupMergeTest {
         assertEquals(MergeTally(insert = 2, identical = 0, conflict = 0, skipped = 0), report.assets)
         assertEquals(MergeTally(1, 0, 0, 0), report.tags)
         assertEquals(emptyList(), report.conflicts)
+        // One transaction, committed once: #44's "apply accepted plan in one Room transaction".
+        assertEquals(1, target.uow.commits)
+        assertEquals(0, target.uow.rollbacks)
         runBlocking {
             assertEquals(listOf("a1", "a2", "z9"), target.assets.all().map { it.id.value }.sorted())
             // #44 acceptance 2: the imported UUIDs are preserved exactly.
@@ -166,11 +207,21 @@ class ImportBackupMergeTest {
         assertEquals(after, target.everything())
     }
 
-    /** #44 acceptance 5 and 13: a conflict refuses, and mutates nothing at all. */
+    /**
+     * #44 acceptance 5 and 13: a conflict refuses, and mutates nothing at all.
+     *
+     * The archive carries a second, perfectly **insertable** asset on purpose. Without it the
+     * assertion that nothing changed is satisfied by the fixture rather than by the code, because
+     * there would be nothing an implementation that "writes what it can" could have written. `a2`
+     * is that something, and its absence afterwards is what makes this case a proof.
+     */
     @Test
     fun `a conflicting archive is refused and the destination is byte for byte unchanged`() {
         val source = Fakes()
-        runBlocking { source.assets.upsert(asset("a1", "Hot tub")) }
+        runBlocking {
+            source.assets.upsert(asset("a1", "Hot tub"))
+            source.assets.upsert(asset("a2", "Filter"))
+        }
         val target = Fakes()
         runBlocking {
             target.assets.upsert(asset("a1", "Spa"))
@@ -184,6 +235,8 @@ class ImportBackupMergeTest {
         assertEquals(1, refused.report.conflicts.size)
         assertEquals(MergeTable.ASSETS, refused.report.conflicts.single().table)
         assertEquals(MergeReason.CONTENT_DIFFERS, refused.report.conflicts.single().reason)
+        // The insertable row was not written, and nothing else moved either.
+        runBlocking { assertEquals(null, target.assets.get(AssetId("a2"))) }
         assertEquals(before, target.everything())
     }
 
@@ -274,8 +327,7 @@ class ImportBackupMergeTest {
         }
         val archive = exportOf(source)
 
-        val noFolder = Fakes()
-        noFolder.storage.state = com.loosecannon.servicetag.core.ports.StoreState.NotConfigured
+        val noFolder = Fakes(FakeAttachmentStorage(state = StoreState.NotConfigured))
         val skippedNoFolder = runBlocking { noFolder.merge.run(archive) }
         assertTrue(skippedNoFolder.applicable)
         assertEquals(MergeTally(insert = 0, identical = 0, conflict = 0, skipped = 1), skippedNoFolder.attachments)
@@ -285,11 +337,80 @@ class ImportBackupMergeTest {
         val skippedNoBytes = runBlocking { noBytes.merge.run(archive) }
         assertEquals(MergeTally(0, 0, 0, 1), skippedNoBytes.attachments)
 
-        val withBytes = Fakes()
-        withBytes.storage.store.files["assets/a1/att1.pdf"] = bytes
+        val withBytes = Fakes(
+            FakeAttachmentStorage(
+                InMemoryAttachmentStore().also { it.files["assets/a1/att1.pdf"] = bytes },
+            ),
+        )
         val written = runBlocking { withBytes.merge.run(archive) }
         assertEquals(MergeTally(1, 0, 0, 0), written.attachments)
         runBlocking { assertEquals(1, withBytes.attachments.count()) }
+    }
+
+    /**
+     * The fourth store answer, and the one that used to be fatal: a locator whose `open` **throws**.
+     * A raced delete or a revoked grant is a missing-bytes answer for that one row — not a failed
+     * plan, and not the 500 the API would have to report for an exception it cannot name. The other
+     * six tables merge, `applicable` stays true, and no attachment row is written.
+     */
+    @Test
+    fun `an attachment whose bytes cannot be opened is SKIPPED and everything else still merges`() {
+        val source = Fakes()
+        runBlocking {
+            source.assets.upsert(asset("a1", "Hot tub"))
+            source.attachments.upsert(attachment("att1", "a1"))
+        }
+        val archive = exportOf(source)
+        val locator = "assets/a1/att1.pdf"
+
+        val target = Fakes(RefusingStorage(locator))
+        val plan = runBlocking { target.build.run(archive) }
+        assertEquals(
+            MergeDecision(
+                MergeTable.ATTACHMENTS, "att1", MergeVerdict.SKIPPED,
+                MergeReason.ATTACHMENT_BYTES_ABSENT, locator,
+            ),
+            plan.decisions.single { it.table == MergeTable.ATTACHMENTS },
+        )
+
+        val report = runBlocking { target.merge.run(archive) }
+
+        assertTrue(report.applicable)
+        assertEquals(MergeTally(0, 0, 0, 1), report.attachments)
+        assertEquals(MergeTally(1, 0, 0, 0), report.assets)
+        runBlocking {
+            assertEquals(listOf("a1"), target.assets.all().map { it.id.value })
+            assertEquals(0, target.attachments.count())
+        }
+    }
+
+    /**
+     * #44 acceptance 14, the one safety claim that rested entirely on prose: a failure **after** the
+     * first row is written rolls the whole thing back. The tag is the fifth table the apply writes,
+     * so both assets are already in when it fails — and the destination still ends up exactly as it
+     * started. Falsifiable: move the seven `upsert` loops outside `uow.write` and the two assets
+     * survive.
+     */
+    @Test
+    fun `a failure partway through the apply rolls the whole transaction back`() {
+        val source = Fakes()
+        runBlocking {
+            source.assets.upsert(asset("a1", "Hot tub"))
+            source.assets.upsert(asset("a2", "Filter", parent = "a1"))
+            source.tags.upsert(tag("t1", "key-1", "a1"))
+        }
+        val archive = exportOf(source)
+
+        val target = Fakes()
+        runBlocking { target.assets.upsert(asset("z9", "Generator")) }
+        val before = target.everything()
+        target.tags.failOnUpsert = 1
+
+        assertFailsWith<RiggedFailure> { runBlocking { target.merge.run(archive) } }
+
+        assertEquals(before, target.everything())
+        assertEquals(1, target.uow.rollbacks)
+        assertEquals(0, target.uow.commits)
     }
 
     @Test
