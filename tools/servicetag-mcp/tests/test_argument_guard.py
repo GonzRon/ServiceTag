@@ -16,7 +16,9 @@ import asyncio
 import subprocess
 from types import SimpleNamespace
 
+import mcp.types
 import pytest
+from mcp import Client
 from mcp.server.mcpserver.exceptions import ToolError
 
 from servicetag_mcp import client as client_module
@@ -107,6 +109,52 @@ def test_the_refusal_never_contains_the_supplied_value(paired) -> None:
     _assert_value_absent(raised.value, _DISTINCTIVE_VALUE)
 
 
+# --- G1: the override's *position* on the real request path, not just the override in isolation ---
+#
+# Every test above calls `server_module.mcp.call_tool(...)` directly — the override itself, proven
+# correct, but never proving that a real client request actually reaches it. The scoped re-review of
+# `1813ed3` enumerated every server-side `call_tool` call site in `mcp` 2.2.0 (exactly two:
+# `_handle_call_tool` and inside `MCPServer.call_tool` itself) and found no bypass — these two tests
+# are what make that finding a standing test rather than a one-time read.
+
+
+def test_the_real_request_handler_refuses_and_says_nothing_about_the_value(paired) -> None:
+    """Drives `_handle_call_tool` — the lowlevel handler the SDK's `tools/call` JSON-RPC method
+    calls — with a validated `CallToolRequestParams`, the same shape a real connected client's
+    request takes. The `"does not accept"` assertion is load-bearing: it fails if the refusal ever
+    came from the model-level backstop instead of this override, since the backstop's raw message
+    reads differently and echoes the value."""
+    params = mcp.types.CallToolRequestParams.model_validate(
+        {"name": "save_definition", "arguments": {"asset_id": "a1", "id": _DISTINCTIVE_VALUE}}
+    )
+    result = asyncio.run(server_module.mcp._handle_call_tool(None, params))
+    assert result.is_error is True
+    assert "does not accept" in result.content[0].text
+    assert _DISTINCTIVE_VALUE not in result.content[0].text
+    assert paired.requests == []
+
+
+def test_an_in_process_sdk_client_receives_the_refusal_with_no_value_anywhere(paired) -> None:
+    """The other end of the same path, from the SDK's own client side: `mcp.Client` talking to this
+    `MCPServer` in-process (no transport, no socket — the SDK wires the two together directly), so
+    this is what a connected client's `call_tool` actually returns. Checked against the *whole*
+    serialized result (`model_dump_json()`), not just the one text block, since condition 3 says
+    "the error" a client receives, not "the one field this test happened to check"."""
+
+    async def call() -> mcp.types.CallToolResult:
+        async with Client(server_module.mcp) as connected:
+            return await connected.call_tool(
+                "save_definition", {"asset_id": "a1", "id": _DISTINCTIVE_VALUE}
+            )
+
+    result = asyncio.run(call())
+    assert result.is_error is True
+    serialized = result.model_dump_json()
+    assert "does not accept" in serialized
+    assert _DISTINCTIVE_VALUE not in serialized
+    assert paired.requests == []
+
+
 # --- condition 4: the error lists the tool's allowed argument names -------------------------------
 
 
@@ -116,6 +164,44 @@ def test_the_refusal_lists_the_tools_allowed_argument_names(paired) -> None:
     text = str(raised.value)
     for name in ("asset_id", "name", "clear_fields", "category"):
         assert name in text, text
+
+
+# --- G2: the allowed-name set must agree with what validation actually accepts, aliases included ---
+
+
+def test_a_parameter_that_shadows_a_basemodel_attribute_is_listed_by_its_real_name() -> None:
+    """`func_metadata.py` renames a parameter whose name collides with a callable `BaseModel`
+    attribute (`json`, `copy`, `dict`, `schema`, `validate`, ...) to `field_<name>` internally, with
+    `alias=<name>` so the wire key stays the original — probed and confirmed: `model_fields` holds
+    `field_json` for a parameter literally named `json`. Building the allowed set from field names
+    alone would call the real key `json` unknown (a false refusal of a legitimate call) while
+    admitting `field_json`, a name no real client would ever send. `_StrictMCPServer.call_tool`
+    builds it from `info.alias or name` instead, so accepted and listed always agree.
+
+    Registered on a throwaway `_StrictMCPServer`, never on the real `mcp` — the published tool count
+    must stay 21 (asserted at the end, the same way condition 5 pins it elsewhere)."""
+    throwaway = server_module._StrictMCPServer("throwaway-guard-probe")
+
+    @throwaway.tool()
+    def demo_tool(json: str | None = None, asset_id: str = "") -> dict:
+        return {"json": json, "asset_id": asset_id}
+
+    tool = throwaway._tool_manager.get_tool("demo_tool")
+    assert "field_json" in tool.fn_metadata.arg_model.model_fields, "the SDK's own renaming rule"
+
+    server_module._forbid_unknown_arguments(throwaway._tool_manager.list_tools())
+
+    accepted = asyncio.run(throwaway.call_tool("demo_tool", {"json": "hello"}))
+    assert accepted.is_error is False, "the real wire key must not be refused as unknown"
+
+    with pytest.raises(ToolError) as raised:
+        asyncio.run(throwaway.call_tool("demo_tool", {"bogus": "x"}))
+    text = str(raised.value)
+    assert "json" in text
+    assert "field_json" not in text
+
+    assert len(server_module.TOOL_NAMES) == 21
+    assert len(server_module.mcp._tool_manager.list_tools()) == 21
 
 
 # --- fix spec 4(c): parametrised over every one of the 21 registered tools ------------------------
@@ -170,3 +256,51 @@ def test_the_guard_refuses_to_run_over_an_empty_tool_list() -> None:
     a shape the guard does not recognise either, rather than a vacuous success."""
     with pytest.raises(RuntimeError):
         server_module._forbid_unknown_arguments([])
+
+
+def test_the_guard_raises_when_the_config_mutation_has_no_effect_on_the_schema() -> None:
+    """G3, the gap the scoped re-review's condition-6 probe actually found: a tool whose shape is
+    completely intact — `model_config` is a real dict, `model_rebuild` and `model_json_schema` are
+    both callable — but where setting `extra="forbid"` and rebuilding silently fails to change what
+    `model_json_schema()` reports (the pydantic-release-caches-the-core-schema scenario). Every
+    individual statement in the guard's per-tool block succeeds; only the after-the-fact check
+    catches it."""
+
+    class DegradedArgModel:
+        model_config: dict = {}
+
+        @classmethod
+        def model_rebuild(cls, force: bool = False) -> None:
+            pass  # succeeds, but a future pydantic here would change nothing about validation
+
+        @classmethod
+        def model_json_schema(cls) -> dict:
+            return {"type": "object", "properties": {}}  # no "additionalProperties": False
+
+    fake_tool = SimpleNamespace(
+        name="degraded_tool",
+        fn_metadata=SimpleNamespace(arg_model=DegradedArgModel),
+        parameters={},
+    )
+    with pytest.raises(RuntimeError, match="degraded_tool"):
+        server_module._forbid_unknown_arguments([fake_tool])
+
+
+# --- G5: a tool registered (or dropped) around the guard's call site must not go unnoticed ---------
+
+
+def test_the_guard_raises_when_the_tool_count_does_not_match_what_was_expected() -> None:
+    """`expected_count` is what the real call site (`_forbid_unknown_arguments(mcp._tool_manager
+    .list_tools(), expected_count=len(TOOL_NAMES))`) passes — a tool added or removed around that
+    call site changes `len(tools)` without changing anything the per-tool loop inspects, so nothing
+    else in the guard would notice either way."""
+    with pytest.raises(RuntimeError, match=r"1 tools were registered but 2 were expected"):
+        server_module._forbid_unknown_arguments([SimpleNamespace(name="only_one")], expected_count=2)
+
+
+def test_the_real_call_site_pins_the_tool_count_against_tool_names() -> None:
+    """Not a simulation: the real module-level call already ran at import — this just asserts the
+    two numbers it compared are in fact equal for the server as shipped, so a future edit that adds
+    a `@mcp.tool()` without updating `TOOL_NAMES` (or the reverse) is caught the next time this
+    suite runs, not only the next time the module is freshly imported."""
+    assert len(server_module.mcp._tool_manager.list_tools()) == len(server_module.TOOL_NAMES)

@@ -46,9 +46,16 @@ class _StrictMCPServer(MCPServer):
     """
 
     async def call_tool(self, name: str, arguments: dict[str, Any], context: Any = None) -> Any:
+        arguments = arguments or {}  # G4: `_handle_call_tool` always passes a dict, a direct call
+        # might not — refuse rather than crash on `set(None)`.
         tool = self._tool_manager.get_tool(name)
         if tool is not None:
-            allowed = set(tool.fn_metadata.arg_model.model_fields)
+            # G2: built from `alias or name`, exactly the key pydantic itself accepts
+            # (`func_metadata.py`'s own mapping) — a parameter whose name shadows a `BaseModel`
+            # attribute (`json`, `copy`, `dict`, ...) is renamed to `field_<name>` with `alias=
+            # <name>`, and `model_fields` alone would hold the renamed form, not the wire key.
+            fields = tool.fn_metadata.arg_model.model_fields
+            allowed = {info.alias or field_name for field_name, info in fields.items()}
             unknown = sorted(set(arguments) - allowed)
             if unknown:
                 raise ToolError(f"{name} does not accept {unknown}; its arguments are {sorted(allowed)}")
@@ -882,7 +889,7 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     )
 
 
-def _forbid_unknown_arguments(tools: list[Any]) -> None:
+def _forbid_unknown_arguments(tools: list[Any], *, expected_count: int | None = None) -> None:
     """Applied once, right below, after every `@mcp.tool()` registration above — to all of them at
     once, not as a per-tool check. Two things, per tool:
 
@@ -890,7 +897,8 @@ def _forbid_unknown_arguments(tools: list[Any]) -> None:
        2.2.0's default — silently ignoring an extra key, since `ArgModelBase.model_config =
        ConfigDict(arbitrary_types_allowed=True)` sets no `extra=`
        (`mcp/server/mcpserver/utilities/func_metadata.py:96`-ish) — to `extra="forbid"`, then
-       rebuilt so the new config takes effect on the model's next validation.
+       rebuilt so the new config takes effect on the model's next validation. (G3: the rebuild is
+       then *verified*, not just performed — see below.)
     2. The already-computed, published JSON schema (`Tool.parameters`, a plain dict frozen at
        registration time and never auto-refreshed by a later `model_config` change) is given
        `additionalProperties: False` directly, so a client reading `tools/list` sees the same
@@ -903,22 +911,41 @@ def _forbid_unknown_arguments(tools: list[Any]) -> None:
     also the only thing that makes the *published schema* say `additionalProperties: false`,
     which the interception above does nothing to change.
 
+    `expected_count`, when given, is checked before anything else (G5): a tool registered — or
+    dropped — around this function's call site changes `len(tools)` without changing any of the
+    internals the loop below inspects, so nothing else here would notice either way. The real call
+    site passes `len(TOOL_NAMES)`; a differently-shaped-tool test omits it, since it is exercising
+    the per-tool loop on a deliberately small fake list.
+
     Leans on `mcp` 2.2.0 internals that are not part of its public contract: `Tool.fn_metadata`,
-    `FuncMetadata.arg_model` as a pydantic model *class* with a mutable `model_config` dict and a
-    `model_rebuild` classmethod, and `Tool.parameters` as a plain, later-mutable dict. `uv.lock`
-    pins the resolved version, so this is stable until the next deliberate dependency bump. If any
-    of that shape is gone, this raises here — loudly, at *import* time, since the call below runs
-    at module load — rather than silently registering an unguarded tool: a guard that quietly stops
-    guarding after a dependency bump is worse than none (owner ruling, 2026-09-21).
+    `FuncMetadata.arg_model` as a pydantic model *class* with a mutable `model_config` dict, a
+    `model_rebuild` classmethod and a `model_json_schema` classmethod, and `Tool.parameters` as a
+    plain, later-mutable dict. `uv.lock` pins the resolved version, so this is stable until the next
+    deliberate dependency bump. If any of that shape is gone — or present but inert, the
+    silent-degradation mode G3 closes, where the mutation runs without error but no longer changes
+    what `model_json_schema()` reports — this raises here, loudly, at *import* time, since the call
+    below runs at module load, rather than silently registering an unguarded tool: a guard that
+    quietly stops guarding after a dependency bump is worse than none (owner ruling, 2026-09-21).
     """
     if not tools:
         raise RuntimeError("_forbid_unknown_arguments: no tools were registered — call it last")
+    if expected_count is not None and len(tools) != expected_count:
+        raise RuntimeError(
+            f"_forbid_unknown_arguments: {len(tools)} tools were registered but {expected_count} "
+            "were expected — a tool must have been added or removed around the guard's call site"
+        )
     for tool in tools:
         try:
             arg_model = tool.fn_metadata.arg_model
             arg_model.model_config["extra"] = "forbid"
             arg_model.model_rebuild(force=True)
             tool.parameters["additionalProperties"] = False
+            # G3: condition 6 is "never a silent skip" — checking the internals are *shaped* right
+            # is not the same as checking the mutation *worked*. A pydantic release that caches the
+            # core schema could make `model_config["extra"]` + `model_rebuild(force=True)` a no-op
+            # without either call raising; this is what still catches that.
+            if arg_model.model_json_schema().get("additionalProperties") is not False:
+                raise TypeError("extra=forbid did not take effect after model_rebuild")
         except (AttributeError, TypeError, KeyError) as exc:
             raise RuntimeError(
                 f"the guard's assumptions about mcp's internals do not hold for tool "
@@ -927,7 +954,7 @@ def _forbid_unknown_arguments(tools: list[Any]) -> None:
             ) from exc
 
 
-_forbid_unknown_arguments(mcp._tool_manager.list_tools())
+_forbid_unknown_arguments(mcp._tool_manager.list_tools(), expected_count=len(TOOL_NAMES))
 
 
 def main() -> None:
