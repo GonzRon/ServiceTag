@@ -28,10 +28,12 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.ports.UuidGenerator
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.ApplyTemplate
+import com.loosecannon.servicetag.core.usecase.ApplyBackupMergePlan
 import com.loosecannon.servicetag.core.usecase.ArchiveAsset
 import com.loosecannon.servicetag.core.usecase.ArchiveDefinition
 import com.loosecannon.servicetag.core.usecase.ArchiveProfile
 import com.loosecannon.servicetag.core.usecase.BindTag
+import com.loosecannon.servicetag.core.usecase.BuildBackupMergePlan
 import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAttachment
@@ -39,6 +41,7 @@ import com.loosecannon.servicetag.core.usecase.DeleteDefinition
 import com.loosecannon.servicetag.core.usecase.DeleteEvent
 import com.loosecannon.servicetag.core.usecase.DeleteProfile
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
+import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
@@ -158,6 +161,21 @@ class AppGraph(private val context: Context) {
     )
 
     /**
+     * 1.1.0 (#46), semantics from #44 — the additive merge, planned before it writes. `plan`
+     * decides and writes nothing; `run` applies only a conflict-free plan, which the apply rebuilds
+     * inside its own transaction. Reachable only from the Developer API screen's loopback listener;
+     * there is no UI for it.
+     */
+    val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
+        assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
+    )
+    val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
+        assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
+    )
+    val importBackupMerge: ImportBackupMerge =
+        ImportBackupMerge(buildBackupMergePlan, applyBackupMergePlan)
+
+    /**
      * #40 — is there anything on this phone a restore would replace? The Backup screen asks once,
      * per picked file, and the answer chooses the confirmation. Definitions and profiles are not
      * read: neither can exist without its asset, so `assets` answers for both.
@@ -212,7 +230,7 @@ class AppGraph(private val context: Context) {
     val deleteProfile: DeleteProfile = DeleteProfile(profiles, uow)
     val reorderProfiles: ReorderProfiles = ReorderProfiles(profiles, uow, clock)
 
-    private companion object {
+    internal companion object {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */

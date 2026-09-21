@@ -17,9 +17,11 @@ import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.ApplyTemplate
+import com.loosecannon.servicetag.core.usecase.ApplyBackupMergePlan
 import com.loosecannon.servicetag.core.usecase.ArchiveAsset
 import com.loosecannon.servicetag.core.usecase.ArchiveDefinition
 import com.loosecannon.servicetag.core.usecase.ArchiveProfile
+import com.loosecannon.servicetag.core.usecase.BuildBackupMergePlan
 import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAttachment
@@ -27,6 +29,7 @@ import com.loosecannon.servicetag.core.usecase.DeleteDefinition
 import com.loosecannon.servicetag.core.usecase.DeleteEvent
 import com.loosecannon.servicetag.core.usecase.DeleteProfile
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
+import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
@@ -168,6 +171,14 @@ class FakeGraph(
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
     )
+    val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
+        assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
+    )
+    val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
+        assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
+    )
+    val importBackupMerge: ImportBackupMerge =
+        ImportBackupMerge(buildBackupMergePlan, applyBackupMergePlan)
 
     fun close() = db.close()
 
