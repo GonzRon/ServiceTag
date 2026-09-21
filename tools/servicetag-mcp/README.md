@@ -62,6 +62,9 @@ Twenty-one: `pair` plus one per API operation.
 `list_profiles`, `save_profile`, `archive_profile`, `list_events`, `log_event`, `update_event`,
 `delete_event`, `list_tag_bindings`, `import_merge`.
 
+An unknown argument to any tool is rejected before the tool body runs — never silently ignored —
+so a mistyped field name can't be read as absent and quietly change what the call does.
+
 ### Editing an existing row: two layers, and they are not the same thing
 
 The Android API's own asset/reading/quick-action writes (`PATCH /v1/assets/{id}`,

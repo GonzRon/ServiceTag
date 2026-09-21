@@ -26,7 +26,36 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from .client import ApiError, Device, MAX_IMPORT_BYTES, NotPaired
 
-mcp = MCPServer("servicetag")
+
+class _StrictMCPServer(MCPServer):
+    """`MCPServer` whose `call_tool` refuses an unknown argument before pydantic ever sees one.
+
+    `_handle_call_tool` — the lowlevel handler a real client request reaches
+    (`mcp/server/mcpserver/server.py:428`-`433`) — calls `self.call_tool(...)`, so overriding it
+    here is the one place every call passes through, known tool or not, before any HTTP, `adb` or
+    tool-body activity. The message names the bad key(s) and the tool's real argument names, and
+    never the value that was supplied — unlike the model-level backstop
+    `_forbid_unknown_arguments` installs below, whose own raw pydantic refusal would echo it
+    (`"... Extra inputs are not permitted ... input_value=..."`), which does not belong in a
+    message a model reads back.
+
+    Owner ruling, 2026-09-21: a mistyped argument name must never be silently dropped and read as
+    absent — `save_definition(id=...)` where the schema says `definition_id=` would otherwise
+    CREATE instead of editing, because `mcp` 2.2.0's per-tool argument model ignores an extra key
+    by default (see `_forbid_unknown_arguments`'s docstring).
+    """
+
+    async def call_tool(self, name: str, arguments: dict[str, Any], context: Any = None) -> Any:
+        tool = self._tool_manager.get_tool(name)
+        if tool is not None:
+            allowed = set(tool.fn_metadata.arg_model.model_fields)
+            unknown = sorted(set(arguments) - allowed)
+            if unknown:
+                raise ToolError(f"{name} does not accept {unknown}; its arguments are {sorted(allowed)}")
+        return await super().call_tool(name, arguments, context)
+
+
+mcp = _StrictMCPServer("servicetag")
 
 device = Device.from_env()
 
@@ -851,6 +880,54 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
         report_statuses=(409,),
         timeout=_IMPORT_TIMEOUT,
     )
+
+
+def _forbid_unknown_arguments(tools: list[Any]) -> None:
+    """Applied once, right below, after every `@mcp.tool()` registration above — to all of them at
+    once, not as a per-tool check. Two things, per tool:
+
+    1. The per-tool pydantic argument model (`Tool.fn_metadata.arg_model`) is switched from `mcp`
+       2.2.0's default — silently ignoring an extra key, since `ArgModelBase.model_config =
+       ConfigDict(arbitrary_types_allowed=True)` sets no `extra=`
+       (`mcp/server/mcpserver/utilities/func_metadata.py:96`-ish) — to `extra="forbid"`, then
+       rebuilt so the new config takes effect on the model's next validation.
+    2. The already-computed, published JSON schema (`Tool.parameters`, a plain dict frozen at
+       registration time and never auto-refreshed by a later `model_config` change) is given
+       `additionalProperties: False` directly, so a client reading `tools/list` sees the same
+       contract the server enforces — not just the ones who reach `_StrictMCPServer.call_tool`.
+
+    This is the *backstop*: `_StrictMCPServer.call_tool` (above `mcp`'s construction) intercepts
+    first on every real request path, with a message that names the tool's real argument names and
+    never the value supplied. This function is what still refuses the key if that interception were
+    ever bypassed — e.g. a future direct call into `mcp._tool_manager.call_tool(...)` — and it is
+    also the only thing that makes the *published schema* say `additionalProperties: false`,
+    which the interception above does nothing to change.
+
+    Leans on `mcp` 2.2.0 internals that are not part of its public contract: `Tool.fn_metadata`,
+    `FuncMetadata.arg_model` as a pydantic model *class* with a mutable `model_config` dict and a
+    `model_rebuild` classmethod, and `Tool.parameters` as a plain, later-mutable dict. `uv.lock`
+    pins the resolved version, so this is stable until the next deliberate dependency bump. If any
+    of that shape is gone, this raises here — loudly, at *import* time, since the call below runs
+    at module load — rather than silently registering an unguarded tool: a guard that quietly stops
+    guarding after a dependency bump is worse than none (owner ruling, 2026-09-21).
+    """
+    if not tools:
+        raise RuntimeError("_forbid_unknown_arguments: no tools were registered — call it last")
+    for tool in tools:
+        try:
+            arg_model = tool.fn_metadata.arg_model
+            arg_model.model_config["extra"] = "forbid"
+            arg_model.model_rebuild(force=True)
+            tool.parameters["additionalProperties"] = False
+        except (AttributeError, TypeError, KeyError) as exc:
+            raise RuntimeError(
+                f"the guard's assumptions about mcp's internals do not hold for tool "
+                f"{getattr(tool, 'name', '?')!r} — see _forbid_unknown_arguments's docstring for "
+                "exactly which internals it leans on, and check the resolved mcp version in uv.lock"
+            ) from exc
+
+
+_forbid_unknown_arguments(mcp._tool_manager.list_tools())
 
 
 def main() -> None:
