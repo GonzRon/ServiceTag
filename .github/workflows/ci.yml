@@ -32,3 +32,17 @@ jobs:
             libs/nfc-tag-core/nfc-android/build/test-results
             core/build/test-results
             app/build/test-results
+  mcp:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false            # this job needs no git credentials after the checkout
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: "tools/servicetag-mcp/uv.lock"
+      - name: the workstation MCP server's tests
+        run: uv run --frozen pytest
+        working-directory: tools/servicetag-mcp
