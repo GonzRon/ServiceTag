@@ -14,12 +14,31 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 
+import httpx
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
 from servicetag_mcp import client as client_module
 from servicetag_mcp import server as server_module
+
+_FAKE_SERIAL_FOR_TRANSPORT_TESTS = "FAKE_SERIAL_TRANSPORT_TEST_9q2z"
+
+
+def _adb_forward_device(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Wires `server_module.device` onto the adb-forward path (no `SERVICETAG_API_BASE_URL`) with a
+    distinctive fake serial, and makes `subprocess.run` succeed silently — so `ensure_forward()`
+    (including the retry inside `Device.request`) never actually shells out to a real `adb`."""
+    monkeypatch.delenv("SERVICETAG_API_BASE_URL", raising=False)
+    monkeypatch.setenv("SERVICETAG_ADB_SERIAL", _FAKE_SERIAL_FOR_TRANSPORT_TESTS)
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, stdout="", stderr=""),
+    )
+    server_module.device = client_module.Device.from_env()
+    server_module.pair("ABCD2345")
 
 
 def _call_tool(name: str, arguments: dict):
@@ -95,6 +114,48 @@ def test_a_connection_refusal_survives_the_sdk_boundary_with_its_own_wording(
     with pytest.raises(ToolError) as raised:
         _call_tool("status", {})
     assert "Developer API" in str(raised.value)
+
+
+def test_a_remote_protocol_error_survives_the_sdk_boundary_with_its_own_wording(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F1, live observation: `adb forward` stays installed after the Developer API screen closes,
+    so the port still accepts a connection and the phone's own listener closes it mid-request —
+    `httpx.RemoteProtocolError`, not `ConnectError`. This is the single most common real-world
+    failure, and the old message ("could not reach the phone: RemoteProtocolError") said nothing
+    actionable."""
+    _adb_forward_device(monkeypatch)
+
+    def fake_request(method, url, **kwargs):
+        raise httpx.RemoteProtocolError("Server disconnected", request=httpx.Request(method, url))
+
+    monkeypatch.setattr(httpx, "request", fake_request)
+    with pytest.raises(ToolError) as raised:
+        _call_tool("status", {})
+    text = str(raised.value)
+    assert "Developer API" in text
+    assert "pair" in text
+    assert _FAKE_SERIAL_FOR_TRANSPORT_TESTS not in text
+
+
+def test_a_connect_error_survives_the_sdk_boundary_with_its_own_wording(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same unified message, this time through the forward-invalidate-and-retry path (fix 5): the
+    fake transport keeps refusing on the retry too, so this also proves the serial stays out of the
+    final message even after `ensure_forward()` ran a second time."""
+    _adb_forward_device(monkeypatch)
+
+    def fake_request(method, url, **kwargs):
+        raise httpx.ConnectError("refused", request=httpx.Request(method, url))
+
+    monkeypatch.setattr(httpx, "request", fake_request)
+    with pytest.raises(ToolError) as raised:
+        _call_tool("status", {})
+    text = str(raised.value)
+    assert "Developer API" in text
+    assert "pair" in text
+    assert _FAKE_SERIAL_FOR_TRANSPORT_TESTS not in text
 
 
 def test_a_missing_serial_survives_the_sdk_boundary_with_no_serial_in_it(

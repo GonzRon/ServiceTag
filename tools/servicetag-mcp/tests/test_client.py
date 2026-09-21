@@ -253,4 +253,4 @@ def test_a_read_timeout_gives_a_clear_message_not_a_raw_transport_error(
     monkeypatch.setattr(httpx, "request", fake_request)
     with pytest.raises(RuntimeError) as raised:
         device.request("GET", "/v1/status")
-    assert "did not answer in time" in str(raised.value)
+    assert "Developer API" in str(raised.value)

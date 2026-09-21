@@ -272,7 +272,12 @@ def create_asset(
     """Create an asset. `template_key` seeds its readings and quick actions, in the same write.
 
     Every field is optional but `name`: an omitted one is simply the API's own default (blank text,
-    or no value at all) for a brand-new row, not something being cleared."""
+    or no value at all) for a brand-new row, not something being cleared.
+
+    `season_start_mmdd`/`season_end_mmdd` are `MM-DD`, e.g. `"04-01"` — a month and a day, never a
+    year, and never `MMDD` without the dash. The app requires both or neither: set both to give the
+    asset a season window, or leave both unset for year-round.
+    """
     return _call(
         "POST",
         "/v1/assets",
@@ -361,6 +366,10 @@ def update_asset(
     both. Naming an unknown field, or naming one you also passed a value for, is refused before any
     request is made.
 
+    `season_start_mmdd`/`season_end_mmdd` are `MM-DD`, e.g. `"04-01"` — the app requires both or
+    neither, so setting or clearing only one of the pair is refused by the app itself (this tool
+    does not check it locally). Clear both together to go back to year-round.
+
     `template_key` is not a parameter here because the app ignores it on an edit — it only seeds a
     *new* asset (`create_asset`, `create_component`).
     """
@@ -441,7 +450,11 @@ def create_component(
 ) -> dict[str, Any]:
     """Create an asset as a component of another. The path decides the parent, not the body — the
     app ignores a body-level parent on this endpoint, so there is no `parent_asset_id` body field
-    to pass here beyond the one naming which asset this is a component of."""
+    to pass here beyond the one naming which asset this is a component of.
+
+    `season_start_mmdd`/`season_end_mmdd` are `MM-DD`, e.g. `"04-01"` — a month and a day, never a
+    year. The app requires both or neither: set both together, or leave both unset for year-round.
+    """
     return _call(
         "POST",
         f"/v1/assets/{_path_id(parent_asset_id, field='parent_asset_id')}/components",

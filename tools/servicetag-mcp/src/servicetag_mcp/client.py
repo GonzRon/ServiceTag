@@ -34,14 +34,28 @@ _TIMEOUT = 30.0
 """Every call's budget but the two import ones, which pass their own (finding 12: a full-phone
 merge plans and applies inside one Room transaction and can outrun 30 seconds)."""
 
-_CONNECTION_REFUSED = (
-    "the phone is not answering on the forwarded port — open Settings > Utilities > Developer API "
-    "on the phone and leave that screen open, then try again"
+_DEVELOPER_API_NOT_ANSWERING = (
+    "the Developer API is not answering. Open Settings > Utilities > Developer API on the phone "
+    "and keep that screen in front — the code is new every time it opens, so call pair again once "
+    "it is."
 )
 """The listener's lifetime is the Developer API screen's (README), so this is the single most common
-failure in normal use — leaving the screen, locking the phone or switching apps all stop it."""
+failure in normal use — leaving the screen, locking the phone or switching apps all stop it.
 
-_READ_TIMED_OUT = "the phone did not answer in time; try again"
+One message for every `httpx.TransportError` (F1): `adb forward` stays installed after the screen
+closes, so the *port* still accepts a local connection — the phone's own listener is what is gone.
+Live observation on a real device: that reaches `httpx` as `RemoteProtocolError` (accepted, then
+closed), not `ConnectError`, so a message that only covered "connection refused" left the single
+most common real-world failure with nothing actionable. `ConnectError`, `ConnectTimeout`,
+`ReadTimeout`, `ReadError`, `WriteError` and `RemoteProtocolError` all reach the same message now."""
+
+
+def _not_answering(exception_class_name: str) -> str:
+    """[_DEVELOPER_API_NOT_ANSWERING] plus the exception's *class name* for diagnosis — never its
+    text, which can carry the request URL (harmless here, loopback-only, but unbounded) or, for a
+    `subprocess` failure elsewhere in this module, the serial. A class name is always safe and
+    always bounded."""
+    return f"{_DEVELOPER_API_NOT_ANSWERING} ({exception_class_name})"
 
 
 class ApiError(RuntimeError):
@@ -182,22 +196,25 @@ class Device:
             # The forward is a property of the running `adb` server, not of this process: a
             # re-plug, `adb kill-server`, or the daemon restarting all drop it silently while
             # `forwarded` stays True. Re-establish once and retry — safe for a write too, because a
-            # connect failure means nothing was ever sent (fix 5).
+            # connect failure means nothing was ever sent (fix 5). This is the one transport failure
+            # worth a retry: every other one (below) means the port answered, so re-forwarding it
+            # again would not help.
             if self.owns_forward and self.serial:
                 self.forwarded = False
                 self.ensure_forward()
                 try:
                     response = send()
-                except httpx.ConnectError:
-                    raise RuntimeError(_CONNECTION_REFUSED) from None
+                except httpx.TransportError as exc:
+                    raise RuntimeError(_not_answering(exc.__class__.__name__)) from None
             else:
-                raise RuntimeError(_CONNECTION_REFUSED) from None
-        except httpx.ConnectTimeout:
-            raise RuntimeError(_CONNECTION_REFUSED) from None
-        except httpx.ReadTimeout:
-            raise RuntimeError(_READ_TIMED_OUT) from None
+                raise RuntimeError(_not_answering("ConnectError")) from None
         except httpx.TransportError as exc:
-            raise RuntimeError(f"could not reach the phone: {exc.__class__.__name__}") from None
+            # F1: `adb forward` stays installed after the Developer API screen closes, so the port
+            # itself still accepts a connection — the phone's own listener is what stopped. That
+            # reaches `httpx` as `RemoteProtocolError` (accepted, then closed) at least as often as
+            # `ConnectError` in practice, and a `ReadTimeout`/`ReadError`/`WriteError` mid-request
+            # means the same thing happening a moment later. One message for all of them.
+            raise RuntimeError(_not_answering(exc.__class__.__name__)) from None
 
         if response.status_code == 401:
             # The app answers 401 with an empty body on purpose, so this is all it can mean.
