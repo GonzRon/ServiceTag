@@ -56,14 +56,6 @@ TOOL_NAMES: tuple[str, ...] = (
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
 
-CLEAR_FIELD: str = "__CLEAR__"
-"""Pass this literal string to a *nullable* field on an edit tool (`update_asset`, `save_definition`)
-to set that field to null. Omitting the argument (leaving it the Python default `None`) means
-"leave it as it already is" instead — that is the whole overlay convention these edit tools use,
-because the app's own write endpoints are a full replace and an omitted field must not become a
-silently lost one. A *text* field (one whose DTO default is `""`, never `null`) does not need the
-sentinel: pass an explicit `""` to clear it, since `""` and "omitted" are different arguments there."""
-
 _IMPORT_TIMEOUT = httpx.Timeout(30.0, read=120.0)
 """A full-phone merge plans and applies inside one Room transaction on the phone; 30s is a
 plausible ceiling to hit on a very full archive, so the two import calls get a longer read budget
@@ -108,21 +100,50 @@ def _body(**fields: Any) -> dict[str, Any]:
     return {k: v for k, v in fields.items() if v is not None}
 
 
-def _text_overlay(current: str, given: str | None) -> str:
-    """The clearing convention for a *text* field on an edit: omitted (`None`) keeps the row's
-    current value; any given string, including `""`, replaces it — `""` and omitted are different
-    arguments here on purpose."""
+def _overlay(current: Any, given: Any) -> Any:
+    """The clearing convention for every overlay tool's ordinary arguments: an **omitted** argument
+    and an argument explicitly sent as **`null`** are the same thing — both keep the row's current
+    value — and any other, non-null value replaces it. They have to be the same thing: an MCP client
+    that bridges to strict function calling sends `null` for every optional argument the caller did
+    not ask it to set, so if `null` meant "clear", a one-field rename from such a client would wipe
+    every other field. Blanking a text field is simply passing `""` as that value; forcing a field
+    to nothing more deliberately — a text field to `""` or a nullable field to `null` — by name
+    rather than by value is `clear_fields`, below."""
     return current if given is None else given
 
 
-def _nullable_overlay(current: Any, given: Any) -> Any:
-    """The clearing convention for a *nullable* field on an edit: omitted (`None`) keeps the row's
-    current value; the literal [CLEAR_FIELD] sets it to null; anything else replaces it."""
-    if given is None:
-        return current
-    if given == CLEAR_FIELD:
-        return None
-    return given
+def _overlay_or_clear(current: Any, given: Any, name: str, to_clear: set[str], *, when_cleared: Any) -> Any:
+    """As [_overlay], except a field named in `to_clear` (already validated by
+    [_validate_clear_fields]) is forced to `when_cleared` regardless of what was given —
+    `to_clear` and a non-null `given` for the same field are mutually exclusive by the time this
+    runs. `when_cleared` is `""` for a text field, `None` for a nullable one."""
+    if name in to_clear:
+        return when_cleared
+    return _overlay(current, given)
+
+
+def _validate_clear_fields(
+    clear_fields: list[str] | None, clearable: frozenset[str], supplied: dict[str, Any]
+) -> set[str]:
+    """The `clear_fields` contract, checked before any HTTP call: every name must be one of
+    `clearable`, and a field named here must not also have been given a non-null value — the two
+    are different instructions for the same field, and this tool will not guess which one wins."""
+    if not clear_fields:
+        return set()
+    names = set(clear_fields)
+    unknown = names - clearable
+    if unknown:
+        raise ToolError(
+            f"clear_fields names a field that cannot be cleared here: {sorted(unknown)}; "
+            f"clearable fields are {sorted(clearable)}"
+        )
+    conflicting = {name for name in names if supplied.get(name) is not None}
+    if conflicting:
+        raise ToolError(
+            f"clear_fields lists a field that was also given a value: {sorted(conflicting)} — "
+            "pass the value, or clear it, not both"
+        )
+    return names
 
 
 def _find_by_id(rows: list[dict[str, Any]], row_id: str, *, field: str) -> dict[str, Any]:
@@ -215,6 +236,18 @@ def create_asset(
     )
 
 
+_ASSET_TEXT_CLEARABLE: frozenset[str] = frozenset({
+    "category", "description", "notes", "manufacturer", "model", "serial_number",
+    "vendor", "location", "warranty_notes",
+})
+_ASSET_NULLABLE_CLEARABLE: frozenset[str] = frozenset({
+    "purchase_on", "in_service_on", "purchase_price_minor", "currency",
+    "warranty_expires_on", "parent_asset_id", "season_start_mmdd", "season_end_mmdd",
+})
+_ASSET_CLEARABLE_FIELDS: frozenset[str] = _ASSET_TEXT_CLEARABLE | _ASSET_NULLABLE_CLEARABLE
+"""Every field but `name` — the app requires it non-blank, so it is never in `clear_fields`."""
+
+
 @mcp.tool()
 def update_asset(
     asset_id: str,
@@ -227,7 +260,7 @@ def update_asset(
     serial_number: str | None = None,
     purchase_on: str | None = None,
     in_service_on: str | None = None,
-    purchase_price_minor: int | str | None = None,
+    purchase_price_minor: int | None = None,
     currency: str | None = None,
     vendor: str | None = None,
     location: str | None = None,
@@ -236,45 +269,90 @@ def update_asset(
     parent_asset_id: str | None = None,
     season_start_mmdd: str | None = None,
     season_end_mmdd: str | None = None,
+    clear_fields: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Edit an asset. **The app's `PATCH` replaces the whole row** — every field on the wire is
-    what the asset ends up with — so this tool reads the asset first and sends back its current
-    fields, overlaid with only the arguments you actually passed. An omitted argument therefore
-    keeps whatever the asset already has.
+    """Edit an asset.
 
-    Clearing is explicit and looks different depending on the field:
-    - a **text** field (`name`, `category`, `description`, `notes`, `manufacturer`, `model`,
-      `serial_number`, `vendor`, `location`, `warranty_notes`) is cleared by passing `""`; omitted
-      and `""` are different arguments here.
-    - a **nullable** field (`purchase_on`, `in_service_on`, `purchase_price_minor`, `currency`,
-      `warranty_expires_on`, `parent_asset_id`, `season_start_mmdd`, `season_end_mmdd`) is cleared
-      by passing the literal string in [CLEAR_FIELD]; omitted keeps the current value. Clearing
-      `parent_asset_id` promotes a component to a top-level asset.
+    **Two layers, and they are not the same thing.** The Android app's own `PATCH /v1/assets/{id}`
+    is a full replacement — every field on the wire is what the asset ends up with. This tool adds
+    partial-edit convenience on top: it reads the asset's current fields first, overlays only the
+    arguments you actually supplied, and submits the complete replacement for you. Nothing about
+    calling this tool requires stating all eighteen fields.
+
+    An **omitted** argument and one sent explicitly as **`null`** both leave the asset's current
+    value alone — the same thing, on purpose: an MCP client that bridges to strict function calling
+    sends `null` for every optional argument its caller did not set, and if `null` meant "clear", a
+    one-field rename from such a client would silently wipe the other seventeen. A **supplied,
+    non-null value replaces the current one** — for a text field (`category`, `description`,
+    `notes`, `manufacturer`, `model`, `serial_number`, `vendor`, `location`, `warranty_notes`) an
+    explicit `""` is simply that value, setting it empty.
+
+    Clearing by *name* rather than by value is `clear_fields` (e.g. `clear_fields=["vendor"]`,
+    `clear_fields=["currency", "parent_asset_id"]`): every field but `name` is clearable — a text
+    field is sent as `""`, a nullable field (`purchase_on`, `in_service_on`,
+    `purchase_price_minor`, `currency`, `warranty_expires_on`, `parent_asset_id`,
+    `season_start_mmdd`, `season_end_mmdd`) as `null`. Clearing `parent_asset_id` is what promotes
+    a component to a top-level asset. `name` and `asset_id` can never be cleared — the app requires
+    both. Naming an unknown field, or naming one you also passed a value for, is refused before any
+    request is made.
 
     `template_key` is not a parameter here because the app ignores it on an edit — it only seeds a
     *new* asset (`create_asset`, `create_component`).
     """
+    supplied = {
+        "category": category,
+        "description": description,
+        "notes": notes,
+        "manufacturer": manufacturer,
+        "model": model,
+        "serial_number": serial_number,
+        "purchase_on": purchase_on,
+        "in_service_on": in_service_on,
+        "purchase_price_minor": purchase_price_minor,
+        "currency": currency,
+        "vendor": vendor,
+        "location": location,
+        "warranty_expires_on": warranty_expires_on,
+        "warranty_notes": warranty_notes,
+        "parent_asset_id": parent_asset_id,
+        "season_start_mmdd": season_start_mmdd,
+        "season_end_mmdd": season_end_mmdd,
+    }
+    to_clear = _validate_clear_fields(clear_fields, _ASSET_CLEARABLE_FIELDS, supplied)
+
+    def text(current_value: str, given: str | None, name: str) -> str:
+        return _overlay_or_clear(current_value, given, name, to_clear, when_cleared="")
+
+    def nullable(current_value: Any, given: Any, name: str) -> Any:
+        return _overlay_or_clear(current_value, given, name, to_clear, when_cleared=None)
+
     path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}"
     current = _call("GET", path)["asset"]
     body = {
-        "name": _text_overlay(current["name"], name),
-        "category": _text_overlay(current["category"], category),
-        "description": _text_overlay(current["description"], description),
-        "notes": _text_overlay(current["notes"], notes),
-        "manufacturer": _text_overlay(current["manufacturer"], manufacturer),
-        "model": _text_overlay(current["model"], model),
-        "serialNumber": _text_overlay(current["serialNumber"], serial_number),
-        "purchaseOn": _nullable_overlay(current["purchaseOn"], purchase_on),
-        "inServiceOn": _nullable_overlay(current["inServiceOn"], in_service_on),
-        "purchasePriceMinor": _nullable_overlay(current["purchasePriceMinor"], purchase_price_minor),
-        "currency": _nullable_overlay(current["currency"], currency),
-        "vendor": _text_overlay(current["vendor"], vendor),
-        "location": _text_overlay(current["location"], location),
-        "warrantyExpiresOn": _nullable_overlay(current["warrantyExpiresOn"], warranty_expires_on),
-        "warrantyNotes": _text_overlay(current["warrantyNotes"], warranty_notes),
-        "parentAssetId": _nullable_overlay(current["parentAssetId"], parent_asset_id),
-        "seasonStartMmdd": _nullable_overlay(current["seasonStartMmdd"], season_start_mmdd),
-        "seasonEndMmdd": _nullable_overlay(current["seasonEndMmdd"], season_end_mmdd),
+        "name": _overlay(current["name"], name),
+        "category": text(current["category"], category, "category"),
+        "description": text(current["description"], description, "description"),
+        "notes": text(current["notes"], notes, "notes"),
+        "manufacturer": text(current["manufacturer"], manufacturer, "manufacturer"),
+        "model": text(current["model"], model, "model"),
+        "serialNumber": text(current["serialNumber"], serial_number, "serial_number"),
+        "purchaseOn": nullable(current["purchaseOn"], purchase_on, "purchase_on"),
+        "inServiceOn": nullable(current["inServiceOn"], in_service_on, "in_service_on"),
+        "purchasePriceMinor": nullable(
+            current["purchasePriceMinor"], purchase_price_minor, "purchase_price_minor"
+        ),
+        "currency": nullable(current["currency"], currency, "currency"),
+        "vendor": text(current["vendor"], vendor, "vendor"),
+        "location": text(current["location"], location, "location"),
+        "warrantyExpiresOn": nullable(
+            current["warrantyExpiresOn"], warranty_expires_on, "warranty_expires_on"
+        ),
+        "warrantyNotes": text(current["warrantyNotes"], warranty_notes, "warranty_notes"),
+        "parentAssetId": nullable(current["parentAssetId"], parent_asset_id, "parent_asset_id"),
+        "seasonStartMmdd": nullable(
+            current["seasonStartMmdd"], season_start_mmdd, "season_start_mmdd"
+        ),
+        "seasonEndMmdd": nullable(current["seasonEndMmdd"], season_end_mmdd, "season_end_mmdd"),
     }
     return _call("PATCH", path, json_body=body, content_type="application/json")
 
@@ -332,10 +410,16 @@ def create_component(
 
 
 @mcp.tool()
-def retire_asset(asset_id: str, retired_on: str | None) -> dict[str, Any]:
-    """Pass a date (`YYYY-MM-DD`) to retire the asset; pass `retired_on=None` explicitly to
-    un-retire it. There is no default, on purpose: a default that un-retires on a bare
-    `retire_asset(asset_id=...)` call would invert what the tool's own name says it does."""
+def retire_asset(asset_id: str, retired_on: str) -> dict[str, Any]:
+    """Retire the asset on a date (`YYYY-MM-DD`). Required, and must not be blank or null — a
+    missing, empty or `null` date is refused before any request is made, and nothing is sent.
+
+    This tool is **monotonic**: it can only retire, never un-retire. The app's own API row is
+    unchanged (it still answers `retired_on: null` to un-retire), but that half is not exposed here
+    in 1.1.0 — un-retire an asset in the app itself.
+    """
+    if not retired_on:
+        raise ToolError("retired_on is required (YYYY-MM-DD); this tool cannot un-retire an asset")
     return _call(
         "POST",
         f"/v1/assets/{_path_id(asset_id, field='asset_id')}/retire",
@@ -361,6 +445,19 @@ def list_definitions(asset_id: str) -> dict[str, Any]:
     return _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/definitions")
 
 
+_DEFINITION_TEXT_CLEARABLE: frozenset[str] = frozenset({"unit"})
+"""`key` is excluded on purpose: blank already means "leave it alone" to the app itself
+(`SaveDefinitionRequest.key`'s own doc), so naming it in `clear_fields` could not do anything a
+caller would recognise as "clearing". `label`, `kind` and `value_type` are excluded because they
+are either required or an enum the app would refuse blank."""
+_DEFINITION_NULLABLE_CLEARABLE: frozenset[str] = frozenset({
+    "range_low", "range_high", "formula", "source_a_id", "source_b_id",
+})
+_DEFINITION_CLEARABLE_FIELDS: frozenset[str] = (
+    _DEFINITION_TEXT_CLEARABLE | _DEFINITION_NULLABLE_CLEARABLE
+)
+
+
 @mcp.tool()
 def save_definition(
     asset_id: str,
@@ -371,28 +468,45 @@ def save_definition(
     kind: str | None = None,
     value_type: str | None = None,
     decimals: int | None = None,
-    range_low: float | str | None = None,
-    range_high: float | str | None = None,
+    range_low: float | None = None,
+    range_high: float | None = None,
     is_meter: bool | None = None,
     formula: str | None = None,
     source_a_id: str | None = None,
     source_b_id: str | None = None,
+    clear_fields: list[str] | None = None,
 ) -> dict[str, Any]:
     """Create a reading, or edit one by passing `definition_id`.
 
     **Create** (no `definition_id`): `label` is required; every other field starts from the API's
     own default (`key=""` generates one from the label, `kind="ENTERED"`, `value_type="NUMBER"`,
     `decimals=0`, no range, not a meter). `key` blank is always "leave it alone" to the app itself,
-    on a create as well as an edit, so passing `key=""` never sets it blank.
+    on a create as well as an edit, so passing `key=""` never sets it blank. `clear_fields` does not
+    apply to a create and is refused if given.
 
-    **Edit** (`definition_id` given): this reads the asset's current readings (`list_definitions`)
-    and finds `definition_id` among them first, then sends the whole row back with only the fields
-    you passed changed — an omitted argument keeps what the reading already has. `range_low`,
-    `range_high`, `formula`, `source_a_id` and `source_b_id` are nullable: pass the literal string
-    in [CLEAR_FIELD] to clear one. Once measurements exist, the app refuses a change to
+    **Edit** (`definition_id` given): the app's own `POST /v1/definitions` write is a full
+    replacement of the row, same as `update_asset`'s `PATCH`; this tool gives it the same
+    convenience — it reads the asset's current readings (`list_definitions`), finds `definition_id`
+    among them, and sends the whole row back with only the fields you passed changed. An **omitted**
+    argument and one sent explicitly as **`null`** both keep what the reading already has, the same
+    as `update_asset`; a supplied non-null value replaces it. Clearing by *name* rather than by
+    value is `clear_fields`: `unit` is sent as `""`; `range_low`, `range_high`, `formula`,
+    `source_a_id` and `source_b_id` are nullable and are sent as `null`. `key`, `label`, `kind` and
+    `value_type` can never be cleared — blank already means something else for `key` (see above),
+    and the rest are required or an enum. Once measurements exist, the app refuses a change to
     `value_type`, `kind` or `key` either way.
     """
+    supplied = {
+        "unit": unit,
+        "range_low": range_low,
+        "range_high": range_high,
+        "formula": formula,
+        "source_a_id": source_a_id,
+        "source_b_id": source_b_id,
+    }
     if definition_id is None:
+        if clear_fields:
+            raise ToolError("clear_fields only applies to editing an existing reading (pass definition_id)")
         if label is None:
             raise ToolError("label is required to create a reading (pass definition_id to edit one)")
         body = _body(
@@ -411,23 +525,31 @@ def save_definition(
             sourceBId=source_b_id,
         )
     else:
+        to_clear = _validate_clear_fields(clear_fields, _DEFINITION_CLEARABLE_FIELDS, supplied)
+
+        def text(current_value: str, given: str | None, name: str) -> str:
+            return _overlay_or_clear(current_value, given, name, to_clear, when_cleared="")
+
+        def nullable(current_value: Any, given: Any, name: str) -> Any:
+            return _overlay_or_clear(current_value, given, name, to_clear, when_cleared=None)
+
         rows = _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/definitions")
         current = _find_by_id(rows["definitions"], definition_id, field="definition_id")
         body = {
             "id": definition_id,
             "assetId": asset_id,
-            "key": _text_overlay(current["key"], key),
-            "label": _text_overlay(current["label"], label),
-            "unit": _text_overlay(current["unit"], unit),
-            "kind": _text_overlay(current["kind"], kind),
-            "valueType": _text_overlay(current["valueType"], value_type),
+            "key": _overlay(current["key"], key),
+            "label": _overlay(current["label"], label),
+            "unit": text(current["unit"], unit, "unit"),
+            "kind": _overlay(current["kind"], kind),
+            "valueType": _overlay(current["valueType"], value_type),
             "decimals": current["decimals"] if decimals is None else decimals,
-            "rangeLow": _nullable_overlay(current["rangeLow"], range_low),
-            "rangeHigh": _nullable_overlay(current["rangeHigh"], range_high),
+            "rangeLow": nullable(current["rangeLow"], range_low, "range_low"),
+            "rangeHigh": nullable(current["rangeHigh"], range_high, "range_high"),
             "isMeter": current["isMeter"] if is_meter is None else is_meter,
-            "formula": _nullable_overlay(current["formula"], formula),
-            "sourceAId": _nullable_overlay(current["sourceAId"], source_a_id),
-            "sourceBId": _nullable_overlay(current["sourceBId"], source_b_id),
+            "formula": nullable(current["formula"], formula, "formula"),
+            "sourceAId": nullable(current["sourceAId"], source_a_id, "source_a_id"),
+            "sourceBId": nullable(current["sourceBId"], source_b_id, "source_b_id"),
         }
     return _call("POST", "/v1/definitions", json_body=body, content_type="application/json")
 
@@ -465,12 +587,17 @@ def save_profile(
     `{"definitionId": ..., "required": bool}`, each naming an ENTERED reading of the same asset;
     `consumables` is `{"name", "defaultQuantity", "unit"}`. Both default to empty.
 
-    **Edit** (`profile_id` given): this reads the asset's current quick actions (`list_profiles`)
-    and finds `profile_id` among them first, then sends the whole row back with only the fields you
-    passed changed — an omitted argument, `fields`/`consumables` included, keeps what the quick
-    action already has. Pass `fields`/`consumables` only when you mean to replace the whole list.
-    Each existing consumable's `id` travels with it when kept, which is what keeps its identity
-    across the edit; a `consumables` list you pass yourself may include `id` the same way.
+    **Edit** (`profile_id` given): the app's own write is a full replacement, same as
+    `update_asset`; this tool reads the asset's current quick actions (`list_profiles`), finds
+    `profile_id` among them, and sends the whole row back with only the fields you passed changed.
+    An **omitted** argument and one sent explicitly as **`null`** both keep what the quick action
+    already has — `fields`/`consumables` included — the same convention `update_asset` uses; pass
+    `fields`/`consumables` only when you mean to replace the whole list. There is no `clear_fields`
+    here: every field of this row is either text (an explicit `""` already clears it) or a list
+    (an explicit `[]` already clears it) — none of them is a *nullable* field the way an asset's
+    `currency` is. Each existing consumable's `id` travels with it when kept, which is what keeps
+    its identity across the edit; a `consumables` list you pass yourself may include `id` the same
+    way.
     """
     if profile_id is None:
         if name is None or event_kind is None:
@@ -504,9 +631,9 @@ def save_profile(
         body = {
             "id": profile_id,
             "assetId": asset_id,
-            "name": _text_overlay(current["name"], name),
-            "eventKind": _text_overlay(current["eventKind"], event_kind),
-            "defaultTitle": _text_overlay(current["defaultTitle"], default_title),
+            "name": _overlay(current["name"], name),
+            "eventKind": _overlay(current["eventKind"], event_kind),
+            "defaultTitle": _overlay(current["defaultTitle"], default_title),
             "fields": kept_fields if fields is None else fields,
             "consumables": kept_consumables if consumables is None else consumables,
         }

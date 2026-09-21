@@ -76,7 +76,10 @@ def api(monkeypatch: pytest.MonkeyPatch):
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     fake = FakeApi(url=f"http://127.0.0.1:{httpd.server_address[1]}")
     state["api"] = fake
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    # `serve_forever`'s default `poll_interval` is 0.5s, and `shutdown()` blocks for up to one
+    # poll before returning — across ~50 fixture teardowns that is most of the suite's wall time
+    # for zero extra proof. A tighter poll costs nothing this fixture asserts on.
+    thread = threading.Thread(target=httpd.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True)
     thread.start()
 
     # An explicit base URL is the documented signal that someone else owns the transport, so the

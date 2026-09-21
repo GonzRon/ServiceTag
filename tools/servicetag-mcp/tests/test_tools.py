@@ -206,10 +206,52 @@ def test_update_asset_preserves_everything_it_was_not_told_to_change(paired) -> 
     }
 
 
-def test_update_asset_an_explicit_clear_clears_exactly_one_nullable_field(paired) -> None:
+def test_update_asset_a_component_keeps_its_parent_through_a_rename_and_a_category_change(
+    paired,
+) -> None:
+    """A component (`parentAssetId` set) must not be silently promoted to top level by an edit
+    that never mentions its parent — proof #3."""
+    current = _asset_row(parentAssetId="system-1")
+    paired.reply("GET", "/v1/assets/a1", 200, {"asset": current})
+    server_module.update_asset(asset_id="a1", name="Pool pump v2", category="Water", vendor="")
+    body = body_of(paired.last())
+    assert body["parentAssetId"] == "system-1"
+    assert body["name"] == "Pool pump v2"
+    assert body["category"] == "Water"
+    assert body["vendor"] == ""
+    for key in (
+        "description", "notes", "manufacturer", "model", "serialNumber", "purchaseOn",
+        "inServiceOn", "purchasePriceMinor", "currency", "location", "warrantyExpiresOn",
+        "warrantyNotes", "seasonStartMmdd", "seasonEndMmdd",
+    ):
+        assert body[key] == current[key], key
+
+
+def test_update_asset_an_explicit_null_preserves_just_like_omitted(paired) -> None:
+    """Owner ruling: omitted and explicit `null` must be the same thing, because a strict-function-
+    calling client sends `null` for every optional argument it was not given."""
     current = _asset_row()
     paired.reply("GET", "/v1/assets/a1", 200, {"asset": current})
-    server_module.update_asset(asset_id="a1", currency=server_module.CLEAR_FIELD)
+    server_module.update_asset(asset_id="a1", name="Hot Tub Deluxe", category=None, vendor=None)
+    body = body_of(paired.last())
+    assert body["name"] == "Hot Tub Deluxe"
+    assert body["category"] == current["category"]
+    assert body["vendor"] == current["vendor"]
+
+
+def test_update_asset_a_supplied_empty_string_is_just_a_value(paired) -> None:
+    current = _asset_row()
+    paired.reply("GET", "/v1/assets/a1", 200, {"asset": current})
+    server_module.update_asset(asset_id="a1", notes="")
+    body = body_of(paired.last())
+    assert body["notes"] == ""
+    assert body["name"] == current["name"]
+
+
+def test_update_asset_clear_fields_clears_exactly_one_nullable_field(paired) -> None:
+    current = _asset_row()
+    paired.reply("GET", "/v1/assets/a1", 200, {"asset": current})
+    server_module.update_asset(asset_id="a1", clear_fields=["currency"])
     body = body_of(paired.last())
     assert body["currency"] is None
     for key in (
@@ -220,20 +262,40 @@ def test_update_asset_an_explicit_clear_clears_exactly_one_nullable_field(paired
         assert body[key] == current[key], key
 
 
-def test_update_asset_an_explicit_empty_string_clears_a_text_field(paired) -> None:
+def test_update_asset_clear_fields_clears_a_text_field_to_empty_string(paired) -> None:
+    """`vendor` is a text field: `clear_fields` sends `""`, not `null` — the app has no null state
+    for it. Equivalent to passing `vendor=""` directly; `clear_fields` is the name-based spelling."""
     current = _asset_row()
     paired.reply("GET", "/v1/assets/a1", 200, {"asset": current})
-    server_module.update_asset(asset_id="a1", notes="")
+    server_module.update_asset(asset_id="a1", clear_fields=["vendor"])
     body = body_of(paired.last())
-    assert body["notes"] == ""
+    assert body["vendor"] == ""
     assert body["name"] == current["name"]
 
 
-def test_update_asset_clears_the_parent_with_the_sentinel(paired) -> None:
+def test_update_asset_clear_fields_clears_the_parent(paired) -> None:
     current = _asset_row()
     paired.reply("GET", "/v1/assets/a1", 200, {"asset": current})
-    server_module.update_asset(asset_id="a1", parent_asset_id=server_module.CLEAR_FIELD)
+    server_module.update_asset(asset_id="a1", clear_fields=["parent_asset_id"])
     assert body_of(paired.last())["parentAssetId"] is None
+
+
+def test_update_asset_clear_fields_refuses_a_field_that_cannot_be_cleared(paired) -> None:
+    with pytest.raises(ToolError):
+        server_module.update_asset(asset_id="a1", clear_fields=["name"])
+    assert paired.requests == []
+
+
+def test_update_asset_clear_fields_refuses_an_unknown_name(paired) -> None:
+    with pytest.raises(ToolError):
+        server_module.update_asset(asset_id="a1", clear_fields=["not_a_field"])
+    assert paired.requests == []
+
+
+def test_update_asset_clear_fields_refuses_a_field_also_given_a_value(paired) -> None:
+    with pytest.raises(ToolError):
+        server_module.update_asset(asset_id="a1", vendor="Acme", clear_fields=["vendor"])
+    assert paired.requests == []
 
 
 def test_retire_and_archive_post_their_flags(paired) -> None:
@@ -241,18 +303,20 @@ def test_retire_and_archive_post_their_flags(paired) -> None:
     assert paired.last().path == "/v1/assets/a1/retire"
     assert body_of(paired.last()) == {"retiredOn": "2026-04-01"}
 
-    server_module.retire_asset(asset_id="a1", retired_on=None)
-    assert body_of(paired.last()) == {"retiredOn": None}
-
     server_module.archive_asset(asset_id="a1", archived=True)
     assert paired.last().path == "/v1/assets/a1/archive"
     assert body_of(paired.last()) == {"archived": True}
 
 
-def test_retire_asset_has_no_default_for_retired_on() -> None:
-    """Finding 8: `retire_asset(asset_id=...)` alone must be a `TypeError`, not an un-retire."""
+def test_retire_asset_has_no_default_and_is_monotonic(paired) -> None:
+    """`retire_asset` retires only; the MCP server exposes no un-retire in 1.1.0."""
     param = inspect.signature(server_module.retire_asset).parameters["retired_on"]
     assert param.default is inspect.Parameter.empty
+
+    for bad in (None, ""):
+        with pytest.raises(ToolError):
+            server_module.retire_asset(asset_id="a1", retired_on=bad)
+    assert paired.requests == []
 
 
 # --- finding 11: save_definition and save_profile overlay on edit; update_event does not, and --
@@ -323,13 +387,35 @@ def test_save_definition_edit_preserves_everything_it_was_not_told_to_change(pai
     }
 
 
-def test_save_definition_clears_a_nullable_field_with_the_sentinel(paired) -> None:
+def test_save_definition_edit_explicit_null_preserves_like_omitted(paired) -> None:
     current = _definition_row()
     paired.reply("GET", "/v1/assets/a1/definitions", 200, {"definitions": [current]})
-    server_module.save_definition(asset_id="a1", definition_id="d1", range_low=server_module.CLEAR_FIELD)
+    server_module.save_definition(asset_id="a1", definition_id="d1", label="pH (calibrated)", unit=None)
+    body = body_of(paired.last())
+    assert body["label"] == "pH (calibrated)"
+    assert body["unit"] == current["unit"]
+
+
+def test_save_definition_clear_fields_clears_a_nullable_field(paired) -> None:
+    current = _definition_row()
+    paired.reply("GET", "/v1/assets/a1/definitions", 200, {"definitions": [current]})
+    server_module.save_definition(asset_id="a1", definition_id="d1", clear_fields=["range_low"])
     body = body_of(paired.last())
     assert body["rangeLow"] is None
     assert body["rangeHigh"] == current["rangeHigh"]
+
+
+def test_save_definition_clear_fields_refuses_an_unknown_name(paired) -> None:
+    paired.reply("GET", "/v1/assets/a1/definitions", 200, {"definitions": [_definition_row()]})
+    with pytest.raises(ToolError):
+        server_module.save_definition(asset_id="a1", definition_id="d1", clear_fields=["label"])
+    assert paired.requests == []
+
+
+def test_save_definition_clear_fields_refuses_on_a_create(paired) -> None:
+    with pytest.raises(ToolError):
+        server_module.save_definition(asset_id="a1", label="pH", clear_fields=["range_low"])
+    assert paired.requests == []
 
 
 def test_save_definition_edit_of_an_id_not_on_the_asset_is_a_clear_refusal(paired) -> None:

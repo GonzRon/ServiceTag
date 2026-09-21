@@ -62,6 +62,30 @@ Twenty-one: `pair` plus one per API operation.
 `list_profiles`, `save_profile`, `archive_profile`, `list_events`, `log_event`, `update_event`,
 `delete_event`, `list_tag_bindings`, `import_merge`.
 
+### Editing an existing row: two layers, and they are not the same thing
+
+The Android API's own asset/reading/quick-action writes (`PATCH /v1/assets/{id}`,
+`POST /v1/definitions`, `POST /v1/profiles`) are each a **full replacement** — every field on the
+wire is what the row ends up with. `update_asset` and `save_definition`/`save_profile` on an edit
+add **partial-edit convenience** on top of that: the tool reads the row's current fields first,
+overlays only the arguments you actually supplied, and submits the complete replacement for you.
+Nothing about calling these tools requires stating every field.
+
+An **omitted** argument and one sent explicitly as **`null`** both leave the current value alone —
+the same thing, on purpose: an MCP client that bridges to strict function calling sends `null` for
+every optional argument its caller did not set, and if `null` meant "clear", a one-field rename
+from such a client would silently wipe everything else. A supplied, non-null value replaces the
+current one; for a text field an explicit `""` is simply that value. Clearing a field by *name*
+rather than by value is `clear_fields`, e.g. `clear_fields=["vendor"]` — see each tool's own
+docstring for which fields are clearable and what "cleared" means for each (`""` for a text field,
+`null` for a nullable one).
+
+`update_event` is the one edit tool with **no overlay**: `list_events` reports a logged event's
+readings as typed measurements, not as the definition-id-to-text map `update_event` writes, so
+reconstructing one from the other would risk silently reformatting a value. Every one of its
+arguments is required — the call always replaces the whole event, and there is no default that
+could clear something by omission.
+
 ### `import_merge`
 
 Takes a local path to a format-5 `ServiceTag-data-*.zip` and merges it into the phone. **It plans
