@@ -61,7 +61,12 @@ internal class ApiRouter(
      * apply are two different acts and neither is the default.
      */
     private suspend fun route(request: ApiRequest): ApiResponse {
-        val segments = request.path.trim('/').split('/')
+        // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
+        // once, in `parseRequest`, before `bodyCapFor` is ever consulted. Trimming a trailing slash
+        // here too would let a non-canonical spelling reach a handler under the wrong cap — the
+        // route and the cap must agree on the same string, which means neither may forgive what the
+        // other did not already canonicalise (review S6).
+        val segments = request.path.removePrefix("/").split('/')
         if (segments.firstOrNull() != "v1") throw ApiFailure.notFound(request.path)
         val rest = segments.drop(1)
         val method = request.method

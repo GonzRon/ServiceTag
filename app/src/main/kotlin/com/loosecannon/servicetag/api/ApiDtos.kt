@@ -262,8 +262,11 @@ internal fun SaveDefinitionRequest.toCommand() = DefinitionCommand(
     rangeHigh = rangeHigh,
     isMeter = isMeter,
     formula = formula?.let { enumOr400<DerivedFormula>(it, "formula") },
-    sourceAId?.let(::DefinitionId),
-    sourceBId?.let(::DefinitionId),
+    // Review S3: named, not positional — `sourceA`/`sourceB` are adjacent parameters of the
+    // identical type `DefinitionId?`, so a reorder in `:core` would have compiled and silently
+    // swapped them.
+    sourceA = sourceAId?.let(::DefinitionId),
+    sourceB = sourceBId?.let(::DefinitionId),
 )
 
 @Serializable

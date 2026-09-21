@@ -1,16 +1,19 @@
 package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.backup.BackupCodec
+import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.testing.FakeGraph
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -259,6 +262,34 @@ class ApiRouterTest {
         assertEquals("pH (top)", ApiJson.decodeFromString(DefinitionResponse.serializer(), edited.text()).definition.label)
     }
 
+    /**
+     * Review S3: `SaveDefinitionRequest.toCommand()` used to pass `sourceAId`/`sourceBId` into
+     * `DefinitionCommand` positionally, two adjacent parameters of the identical type `DefinitionId?`
+     * — a reorder in `:core` would have silently swapped them. Distinct sources prove the wire
+     * still tells A from B after naming the arguments.
+     */
+    @Test fun aDerivedDefinitionKeepsSourceADistinctFromSourceB() {
+        val id = createHotTub()
+        val sourceA = ApiJson.decodeFromString(
+            DefinitionResponse.serializer(),
+            call("POST", "/v1/definitions", """{"assetId":"$id","label":"Source A","decimals":1}""").text(),
+        ).definition
+        val sourceB = ApiJson.decodeFromString(
+            DefinitionResponse.serializer(),
+            call("POST", "/v1/definitions", """{"assetId":"$id","label":"Source B","decimals":1}""").text(),
+        ).definition
+
+        val derived = call(
+            "POST", "/v1/definitions",
+            """{"assetId":"$id","label":"Drop","kind":"DERIVED","formula":"PERCENT_DROP",""" +
+                """"sourceAId":"${sourceA.id}","sourceBId":"${sourceB.id}"}""",
+        )
+        assertEquals(200, derived.status)
+        val definition = ApiJson.decodeFromString(DefinitionResponse.serializer(), derived.text()).definition
+        assertEquals(sourceA.id, definition.sourceAId)
+        assertEquals(sourceB.id, definition.sourceBId)
+    }
+
     @Test fun saveListAndArchiveAProfile() {
         val id = createHotTub()
         val definition = ApiJson.decodeFromString(
@@ -358,6 +389,54 @@ class ApiRouterTest {
         val typo = call("POST", "/v1/assets", """{"name":"Hot tub","serialNo":"X1"}""")
         assertEquals(400, typo.status)
         assertEquals("bad_request", typo.code())
+    }
+
+    /** A parent that is its own child: `validateAsset` throws `AssetCycle`, a real state 409. */
+    @Test fun aSelfParentingPatchIs409AssetCycle() {
+        val id = createHotTub()
+        val response = call("PATCH", "/v1/assets/$id", """{"name":"Hot tub","parentAssetId":"$id"}""")
+        assertEquals(409, response.status)
+        assertEquals("asset_cycle", response.code())
+    }
+
+    /**
+     * Review S4: `mapDomainFailure`'s `else` branch is the one place whose entire job is to stop a
+     * message leaking — it emits `e.javaClass.simpleName` and deliberately drops `e.message`. A stub
+     * repository through `ApiHandlers`' primary constructor is the seam that already exists to prove
+     * it: the exception message below (a fabricated database path) must never reach the response.
+     */
+    private class ThrowingAssetRepository : AssetRepository {
+        override suspend fun upsert(asset: Asset): Unit = error("not used by this test")
+        override suspend fun get(id: AssetId): Asset? = error("not used by this test")
+        override suspend fun all(): List<Asset> =
+            throw IllegalStateException("/data/data/com.loosecannon.servicetag/databases/servicetag.db is corrupt")
+        override suspend fun delete(id: AssetId): Unit = error("not used by this test")
+        override suspend fun deleteAll(): Unit = error("not used by this test")
+        override fun observeAll(): Flow<List<Asset>> = error("not used by this test")
+    }
+
+    @Test fun anUnanticipatedFailureIs500WithNoMessageLeak() {
+        val brokenRouter = ApiRouter(
+            ApiHandlers(
+                ThrowingAssetRepository(), graph.tags, graph.links, graph.definitions, graph.profiles,
+                graph.events, graph.attachments,
+                graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
+                graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
+                graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
+                appVersion = "1.1.0",
+                schemaVersion = 5,
+            ),
+            TOKEN,
+        )
+        val response = brokenRouter.handle(
+            ApiRequest("GET", "/v1/status", mapOf("authorization" to "Bearer $TOKEN"), ByteArray(0)),
+        )
+        assertEquals(500, response.status)
+        val error = ApiJson.decodeFromString(ApiErrorBody.serializer(), response.text()).error
+        assertEquals("internal", error.code)
+        assertEquals("IllegalStateException", error.message)
+        assertFalse(response.text().contains("corrupt"))
+        assertFalse(response.text().contains("db"))
     }
 
     // --- the merge import over the wire ------------------------------------------------------
@@ -486,5 +565,12 @@ class ApiRouterTest {
         assertEquals(MAX_BODY_BYTES, router().bodyCapFor("/v1/status"))
         assertEquals(MAX_BODY_BYTES, router().bodyCapFor("/v1/import-merge"))
         assertEquals(MAX_BODY_BYTES, router().bodyCapFor("/v1/import-merge/plan/"))
+        // Review S6: agreement, not divergence. `bodyCapFor` does not recognise the trailing-slash
+        // spelling as the plan path (above), so `route` must not recognise it as the plan route
+        // either — otherwise a second producer of `ApiRequest` (this suite's own `call()`, which
+        // bypasses `parseRequest`'s canonicalisation) could reach the plan handler under the smaller
+        // cap `bodyCapFor` just answered for this exact spelling. It is a 404, the same "not this
+        // path" answer `bodyCapFor` gave.
+        assertEquals(404, call("POST", "/v1/import-merge/plan/", "{}").status)
     }
 }

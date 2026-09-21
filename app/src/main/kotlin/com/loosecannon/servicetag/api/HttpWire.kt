@@ -84,9 +84,10 @@ internal fun parseRequest(input: InputStream, bodyCapFor: (String) -> Int): ApiR
     val method = parts[0]
     if (method !in METHODS) throw malformed(405, "Method Not Allowed")
     // The query string is dropped — no endpoint reads one — and trailing slashes are dropped
-    // with it, so `bodyCapFor` below and `ApiRouter.route` (which trims slashes of its own) cannot
-    // disagree about which path this is. Canonicalising in one place is what keeps a trailing-slash
-    // spelling from reaching a handler with the wrong ceiling.
+    // with it, so `bodyCapFor` below and `ApiRouter.route` (which only strips the one leading slash,
+    // not a trailing one — review S6) cannot disagree about which path this is. Canonicalising in
+    // one place is what keeps a trailing-slash spelling from reaching a handler with the wrong
+    // ceiling.
     val path = parts[1].substringBefore('?').let {
         it.trimEnd('/').ifEmpty { "/" }
     }
@@ -150,9 +151,11 @@ private fun readLine(input: InputStream, max: Int): String? {
             val end = if (bytes.isNotEmpty() && bytes.last() == '\r'.code.toByte()) bytes.size - 1 else bytes.size
             return String(bytes, 0, end, Charsets.UTF_8)
         }
+        // N5: checked before the write, not after — otherwise the byte that pushes `out` from `max`
+        // to `max + 1` is written before the check catches it, admitting one byte more than [max]
+        // documents. `out.size()` is bytes, not characters, which is the ceiling this is meant to be.
+        if (out.size() >= max) throw malformed(400, "Bad Request", "that line is too long")
         out.write(b)
-        if (out.size() > max) throw malformed(400, "Bad Request", "that line is too long")
-        // `out.size()` is bytes, not characters, which is the ceiling this is meant to be.
     }
 }
 

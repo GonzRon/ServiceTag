@@ -83,16 +83,18 @@ class HttpWireTest {
             assertEquals("body for ${raw.take(24)}", 0, response.body.size)
             assertTrue("status for ${raw.take(24)}", response.status in setOf(400, 405, 413))
         }
-        // And the cap number is nowhere in any of them.
-        assertTrue(
-            shapes.none { refusal(it).body.decodeToString().contains(MAX_IMPORT_BYTES.toString()) },
-        )
+        // N12: the "cap number is nowhere in any of them" assertion that used to live here was
+        // vacuous — every body above is already proven zero bytes, so `"".contains(...)` can only
+        // be false and could never fail for the wrong reason. The zero-byte-body loop above is the
+        // whole claim; nothing here can be a non-empty refusal body to check the cap's absence in.
     }
 
     /**
-     * One canonical spelling, so the ceiling and the route cannot disagree. `ApiRouter.route` trims
-     * slashes of its own, so without this a `POST /v1/import-merge/plan/` would reach the plan
-     * handler with the 64 KiB cap instead of 4 MiB.
+     * One canonical spelling, so the ceiling and the route cannot disagree. `ApiRouter.route` no
+     * longer re-trims a trailing slash of its own (review S6), so without this a
+     * `POST /v1/import-merge/plan/` would reach `bodyCapFor` still carrying its slash and get the
+     * 64 KiB cap instead of 4 MiB — or, since S6, simply be a 404, either way never the plan handler
+     * under the wrong ceiling.
      */
     @Test fun aTrailingSlashIsDroppedSoTheCapComesFromTheCanonicalPath() {
         assertEquals("/v1/assets", parse("GET /v1/assets/ HTTP/1.1\r\n\r\n").path)
@@ -163,6 +165,12 @@ class HttpWireTest {
         assertEquals(400, refusal("GET /v1/status HTTP/1.1\r\nno-colon-here\r\n\r\n").status)
         assertEquals(400, refusal("GET /v1/status HTTP/1.1\r\nContent-Length: nine\r\n\r\n").status)
         assertEquals(400, refusal("POST /v1/assets HTTP/1.1\r\nContent-Length: 40\r\n\r\nshort").status)
+        // Review S5: negative and overflow are both untested branches of the same guard. Without
+        // the negative check, `toIntOrNull()` happily returns -1 and `readExactly` would reach
+        // `ByteArray(-1)`, which throws `NegativeArraySizeException` — an uncaught crash per
+        // connection, not a `MalformedRequest`, so the peer would be dropped instead of answered 400.
+        assertEquals(400, refusal("POST /v1/assets HTTP/1.1\r\nContent-Length: -1\r\n\r\n").status)
+        assertEquals(400, refusal("POST /v1/assets HTTP/1.1\r\nContent-Length: 99999999999\r\n\r\n").status)
     }
 
     @Test fun aResponseIsFramedWithItsLengthAndClosesTheConnection() {

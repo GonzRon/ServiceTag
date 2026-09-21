@@ -1,9 +1,15 @@
 package com.loosecannon.servicetag.api
 
+import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.IOException
 import java.net.InetAddress
 import java.net.Socket
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.flow.Flow
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -75,6 +81,30 @@ class LoopbackApiServerTest {
         assertTrue(answer, answer.contains("\"assets\":0"))
     }
 
+    /**
+     * Review S2, over a real socket: a 413 fires before the body is read, so the declared body may
+     * still be arriving on the wire when the response goes out. Without draining it before close,
+     * the caller risks an `ECONNRESET` instead of the 413 it was sent — this is the case the drain
+     * exists to make observable, so it is pinned with real bytes over a real socket, not the
+     * `ByteArrayInputStream`-backed `HttpWireTest.aBodyOverTheCapIs413`.
+     */
+    @Test fun aBodyOverTheCapReachesTheCallerAsA413NotAReset() {
+        val big = MAX_BODY_BYTES + 1
+        val answer = Socket("127.0.0.1", server.boundPort).use { socket ->
+            socket.soTimeout = 5_000
+            socket.getOutputStream().apply {
+                write(
+                    "POST /v1/assets HTTP/1.1\r\nAuthorization: Bearer $TOKEN\r\nContent-Length: $big\r\n\r\n"
+                        .toByteArray(),
+                )
+                write(ByteArray(big))
+                flush()
+            }
+            socket.getInputStream().readBytes().decodeToString()
+        }
+        assertTrue(answer, answer.startsWith("HTTP/1.1 413"))
+    }
+
     /** The first security minimum: the socket is on this phone's own address, and nowhere else. */
     @Test fun itBindsTheLoopbackAddressAndNothingElse() {
         assertEquals("127.0.0.1", server.boundAddress)
@@ -140,9 +170,13 @@ class LoopbackApiServerTest {
     @Test fun aHalfOpenClientDoesNotHoldTheWorker() {
         val impatient = LoopbackApiServer(router(), port = 0, readTimeoutMillis = 200)
         assertTrue(impatient.start())
+        // N13: declared here, not inside the `try`, so the `finally` below can always close it —
+        // previously a failed assertion inside the `try` would leak this socket for the rest of the
+        // JVM's life.
+        var stalled: Socket? = null
         try {
             // A fragment with no terminator: the parser blocks, then the socket times out.
-            val stalled = Socket("127.0.0.1", impatient.boundPort)
+            stalled = Socket("127.0.0.1", impatient.boundPort)
             stalled.getOutputStream().apply {
                 write("GET /v1/sta".toByteArray())
                 flush()
@@ -161,9 +195,74 @@ class LoopbackApiServerTest {
             // The stalled connection was dropped without ever being answered, so it counts as one
             // refusal at most and never blocked the one that mattered.
             assertEquals("requests", 1, impatient.requests.value)
-            stalled.close()
         } finally {
+            stalled?.close()
             impatient.stop()
+        }
+    }
+
+    /**
+     * Review S7. The plan's rule for `stop()` mid-request — close the in-flight socket, do not join,
+     * let a domain call already running finish as its own transaction — was asserted nowhere. A
+     * blocking stub repository, the same seam `ApiRouterTest`'s S4 case uses, stands in for a slow
+     * `uow.write`: this proves both halves of the rule in one case, and it is exactly the scenario
+     * S1 was a race in.
+     */
+    private class BlockingAssetRepository(
+        private val entered: CountDownLatch,
+        private val release: CountDownLatch,
+        private val completed: CountDownLatch,
+    ) : AssetRepository {
+        override suspend fun upsert(asset: Asset): Unit = error("not used by this test")
+        override suspend fun get(id: AssetId): Asset? = error("not used by this test")
+        override suspend fun all(): List<Asset> {
+            entered.countDown()
+            release.await()
+            completed.countDown()
+            return emptyList()
+        }
+        override suspend fun delete(id: AssetId): Unit = error("not used by this test")
+        override suspend fun deleteAll(): Unit = error("not used by this test")
+        override fun observeAll(): Flow<List<Asset>> = error("not used by this test")
+    }
+
+    @Test fun stopWhileARequestIsInFlightEndsTheConnectionWithNoResponseAndLetsTheHandlerFinish() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val completed = CountDownLatch(1)
+        val blockingRouter = ApiRouter(
+            ApiHandlers(
+                BlockingAssetRepository(entered, release, completed), graph.tags, graph.links,
+                graph.definitions, graph.profiles, graph.events, graph.attachments,
+                graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
+                graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
+                graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
+                appVersion = "1.1.0",
+                schemaVersion = 5,
+            ),
+            TOKEN,
+        )
+        val blockingServer = LoopbackApiServer(blockingRouter, port = 0)
+        assertTrue(blockingServer.start())
+        var client: Socket? = null
+        try {
+            client = Socket("127.0.0.1", blockingServer.boundPort)
+            client.getOutputStream().apply {
+                write("GET /v1/status HTTP/1.1\r\nAuthorization: Bearer $TOKEN\r\n\r\n".toByteArray())
+                flush()
+            }
+            assertTrue("the handler never entered", entered.await(5, TimeUnit.SECONDS))
+
+            blockingServer.stop()
+
+            client.soTimeout = 5_000
+            assertEquals("expected EOF, not a response", -1, client.getInputStream().read())
+
+            release.countDown()
+            assertTrue("the handler never finished", completed.await(5, TimeUnit.SECONDS))
+        } finally {
+            client?.close()
+            blockingServer.stop()
         }
     }
 }

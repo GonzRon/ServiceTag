@@ -35,6 +35,13 @@ internal fun isAcceptablePeer(address: InetAddress): Boolean = address.isLoopbac
 private const val ACCEPT_BACKLOG = 4
 
 /**
+ * Review S2's drain ceiling: never more than the largest body any route accepts, so a peer that
+ * declared a legitimate (if over-cap) length is fully drained, and a peer sending something far
+ * larger than any real route allows is simply not waited on past this budget.
+ */
+private const val DRAIN_BUDGET_BYTES = MAX_IMPORT_BYTES
+
+/**
  * A loopback HTTP/1.1 listener, one connection at a time, on one daemon thread.
  *
  * **Deliberately narrow, deliberately hand-rolled** — the plan's dependency decision argues it in
@@ -64,7 +71,6 @@ internal class LoopbackApiServer(
     val requests: StateFlow<Int> = _requests.asStateFlow()
 
     @Volatile private var socket: ServerSocket? = null
-    @Volatile private var worker: Thread? = null
 
     /** The connection currently being answered, so [stop] can close it rather than wait for it. */
     @Volatile private var inFlight: Socket? = null
@@ -84,7 +90,9 @@ internal class LoopbackApiServer(
             return false
         }
         socket = bound
-        worker = Thread({ acceptLoop(bound) }, "servicetag-developer-api").apply {
+        // N1: not held in a field. Nothing ever read it — it was assigned in `start()`, nulled in
+        // `stop()`, and never consulted — so it was write-only dead state.
+        Thread({ acceptLoop(bound) }, "servicetag-developer-api").apply {
             isDaemon = true
             start()
         }
@@ -113,7 +121,6 @@ internal class LoopbackApiServer(
         closeQuietly(bound)
         inFlight?.let { closeQuietly(it) }
         inFlight = null
-        worker = null
     }
 
     private fun acceptLoop(bound: ServerSocket) {
@@ -132,7 +139,14 @@ internal class LoopbackApiServer(
                 // never arrives — none of them may take the listener down, because a dead worker
                 // leaves the screen still showing a port that answers nothing.
             } finally {
-                inFlight = null
+                // Review S1: compare-and-clear, not an unconditional null. `inFlight` is instance
+                // state shared across listener generations — `stop()` does not join, so `start()`
+                // is free to spin up a second generation while this `finally` is still on its way
+                // to running. An unconditional clear would let this (stale) worker discard the
+                // *new* generation's in-flight socket, defeating `stop()`'s promise that no answer
+                // reaches a connection it had recorded. Retracting only the socket this worker
+                // itself recorded keeps that promise across a pause-then-quick-resume.
+                if (inFlight === client) inFlight = null
             }
         }
     }
@@ -161,5 +175,38 @@ internal class LoopbackApiServer(
         val output = client.getOutputStream()
         writeResponse(output, response)
         output.flush()
+        drainBeforeClose(client)
+    }
+
+    /**
+     * Review S2. `client.use { answer(it) }` (in [acceptLoop]) closes [client] the instant this
+     * returns; on Linux, closing a socket that still has unread received data queued sends an RST
+     * and can discard outbound data still in flight, so a caller can see `ECONNRESET` instead of the
+     * response it was just sent. That is most likely exactly for the case the cap exists to serve: a
+     * 413 fires *before* the body is read, so the whole declared body may still be arriving when the
+     * response goes out.
+     *
+     * Half-closing the write side tells the peer no more is coming — which is also what lets its own
+     * read of the response return — and then draining whatever it still has queued, up to
+     * [DRAIN_BUDGET_BYTES] or EOF, empties the receive buffer before `close()` runs so that close is
+     * graceful instead of a reset. Bounded twice over: by the byte budget, and by [readTimeoutMillis]
+     * already set on this socket, so a peer that never sends its declared body and never closes
+     * cannot hold the worker here either.
+     */
+    private fun drainBeforeClose(client: Socket) {
+        try {
+            client.shutdownOutput()
+            val input = client.getInputStream()
+            val scratch = ByteArray(8 * 1024)
+            var drained = 0
+            while (drained < DRAIN_BUDGET_BYTES) {
+                val n = input.read(scratch)
+                if (n < 0) break
+                drained += n
+            }
+        } catch (e: IOException) {
+            // Half-closed already, closed by the peer, or the read timed out — nothing left to
+            // drain, and the caller either got its answer or gave up waiting for one.
+        }
     }
 }
