@@ -49,12 +49,17 @@ import org.junit.jupiter.api.Test
  *
  * Two cases are deliberate **negative controls** — `the physical uid is never identity` and
  * `a matching name alone is neither identity nor a hint` — and they are labelled so, because a
- * reader should not mistake them for behaviour tests. **Seven** more are **planner guards**: they
- * assert a rule against an archive or a snapshot the codec or the schema would not allow, so they
- * cannot fire through the API in 1.1.0. Each one says so in its own KDoc and names the line that
- * refuses it, because a reader should not mistake a guard for a live path either — and the guards
- * are kept because the planner must not depend on the codec for its own invariants, and because
- * #44's slice B makes several of them live.
+ * reader should not mistake them for behaviour tests. **Seven** more are **planner guards**: each
+ * asserts a rule against an archive or a snapshot the codec or the schema would not allow, so that
+ * **fixture** cannot arrive through the API in 1.1.0. Each one says so in its own KDoc and names the
+ * line that refuses it, because a reader should not mistake a guard for a live path either.
+ *
+ * A guard label is a claim about the fixture, **not always about the reason code**: a DERIVED
+ * definition's `OWNER_NOT_AVAILABLE` has a guard arm — a source that is nowhere at all — *and* a
+ * live arm — a source the archive carries that then loses a key collision — and both are tested,
+ * the way `PROFILE_FIELD_DEFINITION_TAKEN` also distinguishes its unreachable half from its live
+ * one. The guards are kept because the planner must not depend on the codec for its own invariants,
+ * and because #44's slice B makes several of them live.
  *
  * The end-to-end half — the real codec, the fakes, one transaction, the refusals — is
  * `ImportBackupMergeTest`.
@@ -911,11 +916,14 @@ class MergePlannerTest {
     }
 
     /**
-     * **Planner guard.** A DERIVED row reads two other definitions, and `d-missing` is in neither
-     * the archive nor the destination. `BackupCodec.kt:287`–`295` refuses that archive outright
-     * (`journal/Derived.kt:51` will not even accept a source that is not ENTERED), so this cannot
-     * arrive through the API — but the ENTERED-before-DERIVED ordering is only *safe* because the
-     * planner checks rather than assumes.
+     * **Planner guard — the guard arm of this reason, not the whole of it.** A DERIVED row reads two
+     * other definitions, and `d-missing` is in neither the archive nor the destination.
+     * `BackupCodec.kt:287`–`295` refuses *that archive* outright (`journal/Derived.kt:51` will not
+     * even accept a source that is not ENTERED), so this **fixture** cannot arrive through the API —
+     * but the ENTERED-before-DERIVED ordering is only *safe* because the planner checks rather than
+     * assumes. The same reason on the same field also has a **live** arm, which is the case below:
+     * `derivedProblems` looks only inside the archive, so a source it accepts can still lose a key
+     * collision against the destination.
      */
     @Test
     fun `a derived definition whose source is nowhere is OWNER_NOT_AVAILABLE`() {
@@ -939,6 +947,60 @@ class MergePlannerTest {
             ),
             plan.decision(MergeTable.DEFINITIONS, "d1"),
         )
+    }
+
+    /**
+     * The **live** arm of that same reason, and the reason the guard label above is about a fixture
+     * rather than a reason code. `journal/Derived.kt`'s `derivedProblems` resolves a DERIVED row's
+     * sources inside the **archive** only — it can see neither the destination nor the merge — so an
+     * archive holding ENTERED `d2` and DERIVED `d1` sourcing it decodes cleanly, and then `d2` loses
+     * a `(assetId, key)` collision against a local row. `d2` never reaches `acceptedDefinitions`
+     * and is not `local` either, so `d1` has no source to read and is refused naming `d2`.
+     *
+     * Structurally the same cascade as `an event whose measurement names a conflicted definition is
+     * OWNER_NOT_AVAILABLE`, one level removed — and reachable **today**, not only after slice B.
+     * The sibling source `d3` is insertable and says so, which is what makes this a cascade rather
+     * than a broken archive; nothing is written anyway, because one conflict empties the write set.
+     */
+    @Test
+    fun `a derived definition whose source lost a key collision is OWNER_NOT_AVAILABLE`() {
+        val plan = mergePlanOf(
+            backupOf(
+                assets = listOf(asset("a1", "Hot tub")),
+                definitions = listOf(
+                    definition("d1", "a1", derived = DerivedSpec(DerivedFormula.PERCENT_DROP, DefinitionId("d2"), DefinitionId("d3"))),
+                    definition("d2", "a1", key = "ph"),
+                    definition("d3", "a1", key = "orp"),
+                ),
+            ),
+            snapshotOf(
+                assets = listOf(asset("a1", "Hot tub")),
+                definitions = listOf(definition("d-local", "a1", key = "ph")),
+            ),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(
+            MergeDecision(
+                MergeTable.DEFINITIONS, "d2", MergeVerdict.CONFLICT,
+                MergeReason.DEFINITION_KEY_TAKEN, "d-local",
+            ),
+            plan.decision(MergeTable.DEFINITIONS, "d2"),
+        )
+        assertEquals(
+            MergeDecision(
+                MergeTable.DEFINITIONS, "d1", MergeVerdict.CONFLICT,
+                MergeReason.OWNER_NOT_AVAILABLE, "d2",
+            ),
+            plan.decision(MergeTable.DEFINITIONS, "d1"),
+        )
+        assertEquals(MergeVerdict.INSERT, plan.decision(MergeTable.DEFINITIONS, "d3").verdict)
+        // Decided in `entered + derived` order — d2, d3, then d1 — and reported by id regardless.
+        assertEquals(
+            listOf(MergeTable.DEFINITIONS to "d1", MergeTable.DEFINITIONS to "d2"),
+            plan.conflicts.map { it.table to it.id },
+        )
+        assertEquals(MergeWrites(), plan.writes)
     }
 
     /**
