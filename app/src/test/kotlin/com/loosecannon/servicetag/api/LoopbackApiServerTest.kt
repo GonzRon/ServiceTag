@@ -202,6 +202,66 @@ class LoopbackApiServerTest {
     }
 
     /**
+     * Review re-review New-1: `drainBeforeClose`'s wall-clock deadline. A peer that never stops
+     * sending, but paces itself just under [Socket.soTimeout] so no single `read()` call ever times
+     * out on its own, must not be able to hold the drain — and so the listener's one worker — open
+     * for as long as it keeps trickling. A `413` fires before the declared body is read, which is
+     * exactly the drain's own case (review S2); this test's peer then trickles that body one byte at
+     * a time, spaced under the 200 ms read timeout, for up to two full seconds — comfortably more
+     * than the roughly one `readTimeoutMillis` window the deadline should cut it off within.
+     */
+    @Test fun aTricklingClientCannotHoldTheDrainOpenIndefinitely() {
+        val impatient = LoopbackApiServer(router(), port = 0, readTimeoutMillis = 200)
+        assertTrue(impatient.start())
+        var trickler: Socket? = null
+        try {
+            val big = MAX_BODY_BYTES + 1
+            trickler = Socket("127.0.0.1", impatient.boundPort)
+            trickler.getOutputStream().apply {
+                write(
+                    "POST /v1/assets HTTP/1.1\r\nAuthorization: Bearer $TOKEN\r\nContent-Length: $big\r\n\r\n"
+                        .toByteArray(),
+                )
+                flush()
+            }
+
+            val started = System.nanoTime()
+            val stopTrickling = started + TimeUnit.SECONDS.toNanos(2)
+            var cutOff = false
+            try {
+                while (System.nanoTime() < stopTrickling) {
+                    trickler.getOutputStream().write(0)
+                    trickler.getOutputStream().flush()
+                    Thread.sleep(150) // just under the 200 ms read timeout, so no one read times out
+                }
+            } catch (e: IOException) {
+                // The server closed the connection out from under the trickle — the point of the fix.
+                cutOff = true
+            }
+            val elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
+
+            assertTrue("the trickle was never cut off in two seconds of trying", cutOff)
+            // Comfortably under the two-second trickle budget, and the right order of magnitude for
+            // one 200 ms deadline window rather than the full duration the peer was willing to send.
+            assertTrue("cut off too slowly: ${elapsedMillis}ms", elapsedMillis < 1_000)
+
+            // The worker is free again: a fresh connection is answered normally and promptly.
+            val answer = Socket("127.0.0.1", impatient.boundPort).use { socket ->
+                socket.soTimeout = 5_000
+                socket.getOutputStream().apply {
+                    write("GET /v1/status HTTP/1.1\r\nAuthorization: Bearer $TOKEN\r\n\r\n".toByteArray())
+                    flush()
+                }
+                socket.getInputStream().readBytes().decodeToString()
+            }
+            assertTrue(answer, answer.startsWith("HTTP/1.1 200 OK\r\n"))
+        } finally {
+            trickler?.close()
+            impatient.stop()
+        }
+    }
+
+    /**
      * Review S7. The plan's rule for `stop()` mid-request — close the in-flight socket, do not join,
      * let a domain call already running finish as its own transaction — was asserted nowhere. A
      * blocking stub repository, the same seam `ApiRouterTest`'s S4 case uses, stands in for a slow

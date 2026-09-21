@@ -4,6 +4,7 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -189,9 +190,12 @@ internal class LoopbackApiServer(
      * Half-closing the write side tells the peer no more is coming — which is also what lets its own
      * read of the response return — and then draining whatever it still has queued, up to
      * [DRAIN_BUDGET_BYTES] or EOF, empties the receive buffer before `close()` runs so that close is
-     * graceful instead of a reset. Bounded twice over: by the byte budget, and by [readTimeoutMillis]
-     * already set on this socket, so a peer that never sends its declared body and never closes
-     * cannot hold the worker here either.
+     * graceful instead of a reset. Bounded three ways: by the byte budget; by [readTimeoutMillis] on
+     * each individual read, so a peer that goes silent mid-drain does not block forever on one call;
+     * and by a wall-clock deadline of [readTimeoutMillis] over the *whole loop* — [Socket.soTimeout]
+     * only bounds one `read()` call, not how many of them the loop may make, so without the deadline
+     * a peer trickling a byte every `readTimeoutMillis − ε` could hold this loop, and the listener's
+     * one worker, open for as long as it kept sending (review re-review New-1).
      */
     private fun drainBeforeClose(client: Socket) {
         try {
@@ -199,7 +203,8 @@ internal class LoopbackApiServer(
             val input = client.getInputStream()
             val scratch = ByteArray(8 * 1024)
             var drained = 0
-            while (drained < DRAIN_BUDGET_BYTES) {
+            val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(readTimeoutMillis.toLong())
+            while (drained < DRAIN_BUDGET_BYTES && System.nanoTime() < deadline) {
                 val n = input.read(scratch)
                 if (n < 0) break
                 drained += n
