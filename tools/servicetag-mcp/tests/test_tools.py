@@ -15,6 +15,7 @@ import zipfile
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
+from servicetag_mcp import client as client_module
 from servicetag_mcp import server as server_module
 
 EXPECTED_TOOLS = (
@@ -77,7 +78,7 @@ def test_the_read_tools_get_their_paths(paired) -> None:
 
 
 def test_an_empty_id_refuses_instead_of_answering_with_the_list(paired) -> None:
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="asset_id must not be empty"):
         server_module.get_asset(asset_id="")
     assert paired.requests == []
 
@@ -281,19 +282,19 @@ def test_update_asset_clear_fields_clears_the_parent(paired) -> None:
 
 
 def test_update_asset_clear_fields_refuses_a_field_that_cannot_be_cleared(paired) -> None:
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="cannot be cleared"):
         server_module.update_asset(asset_id="a1", clear_fields=["name"])
     assert paired.requests == []
 
 
 def test_update_asset_clear_fields_refuses_an_unknown_name(paired) -> None:
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="cannot be cleared"):
         server_module.update_asset(asset_id="a1", clear_fields=["not_a_field"])
     assert paired.requests == []
 
 
 def test_update_asset_clear_fields_refuses_a_field_also_given_a_value(paired) -> None:
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="also given a value"):
         server_module.update_asset(asset_id="a1", vendor="Acme", clear_fields=["vendor"])
     assert paired.requests == []
 
@@ -314,7 +315,7 @@ def test_retire_asset_has_no_default_and_is_monotonic(paired) -> None:
     assert param.default is inspect.Parameter.empty
 
     for bad in (None, ""):
-        with pytest.raises(ToolError):
+        with pytest.raises(ToolError, match="retired_on is required"):
             server_module.retire_asset(asset_id="a1", retired_on=bad)
     assert paired.requests == []
 
@@ -357,7 +358,7 @@ def test_save_definition_create_sends_only_what_was_given(paired) -> None:
 
 
 def test_save_definition_create_without_a_label_is_a_clear_refusal(paired) -> None:
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="label is required"):
         server_module.save_definition(asset_id="a1")
     assert paired.requests == []
 
@@ -407,20 +408,20 @@ def test_save_definition_clear_fields_clears_a_nullable_field(paired) -> None:
 
 def test_save_definition_clear_fields_refuses_an_unknown_name(paired) -> None:
     paired.reply("GET", "/v1/assets/a1/definitions", 200, {"definitions": [_definition_row()]})
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="cannot be cleared"):
         server_module.save_definition(asset_id="a1", definition_id="d1", clear_fields=["label"])
     assert paired.requests == []
 
 
 def test_save_definition_clear_fields_refuses_on_a_create(paired) -> None:
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="clear_fields only applies to editing"):
         server_module.save_definition(asset_id="a1", label="pH", clear_fields=["range_low"])
     assert paired.requests == []
 
 
 def test_save_definition_edit_of_an_id_not_on_the_asset_is_a_clear_refusal(paired) -> None:
     paired.reply("GET", "/v1/assets/a1/definitions", 200, {"definitions": [_definition_row()]})
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="no definition_id"):
         server_module.save_definition(asset_id="a1", definition_id="nope", label="x")
 
 
@@ -481,7 +482,7 @@ def test_save_profile_sends_its_fields(paired) -> None:
 
 
 def test_save_profile_create_without_name_or_event_kind_is_a_clear_refusal(paired) -> None:
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="event_kind are required"):
         server_module.save_profile(asset_id="a1", name="Water test")
     assert paired.requests == []
 
@@ -664,7 +665,7 @@ def test_import_merge_apply_409_with_an_error_envelope_raises_instead_of_returni
 
 
 def test_import_merge_says_so_when_the_file_is_not_there(paired, tmp_path) -> None:
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="No such file"):
         server_module.import_merge(archive_path=str(tmp_path / "nope.zip"))
     assert paired.requests == []
 
@@ -679,3 +680,10 @@ def test_import_merge_refuses_an_archive_over_the_cap_before_reading_it(
         server_module.import_merge(archive_path=str(archive))
     assert "4 bytes" in str(raised.value)
     assert paired.requests == []
+
+
+def test_max_import_bytes_is_four_mebibytes() -> None:
+    """R7: the test above monkeypatches this constant to make the over-cap check cheap to trigger
+    without a real 4 MiB fixture file, which proves the comparison but leaves the real value
+    unasserted anywhere. This pins it, against `ApiRouter.kt`'s own `MAX_IMPORT_BYTES`."""
+    assert client_module.MAX_IMPORT_BYTES == 4 * 1024 * 1024

@@ -66,6 +66,26 @@ def test_an_error_with_no_json_body_still_raises_something_readable(paired) -> N
     assert "not json" in raised.value.message
 
 
+def test_a_413_with_an_empty_body_gets_a_plain_message_not_a_blank_one(paired) -> None:
+    """R2: the app's cap refusal has a zero-byte body by design (`HttpWire.kt`); before this fix
+    the message was the literal empty string, so the delivered text read as `413 unknown: `."""
+    paired.reply("POST", "/v1/assets", 413, b"")
+    with pytest.raises(ApiError) as raised:
+        server_module.device.request(
+            "POST", "/v1/assets", json_body={"name": "x"}, content_type="application/json"
+        )
+    assert raised.value.status == 413
+    assert raised.value.message == "the payload is larger than the API accepts"
+
+
+def test_an_empty_body_on_another_status_names_just_the_status(paired) -> None:
+    paired.reply("GET", "/v1/status", 409, b"")
+    with pytest.raises(ApiError) as raised:
+        server_module.device.request("GET", "/v1/status")
+    assert raised.value.status == 409
+    assert raised.value.message == "the phone answered 409 with no body"
+
+
 def test_a_204_is_an_empty_result(paired) -> None:
     paired.reply("DELETE", "/v1/events/e1", 204, b"")
     assert server_module.device.request("DELETE", "/v1/events/e1") == {}

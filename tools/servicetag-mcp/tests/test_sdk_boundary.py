@@ -110,6 +110,42 @@ def test_a_missing_serial_survives_the_sdk_boundary_with_no_serial_in_it(
     assert "SERVICETAG_ADB_SERIAL" in text
 
 
+# --- R1: the three exception classes the re-review found still escaping `_call`'s conversion -----
+# seam as the bare, message-free `UnexpectedToolError` -------------------------------------------
+
+
+def test_a_non_json_200_survives_the_sdk_boundary_instead_of_crashing(paired) -> None:
+    """`SERVICETAG_API_BASE_URL` pointed at anything else that answers 200 with a non-JSON body —
+    no app bug needed to reach this, since it is a documented, user-set variable."""
+    paired.reply("GET", "/v1/status", 200, b"<html>not the app</html>")
+    with pytest.raises(ToolError, match="not valid JSON") as raised:
+        _call_tool("status", {})
+    assert type(raised.value) is ToolError, "must be a deliberate ToolError, not UnexpectedToolError"
+    assert len(paired.requests) == 1
+
+
+def test_update_asset_with_an_unexpected_response_shape_survives_the_sdk_boundary(paired) -> None:
+    """A GET that does not answer `{"asset": {...}}` — a version skew, or the same misdirected
+    base URL — must not crash past `_call` on the first `["asset"]`/`["<field>"]` subscript."""
+    paired.reply("GET", "/v1/assets/a1", 200, {"nope": {}})
+    with pytest.raises(ToolError, match="no 'asset' field") as raised:
+        _call_tool("update_asset", {"asset_id": "a1", "name": "New Name"})
+    assert type(raised.value) is ToolError
+    assert not any(r.method == "PATCH" for r in paired.requests)
+
+
+def test_save_definition_edit_with_an_unexpected_response_shape_survives_the_sdk_boundary(
+    paired,
+) -> None:
+    paired.reply("GET", "/v1/assets/a1/definitions", 200, {"nope": []})
+    with pytest.raises(ToolError, match="no 'definitions' field") as raised:
+        _call_tool(
+            "save_definition", {"asset_id": "a1", "definition_id": "d1", "label": "New label"}
+        )
+    assert type(raised.value) is ToolError
+    assert not any(r.method == "POST" for r in paired.requests)
+
+
 # --- proof 2: clear versus omit, through the real argument path ----------------------------------
 
 
@@ -166,15 +202,18 @@ def test_clear_fields_clears_exactly_one_field_through_the_sdk(paired) -> None:
 
 
 def test_clear_fields_validation_refuses_before_any_request_through_the_sdk(paired) -> None:
-    with pytest.raises(ToolError):
+    # `match=` is load-bearing here, not decoration: `UnexpectedToolError` subclasses `ToolError`,
+    # so `pytest.raises(ToolError)` alone would also pass on the bare, message-free SDK crash text —
+    # asserting the wording is what actually proves the refusal's own message survived.
+    with pytest.raises(ToolError, match="cannot be cleared"):
         _call_tool("update_asset", {"asset_id": "a1", "clear_fields": ["name"]})
     assert paired.requests == []
 
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="cannot be cleared"):
         _call_tool("update_asset", {"asset_id": "a1", "clear_fields": ["not_a_field"]})
     assert paired.requests == []
 
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="also given a value"):
         _call_tool(
             "update_asset", {"asset_id": "a1", "vendor": "Acme", "clear_fields": ["vendor"]}
         )
@@ -185,6 +224,6 @@ def test_clear_fields_validation_refuses_before_any_request_through_the_sdk(pair
 
 
 def test_retire_asset_with_null_is_refused_before_any_request_through_the_sdk(paired) -> None:
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="retired_on"):
         _call_tool("retire_asset", {"asset_id": "a1", "retired_on": None})
     assert paired.requests == []

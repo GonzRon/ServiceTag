@@ -78,6 +78,16 @@ def _call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         raise ToolError(detail) from exc
     except (RuntimeError, OSError, httpx.HTTPError) as exc:
         raise ToolError(str(exc)) from exc
+    except ValueError as exc:
+        # `response.json()` on a 200 whose body is not JSON raises `json.JSONDecodeError`, a
+        # `ValueError` — reachable with no app bug at all: `SERVICETAG_API_BASE_URL` is a
+        # documented, user-set variable, and pointing it at anything else that answers 200 with a
+        # non-JSON body (or a truncated one) must not crash past this seam either (R1). The
+        # message never echoes the body: it is bounded to what a caller needs to fix the setup.
+        raise ToolError(
+            "the phone's answer was not valid JSON — check SERVICETAG_API_BASE_URL and that the "
+            "Developer API screen is open"
+        ) from exc
 
 
 def _path_id(value: str, *, field: str) -> str:
@@ -146,10 +156,28 @@ def _validate_clear_fields(
     return names
 
 
-def _find_by_id(rows: list[dict[str, Any]], row_id: str, *, field: str) -> dict[str, Any]:
+def _field(row: Any, key: str, *, of: str) -> Any:
+    """A response field, read defensively (R1). `row[key]` unguarded lets `KeyError`/`TypeError`
+    past `_call`'s conversion seam the moment the shape is not what an overlay tool expects — a
+    version skew, or `SERVICETAG_API_BASE_URL` pointed at something that answers 200 but is not
+    this API. Used for every subscript an overlay tool applies to a response: the top-level
+    `"asset"`/`"definitions"`/`"profiles"` wrapper and each field read off the row it finds."""
+    try:
+        return row[key]
+    except (KeyError, TypeError) as exc:
+        raise ToolError(
+            f"the phone's answer for {of} has no {key!r} field — check that "
+            "SERVICETAG_API_BASE_URL (if set) points at the ServiceTag API and that the app is "
+            "the version this tool was written for"
+        ) from exc
+
+
+def _find_by_id(rows: Any, row_id: str, *, field: str, of: str) -> dict[str, Any]:
     """The row an edit tool needs to overlay onto, from a list read the API already offers."""
+    if not isinstance(rows, list):
+        raise ToolError(f"the phone's answer for {of} was not a list")
     for row in rows:
-        if row["id"] == row_id:
+        if isinstance(row, dict) and row.get("id") == row_id:
             return row
     raise ToolError(f"no {field} {row_id!r} among that asset's rows")
 
@@ -320,39 +348,34 @@ def update_asset(
     }
     to_clear = _validate_clear_fields(clear_fields, _ASSET_CLEARABLE_FIELDS, supplied)
 
-    def text(current_value: str, given: str | None, name: str) -> str:
-        return _overlay_or_clear(current_value, given, name, to_clear, when_cleared="")
-
-    def nullable(current_value: Any, given: Any, name: str) -> Any:
-        return _overlay_or_clear(current_value, given, name, to_clear, when_cleared=None)
-
     path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}"
-    current = _call("GET", path)["asset"]
+    current = _field(_call("GET", path), "asset", of="the asset lookup")
+
+    def text(key: str, given: str | None, name: str) -> str:
+        return _overlay_or_clear(_field(current, key, of="the asset"), given, name, to_clear, when_cleared="")
+
+    def nullable(key: str, given: Any, name: str) -> Any:
+        return _overlay_or_clear(_field(current, key, of="the asset"), given, name, to_clear, when_cleared=None)
+
     body = {
-        "name": _overlay(current["name"], name),
-        "category": text(current["category"], category, "category"),
-        "description": text(current["description"], description, "description"),
-        "notes": text(current["notes"], notes, "notes"),
-        "manufacturer": text(current["manufacturer"], manufacturer, "manufacturer"),
-        "model": text(current["model"], model, "model"),
-        "serialNumber": text(current["serialNumber"], serial_number, "serial_number"),
-        "purchaseOn": nullable(current["purchaseOn"], purchase_on, "purchase_on"),
-        "inServiceOn": nullable(current["inServiceOn"], in_service_on, "in_service_on"),
-        "purchasePriceMinor": nullable(
-            current["purchasePriceMinor"], purchase_price_minor, "purchase_price_minor"
-        ),
-        "currency": nullable(current["currency"], currency, "currency"),
-        "vendor": text(current["vendor"], vendor, "vendor"),
-        "location": text(current["location"], location, "location"),
-        "warrantyExpiresOn": nullable(
-            current["warrantyExpiresOn"], warranty_expires_on, "warranty_expires_on"
-        ),
-        "warrantyNotes": text(current["warrantyNotes"], warranty_notes, "warranty_notes"),
-        "parentAssetId": nullable(current["parentAssetId"], parent_asset_id, "parent_asset_id"),
-        "seasonStartMmdd": nullable(
-            current["seasonStartMmdd"], season_start_mmdd, "season_start_mmdd"
-        ),
-        "seasonEndMmdd": nullable(current["seasonEndMmdd"], season_end_mmdd, "season_end_mmdd"),
+        "name": _overlay(_field(current, "name", of="the asset"), name),
+        "category": text("category", category, "category"),
+        "description": text("description", description, "description"),
+        "notes": text("notes", notes, "notes"),
+        "manufacturer": text("manufacturer", manufacturer, "manufacturer"),
+        "model": text("model", model, "model"),
+        "serialNumber": text("serialNumber", serial_number, "serial_number"),
+        "purchaseOn": nullable("purchaseOn", purchase_on, "purchase_on"),
+        "inServiceOn": nullable("inServiceOn", in_service_on, "in_service_on"),
+        "purchasePriceMinor": nullable("purchasePriceMinor", purchase_price_minor, "purchase_price_minor"),
+        "currency": nullable("currency", currency, "currency"),
+        "vendor": text("vendor", vendor, "vendor"),
+        "location": text("location", location, "location"),
+        "warrantyExpiresOn": nullable("warrantyExpiresOn", warranty_expires_on, "warranty_expires_on"),
+        "warrantyNotes": text("warrantyNotes", warranty_notes, "warranty_notes"),
+        "parentAssetId": nullable("parentAssetId", parent_asset_id, "parent_asset_id"),
+        "seasonStartMmdd": nullable("seasonStartMmdd", season_start_mmdd, "season_start_mmdd"),
+        "seasonEndMmdd": nullable("seasonEndMmdd", season_end_mmdd, "season_end_mmdd"),
     }
     return _call("PATCH", path, json_body=body, content_type="application/json")
 
@@ -527,29 +550,38 @@ def save_definition(
     else:
         to_clear = _validate_clear_fields(clear_fields, _DEFINITION_CLEARABLE_FIELDS, supplied)
 
-        def text(current_value: str, given: str | None, name: str) -> str:
-            return _overlay_or_clear(current_value, given, name, to_clear, when_cleared="")
+        rows = _field(
+            _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/definitions"),
+            "definitions",
+            of="the definitions list",
+        )
+        current = _find_by_id(rows, definition_id, field="definition_id", of="the definitions list")
 
-        def nullable(current_value: Any, given: Any, name: str) -> Any:
-            return _overlay_or_clear(current_value, given, name, to_clear, when_cleared=None)
+        def text(key: str, given: str | None, name: str) -> str:
+            return _overlay_or_clear(
+                _field(current, key, of="the reading"), given, name, to_clear, when_cleared=""
+            )
 
-        rows = _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/definitions")
-        current = _find_by_id(rows["definitions"], definition_id, field="definition_id")
+        def nullable(key: str, given: Any, name: str) -> Any:
+            return _overlay_or_clear(
+                _field(current, key, of="the reading"), given, name, to_clear, when_cleared=None
+            )
+
         body = {
             "id": definition_id,
             "assetId": asset_id,
-            "key": _overlay(current["key"], key),
-            "label": _overlay(current["label"], label),
-            "unit": text(current["unit"], unit, "unit"),
-            "kind": _overlay(current["kind"], kind),
-            "valueType": _overlay(current["valueType"], value_type),
-            "decimals": current["decimals"] if decimals is None else decimals,
-            "rangeLow": nullable(current["rangeLow"], range_low, "range_low"),
-            "rangeHigh": nullable(current["rangeHigh"], range_high, "range_high"),
-            "isMeter": current["isMeter"] if is_meter is None else is_meter,
-            "formula": nullable(current["formula"], formula, "formula"),
-            "sourceAId": nullable(current["sourceAId"], source_a_id, "source_a_id"),
-            "sourceBId": nullable(current["sourceBId"], source_b_id, "source_b_id"),
+            "key": _overlay(_field(current, "key", of="the reading"), key),
+            "label": _overlay(_field(current, "label", of="the reading"), label),
+            "unit": text("unit", unit, "unit"),
+            "kind": _overlay(_field(current, "kind", of="the reading"), kind),
+            "valueType": _overlay(_field(current, "valueType", of="the reading"), value_type),
+            "decimals": _field(current, "decimals", of="the reading") if decimals is None else decimals,
+            "rangeLow": nullable("rangeLow", range_low, "range_low"),
+            "rangeHigh": nullable("rangeHigh", range_high, "range_high"),
+            "isMeter": _field(current, "isMeter", of="the reading") if is_meter is None else is_meter,
+            "formula": nullable("formula", formula, "formula"),
+            "sourceAId": nullable("sourceAId", source_a_id, "source_a_id"),
+            "sourceBId": nullable("sourceBId", source_b_id, "source_b_id"),
         }
     return _call("POST", "/v1/definitions", json_body=body, content_type="application/json")
 
@@ -613,27 +645,34 @@ def save_profile(
             consumables=consumables,
         )
     else:
-        rows = _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/profiles")
-        current = _find_by_id(rows["profiles"], profile_id, field="profile_id")
+        rows = _field(
+            _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/profiles"),
+            "profiles",
+            of="the profiles list",
+        )
+        current = _find_by_id(rows, profile_id, field="profile_id", of="the profiles list")
         kept_fields = [
-            {"definitionId": f["definitionId"], "required": f["required"]}
-            for f in current["fields"]
+            {
+                "definitionId": _field(f, "definitionId", of="a field entry"),
+                "required": _field(f, "required", of="a field entry"),
+            }
+            for f in _field(current, "fields", of="the quick action")
         ]
         kept_consumables = [
             {
-                "id": c["id"],
-                "name": c["name"],
-                "defaultQuantity": c["defaultQuantity"],
-                "unit": c["unit"],
+                "id": _field(c, "id", of="a consumable entry"),
+                "name": _field(c, "name", of="a consumable entry"),
+                "defaultQuantity": _field(c, "defaultQuantity", of="a consumable entry"),
+                "unit": _field(c, "unit", of="a consumable entry"),
             }
-            for c in current["consumables"]
+            for c in _field(current, "consumables", of="the quick action")
         ]
         body = {
             "id": profile_id,
             "assetId": asset_id,
-            "name": _overlay(current["name"], name),
-            "eventKind": _overlay(current["eventKind"], event_kind),
-            "defaultTitle": _overlay(current["defaultTitle"], default_title),
+            "name": _overlay(_field(current, "name", of="the quick action"), name),
+            "eventKind": _overlay(_field(current, "eventKind", of="the quick action"), event_kind),
+            "defaultTitle": _overlay(_field(current, "defaultTitle", of="the quick action"), default_title),
             "fields": kept_fields if fields is None else fields,
             "consumables": kept_consumables if consumables is None else consumables,
         }
@@ -795,6 +834,10 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
         content_type="application/zip",
         timeout=_IMPORT_TIMEOUT,
     )
+    if not isinstance(plan, dict):
+        # `.get` below would be an `AttributeError` on anything else (R1) — a version skew or a
+        # misdirected `SERVICETAG_API_BASE_URL` again, not an app bug.
+        raise ToolError("the phone's import-merge plan was not a JSON object — check SERVICETAG_API_BASE_URL")
     if plan_only or not plan.get("applicable", False):
         return plan
     # A 409 from the apply is the report, not an error: the phone re-planned inside its own

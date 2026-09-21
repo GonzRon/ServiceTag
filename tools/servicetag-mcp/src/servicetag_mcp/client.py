@@ -226,7 +226,14 @@ def _safe_json(response: httpx.Response) -> Any | None:
 
 
 def _detail(response: httpx.Response) -> tuple[str, str, list[str]]:
-    """The error envelope, or something honest when the body is not one."""
+    """The error envelope, or something honest when the body is not one.
+
+    A few refusals — the app's 413 chief among them — answer with a **zero-byte body by design**
+    (`HttpWire.kt`'s cap and framing refusals never echo anything back), so `response.text[:200]`
+    would be `""` and the message would read as `413 unknown: ` — technically true and useless.
+    (R2.) Give an empty body a plain sentence instead, naming the one status this tool's own cap
+    check makes reachable by name and falling back to the status alone otherwise.
+    """
     try:
         error = response.json()["error"]
         return (
@@ -235,4 +242,9 @@ def _detail(response: httpx.Response) -> tuple[str, str, list[str]]:
             [str(p) for p in error.get("problems", [])],
         )
     except (ValueError, KeyError, TypeError, json.JSONDecodeError):
-        return ("unknown", response.text[:200], [])
+        text = response.text[:200]
+        if text:
+            return ("unknown", text, [])
+        if response.status_code == 413:
+            return ("unknown", "the payload is larger than the API accepts", [])
+        return ("unknown", f"the phone answered {response.status_code} with no body", [])
