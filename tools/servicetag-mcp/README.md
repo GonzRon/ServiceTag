@@ -33,7 +33,7 @@ your phone:
   "mcpServers": {
     "servicetag": {
       "command": "uv",
-      "args": ["--directory", "tools/servicetag-mcp", "run", "servicetag-mcp"],
+      "args": ["--directory", "tools/servicetag-mcp", "run", "--frozen", "servicetag-mcp"],
       "env": {
         "SERVICETAG_ADB_SERIAL": "<serial>"
       }
