@@ -16,6 +16,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.api.DeveloperApiScreen
 import com.loosecannon.servicetag.ui.asset.AssetDetailScreen
 import com.loosecannon.servicetag.ui.asset.AssetEditScreen
 import com.loosecannon.servicetag.ui.asset.AssetsScreen
@@ -265,6 +266,13 @@ fun ServiceTagRoot(
                         onBack = { backStack.removeLastOrNull() },
                         onReadTag = { backStack.add(Route.Scan) },
                         onBackup = { backStack.add(Route.Backup) },
+                        onDeveloperApi = { backStack.add(Route.DeveloperApi) },
+                    )
+                }
+                entry<Route.DeveloperApi> {
+                    DeveloperApiScreen(
+                        graph = graph,
+                        onBack = { backStack.removeLastOrNull() },
                     )
                 }
             },

@@ -46,6 +46,13 @@ sealed interface Route : NavKey {
     @Serializable data class WriteTag(val targetKind: String, val targetId: String?, val label: String?) : Route
     @Serializable data object Backup : Route
     @Serializable data object Settings : Route
+
+    /**
+     * The loopback automation API's one screen (1.1.0, #46). A pushed destination reached from
+     * Settings, exactly like [Backup] and [Scan]: the listener is alive only while this entry is on
+     * top, so there is deliberately no deep link and no way to reach it but through Settings.
+     */
+    @Serializable data object DeveloperApi : Route
 }
 
 /**

@@ -1,6 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.NFC" />
+    <!-- A TCP socket needs this on Android even when it is bound to the loopback address: the
+         platform gates AF_INET socket creation on the `inet` group this permission grants, not on
+         the address the socket ends up bound to. It is a normal, install-time permission with no
+         runtime prompt. No component is added for it — a socket is not a component, so there is
+         nothing here to export.
+
+         INTERNET gives the process network capability, but ServiceTag 1.1.0 introduces no outbound networking and the Developer API listens only on localhost; future cloud features may make intentional outbound use of the permission under their own designs. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-feature android:name="android.hardware.nfc" android:required="true" />
 
     <queries>

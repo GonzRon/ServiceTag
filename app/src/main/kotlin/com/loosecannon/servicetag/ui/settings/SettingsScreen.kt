@@ -76,6 +76,10 @@ private const val PROJECT_URL = "https://github.com/GonzRon/ServiceTag"
  * Read / inspect tag is the scan screen kept as a utility (D12 §16 correction, spec §9): normal
  * tag reading is ambient dispatch, so the only reason to open it deliberately is to identify a
  * tag with nothing else prompting the read.
+ *
+ * Developer API is the third utility (1.1.0, #46) and the only one whose *screen* is the feature:
+ * while it is open the app answers commands on this phone's own loopback address, and closing it
+ * is what stops that. The row is last, so the two doors the owner already knows keep their places.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +88,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onReadTag: () -> Unit,
     onBackup: () -> Unit,
+    onDeveloperApi: () -> Unit,
 ) {
     val activity = LocalActivity.current
     val prefs = graph.prefs
@@ -239,6 +244,11 @@ fun SettingsScreen(
                 icon = ServiceTagIcons.Contactless,
                 label = "Read / inspect tag",
                 onClick = onReadTag,
+            )
+            UtilityRow(
+                icon = ServiceTagIcons.Speed,
+                label = "Developer API",
+                onClick = onDeveloperApi,
             )
 
             SectionHeader(title = "About")

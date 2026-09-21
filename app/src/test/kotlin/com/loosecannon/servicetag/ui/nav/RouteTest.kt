@@ -38,6 +38,9 @@ class RouteTest {
      * A "link" write route is not one of them either: the shell draws no screen for one and pops it
      * a frame later, so a hold over it would turn reader mode on and off with no sink ever
      * installed.
+     *
+     * Neither is the Developer API screen (1.1.0, #46): it holds a socket, not a tag, and adding it
+     * here would turn reader mode on over a screen with no sink.
      */
     @Test fun onlyTheTagScreensHoldReaderMode() {
         assertTrue(Route.Scan.readsTags())
@@ -49,5 +52,6 @@ class RouteTest {
         assertFalse(Route.Assets.readsTags())
         assertFalse(Route.AssetDetail("a1").readsTags())
         assertFalse(Route.Settings.readsTags())
+        assertFalse(Route.DeveloperApi.readsTags())
     }
 }
