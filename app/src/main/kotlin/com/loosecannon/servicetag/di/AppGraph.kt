@@ -101,6 +101,7 @@ import com.loosecannon.servicetag.reminders.AndroidNotificationPermission
 import com.loosecannon.servicetag.reminders.AndroidPlatformState
 import com.loosecannon.servicetag.reminders.AndroidQuickActionIntents
 import com.loosecannon.servicetag.reminders.AndroidReminderNotifications
+import com.loosecannon.servicetag.reminders.BackstopWork
 import com.loosecannon.servicetag.reminders.DigestAlarm
 import com.loosecannon.servicetag.reminders.LocalReminderProvider
 import com.loosecannon.servicetag.reminders.NonceStore
@@ -112,17 +113,19 @@ import com.loosecannon.servicetag.reminders.QuickActionShapeSource
 import com.loosecannon.servicetag.reminders.QuickActions
 import com.loosecannon.servicetag.reminders.ReconcileWorker
 import com.loosecannon.servicetag.reminders.ReminderNotifications
+import com.loosecannon.servicetag.reminders.ReminderHealthCheck
 import com.loosecannon.servicetag.reminders.ReminderRuns
 import com.loosecannon.servicetag.reminders.ReminderSnooze
 import com.loosecannon.servicetag.reminders.ScheduleCompletion
 import com.loosecannon.servicetag.reminders.ScheduleDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
+import com.loosecannon.servicetag.reminders.WorkManagerBackstop
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.HealthSummary
 import com.loosecannon.servicetag.ui.maintenance.LastCompletionEventId
 import com.loosecannon.servicetag.ui.maintenance.LastCompletionReadings
-import com.loosecannon.servicetag.ui.maintenance.NoHealthFindings
+import com.loosecannon.servicetag.ui.maintenance.ReminderHealth
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
 import com.loosecannon.servicetag.ui.maintenance.ScanRoundMembership
 import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
@@ -479,9 +482,34 @@ class AppGraph(private val context: Context) {
     )
 
     /**
-     * Reminder health, as the dashboard's badge asks about it. B10 implements the real check over
-     * its seven findings and replaces this field; until then nothing is found, which is the honest
-     * answer for a build with no check in it (master plan decision 28).
+     * 1.2 (#27) — the backstop's unique work as a question, which is the half `BackstopWorker` does
+     * not answer: it can enqueue, and asking first is what makes the repair idempotent.
+     */
+    val backstopWork: BackstopWork = WorkManagerBackstop(context.applicationContext)
+
+    /**
+     * #27 — the seven findings, and the two repairs that are safe to run unasked.
+     *
+     * The three provider-side findings come from [localReminderProvider]'s own `health()` rather
+     * than being re-derived here, so each ratified sentence is written once in the repository.
+     * Derived state arrives through [scheduleStateReader], which has no write method, so no health
+     * run can reach `schedule_state` (invariant 17).
+     */
+    val reminderHealthCheck: ReminderHealthCheck = ReminderHealthCheck(
+        provider = localReminderProvider,
+        platform = platformState,
+        backstop = backstopWork,
+        alarm = digestAlarm,
+        schedules = schedules,
+        states = scheduleStateReader,
+    )
+
+    /**
+     * Reminder health, as the dashboard's badge asks about it (master plan decision 28) — the real
+     * check now, with the cache decision 32 requires: both badge surfaces read this on every
+     * emission of their own flows and the check reads the standby bucket, so it answers from the
+     * last refresh rather than doing platform work per keystroke. Launch, the backstop worker and
+     * the Health screen are what refresh it.
      *
      * A `val`, deliberately. Both view models read it in their `AppGraph` constructor, so the value
      * is captured when the view model is built and a later assignment would be silently ignored by
@@ -489,7 +517,8 @@ class AppGraph(private val context: Context) {
      * its own summary to the screen instead (see `DashboardScreen`'s `health` parameter), which is
      * the seam that cannot be raced.
      */
-    val healthSummary: HealthSummary = NoHealthFindings
+    val reminderHealth: ReminderHealth = ReminderHealth(reminderHealthCheck)
+    val healthSummary: HealthSummary = reminderHealth
 
     /**
      * 1.2 — **the only completion mechanism** (master plan decision 36, #50). The schedule detail

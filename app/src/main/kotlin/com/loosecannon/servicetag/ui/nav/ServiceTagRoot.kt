@@ -29,6 +29,7 @@ import com.loosecannon.servicetag.ui.journal.EventDetailScreen
 import com.loosecannon.servicetag.ui.journal.EventEntryScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupDetailScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupEditScreen
+import com.loosecannon.servicetag.ui.maintenance.HealthScreen
 import com.loosecannon.servicetag.ui.maintenance.LogMaintenancePicker
 import com.loosecannon.servicetag.ui.maintenance.MaintenanceScreen
 import com.loosecannon.servicetag.ui.maintenance.MaintenanceSheet
@@ -408,7 +409,18 @@ fun ServiceTagRoot(
                         onBack = { backStack.removeLastOrNull() },
                     )
                 }
-                entry<Route.ReminderHealth> { key -> PlaceholderPop(key, backStack) }
+                entry<Route.ReminderHealth> {
+                    HealthScreen(
+                        graph = graph,
+                        // Both in-app repairs land in the editor: the provider row ("Remind me
+                        // through") and the meter baseline ("Last done at") are both fields on it,
+                        // which is what #27's repair column means by "the editor" and "the
+                        // completion / anchor form".
+                        onOpenSchedule = { backStack.add(Route.ScheduleEdit(it)) },
+                        onLogMeterReading = { backStack.add(Route.ScheduleEdit(it)) },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
+                }
                 entry<Route.MaintenanceSheet> { key ->
                     MaintenanceSheet(
                         graph = graph,
@@ -433,16 +445,6 @@ fun ServiceTagRoot(
             },
         )
     }
-}
-
-/**
- * A destination whose screen has not landed yet: nothing is drawn and the key leaves the stack a
- * frame later, exactly as an unsupported write route does. Keyed on the route so a second push of
- * a different id runs the effect again.
- */
-@Composable
-private fun PlaceholderPop(key: Route, backStack: MutableList<NavKey>) {
-    LaunchedEffect(key) { backStack.removeLastOrNull() }
 }
 
 /**

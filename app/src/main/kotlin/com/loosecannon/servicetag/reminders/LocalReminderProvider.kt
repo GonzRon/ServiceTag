@@ -240,8 +240,10 @@ class LocalReminderProvider(
      * `NOTIFICATIONS_BLOCKED` folds three different ways of being silenced by the system — the
      * runtime permission refused, the app-level toggle off, and a channel the owner muted or that
      * was never created — because the spec ships one code for them and the sentence is true of all
-     * three (spec §5.5, §5.8). The sentences are RATIFIED verbatim (master plan §17.1a); the repair
-     * **labels** are B10's to draw, so only the repair's code appears here.
+     * three (spec §5.5, §5.8). The sentences are RATIFIED verbatim (master plan §17.1a) and are
+     * drawn **here and nowhere else** in the repository: B10's health check folds these three in
+     * rather than re-deriving them. The repair **labels** are B10's to draw, so only the
+     * repair's code appears here, from the one list of codes in [ReminderRepair].
      */
     override suspend fun health(): List<HealthFinding> = buildList {
         if (!notificationsAvailable()) {
@@ -250,7 +252,7 @@ class LocalReminderProvider(
                     code = "NOTIFICATIONS_BLOCKED",
                     severity = Severity.ERROR,
                     message = "Notifications are turned off, so maintenance reminders will not arrive.",
-                    repair = RepairAction.OpenSystemSettings("OPEN_NOTIFICATION_SETTINGS"),
+                    repair = RepairAction.OpenSystemSettings(ReminderRepair.OPEN_NOTIFICATION_SETTINGS),
                 ),
             )
         }
@@ -260,18 +262,23 @@ class LocalReminderProvider(
                     code = "REMINDERS_GLOBALLY_OFF",
                     severity = Severity.INFO,
                     message = "Reminders are turned off in ServiceTag.",
-                    repair = RepairAction.OpenInApp("TURN_REMINDERS_ON"),
+                    repair = RepairAction.OpenInApp(ReminderRepair.TURN_REMINDERS_ON),
                 ),
             )
         }
-        if (!alarm.armed()) {
+        // "While reminders are enabled" is part of the condition, not a nicety (#27's detection
+        // table, and B10's own negative control): an owner who switched reminders off did not ask
+        // to be told the alarm is gone, and without this clause the finding fires for ever on a
+        // phone that is doing exactly what it was told. Nothing is *disabled* by it — the alarm is
+        // still re-armed by `reconcile` above, whatever the switch says (D-22, invariant 61).
+        if (prefs.remindersEnabled && !alarm.armed()) {
             add(
                 HealthFinding(
                     code = "DIGEST_ALARM_MISSING",
                     severity = Severity.WARN,
                     message = "The daily reminder check is not scheduled, so today's maintenance may go unannounced.",
                     // Unambiguous and idempotent, which is the whole test for an automatic repair.
-                    repair = RepairAction.Automatic("ARM_DIGEST_ALARM"),
+                    repair = RepairAction.Automatic(ReminderRepair.ARM_DIGEST_ALARM),
                 ),
             )
         }

@@ -37,6 +37,7 @@ class BackstopWorker(context: Context, parameters: WorkerParameters) : Coroutine
         }
         return try {
             run.onBackstop()
+            repairHealth()
             Result.success()
         } catch (e: Exception) {
             // A transient failure — a database busy, a read that raced a write — is worth one more
@@ -44,6 +45,25 @@ class BackstopWorker(context: Context, parameters: WorkerParameters) : Coroutine
             // full period away.
             Log.w(TAG, "the backstop run failed; WorkManager will retry it", e)
             Result.retry()
+        }
+    }
+
+    /**
+     * #27's second run point: this worker already runs on a schedule and already re-arms the alarm,
+     * so the finding and its repair are one pass (master plan decision 32). Only the two
+     * unambiguous repairs are applied, by [ReminderHealthCheck] itself, and running them again on
+     * the next period changes nothing.
+     *
+     * It has its own `try`, deliberately: the sweep above has already succeeded by the time this
+     * runs, and a health check that could turn that into a retry would cost the phone the whole
+     * recompute and every notification it just posted.
+     */
+    private suspend fun repairHealth() {
+        val check = ReminderHealthDispatch.check ?: return
+        try {
+            check.runAndRepair()
+        } catch (e: Exception) {
+            Log.w(TAG, "the health check failed; the sweep itself succeeded", e)
         }
     }
 

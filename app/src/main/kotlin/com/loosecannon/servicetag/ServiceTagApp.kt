@@ -5,8 +5,10 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.reminders.BackstopWorker
 import com.loosecannon.servicetag.reminders.NotificationChannels
 import com.loosecannon.servicetag.reminders.QuickActionDispatch
+import com.loosecannon.servicetag.reminders.ReminderHealthDispatch
 import com.loosecannon.servicetag.reminders.ReminderDispatch
 import com.loosecannon.servicetag.reminders.ReminderRunDispatch
+import kotlinx.coroutines.launch
 
 class ServiceTagApp : Application() {
     lateinit var graph: AppGraph
@@ -29,10 +31,19 @@ class ServiceTagApp : Application() {
         // process that posted it, so a cold process started by a tapped action looks this up
         // before it does anything else (B07).
         QuickActionDispatch.handler = graph.quickActionRuns
+        // And #27's check, for the backstop worker, which is constructed by WorkManager and never
+        // through the graph.
+        ReminderHealthDispatch.check = graph.reminderHealthCheck
         // Unique periodic work with KEEP, so every process start is safe and none of them restarts
         // the period (spec §5.3). The alarm is armed by the run itself, not from here: the four
         // platform receivers, the digest fire and this worker all arm it, and an arm on the launch
         // path would be a seventh site with no event behind it.
         BackstopWorker.enqueue(this)
+        // #27's first run point (master plan decision 32): the cheapest moment to notice an alarm
+        // the platform dropped while the app was away, and what fills the badge's cache for this
+        // process. It **repairs nothing** — the backstop is where the finding and its repair are
+        // one pass — and it is off this thread, because the check reads the standby bucket and
+        // queries WorkManager, neither of which belongs on `onCreate`.
+        graph.appScope.launch { graph.reminderHealth.refresh() }
     }
 }

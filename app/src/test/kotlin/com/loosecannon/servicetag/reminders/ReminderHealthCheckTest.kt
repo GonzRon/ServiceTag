@@ -4,7 +4,6 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
-import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.TerminationKind
@@ -151,7 +150,6 @@ class ReminderHealthCheckTest {
         alarm = alarm,
         schedules = schedules,
         states = ScheduleStateReader { states[it.value] },
-        today = { TODAY },
         // The production check moves its blocking platform reads off the caller's thread; the
         // suite runs them on the test dispatcher so nothing is left in flight at assertion time.
         io = Dispatchers.Unconfined,
@@ -538,13 +536,24 @@ class ReminderHealthCheckTest {
         assertEquals("and the schedules are still readable", 1, schedules.all().size)
     }
 
-    /** Worst first, so the position on the screen carries the severity as well as the icon does. */
+    /**
+     * Worst first, so the position on the screen carries the severity as well as the icon and the
+     * wording do.
+     *
+     * The WARN is the restriction and **not** the alarm, deliberately: turning the global switch off
+     * to get the INFO also suppresses `DIGEST_ALARM_MISSING`, which is the contract the control
+     * above asserts. One state cannot produce all three any other way.
+     */
     @Test
     fun findingsComeBackWorstFirst() = runTest {
         platform.enabled = false
+        platform.restriction = AppRestriction.BATTERY_RESTRICTED
         prefs.remindersEnabled = false
-        alarm.cancel()
 
+        assertEquals(
+            listOf("NOTIFICATIONS_BLOCKED", "APP_RESTRICTED", "REMINDERS_GLOBALLY_OFF"),
+            check().run().map { it.code },
+        )
         assertEquals(
             listOf(Severity.ERROR, Severity.WARN, Severity.INFO),
             check().run().map { it.severity },
