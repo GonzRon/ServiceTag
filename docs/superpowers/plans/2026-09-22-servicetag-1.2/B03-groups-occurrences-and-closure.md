@@ -30,7 +30,7 @@ Maintenance groups as a first-class aggregate — never a synthetic Asset, never
 
 ## Interfaces
 
-**Consumes from B01:** `MaintenanceGroup`, `GroupMember`, `OccurrenceClosure`, `GroupId`, `MaintenanceGroupDao`, `OccurrenceClosureDao`. **From B02:** `ScheduleRecompute.rebuild`, `RecomputeSchedules`, `Today`, `ScheduleRepository`, `ScheduleStateRepository`, the schedule command and its problem types, `DueStatus`.
+**Consumes from B01:** `MaintenanceGroup`, `GroupMember`, `OccurrenceClosure`, `GroupId`, `MaintenanceGroupDao`, `OccurrenceClosureDao`. **From B02:** `ScheduleRecompute.rebuild` (pass `season`, the sixth defaulted parameter, whenever the schedule carries a window — amended 2026-09-22), `RecomputeSchedules`, `Today`, `ScheduleRepository`, `ScheduleStateRepository`, the schedule command and its problem types, `DueStatus`.
 
 **Produces, for B04, B08, B09, B12, B15:**
 

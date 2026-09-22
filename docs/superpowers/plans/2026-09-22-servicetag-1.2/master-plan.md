@@ -311,7 +311,7 @@ sealed interface ScheduleTarget {
 
 ### 5.3 `ScheduleState` and `rebuild`
 
-`ScheduleRecompute.rebuild(schedule, events, closures, membership, T)` is the **only** write path into `schedule_state` (invariant 17). It runs after every event insert/update/delete, every closure insert, every schedule edit, every import, and in the digest and backstop runs. It is **pure** in (config, events, closures, membership, `T`) and **idempotent** (invariants 15, 16 — asserted as properties over the function, not with two devices).
+`ScheduleRecompute.rebuild(schedule, events, closures, membership, T)` — **amended at B02's review (2026-09-22):** the real signature carries a sixth, trailing, defaulted parameter `season: SeasonWindow? = null` (the matrix's `Season.inSeason` row needs it; a missing window fails open); callers that know the window pass it is the **only** write path into `schedule_state` (invariant 17). It runs after every event insert/update/delete, every closure insert, every schedule edit, every import, and in the digest and backstop runs. It is **pure** in (config, events, closures, membership, `T`) and **idempotent** (invariants 15, 16 — asserted as properties over the function, not with two devices).
 
 Materialised fields are §2.1's `schedule_state` columns. `lastTerminationEffectiveOn` is the termination's **effective date** `E`, not its occurrence key: the key `D` is not materialised because `rebuild` recomputes it from `occurrence_on`. `lastCompletedOn` keeps its narrower meaning — the latest member *completion* — so "last done" never reports a round nobody did.
 

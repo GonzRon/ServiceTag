@@ -34,7 +34,7 @@ Deliver ServiceTag's own reminders reliably with no account, no cloud and **no e
 
 ## Interfaces
 
-**Consumes from B04:** `ReminderProvider`, `ReminderSubject`, `SubjectState`, `ProviderId.LOCAL`, `ReconcileReport`, `HealthFinding`, `Severity`, `RepairAction`, `BuildReminderSubjects`. **From B05:** `NotificationChannels.DUE`/`.OVERDUE`, `PlatformState`, `NotificationPermission.granted()`, `ReminderTrigger`/`PlatformEventKind`. **From B02:** `RecomputeSchedules`, `Today`. **From B01:** `ScheduleLocalDeliveryDao`.
+**Consumes from B04:** `ReminderProvider`, `ReminderSubject`, `SubjectState`, `ProviderId.LOCAL`, `ReconcileReport`, `HealthFinding`, `Severity`, `RepairAction`, `BuildReminderSubjects`. **From B05:** `NotificationChannels.DUE`/`.OVERDUE`, `PlatformState`, `NotificationPermission.granted()`, `ReminderTrigger`/`PlatformEventKind`. **From B02:** `RecomputeSchedules`, `Today`. **From B01:** `ScheduleLocalDeliveryDao`. **Amended 2026-09-22:** when this brief calls `ScheduleRecompute.rebuild` or `RecomputeSchedules`, pass `season` (B02's sixth, defaulted parameter) for schedules that carry a window.
 
 **Produces, for B07 and B10:**
 
