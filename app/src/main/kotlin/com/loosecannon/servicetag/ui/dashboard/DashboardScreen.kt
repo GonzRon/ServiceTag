@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -41,21 +41,35 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.components.ServiceTagIcons
+import com.loosecannon.servicetag.ui.components.StatusBadge
+import com.loosecannon.servicetag.ui.maintenance.AttentionSection
+import com.loosecannon.servicetag.ui.maintenance.DueItem
+import com.loosecannon.servicetag.ui.maintenance.DueItemRow
+import com.loosecannon.servicetag.ui.maintenance.sectionLabel
+import com.loosecannon.servicetag.ui.maintenance.showsBadge
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
+import com.loosecannon.servicetag.ui.theme.LocalServiceTagSemanticColors
 import com.loosecannon.servicetag.ui.theme.PlateShape
 
 /**
  * The landing screen: what needs attention, then the ways out of it (D12 §4).
  *
- * The section order is fixed — ATTENTION · UPCOMING · CURRENT · OUT OF SEASON (G1 §1.2) — and a
- * section with no rows is omitted, so Phase 1C only ever draws CURRENT: schedules, and with them
- * the other three sections, arrive in Phase 3. Scan has no FAB of its own to replace (G1 §1.2
- * "Navigation") — [onScan] pushes the scan screen from the empty-state action, same as Settings
- * does with its own Read / inspect tag row.
+ * The section order is fixed — ATTENTION · UPCOMING · CURRENT · OUT OF SEASON (D12 §10 `:706-707`)
+ * — and a section with no rows is omitted. Phase 1C only ever drew CURRENT because there were no
+ * schedules; 1.2 fills the other three from the shared due projection, and CURRENT now holds the
+ * `OK` schedules first and then the systems nothing is scheduled on yet. Scan has no FAB of its own
+ * to replace (G1 §1.2 "Navigation") — [onScan] pushes the scan screen from the empty-state action,
+ * same as Settings does with its own Read / inspect tag row.
+ *
+ * Nothing on this screen decides what belongs in a list: the sections, their order, the promotion
+ * of a component's due work and F2's two filters are all the view model's, so the dashboard and the
+ * Maintenance destination cannot disagree about any of them.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +80,8 @@ fun DashboardScreen(
     onBackup: () -> Unit,
     onSettings: () -> Unit,
     onScan: () -> Unit,
+    onOpenSchedule: (String) -> Unit = {},
+    onReminderHealth: () -> Unit = {},
 ) {
     val model: DashboardViewModel = viewModel(key = "dashboard") { DashboardViewModel(graph) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -83,6 +99,19 @@ fun DashboardScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
+                    // #27, D3 §7.3: the badge appears only once the worst finding is at least WARN.
+                    // An INFO-only set leaves it off, because a badge that never clears is a badge
+                    // that has stopped saying anything.
+                    if (state.worstSeverity.showsBadge()) {
+                        StatusBadge(
+                            label = REMINDER_FAILED,
+                            colors = LocalServiceTagSemanticColors.current.reminderFailure,
+                            icon = ServiceTagIcons.NotificationsOff,
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .clickable(onClick = onReminderHealth),
+                        )
+                    }
                     IconButton(onClick = onSettings) {
                         Icon(Icons.Outlined.Settings, contentDescription = "Settings")
                     }
@@ -106,6 +135,12 @@ fun DashboardScreen(
                     onClear = model::clearQuery,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
+                DashboardFilterRow(
+                    filters = state.filters,
+                    onCategory = model::onCategoryChange,
+                    onStatus = model::onStatusChange,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
                 // Said once, and only while there is something it explains: a list that is short
                 // because the parts are on their systems should say where they went.
                 if (state.query.isBlank() && state.hiddenComponents > 0) {
@@ -114,29 +149,108 @@ fun DashboardScreen(
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                 }
-                if (state.assets.isNotEmpty()) {
-                    SectionHeader(title = "Current", modifier = Modifier.padding(horizontal = 16.dp))
-                    LazyColumn {
-                        items(state.assets, key = { it.asset.id.value }) { row ->
-                            CurrentRow(row = row, onClick = { onOpenAsset(row.asset.id.value) })
-                            HorizontalDivider(
-                                thickness = 1.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                            )
-                        }
-                    }
-                } else if (state.query.isNotBlank()) {
-                    // Only ever an answer to something typed (F1). An empty list under an empty box
-                    // is reachable — retire a parent and its component stays in service — and there
-                    // the line above has already said where the parts are; telling the owner their
-                    // search found nothing when they searched for nothing is how they conclude
-                    // their assets are gone.
+                if (state.sections.isNotEmpty() || state.assets.isNotEmpty()) {
+                    AttentionList(
+                        state = state,
+                        onOpenAsset = onOpenAsset,
+                        onOpenSchedule = onOpenSchedule,
+                    )
+                } else if (state.query.isNotBlank() || state.filters.isActive) {
+                    // Only ever an answer to something asked for (F1). An empty list under an empty
+                    // box with no filter set is reachable — retire a parent and its component stays
+                    // in service — and there the line above has already said where the parts are;
+                    // telling the owner their search found nothing when they searched for nothing
+                    // is how they conclude their assets are gone.
                     QuietLine(text = "Nothing matches that.", modifier = Modifier.padding(16.dp))
                 }
             }
         }
     }
 }
+
+/**
+ * The attention label the badge carries. It is D12 §5's own word for the reminder-failure state
+ * (`12-visual-design-apollo-service-binder.md:274-296`, the `notifications_off` row), and strings
+ * D12 carries are pre-ratified with it (spec §9.1) — the ratified list has no separate badge label.
+ */
+private const val REMINDER_FAILED = "REMINDER FAILED"
+
+/**
+ * The four sections in their fixed order, empty ones omitted, and CURRENT's asset rows after its
+ * schedule rows. One `LazyColumn` for the lot: a section header is a row of the same list, so the
+ * whole thing scrolls as one surface rather than four nested scrollers.
+ */
+@Composable
+private fun AttentionList(
+    state: DashboardState,
+    onOpenAsset: (String) -> Unit,
+    onOpenSchedule: (String) -> Unit,
+) {
+    LazyColumn {
+        state.sections.forEach { group ->
+            item(key = "header-${group.section.name}") {
+                SectionHeader(
+                    title = sectionLabel(group.section),
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+            items(group.items.size, key = { index -> group.items[index].scheduleId.value }) { index ->
+                val item = group.items[index]
+                DueItemRow(
+                    item = item,
+                    onClick = { onOpenSchedule(item.scheduleId.value) },
+                    // The repair is offered only by the repairable form: a missing meter baseline,
+                    // which "Log meter reading" fixes. An empty required set gets no label at all,
+                    // and it is not in a section to be offered one (invariant 74, §17.1a).
+                    onRepair = if (item.isRepairableNoData) {
+                        { onOpenSchedule(item.scheduleId.value) }
+                    } else {
+                        null
+                    },
+                )
+                RowRule()
+            }
+            // CURRENT is also where the systems with nothing scheduled live, after the OK rows.
+            if (group.section == AttentionSection.CURRENT) {
+                currentAssets(state, onOpenAsset)
+            }
+        }
+        // No CURRENT section at all, and still assets to list: the header has to come from here.
+        if (state.assets.isNotEmpty() && state.sections.none { it.section == AttentionSection.CURRENT }) {
+            item(key = "header-CURRENT") {
+                SectionHeader(
+                    title = sectionLabel(AttentionSection.CURRENT),
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+            currentAssets(state, onOpenAsset)
+        }
+    }
+}
+
+private fun LazyListScope.currentAssets(
+    state: DashboardState,
+    onOpenAsset: (String) -> Unit,
+) {
+    items(state.assets.size, key = { index -> state.assets[index].asset.id.value }) { index ->
+        val row = state.assets[index]
+        CurrentRow(row = row, onClick = { onOpenAsset(row.asset.id.value) })
+        RowRule()
+    }
+}
+
+@Composable
+private fun RowRule() {
+    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+/**
+ * Whether this row is the **repairable** `NO_DATA` — a missing meter baseline, which is what "Log
+ * meter reading" repairs. The empty-required-set form reads `NO_DATA` too and is never offered a
+ * repair, which is why the flag and not the status is the question asked here.
+ */
+private val DueItem.isRepairableNoData: Boolean
+    get() = status == DueStatus.NO_DATA && !requiredSetEmpty
 
 /**
  * The quick filter (#39). An `OutlinedTextField`, not a Material 3 `SearchBar`: a `SearchBar`
@@ -227,13 +341,14 @@ private fun FirstRun(onNewAsset: () -> Unit, onScan: () -> Unit) {
 }
 
 /**
- * One asset in service. 28dp glyph · text block · chevron, 11dp vertical padding (G1 §1.2). The
- * glyph is `onSurfaceVariant`, not a state colour: until schedules exist there is no state to
- * carry, and a row that looked OK by colour would be claiming something it does not know.
+ * One asset in service with nothing scheduled on it. 28dp glyph · text block · chevron, 11dp
+ * vertical padding (G1 §1.2). The glyph is `onSurfaceVariant`, not a state colour: a row with no
+ * schedule has no state to carry, and one that looked OK by colour would be claiming something it
+ * does not know.
  *
  * A component — which is only ever here because a search asked for it (#39) — says whose component
- * it is in place of the schedule line. Neither row has a schedule until Phase 3, and of the two
- * facts the parentage is the one that makes the hit make sense.
+ * it is in place of the schedule line. An asset that *has* a schedule is not here at all: its
+ * schedule's row is in one of the sections above, at its own attention rank.
  */
 @Composable
 private fun CurrentRow(row: DashboardRow, onClick: () -> Unit) {

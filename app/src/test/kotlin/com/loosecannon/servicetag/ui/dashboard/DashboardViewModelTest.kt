@@ -2,6 +2,8 @@ package com.loosecannon.servicetag.ui.dashboard
 
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.ui.maintenance.DueReadModel
+import com.loosecannon.servicetag.ui.maintenance.NoHealthFindings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
@@ -43,7 +45,17 @@ class DashboardViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel() = DashboardViewModel(graph.assets, graph.prefs)
+    private fun viewModel() = DashboardViewModel(
+        assets = graph.assets,
+        schedules = graph.schedules,
+        states = graph.scheduleStates,
+        due = DueReadModel(
+            graph.schedules, graph.scheduleStates, graph.assets, graph.groups,
+            graph.definitions, graph.recomputeSchedules, graph.todayPort,
+        ),
+        health = NoHealthFindings,
+        prefs = graph.prefs,
+    )
 
     @Test fun needsBackupIsTrueUntilPrefsSayOtherwise() = runTest {
         val vm = viewModel()

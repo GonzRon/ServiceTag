@@ -27,6 +27,7 @@ import com.loosecannon.servicetag.core.usecase.ArchiveAsset
 import com.loosecannon.servicetag.core.usecase.ArchiveDefinition
 import com.loosecannon.servicetag.core.usecase.ArchiveProfile
 import com.loosecannon.servicetag.core.usecase.BuildBackupMergePlan
+import com.loosecannon.servicetag.core.usecase.CompleteGroupMembers
 import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAttachment
@@ -218,6 +219,14 @@ class FakeGraph(
     )
     val importBackupMerge: ImportBackupMerge =
         ImportBackupMerge(buildBackupMergePlan, applyBackupMergePlan)
+
+    /**
+     * 1.2 — the group completion path, so a read-model test can mark members done through the
+     * production use case rather than hand-writing an `occurrence_on`. Mirrors `AppGraph`'s field.
+     */
+    val completeGroupMembers: CompleteGroupMembers = CompleteGroupMembers(
+        schedules, groups, events, closures, definitions, profiles, uow, ids, clock, recomputeSchedules,
+    )
 
     fun close() = db.close()
 

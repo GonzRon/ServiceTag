@@ -96,6 +96,9 @@ import com.loosecannon.servicetag.reminders.AndroidNotificationPermission
 import com.loosecannon.servicetag.reminders.AndroidPlatformState
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.reminders.PlatformState
+import com.loosecannon.servicetag.ui.maintenance.DueReadModel
+import com.loosecannon.servicetag.ui.maintenance.HealthSummary
+import com.loosecannon.servicetag.ui.maintenance.NoHealthFindings
 import java.io.File
 import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
@@ -327,6 +330,27 @@ class AppGraph(private val context: Context) {
     )
     val closeRound: CloseRound =
         CloseRound(schedules, closures, uow, ids, clock, today, recomputeSchedules)
+
+    /**
+     * 1.2 — the one due projection behind the dashboard, the Maintenance destination, the scan
+     * sheet and `/v1/due` (master plan decision 27). It **reads** derived state and never writes
+     * it: [recomputeSchedules] is here for its occurrence derivation and its pure `stateOf`, and
+     * `rebuild` stays the only writer of `schedule_state` (invariant 17).
+     *
+     * The snooze source keeps its default: `schedule_local_delivery` is B06's table and B06
+     * declares its port, so this seam answers "no snooze" until that lands rather than this brief
+     * growing a second reader of a table it does not own.
+     */
+    val dueReadModel: DueReadModel = DueReadModel(
+        schedules, scheduleStates, assets, groups, definitions, recomputeSchedules, today,
+    )
+
+    /**
+     * Reminder health, as the dashboard's badge asks about it. B10 implements the real check over
+     * its seven findings and replaces this field; until then nothing is found, which is the honest
+     * answer for a build with no check in it (master plan decision 28).
+     */
+    val healthSummary: HealthSummary = NoHealthFindings
 
     internal companion object {
         const val DB_NAME = "servicetag.db"
