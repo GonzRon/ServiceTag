@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -32,7 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,10 +58,16 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
  * A group is not equipment — it has no tag, no serial and no place in the asset tree (invariants 4,
  * 5) — so the only navigation out of a member is to the real thing.
  *
- * **There is no "Close this round" here**: that action is B14's and belongs to the schedule. Nor is
- * there an inline completion yet — B14's `CompletionFlow` is the canonical one, so until it lands a
- * round's member work is reached by opening the schedule, and this screen writes nothing but
- * `archived_at`.
+ * What it draws: the group's name and description, the **Archived** badge when it is, its current
+ * members each with the ratified "Open asset", and each of its schedules with the round's checklist
+ * — the ratified progress line, a tick per member and the round's two ratified actions.
+ *
+ * What it writes: **nothing of its own.** The three completion actions are `CompletionFlow` calls,
+ * which is the one completion mechanism in 1.2, and the only column this screen sets directly is
+ * `archived_at`, through `ArchiveGroup`.
+ *
+ * **There is no "Close this round" here**: that action is B14's and belongs to the schedule, which
+ * the checklist's title row opens along with the round's postponement and its snooze.
  *
  * D-26: `description` is the **only** context a group carries. The field #55's sketch proposed
  * is in neither the aggregate nor these screens, so nothing here could draw one.
@@ -74,23 +81,22 @@ fun GroupDetailScreen(
     onEdit: (String) -> Unit,
     onOpenAsset: (String) -> Unit,
     onOpenSchedule: (String) -> Unit,
-    /** A `FORM` member completion is collected by that member's own profile form. */
-    onLogForm: (assetId: String, profileId: String?) -> Unit,
+    /** "Add a schedule for this group": the create entry, offered only while it has a member. */
+    onAddSchedule: (String) -> Unit,
 ) {
     val model: GroupDetailViewModel = viewModel(key = groupId) { GroupDetailViewModel(graph, groupId) }
     val state by model.state.collectAsStateWithLifecycle()
     val missing by model.missing.collectAsStateWithLifecycle()
     val busy by model.busy.collectAsStateWithLifecycle()
-    // Which members are ticked, per schedule. It lives here because it is a selection and not a
-    // fact about the round: nothing is written until one of the two ratified actions is tapped.
-    var selected by remember(groupId) { mutableStateOf(emptyMap<String, Set<String>>()) }
+    // Which members are ticked, as "<scheduleId>\u001f<assetId>" keys. It lives here because it is
+    // a selection and not a fact about the round — nothing is written until one of the two ratified
+    // actions is tapped — and it is *saveable* so a rotation does not silently drop the ticks the
+    // owner just made. A flat list of strings is what the default saver can carry.
+    var selected by rememberSaveable(groupId) { mutableStateOf(emptyList<String>()) }
 
     // A restored back stack or a replacing import can name a group that is not there any more.
     // Leaving is the honest answer; an empty screen would pretend it still exists.
     LaunchedEffect(missing) { if (missing) onBack() }
-    LaunchedEffect(model) {
-        model.needsForm.collect { form -> onLogForm(form.assetId.value, form.profileId?.value) }
-    }
 
     val current = state
     Scaffold(
@@ -171,7 +177,32 @@ fun GroupDetailScreen(
                 MemberRow(member = member, onOpenAsset = { onOpenAsset(member.assetId.value) })
             }
 
-            MaintenanceSectionTitle(SCHEDULES_SECTION)
+            // The create entry, in the same shape the asset screen carries it: a glyph labelled
+            // with the ratified section word, and no new string. It is drawn **only while the group
+            // has an open member**, which is how invariant 74 is made unreachable through the UI —
+            // `SaveSchedule` refuses a group target with nobody in it, and a refusal the owner
+            // cannot provoke needs no sentence.
+            MaintenanceSectionTitle(
+                title = SCHEDULES_SECTION,
+                trailing = if (current.members.isEmpty()) {
+                    null
+                } else {
+                    {
+                        IconButton(onClick = { onAddSchedule(groupId) }) {
+                            Icon(Icons.Outlined.Add, contentDescription = SCHEDULES_SECTION)
+                        }
+                    }
+                },
+            )
+            if (current.schedules.isEmpty()) {
+                // B08's RATIFIED empty-state line (master plan §17.1f), which fits this surface
+                // exactly: it names the group as one of the two places a schedule is added from,
+                // and the glyph above is that place.
+                QuietLine(
+                    NO_SCHEDULES_YET,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
             current.schedules.forEachIndexed { index, schedule ->
                 if (index > 0) {
                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
@@ -179,32 +210,52 @@ fun GroupDetailScreen(
                 val key = schedule.scheduleId.value
                 GroupScheduleBlock(
                     row = schedule,
-                    selected = selected[key].orEmpty(),
+                    selected = selectionFor(selected, key),
                     busy = busy,
                     onClick = { onOpenSchedule(key) },
                     onSelect = { assetId, on ->
-                        val now = selected[key].orEmpty()
-                        selected = selected + (key to if (on) now + assetId else now - assetId)
+                        val tick = tickOf(key, assetId)
+                        selected = if (on) selected + tick else selected - tick
                     },
                     onCompleteAll = {
                         model.completeAll(schedule.scheduleId)
-                        selected = selected - key
+                        selected = selected.filterNot { it.startsWith("$key\u001f") }
                     },
                     onCompleteSelected = {
+                        val ticked = selectionFor(selected, key)
                         model.completeSelected(
                             schedule.scheduleId,
                             schedule.checklist
-                                .filter { !it.complete && it.assetId.value in selected[key].orEmpty() }
+                                .filter { !it.complete && it.assetId.value in ticked }
                                 .map { it.assetId },
                         )
-                        selected = selected - key
+                        selected = selected.filterNot { it.startsWith("$key\u001f") }
                     },
-                    onCompleteMember = { model.completeMember(schedule.scheduleId, it) },
+                    // Nit 9: the tick goes with the member that was just completed, so the round
+                    // action is never enabled on a selection that would filter away to nothing.
+                    onCompleteMember = { assetId ->
+                        model.completeMember(schedule.scheduleId, assetId)
+                        selected = selected - tickOf(key, assetId.value)
+                    },
                 )
             }
             Spacer(Modifier.height(24.dp))
         }
     }
+}
+
+/**
+ * The checklist selection, flattened to one saveable list of `"<scheduleId>\u001f<assetId>"` keys.
+ *
+ * A `Map<String, Set<String>>` is not something the default `rememberSaveable` saver can carry, and
+ * the ticks are worth keeping across a rotation; the unit separator cannot occur in a UUID, so the
+ * two halves are unambiguous.
+ */
+private fun tickOf(scheduleId: String, assetId: String): String = "$scheduleId\u001f$assetId"
+
+private fun selectionFor(ticks: List<String>, scheduleId: String): Set<String> {
+    val prefix = "$scheduleId\u001f"
+    return ticks.filter { it.startsWith(prefix) }.map { it.removePrefix(prefix) }.toSet()
 }
 
 /** A member: the Asset's name, and the RATIFIED action that opens it. */

@@ -18,12 +18,9 @@ import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.core.usecase.ArchiveGroup
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.di.AppGraph
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -146,13 +143,6 @@ class GroupDetailViewModel(
     /** Whether a completion is in flight; the round's actions are disabled while it is. */
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
-    /** A `FORM` member completion is collected by that member's profile form; the screen navigates. */
-    private val _needsForm = MutableSharedFlow<CompletionOutcome.NeedsForm>(
-        replay = 0,
-        extraBufferCapacity = 1,
-    )
-    val needsForm: SharedFlow<CompletionOutcome.NeedsForm> = _needsForm.asSharedFlow()
-
     val state: StateFlow<GroupDetailState?> =
         combine(rows, schedules.observeAll(), states.observeAll()) { groupRows, _, _ ->
             groupRows.firstOrNull { it.id == id }
@@ -190,10 +180,14 @@ class GroupDetailViewModel(
     /**
      * One member, done. The same flow, with the member named: a group target with no member named
      * is refused rather than guessed at, so the id is always passed.
+     *
+     * There is no `NeedsForm` branch here, and there is nothing for one to do: `CompletionFlow`
+     * returns that outcome only for an **asset** target, and a group target is QUICK-only anyway
+     * (D-12), so a form route from this screen would be dead code with a KDoc promising a path
+     * that cannot be taken.
      */
     fun completeMember(scheduleId: ScheduleId, assetId: AssetId) = operate {
-        val outcome = completion.complete(scheduleId, assetId)
-        if (outcome is CompletionOutcome.NeedsForm) _needsForm.tryEmit(outcome)
+        completion.complete(scheduleId, assetId)
     }
 
     /**

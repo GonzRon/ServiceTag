@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.di.AppGraph
-import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
 /**
@@ -80,11 +79,13 @@ fun GroupEditScreen(
             )
         },
     ) { padding ->
+        // The 16dp gutter is each block's own, because the members heading carries its own — the
+        // same heading the detail screen draws, so one feature spells it one way.
         Column(
             modifier = Modifier
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             OutlinedTextField(
@@ -93,7 +94,7 @@ fun GroupEditScreen(
                 label = { Text("Name") },
                 singleLine = true,
                 shape = ControlShape,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
             OutlinedTextField(
                 value = state.description,
@@ -101,13 +102,10 @@ fun GroupEditScreen(
                 label = { Text("Description") },
                 minLines = 2,
                 shape = ControlShape,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
 
-            // The form's own idiom, which is `SectionHeader`: "Assets" is a **shipped** word, not
-            // a ratified 1.2 string, so the component's upper-casing is a treatment here and not a
-            // paraphrase — exactly as it is over "Identity" and "Notes" on the asset form.
-            SectionHeader(title = MEMBERS_SECTION)
+            MaintenanceSectionTitle(MEMBERS_SECTION)
             state.candidates.forEach { candidate ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -115,7 +113,8 @@ fun GroupEditScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { model.toggle(candidate.assetId) }
-                        .heightIn(min = 56.dp),
+                        .heightIn(min = 56.dp)
+                        .padding(horizontal = 16.dp),
                 ) {
                     // The whole row is the toggle; the box reports state and takes no click of
                     // its own, so one tap can never be counted twice.

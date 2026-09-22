@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasTextExactly
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -62,6 +63,10 @@ class GroupScreensTest {
      * open: a round whose last outstanding member is completed is finished, and the engine opens
      * the next one — which is correct, and would make "the progress moved" the wrong assertion.
      *
+     * The third group has **no** members at all, which is what the create-affordance test needs:
+     * `SaveSchedule` refuses a group target with nobody in it, so the affordance must not be there
+     * to tap (invariant 74).
+     *
      * Everything goes through the production use cases, so the membership windows are stamped before
      * the schedule is created and the round therefore opens on an instant they cover.
      */
@@ -89,6 +94,8 @@ class GroupScreensTest {
                     members = listOf(GroupMemberInput(assetId = one.id), GroupMemberInput(assetId = two.id)),
                 ),
             )
+            // A group with nobody in it: the half of the create rule that has to be *absent*.
+            graph.saveGroup.run(null, GroupCommand(name = "Emptied run"))
             val today = LocalDate.now().toString()
             val round = graph.saveSchedule.run(
                 null,
@@ -302,6 +309,44 @@ class GroupScreensTest {
         assert(written.assetId.value in owed) { "a member the round owed, and only one: $written" }
         assert(written.scheduleId != null) { "the completion carries its schedule: $written" }
         assert(written.occurrenceOn != null) { "and its occurrence key: $written" }
+    }
+
+    /**
+     * The in-app way to put a schedule on a group, and the one case where it must **not** be
+     * offered (invariant 74).
+     *
+     * Both halves in one test, because they are one rule: a group with an open member carries the
+     * create glyph — the same glyph and the same ratified `contentDescription` the asset screen
+     * uses — and tapping it lands on B14's editor with the **group** as the target, which the
+     * read-only target picker names. A group with nobody in it carries no glyph at all, so the
+     * refusal `SaveSchedule` would give is unreachable through the UI and needs no sentence.
+     *
+     * Without this the release has no in-app path to a group-targeted schedule: the only other
+     * `Route.ScheduleEdit` pushes are the asset screen's and "edit this one".
+     */
+    @Test fun theSchedulesSectionOffersCreationOnlyWhileTheGroupHasAMember() {
+        aStoreWithGroups()
+        openMaintenance()
+        rule.onNode(hasTextExactly("North run") and hasClickAction()).performScrollTo().performClick()
+        rule.awaitText("Maintenance group")
+
+        // The glyph is labelled with the ratified section word; the heading beside it is a Text and
+        // carries no contentDescription, so this counts the action and nothing else.
+        rule.onAllNodesWithContentDescription("Schedules").assertCountEquals(1)
+        rule.onNodeWithContentDescription("Schedules").performScrollTo().performClick()
+
+        // B14's editor, opened on a group target: the read-only picker says which kind it is.
+        rule.awaitText("This applies to")
+        rule.awaitText("A maintenance group")
+
+        // And the group with nobody in it offers nothing to tap.
+        rule.onNodeWithContentDescription("Cancel").performClick()
+        rule.onNodeWithContentDescription("Back").performClick()
+        rule.onNode(hasTextExactly("Emptied run") and hasClickAction()).performScrollTo().performClick()
+        rule.awaitText("Maintenance group")
+        // The ratified empty state stands in for the schedules it has none of.
+        rule.awaitText("No maintenance schedules yet. Add one from an asset or a maintenance group.")
+        rule.onAllNodesWithContentDescription("Schedules").assertCountEquals(0)
     }
 
     private fun assetIdOf(name: String): String =

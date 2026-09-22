@@ -131,13 +131,15 @@ class RetireDeleteAssetTest {
     }
 
     /**
-     * Invariant 8 at the use case: a member of a group that has already recorded a round cannot be
-     * deleted, because the membership table's cascade from its asset would take the windows
-     * `required(D)` is derived from — and the round is already history.
+     * Invariant 8 at the use case, **word for word**: a member whose window *covered* a recorded
+     * round cannot be deleted, because the membership table's cascade from its asset would take the
+     * row `required(D)` was derived from — and the round is already history.
      *
-     * The control is the second group in the same store: nobody has serviced it, so it holds no
-     * round to rewrite and its member is deletable. That pair is what makes this a rule about
-     * recorded rounds rather than about membership as such.
+     * Three controls in the same store, and each one is a different reason to allow the delete:
+     * a group nobody has serviced holds no round to rewrite; a group whose only recorded round
+     * opened **before** a member joined never obliged that member; and only a group with a round
+     * the asset's own window covered refuses. The second is what stops the rule from reading
+     * "anybody in a serviced group is undeletable for ever".
      */
     @Test fun deleteRefusedWhileMembershipCarriesARecordedRound() = runTest {
         store("a1", "Sprinkler 1")
@@ -165,6 +167,24 @@ class RetireDeleteAssetTest {
         schedules.upsert(scheduleOf("s3", assetId = null, groupId = "g3", timeInterval = 3, timeUnit = RecurrenceUnit.MONTH, anchorOn = "2026-01-01"))
         delete.run(AssetId("a3"))
         assertFalse(assets.rows.containsKey("a3"))
+
+        // Nor does a member who joined **after** g1's only recorded round: that round opened on the
+        // schedule's own `created_at` — 2026-01-01 — which this window does not cover, so the asset
+        // was never in `required(D)` and taking its row away changes nothing that was recorded.
+        store("a4", "Sprinkler 4")
+        groups.upsert(
+            groupOf(
+                "g1",
+                members = listOf(
+                    Triple("a1", "2026-01-01", null),
+                    Triple("a4", "2026-06-01", null),
+                ),
+            ),
+        )
+        delete.run(AssetId("a4"))
+        assertFalse(assets.rows.containsKey("a4"))
+        // a1's window still covers that round, so a1 is still refused.
+        assertFailsWith<AssetMembershipReferenced> { delete.run(AssetId("a1")) }
     }
 
     @Test fun archiveDoesNotCascade() = runTest {

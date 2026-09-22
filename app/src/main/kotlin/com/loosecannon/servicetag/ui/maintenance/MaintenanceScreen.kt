@@ -138,15 +138,23 @@ fun MaintenanceScreen(
                 )
             }
 
-            // B15's group list, in this section. The heading is always drawn now, because the
-            // section always has something in it: with no groups yet the list is just its own
-            // "add" affordance, which is the one place a first group can be made.
-            MaintenanceSectionTitle(GROUPS_SECTION)
-            GroupList(
-                groups = state.groups,
-                onOpenGroup = onOpenGroup,
-                onNewGroup = onNewGroup,
-            )
+            // B15's group list, in this section. B08's rule stands and is deliberately not
+            // changed here: a section with no rows is **omitted** rather than drawn as a bare
+            // heading, and §17.1f has no empty-state line for this one.
+            //
+            // The consequence is recorded rather than worked around: the list's own create
+            // affordance is inside the section, so a phone with **no** groups has no in-app way to
+            // make its first one. Drawing the heading unconditionally would fix that in one line,
+            // and it is a finding for the controller — not a rule this brief may change, since no
+            // numbered plan decision reaches B08's.
+            if (state.groups.isNotEmpty()) {
+                MaintenanceSectionTitle(GROUPS_SECTION)
+                GroupList(
+                    groups = state.groups,
+                    onOpenGroup = onOpenGroup,
+                    onNewGroup = onNewGroup,
+                )
+            }
 
             // The fourth section is one row and needs no heading of its own: the row's name *is*
             // the ratified section label, and a heading above it would say the same word twice.

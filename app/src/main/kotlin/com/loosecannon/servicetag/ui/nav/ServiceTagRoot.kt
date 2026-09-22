@@ -377,11 +377,11 @@ fun ServiceTagRoot(
                         // A round's checklist opens the schedule, which is where the round itself
                         // — its postponement, its snooze and its close — lives (B14).
                         onOpenSchedule = { backStack.add(Route.ScheduleDetail(it)) },
-                        // A `FORM` member completion is collected by that member's own profile
-                        // form, exactly as the schedule detail collects one.
-                        onLogForm = { assetId, profileId ->
-                            backStack.add(Route.EventEntry(assetId, profileId, null))
-                        },
+                        // The in-app way to put a schedule on a group — the other half of B14's
+                        // create entry, which the asset screen already carries for an asset target.
+                        // The editor's target picker is read-only, so the key is what names the
+                        // group and there is no second place the target could come from.
+                        onAddSchedule = { backStack.add(Route.ScheduleEdit(null, targetGroupId = it)) },
                     )
                 }
                 entry<Route.GroupEdit> { key ->
