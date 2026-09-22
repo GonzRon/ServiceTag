@@ -52,6 +52,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="servicetag" android:host="asset" />
                 <data android:scheme="servicetag" android:host="tag" />
+                <data android:scheme="servicetag" android:host="schedule" />
             </intent-filter>
         </activity>
 
@@ -110,6 +111,16 @@
              no intent filter at all (spec §5.2, §5.4, invariant 54). -->
         <receiver
             android:name="com.loosecannon.servicetag.reminders.DigestReceiver"
+            android:exported="false" />
+
+        <!-- The quick actions' own target (spec §5.8, D-21, invariants 54, 55). Manifest-declared
+             because a notification outlives the process that posted it; non-exported and carrying
+             no intent filter, so the only thing that can reach it is this app's own explicit,
+             FLAG_IMMUTABLE PendingIntent — an exported receiver would be the forgery door the
+             nonce exists because of. It starts nothing: the two actions that open a screen are
+             activity PendingIntents and never arrive here. -->
+        <receiver
+            android:name="com.loosecannon.servicetag.reminders.QuickActionReceiver"
             android:exported="false" />
 
         <!-- The camera writes into cacheDir/camera/ and hands the URI straight back (spec 9.3). -->

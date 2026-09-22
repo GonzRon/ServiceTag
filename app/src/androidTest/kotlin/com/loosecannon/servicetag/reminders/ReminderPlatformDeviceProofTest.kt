@@ -160,10 +160,13 @@ class ReminderPlatformDeviceProofTest {
      * This is what makes invariant 44 a platform fact rather than a fake's courtesy — "what am I
      * already showing?" is answered by the shade, so nothing has to be persisted for a second
      * reconcile to be inert or for a cleared app to rebuild itself.
+     *
+     * The actions are deliberately **empty** here: this row is about the tag being the identity, and
+     * a posted notification's actions are `QuickActionDeviceProofTest`'s whole subject.
      */
     @Test
     fun aPostedNotificationIsReadableBackByItsTag() {
-        val notifications = AndroidReminderNotifications(context)
+        val notifications = AndroidReminderNotifications(context, AndroidQuickActionIntents(context))
         val key: SubjectKey = SubjectKey.Schedule(ScheduleId("device-proof-1"))
         val tag = itemTag(key, "0123456789abcdef0123")
         val post = ItemPost(
@@ -180,7 +183,7 @@ class ReminderPlatformDeviceProofTest {
         notifications.cancelItem(tag)
         assertTrue("nothing of ours is standing to begin with", awaitStanding(notifications, tag, false))
 
-        notifications.postItem(post)
+        notifications.postItem(post, emptyList())
         assertTrue("the shade is this provider's projection", awaitStanding(notifications, tag, true))
 
         notifications.cancelItem(tag)

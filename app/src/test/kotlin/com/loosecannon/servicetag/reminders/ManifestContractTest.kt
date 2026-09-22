@@ -45,17 +45,18 @@ class ManifestContractTest {
 
     /**
      * Invariant 54: every `<receiver>` is non-exported, and the declared set is exactly B05's four
-     * platform receivers plus B06's digest receiver — **five** at this tip. The quick-action
-     * receiver is B07's own manifest addition (its own brief), which takes the final count to six.
+     * platform receivers, B06's digest receiver and B07's quick-action receiver — **six**, which is
+     * the count master plan §16's release proof states and the final one for 1.2.
      *
      * B06 added the fifth because an alarm-targeted receiver has to outlive the process that armed
-     * it and so cannot be registered at runtime (controller ruling, 2026-09-22: B06 adds exactly
-     * one manifest element, and it is that `<receiver>`).
+     * it and so cannot be registered at runtime; B07 added the sixth for the same reason about a
+     * notification, which outlives the process that posted it (controller ruling, 2026-09-22: each
+     * of those two briefs adds exactly one manifest `<receiver>`).
      */
     @Test
-    fun everyReceiverIsNonExportedAndThereAreFive() {
+    fun everyReceiverIsNonExportedAndThereAreSix() {
         val receivers = manifest.elements("receiver")
-        assertEquals(5, receivers.size)
+        assertEquals(6, receivers.size)
         receivers.forEach { receiver ->
             assertEquals(
                 "every receiver must be android:exported=\"false\": ${receiver.androidAttr("name")}",
@@ -72,6 +73,7 @@ class ManifestContractTest {
                 "com.loosecannon.servicetag.reminders.TimezoneChangedReceiver",
                 "com.loosecannon.servicetag.reminders.DateChangedReceiver",
                 "com.loosecannon.servicetag.reminders.DigestReceiver",
+                "com.loosecannon.servicetag.reminders.QuickActionReceiver",
             ),
             declaredNames,
         )
@@ -151,9 +153,9 @@ class ManifestContractTest {
      * are both asserted; neither alone would catch a class hard-coded against the wrong action.
      *
      * List-valued, not `.single()` (B05 fix round 2, finding 23): B07's `QuickActionReceiver` is
-     * explicitly "none — explicit intent only", so once it lands `.single()` would throw
-     * `NoSuchElementException` instead of reporting a clean expected-vs-actual diff. This brief's
-     * four each carry exactly one action; that is what the expected map's single-element lists say.
+     * "none — explicit intent only", and `.single()` would throw `NoSuchElementException` on it
+     * instead of reporting a clean expected-vs-actual diff. B05's four each carry exactly one
+     * action; that is what the expected map's single-element lists say.
      */
     @Test
     fun eachReceiverNameFiltersItsOwnAction() {
@@ -165,6 +167,9 @@ class ManifestContractTest {
             // B06's digest receiver: none. It is addressed by an explicit PendingIntent, and an
             // intent filter on it would be a public door onto the digest for no reason at all.
             "com.loosecannon.servicetag.reminders.DigestReceiver" to emptyList(),
+            // B07's quick-action receiver: none either, and for a sharper version of the same
+            // reason — an intent filter here would be the forgery door the nonce exists because of.
+            "com.loosecannon.servicetag.reminders.QuickActionReceiver" to emptyList(),
         )
 
         val actual = manifest.elements("receiver").associate { receiver ->

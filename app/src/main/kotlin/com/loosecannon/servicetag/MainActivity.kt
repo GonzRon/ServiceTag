@@ -78,15 +78,10 @@ class MainActivity : ComponentActivity() {
         }
         if (intent.action != Intent.ACTION_VIEW) return null
         val uri = intent.data
-        return when (val link = DeepLinkRoute.parse(uri?.scheme, uri?.host, uri?.pathSegments.orEmpty())) {
-            is DeepLink.Asset -> Route.AssetDetail(link.id.value)
-            is DeepLink.Tag -> when (val payload = link.payload) {
-                is TagPayload.V1 -> Route.TagResult(TagResultWire.formatOf(payload), payload.tagId.value)
-                else -> malformed()
-            }
-            is DeepLink.Malformed -> malformed()
-            null -> null
-        }
+        val link = DeepLinkRoute.parse(uri?.scheme, uri?.host, uri?.pathSegments.orEmpty())
+        // A link this app answers but cannot make a destination of — a malformed id, or a tag
+        // payload written by a newer format — says so. A link that is not ours at all says nothing.
+        return routeForDeepLink(link) ?: if (link == null) null else malformed()
     }
 
     private fun malformed(): Route? {
@@ -98,4 +93,26 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_TAG_FORMAT = "tag_format"
         const val EXTRA_TAG_KEY = "tag_key"
     }
+}
+
+/**
+ * The destination a parsed [DeepLink] names, or null when it names none.
+ *
+ * **Pure, and file-level so a JVM test can drive it.** That is what makes invariant 57 — a scan, an
+ * NFC dispatch and a `servicetag://` link never mutate — an assertable property rather than a
+ * reading of `routeFrom`: there is no port in reach here, so there is nowhere for a write to hide.
+ * `routeFrom` above adds one thing on top of this, and it is the "say so" for a link that is ours
+ * but points at nothing.
+ *
+ * 1.2 adds the `schedule` host, routed to [Route.ScheduleDetail] exactly as the two shipped links
+ * are routed and with **no** mutation on the way: it is what a notification's "Open" action, and
+ * "Done" on a schedule whose completion needs the owner, both open.
+ */
+internal fun routeForDeepLink(link: DeepLink?): Route? = when (link) {
+    is DeepLink.Asset -> Route.AssetDetail(link.id.value)
+    is DeepLink.Schedule -> Route.ScheduleDetail(link.id.value)
+    is DeepLink.Tag -> (link.payload as? TagPayload.V1)?.let { payload ->
+        Route.TagResult(TagResultWire.formatOf(payload), payload.tagId.value)
+    }
+    is DeepLink.Malformed, null -> null
 }

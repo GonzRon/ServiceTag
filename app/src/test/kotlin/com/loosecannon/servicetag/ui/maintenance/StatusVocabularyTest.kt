@@ -1,7 +1,14 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.schedule.DueStatus
+import java.time.LocalDate
+import java.time.ZoneId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -56,4 +63,56 @@ class StatusVocabularyTest {
             AttentionSection.entries.map(::sectionLabel),
         )
     }
+
+    /**
+     * B07's badge, verbatim: **"Snoozed until \<date\>"** (master plan §17), in the shipped display
+     * date shape and in the device's own zone — the instant is device-local by definition.
+     *
+     * It is a line **beside** the status badge, so the status word this row draws is still OVERDUE:
+     * a snooze suppresses delivery and moves no obligation (invariant 20, D-13).
+     */
+    @Test fun aSnoozedRowCarriesTheRatifiedBadgeAndKeepsItsStatusWord() {
+        val zone = ZoneId.of("America/New_York")
+        val now = LocalDate.parse("2026-06-15").atTime(9, 5).atZone(zone).toInstant().toEpochMilli()
+        val until = LocalDate.parse("2026-06-16").atTime(9, 5).atZone(zone).toInstant().toEpochMilli()
+
+        assertEquals("Snoozed until 16 Jun 2026", snoozeLine(row(until), now, zone))
+        assertEquals("OVERDUE", statusLabel(row(until).status))
+    }
+
+    /**
+     * No snooze, and a **lapsed** one, each draw nothing. A row still claiming a snooze whose
+     * instant has passed would be saying something the delivery path stopped believing at the same
+     * moment — the next digest run posts that schedule again.
+     */
+    @Test fun aRowWithNoSnoozeOrALapsedOneDrawsNothing() {
+        val now = 1_781_000_000_000L
+
+        assertNull(snoozeLine(row(null), now, ZoneId.of("UTC")))
+        assertNull(snoozeLine(row(now), now, ZoneId.of("UTC")))
+        assertNull(snoozeLine(row(now - 1L), now, ZoneId.of("UTC")))
+    }
+
+    /** An OVERDUE asset-targeted row, carrying nothing but the snooze under test. */
+    private fun row(snoozedUntil: Long?) = DueItem(
+        scheduleId = ScheduleId("s1"),
+        title = "Filter change",
+        target = ScheduleTarget.AssetTarget(AssetId("a1")),
+        assetName = "Pump house filter",
+        parentName = null,
+        category = "Water",
+        status = DueStatus.OVERDUE,
+        section = AttentionSection.ATTENTION,
+        requiredSetEmpty = false,
+        effectiveDueOn = LocalDate.parse("2026-05-30"),
+        computedDueMeter = null,
+        currentMeter = null,
+        meterUnit = null,
+        lastCompletedOn = null,
+        completionMode = CompletionMode.QUICK,
+        membersRequired = null,
+        membersComplete = null,
+        snoozedUntil = snoozedUntil,
+        rank = 0,
+    )
 }

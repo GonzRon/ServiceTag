@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.meterDefinitionOf
 import com.loosecannon.servicetag.testing.readingOf
@@ -38,7 +39,7 @@ class DueReadModelTest {
 
     @After fun tearDown() = graph.close()
 
-    private fun readModel(): DueReadModel = DueReadModel(
+    private fun readModel(snoozes: Map<String, Long> = emptyMap()): DueReadModel = DueReadModel(
         schedules = graph.schedules,
         states = graph.scheduleStates,
         assets = graph.assets,
@@ -46,7 +47,10 @@ class DueReadModelTest {
         definitions = graph.definitions,
         recompute = graph.recomputeSchedules,
         today = graph.todayPort,
-        snoozedUntilOf = { null },
+        // B07 wires this to `schedule_local_delivery`'s own instant; a map stands in for the row
+        // here, because what this projection owes its four surfaces is the value passed through
+        // and not the table it came from.
+        snoozedUntilOf = { snoozes[it.value] },
     )
 
     /** Writes the schedule and lets the engine derive its state, exactly as a save would. */
@@ -359,6 +363,31 @@ class DueReadModelTest {
             emptyList<String>(),
             Regex("""\bstates\.upsert\(""").findAll(projection).map { it.value }.toList(),
         )
+    }
+
+    /**
+     * B07's snooze, as this projection carries it (invariant 20, D-13).
+     *
+     * The seam is what makes "Snoozed until \<date\>" possible at all on the four surfaces this
+     * one projection feeds, and the load-bearing half is what it does **not** change: the schedule
+     * is still OVERDUE, it still counts as due, and no date on it has moved. A snooze that changed
+     * any of those would be a postponement wearing a different name.
+     */
+    @Test fun aSnoozedScheduleCarriesItsInstantAndIsStillOverdue() = runTest {
+        val mower = asset("Mower")
+        seed(scheduleOf("s-overdue", assetId = mower.id.value, title = "Overdue one", anchorOn = "2026-01-01", leadDays = 0))
+        val until = dayMillis("2026-04-16")
+
+        val snoozed = readModel(mapOf("s-overdue" to until)).items().single()
+
+        assertEquals(until, snoozed.snoozedUntil)
+        assertEquals("the obligation has not moved", DueStatus.OVERDUE, snoozed.status)
+        assertTrue("and it still counts as due", snoozed.countsAsDue)
+        assertEquals(AttentionSection.ATTENTION, snoozed.section)
+
+        val unsnoozed = readModel().items().single()
+        assertNull("a schedule with no delivery row has no snooze", unsnoozed.snoozedUntil)
+        assertEquals(snoozed.effectiveDueOn, unsnoozed.effectiveDueOn)
     }
 
     private companion object {

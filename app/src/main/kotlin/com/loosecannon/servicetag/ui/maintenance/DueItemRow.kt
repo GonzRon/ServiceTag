@@ -31,6 +31,9 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.LocalServiceTagSemanticColors
 import com.loosecannon.servicetag.ui.theme.ServiceTagSemanticColors
 import com.loosecannon.servicetag.ui.theme.StatusColor
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /**
  * The RATIFIED status word for each derived status (spec §9.1, D12 §5 `:274-296`).
@@ -142,6 +145,29 @@ fun meterLine(item: DueItem): String? {
 }
 
 /**
+ * The RATIFIED badge a snoozed schedule carries: **"Snoozed until \<date\>"** (master plan §17,
+ * invariant 20).
+ *
+ * The **status word is untouched** — a schedule that was snoozed from a notification is still
+ * OVERDUE — and that is the whole reason the snooze lives in `schedule_local_delivery` rather than
+ * on a date column: it suppresses *delivery* and moves no obligation (D-13). This line is what says
+ * so on the surface, **beside** the status badge and never instead of it.
+ *
+ * Null once the instant has passed: a lapsed snooze is not a snooze, and a row still claiming one
+ * would be stating something the delivery path stopped believing at the same moment. The date is
+ * the shipped display shape, read in the device's own zone because the instant is device-local by
+ * definition.
+ */
+fun snoozeLine(item: DueItem, nowMillis: Long, zone: ZoneId): String? {
+    val until = item.snoozedUntil ?: return null
+    if (until <= nowMillis) return null
+    return "Snoozed until ${Instant.ofEpochMilli(until).atZone(zone).toLocalDate().format(SNOOZE_DATE)}"
+}
+
+/** The shipped display-date shape, the same one every other date in the app is drawn with. */
+private val SNOOZE_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM uuuu")
+
+/**
  * The RATIFIED progress form of a group row: "3 of 5 complete".
  *
  * Null for an **empty required set**, and not "0 of 0 complete": that reads as *done*, and
@@ -225,6 +251,8 @@ fun DueItemRow(
             QuietLine(subtitleOf(item))
             meterLine(item)?.let { QuietLine(it) }
             progressLine(item)?.let { QuietLine(it) }
+            // Beside the status badge, never instead of it: the obligation has not moved (D-13).
+            snoozeLine(item, System.currentTimeMillis(), ZoneId.systemDefault())?.let { QuietLine(it) }
             if (onRepair != null && item.isRepairableNoData) {
                 TextButton(onClick = onRepair, shape = ControlShape) { Text(LOG_METER_READING) }
             }

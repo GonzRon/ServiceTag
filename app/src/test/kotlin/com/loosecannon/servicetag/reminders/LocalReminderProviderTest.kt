@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.reminders
 
+import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
@@ -32,12 +33,16 @@ internal class FakeReminderNotifications : ReminderNotifications {
     val postedItems = mutableListOf<ItemPost>()
     val cancelled = mutableListOf<String>()
 
+    /** B07: the quick actions each post arrived with, in post order. */
+    val postedActions = mutableListOf<List<QuickAction>>()
+
     override fun standingItems(): Set<String> = items.keys.toSet()
     override fun standingSummary(): String? = summary?.tag
 
-    override fun postItem(post: ItemPost) {
+    override fun postItem(post: ItemPost, actions: List<QuickAction>) {
         items[post.tag] = post
         postedItems += post
+        postedActions += actions
     }
 
     override fun postSummary(summary: SummaryPost) {
@@ -143,6 +148,14 @@ class LocalReminderProviderTest {
         alarm = alarm,
         prefs = prefs,
         clock = clock,
+        // B07's builder, over the same delivery rows: what it issues and which actions it issues
+        // for are `QuickActionsTest`'s, and what matters here is that a run posts through it.
+        quickActions = QuickActions(
+            shapes = QuickActionShapeSource {
+                QuickActionShape(groupTargeted = false, completionMode = CompletionMode.QUICK, meterRule = false)
+            },
+            nonces = NonceStore(delivery, IdGenerator { "quick-nonce" }, clock),
+        ),
     )
 
     private fun subject(id: String, dueOn: String?, state: SubjectState = SubjectState.Active, stamp: String = "v1") =

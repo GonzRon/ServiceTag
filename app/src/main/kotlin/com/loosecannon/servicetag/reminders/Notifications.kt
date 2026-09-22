@@ -23,7 +23,14 @@ interface ReminderNotifications {
     /** The tag of the standing summary, or null if none is showing. */
     fun standingSummary(): String?
 
-    fun postItem(post: ItemPost)
+    /**
+     * [actions] are the quick actions this notification carries, in the order they are drawn.
+     *
+     * A parameter and not a field of [ItemPost], because the digest policy that builds an
+     * `ItemPost` is pure and the nonce each action carries is issued **per post** (D-21): the
+     * labels are already `ItemPost.actions`, and what arrives here is what each one is aimed at.
+     */
+    fun postItem(post: ItemPost, actions: List<QuickAction>)
     fun postSummary(summary: SummaryPost)
     fun cancelItem(tag: String)
     fun cancelSummary()
@@ -43,12 +50,20 @@ interface ReminderNotifications {
  * the system shade's own background, which no app controls and which is not this app's light or
  * dark surface; picking per-theme accents here would be guessing at a surface we cannot see.
  *
- * It carries **no content intent and no actions**: the four quick actions, their `FLAG_IMMUTABLE`
- * `PendingIntent`s and the nonce routing are B07's, and [ItemPost.actions] is the ratified label
- * list this brief hands it. Until B07 lands a posted notification is an announcement and nothing
- * more, which is the honest state of the feature at this brief's tip.
+ * It carries **no content intent**: tapping the notification body itself opens nothing, and the
+ * "Open" action is what navigates. The actions themselves are attached here from the targets the
+ * provider hands over, each one turned into a `FLAG_IMMUTABLE` `PendingIntent` by
+ * [QuickActionIntents] — the one Android-shaped step, kept behind a seam so a fake can assert the
+ * labels and the targets without a `Context`.
+ *
+ * **No `setGroup`.** Whether the per-item notifications bundle under their summary is a visual
+ * decision and no ratified string or design row settles it, so nothing here groups anything: the
+ * summary and the items stand as they did at B06's tip.
  */
-class AndroidReminderNotifications(private val context: Context) : ReminderNotifications {
+class AndroidReminderNotifications(
+    private val context: Context,
+    private val intents: QuickActionIntents,
+) : ReminderNotifications {
 
     private val manager = NotificationManagerCompat.from(context)
 
@@ -56,7 +71,7 @@ class AndroidReminderNotifications(private val context: Context) : ReminderNotif
 
     override fun standingSummary(): String? = standing(SUMMARY_ID).firstOrNull()
 
-    override fun postItem(post: ItemPost) {
+    override fun postItem(post: ItemPost, actions: List<QuickAction>) {
         val builder = NotificationCompat.Builder(context, post.channelId)
             .setSmallIcon(iconFor(post))
             .setColor(accentFor(post).toArgb())
@@ -72,6 +87,11 @@ class AndroidReminderNotifications(private val context: Context) : ReminderNotif
         if (post.body.isNotEmpty()) {
             builder.setContentText(post.body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(post.body))
+        }
+        // Icon `0`: since API 24 the shade draws an action's label and not its icon, and a drawable
+        // chosen here would be a picture nothing renders. The label is the ratified word.
+        actions.forEach { action ->
+            builder.addAction(0, action.label, intents.pendingIntentFor(action.target))
         }
         notify(post.tag, ITEM_ID, builder)
     }

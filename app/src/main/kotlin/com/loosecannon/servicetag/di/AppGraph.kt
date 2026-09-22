@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.attachments.AttachmentRoot
 import com.loosecannon.servicetag.attachments.DocumentTreeRoot
 import com.loosecannon.servicetag.attachments.SafAttachmentStorage
 import com.loosecannon.servicetag.attachments.Thumbnails
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
@@ -46,6 +47,7 @@ import com.loosecannon.servicetag.core.usecase.BuildBackupMergePlan
 import com.loosecannon.servicetag.core.usecase.CloseRound
 import com.loosecannon.servicetag.core.usecase.CompleteGroupMembers
 import com.loosecannon.servicetag.core.usecase.CompleteSchedule
+import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAttachment
@@ -97,16 +99,22 @@ import com.loosecannon.servicetag.prefs.SharedPrefsStore
 import com.loosecannon.servicetag.reminders.AndroidDigestAlarm
 import com.loosecannon.servicetag.reminders.AndroidNotificationPermission
 import com.loosecannon.servicetag.reminders.AndroidPlatformState
+import com.loosecannon.servicetag.reminders.AndroidQuickActionIntents
 import com.loosecannon.servicetag.reminders.AndroidReminderNotifications
 import com.loosecannon.servicetag.reminders.DigestAlarm
 import com.loosecannon.servicetag.reminders.LocalReminderProvider
 import com.loosecannon.servicetag.reminders.NonceStore
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.reminders.PlatformState
+import com.loosecannon.servicetag.reminders.QuickActionRuns
+import com.loosecannon.servicetag.reminders.QuickActionShape
+import com.loosecannon.servicetag.reminders.QuickActionShapeSource
+import com.loosecannon.servicetag.reminders.QuickActions
 import com.loosecannon.servicetag.reminders.ReconcileWorker
 import com.loosecannon.servicetag.reminders.ReminderNotifications
 import com.loosecannon.servicetag.reminders.ReminderRuns
 import com.loosecannon.servicetag.reminders.ReminderSnooze
+import com.loosecannon.servicetag.reminders.ScheduleCompletion
 import com.loosecannon.servicetag.reminders.ScheduleDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
@@ -118,6 +126,7 @@ import com.loosecannon.servicetag.ui.maintenance.ScheduleCompletions
 import com.loosecannon.servicetag.ui.maintenance.ScheduleSnooze
 import java.io.File
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -197,8 +206,35 @@ class AppGraph(private val context: Context) {
     val scheduleStateReader: ScheduleStateReader = ScheduleStateReader { scheduleStates.get(it) }
 
     val digestAlarm: DigestAlarm = AndroidDigestAlarm(context.applicationContext, prefs, today, clock)
+
+    /** B07's "Snooze 1 day" and B09's "Snooze"; and the nonce column's single owner (D-21). */
+    val reminderSnooze: ReminderSnooze = ReminderSnooze(scheduleLocalDelivery, clock)
+    val nonceStore: NonceStore = NonceStore(scheduleLocalDelivery, ids, clock)
+
+    /**
+     * #11 — the actions on a reminder notification. Declared **above** the notification seam and
+     * the provider because both hold it, and a Kotlin property initialised after its reader would
+     * be null when the reader ran.
+     *
+     * The shape seam is three facts read off the schedule row, which is all §12.1's table needs to
+     * decide which actions a notification offers (D-7's group clause, the `FORM` rule and the meter
+     * carve-out). Nothing about it can reach derived state (invariant 17).
+     */
+    val quickActions: QuickActions = QuickActions(
+        shapes = QuickActionShapeSource { id ->
+            schedules.get(id)?.let { schedule ->
+                QuickActionShape(
+                    groupTargeted = schedule.target is ScheduleTarget.GroupTarget,
+                    completionMode = schedule.completionMode,
+                    meterRule = schedule.meterDefinitionId != null,
+                )
+            }
+        },
+        nonces = nonceStore,
+    )
+
     val reminderNotifications: ReminderNotifications =
-        AndroidReminderNotifications(context.applicationContext)
+        AndroidReminderNotifications(context.applicationContext, AndroidQuickActionIntents(context.applicationContext))
 
     val localReminderProvider: LocalReminderProvider = LocalReminderProvider(
         facts = ScheduleDeliveryFacts(schedules, scheduleStateReader, assets, groups, definitions, today),
@@ -209,11 +245,8 @@ class AppGraph(private val context: Context) {
         alarm = digestAlarm,
         prefs = prefs,
         clock = clock,
+        quickActions = quickActions,
     )
-
-    /** B07's "Snooze 1 day" and B09's "Snooze"; and the nonce column's single owner (D-21). */
-    val reminderSnooze: ReminderSnooze = ReminderSnooze(scheduleLocalDelivery, clock)
-    val nonceStore: NonceStore = NonceStore(scheduleLocalDelivery, ids, clock)
 
     /**
      * The one run behind the four platform receivers, the digest alarm's receiver and the backstop
@@ -229,6 +262,30 @@ class AppGraph(private val context: Context) {
         // post per subject, so the receivers enqueue this and return (B06 fix round 1, finding 4).
         // A seam rather than a `Context` field: nothing about the run itself is Android-shaped.
         enqueueReconcile = { ReconcileWorker.enqueue(context.applicationContext) },
+    )
+
+    /**
+     * #11 — one tapped quick action: the nonce gate, then the use case, then a reconcile.
+     * `ServiceTagApp.onCreate` assigns it to [QuickActionDispatch], synchronously, because the
+     * worker behind a notification tap is never constructed through this graph.
+     *
+     * The completion is [completeSchedule] — the canonical use case, with `occurredOn` today and
+     * the device zone, which is exactly what a one-tap completion means (invariant 17: nothing in
+     * the delivery path goes near derived state, and the recompute inside the use case is the one
+     * writer). It is a seam rather than the use case itself so the nonce gate can be proved without
+     * constructing eight ports.
+     */
+    val quickActionRuns: QuickActionRuns = QuickActionRuns(
+        nonces = nonceStore,
+        completion = ScheduleCompletion { id ->
+            completeSchedule.run(
+                id,
+                CompletionCommand(occurredOn = today.localDate().toString(), tzId = ZoneId.systemDefault().id),
+            )
+        },
+        snooze = reminderSnooze,
+        reconcile = { reminderRuns.reconcileAll() },
+        clock = clock,
     )
 
     /**
@@ -401,18 +458,13 @@ class AppGraph(private val context: Context) {
      * it: [recomputeSchedules] is here for its occurrence derivation and its pure `stateOf`, and
      * `rebuild` stays the only writer of `schedule_state` (invariant 17).
      *
-     * The snooze source keeps its default: `schedule_local_delivery` is B06's table and B06
-     * declares its port, so this seam answers "no snooze" until that lands rather than this brief
-     * growing a second reader of a table it does not own.
+     * The snooze source is B06's `schedule_local_delivery`, wired here by B07: the row's own
+     * instant, read and never written, which is what makes the ratified "Snoozed until \<date\>"
+     * true of the schedule the notification's "Snooze 1 day" acted on.
      */
     val dueReadModel: DueReadModel = DueReadModel(
         schedules, scheduleStates, assets, groups, definitions, recomputeSchedules, today,
-        // B06's `schedule_local_delivery` is the snooze's home and B06 declares its port; this
-        // brief does not grow a second reader of a table it does not own. The parameter has no
-        // default, so wiring it is a visible one-line change here and forgetting it is not
-        // possible: `DueItem.snoozedUntil` staying null for ever would leave B07's and B09's
-        // ratified "Snoozed until <date>" dead with nothing failing.
-        snoozedUntilOf = { null },
+        snoozedUntilOf = { scheduleLocalDelivery.get(it)?.snoozedUntilAt },
     )
 
     /**

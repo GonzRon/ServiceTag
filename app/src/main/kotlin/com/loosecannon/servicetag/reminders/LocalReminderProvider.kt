@@ -149,6 +149,13 @@ class LocalReminderProvider(
     private val alarm: DigestAlarm,
     private val prefs: AppPrefs,
     private val clock: Clock,
+    /**
+     * B07's quick actions. Held here rather than inside [notifications], because issuing a
+     * notification's nonce is a `suspend` write into the same row this class writes and the **order
+     * of those two writes is the contract** — which is a statement about this method, not about the
+     * shade. The call site below says which way round it has to be and why.
+     */
+    private val quickActions: QuickActions,
 ) : ReminderProvider {
 
     override val id: ProviderId = ProviderId.LOCAL
@@ -187,10 +194,19 @@ class LocalReminderProvider(
         // new one for as long as both exist, and the stale one is the wrong answer.
         decision.cancelTags.forEach(notifications::cancelItem)
         if (decision.cancelSummary) notifications.cancelSummary()
-        decision.posts.forEach(notifications::postItem)
-        decision.summary?.let(notifications::postSummary)
+        // The row writes and the nonce clearance both happen **before** anything is posted, and
+        // that order is load-bearing (B07). `decision.rows` was computed from the rows as they
+        // stood at the top of this method, so writing it after a nonce had been issued would write
+        // the *old* nonce back over the new one and every action on the notification just posted
+        // would be dead on arrival. Clearing runs before the posting for the same reason in the
+        // other direction: a subject whose content moved is cancelled **and** re-posted in one run,
+        // so its old nonce has to go before its new one is issued rather than after (D-21).
         decision.rows.forEach { delivery.upsert(it) }
         clearNoncesFor(decision.cancelTags, now)
+        decision.posts.forEach { post ->
+            notifications.postItem(post, quickActions.forSchedule((post.key as SubjectKey.Schedule).scheduleId))
+        }
+        decision.summary?.let(notifications::postSummary)
 
         return decision.report
     }
