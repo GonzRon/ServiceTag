@@ -100,7 +100,7 @@ One test per hazard class; a row naming several facts is one test asserting them
 
 **Ratified, verbatim** (master plan §17): **"Maintenance group"**, **"3 of 5 complete"** (the progress form), **"Complete selected"**, **"Complete all"**, **"Close this round"** (the action label), **"When was this done?"**.
 **This brief draws none of them** — it is `:core` plus a Room adapter, and the surfaces are B14 and B15. It must not introduce a user-visible string of its own; a problem type name is code.
-**PROPOSED it depends on but does not draft:** the "Close this round" confirmation body (B14).
+**Ratified, and drawn by B14 rather than here:** the "Close this round" confirmation body — "Close this round? The members not marked done will not be recorded as serviced." (owner, 2026-09-22; master plan §17.1b).
 
 ## Ordering
 

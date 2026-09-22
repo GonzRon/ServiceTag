@@ -63,7 +63,7 @@ class NonceStore {                                 // B07 checks and consumes; t
 
 | rule | statement |
 |---|---|
-| one summary per run | each digest run posts **one** summary notification listing DUE and OVERDUE subjects |
+| one summary per run | each digest run posts **one** summary notification. Its **body** is the ratified **"\<n\> overdue, \<n\> due, \<n\> due soon."** and **a zero-count clause may be omitted** — a run with nothing due soon reads "2 overdue, 1 due." Its **title** is the ratified **"\<n\> maintenance items need attention"**, and **that count must equal the items the body represents, first-entry DUE_SOON items included**: two overdue, one due and one first-entry DUE_SOON gives the title "4 maintenance items need attention" (owner amendment at the gate, master plan §17.1e) |
 | per-item notifications | only for DUE/OVERDUE subjects that are **not snoozed** |
 | DUE_SOON | announced **only on first entry**, tracked by `first_entry_seen` |
 | overdue re-notification | every **3 days**, tracked by `last_notified_at` |
@@ -95,6 +95,7 @@ One test per hazard class. **No row waits on a wall clock**: every timing case i
 | the alarm never re-arms after firing | the digest receiver re-arms for the next day as part of handling the fire | a one-shot alarm reminds once and never again |
 | the backstop does not backstop | with the alarm deliberately cancelled, one backstop run **re-arms it** and posts the subjects that were missed (#21 AC 3) | a worker that only recomputes leaves a force-stopped phone permanently silent |
 | the digest shouting | a schedule due tomorrow with a 14-day lead produces **exactly one** notification for the run (#21 AC 1's off-device half) | a per-subject post with no summary, or a summary plus a duplicate per-item post for the same subject, doubles it |
+| **the digest's title and body disagreeing** | one test over a run carrying two OVERDUE, one DUE and one **first-entry DUE_SOON**: the body reads the ratified three-clause form, a **zero-count clause is omitted** when a class is empty, and **the title's count equals the items the body represents — four, not three** | counting only DUE and OVERDUE in the title while the body lists three classes is the arithmetic an implementer would most plausibly get wrong, and it makes the notification contradict itself in the one glance it gets |
 | a snoozed schedule notified | a snoozed schedule produces **nothing** while snoozed, **its due date is unchanged**, and its status is still OVERDUE (invariant 20, #21 AC 4) | writing the snooze onto a `*_on` column changes the due date, which is the one thing a snooze may not do |
 | a parked schedule left standing | a schedule that becomes `Parked` — paused, or out of season — posts nothing **and its standing notification is cleared** (invariant 47, #21 AC 5) | leaving the notification up means a paused schedule keeps nagging with nothing to act on |
 | `reconcile` posting twice | `reconcile` run twice with the same subject list posts nothing the second time and reports every subject `unchanged` (invariant 45, #21 AC 7) | a "post each subject" loop re-posts on every digest run |
@@ -113,7 +114,7 @@ One test per hazard class. **No row waits on a wall clock**: every timing case i
 
 **Ratified, verbatim** (master plan §17): the notification action labels **"Done"**, **"Snooze 1 day"**, **"Open"** (B07 attaches them; the constants may live here if that is where the notification is built), **"Snoozed until <date>"**, and the status terms **DUE**, **OVERDUE**, **DUE SOON**, **PAUSED**, **OUT OF SEASON**, **NO BASELINE**.
 
-**PROPOSED, drafted by this brief and returned for ratification before it executes** (master plan §18 decision 12): the **digest summary notification's title and body** (the one-per-run summary listing DUE and OVERDUE), and the **per-item notification's title and body form**. Draft one title and one body form for each, built from the ratified status vocabulary and the schedule's own `title`, plus the plural forms the summary needs. Hand them to the controller with the brief's plan review. **Do not ship an unratified notification string.**
+**Ratified at the gate** (owner, 2026-09-22; master plan §17.1e), to be used verbatim — the **digest summary**: title **"\<n\> maintenance items need attention"**, body **"\<n\> overdue, \<n\> due, \<n\> due soon."** (the owner's amendment), with **a zero-count clause omitted** and **the title's count equal to the items the body represents, first-entry DUE_SOON included**. And the **per-item** notification: title **"\<asset\> — \<title\>"**, body **"Due \<date\>."** when DUE, **"Overdue since \<date\>."** when OVERDUE, and **"Due at \<n\> \<unit\>, now \<n\>."** when a meter threshold is crossed. **This brief has nothing left to draft.**
 
 ## Ordering
 

@@ -41,7 +41,9 @@ class CompletionFlow(/* CompleteSchedule, CompleteGroupMembers, definitions, Tod
 }
 ```
 
-`Plan decision:` the flow is a shared collaborator rather than duplicated in the sheet and the detail screen. Spec §2.8 says the sheet "delegates entirely to the #4 use cases" and spec §2.9 gives the in-app close the **same** date affordance as the API; one collaborator is how the two surfaces cannot diverge, and it is why this brief gates B09 rather than the other way round.
+`Plan decision:` the flow is a shared collaborator rather than duplicated in the sheet and the detail screen. Spec §2.8 says the sheet "delegates entirely to the #4 use cases" and spec §2.9 gives the in-app close the **same** date affordance as the API; one collaborator is how the surfaces cannot diverge, and it is why this brief gates B09 rather than the other way round.
+
+**It now has a third caller.** The owner ruled F4 IN at the gate (master plan §1.2), so the Maintenance destination's **"Log maintenance"** quick action — **B08's** affordance — also routes through this flow. **`CompletionFlow` is therefore the only completion mechanism in 1.2**, reached from the schedule detail (this brief), the scan sheet (B09) and the quick action (B08), and **none of those three writes an event of its own**. B08 states it and proves it; this brief states it because the flow is where it is true.
 
 **The editor's fields**, with the **ratified** wording (D-24) it must use verbatim:
 
@@ -105,15 +107,15 @@ One test per hazard class; unit tests over the two view models, plus a small con
 
 **Ratified, verbatim** (master plan §17): **"Every N"**, **"Repeats from"**, **"the scheduled date"**, **"when I complete it"**, **"Remind me N days early"**; **"Close this round"** (the action label); **"When was this done?"**; **"Snooze"**; **"Postpone"**; **"This asset already has a similar schedule through another group."**; **"ServiceTag needs notification permission to remind you when maintenance is due."**; **"Log meter reading"**; **"Complete all"** and **"Complete selected"** where the detail screen shows a group round; the progress form **"3 of 5 complete"**; and the status terms **OK · DUE SOON · DUE · OVERDUE · OUT OF SEASON · PAUSED · NO BASELINE**.
 
-**PROPOSED, which this brief draws and must not ship unratified** (spec §12 item 2): the **"Close this round" confirmation body**. The spec's draft, to be ratified as-is or amended by the owner:
+**Ratified at the gate** (owner, 2026-09-22; master plan §17.1b) — the **"Close this round" confirmation body**, as spec §12 drafted it, to be used verbatim:
 
-> `PROPOSED:` "Close this round? The members not marked done will not be recorded as serviced."
+> "Close this round? The members not marked done will not be recorded as serviced."
 
 The **action label** is already ratified; this is the confirmation sentence, and it is the sentence that keeps the action from reading as "mark everything done". Hand it to the controller with this brief's plan review. **Do not execute the close dialog until the owner has ratified it.**
 
-Also **PROPOSED, and this brief's to draft** (master plan §17): the **editor's remaining field labels** — the target picker, the season-behaviour choice, the completion-mode choice, the profile picker, the four meter-rule fields (definition, interval, baseline, lead) and the single provider row. D-24 ratified the time-rule and lead fragments only, so these have no ratified wording.
+**Also ratified at the gate** (master plan §17.1c) — the **editor's remaining field labels and options**: the target picker **"This applies to"** ("One asset" · "A maintenance group"), the season-behaviour choice **"Out of season"** ("Pause with the asset's season" · "Remind me year round"), the completion-mode choice **"Completing this takes"** ("One tap" · "The full form"), the profile picker **"Use this form"**, and the four meter-rule fields **"Also due by use"**, **"Every \<n\> \<unit\> of use"**, **"Last done at"**, **"Remind me \<n\> \<unit\> early"**, plus the provider row **"Remind me through"**.
 
-**Beyond the ratified fragments above, this brief drafts *only* the field labels master plan §17 lists as PROPOSED**, and hands them to the controller with this brief's plan review; **any further wording is a finding for the controller, not a string to invent.** This brief builds the largest new surface in 1.2 and is therefore the one most able to invent copy by accident — the guard is explicit for that reason.
+**This brief now has nothing left to draft.** Every string it draws is ratified and is used verbatim. It builds the largest new surface in 1.2 and is therefore the one most able to invent copy by accident, so the guard stands in its new form: **a string this brief finds it needs that master plan §17 does not list is a finding for the controller, never a string to invent.**
 
 ## Ordering
 

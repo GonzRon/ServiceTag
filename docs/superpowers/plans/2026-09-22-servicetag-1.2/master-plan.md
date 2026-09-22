@@ -1,6 +1,6 @@
 # ServiceTag 1.2 — operational maintenance: MASTER PLAN
 
-> **For agentic workers — EXECUTION IS GATED. Do not start a brief.** **No brief in this package executes until the owner's pre-implementation authorization** (the L2 sequence's step 9: "STOP at the pre-implementation authorization gate. No 1.2 production code, no production phone, no release"). Until that authorization is recorded in the ledger, **this package is read-only**: plan review, string ratification and controller reconciliation only — **no 1.2 production code, no production phone, no release, no wave opened.** Once the owner has authorized implementation, REQUIRED SUB-SKILL: use `superpowers:subagent-driven-development` to execute the package brief by brief in §14.3's wave order.
+> **For agentic workers — EXECUTION AUTHORIZED by the owner on 2026-09-22 for Wave 1 (B01 + B11).** Each later wave opens **only when the master plan's §14.3 precondition is met** — its predecessor brief merged and green, its lane's worktree cut, and the emulator released if it needs it. **B02 does not start before B01 is merged and green; B01 and B02 are never dispatched concurrently.** REQUIRED SUB-SKILL: use `superpowers:subagent-driven-development` to execute the authorized wave brief by brief, one implementer and one independent reviewer each, with scoped re-review of fixes and a controller merge. Still out, at every wave: **no production phone, and no release before its planned gate** (§15).
 >
 > This plan follows `docs/superpowers/planning-policy.md`: **it specifies contracts, invariants and test matrices; implementers author the code and the tests.** Nothing here is meant to be transcribed into the tree. A fenced block appears only where it pins an interface, a data shape or an algorithm boundary.
 
@@ -18,7 +18,7 @@
 
 Copied from the spec's rulings and the repository rules. Binding on every brief.
 
-- **Execution is gated (owner, the L2 sequence's step 9).** **No brief starts until the owner explicitly authorizes implementation after reading the planning summary**, and that authorization is recorded in the ledger. Until then: no 1.2 production code, no production phone, no release, no wave opened. This bullet is first because it is the one an agent handed only this document must read before anything else.
+- **Execution is authorized, wave by wave (owner, 2026-09-22).** The pre-implementation gate is **released**: **Wave 1 = B01 + B11** is authorized now, in their own worktrees and lanes. **Each later wave opens only when §14.3's precondition is met**, and **B02 not before B01 is merged and green** — B01 gates B02 and B03 and the two are never dispatched concurrently. The discipline holds at every wave: one implementer and one independent reviewer per brief, scoped fix and re-review, controller merge; one worktree per lane; at most two implementers; connected emulator use serialised. **No production phone, and no release before its planned gate.** This bullet is first because it is the one an agent handed only this document must read before anything else.
 - **The spec is the authority.** `docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md` — **revision 4 plus §11's revision-4.1 edits** — together with `.superpowers/sdd/2026-09-22-servicetag-1.2-operational-maintenance/owner-rulings-2026-09-22.md`. **Cite the committed path, never the workspace draft**, so there is one authority. An implementer who finds this plan disagreeing with the spec follows the spec and reports the disagreement — **except where this plan has named a deviation** (§18's two, decisions 3 and 4) — and an implementer who finds the spec silent asks the controller rather than inventing a user-visible behaviour.
 - **Proportionality (owner, 2026-09-22, binding).** "One test is enough… do not block on exorbitantly strict acceptance tests." Test matrices are **one test per hazard class, not per permutation**; an invariant naming several facts is one test asserting them together (spec §6 preamble, §8 header).
 - **No overnight blocking (owner, 2026-09-22, binding).** "I don't want to be blocked on any tests that require overnight at all, period." **No acceptance procedure in any brief may wait on an overnight or multi-day measurement.** Where real-world timing matters — the digest alarm, the 12 h backstop — acceptance is a deterministic test against an injected `Today`/shadow clock or a shadow `AlarmManager`.
@@ -29,26 +29,24 @@ Copied from the spec's rulings and the repository rules. Binding on every brief.
 - **A merge only ever inserts.** No `UPDATE` verdict is added (`core/.../core/merge/MergePlan.kt:22-32`); one conflict anywhere writes nothing (`MergePlan.kt:136-141`, `MergePlanner.kt:415-433`). Invariants 66, 67.
 - **Nothing destructive is added.** No route, MCP tool or UI action deletes a schedule, a group or a closure; `POST /v1/events` cannot create a completion (spec §4.1, invariants 43, 76). `ApiRouterTest.theDestructiveUseCasesHaveNoRoute` (`docs/api/v1.md:202-211`) gains the new paths.
 - **The scan never mutates.** `servicetag://` links and NFC dispatch stay navigation-only; mutation follows an explicit in-app action (spec §2.8, invariants 57, 58). `ResolveTag`'s `lastScannedAt` write is informational and unchanged (`core/.../core/usecase/ResolveTag.kt:45-48`).
-- **Strings.** Every user-visible string is either **ratified** (spec §9.1, quoted verbatim — a brief may not paraphrase one) or marked **PROPOSED** in §17 and returned for the owner's ratification **before** the brief that draws it executes.
+- **Strings.** **Every user-visible string in 1.2 is ratified** — spec §9.1's set by D-24, and the remaining fifty-two by the owner at the gate on 2026-09-22 (§17, §17.1, §1.2). A brief **quotes them verbatim and may not paraphrase one**, and **no brief has a string to draft**. A string a brief finds it needs that §17 does not list is a **finding for the controller**, never a brief's to invent.
 - **Out of scope, do not build:** #14 season re-entry (`seasonReentry`, `seasonReentryOffsetDays` are stored and never read — invariant 26); #15 supplies and `SUPPLY(id)` subjects; #47 material requirements; #9/#10/#34 Todoist, `reminder_projection`, `provider_op`, `integration_account` — **no projection and no outbox table is created in 1.2**; #26 fatigue controls; #25 provider-choice UI beyond one enabled row; #44 interactive conflict resolution; #18 the preferences screen (1.2 carries only the digest hour and the global reminders switch, in B06); #17 template-seeded schedules; nested groups, rule-based membership, group NFC identity, a group deep link, `group.location`, `asset_event.cost_minor`/`currency`, and the `supplies`/`sync_problems` channels (spec §1.2, D-20).
 - **Untouched by this release** unless a brief's Files section names it: `libs/`, `tools/servicetag-bundle/`, `core/.../core/nfc/`, `core/.../core/journal/`, the attachment and backup-artifact paths, `app/.../ui/theme/`, and every existing user-visible string.
 - **Privacy and hygiene (binding, every tracked file, report and review).** No private inventory, no device serials or models, no e-mail addresses, no `/home/<user>` paths (write `~`), no pairing codes, no real `backupSetId`. Fixtures use fictional nouns and brands.
 - **Repository rules.** One commit per task; single casual subject, no body, no trailers, no attribution; identity from `git log -1 --format=%ae master`; implementers do not push; **no implementer runs adb, an emulator, a device command, or `gradlew` outside the sandbox tool the controller names**; never work in `/tmp`.
 - **Grep expectations are anchored patterns from the start** (`docs/superpowers/planning-policy.md:41`), so a comment that names a grep can never match it.
 
-### 1.2 Scope questions — PENDING OWNER RULING at the gate
+### 1.2 The three #5 requirements the owner ruled IN at the gate
 
-The plan's counterpart to spec §1.2's out-table. Three requirements of **#5** are named by the issue, are not in spec §1.2's exclusions, and are covered by **no spec section, no brief and no ruling** — so they are neither in nor out. They are listed here rather than decided, because either answer is defensible and only the owner's is binding. **Each must be ruled at the pre-implementation gate**; a brief may not resolve one by building it or by quietly leaving it out.
+Three requirements of **#5** were named by the issue, were in no spec section, no brief and no ruling, and were carried to the gate as open. **The owner ruled all three IN for 1.2 on 2026-09-22**, as **B08-only additions** — one scope line and one proportional matrix row each. None changes a contract, an invariant or a wire shape, and **every string they need is RATIFIED** (§17), so none of them is a brief's to invent.
 
-| # | the requirement | recommended default | the alternative |
+| # | ruled IN as | strings (RATIFIED) | owner |
 |---|---|---|---|
-| **F2** | **#5's "Group/filter by category and maintenance status"** (`issue-5.md:24`). The plan preserves the shipped search-field set and adds attention **sections**, which groups by status but is not the *filter* the issue names; **category** filtering appears nowhere, and the shipped view model filters by lifecycle and search only (`app/.../ui/dashboard/DashboardViewModel.kt:109-136`) | **in 1.2:** one B08 scope line and one matrix row — a filter over category and over status, applied after the lifecycle and search filters, with the section order unchanged | **explicitly out**, recorded in the spec's exclusions with the reason (the sections already answer "what needs attention", and a filter UI is a design the owner has not made) |
-| **F3** | **#5's "next maintenance item and its due date/*value* on each asset row"** (`issue-5.md:26`), with the meter dependency the issue itself names (`:32-35`). The due **date** is covered — `effective_due_on` is the sort key and the row's value. The meter **due value**, #5's own example "due at 170 h, now 165 h", is specified for the **scan sheet** only (§11.2, B09's composed display assertion) and for **no dashboard row**. Meters are in 1.2 by **D-3** and the meter model shipped, so the dependency #5 named is satisfied and the gap is real | **in 1.2:** one clause in §11.1's read-model bullet — "and, where a meter rule exists, the threshold and the current reading" — plus one B08 matrix row. `DueItem` already carries `computedDueMeter` and `currentMeter`, so this is a rendering change, not a contract change | **explicitly out**, recorded in the spec's exclusions: the dashboard shows the date and the sheet shows the numbers |
-| **F4** | **#5's "Quick actions for scan tag, add asset, log maintenance"** (`issue-5.md:27`). Today these ship only as **empty-state** buttons; there is no persistent quick-action affordance and **no "log maintenance" action anywhere** in the plan — conspicuous in the release that first gives "log maintenance" a schedule to log against | **in 1.2:** one B08 scope line and one matrix row — the three actions on the Maintenance destination, with "log maintenance" routing into **B14's `CompletionFlow`** and the other two reusing the shipped routes | **explicitly out**, recorded in the spec's exclusions: the Maintenance destination's due-work section is the path to completion, and a quick-action row is #18/#26 territory |
+| **F2** | **Dashboard filtering by category and by maintenance status**, applied **after** the lifecycle and search filtering the shipped view model already does (`app/.../ui/dashboard/DashboardViewModel.kt:109-136`), with **§11.1's attention-section ordering unchanged**. The existing category values and the ratified status words supply the options | **"Category"**, **"Maintenance status"**, **"All categories"**, **"All statuses"** | B08 |
+| **F3** | **A row whose schedule carries a meter rule shows the due threshold and the current reading.** `DueItem` already carries `computedDueMeter` and `currentMeter` (§11.1), so this is a rendering change and not a contract change — #5's own example, and the dependency `issue-5.md:32-35` named, which D-3 satisfied | **"Due at \<n\> \<unit\>, now \<n\>."** | B08 |
+| **F4** | **The Maintenance destination gets three persistent quick actions.** "Scan tag" and "Add asset" reuse the shipped routes; **"Log maintenance" routes through B14's canonical `CompletionFlow`** and is **never a second completion path** — the rule #50 states for the sheet, applied here | **"Scan tag"**, **"Add asset"**, **"Log maintenance"** | B08, with B14's flow |
 
-**If the owner rules any of the three *in*, the work is B08's** (F4's completion route is B14's, already built), it is **one scope line plus one matrix row** each, and it changes **no contract, no invariant and no wire shape** — which is why the package is ready for the gate with these open. **If the owner rules any *out*, the controller records it in the spec's §1.2 exclusions** so a later reconciliation does not re-raise it. **A new user-visible string in any of the three is a §17 PROPOSED item, not a brief's to invent** (F2's filter labels, F3's meter line form, F4's three action labels).
-
----
+**The one rule that carries risk is F4's.** "Log maintenance" is an entry point, not a completion mechanism: it opens B14's `CompletionFlow` — the same one the schedule detail and B09's sheet use, with the ratified "When was this done?" affordance, the meter prompt where a rule requires a reading, and the profile form for a `FORM` schedule — and it **writes nothing of its own**. Both B08 and B14 state this, and B08's matrix row proves it, because a quick action that logged an event directly would be exactly the second completion path #50 forbids and the one place in 1.2 where one could plausibly appear.
 
 ---
 
@@ -757,7 +755,7 @@ Two implementers concurrently at most (owner ruling, `feedback-two-lanes`), one 
 Owner-run and owner-gated; the controller stops where the owner's click is required.
 
 1. Every brief merged and independently reviewed; scoped re-reviews of every fix round closed; whole-branch **release** review clean (scope, unreviewed mutations, document consistency, ratified strings only, hygiene, evidence correspondence, release mechanics).
-2. **Every PROPOSED string in §17 ratified by the owner before the brief that draws it executes.** No release is cut carrying an unratified user-visible string.
+2. **Every user-visible string in §17 is ratified** — spec §9.1's by D-24 and the remaining fifty-two by the owner at the gate on 2026-09-22 (§17.1, §1.2) — and **used verbatim**. The release review checks each brief's diff against §17 rather than re-ratifying; a string in a diff that §17 does not list is a **release blocker**.
 3. `versionName` **1.2.0**, `versionCode` **13**; `AppDatabase.version` and `AppGraph.SCHEMA_VERSION` **6**; `BackupCodec.FORMAT_VERSION` **6**; `/v1/status` echoing 6 and 6; `docs/versioning.md` carrying the D-2 clarification, the 1.2.0 / code 13 row and **no** 1.1.1 reservation.
 4. §16's controller proofs all PASS at the exact final tip.
 5. Tree clean; push the exact final tip; **CI green on that exact commit** (jobs `build`, `mcp`, `bundle`; zero annotations).
@@ -807,7 +805,7 @@ Run by the controller at the final tip, not by an implementer. Every grep is an 
 
 ## 17. String ratification table
 
-Every user-visible string 1.2 introduces. **RATIFIED** strings are quoted verbatim from spec §9.1 and a brief may not paraphrase one. **PROPOSED** strings return for the owner's ratification before the brief that draws them executes (spec §12, D-24).
+Every user-visible string 1.2 introduces, and **every one of them is now RATIFIED** — spec §9.1's set by D-24, and the remaining forty-four by the owner at the gate on **2026-09-22** (§17.1). **A brief may not paraphrase any of them**, and **no brief has a string left to draft.** Any string a brief finds it needs that this table does not list is still a **finding for the controller**, not a brief's to invent.
 
 **Every status and treatment word D12 already carries is pre-ratified with it** (`docs/design/12-visual-design-apollo-service-binder.md:274-296`, `:289`, `:311-313`, `:706-707`), which covers the seven status terms, the four dashboard section labels, and **REMINDER FAILED** for the failure family (B10) — D12 is approved visual-design direction recorded as part of the design authority.
 
@@ -835,23 +833,26 @@ Every user-visible string 1.2 introduces. **RATIFIED** strings are quoted verbat
 | editor wording "Every N", "Repeats from", "the scheduled date", "when I complete it", "Remind me N days early" | RATIFIED | B14 |
 | status terms **OK · DUE SOON · DUE · OVERDUE · OUT OF SEASON · PAUSED · NO BASELINE** | RATIFIED (D-24; pre-ratified with D12 `:274-296`, `:311-313`) | B08, B09, B14, B15 |
 | dashboard section labels **ATTENTION · UPCOMING · CURRENT · OUT OF SEASON** | RATIFIED (pre-ratified with D12 `:706-707`) | B08 |
-| the seven health-finding sentences (`NOTIFICATIONS_BLOCKED`, `DIGEST_ALARM_MISSING`, `BACKSTOP_WORK_MISSING`, `APP_RESTRICTED`, `REMINDERS_GLOBALLY_OFF`, `SCHEDULE_NO_PROVIDER`, `NO_DATA`) — one plain sentence **and one repair label** each | **PROPOSED** (spec §12 item 1) | B10 drafts, owner ratifies |
-| the "Close this round" **confirmation body**. Spec §12's draft: *"Close this round? The members not marked done will not be recorded as serviced."* | **PROPOSED** (spec §12 item 2) | B14 |
-| the **schedule editor's remaining field labels** — the target picker, the season-behaviour choice, the completion-mode choice, the profile picker, the four meter-rule fields (definition, interval, baseline, lead) and the single provider row. D-24 ratified the time-rule and lead fragments only | **PROPOSED** (see §18 decision 12) | B14 drafts, owner ratifies |
-| the two **notification channel display names and descriptions** shown in Android system settings for `maintenance_due` and `maintenance_overdue` | **PROPOSED** (see §18 decision 12) | B05 drafts, owner ratifies |
-| the **digest summary notification** title and body (the one-per-run summary listing DUE and OVERDUE) and a per-item notification's title and body form | **PROPOSED** (see §18 decision 12) | B06 drafts, owner ratifies |
-| the Maintenance destination's **four section labels** (due work · schedules · groups · reminder health) and its empty-state line | **PROPOSED** (see §18 decision 12) | B08 drafts, owner ratifies |
+| the seven health-finding sentences and their repair labels (`NOTIFICATIONS_BLOCKED`, `DIGEST_ALARM_MISSING`, `BACKSTOP_WORK_MISSING`, `APP_RESTRICTED`, `REMINDERS_GLOBALLY_OFF`, `SCHEDULE_NO_PROVIDER`, `NO_DATA`) | **RATIFIED** (owner, 2026-09-22; §17.1a) | B10 |
+| the "Close this round" **confirmation body**: "Close this round? The members not marked done will not be recorded as serviced." | **RATIFIED** (owner, 2026-09-22; §17.1b) | B14 |
+| the **schedule editor's remaining field labels and options** — the target picker, the season-behaviour choice, the completion-mode choice, the profile picker, the four meter-rule fields and the single provider row | **RATIFIED** (owner, 2026-09-22; §17.1c) | B14 |
+| the two **notification channel display names and descriptions** for `maintenance_due` and `maintenance_overdue` | **RATIFIED** (owner, 2026-09-22; §17.1d) | B05 |
+| the **digest summary notification** title and body, and the per-item notification's title and body forms | **RATIFIED** (owner, 2026-09-22; §17.1e) — the digest body ratified **with one amendment**, see §17.1e | B06 |
+| the Maintenance destination's **four section labels** and its empty-state line | **RATIFIED** (owner, 2026-09-22; §17.1f) | B08 |
+| the dashboard's **filter labels** "Category", "Maintenance status", "All categories", "All statuses" (F2) | **RATIFIED** (owner, 2026-09-22; §1.2) | B08 |
+| the meter line **"Due at \<n\> \<unit\>, now \<n\>."** on a dashboard row (F3) | **RATIFIED** (owner, 2026-09-22; §1.2) | B08 |
+| the Maintenance destination's **quick actions** "Scan tag", "Add asset", "Log maintenance" (F4) | **RATIFIED** (owner, 2026-09-22; §1.2) | B08, routing into B14's `CompletionFlow` |
 
 **Any user-visible string a brief needs that this table does not list is a finding for the controller before that brief executes; no brief invents one.** Thirteen of the fifteen briefs say so in their own Strings section; the four that draft a PROPOSED class (B05, B06, B08, B14) say it of everything beyond the class they were given.
 
 
-### 17.1 The PROPOSED drafts, for ratification at the gate
+### 17.1 The forty-four strings the owner ratified at the gate
 
-Every unratified string in the six classes above, **drafted concretely so the owner can ratify or rewrite at the gate instead of a brief blocking on it later**. Forty-four strings. They are short, plain, and in the register of the ratified ones — "Snoozed until \<date\>", "Reminders are off because notifications are blocked." Placeholders are shown as `<n>`, `<asset>`, `<date>`, `<unit>`. **Every one stays PROPOSED until the owner rules**; a brief may use a draft only after ratification, and the owner rewriting one costs nothing at this stage.
+The six classes that were PROPOSED, **all RATIFIED as written by the owner on 2026-09-22**, with **one amendment** — the digest body (e). Forty-four strings. Placeholders are `<n>`, `<asset>`, `<date>`, `<unit>`. **Every one is now final and quoted verbatim by the brief that draws it; a brief may not paraphrase one, and no brief has a string left to draft.**
 
-**(a) The seven health findings — one sentence and one repair label each (B10).** `NO_DATA`'s label is the already-ratified "Log meter reading", so thirteen of the fourteen are new.
+**(a) The seven health findings — one sentence and one repair label each (B10). RATIFIED.** `NO_DATA`'s label is the already-ratified "Log meter reading", so thirteen of the fourteen were new at the gate.
 
-| finding | PROPOSED sentence | PROPOSED repair label |
+| finding | RATIFIED sentence | RATIFIED repair label |
 |---|---|---|
 | `NOTIFICATIONS_BLOCKED` | "Notifications are turned off, so maintenance reminders will not arrive." | "Open notification settings" |
 | `DIGEST_ALARM_MISSING` | "The daily reminder check is not scheduled, so today's maintenance may go unannounced." | "Reschedule the check" |
@@ -859,15 +860,17 @@ Every unratified string in the six classes above, **drafted concretely so the ow
 | `APP_RESTRICTED` | "This phone is holding ServiceTag back in the background, so reminders may arrive late or not at all." | "Open battery settings" |
 | `REMINDERS_GLOBALLY_OFF` | "Reminders are turned off in ServiceTag." | "Turn reminders on" |
 | `SCHEDULE_NO_PROVIDER` | "\<n\> schedules have reminders switched on but no way to deliver them." | "Open the schedule" |
-| `NO_DATA` | "\<n\> schedules need a meter reading before they can come due." | **RATIFIED** — "Log meter reading" |
+| `NO_DATA` | "\<n\> schedules need a meter reading before they can come due." | "Log meter reading" (ratified with D-24) |
 
-**(b) The "Close this round" confirmation body (B14).** Spec §12's own draft, carried forward unchanged:
+**The `NO_DATA` row is constrained (owner, 2026-09-22).** That sentence and that label apply **only** to the **repairable missing-meter-baseline** form. The **empty-required-set** form — a group occurrence with no required members — is the other `NO_DATA` condition and **never receives them**: it stays non-actionable, with **no due count, no scan-sheet offer, no promotion and no close action**, and it must **never** get the meter-baseline wording merely because its status enum happens to read `NO_DATA` (§11.1, invariants 74, 77). B10 states it, and B08's and B09's matrix rows prove the two halves.
+
+**(b) The "Close this round" confirmation body (B14). RATIFIED** as spec §12 drafted it:
 
 > "Close this round? The members not marked done will not be recorded as serviced."
 
-**(c) The schedule editor's field labels (B14).** D-24 ratified "Every N", "Repeats from", "the scheduled date", "when I complete it" and "Remind me N days early"; these fifteen are the rest.
+**(c) The schedule editor's field labels (B14). RATIFIED.** D-24 ratified "Every N", "Repeats from", "the scheduled date", "when I complete it" and "Remind me N days early"; these fifteen are the rest.
 
-| field | PROPOSED label | PROPOSED options |
+| field | RATIFIED label | RATIFIED options |
 |---|---|---|
 | target picker | "This applies to" | "One asset" · "A maintenance group" |
 | season behaviour | "Out of season" | "Pause with the asset's season" · "Remind me year round" |
@@ -879,25 +882,27 @@ Every unratified string in the six classes above, **drafted concretely so the ow
 | meter lead | "Remind me \<n\> \<unit\> early" | — |
 | provider row | "Remind me through" | — |
 
-**(d) The two notification channels, as Android shows them in system settings (B05).**
+**(d) The two notification channels, as Android shows them in system settings (B05). RATIFIED.**
 
-| channel | PROPOSED name | PROPOSED description |
+| channel | RATIFIED name | RATIFIED description |
 |---|---|---|
 | `maintenance_due` | "Maintenance due" | "Reminders for maintenance that is due." |
 | `maintenance_overdue` | "Maintenance overdue" | "Reminders for maintenance that is past due." |
 
-**(e) The digest summary and the per-item notification (B06).** The status words in these are already ratified; what is proposed is the wrapper.
+**(e) The digest summary and the per-item notification (B06). RATIFIED, with the owner's one amendment to the digest body.**
 
-| notification | PROPOSED title | PROPOSED body |
+| notification | RATIFIED title | RATIFIED body |
 |---|---|---|
-| the digest summary (one per run) | "\<n\> maintenance items need attention" | "\<n\> overdue, \<n\> due." |
+| the digest summary (one per run) | "\<n\> maintenance items need attention" | **"\<n\> overdue, \<n\> due, \<n\> due soon."** — the amendment |
 | a per-item, DUE | "\<asset\> — \<title\>" | "Due \<date\>." |
 | a per-item, OVERDUE | "\<asset\> — \<title\>" | "Overdue since \<date\>." |
 | a per-item, a meter threshold crossed | "\<asset\> — \<title\>" | "Due at \<n\> \<unit\>, now \<n\>." |
 
-**(f) The Maintenance destination's four section labels and its empty state (B08).**
+**The digest body's amendment, and the counting rule it carries (owner, 2026-09-22).** The body is **"\<n\> overdue, \<n\> due, \<n\> due soon."**, and **a zero-count clause may be omitted** — a run with nothing due soon reads "2 overdue, 1 due." Because the body now names three classes, **the title's count must equal the items the body represents, first-entry DUE_SOON items included**: a digest announcing two overdue, one due and one first-entry DUE_SOON has the title "4 maintenance items need attention". B06's digest-policy contract states this and one matrix row proves it, because a title counting only DUE and OVERDUE while the body lists three classes is the arithmetic an implementer would most plausibly get wrong.
 
-| surface | PROPOSED string |
+**(f) The Maintenance destination's four section labels and its empty state (B08). RATIFIED.**
+
+| surface | RATIFIED string |
 |---|---|
 | section 1 — due work | "Due work" |
 | section 2 — schedules | "Schedules" |
@@ -905,7 +910,7 @@ Every unratified string in the six classes above, **drafted concretely so the ow
 | section 4 — reminder health | "Reminders" |
 | empty state, a phone with no schedules | "No maintenance schedules yet. Add one from an asset or a maintenance group." |
 
-**Count: 44 PROPOSED strings** — 13 health sentences and labels (the fourteenth is ratified), 1 close confirmation, 15 editor labels and options, 4 channel names and descriptions, 6 notification titles and bodies, 5 Maintenance labels. **Plus, conditionally:** any string the three §1.2 scope questions need if the owner rules them in — F2's filter labels, F3's meter line form, F4's three quick-action labels — which are PROPOSED items in that event and not a brief's to invent.
+**Count: 44 strings, all RATIFIED** — 13 health sentences and labels (the fourteenth was already ratified), 1 close confirmation, 15 editor labels and options, 4 channel names and descriptions, 6 notification titles and bodies, 5 Maintenance labels. **Plus the eight the owner ratified with §1.2's three rulings** — F2's "Category", "Maintenance status", "All categories", "All statuses"; F3's "Due at \<n\> \<unit\>, now \<n\>."; F4's "Scan tag", "Add asset", "Log maintenance" — for **52 strings ratified at the gate**. **Nothing in 1.2 is left unratified, and no brief has a string to draft.**
 
 ---
 
@@ -928,7 +933,7 @@ The four **revision-4.1 amendments** — that S4 gates nothing (§1, §12.3), `M
 9. **§9.3 — `/v1/due`'s `rank` is the 0-based index of the item in the attention order.** Spec §4.1 names the field without defining it; a client must be able to reproduce the app's order without re-deriving it.
 10. **§11 — the seven new `Route` members and their parameters.** Spec §2.6 names the Maintenance destination but not the back stack; every key carries ids only, as `Route.kt:6-9` requires, and `Route.readsTags()` is unchanged because no new screen reads tags.
 11. **§10 / §16 — the MCP tool count becomes 38** (21 + 17), which is the number `README.md:58` must state and the structural grep must find.
-12. **§17 — the PROPOSED set is larger than spec §12's two items.** Spec §12 says two strings and nothing else, but **four** more classes are user-visible and unratified: the two notification **channel display names and descriptions** (visible in Android system settings), the **digest summary and per-item notification** title and body, the Maintenance destination's **four section labels** and empty-state line, and the **schedule editor's remaining field labels** — D-24 ratified the time-rule and lead fragments only, leaving the target picker, the season-behaviour and completion-mode choices, the profile picker, the four meter-rule fields and the provider row with no ratified wording. They are marked PROPOSED and routed to B05, B06, B08 and B14 to draft rather than invented in a brief, and §17 closes with the rule that any string it does not list is a finding rather than a brief's to invent. **This is the one place the plan extends the spec's open-items list, and the plan review should confirm it.**
+12. **§17 — the PROPOSED set is larger than spec §12's two items.** Spec §12 says two strings and nothing else, but **four** more classes are user-visible and unratified: the two notification **channel display names and descriptions** (visible in Android system settings), the **digest summary and per-item notification** title and body, the Maintenance destination's **four section labels** and empty-state line, and the **schedule editor's remaining field labels** — D-24 ratified the time-rule and lead fragments only, leaving the target picker, the season-behaviour and completion-mode choices, the profile picker, the four meter-rule fields and the provider row with no ratified wording. They were drafted concretely in §17.1 and routed to B05, B06, B08 and B14 rather than invented mid-brief, and §17 closes with the rule that any string it does not list is a finding. **Outcome: the owner ratified all forty-four at the gate on 2026-09-22, with one amendment to the digest body**, plus the eight §1.2's rulings carry — so **nothing in 1.2 is unratified and no brief has a string to draft.** Extending the spec's open-items list is what made that single ratification possible.
 13. **§14.3 — the wave, worktree and device assignment.** Spec §7 fixes the dependencies and the owner's two-lane rule fixes the concurrency; the pairing of briefs into waves is this plan's, chosen so that **the two lanes in a wave never share a file set**. Waves 4–7 both run in `:app` — unavoidable, since eleven briefs touch it — and are separated by package and by each brief's Files section, with `AppGraph.kt` and `ServiceTagRoot.kt` named as the two shared files the controller resolves at merge. **One worktree per lane** and **`emulator-5554` held by one lane at a time**, connected runs serialised, are part of this decision.
 14. **§16.1 — no test total is hardcoded.** The baseline moved with the Stage-A bundle work and the plan author may not run Gradle; the controller records the baseline at `d790506` and asserts baseline + the per-brief counts.
 15. **§16 — the structural grep list and each expected count.** The planning policy requires anchored patterns from the start; the specific list is this plan's derivation from the invariants that are structural rather than behavioural.
@@ -1027,8 +1032,22 @@ The scoped re-review of the fix wave returned **READY FOR THE GATE** with five r
 | **N2** | reconciliation | #50 AC 8 was contract in B09's Interfaces but named by no matrix row | folded into B09's "one due quick item" row, retitled "**and the reminder quiesced by state**", asserting `reconcile` runs and that the notification is not the source of truth |
 | **N5** | reconciliation | §1 and §12.3 said the S4 trial was "already armed" — operational state, which spec revision 4.1 struck from the spec for the same reason | both sentences removed; both places now say that **whether it has been armed, and when, belongs in the ledger, not in this plan** |
 | **N6** | reconciliation | §12.1's "Done, QUICK → broadcast" row omitted the meter carve-out that B07's Interfaces states | the row gains it: a `QUICK` schedule with a **meter rule** routes "Done" into the canonical completion flow as an **activity** `PendingIntent`, because it cannot complete without its reading and the notification never fabricates one |
-| **F2 · F3 · F4** | reconciliation | three #5 requirements — category/status **filtering**, the **meter due value** on an asset row, and a **"log maintenance"** quick action — are in no spec section, no brief and no ruling | **not decided here.** New **§1.2** lists all three as **PENDING OWNER RULING at the gate**, each with its recommended default (in 1.2: one B08 scope line plus one matrix row) and its alternative (explicitly out, recorded in the spec's exclusions), plus the note that none changes a contract, an invariant or a wire shape — and that any new string they need is a §17 PROPOSED item, not a brief's to invent |
+| **F2 · F3 · F4** | reconciliation | three #5 requirements — category/status **filtering**, the **meter due value** on an asset row, and a **"log maintenance"** quick action — are in no spec section, no brief and no ruling | **not decided here.** New **§1.2** lists all three as **PENDING OWNER RULING at the gate**, each with its recommended default (in 1.2: one B08 scope line plus one matrix row) and its alternative (explicitly out, recorded in the spec's exclusions), plus the note that none changes a contract, an invariant or a wire shape — and that any new string they need is a §17 item, not a brief's to invent. **Superseded by the owner's gate ruling 2: all three are IN, and §1.2 now carries their ruled form** |
 
 **Recorded as deliberate, no action (reconciliation N3, N4, N7, N8 and every reviewer's "size vs. estimate" note):** #21 AC 1's device half is proved off-device by the no-overnight-blocking ruling; #4 AC 3's "observed in the UI" is proved in the domain under proportionality; B13 claims none of the eighty because it changes no behaviour; #49 AC 8 is covered from the other side by B11's "a second tag becoming a second asset" row; and the brief line counts are answered by §14.1's relabelled column, because every reviewer found no content gap behind them.
 
-**§17 now carries a concrete PROPOSED draft for all forty-four unratified strings** (§17.1), across all six classes, so the owner ratifies or rewrites at the gate rather than a brief blocking on a string later. Every one stays marked PROPOSED.
+**§17 gained a concrete draft for all forty-four unratified strings** (§17.1), across all six classes, so the owner could ratify or rewrite **at the gate** rather than a brief blocking on a string later. **Outcome: all forty-four were ratified at the gate, with one amendment to the digest body** — see the Gate rulings sub-table below.
+
+### Gate rulings — the owner's five, and what each moved
+
+The owner's gate rulings (`owner-rulings-2026-09-22.md` §"Gate rulings") **released the pre-implementation gate**. Recorded here with the edit each one produced.
+
+| # | ruling | what changed |
+|---|---|---|
+| **1** | **Wave 1 = B01 + B11**; Wave 2 = B02 + B05 after B01 has landed. **B01 gates B02 and B03 and the two are never dispatched concurrently** — the planning summary's "B01 + B02" was an error, corrected | the header line and §1's first bullet now authorize **Wave 1 only** and state the never-concurrent rule; §14.3's wave table already read this way and is unchanged |
+| **2** | **F2, F3, F4 are IN for 1.2**, as **B08-only** additions — one scope line plus one proportional matrix row each — with F4's "Log maintenance" routing through **B14's canonical `CompletionFlow`, never a second completion path** | §1.2 rewritten from three PENDING questions into **the ruled form**, with each ruling's strings; **B08** gains three scope rows in Interfaces, **three matrix rows**, two new files (`DashboardFilters.kt`, `QuickActions.kt`) and the never-a-second-path rule; **B14** records that `CompletionFlow` now has a **third caller** and is the only completion mechanism in 1.2 |
+| **3** | **All 44 §17.1 strings RATIFIED as written, with one amendment:** the digest body is **"\<n\> overdue, \<n\> due, \<n\> due soon."**, zero-count clauses may be omitted, and **the title's count must equal the items the body represents, first-entry DUE_SOON included**. Per-item strings ratified as drafted | §17's header and its six class rows flipped to **RATIFIED**, with three new rows for §1.2's eight strings; **§17.1 retitled** "The forty-four strings the owner ratified at the gate", every status column flipped, and the amendment plus its **counting rule** stated; §15's release-gate item 2 rewritten from "ratify before executing" to "check the diff against §17"; decision 12 records the outcome. **B05**, **B06**, **B08**, **B10** and **B14** all lose their "drafts and returns for ratification" paragraphs and gain the ratified text as **inputs**; B06 also gains the counting rule in its digest-policy contract **and one matrix row** |
+| **4** | **`NO_DATA` wording is constrained:** the meter-baseline sentence and "Log meter reading" apply **only** to the repairable form; an **empty-required-set** occurrence stays non-actionable — no due count, no scan-sheet offer, no promotion, no close action — and **never gets the meter wording merely because its status enum reads `NO_DATA`** | **§17.1a** gains the constraint paragraph; **B10** gains it as contract, marks the detector's row "**this form only**", and gains a **second negative control** — an empty-required-set group schedule produces no finding, no sentence and no repair; **B08**'s strings section and **B09**'s D-18a row already carried the two behavioural halves from the residuals edit and are unchanged |
+| **5** | **Implementation AUTHORIZED** on recording 1–4, with the per-brief implement → independent review → scoped fix/re-review → controller merge discipline, one worktree per lane, at most two implementers, serialised emulator use, no production phone, and no release before its planned gate | the header and §1's first bullet carry all of it; nothing in §14–§16 reads as permission to open a **later** wave, whose precondition remains §14.3's |
+
+**Net effect on the package.** The three open scope questions are closed as **IN**, so **nothing in the plan is pending an owner decision**. Every user-visible string is **ratified** — spec §9.1's set plus the 44 of §17.1 plus §1.2's 8 — so **no brief can be blocked by a string** and **no brief has one to draft**. The `NO_DATA` ambiguity the first plan review found is now constrained in all four places it surfaces: the read model (§11.1), the health finding (B10), the dashboard (B08) and the scan sheet (B09). **Wave 1 — B01 and B11, in their own worktrees and lanes — is authorized and may start.**

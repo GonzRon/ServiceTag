@@ -95,7 +95,7 @@ One test per hazard class. All off-device; the merged-manifest assertions read t
 ## Strings
 
 **Ratified, verbatim** (master plan §17): **"ServiceTag needs notification permission to remind you when maintenance is due."** — the constant lives here, the surface is B14.
-**PROPOSED, drafted by this brief and returned for ratification before it executes:** the **display name and description of each of the two notification channels**, as Android shows them in system settings. Master plan §18 decision 12 records why these are on the PROPOSED list when spec §12 names only two items: a channel name is user-visible, permanent once created, and there is no ratified wording for it. Draft two short names and two one-line descriptions, aligned with the ratified status vocabulary (**DUE**, **OVERDUE**), and hand them to the controller with the brief's plan review.
+**Ratified at the gate** (owner, 2026-09-22; master plan §17.1d) — the **display name and description of each channel**, as Android shows them in system settings, to be used verbatim: `maintenance_due` → **"Maintenance due"** / **"Reminders for maintenance that is due."**; `maintenance_overdue` → **"Maintenance overdue"** / **"Reminders for maintenance that is past due."** **This brief has nothing left to draft**; a channel name is permanent once created, which is why it was ratified rather than left to the implementation.
 
 ## Ordering
 

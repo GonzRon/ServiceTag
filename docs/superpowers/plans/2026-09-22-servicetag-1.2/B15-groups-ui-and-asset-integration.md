@@ -89,9 +89,9 @@ One test per hazard class; unit tests over the two view models, plus one connect
 
 **Ratified, verbatim** (master plan §17): **"Maintenance group"**; the progress form **"3 of 5 complete"**; **"Complete selected"** and **"Complete all"** where the group detail offers the round's checklist; **"Open asset"** where a member row's action is named; and the status terms **OK · DUE SOON · DUE · OVERDUE · OUT OF SEASON · PAUSED · NO BASELINE**.
 
-**PROPOSED it depends on but does not draft:** the Maintenance destination's section labels (B08) and the "Close this round" confirmation (B14) — **"Close this round" is B14's action and is not offered on these screens.**
+**Ratified elsewhere and drawn elsewhere:** the Maintenance destination's section labels (B08, master plan §17.1f) and the "Close this round" confirmation (B14, §17.1b) — **"Close this round" is B14's action and is not offered on these screens.**
 
-**This brief drafts nothing.** It needs an empty-state line for a group with no members and for a phone with no groups; reuse B08's ratified empty-state wording once the owner has ratified it, and if neither fits, that is a finding for the controller rather than a sentence to invent.
+**This brief drafts nothing, and there is nothing left to draft.** For the empty states — a group with no members, and a phone with no groups — reuse B08's **ratified** wording, **"No maintenance schedules yet. Add one from an asset or a maintenance group."** (master plan §17.1f), adapted only by choosing which ratified line fits; if neither does, that is a **finding for the controller** rather than a sentence to invent.
 
 ## Ordering
 

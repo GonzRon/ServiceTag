@@ -99,7 +99,7 @@ One test per hazard class, all against the fake provider and in-memory repositor
 
 ## Strings
 
-**None ratified and none drafted.** A subject's `title` and `body` are **composed from already-ratified material** — the schedule's own `title`, the status terms **OK · DUE SOON · DUE · OVERDUE · OUT OF SEASON · PAUSED · NO BASELINE**, the ratified progress form **"3 of 5 complete"**, and a date — and this brief introduces **no new sentence**. The notification's own wrapper text (the digest summary title and body) is **PROPOSED** and belongs to **B06**, which draws it; if B04's `body` composition needs a connective word beyond the ratified material, that is a finding for the controller and goes onto B06's PROPOSED list rather than being invented here.
+**None drawn and none drafted.** A subject's `title` and `body` are **composed from already-ratified material** — the schedule's own `title`, the status terms **OK · DUE SOON · DUE · OVERDUE · OUT OF SEASON · PAUSED · NO BASELINE**, the ratified progress form **"3 of 5 complete"**, and a date — and this brief introduces **no new sentence**. The notification's own wrapper text is **B06's**, and it too is now **ratified** (master plan §17.1e), so if this brief's `body` composition needs a connective word beyond the ratified material that is a **finding for the controller**, not a string to invent here or in B06.
 
 ## Invariant note
 
