@@ -158,6 +158,38 @@ class ReminderPortContractTest {
         )
     }
 
+    /**
+     * `SubjectState.Completed` is **reserved**: the spec's contract names four members and three
+     * briefs compile against them, and 1.2 has no producer for this one.
+     *
+     * Decision 8's objection to a dead member — that it is a member something can write — is met by
+     * making the write impossible to add quietly rather than by an instruction nobody reads. Every
+     * place `core/src/main` mentions it, it shares a branch with `Withdrawn`, because both mean the
+     * provider must stop holding the subject; there is no site that names it alone, so a future
+     * producer has to take this pin out on purpose. The two guards on either side are what stop it
+     * passing by deletion and by nobody mentioning it at all.
+     */
+    @Test
+    fun nothingInCoreEverBuildsACompletedSubjectOnItsOwn() {
+        assertTrue(
+            "data object Completed : SubjectState" in sourceFile("$REMINDERS/ReminderPort.kt").readText(),
+            "the member must still exist, or this would pass by deletion",
+        )
+
+        val reference = Regex("""\bSubjectState\.Completed\b""")
+        val mentions = kotlinFilesUnder(CORE_MAIN).flatMap { file ->
+            file.readText().lines().withIndex()
+                .filter { (_, line) -> reference.containsMatchIn(line) }
+                .map { (index, line) -> "${file.name}:${index + 1}" to line }
+        }
+        assertTrue(mentions.isNotEmpty(), "nothing mentions it at all, so this would pass vacuously")
+        assertEquals(
+            emptyList(),
+            mentions.filterNot { (_, line) -> "SubjectState.Withdrawn" in line }.map { it.first },
+            "a mention that does not share Withdrawn's branch is a producer this phase has no room for",
+        )
+    }
+
     private companion object {
         const val CORE_MAIN = "core/src/main"
         const val REMINDERS = "core/src/main/kotlin/com/loosecannon/servicetag/core/reminders"

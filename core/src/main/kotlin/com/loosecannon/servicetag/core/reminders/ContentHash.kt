@@ -41,14 +41,19 @@ object ContentHash {
     )
 
     /**
-     * States are rendered by name, and [SubjectState.Parked] by name **and** re-entry date: two
-     * parked subjects that come back on different days are not the same thing to show.
+     * States render by name, and a parked one by name **and** re-entry date: two parked subjects
+     * that come back on different days are not the same thing to show.
+     *
+     * The two cleared states render **identically**, and deliberately. Both mean the provider must
+     * stop holding the subject, so there is nothing a provider shows that differs between them, and
+     * a hash that invented a difference would report a change no provider could act on — invariant
+     * 46's failure in the other direction. It is also the branch that keeps the reserved member
+     * unconstructable here.
      */
     private fun render(state: SubjectState): String = when (state) {
         SubjectState.Active -> "ACTIVE"
-        SubjectState.Completed -> "COMPLETED"
-        SubjectState.Withdrawn -> "WITHDRAWN"
         is SubjectState.Parked -> "PARKED:${state.reentryOn?.toString() ?: ABSENT}"
+        SubjectState.Completed, SubjectState.Withdrawn -> "CLEARED"
     }
 
     private fun render(rule: RuleFacts): String = listOf(

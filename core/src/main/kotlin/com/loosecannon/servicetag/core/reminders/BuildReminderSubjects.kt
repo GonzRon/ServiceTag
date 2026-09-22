@@ -10,7 +10,6 @@ import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.schedule.DueStatus
-import com.loosecannon.servicetag.core.schedule.listedForDue
 import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import java.time.DateTimeException
@@ -28,8 +27,10 @@ import java.time.Year
  * read ports only, and why it never writes derived state: the recompute is the one writer and this
  * is one of its readers.
  *
- * Every list starts from [listedForDue], the one place the archived filter lives, so a schedule the
- * owner has retired can never become a subject at all.
+ * The list is **not** filtered by `listedForDue`: a retired obligation arrives as
+ * [SubjectState.Withdrawn] so a provider is told to let go of it, rather than disappearing and
+ * leaving the provider to infer that from an absence. What is genuinely absent is a schedule nobody
+ * asked to be reminded about — reminders switched off, or no enabled row for this provider.
  */
 class BuildReminderSubjects(
     private val schedules: ScheduleRepository,
@@ -48,7 +49,6 @@ class BuildReminderSubjects(
      */
     suspend fun forProvider(provider: ProviderId, today: LocalDate): List<ReminderSubject> =
         schedules.all()
-            .listedForDue()
             .filter { it.remindersEnabled && it.isEnabledFor(provider) }
             .sortedBy { it.id.value }
             .mapNotNull { subjectOf(it, today) }
@@ -85,10 +85,11 @@ class BuildReminderSubjects(
         val subjectState = subjectStateOf(schedule, state, today)
         val dueOn = when (subjectState) {
             is SubjectState.Parked -> null
-            else -> state.effectiveDueOn?.let(LocalDate::parse)
+            SubjectState.Active, SubjectState.Completed, SubjectState.Withdrawn ->
+                state.effectiveDueOn?.let(LocalDate::parse)
         }
         val rule = ruleFactsOf(schedule)
-        val body = bodyOf(schedule, state, today)
+        val body = bodyOf(schedule, state, subjectState, today)
         return ReminderSubject(
             key = SubjectKey.Schedule(schedule.id),
             title = schedule.title,
@@ -111,14 +112,18 @@ class BuildReminderSubjects(
      *
      * A paused schedule and a seasonally inactive one are both obligations that have not gone away,
      * and filtering either out of the list is how a provider comes to keep something standing with
-     * nothing left to clear it. The order of the two questions is the order [statusOf] asks them in,
-     * so the state and the status word can never disagree about which one applies.
+     * nothing left to clear it. The order of the season and pause questions is the order [statusOf]
+     * asks them in, so the state and the status word can never disagree about which one applies.
+     *
+     * Withdrawal is asked **first**, so a retired obligation is never reported parked and never
+     * reported active — a schedule the owner has archived has no season and no pause worth naming.
      */
     private suspend fun subjectStateOf(
         schedule: MaintenanceSchedule,
         state: ScheduleState,
         today: LocalDate,
     ): SubjectState = when {
+        schedule.status == ScheduleStatus.ARCHIVED -> SubjectState.Withdrawn
         schedule.status == ScheduleStatus.PAUSED -> SubjectState.Parked(null)
         !state.seasonActive -> SubjectState.Parked(seasonReentryOn(schedule, today))
         else -> SubjectState.Active
@@ -160,11 +165,22 @@ class BuildReminderSubjects(
     private suspend fun bodyOf(
         schedule: MaintenanceSchedule,
         state: ScheduleState,
+        subjectState: SubjectState,
         today: LocalDate,
-    ): String = listOfNotNull(
-        statusTerm(statusOf(schedule, state, today), schedule, state),
-        progressOf(schedule),
-    ).joinToString(SEPARATOR)
+    ): String {
+        val cleared = when (subjectState) {
+            SubjectState.Active, is SubjectState.Parked -> false
+            SubjectState.Completed, SubjectState.Withdrawn -> true
+        }
+        // A subject the provider is being told to let go of has nothing to show, and there is no
+        // ratified word for "withdrawn" to show it with. The derived status word is not asked for
+        // either: for an archived row it is the fail-safe `PAUSED`, which would be a lie here.
+        if (cleared) return ""
+        return listOfNotNull(
+            statusTerm(statusOf(schedule, state, today), schedule, state),
+            progressOf(schedule),
+        ).joinToString(SEPARATOR)
+    }
 
     /**
      * The ratified status word for a derived status.

@@ -91,12 +91,14 @@ class BuildReminderSubjectsTest {
         subjects.single { it.key == SubjectKey.Schedule(ScheduleId(id)) }
 
     // ------------------------------------------------------------------------------------------
-    // hazard: an archived schedule — or an archived group's schedule — still reminding, and the
-    // negative control that a switched-off reminder is simply absent.
+    // hazard: an archived schedule still reminding. It arrives **withdrawn** — in the list, so the
+    // provider is told to let go of it — and the negative half is that it is never active and never
+    // parked, so it never reminds. A schedule nobody asked to be reminded about is simply absent,
+    // and so is one whose group has been archived.
     // ------------------------------------------------------------------------------------------
 
     @Test
-    fun aWithdrawnOrSwitchedOffScheduleIsNeverASubject() = runTest {
+    fun anArchivedScheduleArrivesWithdrawnAndASwitchedOffOneIsAbsent() = runTest {
         seedAsset("a1")
         val liveGroup = groupOf(id = "g1", members = listOf(Triple("a1", "2025-12-01", null)))
         val deadGroup = groupOf(
@@ -148,10 +150,23 @@ class BuildReminderSubjectsTest {
         )
         rebuild()
 
+        val subjects = localSubjects()
         assertEquals(
-            listOf("s-live", "s-live-group"),
-            localSubjects().map { (it.key as SubjectKey.Schedule).scheduleId.value }.sorted(),
+            listOf("s-archived", "s-live", "s-live-group"),
+            subjects.map { (it.key as SubjectKey.Schedule).scheduleId.value }.sorted(),
         )
+
+        val archived = subjectFor(subjects, "s-archived")
+        assertEquals(SubjectState.Withdrawn, archived.state)
+        assertTrue(
+            archived.state != SubjectState.Active && archived.state !is SubjectState.Parked,
+            "an archived schedule is never active and never parked, so it never reminds",
+        )
+        assertEquals("", archived.body, "there is nothing to show for a subject being let go of")
+        assertEquals(LocalDate.parse("2026-04-01"), archived.dueOn)
+
+        assertEquals(SubjectState.Active, subjectFor(subjects, "s-live").state)
+        assertEquals(SubjectState.Active, subjectFor(subjects, "s-live-group").state)
     }
 
     // ------------------------------------------------------------------------------------------

@@ -50,6 +50,15 @@ enum class ProviderId { LOCAL }
  * the list and parked, never absent and never overdue, so a provider has something to clear and
  * something to show. [reentryOn] is the date it comes back — the season's next start — and is null
  * for a pause, which has no date, so the provider can say when without knowing what a season is.
+ *
+ * [Withdrawn] is how a retired obligation arrives: **in** the list, so a provider is told to stop
+ * holding it rather than left to infer it from an absence.
+ *
+ * [Completed] is **reserved and has no producer in 1.2**. It is shaped for the supply-level subjects
+ * of a later phase, where a subject can be finished without its schedule advancing; a schedule's
+ * round cannot, because a finished round is a termination and the current occurrence is always the
+ * next one. Nothing here builds one, and a structural test pins that: every place 1.2 mentions it,
+ * it shares a branch with [Withdrawn], because both mean the provider must stop holding the subject.
  */
 sealed interface SubjectState {
     data object Active : SubjectState
@@ -110,11 +119,11 @@ data class ReconcileReport(
 /**
  * A change a provider observed on its own side and is reporting back.
  *
- * 1.2 ships one provider, whose own state is only ever what [ReminderProvider.reconcile] put there,
- * so its list is always empty and nothing in 1.2 produces or consumes one of these. The shape is
- * therefore the smallest one that is not a lie — which subject, and the date the change took effect
- * if it has one — and it is **provisional**: neither the spec nor the plan fixes its fields, and the
- * phase that brings a provider with a life of its own is where the real shape is settled.
+ * `LOCAL` returns empty: its own state is only ever what [ReminderProvider.reconcile] put there, so
+ * nothing in 1.2 produces or consumes one of these. The shape is the smallest one that is not a lie
+ * — which subject, and the date the change took effect if it has one — and it is **provisional**:
+ * neither the spec nor the plan fixes its fields. It is shaped for a **pull-based provider** and is
+ * **revisited at the first non-`LOCAL` provider**.
  */
 data class RemoteChange(val key: SubjectKey, val effectiveOn: LocalDate?)
 
