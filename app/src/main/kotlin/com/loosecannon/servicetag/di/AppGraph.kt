@@ -31,6 +31,7 @@ import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.ports.UuidGenerator
+import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.ApplyTemplate
 import com.loosecannon.servicetag.core.usecase.ApplyBackupMergePlan
@@ -147,6 +148,15 @@ class AppGraph(private val context: Context) {
      */
     val recomputeSchedules: RecomputeSchedules = RecomputeSchedules(
         schedules, scheduleStates, events, closures, groups, assets, today, clock,
+    )
+
+    /**
+     * The desired state of every reminder provider's list, derived from schedule state alone. **No
+     * provider is registered here** — the one that delivers arrives with its own brief and
+     * registers itself; what is here is the question every provider is asked.
+     */
+    val buildReminderSubjects: BuildReminderSubjects = BuildReminderSubjects(
+        schedules, scheduleStates, groups, assets, recomputeSchedules,
     )
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
 
