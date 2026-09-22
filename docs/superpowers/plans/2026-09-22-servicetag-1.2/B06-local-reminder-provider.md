@@ -30,7 +30,7 @@ Deliver ServiceTag's own reminders reliably with no account, no cloud and **no e
 - `app/.../ServiceTagApp.kt` — the backstop enqueued as unique periodic work at process start, idempotently.
 - `core/.../core/usecase/LogEvent.kt` / `UpdateEvent.kt` — **no change**; the meter-crossing evaluation hangs off B02's `RecomputeSchedules` result, not off the event use case (see Interfaces).
 
-**Untouched:** all of `core/src/main` but the one port; `app/.../ui/**` (B08 draws the "reminders are off" line, B10 the health screen); `api/**`; `nfc/**`; the manifest (B05 owns it; this brief adds **no** manifest element); `tools/`; `libs/`.
+**Untouched:** all of `core/src/main` but the one port; `app/.../ui/**` (B08 draws the "reminders are off" line, B10 the health screen); `api/**`; `nfc/**`; the manifest **except one element** — **Amended (B05 review, 2026-09-22, controller ruling):** an alarm-targeted receiver must be manifest-declared, so this brief adds exactly one `<receiver>` for `DigestReceiver`, `android:exported="false"`, nothing else (B05 owns the rest of the file; B07 adds the quick-action receiver); `tools/`; `libs/`.
 
 ## Interfaces
 
