@@ -1,0 +1,21 @@
+[project]
+name = "servicetag-bundle"
+version = "0.1.0"
+description = "Turns a private normalized inventory into a ServiceTag format-5 backup archive"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8.3,<9"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/servicetag_bundle"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
