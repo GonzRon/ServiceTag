@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from pathlib import Path
 
 from servicetag_bundle.cli import main
@@ -150,3 +151,92 @@ def test_inspect_prints_counts_and_size_of_a_built_archive(tmp_path, capsys):
     assert "assets=1" in out
     assert "formatVersion=5" in out
     assert "schemaVersion=5" in out
+
+
+def test_inspect_a_format_le4_manifest_reports_cleanly_instead_of_a_keyerror(tmp_path, capsys):
+    """A format <=4 archive's manifest legitimately lacks `backupSetId` and the `artifact*`
+    fields (BackupCodec's own class doc: format 4 has "none of the four new manifest fields").
+    `inspect` must report what's there, never crash."""
+    archive_path = tmp_path / "old.zip"
+    minimal_manifest = json.dumps(
+        {"formatVersion": 3, "appVersion": "old-app/1.0", "schemaVersion": 2, "createdAt": 0,
+         "counts": {"assets": 0}, "dataSha256": "0" * 64}
+    ).encode("utf-8")
+    with zipfile.ZipFile(archive_path, "w") as zf:
+        zf.writestr("manifest.json", minimal_manifest)
+        zf.writestr("data.json", b"{}")
+
+    code = main(["inspect", str(archive_path)])
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "formatVersion=3" in out
+    assert "backupSetId=-" in out
+    assert "assets=0" in out
+
+
+# ---- never a traceback (S4) ------------------------------------------------------------------
+
+def test_check_missing_source_file_reports_cleanly_not_a_traceback(tmp_path, capsys):
+    missing = tmp_path / "does-not-exist.json"
+
+    code = main(["check", str(missing)])
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert str(missing) in err
+    assert "Traceback" not in err
+
+
+def test_build_missing_source_file_reports_cleanly_not_a_traceback(tmp_path, capsys):
+    missing = tmp_path / "does-not-exist.json"
+    out_path = tmp_path / "out.zip"
+
+    code = main(["build", str(missing), str(out_path)])
+
+    assert code == 1
+    assert not out_path.exists()
+    err = capsys.readouterr().err
+    assert str(missing) in err
+    assert "Traceback" not in err
+
+
+def test_check_malformed_json_reports_cleanly_not_a_traceback(tmp_path, capsys):
+    source_path = tmp_path / "source.json"
+    source_path.write_text("{not valid json", encoding="utf-8")
+
+    code = main(["check", str(source_path)])
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert str(source_path) in err
+    assert "Traceback" not in err
+
+
+def test_build_malformed_json_reports_cleanly_not_a_traceback(tmp_path, capsys):
+    source_path = tmp_path / "source.json"
+    source_path.write_text("{not valid json", encoding="utf-8")
+    out_path = tmp_path / "out.zip"
+
+    code = main(["build", str(source_path), str(out_path)])
+
+    assert code == 1
+    assert not out_path.exists()
+    err = capsys.readouterr().err
+    assert str(source_path) in err
+    assert "Traceback" not in err
+
+
+def test_build_force_onto_a_directory_reports_cleanly_not_a_traceback(tmp_path, capsys):
+    source_path = _write_source(tmp_path / "source.json", rich_source())
+    out_path = tmp_path / "out-dir"
+    out_path.mkdir()
+
+    code = main(["build", str(source_path), str(out_path), "--force"])
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert str(out_path) in err
+    assert "Traceback" not in err
+    assert out_path.is_dir()  # untouched
+    assert set(tmp_path.iterdir()) == {out_path, source_path}  # no stray ".partial" temp file

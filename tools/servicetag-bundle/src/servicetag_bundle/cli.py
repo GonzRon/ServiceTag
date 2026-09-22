@@ -51,6 +51,9 @@ def _cmd_build(args: argparse.Namespace) -> int:
     except ArchiveTooLarge as e:
         print(f"{out_path}: {e}", file=sys.stderr)
         return 1
+    except OSError as e:
+        print(f"{out_path}: {e.strerror or e}", file=sys.stderr)
+        return 1
 
     print(f"{out_path}: backupSetId={manifest['backupSetId']}")
     for key, value in manifest["counts"].items():
@@ -71,13 +74,17 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         print(f"{archive_path}: {e}", file=sys.stderr)
         return 1
 
+    # `manifest.get(..., "-")` throughout: a format <=4 archive's manifest legitimately lacks
+    # `backupSetId`/`artifact*` (the "four new" format-5 fields), and even older ones may lack
+    # more -- `inspect` reports what's there rather than crashing on what isn't.
     print(f"{archive_path}: {size} bytes")
     print(
-        f"formatVersion={manifest['formatVersion']} schemaVersion={manifest['schemaVersion']} "
-        f"appVersion={manifest['appVersion']}"
+        f"formatVersion={manifest.get('formatVersion', '-')} "
+        f"schemaVersion={manifest.get('schemaVersion', '-')} "
+        f"appVersion={manifest.get('appVersion', '-')}"
     )
-    print(f"backupSetId={manifest['backupSetId']}")
-    for key, value in manifest["counts"].items():
+    print(f"backupSetId={manifest.get('backupSetId', '-')}")
+    for key, value in manifest.get("counts", {}).items():
         print(f"{key}={value}")
     return 0
 

@@ -16,10 +16,12 @@ from .source import Asset, Event, Profile, Source
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
-def _epoch_millis(dt: datetime) -> int:
+def epoch_millis(dt: datetime) -> int:
     """`dt` (already UTC, per `source._parse_as_of`) as epoch milliseconds -- integer arithmetic
     only, never via a float timestamp. Sub-millisecond precision is truncated toward the lower
-    millisecond."""
+    millisecond. Public: `archive.py`'s manifest `createdAt` must be the same number as every
+    row's `createdAt`/`updatedAt`, so both share this one function rather than two copies that
+    could drift apart."""
     delta = dt - _EPOCH
     return delta.days * 86_400_000 + delta.seconds * 1000 + delta.microseconds // 1000
 
@@ -56,7 +58,7 @@ def build_rows(source: Source) -> dict[str, list[dict[str, Any]]]:
     `measurementDefinitions`, `eventProfiles`, `assetEvents`, `attachments`, each a list of plain
     dicts. Assets are emitted parents-first."""
     ns = namespace_of(source)
-    as_of_millis = _epoch_millis(source.asOf)
+    as_of_millis = epoch_millis(source.asOf)
     ordered_assets = _topological_assets(source.assets)
 
     asset_ids = {asset.key: row_id(ns, f"asset:{asset.key}") for asset in source.assets}

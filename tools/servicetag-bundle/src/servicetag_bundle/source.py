@@ -147,7 +147,17 @@ def parse_source(obj: dict) -> Source:
 
 
 def load_source(path: Path) -> Source:
-    """Read and validate a source document from `path`."""
-    text = Path(path).read_text(encoding="utf-8")
-    obj = json.loads(text)
+    """Read and validate a source document from `path`. A missing/unreadable file or malformed
+    JSON is reported the same way a validation failure is -- as a `SourceError` naming `path` --
+    so a caller (the CLI) needs only one `except SourceError` to report every way this can fail,
+    never a bare traceback."""
+    path = Path(path)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as e:
+        raise SourceError(str(path), e.strerror or str(e)) from e
+    try:
+        obj = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise SourceError(str(path), f"not valid JSON: {e}") from e
     return parse_source(obj)

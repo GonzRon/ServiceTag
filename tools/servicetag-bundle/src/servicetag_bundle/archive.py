@@ -4,21 +4,25 @@ from a validated `Source`. No clock, environment or filesystem access beyond the
 
 The zip is built by hand, entry by entry, with an explicit `zipfile.ZipInfo` per entry: passing a
 bare filename to `writestr` stamps the local wall clock into the zip's local-file-header timestamp,
-which would make two otherwise-identical runs produce different bytes.
+which would make two otherwise-identical runs produce different bytes. Every entry is written at a
+pinned `compresslevel=6`, which removes one source of byte drift, but not the only one: the
+compressed bytes DEFLATE emits still depend on the zlib build the interpreter links against, so
+byte-identity across two different machines is not guaranteed by this module alone -- only
+same-machine, cross-process determinism is (see the `PYTHONHASHSEED` test in `test_archive.py`).
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import zipfile
-from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 from .ids import namespace_of, row_id
-from .rows import build_rows
+from .rows import build_rows, epoch_millis
 from .source import Source
 
 FORMAT_VERSION = 5
@@ -29,12 +33,15 @@ APP_VERSION = "servicetag-bundle/0.1.0"
 MANIFEST_ENTRY = "manifest.json"
 DATA_ENTRY = "data.json"
 
-#: The API's import cap (`docs/api/v1.md` Import-merge, `tools/servicetag-mcp`'s client). `build`
-#: refuses an archive larger than this without writing anything.
+#: The API's import cap (`docs/api/v1.md` Import-merge, `tools/servicetag-mcp`'s client). Enforced
+#: in `_build`, so both `archive_bytes` and `write_archive` refuse an over-cap archive the same way.
 MAX_ARCHIVE_BYTES = 4 * 1024 * 1024
 
+#: DEFLATE compression level for every entry, pinned for reproducibility (see the module docstring
+#: for what this does and does not guarantee).
+_COMPRESSLEVEL = 6
+
 _ZIP_DATE_TIME = (1980, 1, 1, 0, 0, 0)
-_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 class ArchiveError(Exception):
@@ -48,13 +55,6 @@ class ArchiveTooLarge(ArchiveError):
         super().__init__(f"archive is {size} bytes, over the {limit} byte limit")
         self.size = size
         self.limit = limit
-
-
-def _epoch_millis(dt: datetime) -> int:
-    """`dt` (already UTC, per `source._parse_as_of`) as epoch milliseconds -- integer arithmetic
-    only, never via a float timestamp."""
-    delta = dt - _EPOCH
-    return delta.days * 86_400_000 + delta.seconds * 1000 + delta.microseconds // 1000
 
 
 def _dumps(obj: Any) -> bytes:
@@ -97,11 +97,13 @@ def _zip_info(name: str) -> zipfile.ZipInfo:
 
 def _build(source: Source) -> tuple[dict[str, Any], bytes]:
     """The manifest dict and the full archive bytes, computed together so the manifest's
-    `dataSha256` is hashed from exactly the bytes written into the `data.json` entry."""
+    `dataSha256` is hashed from exactly the bytes written into the `data.json` entry. Raises
+    `ArchiveTooLarge` here -- the one place both `archive_bytes` and `write_archive` go through --
+    before returning anything, so neither caller can ever hand back an over-cap archive."""
     ns = namespace_of(source)
     data = build_rows(source)
     data_bytes = _dumps(data)
-    as_of_millis = _epoch_millis(source.asOf)
+    as_of_millis = epoch_millis(source.asOf)
 
     manifest: dict[str, Any] = {
         "formatVersion": FORMAT_VERSION,
@@ -119,28 +121,42 @@ def _build(source: Source) -> tuple[dict[str, Any], bytes]:
 
     buf = BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr(_zip_info(MANIFEST_ENTRY), manifest_bytes)
-        zf.writestr(_zip_info(DATA_ENTRY), data_bytes)
-    return manifest, buf.getvalue()
+        zf.writestr(_zip_info(MANIFEST_ENTRY), manifest_bytes, compresslevel=_COMPRESSLEVEL)
+        zf.writestr(_zip_info(DATA_ENTRY), data_bytes, compresslevel=_COMPRESSLEVEL)
+    archive = buf.getvalue()
+
+    if len(archive) > MAX_ARCHIVE_BYTES:
+        raise ArchiveTooLarge(len(archive), MAX_ARCHIVE_BYTES)
+    return manifest, archive
 
 
 def archive_bytes(source: Source) -> bytes:
     """The archive's exact bytes -- deterministic across processes for the same source, including
-    under different `PYTHONHASHSEED` values."""
+    under different `PYTHONHASHSEED` values. Raises `ArchiveTooLarge` for a source that renders
+    over `MAX_ARCHIVE_BYTES`, same as `write_archive`."""
     _, archive = _build(source)
     return archive
 
 
 def write_archive(source: Source, out: Path) -> dict[str, Any]:
-    """Builds the archive and writes it to `out` in one shot, refusing -- without writing anything
-    -- an archive over `MAX_ARCHIVE_BYTES`. Returns the manifest dict as written.
+    """Builds the archive and writes it to `out`, refusing -- without writing anything -- an
+    archive over `MAX_ARCHIVE_BYTES`. Returns the manifest dict as written.
+
+    Atomic: the archive is written to a temporary file beside `out` and moved into place with
+    `os.replace`, and the temporary file is removed on any failure -- a full disk, a signal, a
+    permission error -- so a failed `write_archive` never leaves a truncated file at `out`.
 
     Does not create `out`'s parent directory (a missing parent surfaces as the underlying
     `OSError`) and does not check whether `out` already exists: overwrite policy belongs to the
     CLI, which decides before ever calling this.
     """
     manifest, archive = _build(source)
-    if len(archive) > MAX_ARCHIVE_BYTES:
-        raise ArchiveTooLarge(len(archive), MAX_ARCHIVE_BYTES)
-    Path(out).write_bytes(archive)
+    out = Path(out)
+    tmp = out.with_name(out.name + ".partial")
+    try:
+        tmp.write_bytes(archive)
+        os.replace(tmp, out)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
     return manifest
