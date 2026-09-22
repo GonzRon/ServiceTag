@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.reminders.Severity
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.reminders.NotificationPermission
@@ -59,7 +60,7 @@ class MaintenanceViewModelTest {
         groups = graph.groups,
         due = DueReadModel(
             graph.schedules, graph.scheduleStates, graph.assets, graph.groups,
-            graph.definitions, graph.recomputeSchedules, graph.todayPort,
+            graph.definitions, graph.recomputeSchedules, graph.todayPort, { null },
         ),
         health = health,
         notifications = object : NotificationPermission {

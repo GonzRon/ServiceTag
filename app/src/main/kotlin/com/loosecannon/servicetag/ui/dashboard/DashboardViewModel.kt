@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
+import com.loosecannon.servicetag.core.reminders.Severity
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
@@ -17,7 +18,7 @@ import com.loosecannon.servicetag.ui.maintenance.AttentionSection
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.HealthSummary
-import com.loosecannon.servicetag.ui.maintenance.Severity
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -34,8 +35,19 @@ private const val SUBSCRIPTION_GRACE_MS = 5_000L
  * One row of the dashboard list: the asset, and — for a component a search has surfaced — the name
  * of the asset it is part of. A component row on its own would be a name with no home, and the
  * whole point of letting the search reach components is that the hit can be understood.
+ *
+ * [hasSchedule] is why the shipped "No schedule yet" line can stay honest. An asset reaches this
+ * list either because nothing is scheduled on it, or because everything that is has a status the
+ * dashboard deliberately does not draw — a `PAUSED` schedule, or a round that obliges nobody. In
+ * the second case the row must not claim there is no schedule, and §17 has no line for "its
+ * schedules are all paused", so the subtitle is **omitted**: leaving a ratified string out needs no
+ * ratification, inventing one would.
  */
-data class DashboardRow(val asset: Asset, val parentName: String? = null)
+data class DashboardRow(
+    val asset: Asset,
+    val parentName: String? = null,
+    val hasSchedule: Boolean = false,
+)
 
 /**
  * One drawn section: its identity and the rows in it, already in `rank` order. A section with no
@@ -56,10 +68,12 @@ data class AttentionGroup(val section: AttentionSection, val items: List<DueItem
  *
  * **1.2 adds [sections]**: the attention sections of D12 §10 — ATTENTION · UPCOMING · CURRENT ·
  * OUT OF SEASON, in that order, empty ones omitted — drawn from the shared due projection, so the
- * order this screen shows is the order B09's sheet and `/v1/due` use. [assets] is narrowed by one
- * rule with them: an asset that has a listed schedule is represented by that schedule's row, so
- * CURRENT's asset rows are the systems nothing is scheduled on yet, which is exactly what their
- * "No schedule yet" line already said.
+ * order this screen shows is the order B09's sheet and `/v1/due` use.
+ *
+ * **An asset appears exactly once** (controller ruling, fix round 1): in its schedule's section
+ * when any of its schedules is drawn there, and in [assets] otherwise. So an asset whose only
+ * schedule is `PAUSED`, or whose only round obliges nobody, is still on the landing screen — the
+ * dashboard omits those *sections*, never the asset.
  *
  * [dueCount] counts the store and not the view: a filter narrows what is listed, and a total that
  * moved with the filter would not be a total. A group schedule contributes **once** however many
@@ -113,9 +127,16 @@ internal fun Asset.matches(query: String): Boolean {
  * different ways — the rows and the schedule tables from live repository flows, the query and the
  * filters from the screen, the backup instant from preferences, which nothing observes.
  *
- * [refresh] is what closes that last gap. The screen calls it when it comes back into composition,
- * so an export that happened while the user was on the backup screen puts the nudge out on the next
- * emission rather than on the next process start.
+ * **The store's half and the screen's half are two flows on purpose** (master plan decision 32).
+ * Reading the store — the ranked projection, the health summary and the backup instant — is work:
+ * four `all()` reads, an occurrence derivation per group schedule, and in B10's hands a platform
+ * probe that touches the standby bucket. That happens when the tables move or the screen asks for a
+ * [refresh], and **never on a keystroke**. The query and the filters only ever *narrow* an
+ * already-ranked list, so they combine with it rather than re-deriving it.
+ *
+ * [refresh] is what closes the preference gap. The screen calls it when it comes back into
+ * composition, so an export that happened while the user was on the backup screen puts the nudge out
+ * on the next emission rather than on the next process start.
  *
  * The initial state says `needsBackup = false`: a nudge that flashes up before the preferences
  * have been read and then disappears is worse than a nudge that arrives a frame late.
@@ -133,12 +154,17 @@ class DashboardViewModel(
     private val prefs: AppPrefs,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph) : this(
+    /**
+     * [health] is a parameter rather than a read of `graph.healthSummary` so a test can hand the
+     * screen a known answer without mutating the composition root: a view model captures the
+     * summary when it is built, and a field assigned afterwards would be silently ignored.
+     */
+    constructor(graph: AppGraph, health: HealthSummary = graph.healthSummary) : this(
         graph.assets,
         graph.schedules,
         graph.scheduleStates,
         graph.dueReadModel,
-        graph.healthSummary,
+        health,
         graph.prefs,
     )
 
@@ -156,43 +182,73 @@ class DashboardViewModel(
      */
     val query: StateFlow<String> = queries.asStateFlow()
 
-    /** What the two F2 controls draw themselves from, for the same reason the box does. */
-    val filters: StateFlow<DashboardFilters> = filterChoices.asStateFlow()
+    /**
+     * Everything that has to be read to answer "what is in the store". Emits on a table change or a
+     * [refresh] and on nothing else — see the class KDoc and decision 32.
+     */
+    private data class StoreView(
+        val rows: List<Asset>,
+        val items: List<DueItem>,
+        val worstSeverity: Severity?,
+        val lastBackupAt: Long?,
+    )
 
-    val state: StateFlow<DashboardState> =
+    private val store: Flow<StoreView> =
         combine(
             assets.observeAll(),
-            // Either table moving can move a status or a section, and neither is what a row
-            // *says* — it is only the signal to re-derive. Folding the two keeps the outer
-            // `combine` inside its five-argument overload.
+            // Either schedule table moving can move a status or a section, and neither is what a
+            // row *says* — each is only the signal to re-derive.
             combine(schedules.observeAll(), states.observeAll()) { _, _ -> Unit },
             refreshes,
-            queries,
-            filterChoices,
-        ) { rows, _, _, query, chosen -> Inputs(rows, query, chosen) }
-            .map { inputs -> build(inputs) }
+        ) { rows, _, _ -> rows }
+            .map { rows ->
+                StoreView(
+                    rows = rows,
+                    items = due.items(),
+                    worstSeverity = health.worstSeverity(),
+                    lastBackupAt = prefs.lastBackupAt,
+                )
+            }
+
+    val state: StateFlow<DashboardState> =
+        combine(store, queries, filterChoices) { view, query, chosen -> build(view, query, chosen) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), DashboardState())
 
-    private data class Inputs(val rows: List<Asset>, val query: String, val chosen: DashboardFilters)
-
-    private suspend fun build(inputs: Inputs): DashboardState {
-        val rows = inputs.rows
-        val query = inputs.query
-        val chosen = inputs.chosen
-        val last = prefs.lastBackupAt
-        val active = rows.filter { it.status == AssetStatus.ACTIVE }
+    /**
+     * The screen's half: lifecycle, then the search, then the blank-query rule with §11.1's
+     * promotion exception, then F2 — over a list the projection has already ranked. Pure, and no
+     * repository or platform read in it.
+     */
+    private fun build(view: StoreView, query: String, chosen: DashboardFilters): DashboardState {
+        val active = view.rows.filter { it.status == AssetStatus.ACTIVE }
         val inService = active.filterNot { it.isRetired }
         // Parent names come from every row, not just the in-service ones: a component of a
         // retired machine is itself in service and still has to say whose component it is.
-        val byId = rows.associateBy { it.id }
+        val byId = view.rows.associateBy { it.id }
         val matching = inService.filter { it.matches(query) }
 
-        val items = due.items()
+        val items = view.items
         // §11.1's promotion rule, and decision 29's reading of "actionable": a status in ATTENTION
         // or UPCOMING, which is OVERDUE, DUE, DUE_SOON and NO_DATA in its repairable form — the
         // empty-required-set form has no section, so it is not in this set (invariant 74).
         val promoted = items.filter { it.isPromotable }.mapNotNull { it.targetAssetId }.toSet()
-        val scheduled = items.mapNotNull { it.targetAssetId }.toSet()
+
+        // F2 is applied here — after the lifecycle and the search, over rows the projection has
+        // already ranked. A filter narrows what is listed and never re-derives an order.
+        val listedDue = items
+            .filter { it.section != null }
+            .filter { it.admittedBy(query, byId) }
+            .filter { query.isNotBlank() || !it.isComponent || it.isPromotable }
+            .filter { chosen.admits(it) }
+
+        // The asset appears exactly once (controller ruling, fix round 1). The exclusion is the set
+        // of assets whose schedule is **actually drawn** above — not every asset with a schedule:
+        // a `PAUSED` one, or a round that obliges nobody, is in no section, so excluding its asset
+        // would leave it represented by nothing at all.
+        val drawn = listedDue.mapNotNull { it.targetAssetId }.toSet()
+        // Whether an asset has any listed schedule at all, which is a different question and only
+        // decides whether "No schedule yet" would be a lie.
+        val anySchedule = items.mapNotNull { it.targetAssetId }.toSet()
 
         // The list is the systems. A blank query keeps the parts on the systems they belong to
         // (#39); typing brings them back, because that is the one place a hidden part is asked
@@ -206,17 +262,15 @@ class DashboardViewModel(
             matching
         }
         val assetRows = shown
-            .filterNot { it.id.value in scheduled }
+            .filterNot { it.id.value in drawn }
             .filter { chosen.admitsAsset(it) }
-            .map { row -> DashboardRow(asset = row, parentName = row.parentAssetId?.let { byId[it]?.name }) }
-
-        // F2 is applied here — after the lifecycle and the search, over rows the projection has
-        // already ranked. A filter narrows what is listed and never re-derives an order.
-        val listedDue = items
-            .filter { it.section != null }
-            .filter { it.admittedBy(query, byId) }
-            .filter { query.isNotBlank() || !it.isComponent || it.isPromotable }
-            .filter { chosen.admits(it) }
+            .map { row ->
+                DashboardRow(
+                    asset = row,
+                    parentName = row.parentAssetId?.let { byId[it]?.name },
+                    hasSchedule = row.id.value in anySchedule,
+                )
+            }
 
         return DashboardState(
             assets = assetRows,
@@ -232,23 +286,26 @@ class DashboardViewModel(
             // noise: the offer only means something once there is something to survive the
             // phone change.
             // The nudge counts every active asset, retired included; CURRENT above excludes them.
-            needsBackup = last == null && active.isNotEmpty(),
-            lastBackupAt = last,
+            needsBackup = view.lastBackupAt == null && active.isNotEmpty(),
+            lastBackupAt = view.lastBackupAt,
             filters = chosen.copy(
                 categories = inService.map { it.category }.filter { it.isNotBlank() }.distinct().sorted(),
             ),
             dueCount = items.count { it.countsAsDue },
-            worstSeverity = health.worstSeverity(),
+            worstSeverity = view.worstSeverity,
         )
     }
 
-    /** Re-read the preferences and emit. Cheap: it is one `SharedPreferences` lookup. */
+    /**
+     * Re-read the store and emit: the preferences, the projection and the health summary. This is
+     * the screen coming back into composition, not a keystroke — decision 32's "app launch and the
+     * Health screen", never per emission.
+     */
     fun refresh() = refreshes.update { it + 1 }
 
     /**
-     * What the search box holds. Filtering is a pass over rows already in hand, so a keystroke runs
-     * no query and needs no debounce; the one cost is that the preference lookup above happens
-     * again per keystroke, which is the same single lookup [refresh] is built on.
+     * What the search box holds. Filtering is a pass over rows the store flow already produced, so
+     * a keystroke runs no query, reads no preference and needs no debounce.
      */
     fun onQueryChange(value: String) { queries.value = value }
 

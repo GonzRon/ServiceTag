@@ -46,6 +46,7 @@ class DueReadModelTest {
         definitions = graph.definitions,
         recompute = graph.recomputeSchedules,
         today = graph.todayPort,
+        snoozedUntilOf = { null },
     )
 
     /** Writes the schedule and lets the engine derive its state, exactly as a save would. */

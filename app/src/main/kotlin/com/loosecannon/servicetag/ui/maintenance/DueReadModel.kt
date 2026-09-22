@@ -115,8 +115,11 @@ data class DueItem(
  * `occurrenceOf` and for `stateOf`, both of which derive without upserting. The one write path into
  * `schedule_state` stays `rebuild`, called by the use cases.
  *
- * [snoozedUntilOf] is the seam B06's `schedule_local_delivery` port fills. It defaults to "no
- * snooze" so the projection can land before that table has a reader.
+ * [snoozedUntilOf] is the seam B06's `schedule_local_delivery` port fills, and it has **no
+ * default**: `AppGraph` passes "no snooze" explicitly today, so wiring the real reader is one
+ * visible line at one call site. A defaulted seam could be forgotten in silence — `snoozedUntil`
+ * would stay null for ever, B07's and B09's ratified "Snoozed until \<date\>" would be dead, and
+ * nothing would fail.
  */
 class DueReadModel(
     private val schedules: ScheduleRepository,
@@ -126,7 +129,7 @@ class DueReadModel(
     private val definitions: DefinitionRepository,
     private val recompute: RecomputeSchedules,
     private val today: Today,
-    private val snoozedUntilOf: suspend (ScheduleId) -> Long? = { null },
+    private val snoozedUntilOf: suspend (ScheduleId) -> Long?,
 ) {
 
     /**

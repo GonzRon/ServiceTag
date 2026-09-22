@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
+import com.loosecannon.servicetag.core.reminders.Severity
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import kotlinx.coroutines.flow.MutableStateFlow

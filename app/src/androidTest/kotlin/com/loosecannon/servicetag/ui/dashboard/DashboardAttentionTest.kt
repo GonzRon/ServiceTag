@@ -20,6 +20,7 @@ import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonBehavior
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.ValueType
+import com.loosecannon.servicetag.core.reminders.Severity
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.DefinitionCommand
@@ -32,7 +33,6 @@ import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.maintenance.HealthSummary
-import com.loosecannon.servicetag.ui.maintenance.Severity
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -146,7 +146,11 @@ class DashboardAttentionTest {
         return graph
     }
 
-    private fun draw(graph: AppGraph) {
+    /**
+     * The summary is passed to the screen rather than assigned on the graph: a view model captures
+     * it when it is built, so a field mutated afterwards would be silently ignored.
+     */
+    private fun draw(graph: AppGraph, severity: Severity? = null) {
         rule.setContent {
             ServiceTagTheme {
                 DashboardScreen(
@@ -156,6 +160,7 @@ class DashboardAttentionTest {
                     onBackup = {},
                     onSettings = {},
                     onScan = {},
+                    health = summary(severity),
                 )
             }
         }
@@ -210,7 +215,9 @@ class DashboardAttentionTest {
      * Grayscale acceptance (#5 AC 2, D12 §5, the D12 acceptance): every state on screen carries a
      * **word** of its own as well as a colour, and the words differ. With the palette removed the
      * wording plus the glyph plus the row's position is what tells the states apart, so nothing here
-     * is distinguished by colour alone: one OVERDUE row and two DUE rows, each named.
+     * is distinguished by colour alone. One row reads OVERDUE (the component's overdue check) and two
+ * read DUE (the group round, which is due today, and the meter past its threshold — a meter has no
+ * overdue degree). `awaitText` is exact-match, so the DUE count does not pick up "OVERDUE".
      */
     @Test fun everyStateOnScreenCarriesItsOwnWord() {
         draw(aStoreWithAttentionWork())
@@ -222,11 +229,61 @@ class DashboardAttentionTest {
         rule.onAllNodesWithText("OVERDUE").assertCountEquals(1)
     }
 
+    /**
+     * Blocking finding 2: the **drawn** order is D12 §10's fixed one, whichever sections are empty.
+     *
+     * The reachable case is one asset carrying an out-of-season schedule and one asset with nothing
+     * scheduled: there is no `OK` row, so CURRENT's only content is the asset list, and the old
+     * screen appended that block after the `sections` loop — drawing OUT OF SEASON, its row, and
+     * then CURRENT. The assertion is on positions in the tree, not on the view model, because the
+     * view model was right and the render was not.
+     */
+    @Test fun theDrawnSectionOrderIsFixedEvenWhenCurrentHoldsOnlyAssetRows() {
+        val graph = app.graph
+        runBlocking {
+            val blower = graph.createAsset.run(
+                AssetCommand(
+                    name = "Snowblower",
+                    category = "Yard",
+                    seasonStartMmdd = "11-01",
+                    seasonEndMmdd = "02-28",
+                ),
+            )
+            seed(
+                graph,
+                scheduleOf(
+                    id = "b08-season",
+                    assetId = blower.id.value,
+                    title = "Pre-season check",
+                    timeInterval = 3,
+                    timeUnit = RecurrenceUnit.MONTH,
+                    anchorOn = "2026-01-01",
+                    createdOn = "2026-01-01",
+                    seasonBehavior = SeasonBehavior.FOLLOW_ASSET,
+                ),
+            )
+            graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+        }
+        draw(graph)
+
+        rule.awaitText("CURRENT")
+        rule.awaitText("Mower")
+        // "OUT OF SEASON" is both the section label and the row's own status word, so every node
+        // carrying it is compared: the CURRENT heading must be above all of them.
+        val currentTop = rule.onNodeWithText("CURRENT").fetchSemanticsNode().positionInRoot.y
+        val outOfSeasonTop = rule.onAllNodesWithText("OUT OF SEASON")
+            .fetchSemanticsNodes()
+            .minOf { it.positionInRoot.y }
+        assert(currentTop < outOfSeasonTop) {
+            "CURRENT must be drawn above OUT OF SEASON: $currentTop vs $outOfSeasonTop"
+        }
+        // And the season row is still in its own section, with its ratified word.
+        rule.awaitText("Pre-season check")
+    }
+
     /** An `INFO`-only set leaves the badge off: a badge that never clears says nothing (#27). */
     @Test fun anInfoOnlyFindingLeavesTheBadgeOff() {
-        val graph = aStoreWithAttentionWork()
-        graph.healthSummary = summary(Severity.INFO)
-        draw(graph)
+        draw(aStoreWithAttentionWork(), severity = Severity.INFO)
 
         rule.awaitText("ATTENTION")
         rule.onAllNodesWithText("REMINDER FAILED").assertCountEquals(0)
@@ -234,9 +291,7 @@ class DashboardAttentionTest {
 
     /** At `WARN` it appears (#27, D3 §7.3). */
     @Test fun aWarnFindingShowsTheBadge() {
-        val graph = aStoreWithAttentionWork()
-        graph.healthSummary = summary(Severity.WARN)
-        draw(graph)
+        draw(aStoreWithAttentionWork(), severity = Severity.WARN)
 
         rule.awaitText("REMINDER FAILED")
     }
@@ -268,6 +323,7 @@ class DashboardAttentionTest {
             meterDefinitionId: String? = null,
             meterInterval: Double? = null,
             anchorMeter: Double? = null,
+            seasonBehavior: SeasonBehavior = SeasonBehavior.IGNORE,
         ): MaintenanceSchedule = MaintenanceSchedule(
             id = ScheduleId(id),
             target = ScheduleTarget.AssetTarget(AssetId(assetId)),
@@ -282,7 +338,7 @@ class DashboardAttentionTest {
             meterInterval = meterInterval,
             anchorMeter = anchorMeter,
             meterLead = null,
-            seasonBehavior = SeasonBehavior.IGNORE,
+            seasonBehavior = seasonBehavior,
             seasonReentry = null,
             seasonReentryOffsetDays = null,
             completionMode = CompletionMode.QUICK,

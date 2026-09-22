@@ -84,7 +84,7 @@ fun MaintenanceScreen(
                 actions = {
                     if (state.worstSeverity.showsBadge()) {
                         StatusBadge(
-                            label = "REMINDER FAILED",
+                            label = REMINDER_FAILED,
                             colors = LocalServiceTagSemanticColors.current.reminderFailure,
                             icon = ServiceTagIcons.NotificationsOff,
                             modifier = Modifier
@@ -137,12 +137,16 @@ fun MaintenanceScreen(
                 )
             }
 
-            MaintenanceSectionTitle(GROUPS_SECTION)
-            state.groups.forEachIndexed { index, group ->
-                if (index > 0) {
-                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            // Omitted entirely on a phone with no groups: a heading over nothing is the bare
+            // heading this file's own rule forbids, and §17.1f has no empty-state line for it.
+            if (state.groups.isNotEmpty()) {
+                MaintenanceSectionTitle(GROUPS_SECTION)
+                state.groups.forEachIndexed { index, group ->
+                    if (index > 0) {
+                        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    NavigatingRow(title = group.name, onClick = { onOpenGroup(group.id.value) })
                 }
-                NavigatingRow(title = group.name, onClick = { onOpenGroup(group.id.value) })
             }
 
             // The fourth section is one row and needs no heading of its own: the row's name *is*

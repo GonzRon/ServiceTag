@@ -6,11 +6,22 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.MainActivity
+import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
@@ -59,6 +70,20 @@ class MaintenanceShellTest {
                     anchorOn = java.time.LocalDate.now().toString(),
                 ),
             )
+            // A paused schedule: the shell lists it under Schedules and Due work omits it, which
+            // is the one row that tells the two sections apart.
+            val paused = graph.saveSchedule.run(
+                null,
+                ScheduleCommand(
+                    targetAssetId = mower.id,
+                    targetGroupId = null,
+                    title = "Winter service",
+                    timeInterval = 1,
+                    timeUnit = RecurrenceUnit.YEAR,
+                    anchorOn = java.time.LocalDate.now().toString(),
+                ),
+            )
+            graph.pauseSchedule.run(paused.id, paused = true)
             graph.saveGroup.run(
                 null,
                 GroupCommand(name = "North run", members = listOf(GroupMemberInput(assetId = head.id))),
@@ -81,9 +106,13 @@ class MaintenanceShellTest {
     }
 
     /**
-     * The four sections, and one navigation out of each: a due row and a schedule row to a
-     * schedule, a group row to its group, and the Reminders row to reminder health. Four
-     * navigations from one screen.
+     * **Four** navigations from one screen, one out of each section: a Due-work row and a
+     * Schedules-only row both to a schedule, a group row to its group, and the Reminders row to
+     * reminder health.
+     *
+     * The two schedule taps are told apart by the id each one reports, which is why the second is
+     * the **paused** schedule — it is listed under Schedules and nowhere else, so tapping it can
+     * only have come from that section. Both call the same `onOpenSchedule` seam, as they should.
      */
     @Test fun theFourSectionsEachReachSomething() {
         val record = mutableListOf<String>()
@@ -97,15 +126,102 @@ class MaintenanceShellTest {
         // A due row. The title appears twice — once under Due work, once under Schedules — so the
         // first node is taken deliberately rather than by an ambiguous single-match lookup.
         rule.onAllNodes(hasText("Blade sharpen") and hasClickAction())[0].performClick()
+        // The paused row exists only under Schedules, and it carries the ratified PAUSED word.
+        rule.awaitText("PAUSED")
+        rule.onAllNodes(hasText("Winter service") and hasClickAction())[0].performClick()
         rule.onAllNodes(hasText("North run") and hasClickAction())[0].performClick()
         rule.onNodeWithText("Reminders").performClick()
 
         rule.runOnIdle {
-            assert(record.size == 3) { "three navigations, not $record" }
+            assert(record.size == 4) { "four navigations, not $record" }
             assert(record[0].startsWith("schedule:")) { "the due row opens a schedule, not ${record[0]}" }
-            assert(record[1].startsWith("group:")) { "the group row opens a group, not ${record[1]}" }
-            assert(record[2] == "health") { "the Reminders row opens reminder health, not ${record[2]}" }
+            assert(record[1].startsWith("schedule:")) { "the schedules row opens a schedule, not ${record[1]}" }
+            assert(record[0] != record[1]) { "the two rows are different schedules: $record" }
+            assert(record[2].startsWith("group:")) { "the group row opens a group, not ${record[2]}" }
+            assert(record[3] == "health") { "the Reminders row opens reminder health, not ${record[3]}" }
         }
+    }
+
+    /**
+     * Blocking finding 1, and master plan §17.1a: a round that **obliges nobody** is drawn with no
+     * meter word, no progress line and no repair label.
+     *
+     * "NO BASELINE" is the repairable missing-meter-baseline form's word and its alone; "0 of 0
+     * complete" would read as *done*, and emptiness never means complete; and no reading repairs an
+     * empty required set. §17 ratifies no word for this state, so the row says its name and what it
+     * is on and nothing else — and it is still listed, which is what lets the owner find it.
+     */
+    @Test fun aRoundThatObligesNobodyGetsNoMeterWordNoProgressAndNoRepair() {
+        val record = mutableListOf<String>()
+        val graph = app.graph
+        runBlocking {
+            // A group with no members at all: the round's required set is empty. The schedule is
+            // written straight to the repository because `saveSchedule` refuses a group target with
+            // nobody in it (422), which is the correct refusal — this row only exists on a phone
+            // whose members were all removed after the fact.
+            graph.groups.upsert(
+                MaintenanceGroup(
+                    id = GroupId("b08-empty-group"),
+                    name = "Emptied run",
+                    description = "",
+                    archivedAt = null,
+                    createdAt = 1_000L,
+                    updatedAt = 1_000L,
+                    members = emptyList(),
+                ),
+            )
+            val schedule = MaintenanceSchedule(
+                id = ScheduleId("b08-vacuous"),
+                target = ScheduleTarget.GroupTarget(GroupId("b08-empty-group")),
+                title = "Nobody's round",
+                description = "",
+                timeInterval = 3,
+                timeUnit = RecurrenceUnit.MONTH,
+                timeBasis = TimeBasis.FIXED,
+                anchorOn = "2026-01-01",
+                leadDays = 0,
+                meterDefinitionId = null,
+                meterInterval = null,
+                anchorMeter = null,
+                meterLead = null,
+                seasonBehavior = SeasonBehavior.IGNORE,
+                seasonReentry = null,
+                seasonReentryOffsetDays = null,
+                completionMode = CompletionMode.QUICK,
+                profileId = null,
+                remindersEnabled = true,
+                status = ScheduleStatus.ACTIVE,
+                postponedDueOn = null,
+                createdAt = 1_000L,
+                updatedAt = 1_000L,
+                providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
+            )
+            graph.schedules.upsert(schedule)
+            graph.recomputeSchedules.forSchedule(schedule.id)
+        }
+        rule.setContent {
+            ServiceTagTheme {
+                MaintenanceScreen(
+                    graph = graph,
+                    onOpenSchedule = { record += "schedule:$it" },
+                    onOpenGroup = { record += "group:$it" },
+                    onReminderHealth = { record += "health" },
+                    onScanTag = {},
+                    onAddAsset = {},
+                    onLogMaintenance = {},
+                )
+            }
+        }
+
+        // It is listed, under Schedules, naming its group.
+        rule.awaitText("Nobody's round")
+        rule.awaitText("Emptied run")
+        // And it says none of the three things it cannot support.
+        rule.onAllNodesWithText("NO BASELINE").assertCountEquals(0)
+        rule.onAllNodesWithText("0 of 0 complete").assertCountEquals(0)
+        rule.onAllNodesWithText("Log meter reading").assertCountEquals(0)
+        // Nor is it in Due work: that section is omitted because it would be empty.
+        rule.onAllNodesWithText("Due work").assertCountEquals(0)
     }
 
     /**
@@ -177,11 +293,15 @@ class MaintenanceTabTest {
         rule.onNode(hasText("Assets") and hasClickAction()).assertIsDisplayed()
         rule.onNode(hasText("Maintenance") and hasClickAction()).performClick()
 
-        // The destination's own title and its four section labels. "Maintenance" now appears twice
-        // — the tab and the title — which is what the count asserts.
+        // The destination's own title: "Maintenance" now appears twice — the tab and the title —
+        // which is what the count asserts. This install is fresh, so what the destination shows is
+        // its ratified empty state and the Reminders row; the group heading is correctly absent,
+        // because a heading over nothing is a heading for nothing, and the seeded-store class
+        // asserts all four sections.
         rule.awaitText("Maintenance", count = 2)
-        rule.awaitText("Maintenance groups")
+        rule.awaitText("No maintenance schedules yet. Add one from an asset or a maintenance group.")
         rule.awaitText("Reminders")
+        rule.onAllNodesWithText("Maintenance groups").assertCountEquals(0)
 
         // Scan is still not a tab (D12 §16 correction): the third slot is Maintenance, not Scan.
         rule.onAllNodes(hasText("Scan") and hasClickAction()).assertCountEquals(0)

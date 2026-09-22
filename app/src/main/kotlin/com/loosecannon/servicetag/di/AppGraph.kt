@@ -343,6 +343,12 @@ class AppGraph(private val context: Context) {
      */
     val dueReadModel: DueReadModel = DueReadModel(
         schedules, scheduleStates, assets, groups, definitions, recomputeSchedules, today,
+        // B06's `schedule_local_delivery` is the snooze's home and B06 declares its port; this
+        // brief does not grow a second reader of a table it does not own. The parameter has no
+        // default, so wiring it is a visible one-line change here and forgetting it is not
+        // possible: `DueItem.snoozedUntil` staying null for ever would leave B07's and B09's
+        // ratified "Snoozed until <date>" dead with nothing failing.
+        snoozedUntilOf = { null },
     )
 
     /**
@@ -350,11 +356,13 @@ class AppGraph(private val context: Context) {
      * its seven findings and replaces this field; until then nothing is found, which is the honest
      * answer for a build with no check in it (master plan decision 28).
      *
-     * A `var` for the same reason the attachment seams are: the instrumented suite has no findings
-     * to provoke and needs the badge drawn against a known answer. Production never reassigns it.
+     * A `val`, deliberately. Both view models read it in their `AppGraph` constructor, so the value
+     * is captured when the view model is built and a later assignment would be silently ignored by
+     * any view model already alive. A test that needs the badge drawn against a known answer passes
+     * its own summary to the screen instead (see `DashboardScreen`'s `health` parameter), which is
+     * the seam that cannot be raced.
      */
-    @VisibleForTesting
-    var healthSummary: HealthSummary = NoHealthFindings
+    val healthSummary: HealthSummary = NoHealthFindings
 
     internal companion object {
         const val DB_NAME = "servicetag.db"

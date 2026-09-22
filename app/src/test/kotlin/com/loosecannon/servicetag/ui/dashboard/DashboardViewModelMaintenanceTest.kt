@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.reminders.Severity
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
@@ -15,7 +16,6 @@ import com.loosecannon.servicetag.ui.maintenance.AttentionSection
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.HealthSummary
 import com.loosecannon.servicetag.ui.maintenance.NoHealthFindings
-import com.loosecannon.servicetag.ui.maintenance.Severity
 import com.loosecannon.servicetag.ui.maintenance.showsBadge
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -65,7 +66,7 @@ class DashboardViewModelMaintenanceTest {
         states = graph.scheduleStates,
         due = DueReadModel(
             graph.schedules, graph.scheduleStates, graph.assets, graph.groups,
-            graph.definitions, graph.recomputeSchedules, graph.todayPort,
+            graph.definitions, graph.recomputeSchedules, graph.todayPort, { null },
         ),
         health = health,
         prefs = graph.prefs,
@@ -292,5 +293,104 @@ class DashboardViewModelMaintenanceTest {
         // And not on the prose fields, which are deliberately out of the set.
         vm.onQueryChange("impeller")
         assertEquals(emptyList<String>(), vm.state.first { it.query == "impeller" }.sections.flatMap { it.items })
+    }
+
+    /**
+     * Controller ruling, fix round 1: **an asset appears exactly once** on the dashboard — in its
+     * schedule's section when any of its schedules is drawn there, and in the asset list otherwise.
+     * An asset whose only schedule is `PAUSED` is therefore still on the landing screen: §11.1 puts
+     * a paused schedule in no *section*, and says nothing about removing the asset. Before the fix
+     * this phone drew no section, no asset row and no message at all.
+     */
+    @Test fun anAssetWhoseOnlyScheduleIsPausedIsStillOnTheDashboard() = runTest {
+        val mower = asset("Mower")
+        seed(scheduleOf("s-paused", assetId = mower.id.value, title = "Winter service", anchorOn = "2026-01-01", status = ScheduleStatus.PAUSED))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.assets.isNotEmpty() }
+        assertEquals(emptyList<AttentionSection>(), state.sections.map { it.section })
+        assertEquals(listOf("Mower"), state.assets.map { it.asset.name })
+        // It does have a schedule, so the row must not claim otherwise — the screen omits the
+        // shipped "No schedule yet" line for exactly this row.
+        assertTrue("the row knows it has a schedule", state.assets.single().hasSchedule)
+        assertEquals(0, state.dueCount)
+    }
+
+    /**
+     * The same ruling's other half, and the reason the narrowing exists at all: an asset whose
+     * schedule **is** drawn appears once, as that schedule's row, and not a second time as an asset
+     * row under the false "No schedule yet".
+     */
+    @Test fun anAssetWithADrawnScheduleAppearsOnlyAsThatScheduleSRow() = runTest {
+        val mower = asset("Mower")
+        seed(scheduleOf("s-overdue", assetId = mower.id.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.sections.isNotEmpty() }
+        assertEquals(listOf("Blade sharpen"), state.sections.single().items.map { it.title })
+        assertEquals(emptyList<String>(), state.assets.map { it.asset.name })
+    }
+
+    /**
+     * A phone whose only schedule obliges nobody is the other half of the same ruling: the row is in
+     * no section (invariant 74), so its asset stays in the asset list rather than vanishing with it.
+     */
+    @Test fun anAssetWhoseOnlyRoundObligesNobodyIsStillOnTheDashboard() = runTest {
+        val head = asset("Sprinkler 1", category = "Irrigation")
+        graph.groups.upsert(groupOf("g-empty", name = "Emptied run"))
+        seed(scheduleOf("s-empty", groupId = "g-empty", title = "Nobody's round", anchorOn = "2026-01-01"))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.assets.isNotEmpty() }
+        assertEquals(emptyList<AttentionSection>(), state.sections.map { it.section })
+        // The group's schedule is not on this asset at all, so the asset is simply unscheduled.
+        assertEquals(listOf("Sprinkler 1"), state.assets.map { it.asset.name })
+        assertFalse(state.assets.single().hasSchedule)
+        assertEquals(head.id, state.assets.single().asset.id)
+        assertEquals(0, state.dueCount)
+    }
+
+    /**
+     * Decision 32, at the seam this brief owns: the store's half — the projection and the health
+     * summary — is read when the tables or a [DashboardViewModel.refresh] move, and **not** on a
+     * keystroke. The real check reads the standby bucket, so a per-emission call would probe the
+     * platform on every character typed.
+     */
+    @Test fun aKeystrokeReadsNeitherTheProjectionNorTheHealthSummary() = runTest {
+        val mower = asset("Mower")
+        seed(scheduleOf("s-overdue", assetId = mower.id.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
+
+        var healthCalls = 0
+        val vm = viewModel(health = object : HealthSummary {
+            override suspend fun worstSeverity(): Severity? {
+                healthCalls += 1
+                return null
+            }
+        })
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.sections.isNotEmpty() }
+        val afterFirstRead = healthCalls
+
+        // Four keystrokes and a filter change: the list narrows, and the store is not read again.
+        for (typed in listOf("b", "bl", "bla", "blade")) {
+            vm.onQueryChange(typed)
+            vm.state.first { it.query == typed }
+        }
+        vm.onCategoryChange("Yard")
+        vm.state.first { it.filters.category == "Yard" }
+        assertEquals("a keystroke must not probe the platform", afterFirstRead, healthCalls)
+
+        // A refresh is the screen coming back into composition, and that does read again. The
+        // wait is on the scheduler and not on an emission: the re-read produces an equal
+        // `DashboardState`, which a `StateFlow` conflates away, so waiting for one would hang.
+        vm.refresh()
+        advanceUntilIdle()
+        assertTrue("a refresh reads the store again", healthCalls > afterFirstRead)
     }
 }

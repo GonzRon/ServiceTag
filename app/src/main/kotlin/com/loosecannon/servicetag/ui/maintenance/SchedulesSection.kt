@@ -8,7 +8,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.ui.components.QuietLine
 
 /**
@@ -42,11 +41,10 @@ fun SchedulesSection(
             DueItemRow(
                 item = item,
                 onClick = { onOpen(item) },
-                // The repair is the repairable form's alone: a missing meter baseline, which "Log
-                // meter reading" fixes. An empty required set reads `NO_DATA` too and is never
-                // offered one (invariant 74, §17.1a).
-                onRepair = onRepair?.takeIf { item.status == DueStatus.NO_DATA && !item.requiredSetEmpty }
-                    ?.let { repair -> { repair(item) } },
+                // The repair is the repairable form's alone; `DueItemRow` re-checks the same
+                // predicate, so the label cannot come back by a caller forgetting the gate
+                // (invariant 74, §17.1a).
+                onRepair = onRepair?.let { repair -> { repair(item) } },
             )
         }
     }

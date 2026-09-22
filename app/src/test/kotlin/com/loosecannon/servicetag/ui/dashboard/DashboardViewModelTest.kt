@@ -51,7 +51,7 @@ class DashboardViewModelTest {
         states = graph.scheduleStates,
         due = DueReadModel(
             graph.schedules, graph.scheduleStates, graph.assets, graph.groups,
-            graph.definitions, graph.recomputeSchedules, graph.todayPort,
+            graph.definitions, graph.recomputeSchedules, graph.todayPort, { null },
         ),
         health = NoHealthFindings,
         prefs = graph.prefs,

@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -41,15 +40,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.R
-import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.maintenance.AttentionSection
-import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueItemRow
+import com.loosecannon.servicetag.ui.maintenance.HealthSummary
+import com.loosecannon.servicetag.ui.maintenance.REMINDER_FAILED
 import com.loosecannon.servicetag.ui.maintenance.sectionLabel
 import com.loosecannon.servicetag.ui.maintenance.showsBadge
 import com.loosecannon.servicetag.ui.theme.ControlShape
@@ -82,8 +81,9 @@ fun DashboardScreen(
     onScan: () -> Unit,
     onOpenSchedule: (String) -> Unit = {},
     onReminderHealth: () -> Unit = {},
+    health: HealthSummary = graph.healthSummary,
 ) {
-    val model: DashboardViewModel = viewModel(key = "dashboard") { DashboardViewModel(graph) }
+    val model: DashboardViewModel = viewModel(key = "dashboard") { DashboardViewModel(graph, health) }
     val state by model.state.collectAsStateWithLifecycle()
     // The box draws itself from the view model's own query holder, not from `state.query` (F3): the
     // latter is a `combine`/`stateIn` round trip and a text field has to see its own keystroke back
@@ -169,16 +169,16 @@ fun DashboardScreen(
 }
 
 /**
- * The attention label the badge carries. It is D12 §5's own word for the reminder-failure state
- * (`12-visual-design-apollo-service-binder.md:274-296`, the `notifications_off` row), and strings
- * D12 carries are pre-ratified with it (spec §9.1) — the ratified list has no separate badge label.
- */
-private const val REMINDER_FAILED = "REMINDER FAILED"
-
-/**
- * The four sections in their fixed order, empty ones omitted, and CURRENT's asset rows after its
- * schedule rows. One `LazyColumn` for the lot: a section header is a row of the same list, so the
- * whole thing scrolls as one surface rather than four nested scrollers.
+ * The four sections in D12 §10's **fixed** order — ATTENTION · UPCOMING · CURRENT · OUT OF SEASON
+ * (`:706-707`) — with the empty ones omitted, and CURRENT's asset rows after its schedule rows. One
+ * `LazyColumn` for the lot: a section header is a row of the same list, so the whole thing scrolls
+ * as one surface rather than four nested scrollers.
+ *
+ * The loop is over `AttentionSection.entries` and not over `state.sections`, so a header can only
+ * ever appear at its own ordinal position. Iterating the state's list and appending CURRENT
+ * afterwards — which is what this did before fix round 1 — drew CURRENT *after* OUT OF SEASON
+ * whenever there was no `OK` schedule row but there were assets with nothing scheduled, which is
+ * the one thing D12 §10 calls fixed.
  */
 @Composable
 private fun AttentionList(
@@ -187,55 +187,37 @@ private fun AttentionList(
     onOpenSchedule: (String) -> Unit,
 ) {
     LazyColumn {
-        state.sections.forEach { group ->
-            item(key = "header-${group.section.name}") {
+        AttentionSection.entries.forEach { section ->
+            val rows = state.sections.firstOrNull { it.section == section }?.items.orEmpty()
+            // CURRENT is also where the systems with nothing the dashboard draws live, after its
+            // own OK rows — so it has content whenever either half does.
+            val assetsHere = if (section == AttentionSection.CURRENT) state.assets else emptyList()
+            if (rows.isEmpty() && assetsHere.isEmpty()) return@forEach
+
+            item(key = "header-${section.name}") {
                 SectionHeader(
-                    title = sectionLabel(group.section),
+                    title = sectionLabel(section),
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
             }
-            items(group.items.size, key = { index -> group.items[index].scheduleId.value }) { index ->
-                val item = group.items[index]
+            items(rows.size, key = { index -> rows[index].scheduleId.value }) { index ->
+                val item = rows[index]
                 DueItemRow(
                     item = item,
                     onClick = { onOpenSchedule(item.scheduleId.value) },
                     // The repair is offered only by the repairable form: a missing meter baseline,
                     // which "Log meter reading" fixes. An empty required set gets no label at all,
                     // and it is not in a section to be offered one (invariant 74, §17.1a).
-                    onRepair = if (item.isRepairableNoData) {
-                        { onOpenSchedule(item.scheduleId.value) }
-                    } else {
-                        null
-                    },
+                    onRepair = { onOpenSchedule(item.scheduleId.value) },
                 )
                 RowRule()
             }
-            // CURRENT is also where the systems with nothing scheduled live, after the OK rows.
-            if (group.section == AttentionSection.CURRENT) {
-                currentAssets(state, onOpenAsset)
+            items(assetsHere.size, key = { index -> assetsHere[index].asset.id.value }) { index ->
+                val row = assetsHere[index]
+                CurrentRow(row = row, onClick = { onOpenAsset(row.asset.id.value) })
+                RowRule()
             }
         }
-        // No CURRENT section at all, and still assets to list: the header has to come from here.
-        if (state.assets.isNotEmpty() && state.sections.none { it.section == AttentionSection.CURRENT }) {
-            item(key = "header-CURRENT") {
-                SectionHeader(
-                    title = sectionLabel(AttentionSection.CURRENT),
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
-            currentAssets(state, onOpenAsset)
-        }
-    }
-}
-
-private fun LazyListScope.currentAssets(
-    state: DashboardState,
-    onOpenAsset: (String) -> Unit,
-) {
-    items(state.assets.size, key = { index -> state.assets[index].asset.id.value }) { index ->
-        val row = state.assets[index]
-        CurrentRow(row = row, onClick = { onOpenAsset(row.asset.id.value) })
-        RowRule()
     }
 }
 
@@ -243,14 +225,6 @@ private fun LazyListScope.currentAssets(
 private fun RowRule() {
     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
 }
-
-/**
- * Whether this row is the **repairable** `NO_DATA` — a missing meter baseline, which is what "Log
- * meter reading" repairs. The empty-required-set form reads `NO_DATA` too and is never offered a
- * repair, which is why the flag and not the status is the question asked here.
- */
-private val DueItem.isRepairableNoData: Boolean
-    get() = status == DueStatus.NO_DATA && !requiredSetEmpty
 
 /**
  * The quick filter (#39). An `OutlinedTextField`, not a Material 3 `SearchBar`: a `SearchBar`
@@ -373,7 +347,12 @@ private fun CurrentRow(row: DashboardRow, onClick: () -> Unit) {
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            QuietLine(row.parentName?.let { parent -> "Part of $parent" } ?: "No schedule yet")
+            // A component says whose part it is. An asset with nothing scheduled says so. An asset
+            // that *has* a schedule but none the dashboard draws — every one of them paused, or a
+            // round that obliges nobody — says neither: "No schedule yet" would be false, and §17
+            // has no line for the true thing, so the subtitle is omitted rather than drafted.
+            row.parentName?.let { parent -> QuietLine("Part of $parent") }
+                ?: if (!row.hasSchedule) QuietLine("No schedule yet") else Unit
         }
         Icon(
             imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
