@@ -25,6 +25,7 @@ import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
@@ -86,16 +87,27 @@ import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
+import com.loosecannon.servicetag.data.room.RoomScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.SharedPrefsStore
+import com.loosecannon.servicetag.reminders.AndroidDigestAlarm
 import com.loosecannon.servicetag.reminders.AndroidNotificationPermission
 import com.loosecannon.servicetag.reminders.AndroidPlatformState
+import com.loosecannon.servicetag.reminders.AndroidReminderNotifications
+import com.loosecannon.servicetag.reminders.DigestAlarm
+import com.loosecannon.servicetag.reminders.LocalReminderProvider
+import com.loosecannon.servicetag.reminders.NonceStore
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.reminders.PlatformState
+import com.loosecannon.servicetag.reminders.ReminderNotifications
+import com.loosecannon.servicetag.reminders.ReminderRuns
+import com.loosecannon.servicetag.reminders.ReminderSnooze
+import com.loosecannon.servicetag.reminders.ScheduleDeliveryFacts
+import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.HealthSummary
 import com.loosecannon.servicetag.ui.maintenance.NoHealthFindings
@@ -154,9 +166,9 @@ class AppGraph(private val context: Context) {
     )
 
     /**
-     * The desired state of every reminder provider's list, derived from schedule state alone. **No
-     * provider is registered here** — the one that delivers arrives with its own brief and
-     * registers itself; what is here is the question every provider is asked.
+     * The desired state of every reminder provider's list, derived from schedule state alone. The
+     * one provider that delivers is [localReminderProvider] below; what is here is the question
+     * every provider is asked.
      */
     val buildReminderSubjects: BuildReminderSubjects = BuildReminderSubjects(
         schedules, scheduleStates, groups, assets, recomputeSchedules,
@@ -166,6 +178,49 @@ class AppGraph(private val context: Context) {
     // #24 — the platform-ownership seams B06, B07, B10 and B14 compile against (master plan §12).
     val platformState: PlatformState = AndroidPlatformState(context)
     val notificationPermission: NotificationPermission = AndroidNotificationPermission(context)
+
+    // 1.2 (#21) — the local delivery path: device-local bookkeeping, the provider, and the one run
+    // every entry point shares.
+    /** Never exported and never merged (invariants 64, 65). Losing it costs one repeated notification. */
+    val scheduleLocalDelivery: ScheduleLocalDeliveryRepository =
+        RoomScheduleLocalDeliveryRepository(db.scheduleLocalDeliveryDao())
+
+    /**
+     * Derived state as a **read**, so the delivery path cannot reach the one write method the
+     * recompute owns (invariant 17).
+     */
+    val scheduleStateReader: ScheduleStateReader = ScheduleStateReader { scheduleStates.get(it) }
+
+    val digestAlarm: DigestAlarm = AndroidDigestAlarm(context.applicationContext, prefs, today, clock)
+    val reminderNotifications: ReminderNotifications =
+        AndroidReminderNotifications(context.applicationContext)
+
+    val localReminderProvider: LocalReminderProvider = LocalReminderProvider(
+        facts = ScheduleDeliveryFacts(schedules, scheduleStateReader, assets, groups, definitions, today),
+        delivery = scheduleLocalDelivery,
+        notifications = reminderNotifications,
+        permission = notificationPermission,
+        platform = platformState,
+        alarm = digestAlarm,
+        prefs = prefs,
+        clock = clock,
+    )
+
+    /** B07's "Snooze 1 day" and B09's "Snooze"; and the nonce column's single owner (D-21). */
+    val reminderSnooze: ReminderSnooze = ReminderSnooze(scheduleLocalDelivery, clock)
+    val nonceStore: NonceStore = NonceStore(scheduleLocalDelivery, ids, clock)
+
+    /**
+     * The one run behind the four platform receivers, the digest alarm's receiver and the backstop
+     * worker. `ServiceTagApp.onCreate` assigns it to both dispatch seams, synchronously.
+     */
+    val reminderRuns: ReminderRuns = ReminderRuns(
+        rebuildAll = { recomputeSchedules.all() },
+        subjectsFor = { provider, on -> buildReminderSubjects.forProvider(provider, on) },
+        provider = localReminderProvider,
+        alarm = digestAlarm,
+        today = today,
+    )
 
     /**
      * Swapped only by the instrumented suite, which has no SAF picker to drive and no persisted

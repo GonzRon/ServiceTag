@@ -55,8 +55,9 @@ internal fun nextDigestAt(nowMillis: Long, today: LocalDate, hour: Int, zone: Zo
 }
 
 /**
- * The Android-backed [DigestAlarm]: one inexact `setAndAllowWhileIdle(RTC_WAKEUP)` and nothing
- * else.
+ * The Android-backed [DigestAlarm]: one inexact allow-while-idle `RTC_WAKEUP` alarm and nothing
+ * else. (The platform call is named once, in [arm], so the gate's anchored grep finds a single
+ * site — a comment that spelled it out would match too.)
  *
  * **No exact-alarm API appears anywhere in this app** (invariant 52, ledger A12): "due today" is a
  * date, `SCHEDULE_EXACT_ALARM` is denied by default on API 34+ and `USE_EXACT_ALARM` is restricted

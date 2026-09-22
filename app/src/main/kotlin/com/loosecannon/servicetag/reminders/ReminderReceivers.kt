@@ -176,7 +176,7 @@ class ReminderRuns(
         alarm.arm()
     }
 
-    /** `setAndAllowWhileIdle` is one shot: handling the fire is what arms tomorrow's. */
+    /** The inexact alarm is one shot: handling the fire is what arms tomorrow's. */
     override suspend fun onDigestFired() {
         reconcileAll()
         alarm.arm()

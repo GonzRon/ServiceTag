@@ -182,6 +182,55 @@ interface ScheduleStateRepository {
 }
 
 /**
+ * One schedule's **device-local delivery bookkeeping**: the snooze instant, the two facts the
+ * digest policy needs to avoid nagging, and the current notification's nonce (spec §2.5, D-13,
+ * D-21).
+ *
+ * Nothing here is canonical, exported or merged (invariants 64, 65). Losing all of it costs at most
+ * one repeated notification, which is exactly why all four facts belong together in one table a
+ * backup never touches, and why every reader must behave correctly — at worst noisily — when the
+ * row is **absent**. In particular an absent row is **not** a snooze: null [snoozedUntilAt] means
+ * nothing is suppressed, and reading a missing row as "snoozed" would make a wiped table silence
+ * the app.
+ *
+ * The row lives in `:core` rather than in the delivering module because the port does, and the port
+ * does because two briefs consume it — the quick actions check and consume the nonce, and the
+ * health screen reports on it — while only one writes it.
+ *
+ * The **model** is here beside the port, not in `core/model/`, because it is not domain data: no
+ * use case reads it, no invariant is stated over it, and a file in `core/model/` is by convention a
+ * thing a backup carries.
+ */
+data class ScheduleLocalDelivery(
+    val scheduleId: ScheduleId,
+    /** D-13: the instant a snooze runs until. Suppresses this provider's delivery and nothing else. */
+    val snoozedUntilAt: Long?,
+    /** D-5: when this subject was last announced, which drives the 3-day overdue re-notification. */
+    val lastNotifiedAt: Long?,
+    /** D-5: whether the one `DUE SOON` announcement for the current entry has been made. */
+    val firstEntrySeen: Boolean,
+    /** D-21: the current notification's nonce, or null when nothing is standing to act on. */
+    val actionNonce: String?,
+    val nonceIssuedAt: Long?,
+    val updatedAt: Long,
+)
+
+/**
+ * 1.2. The delivery bookkeeping above, as a port.
+ *
+ * `upsert` replaces the whole row: there is no per-column setter, because the four facts are
+ * written together by one decision and a partial write is how a snooze survives a reconcile that
+ * cleared the nonce it belonged to. `deleteAll` is what the replace import's wipe and the
+ * rebuildable-from-nothing proof both call.
+ */
+interface ScheduleLocalDeliveryRepository {
+    suspend fun get(id: ScheduleId): ScheduleLocalDelivery?
+    suspend fun upsert(row: ScheduleLocalDelivery)
+    suspend fun all(): List<ScheduleLocalDelivery>
+    suspend fun deleteAll()
+}
+
+/**
  * 1.2. **Insert and query only.** Every other port here offers `upsert`; copying that shape would
  * hand a caller the amendment the closure fact forbids, so this one does not have it — and it has
  * no `delete` and no `deleteAll` either. A closure row is immutable: it is written once and leaves
