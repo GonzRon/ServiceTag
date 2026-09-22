@@ -4,11 +4,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRowScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -39,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,6 +75,7 @@ import com.loosecannon.servicetag.ui.components.IdentityPlate
 import com.loosecannon.servicetag.ui.components.InstrumentList
 import com.loosecannon.servicetag.ui.components.InstrumentRow
 import com.loosecannon.servicetag.ui.components.LabelValue
+import com.loosecannon.servicetag.ui.components.LedgerDateColumnWidth
 import com.loosecannon.servicetag.ui.components.LedgerEntry
 import com.loosecannon.servicetag.ui.components.LedgerList
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
@@ -698,27 +702,41 @@ internal fun TagsSection(tags: List<TagBinding>, onEditLabel: (TagId, String?) -
         val tag = tags[index]
         val stamped = tag.writtenAt ?: tag.createdAt
         val (day, month, year) = stamped.asLedgerDate()
-        Column(modifier = Modifier.fillMaxWidth().clickable { editing = tag }) {
-            LedgerEntry(
-                day = day,
-                month = month,
-                year = year,
-                title = if (tag.writtenAt != null) "Tag written" else "Tag bound",
-                detail = tag.identityLine(),
-                badge = if (tag.status != TagStatus.ACTIVE) {
-                    {
-                        StatusBadge(
-                            label = tag.status.name.lowercase().replaceFirstChar { it.uppercase() },
-                            colors = ServiceTagTheme.semanticColors.seasonInactive,
-                        )
-                    }
-                } else {
-                    null
-                },
-            )
-            tag.placementOrNull()?.let { placement ->
-                TagPlacementCaption(placement, modifier = Modifier.padding(start = 64.dp, bottom = 8.dp))
+        // Review fix round 1, nit 7: a trailing edit glyph is the tappable row's own affordance —
+        // reusing the shipped word "Edit" already used for the asset-level action above, not a
+        // new string.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().clickable { editing = tag },
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                LedgerEntry(
+                    day = day,
+                    month = month,
+                    year = year,
+                    title = if (tag.writtenAt != null) "Tag written" else "Tag bound",
+                    detail = tag.identityLine(),
+                    badge = if (tag.status != TagStatus.ACTIVE) {
+                        {
+                            StatusBadge(
+                                label = tag.status.name.lowercase().replaceFirstChar { it.uppercase() },
+                                colors = ServiceTagTheme.semanticColors.seasonInactive,
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                )
+                tag.placementOrNull()?.let { placement ->
+                    TagPlacementCaption(placement, modifier = Modifier.padding(start = LedgerDateColumnWidth, bottom = 8.dp))
+                }
             }
+            Icon(
+                imageVector = Icons.Outlined.Edit,
+                contentDescription = "Edit",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
     editing?.let { tag ->
@@ -750,6 +768,8 @@ private fun TagPlacementCaption(value: String, modifier: Modifier = Modifier) {
 @Composable
 private fun TagPlacementDialog(tag: TagBinding, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
     var text by remember(tag.id) { mutableStateOf(tag.label.orEmpty()) }
+    // Review fix round 1, nit 6: the ratified caption appears once, as the dialog's title — the
+    // field itself carries no second "Tag placement" label.
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Tag placement") },
@@ -757,7 +777,6 @@ private fun TagPlacementDialog(tag: TagBinding, onDismiss: () -> Unit, onSave: (
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
-                label = { Text("Tag placement") },
                 singleLine = true,
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth(),

@@ -25,6 +25,7 @@ import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.usecase.ApplyResult
 import com.loosecannon.servicetag.core.usecase.ApplyTemplate
 import com.loosecannon.servicetag.core.usecase.ArchiveAsset
@@ -228,6 +229,8 @@ class AssetDetailViewModel(
     private val retireAsset: RetireAsset,
     private val deleteAsset: DeleteAsset,
     private val applyTemplate: ApplyTemplate,
+    /** Review fix round 1, finding 3: `editTagLabel`'s read-modify-write needs the same transaction every other tag write goes through. */
+    private val uow: UnitOfWork,
     private val clock: Clock,
     private val id: AssetId,
 ) : ViewModel() {
@@ -236,7 +239,7 @@ class AssetDetailViewModel(
         graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
-        graph.applyTemplate, graph.clock, AssetId(id),
+        graph.applyTemplate, graph.uow, graph.clock, AssetId(id),
     )
 
     /** The zone the season window and the warranty date are read in: the user's calendar day. */
@@ -407,13 +410,20 @@ class AssetDetailViewModel(
      * tag-provisioning or tag-binding write paths, so no NFC payload is re-encoded and no binding
      * field moves. A blank value clears the placement rather than being refused (an ordinary
      * one-tag asset has no placement to type).
+     *
+     * The read and the write are one [UnitOfWork.write] transaction (review fix round 1,
+     * finding 3): every other read-modify-write of a tag row in this codebase already is one —
+     * a scan's `lastScannedAt` stamp can otherwise interleave between this function's read and
+     * its write and be lost when this edit's stale copy is written back.
      */
     fun editTagLabel(id: TagId, label: String?) {
         viewModelScope.launch {
-            val row = tags.get(id) ?: return@launch
-            val trimmed = label?.trim()?.takeIf { it.isNotEmpty() }
-            if (trimmed == row.label) return@launch
-            tags.upsert(row.copy(label = trimmed, updatedAt = clock.nowMillis()))
+            uow.write {
+                val row = tags.get(id) ?: return@write
+                val trimmed = label?.trim()?.takeIf { it.isNotEmpty() }
+                if (trimmed == row.label) return@write
+                tags.upsert(row.copy(label = trimmed, updatedAt = clock.nowMillis()))
+            }
         }
     }
 

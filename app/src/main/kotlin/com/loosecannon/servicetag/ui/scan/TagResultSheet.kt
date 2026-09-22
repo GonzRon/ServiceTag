@@ -136,6 +136,9 @@ fun TagResultSheet(
                     sentence = result.asset.name,
                     identifier = result.tag.identityLine(),
                 ) {
+                    // #49 AC 3, review fix round 1 finding 4: spec §2.7 says "the scan result"
+                    // without naming a branch, so the ambient path surfaces the placement too.
+                    result.tag.placementOrNull()?.let { PlacementLine(it) }
                     QuietLine("Opening asset…")
                 }
             }

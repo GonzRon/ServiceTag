@@ -62,7 +62,7 @@ class TagPlacementTest {
         graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
-        graph.applyTemplate, graph.clock, id,
+        graph.applyTemplate, graph.uow, graph.clock, id,
     )
 
     // --- 1: two tags, one asset ------------------------------------------------------------

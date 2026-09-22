@@ -15,9 +15,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
+ * The date column's width — also the left indent a row's own content (such as a `TagPlacement`
+ * caption in the asset detail's tags section) lines up under, so the two never drift apart as two
+ * independent `64.dp` literals (review fix round 1, nit 5).
+ */
+val LedgerDateColumnWidth = 64.dp
+
+/**
  * One row of the chronological service record of D12 §8 — a maintenance record, not an activity
- * feed. The date anchors a 64dp left column; the rule between entries belongs to [LedgerList]
- * (G1 §1.1 "Ledger": 1dp `outlineVariant` between entries, none around the block).
+ * feed. The date anchors a [LedgerDateColumnWidth] left column; the rule between entries belongs
+ * to [LedgerList] (G1 §1.1 "Ledger": 1dp `outlineVariant` between entries, none around the block).
  */
 @Composable
 fun LedgerEntry(
@@ -31,7 +38,7 @@ fun LedgerEntry(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier.padding(vertical = 10.dp)) {
-        Column(modifier = Modifier.width(64.dp)) {
+        Column(modifier = Modifier.width(LedgerDateColumnWidth)) {
             Text(
                 text = "$day ${month.uppercase()}",
                 style = MaterialTheme.typography.labelMedium,

@@ -102,6 +102,44 @@ class TagWriteControllerTest {
         assertNotNull("an empty tag must not raise a question", theRow().writtenAt)
     }
 
+    // --- #49, review fix round 1 finding 1: the placement the screen types must reach the row ---
+
+    /** A placement typed via `setLabel` before the tap is carried into the row `begin` provisions. */
+    @Test fun aPlacementSetBeforeTheTapIsCarriedIntoTheProvisionedRow() = runTest(dispatcher) {
+        controller = controller()
+        controller.setLabel("Indoor head")
+        io.inspection = writable137
+        io.writeResult = WriteResult.Written(intended, 95, locked = false)
+
+        controller.onTag(handle); advanceUntilIdle()
+
+        assertEquals("Indoor head", theRow().label)
+    }
+
+    /** `ProvisionTag`'s own blank-to-null normalisation is what a blank placement relies on. */
+    @Test fun aBlankPlacementLeavesTheRowsLabelNull() = runTest(dispatcher) {
+        controller = controller()
+        controller.setLabel("   ")
+        io.inspection = writable137
+        io.writeResult = WriteResult.Written(intended, 95, locked = false)
+
+        controller.onTag(handle); advanceUntilIdle()
+
+        assertNull(theRow().label)
+    }
+
+    /** Finding 2's fix: the field must stop accepting input once the row is provisioned. */
+    @Test fun placementLocksTheInstantTheRowIsProvisioned() = runTest(dispatcher) {
+        controller = controller()
+        assertEquals(false, controller.placementLocked.value)
+
+        io.inspection = writable137
+        io.writeResult = WriteResult.Written(intended, 95, locked = false)
+        controller.onTag(handle); advanceUntilIdle()
+
+        assertEquals(true, controller.placementLocked.value)
+    }
+
     @Test fun foreignContentAsksFirstAndKeepItWritesNothing() = runTest(dispatcher) {
         controller = controller()
         io.inspection = foreign137

@@ -80,6 +80,15 @@ class TagWriteController(
     /** Called by the screen as the owner types the placement, before the row is provisioned. */
     fun setLabel(value: String?) { currentLabel = value }
 
+    private val _placementLocked = MutableStateFlow(false)
+
+    /**
+     * True once [pending] is provisioned, so [currentLabel] is already baked into the row and any
+     * further [setLabel] call is inert (review fix round 1, finding 2). The screen reads this to
+     * disable the placement field rather than accepting typing it silently discards.
+     */
+    val placementLocked: StateFlow<Boolean> = _placementLocked.asStateFlow()
+
     private val _state = MutableStateFlow<WriteState>(InitialState)
     val state: StateFlow<WriteState> = _state.asStateFlow()
 
@@ -142,7 +151,10 @@ class TagWriteController(
             WriteRoute.ReadOnly -> { _state.value = WriteState.Error("This tag is read-only (locked). Nothing written."); return false }
             is WriteRoute.Writable -> r
         }
-        val row = pending ?: provisionTag.begin(target, currentLabel).also { pending = it }
+        val row = pending ?: provisionTag.begin(target, currentLabel).also {
+            pending = it
+            _placementLocked.value = true
+        }
         val intended = codec.encodeV1(row.id)
         when (val v = writable.fit(NdefSize.serialisedSize(intended))) {
             is CapacityVerdict.TooSmall -> {

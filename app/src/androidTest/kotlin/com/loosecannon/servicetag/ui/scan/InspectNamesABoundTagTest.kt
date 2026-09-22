@@ -174,6 +174,43 @@ class InspectNamesABoundTagTest {
         assertEquals(listOf(tubId), opened)
         // No action was offered, because none was needed.
         rule.onAllNodesWithText("Open asset").assertCountEquals(0)
+        // This tag carries no placement, so no "Tag placement" caption either (#49 AC 3).
+        rule.onAllNodesWithText("Tag placement").assertCountEquals(0)
+    }
+
+    /**
+     * #49 AC 3, review fix round 1 finding 4: spec §2.7 says "the scan result surfaces the
+     * placement label when present" without naming a branch, so the ambient path — which is what
+     * the ordinary tap-a-tag-anywhere trampoline actually lands on — shows it too, not only the
+     * deliberate-inspect branch `InspectNamesABoundTagTest.aBoundTagIsNamedAndOpensOnlyWhenTheOwnerTapsIt`
+     * already covers.
+     */
+    @Test fun theAmbientSheetShowsThePlacementWhenTheTagHasOne() {
+        val graph = app.graph
+        val tubId = runBlocking {
+            val tub = graph.createAsset.run("Hot tub", "Water")
+            graph.bindTag.run(PayloadFormat.V1, TAG_KEY, TagTarget.AssetTarget(tub.id), "Poolside shed")
+            tub.id.value
+        }
+
+        rule.setContent {
+            ServiceTagTheme {
+                TagResultSheet(
+                    graph = graph,
+                    format = PayloadFormat.V1.name,
+                    key = TAG_KEY,
+                    onDismiss = {},
+                    onWriteTag = { error("a bound tag never writes a tag") },
+                    onOpenAsset = { id -> opened += id },
+                    onNewAsset = { error("a bound tag never makes an asset") },
+                )
+            }
+        }
+
+        rule.waitUntil(SETTLE_MILLIS) { opened.isNotEmpty() }
+        assertEquals(listOf(tubId), opened)
+        rule.onNodeWithText("Tag placement").assertIsDisplayed()
+        rule.onNodeWithText("Poolside shed").assertIsDisplayed()
     }
 
     /** A handle the test can build; [ReadsABoundTag] only echoes its `uid` back. */

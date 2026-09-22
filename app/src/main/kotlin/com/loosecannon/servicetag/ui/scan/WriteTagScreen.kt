@@ -68,6 +68,7 @@ fun WriteTagScreen(
     val lock by model.lock.collectAsStateWithLifecycle()
     val targetName by model.targetName.collectAsStateWithLifecycle()
     val placement by model.placement.collectAsStateWithLifecycle()
+    val placementLocked by model.placementLocked.collectAsStateWithLifecycle()
 
     // The activity owns the one reader-mode session (#37, R1): arriving here from the inspect
     // screen is a change of sink, not a hand-over of NFC, so nothing can land between the two.
@@ -90,7 +91,7 @@ fun WriteTagScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             TargetLine(targetName)
-            PlacementField(value = placement, onValueChange = model::setPlacement)
+            PlacementField(value = placement, onValueChange = model::setPlacement, enabled = !placementLocked)
             WriteStatus(state, targetName, onDone)
             NfcAvailabilityLine(readerMode)
             LockSwitch(
@@ -143,14 +144,20 @@ private fun TargetLine(targetName: String) {
  * before the first tap, it is carried into the row [TagWriteController] provisions as the new
  * row's placement — the same "Tag placement" value the asset detail's tags section later lists
  * and lets the owner edit in place.
+ *
+ * [enabled] goes false the instant the row is provisioned (review fix round 1, finding 2): the
+ * row is provisioned once and reused across retries, so text typed after that tap would otherwise
+ * be silently discarded. Disabling the field is the fix, not writing the label a second time —
+ * that would be the second write path the brief's fourth surface rules out.
  */
 @Composable
-private fun PlacementField(value: String, onValueChange: (String) -> Unit) {
+private fun PlacementField(value: String, onValueChange: (String) -> Unit, enabled: Boolean) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text("Tag placement") },
         singleLine = true,
+        enabled = enabled,
         shape = ControlShape,
         modifier = Modifier.fillMaxWidth(),
     )

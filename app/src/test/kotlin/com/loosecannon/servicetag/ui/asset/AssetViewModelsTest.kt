@@ -71,12 +71,12 @@ class AssetViewModelsTest {
         updatedAt = 1L,
     )
 
-    /** The detail model takes twelve collaborators; every test wants the same twelve off the graph. */
+    /** The detail model takes thirteen collaborators; every test wants the same thirteen off the graph. */
     private fun detailModel(id: AssetId) = AssetDetailViewModel(
         graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
-        graph.applyTemplate, graph.clock, id,
+        graph.applyTemplate, graph.uow, graph.clock, id,
     )
 
     /**

@@ -287,6 +287,9 @@ class WriteTagViewModel(
         controller.setLabel(value)
     }
 
+    /** Review fix round 1, finding 2: once true, the field the screen draws must stop accepting input. */
+    val placementLocked: StateFlow<Boolean> = controller.placementLocked
+
     init {
         viewModelScope.launch {
             val named = when (target) {
