@@ -110,6 +110,7 @@ class StatusVocabularyTest {
         meterUnit = null,
         lastCompletedOn = null,
         completionMode = CompletionMode.QUICK,
+        remindersEnabled = true,
         membersRequired = null,
         membersComplete = null,
         snoozedUntil = snoozedUntil,

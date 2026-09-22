@@ -75,9 +75,11 @@ fun MaintenanceSheet(
     var postponing by remember { mutableStateOf<ScheduleId?>(null) }
 
     // Coming back from a profile form is how the sequential run advances, so the sheet re-derives
-    // on every resume rather than trusting the list it drew before it left.
+    // on every resume rather than trusting the list it drew before it left — but not on the
+    // **first** one, which the view model's own `init` has already done (nit 14).
+    var resumed by remember { mutableStateOf(false) }
     LifecycleResumeEffect(model) {
-        model.refresh()
+        if (resumed) model.refresh() else resumed = true
         onPauseOrDispose { }
     }
 

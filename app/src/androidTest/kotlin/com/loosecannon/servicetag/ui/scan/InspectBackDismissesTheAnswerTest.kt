@@ -91,7 +91,6 @@ class InspectBackDismissesTheAnswerTest {
                         graph = graph,
                         readerMode = readerMode,
                         onOpenAsset = { error("no answer here opens an asset") },
-                        onOpenMaintenance = { _, _ -> error("no answer here opens the sheet") },
                         onNewAsset = { error("no answer here makes an asset") },
                         onWriteTag = { error("no answer here writes a tag") },
                         onBack = { screenBacks++ },

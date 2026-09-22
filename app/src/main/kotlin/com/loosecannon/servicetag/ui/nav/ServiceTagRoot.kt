@@ -30,8 +30,8 @@ import com.loosecannon.servicetag.ui.journal.EventEntryScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupDetailScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupEditScreen
 import com.loosecannon.servicetag.ui.maintenance.LogMaintenancePicker
-import com.loosecannon.servicetag.ui.maintenance.MaintenanceSheet
 import com.loosecannon.servicetag.ui.maintenance.MaintenanceScreen
+import com.loosecannon.servicetag.ui.maintenance.MaintenanceSheet
 import com.loosecannon.servicetag.ui.maintenance.ScheduleDetailScreen
 import com.loosecannon.servicetag.ui.maintenance.ScheduleEditScreen
 import com.loosecannon.servicetag.ui.nfc.ReaderMode
@@ -277,12 +277,6 @@ fun ServiceTagRoot(
                         // navigates, exactly as the pushed sheet's entry did; the entry itself
                         // stays for the ambient trampoline, which is the only thing that uses it.
                         onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
-                        // #50: the completion sheet opens *before* the ordinary detail path, and
-                        // only for a `Resolution.OpenAsset` that has actionable work. It is a
-                        // plain push, so one back press returns to the inspector.
-                        onOpenMaintenance = { assetId, tagId ->
-                            backStack.add(Route.MaintenanceSheet(assetId, tagId))
-                        },
                         onNewAsset = { backStack.add(Route.AssetEdit(null)) },
                         onWriteTag = { backStack.add(it) },
                         onBack = { backStack.removeLastOrNull() },

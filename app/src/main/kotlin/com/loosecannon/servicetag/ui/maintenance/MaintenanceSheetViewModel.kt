@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.AssetId
@@ -7,11 +8,13 @@ import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.schedule.DueStatus
+import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.journal.formatNumber
@@ -83,6 +86,23 @@ fun interface ReminderReconcile {
 }
 
 /**
+ * The current round of a group-targeted schedule, **derived and read**.
+ *
+ * The third one-method seam, in the shape of the other two, and the tool the brief already grants
+ * ("**From B03:** `GroupOccurrence`, `CompleteGroupMembers`"). It is needed because
+ * `DueReadModel.forAsset` returns a deliberate **superset** on the group half — its own KDoc says
+ * it reads every group the Asset has ever held a window in and "only has to be certain it misses
+ * nothing" — and `requiredSetEmpty` answers "does this round oblige *nobody*", never "does it
+ * oblige *this* Asset" (review blocking 2).
+ *
+ * `RecomputeSchedules.occurrenceOf` derives without upserting, so this stays a pure read and the
+ * write-free gate is intact.
+ */
+fun interface ScanRoundMembership {
+    suspend fun roundFor(scheduleId: ScheduleId): GroupOccurrence?
+}
+
+/**
  * Whether a scan of this Asset has work the completion sheet would offer.
  *
  * The **routing** half of D-18a, asked by the scan path before it navigates: no actionable work
@@ -104,9 +124,15 @@ fun interface ScanSheetOffer {
  * reads — a round that obliges nobody is not work to offer somebody standing at the equipment
  * (invariant 74). `DUE_SOON` is not actionable and rides along only as a passenger; `OK`,
  * `INACTIVE_SEASON` and `PAUSED` never appear.
+ *
+ * A **reminders-disabled** schedule never appears either: the D-18a row reads "an archived or
+ * **reminders-disabled** schedule | never", and the archived half is already gone by
+ * `listedForDue()` (review blocking 3 — the earlier reading of "disabled" as PAUSED was overturned,
+ * because PAUSED is excluded by the clause immediately before it and that reading left the second
+ * clause with no content).
  */
 val DueItem.actionableOnScanSheet: Boolean
-    get() = !requiredSetEmpty &&
+    get() = !requiredSetEmpty && remindersEnabled &&
         (status == DueStatus.DUE || status == DueStatus.OVERDUE || isRepairableNoData)
 
 /**
@@ -125,9 +151,42 @@ val DueItem.actionableOnScanSheet: Boolean
 fun scanSheetItems(items: List<DueItem>): List<DueItem> {
     if (items.none { it.actionableOnScanSheet }) return emptyList()
     return items.filter {
-        it.actionableOnScanSheet || (it.status == DueStatus.DUE_SOON && !it.requiredSetEmpty)
+        it.actionableOnScanSheet ||
+            (it.status == DueStatus.DUE_SOON && !it.requiredSetEmpty && it.remindersEnabled)
     }
 }
+
+/**
+ * What the scan sheet offers **this** Asset: the projection, narrowed to the rounds that actually
+ * oblige it, then D-18a.
+ *
+ * This is the whole of the sheet's admission set and the **one** place it is decided, so the
+ * routing question ([ScanSheetOffer]) and the sheet's own contents cannot disagree — a second
+ * predicate would be wrong on one of them the moment it was right on the other.
+ *
+ * A group-targeted row is admitted only when this Asset is **required** by the open round and has
+ * **not already completed** it (review blocking 2). Both halves are load-bearing: a former member
+ * whose window closed before the round opened would otherwise be offered work
+ * `CompleteGroupMembers` refuses as `NotARequiredMember`, and a member who has already done it
+ * would be offered a second completion the idempotence index refuses — which is #50 AC 12 at the
+ * group level.
+ *
+ * A group schedule with **no round at all** — `occurrenceOf` answers null for a schedule with no
+ * time rule, and a group target carries no meter rule (invariant 2) — is not admitted: there is no
+ * occurrence to oblige anybody.
+ */
+suspend fun scanSheetItemsFor(
+    assetId: AssetId,
+    items: List<DueItem>,
+    rounds: ScanRoundMembership,
+): List<DueItem> = scanSheetItems(items.filter { rounds.obliges(assetId, it) })
+
+private suspend fun ScanRoundMembership.obliges(assetId: AssetId, item: DueItem): Boolean =
+    when (item.target) {
+        is ScheduleTarget.AssetTarget -> true
+        is ScheduleTarget.GroupTarget -> roundFor(item.scheduleId)
+            ?.let { assetId in it.required && assetId !in it.completed } == true
+    }
 
 /**
  * One row of the sheet, with every display fact D5 §7A `:219-221` requires already rendered.
@@ -214,6 +273,7 @@ class MaintenanceSheetViewModel(
     private val tags: TagRepository,
     private val readings: LastCompletionReadings,
     private val lastCompletionEventId: LastCompletionEventId,
+    private val rounds: ScanRoundMembership,
     private val snoozer: ScheduleSnooze,
     private val postponeSchedule: PostponeSchedule,
     private val reconcile: ReminderReconcile,
@@ -225,8 +285,8 @@ class MaintenanceSheetViewModel(
 
     constructor(graph: AppGraph, assetId: String, tagId: String?) : this(
         graph.dueReadModel, graph.assets, graph.tags, graph.lastCompletionReadings,
-        graph.lastCompletionEventId, graph.scheduleSnooze, graph.postponeSchedule,
-        graph.reminderReconcile, graph.clock, graph.completionFlow,
+        graph.lastCompletionEventId, graph.scanRoundMembership, graph.scheduleSnooze,
+        graph.postponeSchedule, graph.reminderReconcile, graph.clock, graph.completionFlow,
         AssetId(assetId), tagId?.let(::TagId),
     )
 
@@ -275,7 +335,7 @@ class MaintenanceSheetViewModel(
     private suspend fun load() {
         val asset = assets.get(assetId)
         val placement = tagId?.let { tags.get(it) }?.label?.takeIf { it.isNotBlank() }
-        val rows = scanSheetItems(due.forAsset(assetId)).map { item(it) }
+        val rows = scanSheetItemsFor(assetId, due.forAsset(assetId), rounds).map { item(it) }
         val shown = rows.map { it.scheduleId.value }.toSet()
         val first = !_state.value.loaded
         _state.update { previous ->
@@ -313,8 +373,11 @@ class MaintenanceSheetViewModel(
             // one, so the action is **not offered** rather than offered and refused (invariant 10).
             canPostpone = !row.isRepairableNoData && row.effectiveDueOn != null,
             // A snooze suppresses a delivery, so it means something only where there is one:
-            // `NO_DATA`, `INACTIVE_SEASON` and `PAUSED` never notify (invariant 22).
-            canSnooze = row.status.notifies,
+            // `NO_DATA`, `INACTIVE_SEASON` and `PAUSED` never notify (invariant 22), and a schedule
+            // whose reminders are off has nothing to suppress. The same two conditions B14's
+            // schedule detail gates the identical action on, so the sheet's Snooze is not merely
+            // the same code but the same *availability* (carry-forward (d), review should-fix 7).
+            canSnooze = row.remindersEnabled && row.status.notifies,
         )
     }
 
@@ -376,6 +439,9 @@ class MaintenanceSheetViewModel(
         while (queue.isNotEmpty()) {
             val head = queue.first()
             queue = queue.drop(1)
+            // Exhaustive, with **no `else ->`** (review blocking 2): a refusal that fell into a
+            // catch-all was how `NotARequiredMember` and the idempotence index became "the queue
+            // emptied and nothing happened".
             when (val outcome = completion.complete(head, assetId)) {
                 is CompletionOutcome.Completed -> reconcile.run()
                 is CompletionOutcome.NeedsForm -> {
@@ -383,7 +449,20 @@ class MaintenanceSheetViewModel(
                     _needsForm.tryEmit(outcome)
                     return
                 }
-                else -> {
+                // The owner backed out of the question. Stopping is the explicit answer, and §17
+                // ratifies no wording for it.
+                CompletionOutcome.Cancelled -> {
+                    queue = emptyList()
+                    return
+                }
+                // A use case refused. The two refusals this sheet could reach —
+                // `NotARequiredMember` and the repeat-completion index — are now **unreachable**,
+                // because `scanSheetItemsFor` will not offer a round this Asset is not required by
+                // or has already done. So this branch is the belt to that fix rather than a
+                // routine path, and the cause is carried to the log instead of being dropped: §17
+                // ratifies no sentence for a refusal, and inventing one is not this brief's to do.
+                is CompletionOutcome.Refused -> {
+                    Log.w(TAG, "a completion the scan sheet offered was refused", outcome.cause)
                     queue = emptyList()
                     return
                 }
@@ -402,10 +481,18 @@ class MaintenanceSheetViewModel(
     private suspend fun resumeQueue() {
         val pending = awaiting ?: return
         awaiting = null
-        if (_state.value.items.any { it.scheduleId == pending } || queue.isEmpty()) {
+        if (_state.value.items.any { it.scheduleId == pending }) {
+            // Still offered, so the owner left the form without saving: the run stops, which is
+            // what leaves the forms already saved written and every later one absent.
             queue = emptyList()
             return
         }
+        // The form **was** saved, and the journal screen that wrote the event reconciles nothing —
+        // so this is the one point on the FORM path where the standing notification can be quiesced
+        // by canonical state rather than left up until the next digest or backstop sweep (#50 AC 8,
+        // review should-fix 4). It runs whether or not there is more queue to walk.
+        reconcile.run()
+        if (queue.isEmpty()) return
         _state.update { it.copy(busy = true) }
         runCatching { pump() }
         load()
@@ -443,6 +530,7 @@ class MaintenanceSheetViewModel(
     }
 
     private companion object {
+        private const val TAG = "MaintenanceSheet"
 
         /**
          * The why-now line, composed from the row's **own** status and dates using the RATIFIED

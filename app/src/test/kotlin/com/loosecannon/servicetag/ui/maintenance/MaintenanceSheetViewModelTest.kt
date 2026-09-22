@@ -3,7 +3,9 @@ package com.loosecannon.servicetag.ui.maintenance
 import com.loosecannon.servicetag.core.links.DeepLinkRoute
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.LinkId
+import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
@@ -18,7 +20,9 @@ import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
+import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.routeForDeepLink
 import com.loosecannon.servicetag.routeForQuickCompletion
@@ -30,6 +34,9 @@ import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.nav.TopLevelRoutes
 import com.loosecannon.servicetag.ui.nav.readsTags
+import com.loosecannon.servicetag.ui.scan.TagResult
+import com.loosecannon.servicetag.ui.scan.TagResultViewModel
+import com.loosecannon.servicetag.ui.scan.TagResultWire
 import com.loosecannon.servicetag.ui.scan.asTagResult
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +113,7 @@ class MaintenanceSheetViewModelTest {
         lastCompletionEventId = LastCompletionEventId { id ->
             graph.scheduleStates.get(id)?.lastCompletionEventId
         },
+        rounds = roundMembership(),
         snoozer = graph.scheduleSnooze,
         postponeSchedule = graph.postponeSchedule,
         reconcile = ReminderReconcile { reconciles++ },
@@ -133,9 +141,17 @@ class MaintenanceSheetViewModelTest {
         ),
     ).id
 
-    /** What the scan sheet would offer for this Asset, asked of the real projection. */
+    private fun roundMembership() = ScanRoundMembership { scheduleId ->
+        graph.schedules.get(scheduleId)?.let { graph.recomputeSchedules.occurrenceOf(it) }
+    }
+
+    /**
+     * What the scan sheet would offer **this** Asset, asked of the real projection through the real
+     * narrowing — the same entry point the sheet and `AppGraph.scanSheetOffer` both use.
+     */
     private suspend fun offered(assetId: AssetId): List<String> =
-        scanSheetItems(readModel().forAsset(assetId)).map { it.scheduleId.value }
+        scanSheetItemsFor(assetId, readModel().forAsset(assetId), roundMembership())
+            .map { it.scheduleId.value }
 
     /** Answers the open "When was this done?" with today, which is the affordance's default. */
     private fun answerToday() {
@@ -166,6 +182,11 @@ class MaintenanceSheetViewModelTest {
         seed(scheduleOf("s-paused", assetId = asset.value, title = "Winter store", status = ScheduleStatus.PAUSED))
         seed(scheduleOf("s-season", assetId = asset.value, title = "Season job", anchorOn = "2026-01-01", seasonBehavior = SeasonBehavior.FOLLOW_ASSET))
         seed(scheduleOf("s-archived", assetId = asset.value, title = "Retired job", anchorOn = "2026-01-01", leadDays = 0, status = ScheduleStatus.ARCHIVED))
+        // The other half of the same D-18a row: DUE, but its reminders are off (blocking 3).
+        seed(
+            scheduleOf("s-muted", assetId = asset.value, title = "Muted job", anchorOn = "2026-01-01", leadDays = 0)
+                .copy(remindersEnabled = false),
+        )
         // A meter rule with a definition and no baseline at all: the repairable NO_DATA.
         graph.definitions.upsert(meterDefinitionOf("d-hours", assetId = asset.value))
         seed(
@@ -186,10 +207,20 @@ class MaintenanceSheetViewModelTest {
         // Every state is in the projection — it is one shared read model — and the sheet's own
         // predicate is what narrows it (decision 27).
         assertEquals(
-            setOf("s-overdue", "s-due", "s-soon", "s-ok", "s-paused", "s-season", "s-nodata", "s-empty"),
+            setOf(
+                "s-overdue", "s-due", "s-soon", "s-ok", "s-paused", "s-season", "s-nodata",
+                "s-empty", "s-muted",
+            ),
             projection.map { it.scheduleId.value }.toSet(),
         )
         assertEquals(listOf("s-overdue", "s-due", "s-nodata", "s-soon"), offered(asset))
+
+        // "an archived or **reminders-disabled** schedule | never": the archived one is gone before
+        // the predicate sees it (`listedForDue()`), and the muted one is DUE and excluded here.
+        val muted = projection.single { it.scheduleId.value == "s-muted" }
+        assertEquals(DueStatus.OVERDUE, muted.status)
+        assertFalse("a reminders-disabled schedule is never offered", muted.actionableOnScanSheet)
+        assertFalse("nor does it ride along as a passenger", "s-muted" in offered(asset))
 
         val vacuous = projection.single { it.scheduleId.value == "s-empty" }
         assertEquals(DueStatus.NO_DATA, vacuous.status)
@@ -314,6 +345,10 @@ class MaintenanceSheetViewModelTest {
         model.refresh()
         advanceUntilIdle()
         assertEquals("and only then does the second open", listOf("f1", "f2"), forms)
+        // #50 AC 8 on the FORM path: the journal screen wrote the event and reconciles nothing, so
+        // the sheet is where the standing notification is quiesced by canonical state
+        // (should-fix 4).
+        assertEquals(1, reconciles)
 
         // …and abandons the second. The run stops rather than carrying on behind their back.
         model.refresh()
@@ -321,6 +356,7 @@ class MaintenanceSheetViewModelTest {
         assertEquals(listOf("f1", "f2"), forms)
         assertEquals(1, graph.events.all().count { it.scheduleId?.value == "f1" })
         assertEquals(0, graph.events.all().count { it.scheduleId?.value == "f2" })
+        assertEquals("an abandoned form reconciles nothing", 1, reconciles)
     }
 
     /** #50 AC 5 / #11: a meter schedule cannot be completed without its required reading. */
@@ -571,12 +607,75 @@ class MaintenanceSheetViewModelTest {
         assertEquals(listOf(one.value), written.map { it.assetId.value })
         assertEquals(1, reconciles)
 
+        // #50 AC 12 at the **group** level: this member has done this round, so a second scan of
+        // this Asset does not re-offer it — even though the round is still open and the schedule
+        // still reads DUE (review blocking 2).
+        assertEquals(emptyList<String>(), offered(one))
+        assertEquals(emptyList<String>(), model.state.value.items.map { it.scheduleId.value })
+
         // The round is still open, so the other member is still offered its own work and the
         // progress has moved by exactly one.
         val other = viewModel(two)
         advanceUntilIdle()
         assertEquals("1 of 2 complete", other.state.value.items.single().progress)
         assertEquals(listOf("g-s"), offered(two))
+    }
+
+    /**
+     * The other half of the group contract, and the one `requiredSetEmpty` cannot answer (review
+     * blocking 2): `DueReadModel.forAsset` returns a deliberate **superset** on the group half, so
+     * the sheet has to ask the round itself whether it obliges **this** Asset.
+     *
+     * A **former member** — window closed before the round opened — and a member who has **already
+     * done it** are both offered nothing, while the outstanding required member is offered the
+     * round. Without the narrowing the first would be handed work `CompleteGroupMembers` refuses as
+     * `NotARequiredMember` and the second a completion the idempotence index refuses, and in both
+     * cases the owner would tap, answer "When was this done?", and watch nothing happen.
+     */
+    @Test fun aRoundOfferedOnlyToTheMembersItObligesAndOnlyUntilTheyDoIt() = runTest(scheduler) {
+        val former = graph.createAsset.run(AssetCommand(name = "Sprinkler one", category = "Irrigation")).id
+        val doneAlready = graph.createAsset.run(AssetCommand(name = "Sprinkler two", category = "Irrigation")).id
+        val outstanding = graph.createAsset.run(AssetCommand(name = "Sprinkler three", category = "Irrigation")).id
+        graph.groups.upsert(
+            groupOf(
+                "g-mixed",
+                name = "North run",
+                members = listOf(
+                    // Its window closed long before the round opened, so the round never obliged it.
+                    Triple(former.value, "2025-01-01", "2025-06-01"),
+                    Triple(doneAlready.value, "2026-01-01", null),
+                    Triple(outstanding.value, "2026-01-01", null),
+                ),
+            ),
+        )
+        seed(scheduleOf("g-mixed-s", assetId = null, groupId = "g-mixed", title = "Head flush", anchorOn = "2026-01-01", leadDays = 0))
+        graph.completeGroupMembers.run(
+            ScheduleId("g-mixed-s"),
+            listOf(doneAlready),
+            CompletionCommand(occurredOn = "2026-04-14", tzId = "UTC"),
+        )
+
+        // The round is open, obliges two members, and one of them has done it.
+        val round = graph.recomputeSchedules.occurrenceOf(graph.schedules.get(ScheduleId("g-mixed-s"))!!)!!
+        assertEquals(listOf(doneAlready, outstanding).map { it.value }.sorted(), round.required.map { it.value }.sorted())
+        assertEquals(listOf(doneAlready.value), round.completed.map { it.value })
+
+        // The projection hands all three Assets the row — it is a superset by design …
+        listOf(former, doneAlready, outstanding).forEach { assetId ->
+            assertTrue(
+                "the projection is a superset on the group half",
+                readModel().forAsset(assetId).any { it.scheduleId.value == "g-mixed-s" },
+            )
+        }
+        // … and the sheet offers it to exactly one of them.
+        assertEquals(emptyList<String>(), offered(former))
+        assertEquals(emptyList<String>(), offered(doneAlready))
+        assertEquals(listOf("g-mixed-s"), offered(outstanding))
+
+        val model = viewModel(former)
+        advanceUntilIdle()
+        assertEquals(emptyList<String>(), model.state.value.items.map { it.scheduleId.value })
+        assertEquals("and nothing was written on the way to finding that out", 1, graph.events.all().size)
     }
 
     // ---------------------------------------------------------------- navigation-only
@@ -591,7 +690,59 @@ class MaintenanceSheetViewModelTest {
      * `asTagResult`'s `when` has no `else ->` through which a new variant could slip into the
      * completion path unnoticed.
      */
-    @Test fun noResolutionButOpenAssetCanReachTheSheet() {
+    @Test fun noResolutionButOpenAssetIsEvenAskedAboutTheSheet() = runTest(scheduler) {
+        val key = "77777777-7777-4777-8777-777777777777"
+        // Every resolution a (format, key) pair can actually produce, driven through the real
+        // `TagResultViewModel` with an offer that **throws if it is consulted**. `NeedsNewerApp` is
+        // unreachable from the wire pair by construction — the pair carries no payload version — so
+        // it is covered by the mapping half below alone.
+        val cases: List<Pair<String, suspend () -> String>> = listOf(
+            "Unbound" to {
+                graph.tags.upsert(binding(key, TagTarget.None, TagStatus.UNBOUND)); key
+            },
+            "Revoked" to {
+                graph.tags.upsert(binding(key, TagTarget.None, TagStatus.RETIRED)); key
+            },
+            "UnknownV1" to { key },
+            "PreSplitLink" to {
+                graph.links.upsert(
+                    ExternalLink(LinkId("l1"), null, LinkKind.JOPLIN, "note", "joplin://x", 1L, null, 1L),
+                )
+                graph.tags.upsert(binding(key, TagTarget.LinkTarget(LinkId("l1")), TagStatus.ACTIVE))
+                key
+            },
+        )
+        cases.forEach { (name, seedTag) ->
+            graph.tags.deleteAll()
+            val scanned = seedTag()
+            val model = TagResultViewModel(
+                ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock),
+                BindTag(graph.tags, graph.assets, graph.uow, graph.clock),
+                graph.assets,
+                { error("a $name resolution must never be asked about the sheet") },
+                PayloadFormat.V1.name,
+                scanned,
+            )
+            advanceUntilIdle()
+            assertFalse("$name reached OpensAsset", model.state.value is TagResult.OpensAsset)
+        }
+        // And "not ours at all", which never reaches `ResolveTag`'s tag lookup either.
+        val foreign = TagResultViewModel(
+            ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock),
+            BindTag(graph.tags, graph.assets, graph.uow, graph.clock),
+            graph.assets,
+            { error("a NotOurs resolution must never be asked about the sheet") },
+            TagResultWire.FORMAT_NONE,
+            "not a ServiceTag tag",
+        )
+        advanceUntilIdle()
+        assertTrue(foreign.state.value is TagResult.NotOurs)
+
+        theShippedRoutingIsUnchanged()
+    }
+
+    /** The other half of the brief's row: every resolution still maps to the route it always did. */
+    private fun theShippedRoutingIsUnchanged() {
         val binding = TagBinding(
             TagId("33333333-3333-4333-8333-333333333333"),
             PayloadFormat.V1,
@@ -637,8 +788,14 @@ class MaintenanceSheetViewModelTest {
      * the notification path and this sheet share the **one** completion mechanism.
      *
      * The two halves the failure would hide are both here: the redirect names a destination and
-     * writes nothing, and an **external** `servicetag://schedule/<uuid>` is untouched — it still
-     * only navigates, so nobody outside the app can open a completion affordance (invariant 57).
+     * writes nothing, and an **external** `servicetag://schedule/<uuid>` is untouched — the
+     * *mapping* an outside link is routed by opens no completion flow of its own.
+     *
+     * That is all this test establishes, and the docstring used to claim more (review should-fix 8):
+     * `MainActivity` is exported, so whether an outside **intent** can pre-open the question is a
+     * question about `routeFrom`'s provenance check, not about this pure function. `routeFrom` now
+     * honours the extra only on an intent addressed explicitly to `MainActivity`, and even then the
+     * pre-opened question writes nothing until it is answered — which is what keeps invariant 57.
      */
     @Test fun doneOnAFormOrMeterScheduleLandsOnTheCanonicalCompletionFlow() {
         val id = "123e4567-e89b-12d3-a456-426614174000"
@@ -658,6 +815,16 @@ class MaintenanceSheetViewModelTest {
     }
 
     // ---------------------------------------------------------------- helpers
+
+    private fun binding(key: String, target: TagTarget, status: TagStatus) = TagBinding(
+        TagId(key),
+        PayloadFormat.V1,
+        key,
+        target,
+        status,
+        createdAt = 1L,
+        updatedAt = 1L,
+    )
 
     private suspend fun boundTag(id: String, assetId: AssetId, label: String): TagId {
         graph.tags.upsert(

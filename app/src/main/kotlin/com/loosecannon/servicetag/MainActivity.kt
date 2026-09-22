@@ -69,8 +69,9 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Only the data URI (deep links) and the two trampoline extras are read; every other extra an
-     * exported activity can be handed is ignored. Whether the id exists is the screen's question.
+     * Only the data URI (deep links) and the three extras this app sends itself are read; every
+     * other extra an exported activity can be handed is ignored. Whether the id exists is the
+     * screen's question.
      */
     private fun routeFrom(intent: Intent): Route? {
         intent.getStringExtra(EXTRA_TAG_FORMAT)?.let { format ->
@@ -79,11 +80,16 @@ class MainActivity : ComponentActivity() {
         if (intent.action != Intent.ACTION_VIEW) return null
         val uri = intent.data
         val link = DeepLinkRoute.parse(uri?.scheme, uri?.host, uri?.pathSegments.orEmpty())
-        // B07's "Done" on a schedule whose completion needs the owner. The extra rides on an
-        // **explicit** `PendingIntent` this app built for its own notification, and it is read only
-        // for a link that is already a well-formed schedule link — so an outside intent carrying
-        // the same extra buys nothing a plain `servicetag://schedule/<uuid>` does not already do.
-        if (intent.getBooleanExtra(EXTRA_COMPLETE_SCHEDULE, false)) {
+        // B07's "Done" on a schedule whose completion needs the owner. The extra is honoured only
+        // on an intent addressed **explicitly** to this activity, which is what this app's own
+        // notification `PendingIntent` does and what an implicit `ACTION_VIEW` — a browser's
+        // BROWSABLE launch, or another app's `servicetag://schedule/<uuid>` — never does. Without
+        // that test the affordance could be pre-opened by anyone who knew the extra's name (review
+        // should-fix 8); it still wrote nothing, because the flow waits for an answer, but the
+        // provenance check is what makes the sentence above true rather than nearly true.
+        if (intent.component?.className == MainActivity::class.java.name &&
+            intent.getBooleanExtra(EXTRA_COMPLETE_SCHEDULE, false)
+        ) {
             routeForQuickCompletion(link)?.let { return it }
         }
         // A link this app answers but cannot make a destination of — a malformed id, or a tag
@@ -136,6 +142,10 @@ internal fun routeForDeepLink(link: DeepLink?): Route? = when (link) {
  * rather than a reading of `routeFrom`. It still only names a destination — the completion writes
  * nothing until the owner answers "When was this done?", which is what keeps a notification action
  * from being a mutation nobody confirmed (invariant 57, §12.1's carve-out).
+ *
+ * `routeFrom` reaches this **only** for an intent addressed explicitly to `MainActivity`, so an
+ * external or implicit `servicetag://schedule/<uuid>` is routed by [routeForDeepLink] alone and
+ * opens no affordance of its own.
  *
  * Anything that is not a well-formed schedule link is **no** destination at all, so the instruction
  * cannot be pointed at another screen.

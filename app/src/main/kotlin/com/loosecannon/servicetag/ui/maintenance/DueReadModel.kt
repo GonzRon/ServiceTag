@@ -82,6 +82,22 @@ data class DueItem(
     val meterUnit: String?,
     val lastCompletedOn: LocalDate?,
     val completionMode: CompletionMode,
+    /**
+     * The schedule's own reminder switch, carried so a surface can ask whether there is a delivery
+     * at all.
+     *
+     * **Added for B09 (review blocking 3), and additive:** the D-18a admission set excludes "an
+     * archived or **reminders-disabled** schedule", and the scan sheet is the surface that has to
+     * honour it — the archived half is already gone by `listedForDue()`, and this is the other
+     * half. It is also what stops the sheet offering a **"Snooze"** that would suppress a delivery
+     * that was never going to happen, which is the condition B14's schedule detail already gates
+     * the same action on (`ScheduleDetailState.canSnooze`).
+     *
+     * It is **not** a status and it is **not** an actionability flag (decision 27): it is the
+     * stored column, and each surface decides what to do with it. The dashboard deliberately does
+     * not filter on it — a due obligation is due whether or not the phone will announce it.
+     */
+    val remindersEnabled: Boolean,
     val membersRequired: Int?,
     val membersComplete: Int?,
     val snoozedUntil: Long?,
@@ -218,6 +234,7 @@ class DueReadModel(
             meterUnit = schedule.meterDefinitionId?.let { definitions.get(it)?.unit }?.takeIf { it.isNotBlank() },
             lastCompletedOn = state.lastCompletedOn?.let(LocalDate::parse),
             completionMode = schedule.completionMode,
+            remindersEnabled = schedule.remindersEnabled,
             membersRequired = progress?.second,
             membersComplete = progress?.first,
             snoozedUntil = snoozedUntilOf(schedule.id),

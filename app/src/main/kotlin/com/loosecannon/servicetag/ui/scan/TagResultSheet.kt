@@ -72,12 +72,13 @@ import com.loosecannon.servicetag.ui.theme.SheetSentence
  *   the sheet names the asset and waits — which also means the inspect screen stays on top and the
  *   activity's one reader-mode session stays held, instead of being released with the tag still
  *   against the phone. Every other branch is identical either way.
- * @param onOpenMaintenance where a bound tag goes when that Asset has work the scan completion
- *   sheet would offer (#50, spec §2.8). It is the **same** branch on both paths — the ambient
- *   trampoline's auto-open and the inspect screen's "Open asset" tap — because the rule is about
- *   the *resolution* and not about which surface resolved it, and because the sheet opens
- *   **before** the ordinary detail path rather than instead of it: the sheet's own "Open asset"
- *   always still reaches the detail. With no actionable work nothing here changes at all.
+ * @param onOpenMaintenance where the **ambient** landing of a bound tag goes when that Asset has
+ *   work the scan completion sheet would offer (#50, spec §2.8). It is the ambient branch alone:
+ *   the brief's Files section names "the ambient-dispatch landing" and nothing else, and #41's
+ *   deliberate inspect is released, ratified behaviour whose **"Open asset"** opens the asset —
+ *   spec §2.8's own "'Open asset' always reaches the ordinary detail" is what that button means
+ *   (review blocking 1, controller ruling R1). It defaults to a no-op, so the inspect screen and
+ *   every other caller are untouched. With no actionable work nothing here changes at all.
  */
 @Composable
 fun TagResultSheet(
@@ -88,7 +89,7 @@ fun TagResultSheet(
     onDismiss: () -> Unit,
     onWriteTag: (Route.WriteTag) -> Unit,
     onOpenAsset: (String) -> Unit,
-    onOpenMaintenance: (assetId: String, tagId: String) -> Unit,
+    onOpenMaintenance: (assetId: String, tagId: String) -> Unit = { _, _ -> },
     onNewAsset: () -> Unit,
 ) {
     val model: TagResultViewModel =
@@ -126,7 +127,7 @@ fun TagResultSheet(
                     sentence = result.asset.name,
                     identifier = result.tag.identityLine(),
                     actions = {
-                        FilledAction("Open asset") { openResolved(result, onOpenAsset, onOpenMaintenance) }
+                        FilledAction("Open asset") { onOpenAsset(result.asset.id.value) }
                         TextAction("Cancel", onDismiss)
                     },
                 ) {
@@ -232,12 +233,13 @@ fun TagResultSheet(
 }
 
 /**
- * Where a resolved, bound tag goes: the scan completion sheet when that Asset has actionable work,
- * and the ordinary asset screen otherwise (#50 AC 1, spec §2.8).
+ * Where an **ambient** tap of a resolved, bound tag goes: the scan completion sheet when that Asset
+ * has actionable work, and the ordinary asset screen otherwise (#50 AC 1, spec §2.8).
  *
- * One function, called from both branches, so the ambient tap and the deliberate inspect cannot
- * answer the question differently. `maintenance` was decided on the resolve, by the same predicate
- * the sheet itself applies — nothing is re-derived here and nothing is written.
+ * Called from the ambient branch **only** (controller ruling R1). A deliberate inspect is #41's
+ * released behaviour: it names the tag, waits, and its ratified "Open asset" opens the asset — the
+ * one thing spec §2.8 says that label always does. `maintenance` was decided on the resolve, by the
+ * same predicate the sheet itself applies, so nothing is re-derived here and nothing is written.
  */
 private fun openResolved(
     result: TagResult.OpensAsset,

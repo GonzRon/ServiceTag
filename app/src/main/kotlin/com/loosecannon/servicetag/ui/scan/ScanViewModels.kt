@@ -232,7 +232,12 @@ class TagResultViewModel(
             is Resolution.OpenAsset -> TagResult.OpensAsset(
                 resolution.tag,
                 resolution.asset,
-                maintenance = runCatching { sheetOffer.has(resolution.asset.id) }.getOrDefault(false),
+                maintenance = runCatching { sheetOffer.has(resolution.asset.id) }
+                    // "No sheet" is the right default — a scan must never be lost to a projection
+                    // that failed — but it must not be a silent one, or a systematically failing
+                    // read would look exactly like an asset with nothing due (nit 11).
+                    .onFailure { Log.w(TAG, "the scan sheet offer could not be answered", it) }
+                    .getOrDefault(false),
             )
             is Resolution.PreSplitLink -> TagResult.PreSplitLink(resolution.tag)
             is Resolution.Unbound -> TagResult.Unregistered(resolution.tag)
@@ -243,6 +248,10 @@ class TagResultViewModel(
             is Resolution.NotOurs -> TagResult.NotOurs(describe(resolution.payload))
             null -> TagResult.NotOurs("this tag could not be resolved")
         }
+    }
+
+    private companion object {
+        const val TAG = "TagResultViewModel"
     }
 
     /**

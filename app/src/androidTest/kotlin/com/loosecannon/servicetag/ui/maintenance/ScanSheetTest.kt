@@ -31,6 +31,7 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
+import com.loosecannon.servicetag.ui.scan.TagResultSheet
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -335,6 +336,65 @@ class ScanSheetTest {
         rule.onAllNodesWithText("When was this done?").assertCountEquals(0)
         rule.onAllNodesWithText("Log meter reading").assertCountEquals(0)
         assertEquals(0, runBlocking { graph.events.all().size })
+    }
+
+    private fun resultSheetFor(
+        graph: AppGraph,
+        tagId: String,
+        inspecting: Boolean,
+        record: MutableList<String>,
+    ) {
+        rule.setContent {
+            ServiceTagTheme {
+                TagResultSheet(
+                    graph = graph,
+                    format = PayloadFormat.V1.name,
+                    key = tagId,
+                    inspecting = inspecting,
+                    onDismiss = { record += "dismiss" },
+                    onWriteTag = { error("a bound tag never writes a tag") },
+                    onOpenAsset = { record += "asset:$it" },
+                    onOpenMaintenance = { assetId, tag -> record += "sheet:$assetId:$tag" },
+                    onNewAsset = { error("a bound tag never makes an asset") },
+                )
+            }
+        }
+    }
+
+    /**
+     * **The ambient landing** of a bound tag whose Asset has actionable work goes to the completion
+     * sheet, carrying the tag it came from (#50, spec §2.8). This is the one path the branch
+     * belongs to.
+     */
+    @Test fun anAmbientTapOfABoundTagWithDueWorkOpensTheSheet() {
+        val graph = app.graph
+        val (assetId, tagId) = seedDueWork(graph)
+        val record = mutableListOf<String>()
+        resultSheetFor(graph, tagId, inspecting = false, record = record)
+
+        rule.waitUntil(TIMEOUT_MS) { record.isNotEmpty() }
+        assertEquals(listOf("sheet:$assetId:$tagId"), record)
+    }
+
+    /**
+     * **A deliberate inspect is #41's released behaviour and keeps it** (controller ruling R1): the
+     * sheet names the tag and waits, and its ratified **"Open asset"** opens the asset — which is
+     * the one thing spec §2.8 says that label always does. The completion sheet is not on this
+     * path at all, on the same Asset with the same due work as the test above.
+     */
+    @Test fun aDeliberateInspectStillOpensTheAssetItself() {
+        val graph = app.graph
+        val (assetId, tagId) = seedDueWork(graph)
+        val record = mutableListOf<String>()
+        resultSheetFor(graph, tagId, inspecting = true, record = record)
+
+        rule.awaitText("Ride-on mower")
+        // It waits for the owner rather than navigating by itself.
+        assertEquals(emptyList<String>(), record)
+        rule.onNodeWithText("Open asset").performClick()
+
+        rule.waitUntil(TIMEOUT_MS) { record.isNotEmpty() }
+        assertEquals(listOf("asset:$assetId"), record)
     }
 
     private companion object {

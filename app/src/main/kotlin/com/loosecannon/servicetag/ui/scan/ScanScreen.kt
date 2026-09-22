@@ -78,8 +78,6 @@ fun ScanScreen(
     graph: AppGraph,
     readerMode: ReaderMode,
     onOpenAsset: (String) -> Unit,
-    /** #50: a bound tag whose Asset has actionable work goes to the completion sheet first. */
-    onOpenMaintenance: (assetId: String, tagId: String) -> Unit,
     onNewAsset: () -> Unit,
     onWriteTag: (Route.WriteTag) -> Unit,
     onBack: () -> Unit,
@@ -166,7 +164,6 @@ fun ScanScreen(
                 onDismiss = clearAnswer,
                 onWriteTag = { route -> clearAnswer(); onWriteTag(route) },
                 onOpenAsset = { id -> clearAnswer(); onOpenAsset(id) },
-                onOpenMaintenance = { id, tag -> clearAnswer(); onOpenMaintenance(id, tag) },
                 onNewAsset = { clearAnswer(); onNewAsset() },
             )
         }

@@ -124,11 +124,12 @@ import com.loosecannon.servicetag.ui.maintenance.LastCompletionEventId
 import com.loosecannon.servicetag.ui.maintenance.LastCompletionReadings
 import com.loosecannon.servicetag.ui.maintenance.NoHealthFindings
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
+import com.loosecannon.servicetag.ui.maintenance.ScanRoundMembership
 import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
 import com.loosecannon.servicetag.ui.maintenance.ScheduleClosures
 import com.loosecannon.servicetag.ui.maintenance.ScheduleCompletions
 import com.loosecannon.servicetag.ui.maintenance.ScheduleSnooze
-import com.loosecannon.servicetag.ui.maintenance.scanSheetItems
+import com.loosecannon.servicetag.ui.maintenance.scanSheetItemsFor
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
@@ -548,8 +549,18 @@ class AppGraph(private val context: Context) {
         scheduleStates.get(scheduleId)?.lastCompletionEventId
     }
     val reminderReconcile: ReminderReconcile = ReminderReconcile { reminderRuns.reconcileAll() }
+    /**
+     * The group round a schedule is currently on, **derived and read** — B09's third read seam
+     * (review blocking 2). `occurrenceOf` derives without upserting, so the scan path stays a pure
+     * read and `rebuild` remains the only writer of `schedule_state` (invariant 17).
+     */
+    val scanRoundMembership: ScanRoundMembership = ScanRoundMembership { scheduleId ->
+        schedules.get(scheduleId)?.let { recomputeSchedules.occurrenceOf(it) }
+    }
     val scanSheetOffer: ScanSheetOffer = ScanSheetOffer { assetId ->
-        scanSheetItems(dueReadModel.forAsset(assetId)).isNotEmpty()
+        // The **same** narrowing the sheet itself applies, so "does this scan open the sheet" and
+        // "what does the sheet show" are one answer.
+        scanSheetItemsFor(assetId, dueReadModel.forAsset(assetId), scanRoundMembership).isNotEmpty()
     }
 
     internal companion object {
