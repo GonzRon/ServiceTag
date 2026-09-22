@@ -84,6 +84,7 @@ import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.components.TypedConfirmDialog
+import com.loosecannon.servicetag.ui.maintenance.SCHEDULES_SECTION
 import com.loosecannon.servicetag.ui.journal.eventDetailLine
 import com.loosecannon.servicetag.ui.journal.formatTarget
 import com.loosecannon.servicetag.ui.journal.formatValue
@@ -120,6 +121,11 @@ fun AssetDetailScreen(
     onOpenEvent: (eventId: String) -> Unit,
     onOpenAsset: (assetId: String) -> Unit,
     onAddComponent: (parentAssetId: String) -> Unit,
+    /**
+     * 1.2 — "add a schedule for this asset": the create entry point, and the only thing B14 adds to
+     * this screen. **B15 owns the schedules *section*** here; this is the action, not the list.
+     */
+    onAddSchedule: (assetId: String) -> Unit,
     /** A free-form entry of one [EventKind] — the retirement follow-on of spec §7 opens it. */
     onLogOutcome: (assetId: String, kind: String) -> Unit,
     /** DOCUMENTS sends the person here when there is no attachment folder yet (spec §8.1). */
@@ -209,7 +215,20 @@ fun AssetDetailScreen(
             ReadingsSection(current.readings)
             Spacer(Modifier.height(10.dp))
             // No schedules in 2A, so nothing can be due: one quiet line, never a red one (G1 §1.1).
-            QuietLine("No schedule yet")
+            // **B15 replaces this line with the schedules section**; what 1.2 adds here is the
+            // create entry beside it, because without one there is no way to make a schedule at all
+            // and the ratified empty state ("Add one from an asset or a maintenance group") sends
+            // the owner to exactly this screen.
+            //
+            // It is a glyph and not a labelled button **because §17 ratifies no wording for it** and
+            // no brief invents one: the accessibility label is the ratified section word, and the
+            // missing label is a finding for the controller rather than a string drafted here.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                QuietLine("No schedule yet", modifier = Modifier.weight(1f))
+                IconButton(onClick = { onAddSchedule(assetId) }) {
+                    Icon(Icons.Outlined.Add, contentDescription = SCHEDULES_SECTION)
+                }
+            }
             Spacer(Modifier.height(14.dp))
             ActionGrid(
                 actions = detailActions(

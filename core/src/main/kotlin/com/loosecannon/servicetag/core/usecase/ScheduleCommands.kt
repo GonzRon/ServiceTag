@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonBehavior
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.reminders.ProviderId
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 
@@ -94,6 +95,15 @@ sealed interface ScheduleProblem {
     data object ProfileOnGroupTarget : ScheduleProblem
 
     /**
+     * A group target is **QUICK-only** (D-12). It carries no `profileId` — the rule above — so
+     * `FORM` names a form with nothing to collect and no profile to collect it against, and the
+     * member-completion path is left picking an event source for a completion that has no form
+     * behind it. `CompleteGroupMembers` records that gap in a comment and names the schedule
+     * command as its owner; this is the rule it was waiting for.
+     */
+    data object FormCompletionOnGroupTarget : ScheduleProblem
+
+    /**
      * The group has no open membership, so the schedule's very first round would oblige nobody: it
      * would report `NO_DATA`, could not be completed and could not be closed, and no later
      * membership change would rescue it — a member added afterwards joins the round *after* the one
@@ -147,6 +157,17 @@ sealed interface ScheduleProblem {
      * postponement is always allowed, so a row that arrived with one set can still be cleaned up.
      */
     data object PostponeNeedsTimeRule : ScheduleProblem
+
+    /**
+     * A `schedule_provider` row naming something that is not a [ProviderId].
+     *
+     * The column is TEXT — it has to be, because a provider set grows without a migration — and the
+     * subject builder matches it against `ProviderId` **by name**. A row naming anything else is a
+     * schedule with reminders switched on and no provider that will ever read it: silently
+     * undeliverable, and surfacing later as a health finding the owner has to chase rather than a
+     * refusal where the value was typed. In 1.2 the known set is `LOCAL` alone (decision 8).
+     */
+    data class UnknownProvider(val provider: String) : ScheduleProblem
 }
 
 /** Validation failed; every problem found, collected once rather than fail-fast. */
@@ -229,9 +250,18 @@ internal fun scheduleProblems(
     }
     if (cmd.leadDays < 0) problems += ScheduleProblem.NegativeLeadDays
 
+    cmd.providers.forEach { row ->
+        if (ProviderId.entries.none { it.name == row.provider }) {
+            problems += ScheduleProblem.UnknownProvider(row.provider)
+        }
+    }
+
     if (target is ScheduleTarget.GroupTarget) {
         if (hasMeter) problems += ScheduleProblem.MeterRuleOnGroupTarget
         if (cmd.profileId != null) problems += ScheduleProblem.ProfileOnGroupTarget
+        if (cmd.completionMode == CompletionMode.FORM) {
+            problems += ScheduleProblem.FormCompletionOnGroupTarget
+        }
         if (cmd.seasonBehavior == SeasonBehavior.FOLLOW_ASSET) {
             problems += ScheduleProblem.SeasonFollowsAssetOnGroupTarget
         }

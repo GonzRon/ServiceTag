@@ -25,9 +25,13 @@ import com.loosecannon.servicetag.core.usecase.ApplyTemplate
 import com.loosecannon.servicetag.core.usecase.ApplyBackupMergePlan
 import com.loosecannon.servicetag.core.usecase.ArchiveAsset
 import com.loosecannon.servicetag.core.usecase.ArchiveDefinition
+import com.loosecannon.servicetag.core.usecase.ArchiveGroup
 import com.loosecannon.servicetag.core.usecase.ArchiveProfile
+import com.loosecannon.servicetag.core.usecase.ArchiveSchedule
 import com.loosecannon.servicetag.core.usecase.BuildBackupMergePlan
+import com.loosecannon.servicetag.core.usecase.CloseRound
 import com.loosecannon.servicetag.core.usecase.CompleteGroupMembers
+import com.loosecannon.servicetag.core.usecase.CompleteSchedule
 import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAttachment
@@ -38,6 +42,8 @@ import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LogEvent
+import com.loosecannon.servicetag.core.usecase.PauseSchedule
+import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
@@ -45,7 +51,9 @@ import com.loosecannon.servicetag.core.usecase.ReorderProfiles
 import com.loosecannon.servicetag.core.usecase.RestoreArtifacts
 import com.loosecannon.servicetag.core.usecase.RetireAsset
 import com.loosecannon.servicetag.core.usecase.SaveDefinition
+import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveProfile
+import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
@@ -65,6 +73,8 @@ import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
+import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
+import com.loosecannon.servicetag.ui.maintenance.ScheduleSnooze
 import java.io.File
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CompletableDeferred
@@ -227,6 +237,37 @@ class FakeGraph(
     val completeGroupMembers: CompleteGroupMembers = CompleteGroupMembers(
         schedules, groups, events, closures, definitions, profiles, uow, ids, clock, recomputeSchedules,
     )
+
+    /**
+     * 1.2 — the schedule editor's and the detail screen's own use cases, mirroring `AppGraph`'s
+     * fields, so a view-model test drives the production rule rather than a fake that agrees with
+     * it. `saveGroup` is here for the same reason: a group-targeted schedule needs a real group
+     * with real membership windows behind it.
+     */
+    val saveSchedule: SaveSchedule =
+        SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recomputeSchedules)
+    val completeSchedule: CompleteSchedule =
+        CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recomputeSchedules)
+    val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)
+    val pauseSchedule: PauseSchedule = PauseSchedule(schedules, uow, recomputeSchedules)
+    val archiveSchedule: ArchiveSchedule = ArchiveSchedule(schedules, uow, recomputeSchedules)
+    val closeRound: CloseRound =
+        CloseRound(schedules, closures, uow, ids, clock, todayPort, recomputeSchedules)
+    val saveGroup: SaveGroup = SaveGroup(groups, assets, uow, ids, clock)
+    val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock)
+
+    /** The one completion mechanism, over the real use cases — always UTC, so a `tzId` is stable. */
+    val completionFlow: CompletionFlow = CompletionFlow(
+        schedules, definitions, completeSchedule, completeGroupMembers, todayPort,
+    ) { java.time.ZoneOffset.UTC }
+
+    /**
+     * What the in-app snooze wrote, per schedule. A map rather than the delivery table, because the
+     * point of the snooze test is that it wrote **no** date column and **no** event — so the seam
+     * only has to be observable, and B06 owns the table it will really write.
+     */
+    val snoozes: MutableMap<String, Long> = mutableMapOf()
+    val scheduleSnooze: ScheduleSnooze = ScheduleSnooze { id, untilAt -> snoozes[id.value] = untilAt }
 
     fun close() = db.close()
 

@@ -40,7 +40,10 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * none whose Asset's own lifecycle leaves it standing (D-16). Its first round would oblige nobody,
  * and no later membership change rescues it: a member added afterwards joins the round *after* the
  * one already open, and a round that obliges nobody can neither be completed nor closed, so the
- * schedule would report `NO_DATA` for ever (invariants 74, 77).
+ * schedule would report `NO_DATA` for ever (invariants 74, 77). The count is taken at the instant
+ * the round this command is about opened — now for a create, the open round's own instant for an
+ * edit — so an edit of a schedule whose round is live is never refused for a member who left after
+ * that round opened and is still required for it.
  *
  * One `uow.write`: the row and the recompute commit together or not at all.
  */
@@ -65,12 +68,24 @@ class SaveSchedule(
         // has already fixed the first batch.
         val now = clock.nowMillis()
         val group = cmd.targetGroupId?.let { groups.get(it) }
-        // The **lifecycle-bounded** windows covering the instant the first round would open at, not
-        // the raw open ones: a group whose only member is archived, or retired by then, obliges
-        // nobody, and the editor has to hear that here rather than store a schedule the engine will
-        // report `NO_DATA` for ever. Counted with the same derivation the recompute uses, so the two
-        // cannot disagree.
-        val obliged = group?.let { boundedMembers(it, assets).openAt(now).size }
+        // The **lifecycle-bounded** windows covering the instant the round this command is about
+        // would open at, not the raw open ones: a group whose only member is archived, or retired by
+        // then, obliges nobody, and the editor has to hear that here rather than store a schedule
+        // the engine will report `NO_DATA` for ever. Counted with the same derivation the recompute
+        // uses, so the two cannot disagree.
+        //
+        // On a **create** that instant is now — the first round opens with the schedule. On an
+        // **edit of the same group** it is the instant the round already open opened at, because an
+        // edit does not open a new round: it changes the rule of the one that is running (D-9). A
+        // member removed mid-round is still required for it (D-10), so counting *today's* windows
+        // would refuse the edit of a schedule whose round is live and obliges somebody — and leave
+        // the owner unable to change its rule at all. A create is still refused, which is the half
+        // that keeps a vacuous schedule from ever being stored (invariants 74, 77).
+        val obligedAt = existing
+            ?.takeIf { it.target == cmd.target() }
+            ?.let { recompute.occurrenceOf(it)?.openInstant }
+            ?: now
+        val obliged = group?.let { boundedMembers(it, assets).openAt(obligedAt).size }
         val problems = scheduleProblems(cmd, profileAssetId, meter, obliged)
         if (problems.isNotEmpty()) throw ScheduleValidation(problems)
 

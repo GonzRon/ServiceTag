@@ -6,7 +6,10 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -24,7 +27,10 @@ import com.loosecannon.servicetag.ui.backup.BackupScreen
 import com.loosecannon.servicetag.ui.dashboard.DashboardScreen
 import com.loosecannon.servicetag.ui.journal.EventDetailScreen
 import com.loosecannon.servicetag.ui.journal.EventEntryScreen
+import com.loosecannon.servicetag.ui.maintenance.LogMaintenancePicker
 import com.loosecannon.servicetag.ui.maintenance.MaintenanceScreen
+import com.loosecannon.servicetag.ui.maintenance.ScheduleDetailScreen
+import com.loosecannon.servicetag.ui.maintenance.ScheduleEditScreen
 import com.loosecannon.servicetag.ui.nfc.ReaderMode
 import com.loosecannon.servicetag.ui.nfc.rememberReaderMode
 import com.loosecannon.servicetag.ui.scan.ScanScreen
@@ -119,6 +125,7 @@ fun ServiceTagRoot(
                     )
                 }
                 entry<Route.Maintenance> {
+                    var logging by remember { mutableStateOf(false) }
                     MaintenanceScreen(
                         graph = graph,
                         onOpenSchedule = { backStack.add(Route.ScheduleDetail(it)) },
@@ -127,12 +134,22 @@ fun ServiceTagRoot(
                         // F4 reuses the shipped routes for two of the three actions.
                         onScanTag = { backStack.add(Route.Scan) },
                         onAddAsset = { backStack.add(Route.AssetEdit(null)) },
-                        // F4's third: the seam B14 connects to its canonical `CompletionFlow`.
-                        // It is left unconnected rather than given a completion path of its own —
-                        // a quick action that wrote an event directly is what #50 forbids, and
-                        // this brief's files contain no event write at all.
-                        onLogMaintenance = {},
+                        // F4's third, connected to the canonical `CompletionFlow` (master plan
+                        // §1.2): the picker opens the graph's one flow and writes nothing itself,
+                        // which is the rule #50 states for the sheet applied here.
+                        onLogMaintenance = { logging = true },
                     )
+                    if (logging) {
+                        LogMaintenancePicker(
+                            flow = graph.completionFlow,
+                            due = graph.dueReadModel,
+                            onDismiss = { logging = false },
+                            onLogForm = { assetId, profileId ->
+                                logging = false
+                                backStack.add(Route.EventEntry(assetId, profileId, null))
+                            },
+                        )
+                    }
                 }
                 entry<Route.Assets> {
                     AssetsScreen(
@@ -158,6 +175,9 @@ fun ServiceTagRoot(
                         // the hierarchy is navigated, never nested inside one screen (spec §2).
                         onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
                         onAddComponent = { backStack.add(Route.AssetEdit(null, parentId = it)) },
+                        // A new schedule aimed at exactly this asset: the target is chosen here,
+                        // once, and the editor carries no second picker to disagree with it.
+                        onAddSchedule = { backStack.add(Route.ScheduleEdit(null, targetAssetId = it)) },
                         onLogOutcome = { asset, kind ->
                             backStack.add(Route.EventEntry(asset, null, null, kind = kind))
                         },
@@ -294,18 +314,45 @@ fun ServiceTagRoot(
                         onBack = { backStack.removeLastOrNull() },
                     )
                 }
-                // The six keys the Maintenance shell routes onward to. Their screens belong to
-                // B14 (the schedule detail and editor), B15 (the group screens), B10 (reminder
-                // health) and B09 (the scan sheet); each of those briefs replaces the placeholder
-                // below with its own `entry`.
+                // The keys the Maintenance shell routes onward to. B14 has replaced its two — the
+                // schedule detail and the editor, above — and the remaining four belong to B15
+                // (the group screens), B10 (reminder health) and B09 (the scan sheet); each of
+                // those briefs replaces the placeholder below with its own `entry`.
                 //
                 // They are registered rather than left out because `entryProvider` is total: an
                 // unregistered key on the back stack is a crash, and the shell is merged before
                 // any of the four. The placeholder does what an unsupported write route does —
                 // draws nothing and leaves the stack a frame later — so a push is a no-op and not
                 // a blank screen the owner has to back out of.
-                entry<Route.ScheduleDetail> { key -> PlaceholderPop(key, backStack) }
-                entry<Route.ScheduleEdit> { key -> PlaceholderPop(key, backStack) }
+                entry<Route.ScheduleDetail> { key ->
+                    ScheduleDetailScreen(
+                        graph = graph,
+                        scheduleId = key.id,
+                        onBack = { backStack.removeLastOrNull() },
+                        // The recurrence edit is the editor, and the editor is the only path to a
+                        // rule column: the five operations never write one (master plan §5.2).
+                        onEditRecurrence = { backStack.add(Route.ScheduleEdit(it)) },
+                        // A `FORM` schedule's completion is collected by its own profile form;
+                        // nothing about it is fabricated on the way there.
+                        onLogForm = { assetId, profileId ->
+                            backStack.add(Route.EventEntry(assetId, profileId, null))
+                        },
+                    )
+                }
+                entry<Route.ScheduleEdit> { key ->
+                    ScheduleEditScreen(
+                        graph = graph,
+                        scheduleId = key.scheduleId,
+                        targetAssetId = key.targetAssetId,
+                        targetGroupId = key.targetGroupId,
+                        // A create lands on the schedule it made; an edit goes back to it.
+                        onDone = { id ->
+                            backStack.removeLastOrNull()
+                            if (key.scheduleId == null) backStack.add(Route.ScheduleDetail(id))
+                        },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
+                }
                 entry<Route.GroupDetail> { key -> PlaceholderPop(key, backStack) }
                 entry<Route.GroupEdit> { key -> PlaceholderPop(key, backStack) }
                 entry<Route.ReminderHealth> { key -> PlaceholderPop(key, backStack) }

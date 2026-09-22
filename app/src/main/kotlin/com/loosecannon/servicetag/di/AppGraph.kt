@@ -92,6 +92,7 @@ import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
+import com.loosecannon.servicetag.data.room.entities.ScheduleLocalDeliveryEntity
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.SharedPrefsStore
 import com.loosecannon.servicetag.reminders.AndroidDigestAlarm
@@ -109,9 +110,13 @@ import com.loosecannon.servicetag.reminders.ReminderRuns
 import com.loosecannon.servicetag.reminders.ReminderSnooze
 import com.loosecannon.servicetag.reminders.ScheduleDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
+import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.HealthSummary
 import com.loosecannon.servicetag.ui.maintenance.NoHealthFindings
+import com.loosecannon.servicetag.ui.maintenance.ScheduleClosures
+import com.loosecannon.servicetag.ui.maintenance.ScheduleCompletions
+import com.loosecannon.servicetag.ui.maintenance.ScheduleSnooze
 import java.io.File
 import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
@@ -423,6 +428,58 @@ class AppGraph(private val context: Context) {
      * the seam that cannot be raced.
      */
     val healthSummary: HealthSummary = NoHealthFindings
+
+    /**
+     * 1.2 — **the only completion mechanism** (master plan decision 36, #50). The schedule detail
+     * screen, the scan completion sheet and the Maintenance destination's "Log maintenance" quick
+     * action all drive this one instance, so the three cannot ask "when was this done" in three
+     * different ways or write an event by three different paths.
+     *
+     * One instance for the process, not one per screen: the flow holds the open prompt, and a
+     * second instance would be a second prompt over one store.
+     */
+    val completionFlow: CompletionFlow = CompletionFlow(
+        schedules, definitions, completeSchedule, completeGroupMembers, today,
+    )
+
+    /**
+     * The schedule detail screen's two **read-only** history seams (master plan decision 41's
+     * pattern): the screen has to show its completions and its closed rounds, and a one-method read
+     * apiece is what makes "it cannot write one" a fact about the types rather than a promise.
+     */
+    val scheduleCompletions: ScheduleCompletions = ScheduleCompletions { scheduleId ->
+        events.all().filter { it.scheduleId == scheduleId }
+    }
+    val scheduleClosures: ScheduleClosures = ScheduleClosures { scheduleId ->
+        closures.forSchedule(scheduleId)
+    }
+
+    /**
+     * 1.2 — the in-app snooze: the **device-local instant only**, no `*_on` column and no event
+     * (invariant 20).
+     *
+     * `schedule_local_delivery` and its port are B06's (master plan decision 25), so this is the
+     * one-method seam B14's operations need rather than a `ScheduleLocalDeliveryRepository` this
+     * release would then own twice. It writes the row B01 already shipped, through B01's own DAO,
+     * and B06 replaces this field with its `ReminderSnooze` — which is why the nonce and
+     * notification columns are left exactly as they are found.
+     */
+    val scheduleSnooze: ScheduleSnooze = ScheduleSnooze { scheduleId, untilAt ->
+        val dao = db.scheduleLocalDeliveryDao()
+        val existing = dao.byId(scheduleId.value)
+        dao.upsert(
+            existing?.copy(snoozedUntilAt = untilAt, updatedAt = clock.nowMillis())
+                ?: ScheduleLocalDeliveryEntity(
+                    scheduleId = scheduleId.value,
+                    snoozedUntilAt = untilAt,
+                    lastNotifiedAt = null,
+                    firstEntrySeen = false,
+                    actionNonce = null,
+                    nonceIssuedAt = null,
+                    updatedAt = clock.nowMillis(),
+                ),
+        )
+    }
 
     internal companion object {
         const val DB_NAME = "servicetag.db"
