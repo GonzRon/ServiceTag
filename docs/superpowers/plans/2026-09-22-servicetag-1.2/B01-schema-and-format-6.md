@@ -67,7 +67,7 @@ private val rebuildAll: suspend () -> Unit,   // runs INSIDE the apply's transac
 
 ## Invariants this brief must hold
 
-**6, 7, 32, 37, 42, 62, 63, 64, **65**, 66, 67, 69, 71, 72, 80** (master plan §13). 65 ("no notification-delivery state is exported or merged") is the general rule where 64 names the two tables; **one grep discharges B01's half of both** — `schedule_state` and `schedule_local_delivery` absent from `core/.../backup/` — and the brief says so rather than leaving 65 to be inferred. It must not make **17, 18, 26** unholdable — no field this brief adds stores a status word, and `season_reentry`/`season_reentry_offset_days` exist with no reader.
+**6, 7, 32, 37, 42, 62, 63, 64, 65, 66, 67, 69, 71, 72, 80** (master plan §13). 65 ("no notification-delivery state is exported or merged") is the general rule where 64 names the two tables; **one grep discharges B01's half of both** — `schedule_state` and `schedule_local_delivery` absent from `core/.../backup/` — and the brief says so rather than leaving 65 to be inferred. It must not make **17, 18, 26** unholdable — no field this brief adds stores a status word, and `season_reentry`/`season_reentry_offset_days` exist with no reader.
 
 ## Test matrix
 

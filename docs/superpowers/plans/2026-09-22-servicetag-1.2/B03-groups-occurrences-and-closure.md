@@ -104,7 +104,7 @@ One test per hazard class; a row naming several facts is one test asserting them
 
 ## Ordering
 
-**After B01 and B02.** **Before B04, B08, B09, B12, B15.** Runs in lane A of wave 3; **B04** takes lane B once this brief's domain lands, or rides wave 4.
+**After B01 and B02.** **Before B04, B08, B09, B12, B15.** Runs in lane A of wave 3; **B04** takes lane B as soon as this brief's domain lands, **and must land before wave 4 opens** — wave 4 lane A is B06, which consumes it (master plan §14.3).
 
 ## Review gate
 

@@ -48,7 +48,7 @@ and the six supporting types, whose shapes are master plan §8's `Plan decision`
 | type | shape | why this shape |
 |---|---|---|
 | `SubjectKey` | sealed; `Schedule(ScheduleId)` **only** in 1.2 | `SUPPLY(id)` is #15, Phase 6; a dead member is a member something can write |
-| `ProviderId` | enum; **`LOCAL` only** in 1.2 | `TODOIST` is Phase 5; adding it now gives the editor a provider row it cannot deliver |
+| `ProviderId` | enum; **`LOCAL` only** in 1.2 | `TODOIST` is Phase 5; adding it now gives the editor a provider row it cannot deliver. **Consequence:** with one member, and `schedule_provider` keyed `(schedule_id, provider)`, no schedule can hold two enabled rows in 1.2 — so the two-list case is proved **structurally**, not behaviourally (see the matrix row, and master plan decision 8) |
 | `SubjectState` | sealed; `Active`, `Parked(reentryOn: LocalDate?)`, `Completed`, `Withdrawn` | `Parked` carries the re-entry date the provider shows without knowing what a season is |
 | `RuleFacts` | `basis: TimeBasis?, interval: Int?, unit: RecurrenceUnit?, hasMeter: Boolean, seasonal: Boolean` | the rule's **facts**, never the entity: what a future provider's capability check consumes (#28, D3 §8) |
 | `ReconcileReport` | `posted: Int, cleared: Int, unchanged: Int, problems: List<String>` | enough for B10's health screen and B12's diagnostics without naming a mechanism |
@@ -87,7 +87,7 @@ One test per hazard class, all against the fake provider and in-memory repositor
 | hazard | behaviour proved | how it fails without the change |
 |---|---|---|
 | a provider leaks into `:core` | a structural assertion over `core/src/main`: no `android.`/`androidx.` import anywhere, and no type name in `core/.../core/reminders/` mentioning a provider product (invariant 48) | importing a notification type or naming a Todoist object makes `:core` unbuildable off-device and the grep hit |
-| two providers need a port change | a schedule with **two** enabled provider rows yields two subject lists, and the port's signature is unchanged between them (invariant 49) | a provider-shaped parameter on `reconcile`, or a single-provider list, makes the second list impossible |
+| two providers need a port change | **proved structurally, not behaviourally** (master plan decision 8): `ProviderId` carries `LOCAL` only in 1.2, so two enabled rows are unconstructable and no test can build the two-list case. What the test asserts instead is that **the port needs no change for one**: the provider is a **parameter** of `forProvider` and the **key** of `all()`'s map, `reconcile`'s signature names no provider, and adding a second enum member is purely additive — asserted over the signatures and over `all()`'s keying, with one subject list for `LOCAL`. **The behavioural half of #28 AC 4 lands with the Todoist provider in Phase 5** (invariant 49) | a provider-shaped parameter on `reconcile`, or a subject list that is not keyed by provider, would make a second provider a port change — which is the fact AC 4 exists to prevent and the only half 1.2 can prove |
 | a no-op update churns the provider | the same schedule state yields the **same** `contentHash`; changing only an unrelated schedule field (its `description`, say, when `description` is not in the body) leaves the hash unchanged; changing `dueOn` changes it (invariant 46) | hashing the whole entity makes every edit look like a change and the provider re-posts |
 | `reconcile` twice | the fake provider records two calls with **identical** subject lists and reports `unchanged` for every subject the second time, with **no second effect** (invariant 45) | a "create one reminder" call, or a `reconcile` that appends rather than reconciles, produces a second effect |
 | a parked schedule vanishing | one test covering both: a `PAUSED` schedule and an out-of-season `FOLLOW_ASSET` schedule each arrive as `Parked`, with the season case carrying its re-entry date; **neither is absent and neither is overdue** (invariant 47) | filtering parked subjects out of the list makes a provider keep a standing notification with nothing to clear it |
@@ -107,7 +107,7 @@ Invariant 44's "rebuildable from nothing" is **B06's** to prove; this brief's pa
 
 ## Ordering
 
-**After B02 and B03** (needs `statusOf`, `ScheduleState` and `GroupOccurrence`). **Before B06** and B10's findings rendering. Takes lane B of wave 3 once B03's domain lands, or lane B of wave 4 beside B06's start.
+**After B02 and B03** (needs `statusOf`, `ScheduleState` and `GroupOccurrence`). **Before B06** and B10's findings rendering. Takes **lane B of wave 3** as soon as B03's domain lands, and **must land before wave 4 opens, because B06 consumes it** (master plan §14.3). **It may not ride wave 4** — wave 4 lane A is B06 and lane B is B08.
 
 ## Review gate
 
