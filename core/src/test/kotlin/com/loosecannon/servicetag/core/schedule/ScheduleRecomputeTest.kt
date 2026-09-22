@@ -1,6 +1,9 @@
 package com.loosecannon.servicetag.core.schedule
 
+import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.DefinitionId
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.TerminationKind
@@ -15,6 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** `rebuild` itself: the pin, the fallback, purity, and the three structural facts about it. */
 class ScheduleRecomputeTest {
@@ -210,6 +214,95 @@ class ScheduleRecomputeTest {
         val state = ScheduleRecompute.rebuild(meterOnly, listOf(noisy), emptyList(), emptyList(), on("2026-06-02"))
         assertEquals(180.0, state.currentMeter)
     }
+
+    /**
+     * **Regression — a termination dated a whole interval before its own round used to stick the
+     * schedule on that round for ever.**
+     *
+     * On the COMPLETION basis the series restarts at the effective date, and a bare `E + interval`
+     * lands back on the occurrence just satisfied whenever `E + interval <= D`. The schedule then
+     * reported that date permanently: the round could never be completed again (the unique index)
+     * and closing it was refused, so nothing could move it. Any past date is a legal `occurredOn`
+     * or `closedOn` (D-25), so it was reachable from the app and the API, and it broke invariant 9's
+     * "at most one current occurrence".
+     *
+     * The fix is the same bound FIXED already carried: strictly after `max(D, E)`. Asserted here on
+     * a completion, a closure and the boundary case where `E + interval` lands exactly on `D`.
+     */
+    @Test
+    fun aTerminationAnIntervalBeforeItsOwnRoundStillAdvancesTheSchedule() {
+        val monthly = scheduleOf(
+            timeInterval = 1,
+            timeUnit = RecurrenceUnit.MONTH,
+            timeBasis = TimeBasis.COMPLETION,
+            anchorOn = "2026-02-01",
+            createdOn = "2026-01-01",
+        )
+        assertEquals("2026-02-01", rebuildOn(monthly, emptyList(), emptyList()), "the anchor, untouched")
+
+        // E + interval lands exactly on D, the round it satisfied: the old answer, and the bug.
+        val backdated = completionOf("e1", occurredOn = "2026-01-01", occurrenceOn = "2026-02-01")
+        assertEquals("2026-03-01", rebuildOn(monthly, listOf(backdated), emptyList()))
+
+        // Further back still: the restarted series is walked to its first date after the round just
+        // satisfied — one next occurrence, never a backlog of the ones it skipped past.
+        val muchEarlier = completionOf("e1", occurredOn = "2025-11-05", occurrenceOn = "2026-02-01")
+        assertEquals("2026-02-05", rebuildOn(monthly, listOf(muchEarlier), emptyList()))
+
+        // And a closure, which is a termination with a date and advances the same way.
+        val closedEarly = closureOf("oc1", occurrenceOn = "2026-02-01", closedOn = "2026-01-01")
+        assertEquals("2026-03-01", rebuildOn(monthly, emptyList(), listOf(closedEarly)))
+
+        // The ordinary cases are untouched: a termination on or after its own round still steps once.
+        val onTime = completionOf("e1", occurredOn = "2026-02-01", occurrenceOn = "2026-02-01")
+        assertEquals("2026-03-01", rebuildOn(monthly, listOf(onTime), emptyList()))
+        val late = completionOf("e1", occurredOn = "2026-04-10", occurrenceOn = "2026-02-01")
+        assertEquals("2026-05-10", rebuildOn(monthly, listOf(late), emptyList()))
+    }
+
+    /**
+     * The property the regression above is a special case of: **the current occurrence is never one
+     * that has already terminated.** Asserted over both bases and a spread of effective dates
+     * either side of the round's own key, because that is the whole family the bug lived in and one
+     * example would not have caught the closure half of it.
+     */
+    @Test
+    fun theCurrentOccurrenceIsNeverOneThatAlreadyTerminated() {
+        val dates = listOf("2025-10-01", "2026-01-01", "2026-01-31", "2026-02-01", "2026-04-10")
+        for (basis in TimeBasis.entries) {
+            for (interval in listOf(1, 3)) {
+                val schedule = scheduleOf(
+                    timeInterval = interval,
+                    timeUnit = RecurrenceUnit.MONTH,
+                    timeBasis = basis,
+                    anchorOn = "2026-02-01",
+                    createdOn = "2026-01-01",
+                )
+                for (date in dates) {
+                    val done = completionOf("e1", occurredOn = date, occurrenceOn = "2026-02-01")
+                    val closed = closureOf("oc1", occurrenceOn = "2026-02-01", closedOn = date)
+                    for ((label, next) in listOf(
+                        "completed on $date" to rebuildOn(schedule, listOf(done), emptyList()),
+                        "closed on $date" to rebuildOn(schedule, emptyList(), listOf(closed)),
+                    )) {
+                        assertTrue(
+                            next!! > "2026-02-01",
+                            "$basis/$interval $label: the round just terminated is still current at $next",
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /** `computedDueOn` for one history, with no membership: the asset-target case. */
+    private fun rebuildOn(
+        schedule: MaintenanceSchedule,
+        events: List<AssetEvent>,
+        closures: List<OccurrenceClosure>,
+    ): String? = ScheduleRecompute
+        .rebuild(schedule, events, closures, emptyList(), on("2026-05-01"))
+        .computedDueOn
 
     /**
      * The group seam, now filled: `rebuild` takes membership as a parameter and the required set of

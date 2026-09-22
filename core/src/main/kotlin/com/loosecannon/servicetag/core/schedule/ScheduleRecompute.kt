@@ -205,8 +205,19 @@ object ScheduleRecompute {
      *
      * With a termination: FIXED takes the smallest series date strictly after `max(D, E)`, so a very
      * late termination skips forward and produces exactly **one** next occurrence rather than a
-     * backlog of missed ones (invariant 13); COMPLETION takes `E + interval`, which is why an early
+     * backlog of missed ones (invariant 13); COMPLETION restarts the series **at** `E` and takes the
+     * smallest `E + k·interval` (`k >= 1`) that is strictly after `max(D, E)`, which is why an early
      * completion moves the whole series and a FIXED one does not.
+     *
+     * That last bound — strictly after `D`, the occurrence just satisfied — is not decoration. With
+     * a bare `E + interval` a termination dated a **whole interval or more** before its own round
+     * lands the next occurrence back on the round it just ended: the schedule then reports that date
+     * for ever, because the round can never be completed again (the unique index) and closing it is
+     * refused. It is reachable from the app and the API, since any past date is a legal `occurredOn`
+     * or `closedOn` (D-25), and it breaks invariant 9's "at most one current occurrence". The bound
+     * changes nothing else: when `E + interval` is already after `D` — which it always is for a
+     * termination on or after its due date, and for any early completion inside one interval — it
+     * *is* the answer, and it is still computed from `E` with a multiplier, so no clamp can drift.
      *
      * With no termination at all, FIXED is **pinned from immutable configuration** (D-27): the
      * smallest series date at or after `max(anchorOn, the row's own floor)`. It never re-floats on
@@ -229,7 +240,9 @@ object ScheduleRecompute {
             TimeBasis.COMPLETION -> if (last == null) {
                 anchor
             } else {
-                RecurrenceMath.plusInterval(LocalDate.parse(last.effectiveOn), interval, unit)
+                val from = LocalDate.parse(last.effectiveOn)
+                val satisfied = LocalDate.parse(last.occurrenceOn)
+                RecurrenceMath.firstSeriesDateAfter(from, maxOf(from, satisfied), interval, unit)
             }
         }.toString()
     }

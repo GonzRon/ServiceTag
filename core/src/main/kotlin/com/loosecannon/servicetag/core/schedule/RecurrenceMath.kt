@@ -83,7 +83,13 @@ object RecurrenceMath {
         return if (!at.isAfter(limit)) at else seriesDate(anchor, k - 1, interval, unit)
     }
 
-    /** The COMPLETION basis's single step: `E + interval`. */
+    /**
+     * The COMPLETION basis's single step: `E + interval`, the same value as `seriesDate(from, 1, …)`.
+     *
+     * The engine reaches the COMPLETION series through [firstSeriesDateAfter] now, because the next
+     * occurrence also has to clear the one just satisfied; this stays as the name of what the basis
+     * *means*, and as the one-step case its own test pins.
+     */
     fun plusInterval(from: LocalDate, interval: Int, unit: RecurrenceUnit): LocalDate {
         require(interval >= 1) { "interval must be at least 1, was $interval" }
         return plusSteps(from, interval.toLong(), unit)

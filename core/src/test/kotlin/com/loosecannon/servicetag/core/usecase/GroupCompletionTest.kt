@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.ports.Clock
@@ -259,30 +260,52 @@ class GroupCompletionTest {
      * loggable — as an ordinary journal event with no `schedule_id`, which is spec §2.9's deliberate
      * consequence rather than a gap.
      *
-     * The state where the **current** round carries a closure is reachable in exactly one shape: a
-     * COMPLETION-basis schedule whose `closed_on` is one interval before the round's own date, so
-     * that `closed_on + interval` lands back on it. That is why the check is on the round rather
-     * than on "the schedule has any closure".
+     * **How this state is reached, and why it matters that it is hard to.** A completion's
+     * `occurrence_on` is stamped from the current round, and since the engine fix a terminated round
+     * is never the current one, so a locally closed round is unreachable through this path at all —
+     * the guard is defence in depth. The one state that still reaches it is an imported closure on a
+     * round that is **not** a termination: a round that obliges nobody, which is the shape a merge
+     * can deliver. That is what is built here, by seeding the row the way an import does.
+     *
+     * The last two assertions discriminate the guard from the emptiness: with the closure the answer
+     * is `OccurrenceClosed`, and without it the very same round answers `OccurrenceNotActionable`.
      */
     @Test
     fun aCompletionOfAClosedRoundIsRefusedWhileAnOrdinaryEventStillSucceeds() = runTest {
         val a1 = seedAsset("a1")
-        val schedule = seedSchedule(
-            seedGroup(listOf(a1)),
-            basis = TimeBasis.COMPLETION,
-            interval = 1,
-            anchorOn = "2026-02-01",
-        )
-        today = LocalDate.parse("2026-02-10")
-        assertEquals("2026-02-01", keyOf(schedule))
+        val groupId = seedGroup(listOf(a1))
+        val schedule = seedSchedule(groupId)
 
-        closeRound.run(schedule.id, closedOn = "2026-01-01")
-        assertEquals("2026-02-01", keyOf(schedule), "the closure landed back on its own round")
-
-        assertFailsWith<OccurrenceClosed> {
-            completeMembers.run(schedule.id, listOf(a1), completion("2026-02-05"))
+        // The member leaves, and finishing the round it was still required for opens an empty one.
+        now = dayMillis("2026-02-01")
+        saveGroup.run(groupId, GroupCommand(name = "North run"))
+        completeMembers.all(schedule.id, completion("2026-04-15"))
+        val open = assertNotNull(recompute.occurrenceOf(schedule))
+        assertEquals(emptyList(), open.required)
+        assertFailsWith<OccurrenceNotActionable> {
+            completeMembers.run(schedule.id, listOf(a1), completion("2026-04-16"))
         }
-        assertEquals(emptyList(), events.all())
+
+        closures.insert(
+            OccurrenceClosure(
+                id = "imported-closure",
+                scheduleId = schedule.id,
+                occurrenceOn = open.occurrenceOn.toString(),
+                closedOn = "2026-04-10",
+                createdAt = dayMillis("2026-04-10"),
+            ),
+        )
+        assertEquals(
+            open.occurrenceOn,
+            assertNotNull(recompute.occurrenceOf(schedule)).occurrenceOn,
+            "a closure on a round that obliges nobody is not a termination, so the round stays",
+        )
+
+        val eventsBefore = events.all()
+        assertFailsWith<OccurrenceClosed> {
+            completeMembers.run(schedule.id, listOf(a1), completion("2026-04-16"))
+        }
+        assertEquals(eventsBefore, events.all())
 
         val logged = logEvent.run(
             EventCommand(
@@ -290,7 +313,7 @@ class GroupCompletionTest {
                 profileId = null,
                 kind = EventKind.MAINTENANCE,
                 title = "Topped up anyway",
-                occurredOn = "2026-02-05",
+                occurredOn = "2026-04-16",
                 occurredTime = null,
                 tzId = "UTC",
                 notes = "",
@@ -300,7 +323,7 @@ class GroupCompletionTest {
         )
         assertNull(logged.scheduleId)
         assertNull(logged.occurrenceOn)
-        assertEquals(1, events.all().size)
+        assertEquals(eventsBefore.size + 1, events.all().size)
     }
 
     /**
