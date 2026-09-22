@@ -29,6 +29,10 @@ from .source import Source
 FORMAT_VERSION = 5
 SCHEMA_VERSION = 5
 ARTIFACT_FORMAT_VERSION = 1
+#: Must be kept in sync by hand with `pyproject.toml`'s `[project] version` (`tests/test_archive.py`
+#: pins the two together). Not derived from `importlib.metadata` at import time: that would read
+#: this package's installed metadata off disk on every import, which is exactly the
+#: beyond-the-one-source-path filesystem access this module's docstring promises never happens.
 APP_VERSION = "servicetag-bundle/0.1.0"
 
 MANIFEST_ENTRY = "manifest.json"
@@ -150,6 +154,10 @@ def write_archive(source: Source, out: Path) -> dict[str, Any]:
     disk, a signal, a permission error -- so a failed `write_archive` never leaves a truncated
     file at `out`, and never disturbs anything already there under that temp name.
 
+    `mkstemp` creates its file mode `0600`; before the rename, the mode is reset to `0644` --
+    umask-independent, and matching the zip entries' own pinned `external_attr` (`0o644 << 16`) --
+    so the file this writes is not silently owner-only just because it went through a temp file.
+
     Does not create `out`'s parent directory (a missing parent surfaces as the underlying
     `OSError`) and does not check whether `out` already exists: overwrite policy belongs to the
     CLI, which decides before ever calling this.
@@ -161,6 +169,7 @@ def write_archive(source: Source, out: Path) -> dict[str, Any]:
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(archive)
+        os.chmod(tmp, 0o644)
         os.replace(tmp, out)
     except BaseException:
         tmp.unlink(missing_ok=True)

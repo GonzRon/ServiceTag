@@ -54,6 +54,13 @@ class StageABundleConformanceTest {
         val child = backup.data.assets.single { it.name == "Greenhouse Heater Thermostat" }
 
         assertEquals(parent.id, child.parentAssetId)
+    }
+
+    @Test
+    fun `the fixture's non-ASCII note survives the decoder`() {
+        val backup = BackupCodec.decode(resourceBytes())
+        val parent = backup.data.assets.single { it.name == "Greenhouse Heater" }
+
         // The fixture's one non-ASCII character round-trips through the pinned `ensure_ascii`
         // escape in data.json and back out through the decoder -- not just present in the bytes.
         assertEquals("runs October through April; façade repainted 2025", parent.notes)

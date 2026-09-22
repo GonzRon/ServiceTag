@@ -10,8 +10,7 @@ import uuid
 from servicetag_bundle.ids import namespace_of, row_id
 from servicetag_bundle.source import parse_source
 
-from conftest import minimal_source
-from test_rows import _all_ids, _built, _ns
+from conftest import _all_ids, _built, _ns, minimal_source
 
 
 def _independent_ns(namespace: str) -> uuid.UUID:

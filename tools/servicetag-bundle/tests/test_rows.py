@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import calendar
 import copy
-import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from servicetag_bundle.ids import namespace_of, row_id
-from servicetag_bundle.rows import build_rows
+from servicetag_bundle.rows import build_rows, epoch_millis
 from servicetag_bundle.source import parse_source
+
+from conftest import _all_ids, _built, _ns, _rich_source
 
 # ---- the DTO field sets, transcribed from BackupFormat.kt -------------------------------------
 
@@ -46,100 +47,10 @@ CONSUMABLE_USAGE_FIELDS = {"id", "name", "quantity", "unit", "sortOrder"}  # Con
 
 
 # ---- fixture --------------------------------------------------------------------------------
-
-def _rich_source() -> dict[str, Any]:
-    return {
-        "formatVersion": 1,
-        "namespace": "widget-farm",
-        "bundleKey": "stage-a",
-        "asOf": "2026-09-21T00:00:00Z",
-        "tzId": "America/Denver",
-        "assets": [
-            {
-                # listed before its parent -- proves the topological sort is real, not a pass
-                # over the array.
-                "key": "widget-fan",
-                "name": "Widget Fan",
-                "parent": "widget-mixer",
-            },
-            {
-                "key": "widget-mixer",
-                "name": "Widget Mixer 3000",
-                "manufacturer": "Acme Gadgets",
-                "purchasePriceMinor": 12345,
-                "currency": "USD",
-                "definitions": [
-                    {"key": "ph", "label": "pH", "valueType": "NUMBER", "unit": "pH",
-                     "rangeLow": 0, "rangeHigh": 14},
-                    {"key": "temp", "label": "Temperature", "valueType": "NUMBER", "unit": "F"},
-                    {"key": "notes_field", "label": "Notes", "valueType": "TEXT"},
-                    {"key": "running", "label": "Running", "valueType": "BOOLEAN"},
-                    {"key": "wear_pct", "label": "Wear", "valueType": "NUMBER", "kind": "DERIVED",
-                     "formula": "PERCENT_DROP", "sourceA": "ph", "sourceB": "temp"},
-                ],
-                "profiles": [
-                    {
-                        "key": "water-test", "name": "Water Test", "eventKind": "MEASUREMENT",
-                        "fields": [
-                            {"definition": "ph", "required": True},
-                            {"definition": "temp"},
-                        ],
-                        "consumables": [
-                            {"key": "filter", "name": "Filter", "defaultQuantity": 2,
-                             "unit": "pcs"},
-                        ],
-                    },
-                ],
-                "events": [
-                    {
-                        "key": "e1", "kind": "MEASUREMENT", "occurredOn": "2026-09-20",
-                        "title": "Morning check", "profile": "water-test",
-                        "values": {
-                            "ph": 7.5, "temp": 68, "running": True,
-                            "notes_field": "Looks clean",
-                        },
-                        "consumables": [
-                            {"key": "filter", "name": "Filter", "quantity": 1, "unit": "pcs"},
-                        ],
-                    },
-                    {
-                        "key": "e2", "kind": "NOTE", "occurredOn": "2026-09-19",
-                        "title": "Second check",
-                    },
-                    {
-                        "key": "e3", "kind": "CUSTOM", "occurredOn": "2026-09-18",
-                        "title": "TZ check", "tzId": "Europe/Berlin",
-                        "values": {"running": False},
-                    },
-                ],
-            },
-        ],
-    }
-
-
-def _built(source_dict: dict[str, Any] | None = None) -> dict[str, list[dict[str, Any]]]:
-    return build_rows(parse_source(source_dict if source_dict is not None else _rich_source()))
-
-
-_ID_FIELD_NAMES = {
-    "id", "assetId", "parentAssetId", "definitionId", "sourceAId", "sourceBId", "profileId",
-}
-
-
-def _all_ids(node: Any) -> set[str]:
-    """Every value of a row-id field (never `tzId`, which is a timezone name, not an id), walked
-    recursively."""
-    found: set[str] = set()
-    if isinstance(node, dict):
-        for key, value in node.items():
-            if key in _ID_FIELD_NAMES and isinstance(value, str):
-                found.add(value)
-            found |= _all_ids(value)
-    elif isinstance(node, list):
-        for item in node:
-            found |= _all_ids(item)
-    return found
-
+#
+# `_rich_source`, `_built`, `_ns` and `_all_ids` live in `conftest.py` -- `test_ids.py`'s key-table
+# test binds the id-derivation formula to a real build of this same fixture, so both suites share
+# one copy rather than one importing the other's test module.
 
 def _asset(built: dict[str, Any], key: str) -> dict[str, Any]:
     ns = _ns()
@@ -151,10 +62,6 @@ def _event(built: dict[str, Any], asset_key: str, event_key: str) -> dict[str, A
     return next(
         e for e in built["assetEvents"] if e["id"] == row_id(ns, f"event:{asset_key}/{event_key}")
     )
-
-
-def _ns() -> uuid.UUID:
-    return uuid.uuid5(uuid.NAMESPACE_URL, "servicetag-bundle:widget-farm")
 
 
 def _expected_millis(dt: datetime) -> int:
@@ -258,31 +165,43 @@ def test_empty_tables_are_empty():
 
 # ---- typing -----------------------------------------------------------------------------------
 
-_NUMERIC_SPEC: dict[str, dict[str, type]] = {
-    "assets": {"createdAt": int, "updatedAt": int, "purchasePriceMinor": int},
-    "measurementDefinitions": {
-        "createdAt": int, "updatedAt": int, "decimals": int, "sortOrder": int,
-        "rangeLow": float, "rangeHigh": float,
+# Each spec value is `(expected_type, nullable)`. `nullable` records whether the DTO field is
+# ever legitimately `None` for that row -- a field marked `False` here that turns up `None` is a
+# real regression (the id/timestamp/sortOrder fields are never optional), not a value the walk
+# should silently pass over the way a genuinely-optional field (`rangeLow`, `defaultQuantity`,
+# `valueNum` for a TEXT measurement) is allowed to.
+_NUMERIC_SPEC: dict[str, dict[str, tuple[type, bool]]] = {
+    "assets": {
+        "createdAt": (int, False), "updatedAt": (int, False),
+        "purchasePriceMinor": (int, True),
     },
-    "eventProfiles": {"createdAt": int, "updatedAt": int, "sortOrder": int},
-    "assetEvents": {"createdAt": int, "updatedAt": int},
-}
-_NESTED_NUMERIC_SPEC: dict[str, dict[str, dict[str, type]]] = {
+    "measurementDefinitions": {
+        "createdAt": (int, False), "updatedAt": (int, False),
+        "decimals": (int, False), "sortOrder": (int, False),
+        "rangeLow": (float, True), "rangeHigh": (float, True),
+    },
     "eventProfiles": {
-        "fields": {"sortOrder": int},
-        "consumables": {"sortOrder": int, "defaultQuantity": float},
+        "createdAt": (int, False), "updatedAt": (int, False), "sortOrder": (int, False),
+    },
+    "assetEvents": {"createdAt": (int, False), "updatedAt": (int, False)},
+}
+_NESTED_NUMERIC_SPEC: dict[str, dict[str, dict[str, tuple[type, bool]]]] = {
+    "eventProfiles": {
+        "fields": {"sortOrder": (int, False)},
+        "consumables": {"sortOrder": (int, False), "defaultQuantity": (float, True)},
     },
     "assetEvents": {
-        "measurements": {"valueNum": float, "sortOrder": int},
-        "consumables": {"quantity": float, "sortOrder": int},
+        "measurements": {"valueNum": (float, True), "sortOrder": (int, False)},
+        "consumables": {"quantity": (float, False), "sortOrder": (int, False)},
     },
 }
 
 
-def _assert_typed(row: dict[str, Any], spec: dict[str, type]) -> None:
-    for field_name, expected in spec.items():
+def _assert_typed(row: dict[str, Any], spec: dict[str, tuple[type, bool]]) -> None:
+    for field_name, (expected, nullable) in spec.items():
         value = row.get(field_name)
         if value is None:
+            assert nullable, f"{field_name} is None, but this DTO field is never null"
             continue
         assert type(value) is expected, f"{field_name} is {type(value)}, expected {expected}"
 
@@ -425,6 +344,16 @@ def test_timestamps_equal_as_of_millis_everywhere():
     _check(built["measurementDefinitions"])
     _check(built["eventProfiles"])
     _check(built["assetEvents"])
+
+
+def test_epoch_millis_truncates_sub_millisecond_precision_toward_the_lower_millisecond():
+    """`asOf` is free to carry microseconds (`datetime.fromisoformat` accepts them); the docstring
+    promises truncation toward the lower millisecond, not rounding -- pin both with a value whose
+    truncated and rounded results would differ (999999us truncates to 999ms, would round to
+    1000ms/carry a second)."""
+    dt = datetime(2026, 9, 21, 0, 0, 0, 999999, tzinfo=timezone.utc)
+    assert epoch_millis(dt) == _expected_millis(dt)
+    assert epoch_millis(dt) % 1000 == 999
 
 
 def test_sort_order_is_the_position_in_the_source_array():

@@ -9,7 +9,8 @@ import zipfile
 from pathlib import Path
 
 from servicetag_bundle.cli import main
-from test_archive import rich_source
+
+from conftest import rich_source
 
 
 def _write_source(path: Path, obj: dict) -> Path:
@@ -37,7 +38,7 @@ def test_check_invalid_source_exits_one_with_path_on_stderr_and_creates_nothing(
 
     assert code == 1
     err = capsys.readouterr().err
-    assert err.strip() == "formatVersion: must be 1"
+    assert err.strip() == f"{source_path}: formatVersion: must be 1"
     assert set(tmp_path.iterdir()) == before
 
 
@@ -173,6 +174,27 @@ def test_inspect_a_format_le4_manifest_reports_cleanly_instead_of_a_keyerror(tmp
     assert "formatVersion=3" in out
     assert "backupSetId=-" in out
     assert "assets=0" in out
+
+
+def test_inspect_never_decodes_a_row_even_when_data_json_is_garbage(tmp_path, capsys):
+    """`inspect` reads only `MANIFEST_ENTRY` (`cli.py`'s `_cmd_inspect`) -- it must report cleanly
+    off a complete manifest even when `data.json` is not valid JSON at all, proving the row data is
+    never touched, let alone decoded (S9)."""
+    archive_path = tmp_path / "garbage-data.zip"
+    manifest = json.dumps(
+        {"formatVersion": 5, "appVersion": "servicetag-bundle/0.1.0", "schemaVersion": 5,
+         "createdAt": 0, "counts": {"assets": 1}, "dataSha256": "0" * 64}
+    ).encode("utf-8")
+    with zipfile.ZipFile(archive_path, "w") as zf:
+        zf.writestr("manifest.json", manifest)
+        zf.writestr("data.json", b"not json at all, and not even rows if it were")
+
+    code = main(["inspect", str(archive_path)])
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "formatVersion=5" in out
+    assert "assets=1" in out
 
 
 def test_inspect_a_corrupt_manifest_reports_missing_fields_not_a_false_clean_bill(tmp_path, capsys):

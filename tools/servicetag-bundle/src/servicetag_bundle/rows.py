@@ -6,12 +6,13 @@ as plain dicts -- exactly the field names and value shapes of the `@Serializable
 
 from __future__ import annotations
 
+import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
 from .ids import namespace_of, row_id
-from .source import Asset, Event, Profile, Source
+from .source import Asset, Definition, Event, Profile, Source
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
@@ -69,7 +70,7 @@ def build_rows(source: Source) -> dict[str, list[dict[str, Any]]]:
     event_rows: list[dict[str, Any]] = []
 
     for asset in ordered_assets:
-        asset_rows.append(_asset_row(ns, asset, asset_ids, as_of_millis))
+        asset_rows.append(_asset_row(asset, asset_ids, as_of_millis))
 
         for index, definition in enumerate(asset.definitions):
             definition_rows.append(
@@ -109,7 +110,7 @@ def build_rows(source: Source) -> dict[str, list[dict[str, Any]]]:
 # ---- assets --------------------------------------------------------------------------------------
 
 def _asset_row(
-    ns: Any, asset: Asset, asset_ids: dict[str, str], as_of_millis: int
+    asset: Asset, asset_ids: dict[str, str], as_of_millis: int
 ) -> dict[str, Any]:
     return {
         "id": asset_ids[asset.key],
@@ -144,7 +145,7 @@ def _asset_row(
 # ---- definitions -----------------------------------------------------------------------------
 
 def _definition_row(
-    ns: Any, asset: Asset, definition: Any, index: int, asset_ids: dict[str, str],
+    ns: uuid.UUID, asset: Asset, definition: Definition, index: int, asset_ids: dict[str, str],
     as_of_millis: int,
 ) -> dict[str, Any]:
     def _definition_id(key: str) -> str:
@@ -175,7 +176,7 @@ def _definition_row(
 # ---- profiles ------------------------------------------------------------------------------------
 
 def _profile_row(
-    ns: Any, asset: Asset, profile: Profile, index: int, asset_ids: dict[str, str],
+    ns: uuid.UUID, asset: Asset, profile: Profile, index: int, asset_ids: dict[str, str],
     as_of_millis: int,
 ) -> dict[str, Any]:
     fields = [
@@ -216,8 +217,8 @@ def _profile_row(
 # ---- events --------------------------------------------------------------------------------------
 
 def _measurement_row(
-    ns: Any, asset: Asset, event: Event, definition_key: str, definitions_by_key: dict[str, Any],
-    definition_sort_order: dict[str, int],
+    ns: uuid.UUID, asset: Asset, event: Event, definition_key: str,
+    definitions_by_key: dict[str, Definition], definition_sort_order: dict[str, int],
 ) -> dict[str, Any]:
     definition = definitions_by_key[definition_key]
     value = event.values[definition_key]
@@ -241,9 +242,9 @@ def _measurement_row(
 
 
 def _event_row(
-    ns: Any, asset: Asset, event: Event, asset_ids: dict[str, str], profile_ids: dict[str, str],
-    definitions_by_key: dict[str, Any], definition_sort_order: dict[str, int],
-    as_of_millis: int,
+    ns: uuid.UUID, asset: Asset, event: Event, asset_ids: dict[str, str],
+    profile_ids: dict[str, str], definitions_by_key: dict[str, Definition],
+    definition_sort_order: dict[str, int], as_of_millis: int,
 ) -> dict[str, Any]:
     # `event.values` is a mapping with no order of its own -- iterate the asset's own definition
     # order (which carries `sortOrder`) instead of the dict's insertion order, so a source that

@@ -60,8 +60,9 @@ servicetag-bundle check SOURCE
 ```
 
 Validates `SOURCE` only — writes nothing. Exits 0 if it's a valid source document, printing
-whether it carries a `deferred` payload; exits 1 with `path: message` on stderr (the JSON path of
-the first thing wrong) if it doesn't.
+whether it carries a `deferred` payload; exits 1 on stderr if it doesn't, always naming `SOURCE` —
+`SOURCE: message` when the file itself can't be read or parsed, `SOURCE: path: message` for a
+validation failure, where `path` is the JSON path of the first thing wrong.
 
 ```
 servicetag-bundle build SOURCE OUT [--force]

@@ -10,9 +10,11 @@ import io
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import tokenize
+import tomllib
 import zipfile
 from datetime import datetime, timezone
 from io import StringIO
@@ -22,6 +24,7 @@ from typing import Any
 import pytest
 
 from servicetag_bundle.archive import (
+    APP_VERSION,
     ArchiveTooLarge,
     DATA_ENTRY,
     MANIFEST_ENTRY,
@@ -32,70 +35,27 @@ from servicetag_bundle.ids import namespace_of, row_id
 from servicetag_bundle.rows import build_rows
 from servicetag_bundle.source import parse_source
 
+from conftest import rich_source
+
 _SRC_ROOT = Path(__file__).resolve().parents[1] / "src"
 
 
 # ---- fixture ------------------------------------------------------------------------------------
-
-def rich_source() -> dict[str, Any]:
-    """One asset with two definitions, a profile carrying a field and a consumable, and one event
-    carrying a measurement and a consumable usage -- enough for every manifest count to be
-    non-zero, including the nested tallies (`profileFields`, `profileConsumables`, `measurements`,
-    `consumableUsages`)."""
-    return {
-        "formatVersion": 1,
-        "namespace": "widget-farm",
-        "bundleKey": "stage-a",
-        "asOf": "2026-09-21T00:00:00Z",
-        "tzId": "America/Denver",
-        "assets": [
-            {
-                "key": "widget-mixer",
-                "name": "Widget Mixer 3000",
-                "definitions": [
-                    {"key": "ph", "label": "pH", "valueType": "NUMBER"},
-                    {"key": "temp", "label": "Temperature", "valueType": "NUMBER"},
-                ],
-                "profiles": [
-                    {
-                        "key": "water-test",
-                        "name": "Water Test",
-                        "eventKind": "MEASUREMENT",
-                        "fields": [{"definition": "ph", "required": True}],
-                        "consumables": [
-                            {"key": "filter", "name": "Filter", "defaultQuantity": 2, "unit": "pcs"},
-                        ],
-                    },
-                ],
-                "events": [
-                    {
-                        "key": "e1",
-                        "kind": "MEASUREMENT",
-                        "occurredOn": "2026-09-20",
-                        "title": "Morning check",
-                        "profile": "water-test",
-                        "values": {"ph": 7.5},
-                        "consumables": [
-                            {"key": "filter", "name": "Filter", "quantity": 1, "unit": "pcs"},
-                        ],
-                    },
-                ],
-            },
-        ],
-    }
-
 
 def _source():
     return parse_source(rich_source())
 
 
 def asymmetric_source() -> dict[str, Any]:
-    """A source where every nested tally differs from its parent table's size *and* from every
-    other table's size (2 assets, 4 definitions, 1 profile with 2 fields and 3 consumables, 2
-    events -- `e1` with 3 values and 3 consumable usages, `e2` bare) so a writer that summed the
-    wrong list -- `len(assetEvents)` where it should sum `len(e["measurements"]) for e in
-    assetEvents`, say -- cannot pass by coincidence the way `measurements == consumableUsages ==
-    len(assetEvents) == 2` once did here."""
+    """A source where every nested tally differs from its own parent table's size (2 assets, 4
+    definitions, 1 profile with 2 fields and 3 consumables, 2 events -- `e1` with 3 values and 3
+    consumable usages, `e2` bare): `profileFields` (2) and `profileConsumables` (3) each differ
+    from their parent `eventProfiles` (1); `measurements` (3) and `consumableUsages` (3) each
+    differ from their parent `assetEvents` (2), and -- unlike `profileFields`, which happens to
+    equal `assetEvents`' size -- neither of those two coincides with any table's size at all. So a
+    writer that summed the wrong list -- `len(assetEvents)` where it should sum
+    `len(e["measurements"]) for e in assetEvents`, say -- cannot pass by coincidence the way
+    `measurements == consumableUsages == len(assetEvents) == 2` once did here."""
     return {
         "formatVersion": 1,
         "namespace": "widget-farm",
@@ -460,6 +420,19 @@ def test_write_archive_leaves_nothing_behind_on_a_mid_write_failure(tmp_path, mo
     assert list(tmp_path.iterdir()) == []  # the ".partial" temp file was cleaned up too
 
 
+def test_write_archive_writes_the_file_mode_0644_regardless_of_umask(tmp_path):
+    """`mkstemp` creates its file `0600`; `write_archive` must reset it to `0644` before the
+    rename (R1) -- matching the zip entries' own pinned `external_attr` -- rather than leaving a
+    private bundle owner-only as a side effect of the atomic-write temp file."""
+    out = tmp_path / "out.zip"
+    old_umask = os.umask(0o077)  # would otherwise mask 0644 down to 0600 too, hiding the bug
+    try:
+        write_archive(_source(), out)
+    finally:
+        os.umask(old_umask)
+    assert stat.S_IMODE(out.stat().st_mode) == 0o644
+
+
 def test_write_archive_does_not_disturb_a_pre_existing_partial_sibling(tmp_path):
     """The temp name used to be the predictable `out.name + ".partial"`; a build would silently
     clobber a pre-existing file under that exact name. `tempfile.mkstemp` picks a unique name, so
@@ -474,3 +447,14 @@ def test_write_archive_does_not_disturb_a_pre_existing_partial_sibling(tmp_path)
     assert out.exists()
     leftovers = [p for p in tmp_path.iterdir() if p not in (out, stray)]
     assert leftovers == []  # no stray mkstemp temp file left behind on success either
+
+
+# ---- the version string is not allowed to drift from pyproject.toml ---------------------------
+
+def test_app_version_matches_pyproject_version():
+    """`archive.APP_VERSION` is a hand-written constant, not derived from `importlib.metadata` at
+    runtime (see its docstring for why), so nothing else ties it to `pyproject.toml`'s `version`
+    except this test -- it fails the moment the next version bump updates one and not the other."""
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    project_version = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))["project"]["version"]
+    assert APP_VERSION == f"servicetag-bundle/{project_version}"

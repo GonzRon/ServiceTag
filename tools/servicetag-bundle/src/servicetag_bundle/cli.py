@@ -27,7 +27,16 @@ def _cmd_check(args: argparse.Namespace) -> int:
     try:
         source = load_source(source_path)
     except SourceError as e:
-        print(str(e), file=sys.stderr)
+        if e.path == str(source_path):
+            # A read/parse failure: load_source already set `e.path` to the source file's own
+            # path (see SourceError's docstring), so `str(e)` is already "path: message" -- naming
+            # it again here would print the path twice.
+            print(str(e), file=sys.stderr)
+        else:
+            # A validation failure: `e.path` is the JSON path of the offending value, not the
+            # source file. Name the file too, so the error line is as identifiable as the success
+            # line already is (`{source_path}: ok`) and as `build`'s own errors already are.
+            print(f"{source_path}: {e}", file=sys.stderr)
         return 1
 
     if source.deferred is not None:
