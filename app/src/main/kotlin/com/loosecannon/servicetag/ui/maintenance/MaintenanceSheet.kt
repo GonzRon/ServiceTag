@@ -34,7 +34,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.di.AppGraph
-import com.loosecannon.servicetag.ui.components.LabelValue
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.theme.ControlShape
@@ -109,7 +108,7 @@ fun MaintenanceSheet(
             Text(text = state.assetName, style = MaterialTheme.typography.titleLarge)
             // #49 AC 3: which scan point this is, when the owner labelled it — and a second tag on
             // the same Asset shows the same work under its **own** label.
-            state.tagPlacement?.let { LabelValue(label = TAG_PLACEMENT, value = it) }
+            state.tagPlacement?.let { TagPlacementLine(it) }
 
             state.items.forEach { item ->
                 HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
@@ -150,6 +149,32 @@ fun MaintenanceSheet(
                 postponing = null
                 model.postpone(scheduleId, dueOn)
             },
+        )
+    }
+}
+
+/**
+ * The scanned tag's placement, captioned with the RATIFIED **"Tag placement"** (#49 AC 3).
+ *
+ * Drawn **verbatim**, exactly as B11 draws the same caption on the scan result sheet
+ * (`TagResultSheet.PlacementLine`). The information-grid cell `LabelValue` would have been the
+ * shorter call, and it upper-cases its label (D12 §8) — which would have put one ratified string on
+ * screen in two different casings depending on which surface the owner was looking at. A connected
+ * assertion caught that, and this is why it is eight lines rather than one: the two surfaces live in
+ * different packages, and copying the rendering is cheaper than a mutual dependency between them.
+ */
+@Composable
+private fun TagPlacementLine(value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = TAG_PLACEMENT,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }

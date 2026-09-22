@@ -10,7 +10,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
@@ -23,6 +25,7 @@ import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.app
@@ -50,6 +53,11 @@ import org.junit.runner.RunWith
  * The tag-resolution rows are unit tests, because **the emulator has no NFC**: the resolution is
  * injected by opening the sheet on a seeded asset and its seeded tag, which is exactly what a
  * `Resolution.OpenAsset` with actionable work leads to.
+ *
+ * The last two tests are the other half of this brief's review-time amendment: B07's **"Done"** on
+ * a FORM or meter reminder now lands on B14's `CompletionFlow`, and only a real tree can show that
+ * the owner actually arrives on the **question** rather than on a screen with a button on it. The
+ * route mapping is unit-proved; what is here is the arrival, with its negative control.
  *
  * The seeded schedule carries a genuinely older `created_at`: the D-27 pin's floor is
  * `max(anchorOn, createdOn)`, so a schedule made through `saveSchedule` is never overdue on a fresh
@@ -234,6 +242,98 @@ class ScanSheetTest {
         rule.waitUntil(TIMEOUT_MS) { record.isNotEmpty() }
 
         assertEquals(listOf("asset:$assetId"), record)
+        assertEquals(0, runBlocking { graph.events.all().size })
+    }
+
+    /** One overdue `QUICK` schedule that carries a **meter rule**: §12.1's "Done" carve-out. */
+    private fun seedMeterSchedule(graph: AppGraph): String = runBlocking {
+        val today = LocalDate.now()
+        val mower = graph.createAsset.run(AssetCommand(name = "Ride-on mower", category = "Yard"))
+        graph.definitions.upsert(
+            MeasurementDefinition(
+                id = DefinitionId("b09-hours"),
+                assetId = mower.id,
+                key = "engine_hours",
+                label = "Engine hours",
+                unit = "h",
+                valueType = ValueType.NUMBER,
+                decimals = 0,
+                rangeLow = null,
+                rangeHigh = null,
+                isMeter = true,
+                sortOrder = 0,
+                archivedAt = null,
+                createdAt = 1L,
+                updatedAt = 1L,
+            ),
+        )
+        graph.schedules.upsert(
+            seeded(
+                id = "b09-meter",
+                target = ScheduleTarget.AssetTarget(mower.id),
+                title = "Oil change",
+                anchorOn = today.minusMonths(6),
+                createdOn = today.minusMonths(6),
+            ).copy(
+                meterDefinitionId = DefinitionId("b09-hours"),
+                meterInterval = 100.0,
+                anchorMeter = 100.0,
+            ),
+        )
+        graph.recomputeSchedules.forSchedule(ScheduleId("b09-meter"))
+        "b09-meter"
+    }
+
+    private fun detailFor(graph: AppGraph, scheduleId: String, startCompletion: Boolean) {
+        rule.setContent {
+            ServiceTagTheme {
+                ScheduleDetailScreen(
+                    graph = graph,
+                    scheduleId = scheduleId,
+                    startCompletion = startCompletion,
+                    onBack = {},
+                    onEditRecurrence = {},
+                    onLogForm = { _, _ -> },
+                )
+            }
+        }
+    }
+
+    /**
+     * B07's **"Done"** on a meter reminder, as the owner meets it: the notification's action lands
+     * on the schedule with B14's canonical affordance **already asking "When was this done?"**, and
+     * with the meter field the rule owes — not on a screen the owner then has to find a button on.
+     *
+     * It still writes nothing on the way: the event exists only once the question is answered, so
+     * the notification action remains navigation plus an explicit confirmation (invariant 57,
+     * §12.1's carve-out).
+     */
+    @Test fun doneOnAMeterReminderArrivesOnTheCompletionQuestion() {
+        val graph = app.graph
+        val scheduleId = seedMeterSchedule(graph)
+        detailFor(graph, scheduleId, startCompletion = true)
+
+        rule.awaitText("When was this done?")
+        rule.onNodeWithText("When was this done?").assertIsDisplayed()
+        // The meter rule's reading, demanded by its RATIFIED repair label.
+        rule.onNodeWithText("Log meter reading").assertIsDisplayed()
+        // Nothing is written until the owner answers.
+        assertEquals(0, runBlocking { graph.events.all().size })
+    }
+
+    /**
+     * The negative control, without which the test above could not tell "the arrival opened it"
+     * from "it is always open": the **same** screen reached any other way asks nothing and draws
+     * its ordinary actions instead.
+     */
+    @Test fun anOrdinaryArrivalAsksNothing() {
+        val graph = app.graph
+        val scheduleId = seedMeterSchedule(graph)
+        detailFor(graph, scheduleId, startCompletion = false)
+
+        rule.awaitText("Oil change")
+        rule.onAllNodesWithText("When was this done?").assertCountEquals(0)
+        rule.onAllNodesWithText("Log meter reading").assertCountEquals(0)
         assertEquals(0, runBlocking { graph.events.all().size })
     }
 
