@@ -59,7 +59,7 @@ fun interface ReminderTrigger { suspend fun onPlatformEvent(kind: PlatformEventK
 enum class PlatformEventKind { BOOT_COMPLETED, TIME_SET, TIMEZONE_CHANGED, DATE_CHANGED }
 ```
 
-The five manifest elements this brief declares, and what each is for:
+The manifest elements this brief declares, and what each is for: **Amended at B05's review (2026-09-22, controller ruling):** this brief declares **four** receivers (`BOOT_COMPLETED`, `TIME_SET`, `TIMEZONE_CHANGED`, `DATE_CHANGED`); the quick-action receiver is B07's fifth, as B07's brief, master §16.4 and the reconciliation already say — the gate counts below read 4 for this brief and 5 once B07 lands. It also declares `RECEIVE_BOOT_COMPLETED` (install-time, no prompt) because invariant 60's re-arm after `BOOT_COMPLETED` is undeliverable without it; spec §5.1's "`POST_NOTIFICATIONS` only" governs the runtime request.
 
 | receiver | action(s) it filters | why it exists | who implements the work |
 |---|---|---|---|
