@@ -426,7 +426,7 @@ class BackupCodecTest {
     }
 
     @Test
-    fun roundTripsAllSevenTables() {
+    fun roundTripsTheJournalAndCountsAllTenTables() {
         val data = journalFixture()
         val decoded = BackupCodec.decode(encoded(data))
         assertEquals(data, decoded.data)

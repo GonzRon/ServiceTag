@@ -423,8 +423,9 @@ class RestoreProofTest {
                 ),
                 report,
             )
-            // All seven tables the backup carries, attachments included, compared whole:
-            // ids, child ids, foreign keys, snapshot units.
+            // The seven tables this fixture carries, attachments included, compared whole: ids,
+            // child ids, foreign keys, snapshot units. Format 6's other three — groups, schedules
+            // and closures — are empty here; their round trip is `BackupFormat6Test`'s.
             assertEquals(before, snapshot(g2))
 
             // And the journal reads back through its own relationship queries, not only `all()`.

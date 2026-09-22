@@ -1294,7 +1294,7 @@ class MergePlannerTest {
         assertEquals(plan.fingerprint, again.fingerprint)
     }
 
-    /** Every table reports a tally, and the seven of them cover every decision exactly once. */
+    /** Every table reports a tally, and the ten of them cover every decision exactly once. */
     @Test
     fun `the report accounts for every row exactly once`() {
         val plan = mergePlanOf(
@@ -1311,8 +1311,8 @@ class MergePlannerTest {
         )
         val report = plan.report()
         val tallies = listOf(
-            report.assets, report.definitions, report.profiles, report.links,
-            report.tags, report.events, report.attachments,
+            report.assets, report.groups, report.definitions, report.profiles, report.schedules,
+            report.closures, report.links, report.tags, report.events, report.attachments,
         )
 
         assertEquals(

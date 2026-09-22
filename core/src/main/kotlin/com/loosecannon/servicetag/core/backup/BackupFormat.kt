@@ -40,11 +40,11 @@ import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonBehavior
 import com.loosecannon.servicetag.core.model.StorageProvider
-import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.ValueType
 import kotlinx.serialization.Serializable
 

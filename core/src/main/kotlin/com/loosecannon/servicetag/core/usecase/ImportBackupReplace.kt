@@ -37,6 +37,12 @@ data class ImportReport(
  *
  * The bytes of the attachment rows this replaces are swept *after* the commit, best effort: a
  * store that will not co-operate leaves an orphaned file for 4B, never a half-undone import.
+ *
+ * **A restore does not recompute derived schedule state yet.** Every canonical row is replaced
+ * here, so every schedule's derived due state is stale the moment this returns; the recompute is
+ * the scheduling-engine brief's, which wires it the way [ApplyBackupMergePlan] already takes it as
+ * a seam. Nothing at this tip writes derived state, so there is nothing stale to read — but this is
+ * where the recompute belongs when it exists.
  */
 class ImportBackupReplace(
     private val assets: AssetRepository,

@@ -145,9 +145,14 @@ interface MaintenanceScheduleDao {
 
     /**
      * Clears the table — and with it, by CASCADE, `schedule_provider`, `occurrence_closure`,
-     * `schedule_state` and `schedule_local_delivery`. The closure table has no delete of its own,
-     * so this cascade is the only way a closure row ever leaves; the provider rows are cleared
-     * explicitly for [MaintenanceGroupDao.deleteAll]'s reason.
+     * `schedule_state` and `schedule_local_delivery`. The provider rows are cleared explicitly for
+     * [MaintenanceGroupDao.deleteAll]'s reason.
+     *
+     * **The closure cascade is load-bearing, and this is the one place that depends on it.** The
+     * closure table has no delete of its own — the row is immutable — so unlike
+     * [MaintenanceGroupDao.deleteAll] there is no explicit statement this could fall back on if
+     * `PRAGMA foreign_keys` were off. That is why `MaintenanceDaoConstraintTest` proves the cascade
+     * against a real database rather than assuming it.
      */
     @Transaction
     suspend fun deleteAll() {

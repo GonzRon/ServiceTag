@@ -179,8 +179,12 @@ enum class MergeHint { SAME_MANUFACTURER_MODEL_SERIAL }
 /**
  * One row's outcome. [detail] carries what it collided with — a local row's id, a taken key, a
  * child row's id, a locator — and **never** a display field. It is the *holder's* row id for every
- * "taken" reason but one: [MergeReason.PROFILE_FIELD_DEFINITION_TAKEN] reports the definition id of
- * the pair, for the reason that reason's own doc gives.
+ * "taken" reason but three, each of which reports the colliding **key** instead:
+ * [MergeReason.PROFILE_FIELD_DEFINITION_TAKEN] reports the definition id of its pair, and
+ * [MergeReason.GROUP_MEMBER_WINDOW_TAKEN] and [MergeReason.GROUP_MEMBER_ALREADY_OPEN] report the
+ * asset id of theirs. All three share one reason, which their own docs give: the key contains the
+ * parent's own id, so in the only reachable case the holder *is* the incoming row and its own id
+ * would say nothing.
  */
 data class MergeDecision(
     val table: MergeTable,
