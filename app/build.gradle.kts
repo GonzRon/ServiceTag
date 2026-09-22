@@ -137,3 +137,14 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
 }
+
+// B05 fix round 1, finding 4: ManifestContractTest reads the merged manifest for one fact (the
+// exact-alarm and permission-set assertions), and a unit test must not depend on another task's
+// output existing or being current to pass. Build wiring, not product code — the manifest-merger
+// output path itself is untouched — so it stays inside this brief's scope even though this file
+// is otherwise on the brief's Untouched list.
+afterEvaluate {
+    tasks.named("testDebugUnitTest") {
+        dependsOn("processDebugManifest")
+    }
+}

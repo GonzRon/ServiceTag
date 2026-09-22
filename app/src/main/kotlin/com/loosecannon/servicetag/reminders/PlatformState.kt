@@ -37,10 +37,13 @@ interface PlatformState {
  * above. Pure and unit-testable on its own: this brief's JVM unit tests run Robolectric-free, so
  * this mapping, not a live `NotificationManager`, is what a test actually exercises.
  */
-internal fun channelImportanceOf(rawImportance: Int?): ChannelImportance = when (rawImportance) {
-    null -> ChannelImportance.ABSENT
-    NotificationManagerCompat.IMPORTANCE_NONE -> ChannelImportance.MUTED
-    NotificationManagerCompat.IMPORTANCE_HIGH -> ChannelImportance.HIGH
+internal fun channelImportanceOf(rawImportance: Int?): ChannelImportance = when {
+    rawImportance == null -> ChannelImportance.ABSENT
+    rawImportance == NotificationManagerCompat.IMPORTANCE_NONE -> ChannelImportance.MUTED
+    // >=, not ==: IMPORTANCE_MAX sits above IMPORTANCE_HIGH and this app never creates one, but a
+    // range is the correct shape for "at least as urgent as the one channel we ship at HIGH"
+    // rather than a value equality that would silently fall through to DEFAULT.
+    rawImportance >= NotificationManagerCompat.IMPORTANCE_HIGH -> ChannelImportance.HIGH
     else -> ChannelImportance.DEFAULT
 }
 
@@ -71,8 +74,11 @@ class AndroidPlatformState(private val context: Context) : PlatformState {
         )
 
     override fun appRestricted(): AppRestriction {
-        // Both facts are API 28+ (Build.VERSION_CODES.P); minSdk is 26, so a pre-28 device is
-        // simply never restricted by either mechanism — NORMAL is the correct, not a fallback, answer.
+        // isBackgroundRestricted() is API 28+; STANDBY_BUCKET_RESTRICTED itself did not arrive
+        // until API 30, so STANDBY_RESTRICTED can never actually be reported on 28-29 — harmless,
+        // since the constant is a compile-time literal, but worth being honest about here. minSdk
+        // is 26, so a pre-28 device is simply never restricted by either mechanism — NORMAL is the
+        // correct, not a fallback, answer.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
             return appRestrictionOf(backgroundRestricted = false, standbyBucket = UsageStatsManager.STANDBY_BUCKET_ACTIVE)
         }

@@ -5,7 +5,6 @@ import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.w3c.dom.Element
 
@@ -115,39 +114,72 @@ class ManifestContractTest {
     }
 
     /**
-     * Invariant 55's mechanism: a receiver declared in this brief must never construct an
+     * Invariant 55's mechanism: no receiver declared in this brief may ever construct an
      * `Activity` `Intent` or call `startActivity` — that door stays shut structurally, at the
-     * declaration, rather than relying on it never being found in a later brief.
+     * declaration, rather than relying on it never being found in a later brief. Scoped to the
+     * whole `reminders/` package (widened from `ReminderReceivers.kt` alone, B05 fix round 1,
+     * finding 17), so a trampoline built in a sibling file this package gains later is caught too.
      */
     @Test
-    fun noReceiverInThisBriefStartsAnActivity() {
-        val source = sourceFile("kotlin/com/loosecannon/servicetag/reminders/ReminderReceivers.kt").readText()
-        assertTrue("startActivity" !in source)
-        assertTrue("Intent(" !in source)
+    fun noReceiverInThisPackageStartsAnActivity() {
+        remindersSourceFiles().forEach { file ->
+            val source = file.readText()
+            assertTrue("${file.name} must not call startActivity", "startActivity" !in source)
+            assertTrue("${file.name} must not construct an Intent(", "Intent(" !in source)
+        }
     }
 
-    private fun Element.androidAttr(name: String): String? {
-        val value = getAttribute("android:$name")
-        return value.ifEmpty { null }
+    /**
+     * S4 (B05 fix round 1, finding 6): the other half of the class→kind pairing
+     * `ReminderReceiversTest.eachReceiverClassCarriesItsOwnKind` proves — here, each receiver
+     * *name* is paired with the manifest `<action>` it is actually invoked for. Together the two
+     * ends of the wiring (which broadcast reaches a class, and which kind that class forwards) are
+     * both asserted; neither alone would catch a class hard-coded against the wrong action.
+     */
+    @Test
+    fun eachReceiverNameFiltersItsOwnAction() {
+        val expected = mapOf(
+            "com.loosecannon.servicetag.reminders.BootCompletedReceiver" to "android.intent.action.BOOT_COMPLETED",
+            "com.loosecannon.servicetag.reminders.TimeSetReceiver" to "android.intent.action.TIME_SET",
+            "com.loosecannon.servicetag.reminders.TimezoneChangedReceiver" to "android.intent.action.TIMEZONE_CHANGED",
+            "com.loosecannon.servicetag.reminders.DateChangedReceiver" to "android.intent.action.DATE_CHANGED",
+        )
+
+        val actual = manifest.elements("receiver").associate { receiver ->
+            val name = receiver.androidAttr("name")!!
+            val actionNodes = receiver.getElementsByTagName("action")
+            val actions = (0 until actionNodes.length).map { (actionNodes.item(it) as Element).androidAttr("name") }
+            name to actions.single()
+        }
+
+        assertEquals(expected, actual)
     }
 }
 
 /**
- * The one review-gate assertion the brief names against both files: the merged manifest, when a
- * prior build has produced one, carries neither exact-alarm permission either. Skipped rather than
- * failed if no merged manifest is on disk — this repository's `testDebugUnitTest` does produce one
- * today, but a test must not depend on another task's output existing to pass.
+ * The facts the brief asks be checked against the *merged*, not the source, manifest: no
+ * exact-alarm permission, and (B05 fix round 1, finding 3/S1) the exact `uses-permission` set —
+ * named rather than merely counted, so a library that adds a permission later, including an exact
+ * alarm one arriving from a dependency rather than this brief's own source, fails this row.
+ *
+ * A missing merged manifest is a **failure**, not a skip (finding 4/S2: the brief's own gate
+ * forbids skips) — `app/build.gradle.kts` now makes `testDebugUnitTest` depend on
+ * `processDebugManifest`, so the file this reads is always the one built from the current
+ * `AndroidManifest.xml`, never a stale one left over from an earlier build.
  */
 class MergedManifestContractTest {
 
+    private val mergedManifestFile: File = mergedManifestCandidates()
+        .flatMap { listOf(File(it), File("app/$it")) }
+        .firstOrNull { it.isFile }
+        ?: error(
+            "no merged manifest on disk at any of ${mergedManifestCandidates()} from " +
+                "${File(".").absolutePath} — testDebugUnitTest should depend on processDebugManifest",
+        )
+
     @Test
     fun neitherExactAlarmPermissionInTheMergedManifestEither() {
-        val file = mergedManifestCandidates()
-            .flatMap { listOf(File(it), File("app/$it")) }
-            .firstOrNull { it.isFile }
-        assumeTrue("no merged manifest on disk to check", file != null)
-
-        val text = file!!.readText()
+        val text = mergedManifestFile.readText()
         assertFalse(
             "SCHEDULE_EXACT_ALARM must never be declared (ledger A12)",
             text.contains("android.permission.SCHEDULE_EXACT_ALARM"),
@@ -155,6 +187,29 @@ class MergedManifestContractTest {
         assertFalse(
             "USE_EXACT_ALARM must never be declared (ledger A12)",
             text.contains("android.permission.USE_EXACT_ALARM"),
+        )
+    }
+
+    /**
+     * §15.7's release-gate sentence: `NFC` + `INTERNET` + `POST_NOTIFICATIONS` + the AndroidX
+     * app-private receiver permission — amended in this fix round to include
+     * `RECEIVE_BOOT_COMPLETED` (S1). A set, not a count: naming every member is what catches an
+     * addition the count-only style would silently tolerate.
+     */
+    @Test
+    fun theMergedManifestPermissionSetIsExactly() {
+        val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(mergedManifestFile)
+        val declared = doc.elements("uses-permission").map { it.androidAttr("name") }.toSet()
+
+        assertEquals(
+            setOf(
+                "android.permission.NFC",
+                "android.permission.INTERNET",
+                "android.permission.POST_NOTIFICATIONS",
+                "android.permission.RECEIVE_BOOT_COMPLETED",
+                "com.loosecannon.servicetag.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+            ),
+            declared,
         )
     }
 
@@ -167,6 +222,12 @@ class MergedManifestContractTest {
 private fun org.w3c.dom.Document.elements(tag: String): List<Element> {
     val nodes = getElementsByTagName(tag)
     return (0 until nodes.length).map { nodes.item(it) as Element }
+}
+
+/** File-scoped (not a class member): both `ManifestContractTest` and `MergedManifestContractTest` read it. */
+private fun Element.androidAttr(name: String): String? {
+    val value = getAttribute("android:$name")
+    return value.ifEmpty { null }
 }
 
 /**
@@ -183,7 +244,8 @@ private fun readSourceManifest(): org.w3c.dom.Document {
     return factory.newDocumentBuilder().parse(file)
 }
 
-private fun sourceFile(relative: String): File {
+/** `internal`, not `private` — `PlatformStateTest` reuses this to scan production source too. */
+internal fun sourceFile(relative: String): File {
     val underMain = "src/main/$relative"
     return listOf(File(underMain), File("app/$underMain")).firstOrNull { it.isFile }
         ?: error("cannot find $underMain from ${File(".").absolutePath}")
@@ -194,3 +256,12 @@ private fun navDirectory(): File {
     return listOf(File(relative), File("app/$relative")).firstOrNull { it.isDirectory }
         ?: error("cannot find $relative from ${File(".").absolutePath}")
 }
+
+private fun remindersDirectory(): File {
+    val relative = "src/main/kotlin/com/loosecannon/servicetag/reminders"
+    return listOf(File(relative), File("app/$relative")).firstOrNull { it.isDirectory }
+        ?: error("cannot find $relative from ${File(".").absolutePath}")
+}
+
+private fun remindersSourceFiles(): List<File> =
+    remindersDirectory().listFiles { f -> f.isFile && f.extension == "kt" }?.toList().orEmpty()

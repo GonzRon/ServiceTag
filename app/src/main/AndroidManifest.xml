@@ -14,6 +14,10 @@
          through app/.../reminders/NotificationPermission.kt. Neither SCHEDULE_EXACT_ALARM nor
          USE_EXACT_ALARM is declared: "due today" is a date, not an instant (ledger A12). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Install-time normal permission, no runtime prompt, no component added for it. Without it
+         the system never delivers BOOT_COMPLETED to this app at all, so BootCompletedReceiver
+         below would otherwise be silently inert (invariant 60, owner ruling 2026-09-22). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-feature android:name="android.hardware.nfc" android:required="true" />
 
     <queries>

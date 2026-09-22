@@ -40,10 +40,10 @@ object NotificationChannels {
 
     /**
      * Creates both channels against the real `NotificationManagerCompat`, called once at process
-     * start (`ServiceTagApp.onCreate`) and safe to call on every start: Android's own
-     * `createNotificationChannel` is a no-op for an id that already exists and never rewrites an
-     * importance the user has changed. That platform guarantee only holds if the importance this
-     * brief passes never varies — [CHANNELS] is fixed, nothing here reads current state first.
+     * start (`ServiceTagApp.onCreate`) and safe to call on every start: the platform call below is
+     * a no-op for an id that already exists and never rewrites an importance the user has changed.
+     * That platform guarantee only holds if the importance this brief passes never varies —
+     * [CHANNELS] is fixed, nothing here reads current state first.
      */
     fun ensure(context: Context) = ensure { spec ->
         NotificationManagerCompat.from(context).createNotificationChannel(

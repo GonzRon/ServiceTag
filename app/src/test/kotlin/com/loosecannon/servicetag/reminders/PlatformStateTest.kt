@@ -55,18 +55,50 @@ class PlatformStateTest {
     }
 
     /**
-     * Invariant 61, D-22: a denied permission is a fact this interface reports, not an error it
-     * raises. Nothing in this brief throws, guards or disables anything else on the strength of
-     * `notificationsEnabled() == false`; `NotificationChannelsTest` proves the channels' half,
-     * `ManifestContractTest` proves the receivers' half (the manifest is unconditional), and this
-     * asserts the seam itself just keeps answering.
+     * The interface's own shape, over the fake: a denied permission is a value `PlatformState`
+     * reports, never an exception it throws. This is a contract check, not the invariant 61 proof
+     * — `deniedNotificationsDisablesNothingThisBriefOwns` below is, over production code.
      */
     @Test
-    fun deniedNotificationsIsAFactNotAThrow() {
+    fun theInterfaceReportsDenialAsAValueNeverAThrow() {
         val denied = FakePlatformState(notificationsEnabled = false)
         assertFalse(denied.notificationsEnabled())
-        // Every other member still answers normally — nothing about the denial disables the seam.
         assertEquals(ChannelImportance.ABSENT, denied.channelImportance(NotificationChannels.DUE))
         assertEquals(AppRestriction.NORMAL, denied.appRestricted())
+    }
+
+    /**
+     * Invariant 61, D-22, over production code rather than the fake (B05 fix round 1, finding 5:
+     * the previous version of this test asserted only `FakePlatformState`'s own constructor
+     * defaults, which cannot fail if `AndroidPlatformState` regressed).
+     *
+     * Three claims, each over the real thing: **channels exist** — `NotificationChannels.ensure`,
+     * the production seam, still creates both when driven directly, because it takes no permission
+     * or platform-state argument to gate on at all. **The seam answers** — structurally, neither
+     * `NotificationChannels.kt` nor `ReminderReceivers.kt` reads `notificationsEnabled()`,
+     * `granted()` or `PlatformState` anywhere, so there is no guard clause in either file for a
+     * denial to trip. **Receivers dispatch** — `ReminderTrigger.onPlatformEvent` takes a
+     * [PlatformEventKind] and nothing else; a denial has no parameter to arrive through.
+     */
+    @Test
+    fun deniedNotificationsDisablesNothingThisBriefOwns() {
+        val created = mutableListOf<NotificationChannels.Spec>()
+        NotificationChannels.ensure { created += it }
+        assertEquals(setOf(NotificationChannels.DUE, NotificationChannels.OVERDUE), created.map { it.id }.toSet())
+
+        listOf(
+            "reminders/NotificationChannels.kt" to sourceFile("kotlin/com/loosecannon/servicetag/reminders/NotificationChannels.kt"),
+            "reminders/ReminderReceivers.kt" to sourceFile("kotlin/com/loosecannon/servicetag/reminders/ReminderReceivers.kt"),
+        ).forEach { (label, file) ->
+            val text = file.readText()
+            assertFalse("$label must not read notificationsEnabled()", "notificationsEnabled" in text)
+            assertFalse("$label must not call granted()", ".granted(" in text)
+            assertFalse("$label must not reference PlatformState", "PlatformState" in text)
+        }
+
+        val seen = mutableListOf<PlatformEventKind>()
+        val trigger = ReminderTrigger { kind -> seen += kind }
+        kotlinx.coroutines.runBlocking { trigger.onPlatformEvent(PlatformEventKind.BOOT_COMPLETED) }
+        assertEquals(listOf(PlatformEventKind.BOOT_COMPLETED), seen)
     }
 }

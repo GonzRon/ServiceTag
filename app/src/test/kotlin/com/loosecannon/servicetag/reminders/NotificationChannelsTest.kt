@@ -31,10 +31,12 @@ class NotificationChannelsTest {
     }
 
     /**
-     * Calling `ensure` twice must build the exact same two specs both times: Android's own
-     * `createNotificationChannel` never overwrites an importance the user changed, but only if the
-     * importance this brief passes never varies. A version that read current state and recomputed
-     * one would fail this test even though it might never fail against a real `NotificationManager`.
+     * The hazard ("recreating a channel with a fresh importance silently overrides the user's
+     * mute") is prevented by construction, not proved by this test alone: `CHANNELS` is a fixed
+     * `val` and `ensure` reads no current state before choosing an importance, so the platform's
+     * own no-overwrite guarantee always holds. What this asserts, structurally, is that calling
+     * `ensure` twice builds the exact same two specs both times — the fact the construction argument
+     * depends on.
      */
     @Test
     fun ensureIsIdempotentAndNeverVariesWhatItPasses() {
