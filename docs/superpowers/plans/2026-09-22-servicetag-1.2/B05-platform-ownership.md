@@ -90,7 +90,7 @@ One test per hazard class. All off-device; the merged-manifest assertions read t
 | a restricted bucket undetected | `appRestricted()` returns `STANDBY_RESTRICTED` and `BATTERY_RESTRICTED` under the simulated conditions and `NORMAL` otherwise — a positive case and a negative control | without it `APP_RESTRICTED` can never fire and the OEM behaviour looks like a ServiceTag bug |
 | the permission asked at launch | a structural assertion: `NotificationPermission.request` has **no call site** in `app/.../ui/nav/**`, `MainActivity.kt` or `ServiceTagApp.kt` — its only caller is B14's editor (#24 AC 1) | requesting at launch is the default reflex and gives the user no context for the prompt |
 | a trampoline door opened here | a structural assertion: no receiver in this brief constructs an `Intent` for an `Activity` or calls `startActivity` (invariant 55's mechanism, enforced where the receivers are declared) | a receiver that launches a screen is the API 31+ trampoline violation, and it is cheaper to forbid at the declaration than to find in B07 |
-| a mutable `PendingIntent` | every `PendingIntent` constructed in `app/src/main` carries `FLAG_IMMUTABLE`, asserted as an anchored grep over the whole module (invariant 54) | a default-flag `PendingIntent` lets another app rewrite the extras a quick action acts on |
+| a mutable `PendingIntent` | the rule is stated and asserted as an anchored grep over the whole module (invariant 54). **B05 constructs none**, so this row is a standing trip-wire that first bites in **B06** and **B07**; B05 owns the rule and the grep, those two briefs own the constructions | a default-flag `PendingIntent` lets another app rewrite the extras a quick action acts on |
 
 ## Strings
 
@@ -112,7 +112,7 @@ One test per hazard class. All off-device; the merged-manifest assertions read t
   - `grep -cE 'android:exported="true"' app/src/main/AndroidManifest.xml` → 2 (the two shipped activities).
   - `grep -rn 'createNotificationChannel' app/src/main` → the single site in `NotificationChannels.kt`.
   - `grep -rniE '"(supplies|sync_problems)"' app/src/main core/src/main` → no match.
-  - `grep -rn 'PendingIntent\.' app/src/main | grep -v 'FLAG_IMMUTABLE'` → no match.
+  - `grep -rnE 'PendingIntent\.(getBroadcast|getActivity|getService)' app/src/main | grep -vc 'FLAG_IMMUTABLE'` → **0**. **A standing trip-wire, not a B05-specific proof:** this brief constructs no `PendingIntent` — the first one arrives with B06's alarm and B07's quick actions — so at B05's own review point the grep has nothing to check and is vacuously true. It is listed here because the rule is B05's to own, and it is re-run at **B06's and B07's** gates, where it has work to do, and again at the release gate (master plan §16.4).
   - `grep -rn 'NotificationPermission' app/src/main/kotlin/com/loosecannon/servicetag/ui/nav app/src/main/kotlin/com/loosecannon/servicetag/MainActivity.kt app/src/main/kotlin/com/loosecannon/servicetag/ServiceTagApp.kt` → no match.
 
 ## Estimated size

@@ -74,7 +74,7 @@ class CompletionFlow(/* CompleteSchedule, CompleteGroupMembers, definitions, Tod
 
 ## Invariants this brief must hold
 
-**1, 2, 3, 19, 20, 21, 25, 27, 35, 36, 43, 78** (master plan §13) at the UI boundary, and it must not weaken **17, 18** — the editor reads `statusOf` and never stores a status.
+**1, 2, 3, 19, 20, 21, 25, 27, 35, 36, 43, 74, 77, 78** (master plan §13) at the UI boundary — **74 and 77** because the "Close this round" gate is where an empty required set must be unreachable through the UI, which is what that row's test proves, and it must not weaken **17, 18** — the editor reads `statusOf` and never stores a status.
 
 ## Test matrix
 
@@ -94,7 +94,7 @@ One test per hazard class; unit tests over the two view models, plus a small con
 | a closure amended or deleted | a structural assertion: no screen in this brief offers an edit or a delete for a closure; the closure history is read-only (invariant 43) | a "fix that date" affordance on immutable history is the amendment the whole design forbids |
 | **a backdated completion** | completing with **yesterday's** date yields the next due date derived from the backdated event; the affordance defaults to **today** and accepts an optional time (D-25, the D7 Phase 3 exit criterion) | a silent today-only completion makes "When was this done?" cosmetic and loses the real service date |
 | a meter completion without its reading | a meter-rule schedule **cannot** be completed until the reading is entered; a `FORM` schedule routes into its profile form and **fabricates nothing** | completing without the reading leaves the next threshold wrong; fabricating form data invents history |
-| the duplicate-operation warning | the ratified sentence appears when the asset already has a similar operation through a group, and it is **non-blocking** — the schedule saves; and it does **not** appear when there is no such schedule (D-11) | a blocking warning is the semantic deduplication D-11 rules out; a missing control makes the line permanent |
+| the duplicate-operation warning | the ratified sentence appears when the asset already has a similar operation through a group, and it is **non-blocking** — the schedule saves; it does **not** appear when there is no such schedule; **and the comparison set is exactly the asset's own schedules plus the schedules of the groups it is an open member of** — a same-titled schedule on an *unrelated* asset raises nothing (D-11, and the decision recorded above) | a blocking warning is the semantic deduplication D-11 rules out; a missing control makes the line permanent; and a global title comparison makes two owners both scheduling "Replace filter" warn each other forever |
 | **an edit clearing a postponement** | editing the recurrence of a postponed schedule clears `postponedDueOn`, abandons an open partial occurrence, keeps the recorded member completions as **history**, and moves the pin's floor to the **edit date** (invariants 19, 25; D-9) | keeping the postponement across a rule change makes the schedule due on a date neither the old nor the new rule implies |
 | a pause or archive losing state | pause and resume round-trip; archiving removes the schedule from the active lists and **keeps** its history and its closures | a destructive archive deletes the exported history |
 | a provider row multiplying | the editor writes **at most one** enabled provider row (#4 "Provider selection") | a multi-select here pre-empts #25 and creates subject lists 1.2 cannot deliver |
@@ -110,6 +110,10 @@ One test per hazard class; unit tests over the two view models, plus a small con
 > `PROPOSED:` "Close this round? The members not marked done will not be recorded as serviced."
 
 The **action label** is already ratified; this is the confirmation sentence, and it is the sentence that keeps the action from reading as "mark everything done". Hand it to the controller with this brief's plan review. **Do not execute the close dialog until the owner has ratified it.**
+
+Also **PROPOSED, and this brief's to draft** (master plan §17): the **editor's remaining field labels** — the target picker, the season-behaviour choice, the completion-mode choice, the profile picker, the four meter-rule fields (definition, interval, baseline, lead) and the single provider row. D-24 ratified the time-rule and lead fragments only, so these have no ratified wording.
+
+**Beyond the ratified fragments above, this brief drafts *only* the field labels master plan §17 lists as PROPOSED**, and hands them to the controller with this brief's plan review; **any further wording is a finding for the controller, not a string to invent.** This brief builds the largest new surface in 1.2 and is therefore the one most able to invent copy by accident — the guard is explicit for that reason.
 
 ## Ordering
 

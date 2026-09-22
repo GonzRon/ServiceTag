@@ -18,7 +18,9 @@ Make the common maintenance actions one tap from a notification, without the not
 **Modify**
 
 - `core/.../core/links/DeepLinkRoute.kt` — `DeepLink` gains `Schedule(val id: ScheduleId)`; `parse`'s `when (host)` gains `"schedule"`, reusing the existing `single(pathSegments)` canonical-UUID check (`DeepLinkRoute.kt:29`) so the shape rule is one rule, not two.
-- `app/src/main/AndroidManifest.xml` — **one line**: `<data android:scheme="servicetag" android:host="schedule" />` beside `AndroidManifest.xml:44-45`. Nothing else; B05 owns the rest of this file, and the `QuickActionReceiver` element is added **here** with `android:exported="false"` because it is this brief's component.
+- `app/src/main/AndroidManifest.xml`, **two additions and nothing else** (B05 owns the rest of this file):
+  1. one `<data android:scheme="servicetag" android:host="schedule" />` line beside `AndroidManifest.xml:44-45`, inside the existing `intent-filter`;
+  2. the **`QuickActionReceiver` `<receiver>` element** — a multi-line declaration, not a one-liner — carrying `android:exported="false"`, because the receiver is this brief's component. B05 declares the four *platform* receivers; this is the fifth and it is B07's.
 - `app/.../ui/nav/ServiceTagRoot.kt` and `app/.../MainActivity.kt` — the new deep link routed to `Route.ScheduleDetail`, exactly as the two shipped links are routed, with **no** mutation on the way.
 - `app/.../reminders/Notifications.kt` (B06's) — the actions attached to the built notification.
 - `app/.../di/AppGraph.kt` — the quick-action builder field.

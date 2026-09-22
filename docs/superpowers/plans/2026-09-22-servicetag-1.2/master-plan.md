@@ -1,6 +1,8 @@
 # ServiceTag 1.2 — operational maintenance: MASTER PLAN
 
-> **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:subagent-driven-development` to execute this package brief by brief. This plan follows `docs/superpowers/planning-policy.md`: **it specifies contracts, invariants and test matrices; implementers author the code and the tests.** Nothing here is meant to be transcribed into the tree. A fenced block appears only where it pins an interface, a data shape or an algorithm boundary.
+> **For agentic workers — EXECUTION IS GATED. Do not start a brief.** **No brief in this package executes until the owner's pre-implementation authorization** (the L2 sequence's step 9: "STOP at the pre-implementation authorization gate. No 1.2 production code, no production phone, no release"). Until that authorization is recorded in the ledger, **this package is read-only**: plan review, string ratification and controller reconciliation only — **no 1.2 production code, no production phone, no release, no wave opened.** Once the owner has authorized implementation, REQUIRED SUB-SKILL: use `superpowers:subagent-driven-development` to execute the package brief by brief in §14.3's wave order.
+>
+> This plan follows `docs/superpowers/planning-policy.md`: **it specifies contracts, invariants and test matrices; implementers author the code and the tests.** Nothing here is meant to be transcribed into the tree. A fenced block appears only where it pins an interface, a data shape or an algorithm boundary.
 
 **Goal:** one canonical maintenance-scheduling engine and the local delivery path around it, shipped as ServiceTag **1.2.0 / versionCode 13** — schedules that target one Asset or one MaintenanceGroup, derived due state that is never stale, truthful per-member group completion with an explicit "Close this round", a provider-neutral reminder port, the local digest provider with an inexact alarm and a 12 h backstop, nonce-protected notification quick actions, the scan completion sheet, the dashboard with maintenance status, reminder health with idempotent repair, and per-tag placement labels — plus the three surfaces those ten issues presuppose and none owns: the **Maintenance** destination, the **schedule editor** with the five operations, and the **group screens**.
 
@@ -16,7 +18,8 @@
 
 Copied from the spec's rulings and the repository rules. Binding on every brief.
 
-- **The spec is the authority.** `spec-draft.md` revision 4 plus `owner-rulings-2026-09-22.md`. An implementer who finds this plan disagreeing with the spec follows the spec and reports the disagreement; an implementer who finds the spec silent asks the controller rather than inventing a user-visible behaviour.
+- **Execution is gated (owner, the L2 sequence's step 9).** **No brief starts until the owner explicitly authorizes implementation after reading the planning summary**, and that authorization is recorded in the ledger. Until then: no 1.2 production code, no production phone, no release, no wave opened. This bullet is first because it is the one an agent handed only this document must read before anything else.
+- **The spec is the authority.** `docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md` — **revision 4 plus §11's revision-4.1 edits** — together with `.superpowers/sdd/2026-09-22-servicetag-1.2-operational-maintenance/owner-rulings-2026-09-22.md`. **Cite the committed path, never the workspace draft**, so there is one authority. An implementer who finds this plan disagreeing with the spec follows the spec and reports the disagreement — **except where this plan has named a deviation** (§18's two, decisions 3 and 4) — and an implementer who finds the spec silent asks the controller rather than inventing a user-visible behaviour.
 - **Proportionality (owner, 2026-09-22, binding).** "One test is enough… do not block on exorbitantly strict acceptance tests." Test matrices are **one test per hazard class, not per permutation**; an invariant naming several facts is one test asserting them together (spec §6 preamble, §8 header).
 - **No overnight blocking (owner, 2026-09-22, binding).** "I don't want to be blocked on any tests that require overnight at all, period." **No acceptance procedure in any brief may wait on an overnight or multi-day measurement.** Where real-world timing matters — the digest alarm, the 12 h backstop — acceptance is a deterministic test against an injected `Today`/shadow clock or a shadow `AlarmManager`.
 - **S4 gates nothing, and this plan owns that statement.** There is **no S4 gate anywhere in this package**: not on a brief, not on a review, not on a merge, not on the release. **B06 is not gated on S4** — it is designed and written now on the default alarm-plus-backstop design of §12 (spec §5.9, D-23 as amended). No brief's Ordering section may name S4 as a predecessor, and any brief that does is wrong. The observation is already armed by the controller and its result is recorded when it arrives; see §12.3.
@@ -130,7 +133,7 @@ New indices: `UNIQUE(schedule_id, occurrence_on, asset_id)` and `(schedule_id, o
 
 ### 2.3 What is **not** a SQL constraint, and why
 
-`Plan decision:` **no `CHECK` constraint is declared anywhere.** Spec §2.1 states two (`(asset_id IS NULL) <> (group_id IS NULL)`; `time_interval IS NOT NULL OR meter_definition_id IS NOT NULL`) as domain rules. Room 3 cannot declare a `CHECK` on an `@Entity`, so one written only into the migration would exist on upgraded databases and not on fresh ones — two different schemas for one version, against the one-source rule the migration file itself states (`app/.../data/room/Migrations.kt:7-16`). Both are therefore **use-case invariants with tests**, exactly as spec §2.3 already rules for the at-most-one-open membership rule (a partial unique index is not expressible in Room either). Every rule enforced this way, and its owner:
+**`Plan decision:` — and a named *spec deviation*, not a silence (§18): no `CHECK` constraint is declared anywhere.** Spec §2.1 states two (`(asset_id IS NULL) <> (group_id IS NULL)`; `time_interval IS NOT NULL OR meter_definition_id IS NOT NULL`) as domain rules. Room 3 cannot declare a `CHECK` on an `@Entity`, so one written only into the migration would exist on upgraded databases and not on fresh ones — two different schemas for one version, against the one-source rule the migration file itself states (`app/.../data/room/Migrations.kt:7-16`). Both are therefore **use-case invariants with tests**, exactly as spec §2.3 already rules for the at-most-one-open membership rule (a partial unique index is not expressible in Room either). Every rule enforced this way, and its owner:
 
 | rule | invariant | enforced in | proved by |
 |---|---|---|---|
@@ -147,7 +150,7 @@ The unique indices **are** real database constraints and are what make idempoten
 
 `MIGRATION_5_6` in `app/.../data/room/Migrations.kt`, chained into `AppGraph.kt:88`, `AppDatabase.version` → 6, `AppGraph.SCHEMA_VERSION` → 6, `app/schemas/.../6.json` committed. Every statement is **copied verbatim from the exported `6.json`**, in the `MIGRATION_4_5` shape (`Migrations.kt:211-235`) — the migration and the compiled entity have one source, and Room validates the result on open.
 
-Because `asset_event` is **altered** and not only added to, this is not a pure table addition. **The requirement, not the implementation:** after the migration, (a) the database validates against the compiled `6.json` — same columns, same primary keys, same foreign keys, same indices as a fresh v6 install, and (b) **every pre-existing row of every pre-existing table is byte-identical to what it was before**, asserted by a `MigrationTest` that seeds v5 rows, migrates, and reads them back (D4 §15 lines 584-585). Two implementations satisfy that — three `ALTER TABLE ADD COLUMN` (the `schedule_id` column carrying its `REFERENCES … ON DELETE SET NULL` clause with a NULL default) plus two `CREATE INDEX`, or the 12-step table recreate — and the choice is the implementer's, decided by which one the validation and the row-identity proof actually accept. B01 records which it used and why.
+Because `asset_event` is **altered** and not only added to, this is not a pure table addition. **`Plan decision:` — a named *spec deviation*, not a silence (§18): spec §3.1 prescribes "`ALTER TABLE ADD COLUMN` ×3 plus two `CREATE INDEX`, all copied from `6.json`"; this plan fixes the two properties instead and leaves the statements to the implementer's proof.** **The requirement, not the implementation:** after the migration, (a) the database validates against the compiled `6.json` — same columns, same primary keys, same foreign keys, same indices as a fresh v6 install, and (b) **every pre-existing row of every pre-existing table is byte-identical to what it was before**, asserted by a `MigrationTest` that seeds v5 rows, migrates, and reads them back (D4 §15 lines 584-585). Two implementations satisfy that — three `ALTER TABLE ADD COLUMN` (the `schedule_id` column carrying its `REFERENCES … ON DELETE SET NULL` clause with a NULL default) plus two `CREATE INDEX`, or the 12-step table recreate — and the choice is the implementer's, decided by which one the validation and the row-identity proof actually accept. B01 records which it used and why.
 
 ---
 
@@ -183,7 +186,7 @@ Field counts are part of the contract: B01's round-trip proof asserts each DTO's
 
 ### 3.2 Encoder, counts, decoder
 
-- **Sorting** (`BackupCodec.kt:80-98`'s determinism discipline): the three new top-level lists by `id`; a group's `members` by `(sortOrder, id)`; a schedule's `providers` by `provider`. `Plan decision:` members tie-break on `id` because `sortOrder` is not promised unique within a parent and the planner's own normalisation is `(sortOrder, id)` (`MergePlanner.kt:~460`); two stable sorts over two different bases would otherwise disagree.
+- **Sorting** (`BackupCodec.kt:80-98`'s determinism discipline): the three new top-level lists by `id`; a group's `members` by `(sortOrder, id)`; a schedule's `providers` by `provider`. `Plan decision:` members tie-break on `id` because `sortOrder` is not promised unique within a parent and the planner's own normalisation is `(sortOrder, id)` (`MergePlanner.kt:454-466`, with its reasoning at `:64-66`); two stable sorts over two different bases would otherwise disagree.
 - **New `counts` keys** (`BackupCodec.kt:108-120`, 11 keys today → 16): `maintenanceGroups`, `groupMembers`, `maintenanceSchedules`, `scheduleProviders`, `occurrenceClosures`.
 - **Decoder:** the `formatVersion > FORMAT_VERSION` refusal (`BackupCodec.kt:150-151`) and the `formatVersion >= 5 ⇒ backupSetId` check (`:155-157`) are unchanged. Every new row is validated by `toDomain()` in the same eager pass as the shipped tables (`BackupCodec.kt:174-180`), so a corrupt schedule, membership or closure is refused **before any import begins**. `validateGraph` gains the new references: a member's `asset_id`, a schedule's target / meter definition / profile, a closure's `schedule_id`, and an event's `schedule_id`.
 - **`schedule_state` and `schedule_local_delivery` are not exported** — the first because every column is on D4 §12's derived side, the second because it is device-local. `schedule_state` is rebuilt after any import.
@@ -200,6 +203,8 @@ ASSETS, GROUPS, DEFINITIONS, PROFILES, SCHEDULES, CLOSURES, LINKS, TAGS, EVENTS,
 ```
 
 A group's members reference assets, so `GROUPS` follows `ASSETS`. A schedule references an asset or a group, a meter definition and a profile, so `SCHEDULES` follows all four. A closure references only a schedule, so `CLOSURES` follows it. An event references a schedule, so `EVENTS` keeps its place. `MergeWrites` (`MergePlan.kt:142-150`), `MergeSnapshot` (`:163-173`) and `MergeReport` (`:182-196`) each gain `groups`, `schedules` and `closures` in write-order position.
+
+**One in-code sentence goes stale the moment this lands.** `MergePlan.kt:14-20`'s KDoc reads "The **seven** canonical tables, **in the order a merge must write them**"; it becomes **ten**, and it is **B01's** edit, in B01's own diff, with a grep in B01's gate. It is called out here beside the enum rather than left to the whole-branch review, because a stale comment immediately above the enum an implementer is editing is the cheapest kind of document rot to catch and the easiest to miss.
 
 ### 4.1 Per-table rules
 
@@ -511,7 +516,8 @@ A read model over `Asset` + `ScheduleState`, **no new canonical rows**, extendin
 | status | section | why |
 |---|---|---|
 | `OVERDUE`, `DUE` | ATTENTION | |
-| **`NO_DATA`** | **ATTENTION** | it is actionable — the missing meter baseline is repairable with "Log meter reading" and #27 raises a finding for it |
+| **`NO_DATA` with a repair action** — a missing meter baseline | **ATTENTION** | it **is** actionable: "Log meter reading" repairs it, and #27 raises a finding for it |
+| **`NO_DATA` from an empty required set** (§6.1, invariants 74, 77) | **no section at all** | it is **not** actionable: not counted as due, not promoted, never offered on the scan sheet, never closeable. **Emptiness never means complete, and it never means actionable either** |
 | `DUE_SOON` | UPCOMING | |
 | `OK` | CURRENT | |
 | `INACTIVE_SEASON` | OUT OF SEASON | satisfies #5 AC 2 |
@@ -519,6 +525,7 @@ A read model over `Asset` + `ScheduleState`, **no new canonical rows**, extendin
 
 - `INACTIVE_SEASON`, `PAUSED` and `NO_DATA` each render **distinctly from `OVERDUE`** wherever they appear, by wording plus icon plus position and never by colour alone (#5 AC 2, D12 §5 `:274-296`), and the hierarchy survives grayscale.
 - **A due schedule on a component asset is never hidden.** The shipped list shows only top-level assets while the query is blank (`DashboardViewModel.kt:121`), which would hide a component's schedule and break #5 AC 1. A component row with an **actionable** schedule is **promoted to its attention rank** and rendered with its parent named, reusing the `parentName` the row already carries (`DashboardViewModel.kt:124`); the blank-query "parts live on their systems" rule still governs every non-actionable row (invariant 75).
+- **"Actionable" is surface-specific, and deliberately so.** The dashboard's **promotion** rule means a status in ATTENTION or UPCOMING (decision 29). The **scan sheet's** admission set is D-18a's (§11.2) and never opens for `DUE_SOON` alone. Both are right for their own surface, and decision 27 puts **one** projection behind four surfaces — so **`DueReadModel` exposes the `status` and an empty-required-set flag and each surface applies its own predicate; it must not carry a single `isActionable` boolean.** A shared flag would be wrong for one surface the moment it was right for the other, and because the projection feeds the dashboard, the Maintenance shell, B09's sheet and `/v1/due`, a single mis-specified predicate would land on all four at once.
 - A group-targeted schedule is **one row that expands to its members' completion state**, and it **counts once** in every due total however many members are outstanding (D-15).
 - Archived assets stay out of the default view and keep their history. A **health badge** appears when any finding is ≥ WARN (#27, D3 §7.3).
 
@@ -576,16 +583,18 @@ S4 is **one overnight baseline observation** on the owner's development phone, *
 
 Spec §6's eighty, each restated in a few words with the brief whose test matrix proves it. Per the proportionality ruling an invariant naming several facts is **one** test asserting them together. A brief's review checks that every invariant in its column has a named test.
 
+**Reading the "proved by" column.** A brief named without a qualifier proves the invariant where it is enforced — in the domain, the schema or the wire. A brief marked **(UI)** proves the narrower fact that **its surface cannot violate** the invariant: B14 and B15 cannot reach a forbidden state through the editor or the group screens, and B09 cannot reach one through the sheet. Both kinds of proof are required, and this column is the crosswalk a reviewer checks a brief's own invariant list against — so a brief's list and this column must agree in both directions.
+
 | # | invariant | proved by |
 |---|---|---|
 | 1 | a schedule targets exactly one Asset or one group | B02 |
 | 2 | a group-targeted schedule carries no meter rule | B02 |
 | 3 | a group-targeted schedule carries no `profileId` | B02 |
 | 4 | a group is never an Asset row and never in the Asset tree | B03 |
-| 5 | a group never holds an NFC identity; no tag resolves to one | B03, B09 |
+| 5 | a group never holds an NFC identity; no tag resolves to one | B03, B09 (structurally — `TagTarget` has no group case) |
 | 6 | `(group_id, asset_id, added_at)` unique; many groups per asset; several closed windows per group | B01, B03 |
-| 7 | a name, location or category is never identity, in the domain or in a merge | B01, B03 |
-| 8 | a membership row is never hard-deleted while a completion or closure references a covered occurrence | B03, B12 |
+| 7 | a name, location or category is never identity, in the domain or in a merge | B01, B03, B15 (UI) |
+| 8 | a membership row is never hard-deleted while a completion or closure references a covered occurrence | B03, B12, B15 (UI) |
 | 9 | at most one current occurrence per schedule | B02 |
 | 10 | `effectiveDueOn` is null only when there is no time rule | B02 |
 | 11 | every FIXED `computedDueOn` lies on `anchorOn + k·interval` | B02 |
@@ -605,12 +614,12 @@ Spec §6's eighty, each restated in a few words with the brief whose test matrix
 | 25 | a never-terminated FIXED due date is pinned from immutable configuration; only an edit moves the floor, to the edit date | B02 |
 | 26 | `seasonReentry` and `seasonReentryOffsetDays` are stored and never read | B02, structural grep |
 | 27 | a group target is `IGNORE` season only; `FOLLOW_ASSET` on one is rejected | B02 |
-| 28 | a group completion never writes an event on a non-member | B03 |
-| 29 | a group completion never marks an unselected member complete | B03 |
+| 28 | a group completion never writes an event on a non-member | B03, B09 (UI), B15 (UI) |
+| 29 | a group completion never marks an unselected member complete | B03, B09 (UI), B15 (UI) |
 | 30 | a group occurrence is incomplete until every required member is complete, or it is closed | B03 |
 | 31 | "Complete all" records each required member's completion exactly once | B03 |
 | 32 | a repeat `(schedule, occurrence, asset)` creates no second event — **by unique index, not by a check in code** | B01, B03 |
-| 33 | a required set never depends on today's membership list; no membership operation changes a past one | B03 |
+| 33 | a required set never depends on today's membership list; no membership operation changes a past one | B03, B15 (UI) |
 | 34 | a completion always names a real asset; a schedule never owns an event of its own | B03 |
 | 35 | closing writes one closure row, no schedule column, no `asset_event` | B03 |
 | 36 | a closed round never claims any member did work | B03 |
@@ -624,7 +633,7 @@ Spec §6's eighty, each restated in a few words with the brief whose test matrix
 | 44 | the reminder projection is derivable from schedule state alone and rebuildable from nothing | B06 |
 | 45 | `reconcile` twice with the same list has no second effect | B04, B06 |
 | 46 | `contentHash` suppresses a no-op update | B04 |
-| 47 | a seasonally inactive or paused schedule arrives as `PARKED(reentryOn)` | B04 |
+| 47 | a seasonally inactive or paused schedule arrives as `PARKED(reentryOn)` | B04, B06 |
 | 48 | `:core` compiles with no Android and no provider dependency; no port type names a provider object | B04, structural grep |
 | 49 | two enabled provider rows yield two subject lists with no change to the port | B04 |
 | 50 | no health repair ever resolves a conflict | B10 |
@@ -634,14 +643,14 @@ Spec §6's eighty, each restated in a few words with the brief whose test matrix
 | 54 | no boot, time or quick-action receiver is exported; every `PendingIntent` is `FLAG_IMMUTABLE` | B05, B07 |
 | 55 | a notification action never starts an activity from a receiver on API 31+ | B07 |
 | 56 | a stale, missing or already-used nonce is rejected and writes nothing | B07 |
-| 57 | a scan, an NFC dispatch and a `servicetag://` link never mutate | B09, B11 |
+| 57 | a scan, an NFC dispatch and a `servicetag://` link never mutate | B07 (the `schedule` host), B09, B11 |
 | 58 | an unknown, unbound, lost, retired, malformed or foreign tag never reaches the completion path | B09 |
 | 59 | editing a placement label rewrites no NFC payload and changes no binding | B11 |
 | 60 | the digest alarm is re-armed after `BOOT_COMPLETED`, `TIME_SET` and `TIMEZONE_CHANGED` | B06 |
-| 61 | denied permission leaves every path working and produces exactly one finding | B05, B10 |
+| 61 | denied permission leaves every path working and produces exactly one finding | B05, B06, B10 |
 | 62 | a format ≤5 archive still decodes and restores, with every new field at its default | B01 |
 | 63 | a format-6 archive is refused by an older build with `BackupNewerFormat`, never partially read | B01 |
-| 64 | neither `schedule_state` nor `schedule_local_delivery` is ever exported or merged | B01, structural grep |
+| 64 | neither `schedule_state` nor `schedule_local_delivery` is ever exported or merged | B01, B06, structural grep |
 | 65 | no notification-delivery state is exported or merged | B01, B06 |
 | 66 | a merge still has no `UPDATE` verdict | B01, structural grep |
 | 67 | one conflict anywhere writes nothing at all | B01 |
@@ -651,13 +660,13 @@ Spec §6's eighty, each restated in a few words with the brief whose test matrix
 | 71 | a schedule or closure whose owner is neither local nor being inserted is `OWNER_NOT_AVAILABLE` | B01 |
 | 72 | groups and closures are never coalesced by name or by date | B01 |
 | 73 | a group occurrence's open instant is a single stated exported value — a property, not a two-device test | B03 |
-| 74 | a schedule whose current occurrence has an empty required set is not actionable and not counted | B03, B08 |
+| 74 | a schedule whose current occurrence has an empty required set is not actionable and not counted | B03, B08, B14 (UI), B15 (UI) |
 | 75 | a schedule on an asset the dashboard hides by default is still reachable at its attention rank | B08 |
 | 76 | `POST /v1/events` cannot create a completion; nothing deletes a schedule, a group or a closure | B12 |
-| 77 | an occurrence with an empty required set is never a termination and can never be closed | B03, B12 |
+| 77 | an occurrence with an empty required set is never a termination and can never be closed | B03, B12, B14 (UI) |
 | 78 | `closed_on` is never in the future and never earlier than its occurrence's open date | B03, B12, B14 |
-| 79 | `removed_at` is never cleared and `added_at` never edited by any use case, route or tool | B03, B12 |
-| 80 | at most one membership row per `(group, asset)` has `removed_at IS NULL` | B01, B03 |
+| 79 | `removed_at` is never cleared and `added_at` never edited by any use case, route or tool | B03, B12, B15 (UI) |
+| 80 | at most one membership row per `(group, asset)` has `removed_at IS NULL` | B01, B03, B12, B15 (UI) |
 
 ---
 
@@ -665,9 +674,9 @@ Spec §6's eighty, each restated in a few words with the brief whose test matrix
 
 ### 14.1 The fifteen briefs
 
-Spec §7's boundaries, in its order.
+Spec §7's boundaries, in its order. The last column is an **estimate of the implementation's size**, carried over from spec §10's per-brief bands — it is **not** a target for the brief document's own length. The delivered briefs are 98–137 lines because each references the master plan's shared contract instead of restating it, which is the anti-restatement discipline working; **depth is judged against spec §10's content list, not against a line count.**
 
-| brief | file | owns | consumes | est. lines |
+| brief | file | owns | consumes | est. implementation size (lines) |
 |---|---|---|---|---|
 | B01 | `B01-schema-and-format-6.md` | Room v6 entities, DAOs, mappers and `MIGRATION_5_6`; `6.json`; format 6 (three lists, three event fields, counts, sorting, decoder, `validateGraph`); `MergeTable`/`MergeWrites`/`MergeSnapshot`/`MergeReport` and the seven new reason codes; the total post-apply rebuild hook. **No engine, no UI** | §2–§4 | 300–380 |
 | B02 | `B02-scheduling-engine.md` | `MaintenanceSchedule`, `ScheduleState`, `ScheduleRecompute.rebuild`, status, FIXED/COMPLETION/meter/combined arithmetic, the four operations, `ScheduleRepository`, the `Today` port | B01 | 320–400 |
@@ -700,22 +709,32 @@ B11 (independent, no schema change)          B13 (last: needs all)
 
 **B01 gates B02 and B03. B08's shell gates B15 and B10's placement. B14 gates B09.** B05 runs in parallel with B02/B03 — it touches no domain. B11 runs in either lane at any time. **Nothing gates on S4, and B06 in particular does not** (§12.3).
 
+**Two edges the diagram does not draw.** **B10 also consumes B05** (`PlatformState`, `NotificationPermission` — decision 22) and **B06** (the digest alarm and the backstop worker it detects and repairs — decision 24). The graph shows only B10's *placement* edge from B08's shell; its detection dependencies are the other two, and B10's own Ordering section states all three.
+
 ### 14.3 Lane plan
 
-Two implementers concurrently at most (owner ruling, `feedback-two-lanes`): different repositories or worktrees, no shared emulator or files, and Gradle contention is never serialised away. One implementer and one independent reviewer per brief, with scoped re-reviews of fixes.
+Two implementers concurrently at most (owner ruling, `feedback-two-lanes`), one implementer and one independent reviewer per brief, with scoped re-reviews of fixes.
 
-| wave | lane A | lane B | notes |
-|---|---|---|---|
-| 1 | **B01** | **B11** (own worktree) | B11 touches no schema and no path B01 touches, so the two cannot collide. B11 merges whenever it is green |
-| 2 | **B02** | **B05** | B05 is `:app` platform only; B02 is `:core` only |
-| 3 | **B03** | **B04** after B03's domain lands, else idle | B04 is small; it may also ride wave 4 lane B |
-| 4 | **B06** | **B08** | B06 is the alarm/worker/provider; B08 is the read model plus the nav shell |
-| 5 | **B14** | **B07** | B14 is the editor; B07 the quick actions. Both `:app`, different packages |
-| 6 | **B09** | **B15** | both need B08's shell; B09 also needs B14 |
-| 7 | **B12** | **B10** | B12 spans `:app/api` and `tools/servicetag-mcp/`; B10 is the health screen |
-| 8 | **B13** | — | version, docs, release proofs; single lane by design |
+**The three isolation rules, which the wave table below obeys rather than assumes:**
 
-**Worktree rule:** B11 executes in its own git worktree from the current `master` tip and merges `--no-ff`. Every other brief works on the release branch in sequence within its lane; a lane never rebases the other lane's merged work away. The controller merges, reviews the whole branch once at the end, and runs §16.
+1. **One git worktree per lane, on its own branch cut from the release tip.** The controller merges each brief `--no-ff` into the release branch, and **no lane rebases the other's merged work away**. Two concurrent implementers never share a checkout.
+2. **Connected runs are serialised on the device.** Only **one lane holds `emulator-5554` at a time** — requested from and released to the controller, `ANDROID_SERIAL` pinned — **unless** the controller has provisioned a second AVD, in which case that brief's gate names its own serial. Instrumented runs wipe device data (`feedback-device-proof-automation`), so two lanes running connected suites against one serial invalidate each other's results. **A lane waiting for the device works on its unit gate meanwhile**, which is where most of every brief's matrix lives.
+3. **The two lanes in a wave never share a *file set*.** Waves 4–7 both run in `:app` — that is unavoidable, since eleven of the fifteen briefs touch it — and they are separated by **package** and by the **Files section of each brief**, which is the real boundary. `AppGraph.kt` and `ServiceTagRoot.kt` are the two files several briefs touch; the controller resolves those at merge, and a lane that needs a line in the other lane's file asks rather than edits.
+
+| wave | lane A | lane B | device | file-set separation |
+|---|---|---|---|---|
+| 1 | **B01** | **B11** | B11 only | `:core` + `data/**` vs `ui/asset`, `ui/scan`. Disjoint. B11 merges whenever it is green |
+| 2 | **B02** | **B05** | neither | `:core` + one Room adapter vs `reminders/**` + the manifest. Disjoint |
+| 3 | **B03** | **B04** | neither | `:core/schedule`, `usecase`, one adapter vs `:core/reminders`. Disjoint |
+| 4 | **B06** | **B08** | **B06** holds it | `reminders/**`, `prefs`, the version catalog vs `ui/maintenance`, `ui/dashboard`, `ui/nav`. Disjoint but for `AppGraph.kt` |
+| 5 | **B14** | **B07** | **B14** holds it | `ui/maintenance/Schedule*` vs `reminders/QuickAction*`, `links`, the manifest, `DeepLinkRoute.kt`. Disjoint but for `AppGraph.kt`, `ServiceTagRoot.kt` |
+| 6 | **B09** | **B15** | **B09** holds it | `ui/maintenance/MaintenanceSheet*`, `ui/scan` vs `ui/maintenance/Group*`, `ui/asset`. Disjoint but for `ServiceTagRoot.kt` |
+| 7 | **B12** | **B10** | **B10** holds it | `api/**`, `tools/servicetag-mcp/**`, `docs/api` vs `reminders/ReminderHealthCheck`, `ui/maintenance/Health*`. Disjoint |
+| 8 | **B13** | — | B13 only | single lane by design |
+
+**B04 must land before wave 4 opens**, because **B06 consumes it**: it rides wave 3 lane B as soon as B03's domain lands, and if it slips, **wave 4 lane A slips with it**. It may not ride wave 4 lane B — that is the wave B06 is in.
+
+**Two lanes is a ceiling, not a target.** A wave whose lane B is not ready runs as a single lane; Gradle contention is never serialised away, and a lane blocked on the device or on the other lane's merge is a lane the controller may simply not open.
 
 ---
 
@@ -742,24 +761,31 @@ Owner-run and owner-gated; the controller stops where the owner's click is requi
 
 Run by the controller at the final tip, not by an implementer. Every grep is an **anchored** pattern.
 
-1. **Unit gate from scratch:** `./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest --rerun-tasks --console=plain` → BUILD SUCCESSFUL, zero failures, zero skips. The controller records the baseline counts at the branch point (`master` at `d790506`) before wave 1 and asserts that the final counts equal the baseline plus the sum of the per-brief counts each brief's review recorded. `Plan decision:` the plan does not hardcode a test total, because the baseline moved with the Stage-A bundle work and the plan author may not run Gradle; the controller's recorded baseline is the number of record.
+1. **Unit gate from scratch:** `./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest --rerun-tasks --console=plain` → BUILD SUCCESSFUL, zero failures, zero skips. **The baseline is measured at `d790506`, the last code-changing commit**, and the release branch is cut from the docs-only tip that carries this plan and the spec. The controller records the baseline counts before wave 1 and asserts that the final counts equal the baseline plus the sum of the per-brief counts each brief's review recorded. `Plan decision:` the plan does not hardcode a test total, because the baseline moved with the Stage-A bundle work and the plan author may not run Gradle; the controller's recorded baseline is the number of record.
 2. **Connected suite on `emulator-5554`** (never a phone here): the whole `androidTest` suite green, zero skips; the new classes present. `ANDROID_SERIAL` pinned. The emulator is the Android Studio flatpak AVD; instrumented runs wipe data, so **no phone runs a suite**.
 3. **Python:** `cd tools/servicetag-mcp && uv run --frozen pytest` green; `cd tools/servicetag-bundle && uv run --frozen pytest` green and unchanged.
-4. **Structural greps**, each with its expected count:
-   - `grep -c '^@mcp\.tool' tools/servicetag-mcp/src/servicetag_mcp/server.py` → **38**.
-   - exactly one `MergeTable` declaration, with the ten members in §4's order.
-   - no `UPDATE` member in `MergeVerdict`; `MergePlan.kt`'s "no `UPDATE`" comment intact.
-   - no `android\.` or `androidx\.` import anywhere under `core/src/main`.
-   - no `TODOIST` identifier outside the `EventSource` enum declaration and its doc comment.
-   - `seasonReentry` and `seasonReentryOffsetDays` appear only in the model, the DTO, the entity, the mappers and the command — **no read site** in the engine.
-   - no `UPDATE .*occurrence_closure` and no `DELETE FROM .*occurrence_closure` anywhere; the closure DAO declares insert and query only.
-   - no `SCHEDULE_EXACT_ALARM` and no `USE_EXACT_ALARM` in any manifest or merged manifest.
-   - exactly two `createNotificationChannel` call sites reachable, with ids `maintenance_due` and `maintenance_overdue`; no `supplies` and no `sync_problems` channel id anywhere.
-   - every `PendingIntent` construction carries `FLAG_IMMUTABLE`; every new `<receiver>` carries `android:exported="false"`.
-   - `schedule_state` and `schedule_local_delivery` appear in no DTO, no `BackupData` field and no `MergeTable` member.
-   - `AppDatabase.version` = 6, `AppGraph.SCHEMA_VERSION` = 6, `BackupCodec.FORMAT_VERSION` = 6, `versionCode` = 13, `versionName` = "1.2.0" — one occurrence each.
-   - `app/schemas/.../6.json` exists and `1..5.json` are byte-identical to `master`.
-   - the untouched list of §1 shows no diff across the whole range.
+4. **Structural greps.** Every one is an **anchored pattern with its command and its expected count**, per `docs/superpowers/planning-policy.md:41` — written this way from the start so a comment that names a grep can never match it. `<base>` is the release branch's base commit.
+
+   | what | command | expected |
+   |---|---|---|
+   | MCP tool count | `grep -c '^@mcp\.tool' tools/servicetag-mcp/src/servicetag_mcp/server.py` | **38** |
+   | one `MergeTable`, ten members | `grep -c '^enum class MergeTable' core/src/main/kotlin/com/loosecannon/servicetag/core/merge/MergePlan.kt` | **1** (the review reads the member list against §4's order) |
+   | the stale KDoc gone | `grep -c 'seven canonical tables' core/src/main/kotlin/com/loosecannon/servicetag/core/merge/MergePlan.kt` | **0** |
+   | no `UPDATE` verdict | `grep -cE '^[[:space:]]*UPDATE[,[:space:]]*$' core/src/main/kotlin/com/loosecannon/servicetag/core/merge/MergePlan.kt` | **0** |
+   | `:core` stays Android-free | `grep -rcE '^import (android\|androidx)\.' core/src/main \| grep -v ':0$'` | no output |
+   | no dead provider identifier | `grep -rn '\bTODOIST\b' core/src/main app/src/main \| grep -vE 'Journal\.kt\|BackupFormat\.kt'` | no output |
+   | the deferred re-entry columns have no reader | `grep -rcE 'seasonReentry(OffsetDays)?' core/src/main/kotlin/com/loosecannon/servicetag/core/schedule` | **0** |
+   | the closure table is immutable | `grep -rniEc '(UPDATE\|DELETE)[[:space:]]+(FROM[[:space:]]+)?.?occurrence_closure' app/src/main core/src/main \| grep -v ':0$'` | no output |
+   | the closure DAO is insert-and-query | `grep -cE '@(Update\|Delete)' app/src/main/kotlin/com/loosecannon/servicetag/data/room/dao/MaintenanceDaos.kt` | **0** on the closure DAO (the review reads the file) |
+   | no exact alarm | `grep -rcE 'android:name="android\.permission\.(SCHEDULE\|USE)_EXACT_ALARM"' app/src/main app/build/intermediates/merged_manifests \| grep -v ':0$'` | no output |
+   | two channels, no third | `grep -rc 'createNotificationChannel' app/src/main` → **1** site; `grep -rncE '"(supplies\|sync_problems)"' app/src/main core/src/main \| grep -v ':0$'` | no output |
+   | every `PendingIntent` immutable | `grep -rnE 'PendingIntent\.(getBroadcast\|getActivity\|getService)' app/src/main \| grep -vc 'FLAG_IMMUTABLE'` | **0** |
+   | no exported new receiver | `grep -cE '<receiver' app/src/main/AndroidManifest.xml` → **6**; `grep -cE '<receiver[^>]*android:exported="true"' app/src/main/AndroidManifest.xml` | **0** |
+   | derived and delivery state unexported | `grep -rncE '(schedule_state\|ScheduleState\|schedule_local_delivery\|ScheduleLocalDelivery)' core/src/main/kotlin/com/loosecannon/servicetag/core/backup core/src/main/kotlin/com/loosecannon/servicetag/core/merge \| grep -v ':0$'` | no output |
+   | the four numbers agree | `grep -c 'version = 6' app/src/main/kotlin/com/loosecannon/servicetag/data/room/AppDatabase.kt`; `grep -c 'SCHEMA_VERSION = 6' app/src/main/kotlin/com/loosecannon/servicetag/di/AppGraph.kt`; `grep -c 'FORMAT_VERSION = 6' core/src/main/kotlin/com/loosecannon/servicetag/core/backup/BackupCodec.kt`; `grep -c 'versionCode = 13' app/build.gradle.kts`; `grep -c 'versionName = "1.2.0"' app/build.gradle.kts` | **1** each |
+   | the schemas | `test -f app/schemas/com.loosecannon.servicetag.data.room.AppDatabase/6.json`; `git diff --stat <base>..HEAD -- app/schemas/com.loosecannon.servicetag.data.room.AppDatabase/1.json ...5.json` | exists; empty |
+   | the stale prose gone | `grep -ci 'twenty-one' tools/servicetag-mcp/README.md`; `grep -c 'seven tables' docs/api/v1.md` | **0** each |
+   | §1's untouched list | `git diff --stat <base>..HEAD -- libs/ tools/servicetag-bundle/ core/src/main/kotlin/com/loosecannon/servicetag/core/nfc/ core/src/main/kotlin/com/loosecannon/servicetag/core/journal/ app/src/main/kotlin/com/loosecannon/servicetag/ui/theme/` | empty |
 5. **Migration proof:** the `MigrationTest` from B01 runs in the unit gate; separately, the controller restores a **real format-5 archive** through the app on the emulator, upgrades, and confirms every count is unchanged and no schedule was invented.
 6. **End-to-end on `emulator-5554`** through a connected MCP client with the Developer API screen open: create a group with two members, create a group-targeted QUICK schedule, `list_due` shows **one** item with `membersRequired = 2, membersComplete = 0`; complete one member → `membersComplete = 1` and the item still due; `close_round` → 201, a second `close_round` → 409 `OCCURRENCE_ALREADY_CLOSED`, `complete_schedule` on that occurrence → 409 `OCCURRENCE_CLOSED`; `list_closures` shows one row; `closedOn` tomorrow → 422 `CLOSED_ON_OUT_OF_RANGE`; export, `import_merge(plan_only=True)` on the same phone → all `IDENTICAL` including the schedule and the closure; `pm clear` after.
 7. **Hygiene over the whole range:** no private nouns, no e-mail, no home path, no serial, no pairing code; single-subject commits; one author identity; submodule clean at its pinned tag (`bash tools/check-submodule-pin.sh`).
@@ -770,6 +796,8 @@ Run by the controller at the final tip, not by an implementer. Every grep is an 
 ## 17. String ratification table
 
 Every user-visible string 1.2 introduces. **RATIFIED** strings are quoted verbatim from spec §9.1 and a brief may not paraphrase one. **PROPOSED** strings return for the owner's ratification before the brief that draws them executes (spec §12, D-24).
+
+**Every status and treatment word D12 already carries is pre-ratified with it** (`docs/design/12-visual-design-apollo-service-binder.md:274-296`, `:289`, `:311-313`, `:706-707`), which covers the seven status terms, the four dashboard section labels, and **REMINDER FAILED** for the failure family (B10) — D12 is approved visual-design direction recorded as part of the design authority.
 
 | string | state | used by |
 |---|---|---|
@@ -785,8 +813,8 @@ Every user-visible string 1.2 introduces. **RATIFIED** strings are quoted verbat
 | "Snooze" | RATIFIED | B09, B14 |
 | "Postpone" | RATIFIED | B09, B14 |
 | "When was this done?" | RATIFIED | B09, B14 |
-| "Tag placement" | RATIFIED | B11 |
-| "Log meter reading" | RATIFIED | B09, B10 |
+| "Tag placement" | RATIFIED | B11, B09 (the sheet header's scanned-tag caption) |
+| "Log meter reading" | RATIFIED | B08 (an ATTENTION `NO_DATA` row's repair), B09, B10 |
 | notification actions "Done" / "Snooze 1 day" / "Open" | RATIFIED | B07 |
 | "Snoozed until <date>" | RATIFIED | B07, B08 |
 | "Reminders are off because notifications are blocked." | RATIFIED | B08 |
@@ -797,9 +825,12 @@ Every user-visible string 1.2 introduces. **RATIFIED** strings are quoted verbat
 | dashboard section labels **ATTENTION · UPCOMING · CURRENT · OUT OF SEASON** | RATIFIED (pre-ratified with D12 `:706-707`) | B08 |
 | the seven health-finding sentences (`NOTIFICATIONS_BLOCKED`, `DIGEST_ALARM_MISSING`, `BACKSTOP_WORK_MISSING`, `APP_RESTRICTED`, `REMINDERS_GLOBALLY_OFF`, `SCHEDULE_NO_PROVIDER`, `NO_DATA`) — one plain sentence **and one repair label** each | **PROPOSED** (spec §12 item 1) | B10 drafts, owner ratifies |
 | the "Close this round" **confirmation body**. Spec §12's draft: *"Close this round? The members not marked done will not be recorded as serviced."* | **PROPOSED** (spec §12 item 2) | B14 |
+| the **schedule editor's remaining field labels** — the target picker, the season-behaviour choice, the completion-mode choice, the profile picker, the four meter-rule fields (definition, interval, baseline, lead) and the single provider row. D-24 ratified the time-rule and lead fragments only | **PROPOSED** (see §18 decision 12) | B14 drafts, owner ratifies |
 | the two **notification channel display names and descriptions** shown in Android system settings for `maintenance_due` and `maintenance_overdue` | **PROPOSED** (see §18 decision 12) | B05 drafts, owner ratifies |
 | the **digest summary notification** title and body (the one-per-run summary listing DUE and OVERDUE) and a per-item notification's title and body form | **PROPOSED** (see §18 decision 12) | B06 drafts, owner ratifies |
 | the Maintenance destination's **four section labels** (due work · schedules · groups · reminder health) and its empty-state line | **PROPOSED** (see §18 decision 12) | B08 drafts, owner ratifies |
+
+**Any user-visible string a brief needs that this table does not list is a finding for the controller before that brief executes; no brief invents one.** Thirteen of the fifteen briefs say so in their own Strings section; the four that draft a PROPOSED class (B05, B06, B08, B14) say it of everything beyond the class they were given.
 
 ---
 
@@ -809,10 +840,12 @@ Every place this plan decided a detail the spec left open, with its one-line rea
 
 The four **revision-4.1 amendments** — that S4 gates nothing (§1, §12.3), `MEMBER_ALREADY_OPEN` as a 422 (§9.1, §9.2, §9.3), the two membership merge codes as archive-internal planner guards with phone-to-phone divergence surfacing as `CONTENT_DIFFERS` on the group row (§4.1), and the schedule command's shape violations as 422 rather than 409 (§2.3, §9.3) — are **spec, not plan decisions**, and are not numbered here.
 
+**Two entries below — 3 and 4 — are named spec deviations, not silences.** They depart from an explicit statement of spec §2.1 (the two `CHECK` constraints) and spec §3.1 (the prescribed migration statements) rather than fill a gap. Both are recorded here for the owner and the spec author, the controller carries them with this plan's review, and **§1's follow-the-spec rule does not apply to a deviation this plan has named** — an implementer follows the plan for these two and reports anything else.
+
 1. **§2.1 — `schedule_state` carries `computed_due_meter`.** Spec §2.2 names it among the materialised fields; §3.1's table does not enumerate columns, and `/v1/due` and the dashboard read it.
 2. **§2.1 — `anchor_on` is nullable, non-null exactly when `time_interval` is non-null.** §2.1 types it non-null while §4.1's command has it optional and a meter-only schedule has no series; this is the only shape that represents both without a sentinel date.
-3. **§2.3 — no `CHECK` constraint is declared anywhere.** Room 3 cannot declare one on an `@Entity`, so a CHECK written only into the migration would exist on upgraded databases and not on fresh ones. The two CHECKs spec §2.1 states become use-case invariants with tests, exactly as §2.3 already rules for the at-most-one-open membership rule.
-4. **§2.4 — the migration's implementation is the implementer's choice between `ALTER TABLE ADD COLUMN` ×3 and a table recreate**, decided by which one satisfies Room's validation against `6.json` and the row-identity proof. The plan fixes the two requirements, not the statements.
+3. **Spec deviation** (not a silence) — **§2.3, no `CHECK` constraint is declared anywhere.** Room 3 cannot declare one on an `@Entity`, so a CHECK written only into the migration would exist on upgraded databases and not on fresh ones. The two CHECKs spec §2.1 states become use-case invariants with tests, exactly as §2.3 already rules for the at-most-one-open membership rule.
+4. **Spec deviation** (not a silence) — **§2.4, the migration's implementation is the implementer's choice between `ALTER TABLE ADD COLUMN` ×3 and a table recreate**, decided by which one satisfies Room's validation against `6.json` and the row-identity proof. The plan fixes the two requirements, not the statements.
 5. **§3.2 — a group's `members` are encoded in `(sortOrder, id)` order.** `sortOrder` is not promised unique within a parent, and `MergePlanner.ordered()` already normalises child lists on `(sortOrder, id)`; two stable sorts over two different bases would disagree.
 6. **§5.1 — `Today` is a `fun interface` port in `core/.../core/ports/`**, not a bare parameter at the top of the stack. Spec §2.2 allows either; `AppGraph` already owns `Clock`, the digest and backstop runs need the same value, and a fake `Today` is how every date test is written. `rebuild` still takes `T` as a parameter.
 7. **§5.2 — the time-unit enum is `RecurrenceUnit`, not `TimeUnit`.** `TimeUnit` collides with `java.util.concurrent.TimeUnit`. The four names on the wire and in the column are unchanged.
@@ -820,15 +853,15 @@ The four **revision-4.1 amendments** — that S4 gates nothing (§1, §12.3), `M
 9. **§9.3 — `/v1/due`'s `rank` is the 0-based index of the item in the attention order.** Spec §4.1 names the field without defining it; a client must be able to reproduce the app's order without re-deriving it.
 10. **§11 — the seven new `Route` members and their parameters.** Spec §2.6 names the Maintenance destination but not the back stack; every key carries ids only, as `Route.kt:6-9` requires, and `Route.readsTags()` is unchanged because no new screen reads tags.
 11. **§10 / §16 — the MCP tool count becomes 38** (21 + 17), which is the number `README.md:58` must state and the structural grep must find.
-12. **§17 — the PROPOSED set is larger than spec §12's two items.** Spec §12 says two strings and nothing else, but three more classes of string are user-visible and unratified: the two notification **channel display names and descriptions** (visible in Android system settings), the **digest summary** notification title and body, and the Maintenance destination's **four section labels** and empty-state line. They are marked PROPOSED and routed to B05, B06 and B08 to draft rather than invented in a brief. **This is the one place the plan extends the spec's open-items list, and the plan review should confirm it.**
-13. **§14.3 — the wave and worktree assignment.** Spec §7 fixes the dependencies and the owner's two-lane rule fixes the concurrency; the pairing of briefs into waves is this plan's, chosen so that the two lanes in a wave never share a module path.
+12. **§17 — the PROPOSED set is larger than spec §12's two items.** Spec §12 says two strings and nothing else, but **four** more classes are user-visible and unratified: the two notification **channel display names and descriptions** (visible in Android system settings), the **digest summary and per-item notification** title and body, the Maintenance destination's **four section labels** and empty-state line, and the **schedule editor's remaining field labels** — D-24 ratified the time-rule and lead fragments only, leaving the target picker, the season-behaviour and completion-mode choices, the profile picker, the four meter-rule fields and the provider row with no ratified wording. They are marked PROPOSED and routed to B05, B06, B08 and B14 to draft rather than invented in a brief, and §17 closes with the rule that any string it does not list is a finding rather than a brief's to invent. **This is the one place the plan extends the spec's open-items list, and the plan review should confirm it.**
+13. **§14.3 — the wave, worktree and device assignment.** Spec §7 fixes the dependencies and the owner's two-lane rule fixes the concurrency; the pairing of briefs into waves is this plan's, chosen so that **the two lanes in a wave never share a file set**. Waves 4–7 both run in `:app` — unavoidable, since eleven briefs touch it — and are separated by package and by each brief's Files section, with `AppGraph.kt` and `ServiceTagRoot.kt` named as the two shared files the controller resolves at merge. **One worktree per lane** and **`emulator-5554` held by one lane at a time**, connected runs serialised, are part of this decision.
 14. **§16.1 — no test total is hardcoded.** The baseline moved with the Stage-A bundle work and the plan author may not run Gradle; the controller records the baseline at `d790506` and asserts baseline + the per-brief counts.
 15. **§16 — the structural grep list and each expected count.** The planning policy requires anchored patterns from the start; the specific list is this plan's derivation from the invariants that are structural rather than behavioural.
 16. **Per-brief review gates.** Spec §8 gives hazard classes, not commands; each brief's gate is this plan's, built from the CI unit command (`.github/workflows/ci.yml:25`), connected classes on `emulator-5554` where UI is involved, `uv run --frozen pytest` for MCP, and the structural greps that belong to that brief.
 
 ### Decisions made inside a brief
 
-Each is marked `Plan decision:` at its point of use in the brief named. Thirty-nine in total with the sixteen above.
+Each is marked `Plan decision:` at its point of use in the brief named. **Forty-one in total** with the sixteen above.
 
 | # | brief | decision |
 |---|---|---|
@@ -842,9 +875,9 @@ Each is marked `Plan decision:` at its point of use in the brief named. Thirty-n
 | 24 | B05 | **The four platform receivers are declared in B05 with one `ReminderTrigger` seam**, implemented in B06 — their manifest declarations and non-exported discipline are B05's invariants, what they *do* is B06's policy |
 | 25 | B06 | **`NonceStore` and `ReminderSnooze` are declared in B06**, consumed by B07, because D-21 makes the nonce a column of the delivery row B06 owns and two briefs must not write one column |
 | 26 | B06 | **No meter-crossing branch in the event use case.** Spec §5.7's "evaluated when a reading is saved" rides the existing recompute-then-reconcile sequence, keeping the engine free of a delivery concern |
-| 27 | B08 | **`DueReadModel` is one shared projection** used by the dashboard, the Maintenance shell, B09's sheet and B12's `/v1/due`. Spec §2.6 fixes the ordering and spec §2.8 reuses it; one projection is the only way they cannot drift |
+| 27 | B08 | **`DueReadModel` is one shared projection** used by the dashboard, the Maintenance shell, B09's sheet and B12's `/v1/due`. Spec §2.6 fixes the ordering and spec §2.8 reuses it; one projection is the only way they cannot drift. It exposes the **`status` and an empty-required-set flag** and **carries no single `isActionable` boolean** — "actionable" is surface-specific (§11.1) and one flag would be wrong for one surface the moment it was right for the other |
 | 28 | B08 | **`HealthSummary` is declared in B08 and implemented in B10**, so the badge can land and be tested against a fake before B10 exists |
-| 29 | B08 | **"Actionable" for the component-promotion rule means ATTENTION or UPCOMING** — `OVERDUE`, `DUE`, `NO_DATA`, `DUE_SOON`. Spec §2.6 says "an actionable schedule" without enumerating; promoting `OK` and `INACTIVE_SEASON` would undo #39's blank-query rule entirely |
+| 29 | B08 | **"Actionable" for the component-promotion rule means a status in ATTENTION or UPCOMING** — `OVERDUE`, `DUE`, `DUE_SOON`, and `NO_DATA` **only in its repairable meter-baseline form**. Spec §2.6 says "an actionable schedule" without enumerating; promoting `OK` and `INACTIVE_SEASON` would undo #39's blank-query rule entirely, and promoting an **empty-required-set** `NO_DATA` would put an unactionable obligation in ATTENTION permanently, against invariant 74 (§11.1) |
 | 30 | B08 | **The total sort order behind `rank`:** (section ordinal, `effectiveDueOn` ascending nulls last, `title` case-insensitively, `scheduleId`). Spec §2.6 fixes the sort key but not a total order, and `rank` must be deterministic for a client and a test |
 | 31 | B10 | **A severity per finding** — `NOTIFICATIONS_BLOCKED` ERROR, `REMINDERS_GLOBALLY_OFF` INFO, the other five WARN. Spec §5.8 names the codes and #27 the "≥ WARN" badge threshold, but no severity per finding, without which the badge is undefined |
 | 32 | B10 | **Where the check runs:** app launch, the backstop worker, and the Health screen. **Not** "after every sync" — there is no sync in 1.2 — and **not** per dashboard emission, which would read the standby bucket on every keystroke |
@@ -855,3 +888,49 @@ Each is marked `Plan decision:` at its point of use in the brief named. Thirty-n
 | 37 | B14 | **D-11's "similar" is a case-insensitive `title` match** between the asset's own schedules and the schedules of the groups it is an open member of. D-11 rules the warning in and deduplication out but does not define the trigger; a title match cannot itself become a deduplication rule, and the warning is non-blocking |
 | 38 | B15 | **Asset detail's schedules section lists asset-targeted schedules only**; group-targeted work is reached through the groups section. Listing both would show one obligation twice and contradict D-15's counted-once principle — the scan sheet is the surface that deliberately merges them |
 | 39 | B15 | **Archived groups are listed, visibly distinguished, rather than hidden.** Spec §2.3's "hides it and its schedules" is applied to the schedules and the due work; a group the owner cannot find is a group whose retained history is unreachable, and 1.2 has no filter UI to build |
+| 40 | B06 | **The channel-per-status mapping:** `OVERDUE` subjects on `maintenance_overdue` (HIGH), `DUE` and `DUE_SOON` on `maintenance_due` (DEFAULT). Spec §5.5 names the two channels and their importances but not which subject state uses which; the mapping follows the channel names, and the alternative — everything on one channel — would waste the HIGH importance D-20 created |
+| 41 | B09 | **A scoped read-only measurements seam** (`LastCompletionReadings`) supplies the last completion's key readings the sheet must show (D5 §7A). `DueItem` cannot carry them — profile values are heterogeneous per schedule — and B09's own gate forbids reaching for a write port; the seam is declared read-only and the gate grep is narrowed to the write methods |
+
+---
+
+## 19. Fix wave — what changed
+
+Four independent plan reviews (`plan-review-master.md`, `plan-review-B01.md` … `plan-review-B15.md`, 2026-09-22) returned **NEEDS CHANGES** on the master plan (4 Blocking, 6 Should-fix, 5 Note), on **B02** and on **B09** (one Blocking each), and APPROVE on the other thirteen with should-fixes and notes. Every Blocking and every Should-fix is fixed below; the notes are taken where cheap. Nothing on the reviewers' "must not be lost" list was traded away — §2.3's four-rule table, §4.1's archive-internal-guard footnote, §5.2's conditional-write rule, §5.3's `prevDue` rule, §7's five consequences, §12.3's triple S4 statement, §13's mapping, and decisions 8 and 19 are all intact.
+
+### Blocking
+
+| # | finding | fix |
+|---|---|---|
+| master B1 | `NO_DATA` was one state and is two, against invariant 74 | §11.1's table now carries **two `NO_DATA` rows** — repairable meter-baseline (ATTENTION, counted, admitted to the sheet) and empty-required-set (no section, not counted, not promoted, never offered, never closeable). Decision 29 restated to admit `NO_DATA` **only in its repairable form**; decision 27 now states that `DueReadModel` exposes the status **and an empty-required-set flag** and carries **no `isActionable` boolean**. B08 gains a matrix row proving the split on a component asset |
+| master B2 | the lane plan's isolation claim contradicted its own wave table | §14.3 rewritten: **three numbered isolation rules** — one worktree per lane on its own branch cut from the release tip, **`emulator-5554` held by one lane at a time** with connected runs serialised and a waiting lane working its unit gate, and file-set (not module-path) separation. The wave table gains a **device** column and a **file-set separation** column naming `AppGraph.kt` and `ServiceTagRoot.kt` as the two shared files the controller resolves at merge. Decision 13 restated. "Two lanes is a ceiling, not a target" added |
+| master B3 | §17 claimed completeness; the editor's remaining labels were neither ratified nor PROPOSED; B14 had no "drafts nothing" guard | §17 gains the **editor field-labels PROPOSED row** (target picker, season behaviour, completion mode, profile picker, the four meter-rule fields, the provider row) and a closing rule: **any string the table does not list is a finding, and no brief invents one**. Decision 12 extended from three classes to four. B14's Strings section gains the PROPOSED paragraph **and** the explicit guard |
+| master B4 | the pre-implementation gate was nowhere, while the first line ordered a worker to execute | The `For agentic workers` line now **opens with "EXECUTION IS GATED. Do not start a brief."** and states the read-only condition; §1's **first bullet** is the same gate. No brief starts until the owner explicitly authorizes implementation after reading the planning summary |
+| B02 | Purpose and a matrix row claimed the **snooze** operation, which B06 owns | Purpose now says **three** operations (complete, postpone, edit recurrence) plus the lifecycle pair, and states that snooze is B06's under D-13 with no port here that could reach the column. The matrix row drops the snooze clause and the **invariant 20** citation, leaving 19 and 21. The split note now says "the three operations" |
+| B09 | the sheet's display contract needed event measurements no interface supplied, and its own gate grep forbade the read | Interfaces declares a **scoped read-only `LastCompletionReadings` seam** (`forEvent(eventId) -> List<Measurement>`, backed by the shipped `EventRepository.get`, **no write method**), recorded as **decision 41**. The gate grep is narrowed to the **write methods** (`(events\|closures)\.(upsert\|insert\|delete)`) with a sentence saying why the bare identifier was wrong |
+
+### Should-fix
+
+| # | finding | fix |
+|---|---|---|
+| master S1 | decisions 3 and 4 override explicit spec statements | Both relabelled **"Spec deviation (not a silence)"** at their point of use and in §18, whose preamble now states that §1's follow-the-spec rule **does not apply to a deviation this plan has named** |
+| master S2 | the graph omitted B05 → B10 and B06 → B10 | §14.2 gains "**Two edges the diagram does not draw**", naming both with their decisions |
+| master S3 | "B04 may ride wave 4 lane B" broke B06's dependency | Replaced: **B04 must land before wave 4 opens**; if it slips, wave 4 lane A slips with it; it may not ride wave 4 lane B — that is B06's wave |
+| master S4 | `MergePlan.kt:14-20`'s "seven canonical tables" KDoc was on no edit list | §4 names it as **B01's** edit; B01's `MergePlan.kt` Modify bullet and its gate grep (`grep -c 'seven canonical tables'` → **0**) both carry it |
+| master S5 | several §16.4 greps were prose, not anchored commands | §16.4 is now a **table of eighteen commands with expected counts**, `<base>`-parameterised |
+| master S6 | "actionable" meant two sets behind one projection | §11.1 gains the **surface-specific paragraph**: the dashboard's promotion set is ATTENTION-or-UPCOMING, the sheet's is D-18a's, and the projection exposes status + flag rather than one boolean |
+| B01 | invariant 65 omitted from the list | Added, with the note that **one grep discharges B01's half of both 64 and 65** |
+| B04 | invariant 22 overclaimed | Dropped from the list and from the matrix row, with the reason stated: B04 proves the adjacent **47** and has no notification or dashboard code |
+| B08 | §17 omitted B08 as a user of "Log meter reading" | Added to that row's used-by column |
+| B09 | invariant 5 not declared; §17 omitted B09 as a user of "Tag placement" | Invariant 5 added with its **structural** proof named (`TagTarget` has no group case); §17's row gains B09 |
+| B12 | §13 omitted B12 from invariant 80 | Added, and §13 gains a **legend** distinguishing enforcement proofs from **(UI)** cannot-violate proofs |
+| B14 | invariants 74 and 77 cited in a matrix row but absent from the list | Added, with the reason: the "Close this round" gate is where an empty required set must be unreachable through the UI |
+
+### Notes taken
+
+§13's attribution crosswalk reconciled in both directions (**B06** added to 47/61/64, **B07** to 57, **B09** to 5, **B12** to 80, and the **(UI)** briefs B09/B14/B15 to the invariants their surfaces cannot violate: 7, 8, 28, 29, 33, 74, 77, 79, 80). §1's spec citation now points at the **committed** path, "revision 4 plus §11's revision-4.1 edits" (N1). §14.1's last column relabelled an **implementation**-size estimate, with the reason brief documents are shorter (N2). §16.1 says the baseline is measured at **`d790506`, the last code-changing commit**, with the release branch cut from the docs-only tip (N3). §17 gains the blanket line that **every word D12 carries is pre-ratified**, covering B10's **REMINDER FAILED** (N4). The `MergePlanner.kt:~460` tilde citation is now `:454-466` with its reasoning at `:64-66` (N5). B05's `PendingIntent` grep is labelled a **standing trip-wire** that first bites in B06/B07 (B05 N1). B06's channel-per-status mapping is tagged a `Plan decision:` and catalogued as **decision 40** (B06 N2). B07's manifest bullet is split into two numbered additions, since a `<receiver>` is not one line (B07 N2). B11 states that invariant 5 is the **group-identity discipline** it must not break, not a group rule it implements (B11 N2). B12 gains a matrix row proving an **overlay still round-trips through the owning use case's validation** (B12 N1). B13's diff-scope line now says the `docs/` and `README.md` edits are outside that diff and are covered by item 7's greps (B13 N2). B14 gains the **comparison-set clause** on the duplicate-warning row, ruling out a global title collision (B14 N2). B15 and B09 state what their **(UI)** attribution means (B15 N2).
+
+### Left unfixed
+
+**None.** Every Blocking and Should-fix item across the sixteen reviews is fixed in place; the five master notes and the ten brief notes are all taken. The two notes that were purely observational — the master's N2 and each brief review's "size vs. estimate" note, which every reviewer explicitly marked "no action needed" — are answered by §14.1's relabelled column rather than by lengthening the briefs, because the reviewers found **no content gap** behind the line counts and padding would trade the anti-restatement discipline for a number.
+
+**Plan decisions after this wave: 41** (§18: sixteen in the numbered list, twenty-five in the per-brief table, of which **40** — B06's channel-per-status mapping — and **41** — B09's read-only readings seam — are new here).

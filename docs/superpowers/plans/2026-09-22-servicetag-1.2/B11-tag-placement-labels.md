@@ -52,7 +52,7 @@ Make the already-supported "several NFC tags per Asset" model usable for equipme
 
 ## Invariants this brief must hold
 
-**57, 59** (master plan §13), and it must leave **5** untouched — nothing here binds a tag to anything but an Asset.
+**57, 59** (master plan §13), and it must leave **5** untouched. Invariant 5 is the **group-identity discipline**, not a group rule this brief implements: this brief adds tag-binding affordances, and the fact it must not break is that **a tag still resolves only to an Asset** — no affordance here may offer a group as a binding target, and `TagTarget` (`core/.../core/model/TagBinding.kt:7-11`) has no group case for it to reach.
 
 ## Test matrix
 

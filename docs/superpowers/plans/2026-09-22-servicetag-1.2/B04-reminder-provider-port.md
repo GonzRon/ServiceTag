@@ -78,7 +78,7 @@ class BuildReminderSubjects(/* schedule, state, group, asset repositories */) {
 
 ## Invariants this brief must hold
 
-**22, 45, 46, 47, 48, 49** (master plan §13), and it must leave **44** achievable for B06 — the subject list is derivable from schedule state alone, with no provider bookkeeping as an input.
+**45, 46, 47, 48, 49** (master plan §13). **Not 22** — "`INACTIVE_SEASON` and `PAUSED` never notify and never count as due" belongs to B02, B06 and B08; this brief proves the adjacent and narrower **47**, that such a schedule *arrives in the subject list as `Parked`, never absent and never overdue*, and it has no notification or dashboard code with which to prove the rest. It must also leave **44** achievable for B06 — the subject list is derivable from schedule state alone, with no provider bookkeeping as an input.
 
 ## Test matrix
 
@@ -90,7 +90,7 @@ One test per hazard class, all against the fake provider and in-memory repositor
 | two providers need a port change | a schedule with **two** enabled provider rows yields two subject lists, and the port's signature is unchanged between them (invariant 49) | a provider-shaped parameter on `reconcile`, or a single-provider list, makes the second list impossible |
 | a no-op update churns the provider | the same schedule state yields the **same** `contentHash`; changing only an unrelated schedule field (its `description`, say, when `description` is not in the body) leaves the hash unchanged; changing `dueOn` changes it (invariant 46) | hashing the whole entity makes every edit look like a change and the provider re-posts |
 | `reconcile` twice | the fake provider records two calls with **identical** subject lists and reports `unchanged` for every subject the second time, with **no second effect** (invariant 45) | a "create one reminder" call, or a `reconcile` that appends rather than reconciles, produces a second effect |
-| a parked schedule vanishing | one test covering both: a `PAUSED` schedule and an out-of-season `FOLLOW_ASSET` schedule each arrive as `Parked`, with the season case carrying its re-entry date; **neither is absent and neither is overdue** (invariants 22, 47) | filtering parked subjects out of the list makes a provider keep a standing notification with nothing to clear it |
+| a parked schedule vanishing | one test covering both: a `PAUSED` schedule and an out-of-season `FOLLOW_ASSET` schedule each arrive as `Parked`, with the season case carrying its re-entry date; **neither is absent and neither is overdue** (invariant 47) | filtering parked subjects out of the list makes a provider keep a standing notification with nothing to clear it |
 | an archived schedule still reminding | an `ARCHIVED` schedule arrives `Withdrawn`; one with `remindersEnabled` false is absent from the list | leaving it `Active` posts a reminder for retired equipment |
 | a group subject fanning out | a group-targeted schedule with five required members and three complete produces **one** subject whose body carries the progress, and **not five** (D-15) | one subject per member floods the provider and breaks the counted-once rule the dashboard relies on |
 | a meter-only subject with no date | a meter-only schedule arrives with `dueOn = null` and `rule.hasMeter` true, and a meter rule with no baseline arrives `Active` with `dueOn = null` | a fabricated date makes a provider alarm on something that has no date (#21 AC 6's reason) |

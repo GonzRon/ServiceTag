@@ -94,7 +94,7 @@ This brief's deliverable beyond the edits: the list below, handed to the control
 
 - Unit: `./gradlew :core:test :app:testDebugUnitTest --console=plain` → BUILD SUCCESSFUL, zero failures, zero skips; the review confirms the version-agreement test class exists and fails when a number is changed in one place only (the reviewer flips one and re-runs).
 - Structural, anchored: items 6 and 7 of the proof list above.
-- `git diff --stat master -- app/src/main core/src/main tools libs app/schemas` → **empty but for `app/build.gradle.kts`**, and the review states that explicitly.
+- `git diff --stat master -- app/src/main core/src/main tools libs app/schemas` → **empty**; `app/build.gradle.kts` is the brief's one code-adjacent edit and sits outside that path list, so the review states both facts explicitly. **The seven `docs/` files and `README.md` this brief edits are also outside this diff's scope** and are covered by item 7's document greps instead — "empty" here does not mean "nothing else changed anywhere".
 
 ## Estimated size
 

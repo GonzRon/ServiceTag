@@ -26,7 +26,15 @@ Make a scan the fastest way to quiesce maintenance when the owner is standing at
 
 ## Interfaces
 
-**Consumes from B08:** `DueReadModel.forAsset(assetId)`, `DueItem`, `AttentionSection`. **From B14:** the completion flow (the "When was this done?" affordance, the form route, the meter prompt), `PostponeSchedule`'s UI entry, and `Route.ScheduleDetail`. **From B06:** `ReminderSnooze`, and `reconcile` after a completion. **From B03:** `GroupOccurrence`, `CompleteGroupMembers`. **From B11:** the tag's placement label. **From the shipped code:** `Resolution` and `ResolveTag`, used as they are.
+**Consumes from B08:** `DueReadModel.forAsset(assetId)`, `DueItem`, `AttentionSection`. **Plus one scoped read-only seam of its own** (see below).
+
+**The last completion's readings need a read this brief must declare.** The sheet must show "the last completion's date and its **key readings**" (D5 §7A `:219-221`). `DueItem` carries `lastCompletedOn` but **not** the completion's measurement values, and it structurally cannot: profile values are heterogeneous per schedule, so a generic projection field would be the wrong shape. This brief therefore declares one **read-only** collaborator:
+
+| seam | shape | rule |
+|---|---|---|
+| `LastCompletionReadings` | `suspend fun forEvent(eventId: EventId): List<Measurement>` | **reads only.** It is backed by the shipped `EventRepository.get` (`core/.../core/ports/Repositories.kt:86`) and exposes **no write method at all**, so the sheet cannot reach a write path even by accident |
+
+`Plan decision:` the seam rather than handing the sheet the whole `EventRepository`. The brief's own gate forbids the sheet from touching a write surface, and a read-only collaborator is how the display fact D5 §7A requires and that prohibition can both hold — handing over the full port would make the gate grep either vacuous or wrong. **From B14:** the completion flow (the "When was this done?" affordance, the form route, the meter prompt), `PostponeSchedule`'s UI entry, and `Route.ScheduleDetail`. **From B06:** `ReminderSnooze`, and `reconcile` after a completion. **From B03:** `GroupOccurrence`, `CompleteGroupMembers`. **From B11:** the tag's placement label. **From the shipped code:** `Resolution` and `ResolveTag`, used as they are.
 
 **Produces:** nothing another brief consumes. It is a leaf.
 
@@ -68,7 +76,7 @@ Items are ordered by master plan §11.1's attention ordering, through `DueReadMo
 
 ## Invariants this brief must hold
 
-**28, 29, 57, 58** (master plan §13), and it must not weaken **20, 21, 32**: its Snooze and Postpone call B02's and B06's operations unchanged, and a repeat scan after a completion cannot re-offer the occurrence.
+**5, 28, 29, 57, 58** (master plan §13) — master plan §13 credits this brief as **B09 (UI)** on 28 and 29, meaning it proves the narrower fact that *the sheet cannot violate* them while B03 proves them where they are enforced. **Invariant 5** ("a group never holds an NFC identity; no tag resolves to one") is proved here **structurally, not by a dedicated test**: `TagTarget` has no group case (`core/.../core/model/TagBinding.kt:7-11`) and `Resolution` has no group variant (`core/.../core/usecase/ResolveTag.kt:16-30`), so the exhaustive `when` over `Resolution` this brief asserts is what forecloses it — a reviewer should not have to re-derive that connection. It must not weaken **20, 21, 32**: its Snooze and Postpone call B02's and B06's operations unchanged, and a repeat scan after a completion cannot re-offer the occurrence.
 
 ## Test matrix
 
@@ -116,7 +124,8 @@ One test per hazard class; unit tests over the view model with a seeded read mod
   - `grep -n 'fun Route.readsTags' -A 6 app/src/main/kotlin/com/loosecannon/servicetag/ui/nav/Route.kt` → unchanged; `grep -c 'MaintenanceSheet' app/src/main/kotlin/com/loosecannon/servicetag/ui/nav/Route.kt` counts the route key and no `readsTags` entry.
   - `grep -rn 'Resolution\.' app/src/main/kotlin/com/loosecannon/servicetag/ui/scan app/src/main/kotlin/com/loosecannon/servicetag/ui/nav` shows an **exhaustive** `when` over `Resolution` with no `else ->` on the path that reaches the sheet.
   - `grep -rn 'enableReaderMode\|NfcReaderModeSession' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance` → no match.
-  - `grep -rnE '(CompleteSchedule|CompleteGroupMembers|CloseRound|ReminderSnooze|PostponeSchedule)' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/MaintenanceSheetViewModel.kt` shows the use cases **called**, and `grep -rn 'events.upsert\|EventRepository' …/MaintenanceSheetViewModel.kt` → no match (no second completion path).
+  - `grep -rnE '(CompleteSchedule|CompleteGroupMembers|CloseRound|ReminderSnooze|PostponeSchedule)' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/MaintenanceSheetViewModel.kt` shows the use cases **called**.
+  - **The write-surface grep, narrowed to the write methods** so the read-only `LastCompletionReadings` seam is not caught by it: `grep -rnE '(events|closures)\.(upsert|insert|delete)' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/MaintenanceSheetViewModel.kt` → **no match** (no second completion path). A bare `EventRepository` identifier is **not** the pattern: the sheet legitimately reads an event's measurements through the declared seam, and the earlier form of this grep would have failed a correct implementation.
   - `grep -rn 'CloseRound' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/MaintenanceSheet.kt` → no match: **"Close this round" is not on the sheet** (spec §1.2 offers it in the editor only).
 
 ## Estimated size

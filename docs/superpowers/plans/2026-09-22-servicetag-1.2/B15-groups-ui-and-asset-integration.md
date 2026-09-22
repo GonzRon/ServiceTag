@@ -59,7 +59,7 @@ The visible half of #55, and the two navigation directions the issue calls its m
 
 ## Invariants this brief must hold
 
-**7, 8, 28, 29, 33, 74, 79, 80** (master plan §13) at the UI boundary, and it must not weaken **4, 5** — nothing here makes a group into an Asset or gives it a tag.
+**7, 8, 28, 29, 33, 74, 79, 80** (master plan §13) **at the UI boundary** — master plan §13 credits this brief as **B15 (UI)** on each of those rows, meaning it proves the narrower fact that *these screens cannot violate* the invariant, while B03 proves it where it is enforced. Both proofs are required. It must not weaken **4, 5** — nothing here makes a group into an Asset or gives it a tag.
 
 ## Test matrix
 

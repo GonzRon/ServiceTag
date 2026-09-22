@@ -28,7 +28,7 @@ Land the data contract 1.2 needs, and nothing else: seven new Room tables plus t
 - `core/.../core/model/Journal.kt` — `EventSource` gains `SCHEDULE_QUICK_COMPLETE`, `TODOIST_SYNC`, `TELEMETRY`; `AssetEvent` gains `scheduleId: ScheduleId?`, `occurrenceOn: String?`, `detailsPending: Boolean`.
 - `core/.../core/backup/BackupFormat.kt` — the five new DTOs of master plan §3.1, `BackupData`'s three new lists, `AssetEventDto`'s three new fields, and the `toDto()`/`toDomain()` pairs for each.
 - `core/.../core/backup/BackupCodec.kt` — `FORMAT_VERSION = 6`; the three lists in `encode`'s `sorted` block and in `counts`; the eager `toDomain()` validation pass; `validateGraph`'s new references.
-- `core/.../core/merge/MergePlan.kt` — `MergeTable`'s ten members in master plan §4's order; `MergeReason`'s seven new members; `MergeWrites`, `MergeSnapshot`, `MergeReport` each gaining `groups`, `schedules`, `closures`; `MergePlan.report()` gaining the three tallies.
+- `core/.../core/merge/MergePlan.kt` — `MergeTable`'s ten members in master plan §4's order **and its KDoc at `:14-20`, which says "The seven canonical tables" and becomes ten** (master plan §4); `MergeReason`'s seven new members; `MergeWrites`, `MergeSnapshot`, `MergeReport` each gaining `groups`, `schedules`, `closures`; `MergePlan.report()` gaining the three tallies.
 - `core/.../core/merge/MergePlanner.kt` — the three new passes in write order, following the existing five-step shape.
 - `core/.../core/usecase/ApplyBackupMergePlan.kt` — the three new write loops in `MergeWrites` field order, and the `rebuildAll` seam.
 - `core/.../core/usecase/BuildBackupMergePlan.kt`, `ImportBackupReplace.kt`, `ExportBackupSet.kt` — the three new tables read and written.
@@ -67,7 +67,7 @@ private val rebuildAll: suspend () -> Unit,   // runs INSIDE the apply's transac
 
 ## Invariants this brief must hold
 
-**6, 7, 32, 37, 42, 62, 63, 64, 66, 67, 69, 71, 72, 80** (master plan §13), and it must not make **17, 18, 26** unholdable — no field this brief adds stores a status word, and `season_reentry`/`season_reentry_offset_days` exist with no reader.
+**6, 7, 32, 37, 42, 62, 63, 64, **65**, 66, 67, 69, 71, 72, 80** (master plan §13). 65 ("no notification-delivery state is exported or merged") is the general rule where 64 names the two tables; **one grep discharges B01's half of both** — `schedule_state` and `schedule_local_delivery` absent from `core/.../backup/` — and the brief says so rather than leaving 65 to be inferred. It must not make **17, 18, 26** unholdable — no field this brief adds stores a status word, and `season_reentry`/`season_reentry_offset_days` exist with no reader.
 
 ## Test matrix
 
@@ -112,6 +112,7 @@ Nothing precedes it. **It gates B02 and B03**, and through them everything else.
 - Unit: `./gradlew :core:test :app:testDebugUnitTest --console=plain` → BUILD SUCCESSFUL, zero failures, zero skips. The review records the per-module counts.
 - Structural, anchored:
   - `grep -c 'enum class MergeTable' core/src/main/kotlin/com/loosecannon/servicetag/core/merge/MergePlan.kt` → 1, and the member list equals master plan §4's order.
+  - `grep -c 'seven canonical tables' core/src/main/kotlin/com/loosecannon/servicetag/core/merge/MergePlan.kt` → **0** (the KDoc now says ten).
   - `grep -nE '\bUPDATE\b' core/src/main/kotlin/com/loosecannon/servicetag/core/merge/MergePlan.kt` finds no `MergeVerdict` member named `UPDATE`.
   - `grep -rnE '(UPDATE|DELETE)[[:space:]]+(FROM[[:space:]]+)?`?occurrence_closure' app/src/main core/src/main` → no match.
   - `grep -rn '@Update\|@Delete' app/src/main/kotlin/com/loosecannon/servicetag/data/room/dao/MaintenanceDaos.kt` → no match on the closure DAO.

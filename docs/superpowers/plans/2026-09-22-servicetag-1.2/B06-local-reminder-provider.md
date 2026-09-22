@@ -67,7 +67,7 @@ class NonceStore {                                 // B07 checks and consumes; t
 | per-item notifications | only for DUE/OVERDUE subjects that are **not snoozed** |
 | DUE_SOON | announced **only on first entry**, tracked by `first_entry_seen` |
 | overdue re-notification | every **3 days**, tracked by `last_notified_at` |
-| channel | OVERDUE subjects on `maintenance_overdue` (HIGH), DUE and DUE_SOON on `maintenance_due` (DEFAULT) |
+| channel | **`Plan decision:`** OVERDUE subjects on `maintenance_overdue` (HIGH), DUE and DUE_SOON on `maintenance_due` (DEFAULT). Spec §5.5 names the two channels and their importances but not which subject state uses which; the mapping follows the channel names, and the alternative — everything on one channel — would waste the HIGH importance D-20 created. Master plan §18 decision 40 |
 | parking | a `Parked` subject posts nothing **and clears any standing notification** |
 | withdrawal | a `Withdrawn` subject clears its notification and its delivery row's nonce |
 | snooze | suppresses **this provider's** notifications only; it never touches a due date and creates no event (invariant 20) |
