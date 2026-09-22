@@ -69,6 +69,13 @@ object ScheduleRecompute {
         val last = terminations(schedule, events, closures, membership).lastOrNull()
 
         val meterId = schedule.meterDefinitionId
+        // **A named divergence from D5 §3**, which reads `last?.measurementOf(meter) ?: anchor_meter`
+        // — the *last* completion's own reading, or the anchor. This takes the latest completion
+        // that actually carries a reading, and the two differ only when the newest completion
+        // carries none and an older one does: D5 falls back to the anchor, this keeps the newer of
+        // the two real readings. That is the better answer — a threshold that never regresses past
+        // work — and D5 holds the case cannot arise because the form makes the meter required on a
+        // metered schedule. Recorded here rather than left implicit so the D5 edit can carry it.
         val lastCompletedMeter = meterId?.let { latestReading(completions, it) ?: schedule.anchorMeter }
         val currentMeter = meterId?.let { latestReading(events, it) }
         val meterInterval = schedule.meterInterval
@@ -234,13 +241,20 @@ object ScheduleRecompute {
     private fun pinFloor(schedule: MaintenanceSchedule): LocalDate =
         Instant.ofEpochMilli(schedule.updatedAt).atZone(ZoneOffset.UTC).toLocalDate()
 
-    /** The newest reading of [definitionId] by [EventChronology] — **the latest, never the maximum**. */
-    private fun latestReading(events: List<AssetEvent>, definitionId: DefinitionId): Double? = events
-        .filter { e -> e.measurements.any { it.definitionId == definitionId && it.valueNum != null } }
-        .maxWithOrNull(EventChronology)
-        ?.measurements
-        ?.firstOrNull { it.definitionId == definitionId }
-        ?.valueNum
+    /**
+     * The newest reading of [definitionId] by [EventChronology] — **the latest, never the maximum**.
+     *
+     * The filter and the extraction ask the same question, `definitionId` **and** a non-null
+     * `valueNum`: an event carrying two measurements of one definition whose first has no numeric
+     * value would otherwise pass the filter and yield null, silently losing the reading and dropping
+     * the schedule back a step.
+     */
+    private fun latestReading(events: List<AssetEvent>, definitionId: DefinitionId): Double? {
+        fun reading(event: AssetEvent): Double? = event.measurements
+            .firstOrNull { it.definitionId == definitionId && it.valueNum != null }
+            ?.valueNum
+        return events.filter { reading(it) != null }.maxWithOrNull(EventChronology)?.let { reading(it) }
+    }
 
     /** A schedule that IGNOREs the season is always active; otherwise the Asset's window decides. */
     private fun seasonActive(

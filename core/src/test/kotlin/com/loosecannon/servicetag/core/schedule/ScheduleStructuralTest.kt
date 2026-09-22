@@ -17,27 +17,33 @@ import kotlin.test.assertTrue
 class ScheduleStructuralTest {
 
     /**
-     * Invariant 17: `rebuild` is the only write path into `schedule_state`. `ScheduleStateRepository`
-     * may therefore be named by exactly four files — the port, its Room adapter, the recompute
-     * collaborator and the composition root that wires them together — and `upsert` against it may
-     * be called from exactly one place. A use case that repaired derived state directly would add a
-     * fifth name here, and a second `states.upsert(` would break the count.
+     * Invariant 17: `rebuild` is the only write path into `schedule_state`.
+     *
+     * Asserted as a **write** list rather than a name list: every file in `src/main` is scanned for
+     * a property typed `ScheduleStateRepository` and then for an `upsert` against that property, and
+     * tree-wide there must be exactly one such call, in the recompute. Naming the port is fine and
+     * will become commoner — a dashboard read model and a `GET` handler both have to hold it to
+     * *read* derived state — so a test that fixed the set of files naming it would have to be
+     * loosened by every legitimate reader, which is how an assertion like this one dies. Paths are
+     * compared whole, not by basename, so two files with one name cannot stand in for each other.
      */
     @Test
     fun scheduleStateHasExactlyOneWriter() {
-        val named = mainSourceFiles()
-            .filter { "ScheduleStateRepository" in it.readText() }
-            .map { it.name }
-            .sorted()
+        val holder = Regex("""val (\w+): ScheduleStateRepository""")
+        val writers = mutableMapOf<String, Int>()
+        var holders = 0
+        mainSourceFiles().forEach { file ->
+            val text = file.readText()
+            val names = holder.findAll(text).map { it.groupValues[1] }.toList()
+            holders += names.size
+            val calls = names.sumOf { name -> Regex("""\b$name\.upsert\(""").findAll(text).count() }
+            if (calls > 0) writers[file.relativeTo(repoRoot()).path] = calls
+        }
+        assertTrue(holders > 0, "nothing holds the port at all, so this would pass vacuously")
         assertEquals(
-            listOf("AppGraph.kt", "MaintenanceRepositories.kt", "RecomputeSchedules.kt", "Repositories.kt"),
-            named,
+            mapOf("core/src/main/kotlin/com/loosecannon/servicetag/core/usecase/RecomputeSchedules.kt" to 1),
+            writers,
         )
-
-        val recompute = sourceFile(
-            "core/src/main/kotlin/com/loosecannon/servicetag/core/usecase/RecomputeSchedules.kt",
-        ).readText()
-        assertEquals(1, Regex("""states\.upsert\(""").findAll(recompute).count())
     }
 
     /**

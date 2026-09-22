@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.core.schedule
 
+import com.loosecannon.servicetag.core.model.DefinitionId
+import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.TerminationKind
 import com.loosecannon.servicetag.core.model.TimeBasis
@@ -175,6 +177,37 @@ class ScheduleRecomputeTest {
         )
         val state = ScheduleRecompute.rebuild(meterOnly, events, emptyList(), emptyList(), on("2026-06-02"))
         assertEquals(150.0, state.currentMeter)
+    }
+
+    /**
+     * An event may carry **two** measurements of one definition — nothing in the model forbids it
+     * and an imported archive can hold it — and only one of them need carry a number. The reading
+     * is found by asking the same question twice, `definitionId` **and** a non-null `valueNum`, so
+     * a numberless measurement sitting first in the list cannot swallow the reading behind it and
+     * drop the schedule back a step.
+     */
+    @Test
+    fun aReadingIsNotLostBehindANumberlessMeasurementOfTheSameDefinition() {
+        val meterOnly = scheduleOf(
+            meterDefinitionId = "engine_hours",
+            meterInterval = 50.0,
+            anchorMeter = 120.0,
+        )
+        val plain = readingOf("r1", "2026-06-01", "engine_hours", 180.0)
+        val noisy = plain.copy(
+            measurements = listOf(
+                Measurement(
+                    id = "m-note",
+                    definitionId = DefinitionId("engine_hours"),
+                    valueNum = null,
+                    valueText = "unreadable",
+                    unit = "h",
+                    sortOrder = 0,
+                ),
+            ) + plain.measurements,
+        )
+        val state = ScheduleRecompute.rebuild(meterOnly, listOf(noisy), emptyList(), emptyList(), on("2026-06-02"))
+        assertEquals(180.0, state.currentMeter)
     }
 
     /**

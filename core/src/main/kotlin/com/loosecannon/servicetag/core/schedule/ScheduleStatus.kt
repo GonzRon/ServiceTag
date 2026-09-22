@@ -19,7 +19,15 @@ import java.time.LocalDate
 enum class DueStatus {
     OK, DUE_SOON, DUE, OVERDUE, INACTIVE_SEASON, PAUSED, NO_DATA;
 
-    /** Whether this status puts the schedule in a due total. `NO_DATA` is a repair, not an obligation. */
+    /**
+     * Whether this status puts the schedule in a due total. `NO_DATA` is a repair, not an
+     * obligation.
+     *
+     * This is **not** the dashboard's "actionable", which is a wider set — a status in ATTENTION or
+     * UPCOMING, so `DUE_SOON` as well, and `NO_DATA` in its repairable meter-baseline form. That
+     * predicate is surface-specific and belongs to the surface; wiring this one into a promotion
+     * rule would quietly narrow it.
+     */
     val countsAsDue: Boolean get() = this == DUE || this == OVERDUE
 
     /**

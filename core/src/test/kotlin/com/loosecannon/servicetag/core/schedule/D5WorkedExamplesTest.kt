@@ -25,8 +25,12 @@ import kotlin.test.assertEquals
  *   completion returns the *same* pin. That case is `ScheduleRecomputeTest`'s.
  * - **§10.2's and §10.3's "created" rows** treat `anchor_on` as "last performed" and add the
  *   interval to it. The master plan and spec §2.1 rule the other way — COMPLETION with no
- *   termination is due **at** `anchorOn`, the date the owner states it is first due — so the
- *   fixtures here anchor on the first due date and the arithmetic matches D5's numbers exactly.
+ *   termination is due **at** `anchorOn`, the date the owner states it is first due — and the two
+ *   fixtures below show the two shapes that follows in: §10.3 anchors on the first due date
+ *   (`2027-04-10`), so every number in D5's table is reproduced; §10.2 keeps D5's own `2026-06-08`
+ *   anchor and therefore **contradicts its "due Sep 6" row directly**, asserting `2026-06-08`
+ *   instead. Both are the same rule; only D5's framing of what an anchor means differs, and the
+ *   edit is D5's.
  */
 class D5WorkedExamplesTest {
 
@@ -182,9 +186,10 @@ class D5WorkedExamplesTest {
     }
 
     /**
-     * §10.4's winter window, and the D5 §7 closure case beside it: a closure advances **both** bases
-     * from `closed_on` exactly as a completion does from `occurred_on`, with no special case in the
-     * arithmetic. A closed round never claims anybody did the work, so `lastCompletedOn` stays null.
+     * The closure case: a closure advances **both** bases from `closed_on` exactly as a completion
+     * does from `occurred_on`, with no special case in the arithmetic. A closed round never claims
+     * anybody did the work, so `lastCompletedOn` stays null. (The season half of §10.4 is
+     * `ScheduleStatusTest`'s — there is no window in this test.)
      */
     @Test
     fun aClosureAdvancesTheSeriesAndClaimsNoWork() {

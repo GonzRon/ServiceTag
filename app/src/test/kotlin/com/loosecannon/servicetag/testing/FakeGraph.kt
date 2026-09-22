@@ -194,13 +194,12 @@ class FakeGraph(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
     )
-    /** How many times a restore asked for the total recompute, beside `rebuilds` for an apply. */
-    var restoreRebuilds = 0
-
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, attachmentStorage, uow,
-        rebuildAll = { restoreRebuilds += 1; recomputeSchedules.all() },
+        // The real engine: "once, inside the transaction, after the last insert" is proved against
+        // the seam in `:core`, so there is no counter to keep here.
+        rebuildAll = { recomputeSchedules.all() },
     )
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,

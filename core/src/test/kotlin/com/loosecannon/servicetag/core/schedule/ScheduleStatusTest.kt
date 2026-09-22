@@ -103,11 +103,18 @@ class ScheduleStatusTest {
 
         val archived = quarterly.copy(status = ScheduleStatus.ARCHIVED)
         assertEquals(listOf(quarterly.id), listOf(quarterly, archived).listedForDue().map { it.id })
-        assertFalse(statusOf(
+        // The word for an archived schedule is PAUSED, pinned as a decision rather than left as an
+        // implementation detail: the enum has no ARCHIVED member, this function's return is
+        // non-null, and PAUSED is the one word that neither counts as due nor notifies — so a
+        // consumer that forgot `listedForDue()` shows nothing rather than something wrong.
+        val archivedStatus = statusOf(
             archived,
             ScheduleRecompute.rebuild(archived, emptyList(), emptyList(), emptyList(), on("2026-09-01")),
             on("2026-09-01"),
-        ).countsAsDue)
+        )
+        assertEquals(DueStatus.PAUSED, archivedStatus)
+        assertFalse(archivedStatus.countsAsDue)
+        assertFalse(archivedStatus.notifies)
 
         // the winter window of D5 §10.4: Oct 15 → Apr 15, evaluated in July
         val winter = quarterly.copy(seasonBehavior = SeasonBehavior.FOLLOW_ASSET)

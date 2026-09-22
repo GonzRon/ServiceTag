@@ -29,9 +29,14 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *   (invariant 21), and it is what makes a repeat a no-op at the database level rather than a
  *   discipline in code.
  * - **the write to the schedule row is conditional** (invariants 68, 69). A completion that clears
- *   nothing writes no column and does not bump `updated_at`, so a schedule that was never
- *   postponed re-imports as `IDENTICAL` however many occurrences it has advanced through. Only a
- *   completion that actually clears a postponement touches the row, and only then bumps the stamp.
+ *   nothing writes no column at all, so a schedule that was never postponed re-imports as
+ *   `IDENTICAL` however many occurrences it has advanced through. A completion that *does* clear a
+ *   postponement writes that one column — and **leaves `updated_at` where it is**, because the
+ *   stamp's date is the D-27 pin's floor and spec §2.1 allows only an explicit edit to move it
+ *   (invariant 25). Otherwise postpone → complete → delete the completion would leave the schedule
+ *   never-terminated again with its pin jumped forward, which is the one sequence these three
+ *   operations can reach between them. A row whose `postponed_due_on` differs is already
+ *   `CONTENT_DIFFERS` on that field, so the stamp carries nothing the merge needs.
  * - a **minimal** completion against a `FORM` schedule is allowed and marks itself
  *   `details_pending`: the notification's one-tap action and a bodyless API call both land here,
  *   and demanding the form's required fields would make the quick path impossible.
@@ -83,6 +88,12 @@ class CompleteSchedule(
                 scheduleId = schedule.id,
                 // Computed here rather than read out of the table, and inside the transaction that
                 // writes the event, so the key it claims is the occurrence the engine says is open.
+                //
+                // It is **null for a meter-only schedule**, deliberately: a schedule with no time
+                // rule has no calendar occurrence to key, so there is nothing for
+                // `UNIQUE(schedule_id, occurrence_on, asset_id)` to refuse and two such completions
+                // never collide. Idempotence by index is a property of a *dated* occurrence, and a
+                // caller must not be told otherwise.
                 occurrenceOn = recompute.stateOf(schedule).computedDueOn,
                 detailsPending = detailsPending,
             )
@@ -106,7 +117,7 @@ class CompleteSchedule(
             )
             events.upsert(event)
             if (schedule.postponedDueOn != null) {
-                schedules.upsert(schedule.copy(postponedDueOn = null, updatedAt = now))
+                schedules.upsert(schedule.copy(postponedDueOn = null))
             }
             recompute.forAsset(target.assetId)
             event

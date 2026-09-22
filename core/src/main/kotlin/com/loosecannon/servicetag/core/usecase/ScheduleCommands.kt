@@ -71,10 +71,11 @@ data class CompletionCommand(
 )
 
 /**
- * One thing wrong with a [ScheduleCommand]. **Every member is a bad-rule refusal** — the command
- * describes a schedule that cannot exist — which is why they all answer 422 on the wire and never
- * 409; 409 is reserved for refusals about *state*. The names are the domain's own, so the wire can
- * render them without a second vocabulary.
+ * One thing wrong with a [ScheduleCommand], or with a postpone aimed at a schedule that has no date
+ * to move. **Every member is a bad-rule refusal** — what was asked for describes a schedule that
+ * cannot exist — which is why they all answer 422 on the wire and never 409; 409 is reserved for
+ * refusals about *state*. The names are the domain's own, so the wire can render them without a
+ * second vocabulary.
  */
 sealed interface ScheduleProblem {
     /** Both targets set, or neither. A schedule is for exactly one Asset or exactly one group. */
@@ -115,6 +116,27 @@ sealed interface ScheduleProblem {
 
     /** A time rule needs a unit as well as an interval. */
     data object TimeUnitRequired : ScheduleProblem
+
+    /**
+     * A meter rule with no interval has no threshold, so the schedule would report `NO_DATA` for
+     * ever and adding an `anchorMeter` would not repair it — a third no-data state the gate does
+     * not allow, and the reason this is refused at the command rather than tolerated by the engine.
+     */
+    data object MeterIntervalRequired : ScheduleProblem
+
+    /**
+     * A meter interval of zero or less puts the threshold at or below the baseline, which makes the
+     * schedule instantly and permanently due. Not a number is refused the same way.
+     */
+    data object MeterIntervalNotPositive : ScheduleProblem
+
+    /**
+     * A postpone was aimed at a schedule with no time rule. There is no occurrence date to move —
+     * `computedDueOn` is null for a meter-only schedule — and writing `postponed_due_on` anyway
+     * would give the sort key a date the schedule does not have, against invariant 10. Clearing a
+     * postponement is always allowed, so a row that arrived with one set can still be cleaned up.
+     */
+    data object PostponeNeedsTimeRule : ScheduleProblem
 }
 
 /** Validation failed; every problem found, collected once rather than fail-fast. */
@@ -175,6 +197,14 @@ internal fun scheduleProblems(
     val hasTime = cmd.timeInterval != null
     val hasMeter = cmd.meterDefinitionId != null
     if (!hasTime && !hasMeter) problems += ScheduleProblem.NoRuleSide
+
+    if (hasMeter) {
+        val interval = cmd.meterInterval
+        when {
+            interval == null -> problems += ScheduleProblem.MeterIntervalRequired
+            !interval.isFinite() || interval <= 0.0 -> problems += ScheduleProblem.MeterIntervalNotPositive
+        }
+    }
 
     if (hasTime) {
         if (cmd.timeInterval < 1) problems += ScheduleProblem.TimeIntervalNotPositive
