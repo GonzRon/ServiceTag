@@ -65,6 +65,11 @@ internal fun clearInstall() {
             // Attachment rows point at assets and events, so they go before the rows they name.
             graph.attachments.deleteAll()
             graph.events.deleteAll()
+            // 1.2's rows. The schedule table's CASCADE takes `occurrence_closure`,
+            // `schedule_state` and `schedule_local_delivery` with it, so those need no line of
+            // their own; the schedules go before the assets and groups they point at.
+            graph.schedules.deleteAll()
+            graph.groups.deleteAll()
             graph.profiles.deleteAll()
             graph.definitions.deleteAll()
             graph.tags.deleteAll()

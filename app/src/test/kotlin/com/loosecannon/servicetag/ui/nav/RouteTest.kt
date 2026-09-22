@@ -6,14 +6,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * `TopLevelRoutes` is what the bottom bar iterates over (2B-2, D12 §16 correction): Scan is gone
- * from the list, so a regression that re-adds it — or reorders Dashboard/Assets — shows up here
- * on the JVM without a device.
+ * `TopLevelRoutes` is what the bottom bar iterates over (2B-2, D12 §16 correction; 1.2's third
+ * member): Scan is still not in the list, so a regression that re-adds it — or reorders the three
+ * that are there — shows up here on the JVM without a device.
  */
 class RouteTest {
 
-    @Test fun topLevelRoutesIsDashboardThenAssetsOnly() {
-        assertEquals(listOf(Route.Dashboard, Route.Assets), TopLevelRoutes)
+    @Test fun topLevelRoutesIsDashboardThenAssetsThenMaintenance() {
+        assertEquals(listOf(Route.Dashboard, Route.Assets, Route.Maintenance), TopLevelRoutes)
     }
 
     /**
@@ -41,6 +41,11 @@ class RouteTest {
      *
      * Neither is the Developer API screen (1.1.0, #46): it holds a socket, not a tag, and adding it
      * here would turn reader mode on over a screen with no sink.
+     *
+     * Nor is any of 1.2's destinations. `Maintenance` and its four surfaces are lists,
+     * `ScheduleDetail` and `ScheduleEdit` are a screen and a form, and `MaintenanceSheet` opens
+     * *after* a read has resolved — the hold for that read belongs to `Route.Scan`. Adding one
+     * would hold reader mode over a screen with no sink.
      */
     @Test fun onlyTheTagScreensHoldReaderMode() {
         assertTrue(Route.Scan.readsTags())
@@ -53,5 +58,12 @@ class RouteTest {
         assertFalse(Route.AssetDetail("a1").readsTags())
         assertFalse(Route.Settings.readsTags())
         assertFalse(Route.DeveloperApi.readsTags())
+        assertFalse(Route.Maintenance.readsTags())
+        assertFalse(Route.ScheduleDetail("s1").readsTags())
+        assertFalse(Route.ScheduleEdit(null, targetAssetId = "a1").readsTags())
+        assertFalse(Route.GroupDetail("g1").readsTags())
+        assertFalse(Route.GroupEdit(null).readsTags())
+        assertFalse(Route.ReminderHealth.readsTags())
+        assertFalse(Route.MaintenanceSheet("a1", "t1").readsTags())
     }
 }

@@ -349,8 +349,12 @@ class AppGraph(private val context: Context) {
      * Reminder health, as the dashboard's badge asks about it. B10 implements the real check over
      * its seven findings and replaces this field; until then nothing is found, which is the honest
      * answer for a build with no check in it (master plan decision 28).
+     *
+     * A `var` for the same reason the attachment seams are: the instrumented suite has no findings
+     * to provoke and needs the badge drawn against a known answer. Production never reassigns it.
      */
-    val healthSummary: HealthSummary = NoHealthFindings
+    @VisibleForTesting
+    var healthSummary: HealthSummary = NoHealthFindings
 
     internal companion object {
         const val DB_NAME = "servicetag.db"

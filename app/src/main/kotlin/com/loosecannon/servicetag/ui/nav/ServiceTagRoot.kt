@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.ui.backup.BackupScreen
 import com.loosecannon.servicetag.ui.dashboard.DashboardScreen
 import com.loosecannon.servicetag.ui.journal.EventDetailScreen
 import com.loosecannon.servicetag.ui.journal.EventEntryScreen
+import com.loosecannon.servicetag.ui.maintenance.MaintenanceScreen
 import com.loosecannon.servicetag.ui.nfc.ReaderMode
 import com.loosecannon.servicetag.ui.nfc.rememberReaderMode
 import com.loosecannon.servicetag.ui.scan.ScanScreen
@@ -113,6 +114,24 @@ fun ServiceTagRoot(
                         // Scan is a pushed destination, not a tab (D12 §16 correction): a plain
                         // push means one back press returns to the dashboard that sent it there.
                         onScan = { backStack.add(Route.Scan) },
+                        onOpenSchedule = { backStack.add(Route.ScheduleDetail(it)) },
+                        onReminderHealth = { backStack.add(Route.ReminderHealth) },
+                    )
+                }
+                entry<Route.Maintenance> {
+                    MaintenanceScreen(
+                        graph = graph,
+                        onOpenSchedule = { backStack.add(Route.ScheduleDetail(it)) },
+                        onOpenGroup = { backStack.add(Route.GroupDetail(it)) },
+                        onReminderHealth = { backStack.add(Route.ReminderHealth) },
+                        // F4 reuses the shipped routes for two of the three actions.
+                        onScanTag = { backStack.add(Route.Scan) },
+                        onAddAsset = { backStack.add(Route.AssetEdit(null)) },
+                        // F4's third: the seam B14 connects to its canonical `CompletionFlow`.
+                        // It is left unconnected rather than given a completion path of its own —
+                        // a quick action that wrote an event directly is what #50 forbids, and
+                        // this brief's files contain no event write at all.
+                        onLogMaintenance = {},
                     )
                 }
                 entry<Route.Assets> {
@@ -275,9 +294,35 @@ fun ServiceTagRoot(
                         onBack = { backStack.removeLastOrNull() },
                     )
                 }
+                // The six keys the Maintenance shell routes onward to. Their screens belong to
+                // B14 (the schedule detail and editor), B15 (the group screens), B10 (reminder
+                // health) and B09 (the scan sheet); each of those briefs replaces the placeholder
+                // below with its own `entry`.
+                //
+                // They are registered rather than left out because `entryProvider` is total: an
+                // unregistered key on the back stack is a crash, and the shell is merged before
+                // any of the four. The placeholder does what an unsupported write route does —
+                // draws nothing and leaves the stack a frame later — so a push is a no-op and not
+                // a blank screen the owner has to back out of.
+                entry<Route.ScheduleDetail> { key -> PlaceholderPop(key, backStack) }
+                entry<Route.ScheduleEdit> { key -> PlaceholderPop(key, backStack) }
+                entry<Route.GroupDetail> { key -> PlaceholderPop(key, backStack) }
+                entry<Route.GroupEdit> { key -> PlaceholderPop(key, backStack) }
+                entry<Route.ReminderHealth> { key -> PlaceholderPop(key, backStack) }
+                entry<Route.MaintenanceSheet> { key -> PlaceholderPop(key, backStack) }
             },
         )
     }
+}
+
+/**
+ * A destination whose screen has not landed yet: nothing is drawn and the key leaves the stack a
+ * frame later, exactly as an unsupported write route does. Keyed on the route so a second push of
+ * a different id runs the effect again.
+ */
+@Composable
+private fun PlaceholderPop(key: Route, backStack: MutableList<NavKey>) {
+    LaunchedEffect(key) { backStack.removeLastOrNull() }
 }
 
 /**

@@ -53,15 +53,56 @@ sealed interface Route : NavKey {
      * top, so there is deliberately no deep link and no way to reach it but through Settings.
      */
     @Serializable data object DeveloperApi : Route
+
+    /**
+     * 1.2 — the Maintenance destination (spec §2.6, the navigation ruling): due work, schedules
+     * including the paused ones the dashboard deliberately omits, maintenance groups and reminder
+     * health. The third and last tab.
+     */
+    @Serializable data object Maintenance : Route
+
+    /** One schedule, in full. Reached from a due row, the Schedules list and the schedule deep link. */
+    @Serializable data class ScheduleDetail(val id: String) : Route
+
+    /**
+     * New when [scheduleId] is null, and then aimed at exactly one target: [targetAssetId] or
+     * [targetGroupId], never both. On an edit the stored target always wins and both are ignored.
+     */
+    @Serializable data class ScheduleEdit(
+        val scheduleId: String?,
+        val targetAssetId: String? = null,
+        val targetGroupId: String? = null,
+    ) : Route
+
+    /** One maintenance group, with its members and their progress. */
+    @Serializable data class GroupDetail(val id: String) : Route
+
+    /** New when [id] is null. */
+    @Serializable data class GroupEdit(val id: String?) : Route
+
+    /** #27's findings and their repairs, under Maintenance. */
+    @Serializable data object ReminderHealth : Route
+
+    /**
+     * The scan completion sheet (#50, spec §2.8). [tagId] is the binding the read resolved, kept so
+     * the sheet can say which tag it came from; it carries an id and never a payload.
+     */
+    @Serializable data class MaintenanceSheet(val assetId: String, val tagId: String? = null) : Route
 }
 
 /**
- * The two roots the bottom bar switches between; nothing else ever shows it. [Route.Scan] is a
- * pushed destination reached from Settings or the dashboard's empty-state action, not a tab
- * (D12 §16 correction, spec §9): normal tag reading is ambient dispatch, so "Scan" does not earn
- * a slot in the primary navigation for something the app never asks the user to open.
+ * The three roots the bottom bar switches between; nothing else ever shows it.
+ *
+ * 1.2 added the third (spec §2.6, the navigation ruling): Maintenance is where due work, the
+ * schedule list, the maintenance groups and reminder health live, and it is a tab because it is a
+ * place the owner goes looking. [Route.Scan] is still **not** one — it is a pushed destination
+ * reached from Settings or the dashboard's empty-state action (D12 §16 correction, spec §9):
+ * normal tag reading is ambient dispatch, so "Scan" does not earn a slot in the primary navigation
+ * for something the app never asks the user to open.
+ *
+ * The order is the ruled one and the bar iterates it, so a reorder here is a reorder on screen.
  */
-val TopLevelRoutes: List<Route> = listOf(Route.Dashboard, Route.Assets)
+val TopLevelRoutes: List<Route> = listOf(Route.Dashboard, Route.Assets, Route.Maintenance)
 
 /**
  * The target kinds this app writes. 2.6 removed "link": a serialised back stack or an old process
@@ -86,6 +127,13 @@ internal fun Route.WriteTag.isSupported(): Boolean = targetKind in SupportedWrit
  * An unsupported write route reads nothing either: the nav shell draws no screen for one and pops
  * it a frame later, so holding reader mode over it would be two binder calls to `NfcService` with
  * no sink ever installed.
+ *
+ * **1.2 adds no member here, and that is deliberate.** None of the new destinations reads a tag:
+ * `Maintenance` and its four surfaces are lists, `ScheduleDetail` and `ScheduleEdit` are a screen
+ * and a form, and `MaintenanceSheet` opens *after* a read has already resolved — the hold for that
+ * read belongs to `Route.Scan` or to the ambient trampoline, neither of which is this. Adding one
+ * would hold reader mode over a screen with no sink and re-introduce the #37 re-dispatch 2.7
+ * removed.
  */
 internal fun Route.readsTags(): Boolean = when (this) {
     Route.Scan -> true
