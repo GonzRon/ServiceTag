@@ -33,8 +33,17 @@ import kotlinx.coroutines.launch
  */
 const val MAINTENANCE_SHEET_TITLE = "Maintenance"
 
-/** RATIFIED (§17): the way out to the ordinary asset detail, which the sheet always offers. */
-const val OPEN_ASSET = "Open asset"
+/**
+ * RATIFIED (§17): the way out to the ordinary asset detail, which the sheet always offers.
+ *
+ * Prefixed because B15's `GroupDetailScreen` declares the **same** ratified word for a member row's
+ * action in this same package, and B15 is merged — so this one takes the qualified name. §17 lists
+ * "Open asset" once, for B09; that two surfaces now say it is a §17 attribution note for B13's
+ * documentation pass, not two strings. Collapsing the two declarations into one would be the
+ * cleaner shape and is the controller's call, not this brief's: it would couple the sheet's strings
+ * block to a constant whose KDoc frames it as a group member row's.
+ */
+const val SHEET_OPEN_ASSET = "Open asset"
 
 /** RATIFIED (§17): leave, having written nothing at all. */
 const val NOT_NOW = "Not now"

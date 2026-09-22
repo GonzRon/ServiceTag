@@ -137,7 +137,7 @@ fun MaintenanceSheet(
                 onClick = { onOpenAsset(assetId) },
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(OPEN_ASSET) }
+            ) { Text(SHEET_OPEN_ASSET) }
             TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text(NOT_NOW) }
         }
     }
