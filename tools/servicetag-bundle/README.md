@@ -34,8 +34,10 @@ payload of each entry, the pinned `ZipInfo` fields, and the `data.json` hash the
 checks — see `tests/test_golden.py`'s module docstring.
 
 **Whenever the generator's output changes** (a field added to a row, an id derivation rule
-changed, a new table), regenerate the resource from the fixture and commit both files together in
-the same change:
+changed, a new table) **or the fixture itself changes**, regenerate the resource from the fixture
+and commit both files together in the same change. A fixture whose shape changes (a different
+number of assets, definitions, events, …) also needs the hardcoded per-table counts in
+`StageABundleConformanceTest` updated to match.
 
 ```
 uv run servicetag-bundle build fixtures/synthetic-estate.json \
@@ -43,8 +45,9 @@ uv run servicetag-bundle build fixtures/synthetic-estate.json \
 ```
 
 Then run both suites (`uv run --frozen pytest` here, and `:core:test` on the Kotlin side) before
-committing — a stale resource fails the golden test and, separately, the JVM conformance test's
-DTO-key-set check, rather than passing on drifted data.
+committing — a stale resource fails the golden test and the JVM test's per-table counts; the DTO
+key-set check is a separate, narrower guard that catches a DTO gaining a field without any
+generator change, not staleness in the resource itself.
 
 ## The CLI
 

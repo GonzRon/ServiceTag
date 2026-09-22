@@ -69,55 +69,72 @@ class StageABundleConformanceTest {
 
     @Test
     fun `every row's key set equals its DTO's descriptor element names`() {
-        val json = Json
         val entries = readZipEntries(resourceBytes())
-        val data = json.parseToJsonElement(String(entries.getValue("data.json"))).jsonObject
+        val data = Json.parseToJsonElement(String(entries.getValue("data.json"))).jsonObject
 
-        assertKeysMatch(data.getValue("assets").jsonArray, AssetDto.serializer().descriptor.elementNames)
-        assertKeysMatch(data.getValue("nfcTags").jsonArray, NfcTagDto.serializer().descriptor.elementNames)
+        // The root object itself: BackupData defaults four of its seven tables to emptyList(), so
+        // a *new* table added there tomorrow would never be emitted by the generator and would
+        // decode away silently unless the root's own key set is pinned here too.
+        assertEquals(
+            BackupData.serializer().descriptor.elementNames.toSet(), data.keys, "data.json root",
+        )
+
         assertKeysMatch(
-            data.getValue("externalLinks").jsonArray,
-            ExternalLinkDto.serializer().descriptor.elementNames,
+            "assets", data.getValue("assets").jsonArray, AssetDto.serializer().descriptor.elementNames,
         )
         assertKeysMatch(
+            "measurementDefinitions",
             data.getValue("measurementDefinitions").jsonArray,
             MeasurementDefinitionDto.serializer().descriptor.elementNames,
         )
-        assertKeysMatch(
-            data.getValue("attachments").jsonArray,
-            AttachmentDto.serializer().descriptor.elementNames,
+
+        // The bundle never carries these three tables -- the source format has no way to declare
+        // an NFC tag, an external link or an attachment -- so the real contract is that they stay
+        // empty, not a (vacuous) walk over zero rows.
+        assertTrue(data.getValue("nfcTags").jsonArray.isEmpty(), "the generator never writes nfcTags")
+        assertTrue(
+            data.getValue("externalLinks").jsonArray.isEmpty(),
+            "the generator never writes externalLinks",
+        )
+        assertTrue(
+            data.getValue("attachments").jsonArray.isEmpty(),
+            "the generator never writes attachments",
         )
 
         val profiles = data.getValue("eventProfiles").jsonArray
-        assertKeysMatch(profiles, EventProfileDto.serializer().descriptor.elementNames)
+        assertKeysMatch("eventProfiles", profiles, EventProfileDto.serializer().descriptor.elementNames)
         profiles.forEach { profile ->
             assertKeysMatch(
+                "eventProfiles[].fields",
                 profile.jsonObject.getValue("fields").jsonArray,
                 ProfileFieldDto.serializer().descriptor.elementNames,
             )
             assertKeysMatch(
+                "eventProfiles[].consumables",
                 profile.jsonObject.getValue("consumables").jsonArray,
                 ProfileConsumableDto.serializer().descriptor.elementNames,
             )
         }
 
         val events = data.getValue("assetEvents").jsonArray
-        assertKeysMatch(events, AssetEventDto.serializer().descriptor.elementNames)
+        assertKeysMatch("assetEvents", events, AssetEventDto.serializer().descriptor.elementNames)
         events.forEach { event ->
             assertKeysMatch(
+                "assetEvents[].measurements",
                 event.jsonObject.getValue("measurements").jsonArray,
                 MeasurementDto.serializer().descriptor.elementNames,
             )
             assertKeysMatch(
+                "assetEvents[].consumables",
                 event.jsonObject.getValue("consumables").jsonArray,
                 ConsumableUsageDto.serializer().descriptor.elementNames,
             )
         }
     }
 
-    private fun assertKeysMatch(array: JsonArray, expectedElementNames: Iterable<String>) {
+    private fun assertKeysMatch(label: String, array: JsonArray, expectedElementNames: Iterable<String>) {
         val expected = expectedElementNames.toSet()
-        array.forEach { element -> assertEquals(expected, element.jsonObject.keys) }
+        array.forEach { element -> assertEquals(expected, element.jsonObject.keys, label) }
     }
 
     private fun readZipEntries(bytes: ByteArray): Map<String, ByteArray> {

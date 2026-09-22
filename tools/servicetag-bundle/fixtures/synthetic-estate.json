@@ -10,7 +10,7 @@
       "name": "Greenhouse Heater",
       "category": "climate",
       "description": "Propane-fired heater for the west greenhouse",
-      "notes": "runs October through April",
+      "notes": "runs October through April; façade repainted 2025",
       "manufacturer": "Bramblewick",
       "model": "GH-100",
       "serialNumber": "BW-GH100-0042",
@@ -118,7 +118,7 @@
       "key": "orchard-drone",
       "name": "Orchard Survey Drone",
       "category": "equipment",
-      "manufacturer": "Fenwick Aerial",
+      "manufacturer": "Thistledown Aerial",
       "model": "FA-Scout"
     },
     {
