@@ -78,6 +78,10 @@ import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.SharedPrefsStore
+import com.loosecannon.servicetag.reminders.AndroidNotificationPermission
+import com.loosecannon.servicetag.reminders.AndroidPlatformState
+import com.loosecannon.servicetag.reminders.NotificationPermission
+import com.loosecannon.servicetag.reminders.PlatformState
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -112,6 +116,10 @@ class AppGraph(private val context: Context) {
     val schedules: ScheduleRepository = RoomScheduleRepository(db.maintenanceScheduleDao())
     val closures: ClosureRepository = RoomClosureRepository(db.occurrenceClosureDao())
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
+
+    // #24 — the platform-ownership seams B06, B07, B10 and B14 compile against (master plan §12).
+    val platformState: PlatformState = AndroidPlatformState(context)
+    val notificationPermission: NotificationPermission = AndroidNotificationPermission(context)
 
     /**
      * Swapped only by the instrumented suite, which has no SAF picker to drive and no persisted

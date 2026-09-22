@@ -9,6 +9,11 @@
 
          INTERNET gives the process network capability, but ServiceTag 1.1.0 introduces no outbound networking and the Developer API listens only on localhost; future cloud features may make intentional outbound use of the permission under their own designs. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- API 33+ runtime permission. Requested on first schedule creation with a rationale, never
+         at launch (spec §5.1, #24 AC 1) — the request lives in the schedule editor (B14), plumbed
+         through app/.../reminders/NotificationPermission.kt. Neither SCHEDULE_EXACT_ALARM nor
+         USE_EXACT_ALARM is declared: "due today" is a date, not an instant (ledger A12). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.nfc" android:required="true" />
 
     <queries>
@@ -60,6 +65,40 @@
                 <data android:scheme="vnd.android.nfc" android:host="ext" android:path="${ndefTagPath}" />
             </intent-filter>
         </activity>
+
+        <!-- The digest alarm's own re-arm receivers (spec §5.4, invariant 54). Every one is
+             non-exported, addressed only by the system's own implicit broadcast, and forwards to
+             B06's ReminderTrigger through ReminderDispatch — none of them starts anything. The
+             fifth receiver the quick actions target is B07's own component and B07's own
+             manifest addition, not this brief's. -->
+        <receiver
+            android:name="com.loosecannon.servicetag.reminders.BootCompletedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="com.loosecannon.servicetag.reminders.TimeSetReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="com.loosecannon.servicetag.reminders.TimezoneChangedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="com.loosecannon.servicetag.reminders.DateChangedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.DATE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!-- The camera writes into cacheDir/camera/ and hands the URI straight back (spec 9.3). -->
         <provider
