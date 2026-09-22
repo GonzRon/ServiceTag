@@ -55,6 +55,7 @@ class PreSplitLinkTagSheetTest {
                     onDismiss = {},
                     onWriteTag = { error("a pre-split link tag must never offer a write") },
                     onOpenAsset = { error("a pre-split link tag must never open an asset") },
+                    onOpenMaintenance = { _, _ -> error("a pre-split link tag must never reach the sheet") },
                     onNewAsset = {},
                 )
             }

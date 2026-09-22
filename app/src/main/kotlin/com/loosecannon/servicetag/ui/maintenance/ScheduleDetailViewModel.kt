@@ -42,8 +42,12 @@ import kotlinx.coroutines.launch
  * expired before it was written and would suppress nothing at all, and at every other hour it would
  * be short of a day. The notification action is "Snooze 1 day" (§17, B07), and this is the same
  * quantity as well as the same code (`ReminderSnooze`, through the seam).
+ *
+ * `internal` rather than private because **B09's sheet offers the same "Snooze"** and carry-forward
+ * (d) makes it the same quantity as well as the same seam; a second literal here would be a second
+ * answer to one question.
  */
-private const val SNOOZE_MILLIS = 86_400_000L
+internal const val SNOOZE_MILLIS = 86_400_000L
 
 /**
  * B06's `ReminderSnooze`, as this brief needs it: the **device-local instant only**.

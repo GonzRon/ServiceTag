@@ -65,6 +65,8 @@ class TagResultViewModelTest {
             ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock),
             BindTag(graph.tags, graph.assets, graph.uow, graph.clock),
             graph.assets,
+            // A link-bound tag never reaches the sheet, so the offer is never asked.
+            { error("a pre-split link tag is not a Resolution.OpenAsset") },
             PayloadFormat.V1.name,
             key,
         )

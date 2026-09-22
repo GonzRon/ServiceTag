@@ -1,0 +1,473 @@
+package com.loosecannon.servicetag.ui.maintenance
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.Measurement
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.TagId
+import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.schedule.DueStatus
+import com.loosecannon.servicetag.core.usecase.PostponeSchedule
+import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.journal.formatNumber
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+/**
+ * RATIFIED, verbatim (master plan §17): the sheet's title. The same word as the Maintenance
+ * destination's, because it is the same subject — §17 lists the two together as one string.
+ */
+const val MAINTENANCE_SHEET_TITLE = "Maintenance"
+
+/** RATIFIED (§17): the way out to the ordinary asset detail, which the sheet always offers. */
+const val OPEN_ASSET = "Open asset"
+
+/** RATIFIED (§17): leave, having written nothing at all. */
+const val NOT_NOW = "Not now"
+
+/** RATIFIED (§17): the schedule detail, which is a look and never a completion. */
+const val REVIEW_MAINTENANCE = "Review maintenance"
+
+/** RATIFIED (§17, #49 AC 3): the caption over the scanned tag's placement label. */
+const val TAG_PLACEMENT = "Tag placement"
+
+/**
+ * The last completion's measurements, **read**.
+ *
+ * Master plan decision 41. D5 §7A `:219-221` requires the sheet to show the last completion's date
+ * **and its key readings**, and `DueItem` carries the date but structurally cannot carry the values
+ * — profile values are heterogeneous per schedule, so a generic projection field would be the wrong
+ * shape. This is that one collaborator: it is backed by the shipped `EventRepository.get` and
+ * exposes **no write method at all**, so the sheet cannot reach a write path even by accident.
+ */
+fun interface LastCompletionReadings {
+    suspend fun forEvent(eventId: EventId): List<Measurement>
+}
+
+/**
+ * Which event a schedule's last completion was — `ScheduleState.lastCompletionEventId`, read.
+ *
+ * A second one-method seam rather than handing the sheet `ScheduleStateRepository`, for
+ * [LastCompletionReadings]' reason and for invariant 17's: that port carries `upsert`, and `rebuild`
+ * is the only write path into `schedule_state`. `DueItem` carries the completion's **date** but not
+ * its id, and the id is what [LastCompletionReadings] is keyed on, so the two seams together are
+ * what let the display fact D5 §7A requires and the sheet's write-free gate both hold.
+ */
+fun interface LastCompletionEventId {
+    suspend fun of(scheduleId: ScheduleId): EventId?
+}
+
+/**
+ * B06's reminder sweep, as the sheet needs it: recompute, then hand the provider the whole desired
+ * state (#50 AC 8).
+ *
+ * A completion quiesces its notification **by canonical state** and never by deleting a
+ * notification — the inversion that would make the notification the source of truth. This is a
+ * seam rather than `ReminderRun` itself because the sheet has no business arming an alarm or
+ * driving a backstop, and because a test of "a completion reconciles" should not have to build a
+ * provider.
+ */
+fun interface ReminderReconcile {
+    suspend fun run()
+}
+
+/**
+ * Whether a scan of this Asset has work the completion sheet would offer.
+ *
+ * The **routing** half of D-18a, asked by the scan path before it navigates: no actionable work
+ * opens the asset exactly as today (#50 AC 1), and only a `Resolution.OpenAsset` that answers true
+ * here reaches `Route.MaintenanceSheet` at all. It is one question with one answer because it is
+ * [scanSheetItems] asked of the same projection the sheet itself reads — the routing decision and
+ * the sheet's contents cannot disagree, which is the failure a second predicate would introduce.
+ */
+fun interface ScanSheetOffer {
+    suspend fun has(assetId: AssetId): Boolean
+}
+
+/**
+ * Whether this row is **actionable on the scan sheet** — D-18a's admission set, and deliberately
+ * narrower than the dashboard's promotion rule (master plan §11.1, decision 27).
+ *
+ * `DUE` and `OVERDUE` always; `NO_DATA` **only** in its repairable missing-meter-baseline form,
+ * which "Log meter reading" repairs; and an **empty required set** never, however its status enum
+ * reads — a round that obliges nobody is not work to offer somebody standing at the equipment
+ * (invariant 74). `DUE_SOON` is not actionable and rides along only as a passenger; `OK`,
+ * `INACTIVE_SEASON` and `PAUSED` never appear.
+ */
+val DueItem.actionableOnScanSheet: Boolean
+    get() = !requiredSetEmpty &&
+        (status == DueStatus.DUE || status == DueStatus.OVERDUE || isRepairableNoData)
+
+/**
+ * D-18a applied to one Asset's projection: which of its rows the sheet offers, in the attention
+ * order [DueReadModel] already put them in (master plan §11.1 — never a second ordering rule).
+ *
+ * The passenger rule is the whole reason this is a list operation and not a row predicate:
+ * `DUE_SOON` joins **only** when the sheet is already open for another actionable item, and
+ * **never alone** (D5 §7A `:208`). An empty answer means "open the asset as today", which is what
+ * keeps a scan from becoming "a completion checklist for every future maintenance item"
+ * (`issue-50.md:58`).
+ *
+ * An **archived** schedule is already gone before this sees it: every due and projection query
+ * starts from `listedForDue()`, inside `DueReadModel` (carry-forward (a)).
+ */
+fun scanSheetItems(items: List<DueItem>): List<DueItem> {
+    if (items.none { it.actionableOnScanSheet }) return emptyList()
+    return items.filter {
+        it.actionableOnScanSheet || (it.status == DueStatus.DUE_SOON && !it.requiredSetEmpty)
+    }
+}
+
+/**
+ * One row of the sheet, with every display fact D5 §7A `:219-221` requires already rendered.
+ *
+ * Nothing here is a new sentence. [whyNow] is composed from the item's own status and dates using
+ * the **ratified** per-item forms of §17.1e ("Due \<date\>.", "Overdue since \<date\>."), [meter]
+ * is F3's ratified "Due at \<n\> \<unit\>, now \<n\>." off the shared [meterLine], [statusWord] is
+ * the ratified status term and [completionTakes] the ratified completion-mode option — so the
+ * sheet draws no wording the owner has not ratified, and this brief drafts nothing.
+ *
+ * [passenger] is a `DUE_SOON` row riding along; [repairOnly] is the repairable `NO_DATA`, which
+ * offers "Log meter reading" and is not selectable for completion — it is a repair, not an
+ * obligation.
+ */
+data class SheetItem(
+    val scheduleId: ScheduleId,
+    val title: String,
+    /** Carried so the row can draw D12 §5's glyph and colour beside the word, never a raw colour. */
+    val status: DueStatus,
+    val statusWord: String,
+    val passenger: Boolean,
+    val repairOnly: Boolean,
+    val effectiveDueOn: String?,
+    val meter: String?,
+    val whyNow: String?,
+    val completionTakes: String,
+    val lastCompletedOn: String?,
+    val lastReadings: List<String>,
+    val progress: String?,
+    val canPostpone: Boolean,
+    val canSnooze: Boolean,
+) {
+    /** Whether "Complete selected" may act on this row. A repair is not a completion. */
+    val selectable: Boolean get() = !repairOnly
+}
+
+/**
+ * The sheet's whole state: which asset was scanned, from which tag, what is actionable, and what
+ * the owner has selected.
+ *
+ * [emptyOnArrival] is the no-work case surviving a restored back stack: the route is reached only
+ * from a resolution that has actionable work, but a stack restored into an asset whose work has
+ * since been done must still land on the ordinary asset screen rather than on an empty sheet
+ * (#50 AC 1). It is decided on the **first** load alone, so completing the last item leaves the
+ * owner on the sheet with its two ways out rather than yanking the screen away.
+ */
+data class MaintenanceSheetState(
+    val assetId: AssetId? = null,
+    val assetName: String = "",
+    val tagPlacement: String? = null,
+    val items: List<SheetItem> = emptyList(),
+    val selected: Set<String> = emptySet(),
+    val busy: Boolean = false,
+    val loaded: Boolean = false,
+    val emptyOnArrival: Boolean = false,
+) {
+    /** "Complete selected" acts on an explicit selection and never on "everything shown". */
+    val canComplete: Boolean get() = selected.isNotEmpty()
+}
+
+/**
+ * The scan completion sheet, as state and operations.
+ *
+ * **It reads derived state and never writes it** (invariant 17): the item list is
+ * [DueReadModel.forAsset]'s projection and the last completion's readings come through two
+ * read-only seams. **It has no completion path of its own**: every completion goes through B14's
+ * [CompletionFlow], which asks the ratified "When was this done?" — so a backdated completion is
+ * first class here exactly as it is everywhere else, and a `FORM` schedule leaves for its own form
+ * with nothing fabricated (#50 AC 4, D-25).
+ *
+ * **The five actions are five different things** (D5 §7A `:230-232`, #50 AC 6). Completion writes
+ * an event and reconciles; "Snooze" writes the device-local instant and no date and no event
+ * (invariant 20); "Postpone" writes `postponed_due_on` and nothing else, and the next occurrence
+ * still comes from the rule (invariant 21); "Review maintenance" navigates; "Not now" and the back
+ * gesture write nothing at all. None of them is an alias for any other.
+ *
+ * **A group round completes this member only.** The scanned Asset is handed to [CompletionFlow] as
+ * the member, so `CompleteGroupMembers` writes one member's event and every other member's history
+ * is byte-identical (invariants 28, 29) — the sheet has no "complete the group" at all.
+ */
+class MaintenanceSheetViewModel(
+    private val due: DueReadModel,
+    private val assets: AssetRepository,
+    private val tags: TagRepository,
+    private val readings: LastCompletionReadings,
+    private val lastCompletionEventId: LastCompletionEventId,
+    private val snoozer: ScheduleSnooze,
+    private val postponeSchedule: PostponeSchedule,
+    private val reconcile: ReminderReconcile,
+    private val clock: Clock,
+    val completion: CompletionFlow,
+    private val assetId: AssetId,
+    private val tagId: TagId?,
+) : ViewModel() {
+
+    constructor(graph: AppGraph, assetId: String, tagId: String?) : this(
+        graph.dueReadModel, graph.assets, graph.tags, graph.lastCompletionReadings,
+        graph.lastCompletionEventId, graph.scheduleSnooze, graph.postponeSchedule,
+        graph.reminderReconcile, graph.clock, graph.completionFlow,
+        AssetId(assetId), tagId?.let(::TagId),
+    )
+
+    private val _state = MutableStateFlow(MaintenanceSheetState())
+    val state: StateFlow<MaintenanceSheetState> = _state.asStateFlow()
+
+    /** A `FORM` schedule's completion is collected by its profile form; the sheet navigates. */
+    private val _needsForm = MutableSharedFlow<CompletionOutcome.NeedsForm>(
+        replay = 0,
+        extraBufferCapacity = 1,
+    )
+    val needsForm: SharedFlow<CompletionOutcome.NeedsForm> = _needsForm.asSharedFlow()
+
+    /**
+     * The sequential form flow, as two fields and no more.
+     *
+     * [queue] is what is left of one "Complete selected", in the order the owner saw the rows;
+     * [awaiting] is the one schedule whose form the owner has been sent to. Several selected forms
+     * therefore run **sequentially and explicitly** — one form at a time, each one saved before the
+     * next opens — and abandoning one stops the run, so the forms already saved stand and the rest
+     * are absent. A batch that started every form at once is the partial silent write this shape
+     * exists to make unrepresentable.
+     */
+    private var queue: List<ScheduleId> = emptyList()
+    private var awaiting: ScheduleId? = null
+
+    init {
+        refresh()
+    }
+
+    /**
+     * Re-derives from canonical state, then advances the form queue if there is one.
+     *
+     * Every read is from the store and not from a list held across an action, which is what makes a
+     * repeat scan after a completion refuse to re-offer that occurrence (#50 AC 12): the completed
+     * schedule is no longer `DUE`, so [scanSheetItems] does not admit it.
+     */
+    fun refresh() {
+        viewModelScope.launch {
+            if (_state.value.busy) return@launch
+            load()
+            resumeQueue()
+        }
+    }
+
+    private suspend fun load() {
+        val asset = assets.get(assetId)
+        val placement = tagId?.let { tags.get(it) }?.label?.takeIf { it.isNotBlank() }
+        val rows = scanSheetItems(due.forAsset(assetId)).map { item(it) }
+        val shown = rows.map { it.scheduleId.value }.toSet()
+        val first = !_state.value.loaded
+        _state.update { previous ->
+            previous.copy(
+                assetId = assetId,
+                assetName = asset?.name.orEmpty(),
+                tagPlacement = placement,
+                items = rows,
+                // A row that has gone — completed, or no longer actionable — takes its selection
+                // with it, so "Complete selected" can never act on something that is not on screen.
+                selected = previous.selected.intersect(shown),
+                loaded = true,
+                emptyOnArrival = if (first) rows.isEmpty() else previous.emptyOnArrival,
+            )
+        }
+    }
+
+    private suspend fun item(row: DueItem): SheetItem {
+        val eventId = row.lastCompletedOn?.let { lastCompletionEventId.of(row.scheduleId) }
+        return SheetItem(
+            scheduleId = row.scheduleId,
+            title = row.title,
+            status = row.status,
+            statusWord = statusLabel(row.status),
+            passenger = row.status == DueStatus.DUE_SOON,
+            repairOnly = row.isRepairableNoData,
+            effectiveDueOn = row.effectiveDueOn?.toString(),
+            meter = meterLine(row),
+            whyNow = whyNow(row),
+            completionTakes = if (row.completionMode == CompletionMode.FORM) THE_FULL_FORM else ONE_TAP,
+            lastCompletedOn = row.lastCompletedOn?.toString(),
+            lastReadings = eventId?.let { readings.forEvent(it) }.orEmpty().map(::readingLine),
+            progress = progressLine(row),
+            // A meter-only schedule has no occurrence date to move and `PostponeSchedule` refuses
+            // one, so the action is **not offered** rather than offered and refused (invariant 10).
+            canPostpone = !row.isRepairableNoData && row.effectiveDueOn != null,
+            // A snooze suppresses a delivery, so it means something only where there is one:
+            // `NO_DATA`, `INACTIVE_SEASON` and `PAUSED` never notify (invariant 22).
+            canSnooze = row.status.notifies,
+        )
+    }
+
+    /** Toggles one row's selection. Selection is the owner's explicit act and the sheet's only one. */
+    fun toggle(scheduleId: ScheduleId) {
+        val id = scheduleId.value
+        _state.update { current ->
+            if (current.items.none { it.scheduleId.value == id && it.selectable }) {
+                current
+            } else {
+                current.copy(
+                    selected = if (id in current.selected) current.selected - id else current.selected + id,
+                )
+            }
+        }
+    }
+
+    /**
+     * **"Complete selected"**: the rows the owner selected, in the order they are shown, each one
+     * through [CompletionFlow] and none of them fabricated.
+     */
+    fun completeSelected() {
+        val chosen = _state.value.items
+            .filter { it.selectable && it.scheduleId.value in _state.value.selected }
+            .map { it.scheduleId }
+        if (chosen.isEmpty()) return
+        run(chosen)
+    }
+
+    /**
+     * **"Log meter reading"**: the repairable `NO_DATA` row's repair, through the **same** flow.
+     *
+     * The flow demands the reading a meter rule owes and refuses to write without it, so this is
+     * the repair and the completion at once and never a second path (#50 AC 5, #11).
+     */
+    fun repair(scheduleId: ScheduleId) = run(listOf(scheduleId))
+
+    private fun run(ids: List<ScheduleId>) {
+        if (_state.value.busy) return
+        queue = ids
+        awaiting = null
+        _state.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            runCatching { pump() }
+            load()
+            _state.update { it.copy(busy = false) }
+        }
+    }
+
+    /**
+     * One schedule at a time, and a stop on anything that is not a completion.
+     *
+     * A `FORM` schedule returns [CompletionOutcome.NeedsForm] **without writing anything**, so the
+     * sheet navigates and the rest of the queue waits for the owner to come back. A cancelled
+     * prompt or a refusal empties the queue: the alternative is continuing through the rest of a
+     * selection the owner has just backed out of.
+     */
+    private suspend fun pump() {
+        while (queue.isNotEmpty()) {
+            val head = queue.first()
+            queue = queue.drop(1)
+            when (val outcome = completion.complete(head, assetId)) {
+                is CompletionOutcome.Completed -> reconcile.run()
+                is CompletionOutcome.NeedsForm -> {
+                    awaiting = head
+                    _needsForm.tryEmit(outcome)
+                    return
+                }
+                else -> {
+                    queue = emptyList()
+                    return
+                }
+            }
+        }
+    }
+
+    /**
+     * Back from a form: carry on only if that form was actually saved.
+     *
+     * A saved completion takes its schedule out of [scanSheetItems]' admission set, so "is it still
+     * offered" is the question, asked of canonical state. Still offered means the owner left the
+     * form without saving — and then the run **stops**, which is what leaves the forms already
+     * saved written and every later one absent rather than half-finished.
+     */
+    private suspend fun resumeQueue() {
+        val pending = awaiting ?: return
+        awaiting = null
+        if (_state.value.items.any { it.scheduleId == pending } || queue.isEmpty()) {
+            queue = emptyList()
+            return
+        }
+        _state.update { it.copy(busy = true) }
+        runCatching { pump() }
+        load()
+        _state.update { it.copy(busy = false) }
+    }
+
+    /**
+     * **"Snooze"**: the device-local instant, and nothing else — no `*_on` column, no event, and
+     * the schedule still reads exactly what it read before (invariant 20).
+     *
+     * The same [SNOOZE_MILLIS] and the same `ReminderSnooze` behind the same seam the schedule
+     * detail and the notification action use, so "Snooze" and "Snooze 1 day" are not merely the
+     * same length: they are the same code (carry-forward (d)).
+     */
+    fun snooze(scheduleId: ScheduleId) = operate {
+        snoozer.snooze(scheduleId, clock.nowMillis() + SNOOZE_MILLIS)
+    }
+
+    /**
+     * **"Postpone"**: `postponed_due_on` only. No rule changes, no event is written, and the
+     * **next** occurrence still comes from the rule (invariant 21).
+     */
+    fun postpone(scheduleId: ScheduleId, dueOn: String) = operate {
+        postponeSchedule.run(scheduleId, dueOn)
+    }
+
+    private fun operate(block: suspend () -> Unit) {
+        if (_state.value.busy) return
+        _state.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            runCatching { block() }
+            load()
+            _state.update { it.copy(busy = false) }
+        }
+    }
+
+    private companion object {
+
+        /**
+         * The why-now line, composed from the row's **own** status and dates using the RATIFIED
+         * per-item forms of §17.1e. This brief drafts no sentence template: a row with neither a
+         * date nor a meter side says nothing here, and its status word and its meter line carry
+         * the answer instead.
+         */
+        fun whyNow(row: DueItem): String? {
+            val due = row.effectiveDueOn ?: return null
+            return when (row.status) {
+                DueStatus.OVERDUE -> "Overdue since $due."
+                DueStatus.DUE, DueStatus.DUE_SOON -> "Due $due."
+                else -> null
+            }
+        }
+
+        /**
+         * One reading of the last completion: the value as it was entered and the unit snapshotted
+         * with it. The definition's **label** is deliberately absent — the declared seam answers
+         * `List<Measurement>`, and reaching for `DefinitionRepository` to name each one would hand
+         * this sheet a port that can write.
+         */
+        fun readingLine(measurement: Measurement): String {
+            val value = measurement.valueNum?.let(::formatNumber) ?: measurement.valueText.orEmpty()
+            return if (measurement.unit.isBlank()) value else "$value ${measurement.unit}"
+        }
+    }
+}

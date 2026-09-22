@@ -1,0 +1,645 @@
+package com.loosecannon.servicetag.ui.maintenance
+
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.LinkId
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.PayloadFormat
+import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.TagBinding
+import com.loosecannon.servicetag.core.model.TagId
+import com.loosecannon.servicetag.core.model.TagStatus
+import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.nfc.TagPayload
+import com.loosecannon.servicetag.core.schedule.DueStatus
+import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.core.usecase.CompletionCommand
+import com.loosecannon.servicetag.core.usecase.Resolution
+import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.dayMillis
+import com.loosecannon.servicetag.testing.groupOf
+import com.loosecannon.servicetag.testing.meterDefinitionOf
+import com.loosecannon.servicetag.testing.scheduleOf
+import com.loosecannon.servicetag.ui.nav.Route
+import com.loosecannon.servicetag.ui.nav.TopLevelRoutes
+import com.loosecannon.servicetag.ui.nav.readsTags
+import com.loosecannon.servicetag.ui.scan.asTagResult
+import java.time.LocalDate
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+/**
+ * The scan completion sheet: which work it admits, what each of its actions does **and does not**
+ * do, and the two ways a scan could stop being navigation-only.
+ *
+ * The failure this class exists to catch is not a wrong list. It is a sheet that quietly completes
+ * something, that lets a revoked or foreign tag into the completion path, that treats a group round
+ * as one button, or that collapses Review, Snooze and Postpone into a generic "reschedule" — which
+ * is the failure D5 §7A `:230-232` names out loud.
+ *
+ * One dispatcher carries the test body and `Dispatchers.Main`, with Room on a `StandardTestDispatcher`
+ * sharing the scheduler, which is what makes `advanceUntilIdle()` a real settle here.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class MaintenanceSheetViewModelTest {
+
+    private val scheduler = TestCoroutineScheduler()
+    private lateinit var graph: FakeGraph
+    private var reconciles = 0
+
+    @Before fun setUp() {
+        Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
+        graph = FakeGraph(queryContext = StandardTestDispatcher(scheduler))
+        graph.today = LocalDate.parse("2026-04-15")
+        // The D-27 pin's floor is `max(anchorOn, createdOn)`, so the clock has to be a real date
+        // before anything is created (carry-forward (c)).
+        graph.now = dayMillis("2026-02-10")
+        reconciles = 0
+    }
+
+    @After fun tearDown() {
+        graph.close()
+        Dispatchers.resetMain()
+    }
+
+    // ---------------------------------------------------------------- fixtures
+
+    private fun readModel() = DueReadModel(
+        schedules = graph.schedules,
+        states = graph.scheduleStates,
+        assets = graph.assets,
+        groups = graph.groups,
+        definitions = graph.definitions,
+        recompute = graph.recomputeSchedules,
+        today = graph.todayPort,
+        snoozedUntilOf = { null },
+    )
+
+    private fun viewModel(assetId: AssetId, tagId: TagId? = null) = MaintenanceSheetViewModel(
+        due = readModel(),
+        assets = graph.assets,
+        tags = graph.tags,
+        readings = LastCompletionReadings { id -> graph.events.get(id)?.measurements.orEmpty() },
+        lastCompletionEventId = LastCompletionEventId { id ->
+            graph.scheduleStates.get(id)?.lastCompletionEventId
+        },
+        snoozer = graph.scheduleSnooze,
+        postponeSchedule = graph.postponeSchedule,
+        reconcile = ReminderReconcile { reconciles++ },
+        clock = graph.clock,
+        completion = graph.completionFlow,
+        assetId = assetId,
+        tagId = tagId,
+    )
+
+    private suspend fun seed(schedule: MaintenanceSchedule) {
+        graph.schedules.upsert(schedule)
+        graph.recomputeSchedules.forSchedule(schedule.id)
+    }
+
+    private suspend fun mower(
+        category: String = "Yard",
+        seasonStartMmdd: String? = null,
+        seasonEndMmdd: String? = null,
+    ) = graph.createAsset.run(
+        AssetCommand(
+            name = "Mower",
+            category = category,
+            seasonStartMmdd = seasonStartMmdd,
+            seasonEndMmdd = seasonEndMmdd,
+        ),
+    ).id
+
+    /** What the scan sheet would offer for this Asset, asked of the real projection. */
+    private suspend fun offered(assetId: AssetId): List<String> =
+        scanSheetItems(readModel().forAsset(assetId)).map { it.scheduleId.value }
+
+    /** Answers the open "When was this done?" with today, which is the affordance's default. */
+    private fun answerToday() {
+        graph.completionFlow.submit(CompletionAnswer(occurredOn = graph.today.toString()))
+    }
+
+    // ---------------------------------------------------------------- the item set
+
+    /**
+     * D-18a, whole (proportionality: one test, not nine). `DUE` and `OVERDUE` always; the
+     * **repairable** `NO_DATA` with its repair; `DUE_SOON` only as a passenger and **never alone**;
+     * `OK`, `INACTIVE_SEASON` and `PAUSED` never; an **archived** schedule never — carry-forward
+     * (a)'s negative row, and it never even reaches the predicate because every projection query
+     * starts from `listedForDue()`; and an **empty-required-set** group round, which reports
+     * `NO_DATA` with *no* repair, never (master plan §11.1, invariant 74).
+     *
+     * Listing everything is what turns a scan into "a completion checklist for every future
+     * maintenance item" (`issue-50.md:58`); excluding `NO_DATA` loses the one repair the owner is
+     * standing next to.
+     */
+    @Test fun theSheetAdmitsExactlyDminus18asSet() = runTest(scheduler) {
+        // A season that is shut on 15 April: November through February.
+        val asset = mower(seasonStartMmdd = "11-01", seasonEndMmdd = "02-28")
+        seed(scheduleOf("s-overdue", assetId = asset.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
+        seed(scheduleOf("s-due", assetId = asset.value, title = "Oil change", anchorOn = "2026-04-15", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR, leadDays = 0))
+        seed(scheduleOf("s-soon", assetId = asset.value, title = "Belt check", anchorOn = "2026-04-20", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR, leadDays = 14))
+        seed(scheduleOf("s-ok", assetId = asset.value, title = "Deep clean", anchorOn = "2026-12-01", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR, leadDays = 0))
+        seed(scheduleOf("s-paused", assetId = asset.value, title = "Winter store", status = ScheduleStatus.PAUSED))
+        seed(scheduleOf("s-season", assetId = asset.value, title = "Season job", anchorOn = "2026-01-01", seasonBehavior = SeasonBehavior.FOLLOW_ASSET))
+        seed(scheduleOf("s-archived", assetId = asset.value, title = "Retired job", anchorOn = "2026-01-01", leadDays = 0, status = ScheduleStatus.ARCHIVED))
+        // A meter rule with a definition and no baseline at all: the repairable NO_DATA.
+        graph.definitions.upsert(meterDefinitionOf("d-hours", assetId = asset.value))
+        seed(
+            scheduleOf(
+                "s-nodata", assetId = asset.value, title = "Engine hours",
+                timeInterval = null, timeUnit = null, anchorOn = null,
+                meterDefinitionId = "d-hours", meterInterval = 100.0,
+            ),
+        )
+        // A group this Asset once held a window in, closed long before the round opened: the round
+        // obliges nobody, so it reports NO_DATA with no repair (invariant 74).
+        graph.groups.upsert(
+            groupOf("g-empty", name = "Emptied run", members = listOf(Triple(asset.value, "2025-01-01", "2025-06-01"))),
+        )
+        seed(scheduleOf("s-empty", assetId = null, groupId = "g-empty", title = "Emptied round", anchorOn = "2026-01-01", leadDays = 0))
+
+        val projection = readModel().forAsset(asset)
+        // Every state is in the projection — it is one shared read model — and the sheet's own
+        // predicate is what narrows it (decision 27).
+        assertEquals(
+            setOf("s-overdue", "s-due", "s-soon", "s-ok", "s-paused", "s-season", "s-nodata", "s-empty"),
+            projection.map { it.scheduleId.value }.toSet(),
+        )
+        assertEquals(listOf("s-overdue", "s-due", "s-nodata", "s-soon"), offered(asset))
+
+        val vacuous = projection.single { it.scheduleId.value == "s-empty" }
+        assertEquals(DueStatus.NO_DATA, vacuous.status)
+        assertTrue(vacuous.requiredSetEmpty)
+        assertFalse("an empty required set is never actionable", vacuous.actionableOnScanSheet)
+        assertTrue(projection.single { it.scheduleId.value == "s-nodata" }.isRepairableNoData)
+
+        // `DUE_SOON` never alone: with the actionable rows taken away the sheet does not open.
+        assertEquals(
+            emptyList<DueItem>(),
+            scanSheetItems(projection.filterNot { it.actionableOnScanSheet }),
+        )
+    }
+
+    /** #50 AC 1: with nothing actionable, a scan opens the ordinary asset screen exactly as today. */
+    @Test fun nothingActionableMeansNoSheetAtAll() = runTest(scheduler) {
+        val asset = mower()
+        seed(scheduleOf("s-ok", assetId = asset.value, title = "Deep clean", anchorOn = "2026-12-01", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR, leadDays = 0))
+        assertEquals(emptyList<String>(), offered(asset))
+    }
+
+    // ---------------------------------------------------------------- completion
+
+    /**
+     * #50 AC 2 and AC 8: one due `QUICK` schedule shows the sheet, an explicit completion writes
+     * **exactly one** event, that occurrence is **no longer offered**, and **`reconcile` runs** — so
+     * the standing notification is quiesced by canonical state and not by deleting a notification.
+     * #50 AC 12 rides along: the re-read comes from the store, so a repeat scan re-offers nothing.
+     */
+    @Test fun oneQuickCompletionWritesOneEventStopsBeingOfferedAndReconciles() = runTest(scheduler) {
+        val asset = mower()
+        seed(scheduleOf("s1", assetId = asset.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
+        assertEquals(listOf("s1"), offered(asset))
+
+        val model = viewModel(asset)
+        advanceUntilIdle()
+        val item = model.state.value.items.single()
+        assertEquals("Blade sharpen", item.title)
+
+        model.toggle(item.scheduleId)
+        model.completeSelected()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+
+        assertEquals(1, graph.events.all().count { it.scheduleId?.value == "s1" })
+        assertEquals(1, reconciles)
+        assertEquals(emptyList<String>(), model.state.value.items.map { it.scheduleId.value })
+        assertEquals(emptyList<String>(), offered(asset))
+    }
+
+    /** #50 AC 3: two due `QUICK` schedules complete together without duplicating either event. */
+    @Test fun twoSelectedTogetherCompleteWithoutDuplicatingEither() = runTest(scheduler) {
+        val asset = mower()
+        seed(scheduleOf("s1", assetId = asset.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
+        seed(scheduleOf("s2", assetId = asset.value, title = "Oil change", anchorOn = "2026-01-02", leadDays = 0))
+
+        val model = viewModel(asset)
+        advanceUntilIdle()
+        model.state.value.items.forEach { model.toggle(it.scheduleId) }
+        model.completeSelected()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+
+        assertEquals(1, graph.events.all().count { it.scheduleId?.value == "s1" })
+        assertEquals(1, graph.events.all().count { it.scheduleId?.value == "s2" })
+        assertEquals(2, reconciles)
+        assertEquals(emptyList<String>(), offered(asset))
+    }
+
+    /** #50 AC 4: a `FORM` schedule routes through its form and is not complete until it is saved. */
+    @Test fun aFormScheduleIsNotCompletedUntilItsFormIsSaved() = runTest(scheduler) {
+        val asset = mower()
+        seed(
+            scheduleOf(
+                "s-form", assetId = asset.value, title = "Annual service",
+                anchorOn = "2026-01-01", leadDays = 0, completionMode = CompletionMode.FORM,
+            ),
+        )
+        val model = viewModel(asset)
+        advanceUntilIdle()
+        val forms = mutableListOf<String>()
+        backgroundScope.launch { model.needsForm.collect { forms += it.scheduleId.value } }
+        advanceUntilIdle()
+
+        model.toggle(ScheduleId("s-form"))
+        model.completeSelected()
+        advanceUntilIdle()
+
+        assertEquals(listOf("s-form"), forms)
+        assertEquals(0, graph.events.all().count { it.scheduleId?.value == "s-form" })
+        assertEquals("nothing was written, so nothing was reconciled", 0, reconciles)
+        assertEquals(listOf("s-form"), offered(asset))
+    }
+
+    /**
+     * Several selected forms run **sequentially**: the first opens, and only once it is saved does
+     * the second — and abandoning the second leaves the first's event written and the second's
+     * **absent**. Never a partial silent write.
+     */
+    @Test fun selectedFormsRunOneAtATimeAndAbandoningOneStopsTheRun() = runTest(scheduler) {
+        val asset = mower()
+        seed(scheduleOf("f1", assetId = asset.value, title = "Annual service", anchorOn = "2026-01-01", leadDays = 0, completionMode = CompletionMode.FORM))
+        seed(scheduleOf("f2", assetId = asset.value, title = "Deep clean", anchorOn = "2026-01-02", leadDays = 0, completionMode = CompletionMode.FORM))
+
+        val model = viewModel(asset)
+        advanceUntilIdle()
+        val forms = mutableListOf<String>()
+        backgroundScope.launch { model.needsForm.collect { forms += it.scheduleId.value } }
+        advanceUntilIdle()
+
+        model.state.value.items.forEach { model.toggle(it.scheduleId) }
+        model.completeSelected()
+        advanceUntilIdle()
+        assertEquals("one form at a time", listOf("f1"), forms)
+
+        // The owner saves the first form, which is what the journal entry screen does.
+        graph.completeSchedule.run(ScheduleId("f1"), CompletionCommand(occurredOn = graph.today.toString(), tzId = "UTC"))
+        model.refresh()
+        advanceUntilIdle()
+        assertEquals("and only then does the second open", listOf("f1", "f2"), forms)
+
+        // …and abandons the second. The run stops rather than carrying on behind their back.
+        model.refresh()
+        advanceUntilIdle()
+        assertEquals(listOf("f1", "f2"), forms)
+        assertEquals(1, graph.events.all().count { it.scheduleId?.value == "f1" })
+        assertEquals(0, graph.events.all().count { it.scheduleId?.value == "f2" })
+    }
+
+    /** #50 AC 5 / #11: a meter schedule cannot be completed without its required reading. */
+    @Test fun aMeterScheduleCannotCompleteWithoutItsReading() = runTest(scheduler) {
+        val asset = mower()
+        graph.definitions.upsert(meterDefinitionOf("d-hours", assetId = asset.value))
+        seed(
+            scheduleOf(
+                "s-meter", assetId = asset.value, title = "Oil change",
+                timeInterval = null, timeUnit = null, anchorOn = null,
+                meterDefinitionId = "d-hours", meterInterval = 100.0,
+            ),
+        )
+        val model = viewModel(asset)
+        advanceUntilIdle()
+        val item = model.state.value.items.single()
+        // The repairable NO_DATA: the missing baseline, offered as its repair and never selectable
+        // for a completion (carry-forward (f)).
+        assertEquals("NO BASELINE", item.statusWord)
+        assertTrue(item.repairOnly)
+        assertFalse(item.selectable)
+        assertFalse("a repair is not an obligation, so it is not snoozeable", item.canSnooze)
+        assertFalse("and there is no occurrence date to move", item.canPostpone)
+
+        model.repair(item.scheduleId)
+        advanceUntilIdle()
+        val prompt = model.completion.prompt.value
+        assertNotNull(prompt)
+        assertTrue(prompt!!.needsMeterReading)
+        // An empty reading is refused and the prompt stays open: nothing is written.
+        assertFalse(model.completion.submit(CompletionAnswer(occurredOn = graph.today.toString())))
+        assertEquals(0, graph.events.all().count { it.scheduleId?.value == "s-meter" })
+        model.completion.cancel()
+        advanceUntilIdle()
+        assertEquals(0, graph.events.all().size)
+        assertEquals(0, reconciles)
+    }
+
+    /**
+     * D-25 and the D7 Phase 3 exit criterion: completing with **yesterday's** date yields the next
+     * due date derived from the **backdated** event, not from today. Defaulting silently to today
+     * would make "When was this done?" cosmetic.
+     */
+    @Test fun aBackdatedCompletionDerivesTheNextDateFromTheBackdatedEvent() = runTest(scheduler) {
+        val asset = mower()
+        seed(
+            scheduleOf(
+                "s-back", assetId = asset.value, title = "Blade sharpen",
+                timeInterval = 1, timeUnit = RecurrenceUnit.MONTH, timeBasis = TimeBasis.COMPLETION,
+                anchorOn = "2026-01-01", leadDays = 0,
+            ),
+        )
+        val model = viewModel(asset)
+        advanceUntilIdle()
+        model.toggle(ScheduleId("s-back"))
+        model.completeSelected()
+        advanceUntilIdle()
+        val yesterday = graph.today.minusDays(1)
+        model.completion.submit(CompletionAnswer(occurredOn = yesterday.toString()))
+        advanceUntilIdle()
+
+        val event = graph.events.all().single { it.scheduleId?.value == "s-back" }
+        assertEquals(yesterday.toString(), event.occurredOn)
+        assertEquals(
+            yesterday.plusMonths(1).toString(),
+            graph.scheduleStates.get(ScheduleId("s-back"))?.computedDueOn,
+        )
+    }
+
+    // ---------------------------------------------------------------- the other actions
+
+    /**
+     * #50 AC 6: **"Snooze"** writes only the device-local instant — no date moves, no event is
+     * written, the schedule row is byte-identical and its status is unchanged (invariant 20).
+     */
+    @Test fun snoozeWritesOnlyTheDeviceLocalInstant() = runTest(scheduler) {
+        val asset = mower()
+        seed(scheduleOf("s1", assetId = asset.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
+        val before = graph.schedules.get(ScheduleId("s1"))!!
+        val state = graph.scheduleStates.get(ScheduleId("s1"))!!
+
+        val model = viewModel(asset)
+        advanceUntilIdle()
+        assertTrue(model.state.value.items.single().canSnooze)
+        model.snooze(ScheduleId("s1"))
+        advanceUntilIdle()
+
+        assertEquals(
+            graph.now + SNOOZE_MILLIS,
+            graph.scheduleLocalDelivery.get(ScheduleId("s1"))?.snoozedUntilAt,
+        )
+        assertEquals(before, graph.schedules.get(ScheduleId("s1")))
+        assertEquals(state.effectiveDueOn, graph.scheduleStates.get(ScheduleId("s1"))?.effectiveDueOn)
+        assertEquals(0, graph.events.all().size)
+        assertEquals(0, reconciles)
+        assertEquals("and the work is still offered, because it is still due", listOf("s1"), offered(asset))
+    }
+
+    /**
+     * #50 AC 6: **"Postpone"** changes only `postponed_due_on` — no event, no rule change, and
+     * `computed_due_on` (which is where the *next* occurrence comes from) is untouched
+     * (invariant 21).
+     */
+    @Test fun postponeMovesThisOccurrenceOnly() = runTest(scheduler) {
+        val asset = mower()
+        seed(scheduleOf("s1", assetId = asset.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
+        val before = graph.schedules.get(ScheduleId("s1"))!!
+        val computed = graph.scheduleStates.get(ScheduleId("s1"))?.computedDueOn
+
+        val model = viewModel(asset)
+        advanceUntilIdle()
+        assertTrue(model.state.value.items.single().canPostpone)
+        model.postpone(ScheduleId("s1"), "2026-05-20")
+        advanceUntilIdle()
+
+        val after = graph.schedules.get(ScheduleId("s1"))!!
+        assertEquals("2026-05-20", after.postponedDueOn)
+        assertEquals(before.copy(postponedDueOn = "2026-05-20", updatedAt = after.updatedAt), after)
+        assertEquals(computed, graph.scheduleStates.get(ScheduleId("s1"))?.computedDueOn)
+        assertEquals("2026-05-20", graph.scheduleStates.get(ScheduleId("s1"))?.effectiveDueOn)
+        assertEquals(0, graph.events.all().size)
+    }
+
+    /**
+     * #50 AC 6: **"Not now"** and the system back gesture write **nothing at all** — which at this
+     * layer is the statement that opening the sheet, selecting every row and leaving writes nothing.
+     * "Review maintenance" is the same fact: it navigates and the view model has no action for it.
+     */
+    @Test fun notNowBackAndReviewWriteNothingAtAll() = runTest(scheduler) {
+        val asset = mower()
+        seed(scheduleOf("s1", assetId = asset.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
+        val before = graph.schedules.get(ScheduleId("s1"))!!
+
+        val model = viewModel(asset)
+        advanceUntilIdle()
+        model.state.value.items.forEach { model.toggle(it.scheduleId) }
+        advanceUntilIdle()
+
+        assertEquals(0, graph.events.all().size)
+        assertEquals(0, graph.closures.all().size)
+        assertEquals(0, reconciles)
+        assertEquals(before, graph.schedules.get(ScheduleId("s1")))
+        assertNull(graph.scheduleLocalDelivery.get(ScheduleId("s1"))?.snoozedUntilAt)
+    }
+
+    // ---------------------------------------------------------------- display and context
+
+    /**
+     * D5 §7A `:219-221`, as **one** composed assertion per the proportionality ruling: the state
+     * word, the due date and/or the meter threshold, the current meter value, the last completion's
+     * date **and its key readings**, the why-now line, and quick versus form **before** selection.
+     *
+     * A bare title-and-status row cannot answer "is this the thing I am standing next to, and
+     * should I do it now".
+     */
+    @Test fun anItemShowsEverythingTheOwnerNeedsToDecide() = runTest(scheduler) {
+        val asset = mower()
+        graph.definitions.upsert(meterDefinitionOf("d-hours", assetId = asset.value))
+        seed(
+            scheduleOf(
+                "s1", assetId = asset.value, title = "Oil change",
+                anchorOn = "2026-01-01", leadDays = 0,
+                meterDefinitionId = "d-hours", meterInterval = 50.0, anchorMeter = 100.0,
+            ),
+        )
+        // A completion whose event carries the reading the sheet has to show back.
+        graph.completeSchedule.run(
+            ScheduleId("s1"),
+            CompletionCommand(occurredOn = "2026-03-01", tzId = "UTC", values = mapOf(graph.definitions.all().single().id to "120")),
+        )
+        graph.recomputeSchedules.forSchedule(ScheduleId("s1"))
+
+        val model = viewModel(asset)
+        advanceUntilIdle()
+        val item = model.state.value.items.singleOrNull()
+            ?: error("expected one row, got ${model.state.value.items.map { it.title }}")
+
+        assertEquals("OVERDUE", item.statusWord)
+        assertEquals(statusLabel(item.status), item.statusWord)
+        assertNotNull("a dated rule shows its date", item.effectiveDueOn)
+        assertEquals(
+            "the RATIFIED per-item form for this status, and no new sentence template",
+            "Overdue since ${item.effectiveDueOn}.",
+            item.whyNow,
+        )
+        assertEquals("the ratified meter line, threshold and current value", "Due at 170 h, now 120.", item.meter)
+        assertEquals("2026-03-01", item.lastCompletedOn)
+        assertEquals(listOf("120 h"), item.lastReadings)
+        assertEquals("quick versus form, before any selection", ONE_TAP, item.completionTakes)
+        assertNull("an asset target has no round to report progress on", item.progress)
+    }
+
+    /**
+     * #50 AC 9, #49 AC 3: a second active tag on the same Asset shows the **same** work with **its
+     * own** placement label as the context. Per-tag schedule state, or the first tag's label, would
+     * misidentify the scan point.
+     */
+    @Test fun eitherTagOnOneAssetShowsTheSameWorkUnderItsOwnLabel() = runTest(scheduler) {
+        val asset = mower()
+        seed(scheduleOf("s1", assetId = asset.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
+        val deck = boundTag("11111111-1111-4111-8111-111111111111", asset, "Deck plate")
+        val handle = boundTag("22222222-2222-4222-8222-222222222222", asset, "Handle bar")
+
+        val first = viewModel(asset, deck)
+        advanceUntilIdle()
+        val second = viewModel(asset, handle)
+        advanceUntilIdle()
+
+        assertEquals(
+            first.state.value.items.map { it.scheduleId.value },
+            second.state.value.items.map { it.scheduleId.value },
+        )
+        assertEquals("Deck plate", first.state.value.tagPlacement)
+        assertEquals("Handle bar", second.state.value.tagPlacement)
+    }
+
+    // ---------------------------------------------------------------- groups
+
+    /**
+     * Invariants 28 and 29 at this surface: a scanned **member** of a due group round is offered
+     * that round, completing it marks **this member only** — no other member gets an event — and
+     * the round is still **open** while others remain, which is also the ratified progress form.
+     */
+    @Test fun aScannedGroupMemberCompletesItselfAndNobodyElse() = runTest(scheduler) {
+        val one = graph.createAsset.run(AssetCommand(name = "Sprinkler one", category = "Irrigation")).id
+        val two = graph.createAsset.run(AssetCommand(name = "Sprinkler two", category = "Irrigation")).id
+        graph.groups.upsert(
+            groupOf(
+                "g1",
+                name = "North run",
+                members = listOf(Triple(one.value, "2026-01-01", null), Triple(two.value, "2026-01-01", null)),
+            ),
+        )
+        seed(scheduleOf("g-s", assetId = null, groupId = "g1", title = "Head flush", anchorOn = "2026-01-01", leadDays = 0))
+
+        val model = viewModel(one)
+        advanceUntilIdle()
+        val item = model.state.value.items.single()
+        assertEquals("0 of 2 complete", item.progress)
+
+        model.toggle(item.scheduleId)
+        model.completeSelected()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+
+        val written = graph.events.all().filter { it.scheduleId?.value == "g-s" }
+        assertEquals(listOf(one.value), written.map { it.assetId.value })
+        assertEquals(1, reconciles)
+
+        // The round is still open, so the other member is still offered its own work and the
+        // progress has moved by exactly one.
+        val other = viewModel(two)
+        advanceUntilIdle()
+        assertEquals("1 of 2 complete", other.state.value.items.single().progress)
+        assertEquals(listOf("g-s"), offered(two))
+    }
+
+    // ---------------------------------------------------------------- navigation-only
+
+    /**
+     * Invariant 58 and #50 AC 10: **one row per non-`OpenAsset` resolution**, each asserting the
+     * sheet is unreachable and the shipped routing is unchanged — every one of them still maps to
+     * the `Route.TagResult` it mapped to before.
+     *
+     * Invariant 5 rides on the same exhaustive `when` (master plan §13, structural): `TagTarget` has
+     * no group case and `Resolution` has no group variant, so a tag cannot resolve to a group — and
+     * `asTagResult`'s `when` has no `else ->` through which a new variant could slip into the
+     * completion path unnoticed.
+     */
+    @Test fun noResolutionButOpenAssetCanReachTheSheet() {
+        val binding = TagBinding(
+            TagId("33333333-3333-4333-8333-333333333333"),
+            PayloadFormat.V1,
+            "33333333-3333-4333-8333-333333333333",
+            TagTarget.None,
+            TagStatus.UNBOUND,
+            createdAt = 1L,
+            updatedAt = 1L,
+        )
+        val resolutions = listOf<Resolution>(
+            Resolution.Unbound(binding),
+            Resolution.Revoked(binding.copy(status = TagStatus.RETIRED)),
+            Resolution.UnknownV1(TagId("44444444-4444-4444-8444-444444444444")),
+            Resolution.NeedsNewerApp(9),
+            Resolution.NotOurs(TagPayload.Empty),
+            Resolution.PreSplitLink(binding.copy(target = TagTarget.LinkTarget(LinkId("l1")))),
+        )
+        resolutions.forEach { resolution ->
+            assertFalse("$resolution", resolution is Resolution.OpenAsset)
+            val route: Route = resolution.asTagResult()
+            assertTrue("$resolution still routes exactly as today", route is Route.TagResult)
+        }
+    }
+
+    /**
+     * The sheet holds no reader mode: `Route.readsTags()` is unchanged, `Route.MaintenanceSheet` is
+     * **not** in it, and it is not a tab either. Adding it would hold reader mode over a screen with
+     * no tag sink and re-open the #37 re-dispatch.
+     */
+    @Test fun theSheetIsNotATagReadingRoute() {
+        assertFalse(Route.MaintenanceSheet("a1", "t1").readsTags())
+        assertFalse(Route.MaintenanceSheet("a1", null).readsTags())
+        assertFalse(TopLevelRoutes.any { it is Route.MaintenanceSheet })
+        assertTrue("and the routes that do read tags still do", Route.Scan.readsTags())
+    }
+
+    // ---------------------------------------------------------------- helpers
+
+    private suspend fun boundTag(id: String, assetId: AssetId, label: String): TagId {
+        graph.tags.upsert(
+            TagBinding(
+                TagId(id),
+                PayloadFormat.V1,
+                id,
+                TagTarget.AssetTarget(assetId),
+                TagStatus.ACTIVE,
+                label = label,
+                createdAt = 1L,
+                updatedAt = 1L,
+            ),
+        )
+        return TagId(id)
+    }
+}

@@ -120,10 +120,15 @@ import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.HealthSummary
+import com.loosecannon.servicetag.ui.maintenance.LastCompletionEventId
+import com.loosecannon.servicetag.ui.maintenance.LastCompletionReadings
 import com.loosecannon.servicetag.ui.maintenance.NoHealthFindings
+import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
+import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
 import com.loosecannon.servicetag.ui.maintenance.ScheduleClosures
 import com.loosecannon.servicetag.ui.maintenance.ScheduleCompletions
 import com.loosecannon.servicetag.ui.maintenance.ScheduleSnooze
+import com.loosecannon.servicetag.ui.maintenance.scanSheetItems
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
@@ -521,6 +526,31 @@ class AppGraph(private val context: Context) {
      * same code.
      */
     val scheduleSnooze: ScheduleSnooze = ScheduleSnooze(reminderSnooze::snooze)
+
+    /**
+     * 1.2 (#50) — the scan completion sheet's three **read-only** seams and its routing question.
+     *
+     * [lastCompletionReadings] and [lastCompletionEventId] are master plan decision 41: D5 §7A
+     * makes the last completion's key readings a display fact, `DueItem` cannot carry heterogeneous
+     * profile values, and handing the sheet `EventRepository` or `ScheduleStateRepository` would
+     * hand it a write surface — so each is one read, satisfied here by a method the shipped ports
+     * already offer. [reminderReconcile] is the sweep a completion runs so the standing notification
+     * is quiesced **by canonical state** and never by deleting a notification (#50 AC 8).
+     *
+     * [scanSheetOffer] is the routing half of D-18a: it asks `scanSheetItems` of the **same**
+     * projection the sheet reads, so "does this scan open the sheet" and "what does the sheet show"
+     * are one answer and cannot drift.
+     */
+    val lastCompletionReadings: LastCompletionReadings = LastCompletionReadings { eventId ->
+        events.get(eventId)?.measurements.orEmpty()
+    }
+    val lastCompletionEventId: LastCompletionEventId = LastCompletionEventId { scheduleId ->
+        scheduleStates.get(scheduleId)?.lastCompletionEventId
+    }
+    val reminderReconcile: ReminderReconcile = ReminderReconcile { reminderRuns.reconcileAll() }
+    val scanSheetOffer: ScanSheetOffer = ScanSheetOffer { assetId ->
+        scanSheetItems(dueReadModel.forAsset(assetId)).isNotEmpty()
+    }
 
     internal companion object {
         const val DB_NAME = "servicetag.db"

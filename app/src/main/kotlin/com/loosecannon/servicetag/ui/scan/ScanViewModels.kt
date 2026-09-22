@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
 import com.loosecannon.servicetag.ui.nav.Route
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -148,8 +149,19 @@ sealed interface TagResult {
     /**
      * Known and bound: the ambient sheet says so and moves on without a tap; a deliberate
      * inspect names the asset and waits for `Open asset` instead (G1 §1.4, 2.7.1 #41).
+     *
+     * 1.2 (#50): [maintenance] is the one branch a resolved, bound tag now has. It is true when
+     * that Asset has work the scan completion sheet would offer — D-18a's admission set, asked of
+     * the **same** projection the sheet itself reads (`ScanSheetOffer`), so the routing decision
+     * and the sheet's contents cannot disagree. False keeps the shipped behaviour exactly:
+     * the ordinary asset screen, as today (#50 AC 1). **The resolve itself is unchanged**, and
+     * nothing on this path writes: the branch is a read.
      */
-    data class OpensAsset(val tag: TagBinding, val asset: Asset) : TagResult
+    data class OpensAsset(
+        val tag: TagBinding,
+        val asset: Asset,
+        val maintenance: Boolean = false,
+    ) : TagResult
 
     /** A tag bound to a pre-split note link: one sentence, and nothing to do (2.6). */
     data class PreSplitLink(val tag: TagBinding) : TagResult
@@ -183,12 +195,13 @@ class TagResultViewModel(
     private val resolveTag: ResolveTag,
     private val bindTag: BindTag,
     assets: AssetRepository,
+    private val sheetOffer: ScanSheetOffer,
     private val format: String,
     private val key: String,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, format: String, key: String) :
-        this(graph.resolveTag, graph.bindTag, graph.assets, format, key)
+        this(graph.resolveTag, graph.bindTag, graph.assets, graph.scanSheetOffer, format, key)
 
     private val _state = MutableStateFlow<TagResult>(TagResult.Loading)
     val state: StateFlow<TagResult> = _state.asStateFlow()
@@ -212,7 +225,15 @@ class TagResultViewModel(
             return
         }
         _state.value = when (val resolution = runCatching { resolveTag.run(payload) }.getOrNull()) {
-            is Resolution.OpenAsset -> TagResult.OpensAsset(resolution.tag, resolution.asset)
+            // 1.2 (#50): the one new question, asked **after** a successful resolve and only of a
+            // `Resolution.OpenAsset`. Every other branch below is untouched, which is what keeps an
+            // unbound, revoked, unknown, newer, foreign or pre-split tag out of the completion path
+            // (invariant 58, #50 AC 10). A failure to answer it is "no sheet", never a lost scan.
+            is Resolution.OpenAsset -> TagResult.OpensAsset(
+                resolution.tag,
+                resolution.asset,
+                maintenance = runCatching { sheetOffer.has(resolution.asset.id) }.getOrDefault(false),
+            )
             is Resolution.PreSplitLink -> TagResult.PreSplitLink(resolution.tag)
             is Resolution.Unbound -> TagResult.Unregistered(resolution.tag)
             is Resolution.Revoked -> TagResult.Revoked(resolution.tag)

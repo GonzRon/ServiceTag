@@ -72,6 +72,12 @@ import com.loosecannon.servicetag.ui.theme.SheetSentence
  *   the sheet names the asset and waits — which also means the inspect screen stays on top and the
  *   activity's one reader-mode session stays held, instead of being released with the tag still
  *   against the phone. Every other branch is identical either way.
+ * @param onOpenMaintenance where a bound tag goes when that Asset has work the scan completion
+ *   sheet would offer (#50, spec §2.8). It is the **same** branch on both paths — the ambient
+ *   trampoline's auto-open and the inspect screen's "Open asset" tap — because the rule is about
+ *   the *resolution* and not about which surface resolved it, and because the sheet opens
+ *   **before** the ordinary detail path rather than instead of it: the sheet's own "Open asset"
+ *   always still reaches the detail. With no actionable work nothing here changes at all.
  */
 @Composable
 fun TagResultSheet(
@@ -82,6 +88,7 @@ fun TagResultSheet(
     onDismiss: () -> Unit,
     onWriteTag: (Route.WriteTag) -> Unit,
     onOpenAsset: (String) -> Unit,
+    onOpenMaintenance: (assetId: String, tagId: String) -> Unit,
     onNewAsset: () -> Unit,
 ) {
     val model: TagResultViewModel =
@@ -119,7 +126,7 @@ fun TagResultSheet(
                     sentence = result.asset.name,
                     identifier = result.tag.identityLine(),
                     actions = {
-                        FilledAction("Open asset") { onOpenAsset(result.asset.id.value) }
+                        FilledAction("Open asset") { openResolved(result, onOpenAsset, onOpenMaintenance) }
                         TextAction("Cancel", onDismiss)
                     },
                 ) {
@@ -127,8 +134,10 @@ fun TagResultSheet(
                     result.tag.placementOrNull()?.let { PlacementLine(it) }
                 }
             } else {
-                // A bound tag needs no decision: the sheet says what it is and the screen moves on.
-                LaunchedEffect(result) { onOpenAsset(result.asset.id.value) }
+                // A bound tag needs no decision: the sheet says what it is and the screen moves on
+                // — to the ordinary asset screen as it always has, or, when that Asset has
+                // actionable maintenance, to the completion sheet that opens before it (#50).
+                LaunchedEffect(result) { openResolved(result, onOpenAsset, onOpenMaintenance) }
                 NfcSheet(
                     eyebrow = "Tag detected",
                     accent = ServiceTagTheme.semanticColors.maintenanceOkay.foreground,
@@ -219,6 +228,26 @@ fun TagResultSheet(
             onNewAsset = { picking = false; onNewAsset() },
             onPick = { target -> model.bind(target) },
         )
+    }
+}
+
+/**
+ * Where a resolved, bound tag goes: the scan completion sheet when that Asset has actionable work,
+ * and the ordinary asset screen otherwise (#50 AC 1, spec §2.8).
+ *
+ * One function, called from both branches, so the ambient tap and the deliberate inspect cannot
+ * answer the question differently. `maintenance` was decided on the resolve, by the same predicate
+ * the sheet itself applies — nothing is re-derived here and nothing is written.
+ */
+private fun openResolved(
+    result: TagResult.OpensAsset,
+    onOpenAsset: (String) -> Unit,
+    onOpenMaintenance: (String, String) -> Unit,
+) {
+    if (result.maintenance) {
+        onOpenMaintenance(result.asset.id.value, result.tag.id.value)
+    } else {
+        onOpenAsset(result.asset.id.value)
     }
 }
 

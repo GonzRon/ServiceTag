@@ -30,6 +30,7 @@ import com.loosecannon.servicetag.ui.journal.EventEntryScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupDetailScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupEditScreen
 import com.loosecannon.servicetag.ui.maintenance.LogMaintenancePicker
+import com.loosecannon.servicetag.ui.maintenance.MaintenanceSheet
 import com.loosecannon.servicetag.ui.maintenance.MaintenanceScreen
 import com.loosecannon.servicetag.ui.maintenance.ScheduleDetailScreen
 import com.loosecannon.servicetag.ui.maintenance.ScheduleEditScreen
@@ -276,6 +277,12 @@ fun ServiceTagRoot(
                         // navigates, exactly as the pushed sheet's entry did; the entry itself
                         // stays for the ambient trampoline, which is the only thing that uses it.
                         onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
+                        // #50: the completion sheet opens *before* the ordinary detail path, and
+                        // only for a `Resolution.OpenAsset` that has actionable work. It is a
+                        // plain push, so one back press returns to the inspector.
+                        onOpenMaintenance = { assetId, tagId ->
+                            backStack.add(Route.MaintenanceSheet(assetId, tagId))
+                        },
                         onNewAsset = { backStack.add(Route.AssetEdit(null)) },
                         onWriteTag = { backStack.add(it) },
                         onBack = { backStack.removeLastOrNull() },
@@ -291,6 +298,13 @@ fun ServiceTagRoot(
                         // somewhere to come back to.
                         onWriteTag = { backStack.removeLastOrNull(); backStack.add(it) },
                         onOpenAsset = { backStack.removeLastOrNull(); backStack.add(Route.AssetDetail(it)) },
+                        // The ambient landing gains the same branch and no second NFC session:
+                        // the trampoline still lands here, and this entry still leaves once it has
+                        // pushed the next thing (#50, spec §2.8).
+                        onOpenMaintenance = { assetId, tagId ->
+                            backStack.removeLastOrNull()
+                            backStack.add(Route.MaintenanceSheet(assetId, tagId))
+                        },
                         onNewAsset = { backStack.removeLastOrNull(); backStack.add(Route.AssetEdit(null)) },
                     )
                 }
@@ -398,7 +412,27 @@ fun ServiceTagRoot(
                     )
                 }
                 entry<Route.ReminderHealth> { key -> PlaceholderPop(key, backStack) }
-                entry<Route.MaintenanceSheet> { key -> PlaceholderPop(key, backStack) }
+                entry<Route.MaintenanceSheet> { key ->
+                    MaintenanceSheet(
+                        graph = graph,
+                        assetId = key.assetId,
+                        tagId = key.tagId,
+                        // "Open asset" always reaches the ordinary detail, and the sheet is done
+                        // once it has: a scan result is never somewhere to come back to.
+                        onOpenAsset = {
+                            backStack.removeLastOrNull()
+                            backStack.add(Route.AssetDetail(it))
+                        },
+                        onReviewSchedule = { backStack.add(Route.ScheduleDetail(it)) },
+                        // A `FORM` schedule's completion is collected by its own profile form; the
+                        // sheet stays under it, which is how the sequential run picks up again.
+                        onLogForm = { assetId, profileId ->
+                            backStack.add(Route.EventEntry(assetId, profileId, null))
+                        },
+                        // "Not now" writes nothing at all and simply leaves.
+                        onDismiss = { backStack.removeLastOrNull() },
+                    )
+                }
             },
         )
     }

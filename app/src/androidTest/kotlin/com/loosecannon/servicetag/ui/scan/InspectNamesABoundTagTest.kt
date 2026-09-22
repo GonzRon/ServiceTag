@@ -101,6 +101,7 @@ class InspectNamesABoundTagTest {
                         graph = graph,
                         readerMode = readerMode,
                         onOpenAsset = { id -> opened += id },
+                        onOpenMaintenance = { _, _ -> error("this asset has no schedules") },
                         onNewAsset = { error("a bound tag never makes an asset") },
                         onWriteTag = { error("a bound tag never writes a tag") },
                         onBack = {},
@@ -165,6 +166,7 @@ class InspectNamesABoundTagTest {
                     onDismiss = {},
                     onWriteTag = { error("a bound tag never writes a tag") },
                     onOpenAsset = { id -> opened += id },
+                    onOpenMaintenance = { _, _ -> error("this asset has no schedules") },
                     onNewAsset = { error("a bound tag never makes an asset") },
                 )
             }
@@ -202,6 +204,7 @@ class InspectNamesABoundTagTest {
                     onDismiss = {},
                     onWriteTag = { error("a bound tag never writes a tag") },
                     onOpenAsset = { id -> opened += id },
+                    onOpenMaintenance = { _, _ -> error("this asset has no schedules") },
                     onNewAsset = { error("a bound tag never makes an asset") },
                 )
             }
