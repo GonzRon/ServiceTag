@@ -17,7 +17,7 @@ The recurrence and state engine, provider-neutral and Android-free: the `Mainten
 - `core/.../core/schedule/ScheduleRecompute.kt` — `rebuild`, and the `terminations` fold it calls (the fold's group-aware inputs come in as parameters).
 - `core/.../core/usecase/ScheduleCommands.kt` — the schedule command shape, its validation and its problem types, in the style of `usecase/EventCommands.kt:31-58`.
 - `core/.../core/usecase/SaveSchedule.kt`, `CompleteSchedule.kt`, `PostponeSchedule.kt`, `PauseSchedule.kt`, `ArchiveSchedule.kt` — one `uow.write` each, validate first, in the shape of `usecase/LogEvent.kt:27-33`.
-- `app/src/main/kotlin/com/loosecannon/servicetag/data/room/MaintenanceRepositories.kt` — the Room adapters for this brief's two ports, over B01's DAOs.
+- `app/src/main/kotlin/com/loosecannon/servicetag/data/room/MaintenanceRepositories.kt` — the Room adapters for this brief's two ports, over B01's DAOs. **Amended (B01 review, 2026-09-22):** `ScheduleRepository` and its adapter `RoomScheduleRepository` (`MaintenanceRepositories.kt`) and the `AppGraph` field already exist from B01, minimal — extend them; only `ScheduleStateRepository`, its adapter and field are new here.
 - Tests: `core/src/test/kotlin/.../schedule/RecurrenceMathTest.kt`, `ScheduleStatusTest.kt`, `ScheduleRecomputeTest.kt`, `D5WorkedExamplesTest.kt`, `core/src/test/kotlin/.../usecase/ScheduleOperationsTest.kt`; the `:core` in-memory fakes extended in `core/src/test/kotlin/.../testing/InMemoryRepositories.kt`.
 
 **Modify**

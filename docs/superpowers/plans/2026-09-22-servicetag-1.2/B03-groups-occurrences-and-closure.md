@@ -14,7 +14,7 @@ Maintenance groups as a first-class aggregate — never a synthetic Asset, never
 - `core/src/main/kotlin/com/loosecannon/servicetag/core/schedule/GroupOccurrence.kt` — the open instant, the open date, `required(D)`, `completed(D)`, the completeness predicate and the empty-required rule, as pure functions.
 - `core/.../core/usecase/GroupCommands.kt` — the group command shape (master plan §9.2), its validation and its problem types.
 - `core/.../core/usecase/SaveGroup.kt`, `ArchiveGroup.kt`, `CompleteGroupMembers.kt`, `CloseRound.kt` — one `uow.write` each, validate first.
-- `app/src/main/kotlin/com/loosecannon/servicetag/data/room/GroupRepositories.kt` — the Room adapters for this brief's two ports over B01's `MaintenanceGroupDao` and `OccurrenceClosureDao`.
+- `app/src/main/kotlin/com/loosecannon/servicetag/data/room/GroupRepositories.kt` — the Room adapters for this brief's two ports over B01's `MaintenanceGroupDao` and `OccurrenceClosureDao`. **Amended (B01 review, 2026-09-22):** `GroupRepository`/`ClosureRepository`, their adapters `RoomGroupRepository`/`RoomClosureRepository` (`MaintenanceRepositories.kt`) and the two `AppGraph` fields already exist from B01, minimal — extend them (in place, or moved to `GroupRepositories.kt`); `ClosureRepository` keeps insert-only.
 - Tests: `core/src/test/kotlin/.../schedule/GroupOccurrenceTest.kt`, `core/src/test/kotlin/.../usecase/GroupMembershipTest.kt`, `GroupCompletionTest.kt`, `CloseRoundTest.kt`.
 
 **Modify**

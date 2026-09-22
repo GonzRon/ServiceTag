@@ -23,7 +23,7 @@ Land the data contract 1.2 needs, and nothing else: seven new Room tables plus t
 - `app/.../data/room/AppDatabase.kt` — seven entities added to the list; `version = 6`; the new DAO accessors.
 - `app/.../data/room/entities/JournalEntities.kt` — `AssetEventEntity` gains `schedule_id`, `occurrence_on`, `details_pending`; its `indices` gain `UNIQUE(schedule_id, occurrence_on, asset_id)` and `(schedule_id, occurred_on DESC)`; the `maintenance_schedule` foreign key with `onDelete = SET_NULL`.
 - `app/.../data/room/Migrations.kt` — `MIGRATION_5_6`.
-- `app/.../di/AppGraph.kt` — `SCHEMA_VERSION = 6`; `MIGRATION_5_6` added to `addMigrations(...)` at `AppGraph.kt:88`. **No repository field is added here by this brief** (see Ordering).
+- `app/.../di/AppGraph.kt` — `SCHEMA_VERSION = 6`; `MIGRATION_5_6` added to `addMigrations(...)` at `AppGraph.kt:88`. **No repository field is added here by this brief** (see Ordering). **Amended at review (2026-09-22):** see master §18.17 — the three minimal adapters and fields were written here after all (brief self-contradiction ruled R1).
 - `app/.../data/room/JournalMappers.kt` and `app/.../data/room/JournalRepositories.kt` — the three new event fields carried through.
 - `core/.../core/model/Journal.kt` — `EventSource` gains `SCHEDULE_QUICK_COMPLETE`, `TODOIST_SYNC`, `TELEMETRY`; `AssetEvent` gains `scheduleId: ScheduleId?`, `occurrenceOn: String?`, `detailsPending: Boolean`.
 - `core/.../core/backup/BackupFormat.kt` — the five new DTOs of master plan §3.1, `BackupData`'s three new lists, `AssetEventDto`'s three new fields, and the `toDto()`/`toDomain()` pairs for each.
