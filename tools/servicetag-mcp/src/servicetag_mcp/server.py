@@ -209,6 +209,29 @@ def _field(row: Any, key: str, *, of: str) -> Any:
         ) from exc
 
 
+def _list_field(row: Any, key: str, *, of: str) -> list[Any]:
+    """[key] off [row], required to already be a JSON array — the check an overlay tool needs
+    before it iterates a list it read back and folds it into a full-replacement write (the
+    Invariant: a malformed read must never become a write). Reuses [_field] for the missing-key
+    case and adds only the list check, naming `<of>.<key>` when the value is present but not one."""
+    value = _field(row, key, of=of)
+    if not isinstance(value, list):
+        raise ToolError(f"{of}.{key} was not a list")
+    return value
+
+
+def _entry(items: list[Any], index: int, *, of: str) -> dict[str, Any]:
+    """One element of a list already proven to be a list ([_list_field]), required to be a JSON
+    object — an entry that is not one (a bare string, a number, `null`) cannot carry the fields an
+    overlay reads off it. Pass the *unindexed* description as [of] (e.g. `"the quick action's
+    fields"`); the raised message, and the `of` a caller should pass to any further [_field] read
+    on the returned row, both carry the index as `<of>[<index>]`."""
+    item = items[index]
+    if not isinstance(item, dict):
+        raise ToolError(f"{of}[{index}] was not an object")
+    return item
+
+
 def _find_by_id(rows: Any, row_id: str, *, field: str, of: str) -> dict[str, Any]:
     """The row an edit tool needs to overlay onto, from a list read the API already offers."""
     if not isinstance(rows, list):
@@ -600,7 +623,7 @@ def save_definition(
     else:
         to_clear = _validate_clear_fields(clear_fields, _DEFINITION_CLEARABLE_FIELDS, supplied)
 
-        rows = _field(
+        rows = _list_field(
             _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/definitions"),
             "definitions",
             of="the definitions list",
@@ -701,22 +724,65 @@ def save_profile(
             of="the profiles list",
         )
         current = _find_by_id(rows, profile_id, field="profile_id", of="the profiles list")
-        kept_fields = [
-            {
-                "definitionId": _field(f, "definitionId", of="a field entry"),
-                "required": _field(f, "required", of="a field entry"),
-            }
-            for f in _field(current, "fields", of="the quick action")
-        ]
-        kept_consumables = [
-            {
-                "id": _field(c, "id", of="a consumable entry"),
-                "name": _field(c, "name", of="a consumable entry"),
-                "defaultQuantity": _field(c, "defaultQuantity", of="a consumable entry"),
-                "unit": _field(c, "unit", of="a consumable entry"),
-            }
-            for c in _field(current, "consumables", of="the quick action")
-        ]
+
+        def typed(value: Any, *, of: str, kind: type, label: str) -> Any:
+            if not isinstance(value, kind):
+                raise ToolError(f"{of} was not {label}")
+            return value
+
+        def kept_fields_from(row: dict[str, Any]) -> list[dict[str, Any]]:
+            items = _list_field(row, "fields", of="the quick action")
+            kept: list[dict[str, Any]] = []
+            for index in range(len(items)):
+                entry = _entry(items, index, of="the quick action's fields")
+                entry_of = f"the quick action's fields[{index}]"
+                definition_id = typed(
+                    _field(entry, "definitionId", of=entry_of),
+                    of=f"{entry_of}.definitionId", kind=str, label="a string",
+                )
+                if not definition_id:
+                    raise ToolError(f"{entry_of}.definitionId was empty")
+                required = typed(
+                    _field(entry, "required", of=entry_of),
+                    of=f"{entry_of}.required", kind=bool, label="a boolean",
+                )
+                kept.append({"definitionId": definition_id, "required": required})
+            return kept
+
+        def kept_consumables_from(row: dict[str, Any]) -> list[dict[str, Any]]:
+            items = _list_field(row, "consumables", of="the quick action")
+            kept: list[dict[str, Any]] = []
+            for index in range(len(items)):
+                entry = _entry(items, index, of="the quick action's consumables")
+                entry_of = f"the quick action's consumables[{index}]"
+                consumable_id = typed(
+                    _field(entry, "id", of=entry_of),
+                    of=f"{entry_of}.id", kind=str, label="a string",
+                )
+                name_value = typed(
+                    _field(entry, "name", of=entry_of),
+                    of=f"{entry_of}.name", kind=str, label="a string",
+                )
+                unit = typed(
+                    _field(entry, "unit", of=entry_of),
+                    of=f"{entry_of}.unit", kind=str, label="a string",
+                )
+                quantity = _field(entry, "defaultQuantity", of=entry_of)
+                quantity_of = f"{entry_of}.defaultQuantity"
+                if quantity is not None:
+                    quantity = typed(quantity, of=quantity_of, kind=(int, float), label="a number")
+                    if isinstance(quantity, bool):
+                        raise ToolError(f"{quantity_of} was not a number")
+                kept.append({
+                    "id": consumable_id,
+                    "name": name_value,
+                    "defaultQuantity": quantity,
+                    "unit": unit,
+                })
+            return kept
+
+        kept_fields = kept_fields_from(current)
+        kept_consumables = kept_consumables_from(current)
         body = {
             "id": profile_id,
             "assetId": asset_id,
