@@ -137,7 +137,8 @@ check what the phone actually holds. It is deliberately the narrowest thing that
 
 The full contract — endpoints, request and response shapes, status codes and limits — is
 [`docs/api/v1.md`](docs/api/v1.md). The workstation side is
-[`tools/servicetag-mcp/`](tools/servicetag-mcp/README.md).
+[`tools/servicetag-mcp/`](tools/servicetag-mcp/README.md). Building an importable archive from a
+private inventory file is [`tools/servicetag-bundle/`](tools/servicetag-bundle/README.md)'s job.
 
 ## Building
 
