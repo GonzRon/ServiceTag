@@ -108,7 +108,7 @@ One test per hazard class. All off-device; the merged-manifest assertions read t
 - Structural, anchored:
   - `grep -cE 'android:name="android\.permission\.(SCHEDULE|USE)_EXACT_ALARM"' app/src/main/AndroidManifest.xml` → 0, and the same over the merged manifest.
   - `grep -cE 'android:name="android\.permission\.POST_NOTIFICATIONS"' app/src/main/AndroidManifest.xml` → 1.
-  - `grep -cE '<receiver' app/src/main/AndroidManifest.xml` → 5, and `grep -cE '<receiver[^>]*android:exported="false"' …` (allowing for attribute order, asserted per element by the test) → 5.
+  - `grep -cE '<receiver' app/src/main/AndroidManifest.xml` → 4 (amended: four here; six once B06 and B07 land), and `grep -cE '<receiver[^>]*android:exported="false"' …` (allowing for attribute order, asserted per element by the test) → 5.
   - `grep -cE 'android:exported="true"' app/src/main/AndroidManifest.xml` → 2 (the two shipped activities).
   - `grep -rn 'createNotificationChannel' app/src/main` → the single site in `NotificationChannels.kt`.
   - `grep -rniE '"(supplies|sync_problems)"' app/src/main core/src/main` → no match.
