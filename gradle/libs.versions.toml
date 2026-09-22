@@ -18,6 +18,10 @@ androidxTestRunner = "1.7.0"
 androidxTestRules = "1.7.0"
 androidxTestExtJunit = "1.3.0"
 androidxEspresso = "3.7.0"
+# B06 (#21): the 12 h / 4 h-flex backstop. WorkManager survives reboot and force-stop; alarms do
+# not, so this is the dependency #21 cannot be delivered without. B06's own decision — the S4
+# probe's throwaway version was explicitly not it (spec 5.9).
+work = "2.11.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -55,6 +59,7 @@ androidx-test-rules = { group = "androidx.test", name = "rules", version.ref = "
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExtJunit" }
 # compose ui-test pulls espresso 3.5.0, which reflects into a hidden InputManager method Android 17 removed; 3.7.0 fixes it
 androidx-test-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "androidxEspresso" }
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

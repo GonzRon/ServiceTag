@@ -4,6 +4,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.reminders.ProviderId
+import com.loosecannon.servicetag.core.reminders.ReconcileReport
+import com.loosecannon.servicetag.core.reminders.ReminderProvider
+import com.loosecannon.servicetag.core.reminders.ReminderSubject
+import java.time.LocalDate
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -99,3 +105,95 @@ internal class TimezoneChangedReceiver : PlatformEventReceiver(PlatformEventKind
 
 /** The device-local date `T` moved, so due state moved with it. */
 internal class DateChangedReceiver : PlatformEventReceiver(PlatformEventKind.DATE_CHANGED)
+
+/**
+ * The two runs that are not a platform event: the digest alarm firing, and the periodic backstop.
+ *
+ * A separate seam from [ReminderTrigger] rather than two more [PlatformEventKind] members, because
+ * neither is a platform event — nothing broadcast them, the app armed one and enqueued the other —
+ * and because the difference between them is precisely the re-arm rule, which a single `kind`
+ * parameter would hide inside a `when`.
+ */
+interface ReminderRun {
+    /** The digest alarm fired: run, then arm the next one. */
+    suspend fun onDigestFired()
+
+    /** The periodic backstop woke: run, and arm only if the alarm has gone. */
+    suspend fun onBackstop()
+}
+
+/**
+ * The bridge from the manifest-declared digest receiver and the WorkManager-constructed
+ * `BackstopWorker` to the run B06 builds inside the composition root, for exactly
+ * [ReminderDispatch]'s reason: neither of those two is constructed through `AppGraph`.
+ *
+ * **Assigned synchronously in `ServiceTagApp.onCreate`**, beside [ReminderDispatch.trigger] and
+ * before `AppGraph`'s constructor returns, so it is in place before any alarm can fire or any
+ * worker can run.
+ */
+object ReminderRunDispatch {
+    @Volatile
+    var run: ReminderRun? = null
+}
+
+/**
+ * The single implementation of the re-arm and recompute policy behind all six entry points: the
+ * four platform receivers, the digest alarm's receiver and the backstop worker.
+ *
+ * One class, because every entry point does the same three things in the same order — rebuild
+ * derived state, ask for the subjects that state implies, hand the whole list to the provider — and
+ * the only thing that differs is when the alarm is re-armed. Six copies of that sequence would be
+ * six chances for one of them to reconcile before it recomputed and post yesterday's answer.
+ *
+ * The two collaborators are function seams rather than the concrete `RecomputeSchedules` and
+ * `BuildReminderSubjects`, following the shape `AppGraph` already uses for
+ * `ImportBackupReplace.rebuildAll`: the recompute takes eight ports and the subject builder five,
+ * and a test of the *order* of three calls should not have to construct either. `rebuildAll` is
+ * wired to `RecomputeSchedules.all()`, which reads each schedule's own season window itself —
+ * nothing in this brief calls `ScheduleRecompute.rebuild` directly, so there is no `season`
+ * argument here to pass.
+ *
+ * Invariant 17 holds by construction: the recompute is the only writer of derived state, and this
+ * class holds no state repository at all.
+ */
+class ReminderRuns(
+    private val rebuildAll: suspend () -> Unit,
+    private val subjectsFor: suspend (ProviderId, LocalDate) -> List<ReminderSubject>,
+    private val provider: ReminderProvider,
+    private val alarm: DigestAlarm,
+    private val today: Today,
+) : ReminderTrigger, ReminderRun {
+
+    /**
+     * Every one of the four platform events re-arms **unconditionally**. A boot cleared the alarm;
+     * a clock or zone change moved the instant it should be set for; a date change moved `T` and so
+     * moved the next instant too. `armed()` cannot tell an alarm pending for a stale instant from a
+     * current one, and `arm()` replaces rather than adds, so asking the question would only ever
+     * let a wrong answer stand.
+     */
+    override suspend fun onPlatformEvent(kind: PlatformEventKind) {
+        reconcileAll()
+        alarm.arm()
+    }
+
+    /** `setAndAllowWhileIdle` is one shot: handling the fire is what arms tomorrow's. */
+    override suspend fun onDigestFired() {
+        reconcileAll()
+        alarm.arm()
+    }
+
+    /**
+     * The backstop re-arms **only if the alarm is gone**, which is the whole of what it is for.
+     * Arming an already-pending alarm twice a day would be harmless and would also stop this being
+     * a statement about a missing alarm.
+     */
+    override suspend fun onBackstop() {
+        reconcileAll()
+        if (!alarm.armed()) alarm.arm()
+    }
+
+    private suspend fun reconcileAll(): ReconcileReport {
+        rebuildAll()
+        return provider.reconcile(subjectsFor(provider.id, today.localDate()))
+    }
+}

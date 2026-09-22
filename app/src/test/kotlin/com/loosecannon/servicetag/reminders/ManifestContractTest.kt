@@ -44,14 +44,18 @@ class ManifestContractTest {
     }
 
     /**
-     * Invariant 54: every `<receiver>` is non-exported, and this brief declares the four platform
-     * receivers only — the quick-action receiver is B07's own manifest addition (its own brief),
-     * not this one's, so four is the right count at this brief's own gate.
+     * Invariant 54: every `<receiver>` is non-exported, and the declared set is exactly B05's four
+     * platform receivers plus B06's digest receiver — **five** at this tip. The quick-action
+     * receiver is B07's own manifest addition (its own brief), which takes the final count to six.
+     *
+     * B06 added the fifth because an alarm-targeted receiver has to outlive the process that armed
+     * it and so cannot be registered at runtime (controller ruling, 2026-09-22: B06 adds exactly
+     * one manifest element, and it is that `<receiver>`).
      */
     @Test
-    fun everyReceiverIsNonExportedAndThereAreFour() {
+    fun everyReceiverIsNonExportedAndThereAreFive() {
         val receivers = manifest.elements("receiver")
-        assertEquals(4, receivers.size)
+        assertEquals(5, receivers.size)
         receivers.forEach { receiver ->
             assertEquals(
                 "every receiver must be android:exported=\"false\": ${receiver.androidAttr("name")}",
@@ -67,6 +71,7 @@ class ManifestContractTest {
                 "com.loosecannon.servicetag.reminders.TimeSetReceiver",
                 "com.loosecannon.servicetag.reminders.TimezoneChangedReceiver",
                 "com.loosecannon.servicetag.reminders.DateChangedReceiver",
+                "com.loosecannon.servicetag.reminders.DigestReceiver",
             ),
             declaredNames,
         )
@@ -157,6 +162,9 @@ class ManifestContractTest {
             "com.loosecannon.servicetag.reminders.TimeSetReceiver" to listOf("android.intent.action.TIME_SET"),
             "com.loosecannon.servicetag.reminders.TimezoneChangedReceiver" to listOf("android.intent.action.TIMEZONE_CHANGED"),
             "com.loosecannon.servicetag.reminders.DateChangedReceiver" to listOf("android.intent.action.DATE_CHANGED"),
+            // B06's digest receiver: none. It is addressed by an explicit PendingIntent, and an
+            // intent filter on it would be a public door onto the digest for no reason at all.
+            "com.loosecannon.servicetag.reminders.DigestReceiver" to emptyList(),
         )
 
         val actual = manifest.elements("receiver").associate { receiver ->
@@ -206,9 +214,19 @@ class MergedManifestContractTest {
 
     /**
      * §15.7's release-gate sentence: `NFC` + `INTERNET` + `POST_NOTIFICATIONS` + the AndroidX
-     * app-private receiver permission — amended in this fix round to include
-     * `RECEIVE_BOOT_COMPLETED` (S1). A set, not a count: naming every member is what catches an
-     * addition the count-only style would silently tolerate.
+     * app-private receiver permission — amended at B05's fix round to include
+     * `RECEIVE_BOOT_COMPLETED` (S1), and amended again by B06 for the three
+     * `androidx.work:work-runtime` injects. A set, not a count: naming every member is what catches
+     * an addition the count-only style would silently tolerate.
+     *
+     * **B06's three (`WAKE_LOCK`, `ACCESS_NETWORK_STATE`, `FOREGROUND_SERVICE`)** arrive from
+     * WorkManager's own library manifest, not from this app's source, and every one of them is a
+     * **normal, install-time** permission with no runtime prompt. They do not contradict spec
+     * §5.1: the owner's amendment reads "only" there as the only new *runtime-requested*
+     * permission, which is still exactly `POST_NOTIFICATIONS`. Neither exact-alarm permission is
+     * among them, which the row above asserts separately. The appearance of all three in the
+     * shipped manifest is recorded in B06's report as a finding for the controller, because the
+     * release-gate sentence enumerates this set.
      */
     @Test
     fun theMergedManifestPermissionSetIsExactly() {
@@ -221,6 +239,9 @@ class MergedManifestContractTest {
                 "android.permission.INTERNET",
                 "android.permission.POST_NOTIFICATIONS",
                 "android.permission.RECEIVE_BOOT_COMPLETED",
+                "android.permission.WAKE_LOCK",
+                "android.permission.ACCESS_NETWORK_STATE",
+                "android.permission.FOREGROUND_SERVICE",
                 "com.loosecannon.servicetag.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
             ),
             declared,
@@ -277,5 +298,5 @@ private fun remindersDirectory(): File {
         ?: error("cannot find $relative from ${File(".").absolutePath}")
 }
 
-private fun remindersSourceFiles(): List<File> =
+internal fun remindersSourceFiles(): List<File> =
     remindersDirectory().listFiles { f -> f.isFile && f.extension == "kt" }?.toList().orEmpty()

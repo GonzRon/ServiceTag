@@ -104,6 +104,14 @@
             </intent-filter>
         </receiver>
 
+        <!-- The digest alarm's own target. Manifest-declared because an alarm has to outlive the
+             process that armed it, which a runtime-registered receiver cannot; non-exported and
+             addressed only by this app's own explicit, FLAG_IMMUTABLE PendingIntent, so it carries
+             no intent filter at all (spec §5.2, §5.4, invariant 54). -->
+        <receiver
+            android:name="com.loosecannon.servicetag.reminders.DigestReceiver"
+            android:exported="false" />
+
         <!-- The camera writes into cacheDir/camera/ and hands the URI straight back (spec 9.3). -->
         <provider
             android:name="androidx.core.content.FileProvider"

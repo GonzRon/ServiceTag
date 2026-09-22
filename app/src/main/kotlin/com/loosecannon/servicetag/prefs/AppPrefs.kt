@@ -37,11 +37,42 @@ class AppPrefs(private val store: KeyValueStore) {
         get() = store.getString(KEY_LAST_RESTORED_SET).orNullIfBlank()
         set(value) = store.putString(KEY_LAST_RESTORED_SET, value ?: "")
 
+    /**
+     * The hour of the device-local day the digest alarm is armed for (#21, spec 5.6, D-5). **9**,
+     * i.e. 09:00 local, until the owner changes it.
+     *
+     * An hour and not an instant, because the digest is a date-shaped obligation: a zone change
+     * moves *when* the phone says 09:00 and never *what* is due. An out-of-range stored value is
+     * read as the default rather than repaired, so a hand-edited preferences file cannot make
+     * `LocalTime.of` throw inside an alarm arm.
+     */
+    var digestHour: Int
+        get() = store.getLong(KEY_DIGEST_HOUR)?.toInt()?.takeIf { it in 0..23 } ?: DEFAULT_DIGEST_HOUR
+        set(value) = store.putLong(KEY_DIGEST_HOUR, value.coerceIn(0, 23).toLong())
+
+    /**
+     * The global reminders switch the `REMINDERS_GLOBALLY_OFF` finding reads (spec 5.6, 5.8).
+     * **On** until the owner switches it off — an install that has never touched it reminds.
+     *
+     * Switching it off silences delivery and nothing else: the alarm stays armed, the backstop
+     * stays enqueued and every recompute still runs, exactly as a denied permission leaves them
+     * (D-22). [KeyValueStore] stores longs and strings, so the flag is 0 or 1 rather than a third
+     * accessor pair on a store four other values already share.
+     */
+    var remindersEnabled: Boolean
+        get() = (store.getLong(KEY_REMINDERS_ENABLED) ?: 1L) != 0L
+        set(value) = store.putLong(KEY_REMINDERS_ENABLED, if (value) 1L else 0L)
+
     private companion object {
         const val KEY_LAST_BACKUP = "last_backup_at"
         const val KEY_APPEARANCE = "appearance_mode"
         const val KEY_ATTACHMENT_TREE = "attachment_tree_uri"
         const val KEY_LAST_RESTORED_SET = "last_restored_backup_set_id"
+        const val KEY_DIGEST_HOUR = "reminder_digest_hour"
+        const val KEY_REMINDERS_ENABLED = "reminders_enabled"
+
+        /** 09:00 local (D-5, spec 5.6). */
+        const val DEFAULT_DIGEST_HOUR = 9
     }
 }
 

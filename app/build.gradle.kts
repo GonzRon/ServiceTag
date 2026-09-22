@@ -108,6 +108,9 @@ dependencies {
     // platform ships SQLite anyway. Bundling it only added four .so files the app never calls.
     // The JVM tests are the exception and take sqlite-bundled-jvm below.
     implementation(libs.kotlinx.coroutines.android)
+    // B06 (#21): the periodic backstop only. No `:core` dependency on it — the port it drives is
+    // provider-neutral and knows nothing about a worker (invariant 48).
+    implementation(libs.androidx.work.runtime.ktx)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)
