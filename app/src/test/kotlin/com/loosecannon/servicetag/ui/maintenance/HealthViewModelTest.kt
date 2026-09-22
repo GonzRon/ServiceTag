@@ -98,7 +98,12 @@ class HealthViewModelTest {
         ),
     )
 
-    private fun viewModel(health: ReminderHealth = health()) = HealthViewModel(health, prefs)
+    /**
+     * Refreshed on the way out, because the screen refreshes on every `ON_START` and the view model
+     * deliberately does not run the check from its constructor.
+     */
+    private fun viewModel(health: ReminderHealth = health()) =
+        HealthViewModel(health, prefs).also { it.refresh() }
 
     /**
      * The badge threshold, over the real summary: **≥ WARN** shows it, and an INFO-only set does
@@ -175,11 +180,13 @@ class HealthViewModelTest {
         platform.restriction = AppRestriction.BATTERY_RESTRICTED
         prefs.remindersEnabled = false
 
-        val rows = viewModel().state.first { it.loaded }.rows
+        val state = viewModel().state.first { it.loaded }
         assertEquals(
             listOf(Severity.ERROR, Severity.WARN, Severity.INFO),
-            rows.map { it.severity },
+            state.rows.map { it.severity },
         )
+        assertEquals("and the section's own worst, for the badge", Severity.ERROR, state.worstSeverity)
+        val rows = state.rows
         rows.forEach { row ->
             assertTrue("${row.code} has a sentence", row.message.endsWith("."))
             assertTrue("${row.code} has a label", !row.label.isNullOrBlank())

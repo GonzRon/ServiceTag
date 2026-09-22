@@ -299,6 +299,7 @@ class ReminderHealthCheckTest {
     fun anUnrestrictedPhoneIsSilent() = runTest {
         platform.restriction = AppRestriction.NORMAL
         assertFalse("APP_RESTRICTED" in codes())
+        assertEquals("and nothing else was invented either", emptyList<String>(), codes())
     }
 
     // ---------------------------------------------------------------- REMINDERS_GLOBALLY_OFF
@@ -313,11 +314,12 @@ class ReminderHealthCheckTest {
         assertEquals(RepairAction.OpenInApp("TURN_REMINDERS_ON"), finding.repair)
     }
 
-    /** The control: the switch on, and nothing said about it. */
+    /** The control: the switch on — its default — and nothing said about it. */
     @Test
     fun theGlobalSwitchOnIsSilent() = runTest {
-        assertTrue(prefs.remindersEnabled)
+        assertTrue("an install that has never touched it reminds", prefs.remindersEnabled)
         assertFalse("REMINDERS_GLOBALLY_OFF" in codes())
+        assertEquals("and nothing else was invented either", emptyList<String>(), codes())
     }
 
     // ---------------------------------------------------------------- SCHEDULE_NO_PROVIDER

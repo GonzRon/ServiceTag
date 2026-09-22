@@ -7,6 +7,7 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -27,7 +28,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +36,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.reminders.Severity
@@ -86,9 +88,12 @@ fun HealthScreen(
     val state by model.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    // Every finding here is a platform fact and nothing observes one, so arriving on the screen is
-    // the moment to ask again — which is the third of decision 32's three run points.
-    LaunchedEffect(Unit) { model.refresh() }
+    // Decision 32's third run point. `ON_START` rather than `LaunchedEffect(Unit)`, and that is the
+    // difference between a working repair and a stale screen: two of the seven repairs leave for
+    // the system settings activity, which does not take this destination out of composition, so a
+    // once-per-entry effect would still be showing "notifications are turned off" after the owner
+    // had just turned them on.
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { model.refresh() }
 
     Scaffold(
         topBar = {
@@ -165,10 +170,7 @@ private fun FindingRow(row: HealthRow, onRepair: () -> Unit) {
             if (label != null && row.action != null) {
                 TextButton(
                     onClick = onRepair,
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 0.dp,
-                        vertical = 4.dp,
-                    ),
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
                 ) {
                     Text(label)
                 }

@@ -123,11 +123,13 @@ class HealthViewModel(
     private val _state = MutableStateFlow(HealthState())
     val state: StateFlow<HealthState> = _state.asStateFlow()
 
-    init {
-        refresh()
-    }
-
-    /** Re-run the check. The screen calls it on entering composition and after every repair. */
+    /**
+     * Re-run the check.
+     *
+     * There is deliberately no run in `init`: the screen asks on every `ON_START`, which covers both
+     * arriving here and coming back from the system settings a repair sent the owner to, and a
+     * constructor run on top of that would read the standby bucket twice for one screen open.
+     */
     fun refresh() {
         viewModelScope.launch { emit(health.refresh()) }
     }
