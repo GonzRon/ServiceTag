@@ -186,9 +186,20 @@ class MaintenanceDaoConstraintTest {
             }
             assertEquals(2, dao.byId("g1")!!.members.size)
 
-            // and the open-window lookup sees the one row whose window is still running
-            assertEquals(listOf("g1"), dao.openForAsset("a1").map { it.group.id })
-            assertEquals(listOf("g1"), dao.everForAsset("a1").map { it.group.id })
+            // Several *closed* windows in one group are fine — the asset left and rejoined twice —
+            // and so is membership of more than one group at a time, which is what makes the key
+            // `(group, asset, added_at)` rather than anything narrower.
+            dao.insertMember(member("gm4", "g1", "a1", addedAt = 500L, removedAt = 900L))
+            dao.upsert(
+                group("g2").copy(name = "Orchard Row"),
+                listOf(member("gm5", "g2", "a1", addedAt = 4_000L)),
+            )
+            assertEquals(3, dao.byId("g1")!!.members.size)
+            assertEquals(2, dao.byId("g1")!!.members.count { it.removedAt != null })
+
+            // and the open-window lookup sees only the windows that are still running
+            assertEquals(listOf("g1", "g2"), dao.openForAsset("a1").map { it.group.id }.sorted())
+            assertEquals(listOf("g1", "g2"), dao.everForAsset("a1").map { it.group.id }.sorted())
         } finally {
             db.close()
         }

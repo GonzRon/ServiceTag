@@ -733,6 +733,48 @@ class MergePlannerMaintenanceTest {
         assertEquals(listOf(MergeReason.CONTENT_DIFFERS), divergent.reasons(MergeTable.GROUPS))
     }
 
+    /**
+     * Hazard: a group or a closure coalesced by something that is not its identity. A group's name
+     * is descriptive and never identity, so two groups that share one insert as two; and the
+     * closure pass matches on `(schedule_id, occurrence_on)` and never on the date a round was
+     * closed, so two rounds closed on the same day stay two rows.
+     *
+     * This is the negative control for the second-identity rules above: they must be exactly as
+     * wide as the unique index and no wider.
+     */
+    @Test
+    fun `a name and a closing date are never identity`() {
+        val assets = listOf(asset("a1"))
+        val local = group("g-local", name = "Aviary Feeders")
+        val plan = mergePlanOf(
+            backupOf(assets = assets, groups = listOf(group("g1", name = "Aviary Feeders"))),
+            snapshotOf(assets = assets, groups = listOf(local)),
+        )
+        assertTrue(plan.applicable, "unexpected conflicts: ${plan.conflicts}")
+        assertEquals(
+            MergeDecision(MergeTable.GROUPS, "g1", MergeVerdict.INSERT),
+            plan.decision(MergeTable.GROUPS, "g1"),
+        )
+
+        val groups = listOf(group("g1"))
+        val schedules = listOf(schedule("s1", groupId = "g1"), schedule("s2", groupId = "g1"))
+        val sameDay = mergePlanOf(
+            backupOf(
+                assets = assets, groups = groups, schedules = schedules,
+                closures = listOf(closure("oc1", "s1", occurrenceOn = "2026-05-04", closedOn = "2026-05-06")),
+            ),
+            snapshotOf(
+                assets = assets, groups = groups, schedules = schedules,
+                closures = listOf(closure("oc-local", "s2", occurrenceOn = "2026-05-11", closedOn = "2026-05-06")),
+            ),
+        )
+        assertTrue(sameDay.applicable, "unexpected conflicts: ${sameDay.conflicts}")
+        assertEquals(
+            MergeDecision(MergeTable.CLOSURES, "oc1", MergeVerdict.INSERT),
+            sameDay.decision(MergeTable.CLOSURES, "oc1"),
+        )
+    }
+
     // --- the occurrence index ---------------------------------------------------------------
 
     /**
