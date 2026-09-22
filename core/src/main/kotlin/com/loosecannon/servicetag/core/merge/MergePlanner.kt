@@ -3,6 +3,8 @@ package com.loosecannon.servicetag.core.merge
 import com.loosecannon.servicetag.core.backup.AssetEventDto
 import com.loosecannon.servicetag.core.backup.Backup
 import com.loosecannon.servicetag.core.backup.EventProfileDto
+import com.loosecannon.servicetag.core.backup.MaintenanceGroupDto
+import com.loosecannon.servicetag.core.backup.MaintenanceScheduleDto
 import com.loosecannon.servicetag.core.backup.toDomain
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
@@ -12,15 +14,21 @@ import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
+import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStore
+import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.ports.TagRepository
 import java.io.IOException
@@ -37,14 +45,19 @@ import java.security.MessageDigest
  *
  * 1. **Its own id.** Absent here → `INSERT`. Present with identical content → `IDENTICAL`. Present
  *    with any difference → `CONFLICT` / `CONTENT_DIFFERS`.
- * 2. **Its payload identity**, for tags only, and *independently of the row id* — #44's second
- *    identity rule. A local tag holding the same `(payloadFormat, payloadKey)` is the same logical
- *    tag: equivalent field for field → `IDENTICAL`, bound elsewhere → `CONFLICT`, diverged → also
+ * 2. **Its second identity**, where the table has one, and *independently of the row id* — #44's
+ *    second identity rule. A local tag holding the same `(payloadFormat, payloadKey)` is the same
+ *    logical tag, and a local closure holding the same `(scheduleId, occurrenceOn)` is the same
+ *    closed round: equivalent field for field → `IDENTICAL`, bound elsewhere or diverged →
  *    `CONFLICT`. Nothing is coalesced and nothing is remapped; that is #44's later slice.
- * 3. **Every uniqueness constraint the schema has** — the five unique indices *and* the four
- *    aggregate child-row primary keys — each checked against the destination and against the
- *    archive's own accepted rows, because a constraint does not care which side a duplicate came
- *    from.
+ * 3. **Every uniqueness constraint the schema has** — the unique indices *and* the aggregate
+ *    child-row primary keys — each checked against the destination and against the archive's own
+ *    accepted rows, because a constraint does not care which side a duplicate came from. Three of
+ *    the 1.2 keys contain their parent's own id, which makes their destination arm unreachable
+ *    through the API and their live case an archive that disagrees with itself; each says so at its
+ *    reason.
+ * 3a. **A schedule's target shape**, which no SQL `CHECK` can carry: both sides set, or neither, is
+ *    `SCHEDULE_TARGET_INVALID`. It is read off the DTO, because the domain cannot hold such a row.
  * 4. **Its references.** Every non-null one must resolve to a row that is either already here or
  *    an `INSERT` in this same plan; otherwise `OWNER_NOT_AVAILABLE`, which is a conflict and not an
  *    orphan. Plus, for an asset, the parent-tree cycle guard over local and incoming rows together.
@@ -78,6 +91,11 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
     val decisions = mutableListOf<MergeDecision>()
 
     val localAssets = snapshot.assets.associateBy { it.id.value }
+    val localGroups = snapshot.groups.associateBy { it.id.value }
+    val localSchedules = snapshot.schedules.associateBy { it.id.value }
+    val localClosures = snapshot.closures.associateBy { it.id }
+    val localClosuresByPair = snapshot.closures
+        .associateBy { it.scheduleId.value to it.occurrenceOn }
     val localTags = snapshot.tags.associateBy { it.id.value }
     val localTagsByPayload = snapshot.tags.associateBy { it.payloadFormat.name to it.payloadKey }
     val localLinks = snapshot.links.associateBy { it.id.value }
@@ -114,6 +132,29 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
         .flatMap { e -> e.measurements.map { it.id to e.id.value } }.toMap(mutableMapOf())
     val claimedUsageIds = snapshot.events
         .flatMap { e -> e.consumables.map { it.id to e.id.value } }.toMap(mutableMapOf())
+    // The 1.2 constraints. The first three keys all contain their parent's own id, so — exactly as
+    // `claimedProfileFieldPairs` already documents — the destination arm is unreachable through the
+    // API and is seeded as defence in depth; the live case is an archive disagreeing with itself.
+    val claimedMemberWindows = snapshot.groups
+        .flatMap { g -> g.members.map { Triple(g.id.value, it.assetId.value, it.addedAt) to g.id.value } }
+        .toMap(mutableMapOf())
+    val claimedOpenWindows = snapshot.groups
+        .flatMap { g -> g.members.filter { it.removedAt == null }.map { (g.id.value to it.assetId.value) to g.id.value } }
+        .toMap(mutableMapOf())
+    val claimedGroupMemberIds = snapshot.groups
+        .flatMap { g -> g.members.map { it.id to g.id.value } }.toMap(mutableMapOf())
+    val claimedProviderPairs = snapshot.schedules
+        .flatMap { s -> s.providers.map { (s.id.value to it.provider) to s.id.value } }
+        .toMap(mutableMapOf())
+    // These two are reachable from the destination: a closure's second identity is independent of
+    // its row id, and an occurrence key is shared across devices by construction.
+    val claimedClosurePairs = snapshot.closures
+        .associateTo(mutableMapOf()) { (it.scheduleId.value to it.occurrenceOn) to it.id }
+    val claimedOccurrences = snapshot.events
+        .filter { it.scheduleId != null && it.occurrenceOn != null }
+        .associateTo(mutableMapOf()) {
+            Triple(it.scheduleId!!.value, it.occurrenceOn!!, it.assetId.value) to it.id.value
+        }
 
     // --- assets -----------------------------------------------------------------------------
     // Decided parents-first, so a child always sees whether its parent was accepted.
@@ -147,6 +188,53 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
 
     /** True when a reference to an asset resolves — to a local row, or to one this plan inserts. */
     fun assetAvailable(assetId: String) = assetId in localAssets || assetId in acceptedAssets
+
+    // --- groups -----------------------------------------------------------------------------
+    // Identity is the row id and **only** the row id: a name is never identity, here or anywhere
+    // else. Members travel inside the group, so they are decided with it — which is also why two
+    // phones disagreeing about a group's membership is `CONTENT_DIFFERS` on the group row.
+    val groupWrites = mutableListOf<MaintenanceGroup>()
+    val acceptedGroups = mutableSetOf<String>()
+    for (dto in data.maintenanceGroups) {
+        val id = dto.id
+        val local = localGroups[id]
+        val missingAsset = dto.members.map { it.assetId }.firstOrNull { !assetAvailable(it) }
+        val takenWindow = firstTakenTriple(
+            dto.members.map { Triple(id, it.assetId, it.addedAt) },
+            claimedMemberWindows,
+        )
+        val takenOpen = firstTakenPair(
+            dto.members.filter { it.removedAt == null }.map { id to it.assetId },
+            claimedOpenWindows,
+        )
+        val takenChild = firstTaken(dto.members.map { it.id }, claimedGroupMemberIds)
+        decisions += when {
+            local != null && dto.ordered() == local.toDto().ordered() ->
+                MergeDecision(MergeTable.GROUPS, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.GROUPS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            missingAsset != null ->
+                MergeDecision(MergeTable.GROUPS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingAsset)
+            takenWindow != null ->
+                MergeDecision(MergeTable.GROUPS, id, MergeVerdict.CONFLICT, MergeReason.GROUP_MEMBER_WINDOW_TAKEN, takenWindow.second)
+            takenOpen != null ->
+                MergeDecision(MergeTable.GROUPS, id, MergeVerdict.CONFLICT, MergeReason.GROUP_MEMBER_ALREADY_OPEN, takenOpen.second)
+            takenChild != null ->
+                MergeDecision(MergeTable.GROUPS, id, MergeVerdict.CONFLICT, MergeReason.CHILD_ROW_ID_TAKEN, takenChild)
+            else -> {
+                groupWrites += dto.toDomain()
+                acceptedGroups += id
+                dto.members.forEach {
+                    claimedMemberWindows[Triple(id, it.assetId, it.addedAt)] = id
+                    if (it.removedAt == null) claimedOpenWindows[id to it.assetId] = id
+                    claimedGroupMemberIds[it.id] = id
+                }
+                MergeDecision(MergeTable.GROUPS, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
+    fun groupAvailable(groupId: String) = groupId in localGroups || groupId in acceptedGroups
 
     // --- definitions ------------------------------------------------------------------------
     // ENTERED before DERIVED, so a derived row's two sources are already accepted when it is
@@ -223,6 +311,101 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
                 }
                 row.consumables.forEach { claimedProfileConsumableIds[it.id] = id }
                 MergeDecision(MergeTable.PROFILES, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
+    fun profileAvailable(id: String) = id in localProfiles || id in acceptedProfiles
+
+    // --- schedules --------------------------------------------------------------------------
+    // Four references and one shape rule. The shape rule is read off the **DTO's** two target
+    // columns and not off a domain value, because `toDomain()` throws on a row naming both targets
+    // or neither — and the whole point of `SCHEDULE_TARGET_INVALID` is to *report* such a row.
+    val scheduleWrites = mutableListOf<MaintenanceSchedule>()
+    val acceptedSchedules = mutableSetOf<String>()
+    for (dto in data.maintenanceSchedules) {
+        val id = dto.id
+        val local = localSchedules[id]
+        val targetInvalid = (dto.assetId == null) == (dto.groupId == null)
+        val missingOwner = when {
+            dto.assetId != null && !assetAvailable(dto.assetId) -> dto.assetId
+            dto.groupId != null && !groupAvailable(dto.groupId) -> dto.groupId
+            dto.meterDefinitionId != null && !definitionAvailable(dto.meterDefinitionId) ->
+                dto.meterDefinitionId
+            dto.profileId != null && !profileAvailable(dto.profileId) -> dto.profileId
+            else -> null
+        }
+        // `schedule_provider`'s primary key is `(schedule_id, provider)` and the row has no id of
+        // its own, so a collision is a statement about the schedule's *content* and not about a
+        // child row's identity — which is why it is reported as CONTENT_DIFFERS and not as
+        // CHILD_ROW_ID_TAKEN. Like the membership keys, the key contains the parent's id, so the
+        // live case is one schedule listing a provider twice.
+        val takenProvider = firstTakenPair(
+            dto.providers.map { id to it.provider },
+            claimedProviderPairs,
+        )
+        decisions += when {
+            local != null && dto.ordered() == local.toDto().ordered() ->
+                MergeDecision(MergeTable.SCHEDULES, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.SCHEDULES, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            targetInvalid ->
+                MergeDecision(MergeTable.SCHEDULES, id, MergeVerdict.CONFLICT, MergeReason.SCHEDULE_TARGET_INVALID, id)
+            missingOwner != null ->
+                MergeDecision(MergeTable.SCHEDULES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingOwner)
+            takenProvider != null ->
+                MergeDecision(MergeTable.SCHEDULES, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, takenProvider.second)
+            else -> {
+                scheduleWrites += dto.toDomain()
+                acceptedSchedules += id
+                dto.providers.forEach { claimedProviderPairs[id to it.provider] = id }
+                MergeDecision(MergeTable.SCHEDULES, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
+    fun scheduleAvailable(id: String) = id in localSchedules || id in acceptedSchedules
+
+    // --- closures ---------------------------------------------------------------------------
+    // The closure's **second identity**: `(schedule_id, occurrence_on)` is unique independently of
+    // the row id, so the lookup is deliberately id-independent — the same shape the tag pass uses
+    // for a payload. A closure has no `updated_at` and no mutable field, so a re-imported unchanged
+    // closure is always IDENTICAL; and a closure is never coalesced by date.
+    val closureWrites = mutableListOf<OccurrenceClosure>()
+    for (dto in data.occurrenceClosures) {
+        val id = dto.id
+        val pair = dto.scheduleId to dto.occurrenceOn
+        val local = localClosures[id]
+        val samePair = localClosuresByPair[pair]
+        val pairHolder = claimedClosurePairs[pair]
+        decisions += when {
+            local != null && dto == local.toDto() ->
+                MergeDecision(MergeTable.CLOSURES, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.CLOSURES, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            // A local row under a different id already *is* this closure, field for field.
+            samePair != null && dto.copy(id = samePair.id) == samePair.toDto() ->
+                MergeDecision(
+                    MergeTable.CLOSURES, id, MergeVerdict.IDENTICAL,
+                    MergeReason.CLOSURE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW, samePair.id,
+                )
+            samePair != null ->
+                MergeDecision(
+                    MergeTable.CLOSURES, id, MergeVerdict.CONFLICT,
+                    MergeReason.CLOSURE_DIVERGED, samePair.id,
+                )
+            // No local row holds the pair, so any holder left is another row of this archive.
+            pairHolder != null ->
+                MergeDecision(
+                    MergeTable.CLOSURES, id, MergeVerdict.CONFLICT,
+                    MergeReason.CLOSURE_DUPLICATED_IN_ARCHIVE, pairHolder,
+                )
+            !scheduleAvailable(dto.scheduleId) ->
+                MergeDecision(MergeTable.CLOSURES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.scheduleId)
+            else -> {
+                closureWrites += dto.toDomain()
+                claimedClosurePairs[pair] = id
+                MergeDecision(MergeTable.CLOSURES, id, MergeVerdict.INSERT)
             }
         }
     }
@@ -312,6 +495,14 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
         val local = localEvents[id]
         val owner = dto.assetId
         val refHolder = dto.sourceRef?.let { claimedSourceRefs[dto.source to it] }
+        // `UNIQUE(schedule_id, occurrence_on, asset_id)`. NULLs are distinct in SQLite, so the key
+        // only exists — and the index is only live — for a completion.
+        val occurrenceKey = if (dto.scheduleId != null && dto.occurrenceOn != null) {
+            Triple(dto.scheduleId, dto.occurrenceOn, dto.assetId)
+        } else {
+            null
+        }
+        val occurrenceHolder = occurrenceKey?.let { claimedOccurrences[it] }
         val missingDefinition = dto.measurements.map { it.definitionId }.firstOrNull { !definitionAvailable(it) }
         val takenChild = firstTaken(row.measurements.map { it.id }, claimedMeasurementIds)
             ?: firstTaken(row.consumables.map { it.id }, claimedUsageIds)
@@ -324,8 +515,12 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
                 MergeDecision(MergeTable.EVENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, owner)
             dto.profileId != null && dto.profileId !in localProfiles && dto.profileId !in acceptedProfiles ->
                 MergeDecision(MergeTable.EVENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.profileId)
+            dto.scheduleId != null && !scheduleAvailable(dto.scheduleId) ->
+                MergeDecision(MergeTable.EVENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.scheduleId)
             refHolder != null ->
                 MergeDecision(MergeTable.EVENTS, id, MergeVerdict.CONFLICT, MergeReason.EVENT_SOURCE_REF_TAKEN, refHolder)
+            occurrenceHolder != null ->
+                MergeDecision(MergeTable.EVENTS, id, MergeVerdict.CONFLICT, MergeReason.SCHEDULE_OCCURRENCE_TAKEN, occurrenceHolder)
             missingDefinition != null ->
                 MergeDecision(MergeTable.EVENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingDefinition)
             takenChild != null ->
@@ -334,6 +529,7 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
                 eventWrites += row
                 acceptedEvents += id
                 dto.sourceRef?.let { claimedSourceRefs[dto.source to it] = id }
+                occurrenceKey?.let { claimedOccurrences[it] = id }
                 row.measurements.forEach { claimedMeasurementIds[it.id] = id }
                 row.consumables.forEach { claimedUsageIds[it.id] = id }
                 MergeDecision(MergeTable.EVENTS, id, MergeVerdict.INSERT)
@@ -423,8 +619,11 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
         } else {
             MergeWrites(
                 assets = assetWrites,
+                groups = groupWrites,
                 definitions = definitionWrites,
                 profiles = profileWrites,
+                schedules = scheduleWrites,
+                closures = closureWrites,
                 links = linkWrites,
                 tags = tagWrites,
                 events = eventWrites,
@@ -441,13 +640,30 @@ private fun firstTaken(ids: List<String>, claimed: Map<String, String>): String?
     return ids.firstOrNull { it in claimed || !seen.add(it) }
 }
 
-/** The pair form of [firstTaken], for `profile_field(profile_id, definition_id)`. */
+/**
+ * The pair form of [firstTaken], for `profile_field(profile_id, definition_id)`,
+ * `schedule_provider(schedule_id, provider)` and the at-most-one-open membership rule.
+ */
 private fun firstTakenPair(
     pairs: List<Pair<String, String>>,
     claimed: Map<Pair<String, String>, String>,
 ): Pair<String, String>? {
     val seen = mutableSetOf<Pair<String, String>>()
     return pairs.firstOrNull { it in claimed || !seen.add(it) }
+}
+
+/**
+ * The triple form, for `maintenance_group_member(group_id, asset_id, added_at)`. It returns the
+ * colliding **key**, as [firstTakenPair] does, because the holder is the incoming group itself in
+ * the only live case and its own id would say nothing — the reasoning
+ * [MergeReason.PROFILE_FIELD_DEFINITION_TAKEN] already records for its detail.
+ */
+private fun firstTakenTriple(
+    triples: List<Triple<String, String, Long>>,
+    claimed: Map<Triple<String, String, Long>, String>,
+): Triple<String, String, Long>? {
+    val seen = mutableSetOf<Triple<String, String, Long>>()
+    return triples.firstOrNull { it in claimed || !seen.add(it) }
 }
 
 /**
@@ -465,6 +681,14 @@ private fun AssetEventDto.ordered() = copy(
     measurements = measurements.sortedWith(compareBy({ it.sortOrder }, { it.id })),
     consumables = consumables.sortedWith(compareBy({ it.sortOrder }, { it.id })),
 )
+
+/** A group's members, in the same `(sortOrder, id)` the encoder writes them in. */
+private fun MaintenanceGroupDto.ordered() = copy(
+    members = members.sortedWith(compareBy({ it.sortOrder }, { it.id })),
+)
+
+/** A schedule's providers, by the only key they have — which the encoder also sorts on. */
+private fun MaintenanceScheduleDto.ordered() = copy(providers = providers.sortedBy { it.provider })
 
 /**
  * What the store actually holds for each locator the archive names — **asked outside any
@@ -526,23 +750,34 @@ internal suspend fun storedBytesOf(
     return answers
 }
 
-/** Seven reads. **The caller owns the transaction** — see each use case for which one. */
+/**
+ * Ten reads. **The caller owns the transaction** — see each use case for which one.
+ *
+ * `schedule_state` and `schedule_local_delivery` are deliberately not among them: derived state
+ * never appears in a plan, and device-local delivery state is never merged.
+ */
 internal suspend fun mergeSnapshotOf(
     assets: AssetRepository,
+    groups: GroupRepository,
     tags: TagRepository,
     links: LinkRepository,
     definitions: DefinitionRepository,
     profiles: ProfileRepository,
+    schedules: ScheduleRepository,
+    closures: ClosureRepository,
     events: EventRepository,
     attachments: AttachmentRepository,
     storedBytes: Map<String, StoredBytes>,
     attachmentStoreConfigured: Boolean,
 ): MergeSnapshot = MergeSnapshot(
     assets = assets.all(),
+    groups = groups.all(),
     tags = tags.all(),
     links = links.all(),
     definitions = definitions.all(),
     profiles = profiles.all(),
+    schedules = schedules.all(),
+    closures = closures.all(),
     events = events.all(),
     attachments = attachments.all(),
     storedBytes = storedBytes,

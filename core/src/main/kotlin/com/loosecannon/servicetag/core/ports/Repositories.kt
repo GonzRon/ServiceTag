@@ -10,10 +10,15 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
+import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.LinkId
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
+import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import kotlinx.coroutines.flow.Flow
@@ -93,6 +98,51 @@ interface EventRepository {     // aggregate: upsert replaces measurements and c
     suspend fun deleteAll()
     fun observeForAsset(assetId: AssetId): Flow<List<AssetEvent>>   // newest first by §4.1
     fun observe(id: EventId): Flow<AssetEvent?>
+}
+
+/**
+ * 1.2, the data half. Aggregate: one `upsert` writes the group row and replaces its member rows,
+ * as [ProfileRepository] does for a profile's fields. The queries the group screens and the
+ * occurrence rules need are declared by the brief that owns them; what is here is what an export,
+ * an import and a merge plan cannot be written without.
+ *
+ * There is no `delete`: archiving is a column, and no 1.2 route, tool or action deletes a group.
+ * `deleteAll` exists for the replace import's wipe, which is the only caller.
+ */
+interface GroupRepository {
+    suspend fun upsert(group: MaintenanceGroup)
+    suspend fun get(id: GroupId): MaintenanceGroup?
+    suspend fun all(): List<MaintenanceGroup>
+    suspend fun deleteAll()
+}
+
+/**
+ * 1.2, the data half. Aggregate: one `upsert` writes the schedule row and replaces its
+ * `schedule_provider` rows.
+ *
+ * No `delete`, for [GroupRepository]'s reason. `deleteAll` is the replace import's wipe, and it is
+ * also what clears `occurrence_closure`: closures have no delete of their own and leave only by the
+ * CASCADE from their schedule.
+ */
+interface ScheduleRepository {
+    suspend fun upsert(schedule: MaintenanceSchedule)
+    suspend fun get(id: ScheduleId): MaintenanceSchedule?
+    suspend fun all(): List<MaintenanceSchedule>
+    suspend fun deleteAll()
+}
+
+/**
+ * 1.2. **Insert and query only.** Every other port here offers `upsert`; copying that shape would
+ * hand a caller the amendment the closure fact forbids, so this one does not have it — and it has
+ * no `delete` and no `deleteAll` either. A closure row is immutable: it is written once and leaves
+ * only when its schedule is deleted and the CASCADE takes it.
+ */
+interface ClosureRepository {
+    suspend fun insert(closure: OccurrenceClosure)
+    suspend fun forSchedule(scheduleId: ScheduleId): List<OccurrenceClosure>
+    /** The row holding `(scheduleId, occurrenceOn)`, which is unique — the second identity. */
+    suspend fun find(scheduleId: ScheduleId, occurrenceOn: String): OccurrenceClosure?
+    suspend fun all(): List<OccurrenceClosure>
 }
 
 interface AttachmentRepository {

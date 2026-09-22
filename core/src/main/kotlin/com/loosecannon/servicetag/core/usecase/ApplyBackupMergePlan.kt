@@ -8,10 +8,13 @@ import com.loosecannon.servicetag.core.merge.storedBytesOf
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -47,17 +50,37 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * Every refusal happens before the first row is written, and any that did not would roll back with
  * the transaction. So a refused merge leaves this install byte for byte as it was, which is #44's
  * acceptance criteria 13 and 14.
+ *
+ * **The post-apply rebuild is total, deliberately.** An imported event touches its own schedule,
+ * every schedule of its asset through the current meter reading, and every group schedule whose
+ * required set contains that asset; an imported membership row changes required sets; an imported
+ * closure terminates a round; an imported meter reading moves a threshold. Rather than enumerate
+ * that closure, [rebuildAll] recomputes every schedule in the database, inside this transaction,
+ * after the last write loop. At this scale it is cheap and provably complete, and a refused or
+ * failed apply rolls the recompute back with everything else. It is a **seam** rather than a direct
+ * call to the recompute function because the derived state that it writes never appears in a plan
+ * and the engine that computes it is not this layer's concern: what belongs here is that it is
+ * invoked once, inside, and last.
  */
 class ApplyBackupMergePlan(
     private val assets: AssetRepository,
+    private val groups: GroupRepository,
     private val tags: TagRepository,
     private val links: LinkRepository,
     private val definitions: DefinitionRepository,
     private val profiles: ProfileRepository,
+    private val schedules: ScheduleRepository,
+    private val closures: ClosureRepository,
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
+    /**
+     * Recomputes the derived state of **every** schedule. It runs inside this apply's transaction,
+     * after the last write loop, exactly once — see the class KDoc for why it is total and why it
+     * is a seam rather than a direct call.
+     */
+    private val rebuildAll: suspend () -> Unit,
 ) {
     suspend fun run(plan: MergePlan): MergeReport {
         // The cheap refusal first, so a plan the caller already knows is conflicted never opens a
@@ -71,7 +94,8 @@ class ApplyBackupMergePlan(
             val fresh = mergePlanOf(
                 plan.backup,
                 mergeSnapshotOf(
-                    assets, tags, links, definitions, profiles, events, attachments, stored, configured,
+                    assets, groups, tags, links, definitions, profiles, schedules, closures,
+                    events, attachments, stored, configured,
                 ),
             )
             // Order matters — see the class KDoc.
@@ -80,12 +104,18 @@ class ApplyBackupMergePlan(
 
             // Field order is write order, and every list is ordered within itself.
             fresh.writes.assets.forEach { assets.upsert(it) }
+            fresh.writes.groups.forEach { groups.upsert(it) }
             fresh.writes.definitions.forEach { definitions.upsert(it) }
             fresh.writes.profiles.forEach { profiles.upsert(it) }
+            fresh.writes.schedules.forEach { schedules.upsert(it) }
+            fresh.writes.closures.forEach { closures.insert(it) }
             fresh.writes.links.forEach { links.upsert(it) }
             fresh.writes.tags.forEach { tags.upsert(it) }
             fresh.writes.events.forEach { events.upsert(it) }
             fresh.writes.attachments.forEach { attachments.upsert(it) }
+
+            // After every write, inside the same transaction, once.
+            rebuildAll()
 
             fresh.report()
         }

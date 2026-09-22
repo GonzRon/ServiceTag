@@ -40,10 +40,13 @@ import com.loosecannon.servicetag.core.testing.FakeAttachmentStorage
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
+import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
+import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
+import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
 import java.io.ByteArrayInputStream
@@ -70,8 +73,14 @@ class BackupUseCasesTest {
         val links = InMemoryLinkRepository()
         val profiles = InMemoryProfileRepository()
         val events = InMemoryEventRepository()
+        val groups = InMemoryGroupRepository()
+        val closures = InMemoryClosureRepository()
+        val schedules = InMemoryScheduleRepository(closures)
         val storage = FakeAttachmentStorage()
-        val uow = FakeUnitOfWork(assets, tags, links, definitions, profiles, events, attachments)
+        val uow = FakeUnitOfWork(
+            assets, groups, tags, links, definitions, profiles, schedules, closures,
+            events, attachments,
+        )
     }
 
     private fun asset(
@@ -214,14 +223,16 @@ class BackupUseCasesTest {
 
     private fun exportOf(f: Fakes, now: Long = 1_726_000_000_000L): ByteArray = runBlocking {
         ExportBackupSet(
-            f.assets, f.tags, f.links, f.definitions, f.profiles, f.events, f.attachments,
+            f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
+            f.closures, f.events, f.attachments,
             f.uow, IdGenerator { "set-1" }, Clock { now }, appVersion = "2.0", schemaVersion = 1,
         ).run().data
     }
 
     private fun importInto(f: Fakes, bytes: ByteArray): ImportReport = runBlocking {
         ImportBackupReplace(
-            f.assets, f.tags, f.links, f.definitions, f.profiles, f.events, f.attachments,
+            f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
+            f.closures, f.events, f.attachments,
             f.storage, f.uow,
         ).run(bytes)
     }
@@ -242,7 +253,7 @@ class BackupUseCasesTest {
         }
         assertEquals(
             ImportReport(
-                formatVersion = 5, assets = 3, tags = 4, links = 3, definitions = 0, profiles = 0,
+                formatVersion = BackupCodec.FORMAT_VERSION, assets = 3, tags = 4, links = 3, definitions = 0, profiles = 0,
                 events = 0, attachments = 0, lastRestoredBackupSetId = "set-1",
             ),
             report,
@@ -372,8 +383,8 @@ class BackupUseCasesTest {
         runBlocking { target.assets.upsert(asset("untouched", "Untouched")) }
 
         val e = assertFailsWith<BackupNewerFormat> { importInto(target, bytes) }
-        assertEquals(6, e.found)
-        assertEquals(5, e.supported)
+        assertEquals(BackupCodec.FORMAT_VERSION + 1, e.found)
+        assertEquals(BackupCodec.FORMAT_VERSION, e.supported)
 
         runBlocking {
             assertEquals(listOf("untouched"), target.assets.all().map { it.id.value })
@@ -398,6 +409,9 @@ class BackupUseCasesTest {
                 "profileFields" to 0, "profileConsumables" to 0,
                 "measurements" to 0, "consumableUsages" to 0,
                 "attachments" to 0,
+                "maintenanceGroups" to 0, "groupMembers" to 0,
+                "maintenanceSchedules" to 0, "scheduleProviders" to 0,
+                "occurrenceClosures" to 0,
             ),
             decoded.manifest.counts,
         )
@@ -407,7 +421,7 @@ class BackupUseCasesTest {
         val report = importInto(target, exportOf(f))
         assertEquals(
             ImportReport(
-                formatVersion = 5, assets = 0, tags = 0, links = 0, definitions = 0, profiles = 0,
+                formatVersion = BackupCodec.FORMAT_VERSION, assets = 0, tags = 0, links = 0, definitions = 0, profiles = 0,
                 events = 0, attachments = 0, lastRestoredBackupSetId = "set-1",
             ),
             report,
@@ -457,7 +471,7 @@ class BackupUseCasesTest {
 
         assertEquals(
             ImportReport(
-                formatVersion = 5, assets = 1, tags = 0, links = 0, definitions = 1, profiles = 1,
+                formatVersion = BackupCodec.FORMAT_VERSION, assets = 1, tags = 0, links = 0, definitions = 1, profiles = 1,
                 events = 1, attachments = 0, lastRestoredBackupSetId = "set-1",
             ),
             report,
@@ -510,7 +524,7 @@ class BackupUseCasesTest {
         val v2Bytes = exportOf(source)
 
         val v2Report = importInto(Fakes(), v2Bytes)
-        assertEquals(5, v2Report.formatVersion)
+        assertEquals(BackupCodec.FORMAT_VERSION, v2Report.formatVersion)
         assertEquals("set-1", v2Report.lastRestoredBackupSetId)
 
         // reseal the same, already-valid data under a manifest claiming format 1 — the same
@@ -550,7 +564,7 @@ class BackupUseCasesTest {
             )
         }
         assertEquals(2, report.attachments)
-        assertEquals(5, report.formatVersion)
+        assertEquals(BackupCodec.FORMAT_VERSION, report.formatVersion)
         assertEquals("set-1", report.lastRestoredBackupSetId)
     }
 
@@ -725,7 +739,10 @@ class BackupUseCasesTest {
             }
         }
         val manifest = String(entries.getValue(BackupCodec.MANIFEST_ENTRY), Charsets.UTF_8)
-            .replace(Regex("\"formatVersion\"\\s*:\\s*5"), "\"formatVersion\": 6")
+            .replace(
+                Regex("\"formatVersion\"\\s*:\\s*${BackupCodec.FORMAT_VERSION}"),
+                "\"formatVersion\": ${BackupCodec.FORMAT_VERSION + 1}",
+            )
         entries[BackupCodec.MANIFEST_ENTRY] = manifest.toByteArray(Charsets.UTF_8)
         val baos = ByteArrayOutputStream()
         ZipOutputStream(baos).use { zos ->

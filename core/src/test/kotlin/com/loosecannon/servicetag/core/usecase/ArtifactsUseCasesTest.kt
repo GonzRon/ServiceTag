@@ -25,10 +25,13 @@ import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentStore
+import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
+import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
+import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import kotlinx.coroutines.test.runTest
 import java.io.ByteArrayInputStream
@@ -52,12 +55,18 @@ class ArtifactsUseCasesTest {
     private val profiles = InMemoryProfileRepository()
     private val events = InMemoryEventRepository()
     private val attachments = InMemoryAttachmentRepository()
-    private val uow = FakeUnitOfWork(assets, tags, links, definitions, profiles, events, attachments)
+    private val groups = InMemoryGroupRepository()
+    private val closures = InMemoryClosureRepository()
+    private val schedules = InMemoryScheduleRepository(closures)
+    private val uow = FakeUnitOfWork(
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
+    )
     private val storage = FakeAttachmentStorage()
     private val store: InMemoryAttachmentStore get() = storage.store
 
     private val export = ExportBackupSet(
-        assets, tags, links, definitions, profiles, events, attachments, uow,
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events,
+        attachments, uow,
         IdGenerator { "set-1" }, Clock { 1_726_000_000_000L }, appVersion = "2.4", schemaVersion = 5,
     )
     private val restore = RestoreArtifacts(attachments, storage)
@@ -94,7 +103,7 @@ class ArtifactsUseCasesTest {
 
         assertEquals(listOf("att-1", "att-2"), set.plan.entries.map { it.attachmentId.value })
         assertEquals("set-1", set.plan.backupSetId)
-        assertEquals(5, set.plan.dataFormatVersion)
+        assertEquals(BackupCodec.FORMAT_VERSION, set.plan.dataFormatVersion)
         assertEquals(1_726_000_000_000L, set.plan.createdAt)
         assertEquals(
             listOf("artifacts/att-1.pdf", "artifacts/att-2.pdf"),

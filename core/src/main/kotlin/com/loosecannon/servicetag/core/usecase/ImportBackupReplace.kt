@@ -7,10 +7,13 @@ import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -37,10 +40,13 @@ data class ImportReport(
  */
 class ImportBackupReplace(
     private val assets: AssetRepository,
+    private val groups: GroupRepository,
     private val tags: TagRepository,
     private val links: LinkRepository,
     private val definitions: DefinitionRepository,
     private val profiles: ProfileRepository,
+    private val schedules: ScheduleRepository,
+    private val closures: ClosureRepository,
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
     private val storage: AttachmentStorage,
@@ -54,9 +60,15 @@ class ImportBackupReplace(
             // The bytes of everything about to be replaced, read before the wipe.
             val doomed = attachments.all().map { it.storageLocator }
 
-            // delete in the order that clears references before the rows they point at
+            // delete in the order that clears references before the rows they point at.
+            // `occurrence_closure` has no delete of its own — the row is immutable — so it is
+            // cleared the only way it ever leaves: the CASCADE from `maintenance_schedule`, which
+            // `schedules.deleteAll()` below takes with it, together with `schedule_provider`,
+            // `schedule_state` and `schedule_local_delivery`. Groups follow, taking their members.
             attachments.deleteAll()
             events.deleteAll()
+            schedules.deleteAll()
+            groups.deleteAll()
             profiles.deleteAll()
             definitions.deleteAll()
             tags.deleteAll()
@@ -70,10 +82,16 @@ class ImportBackupReplace(
             // rows after, so a DERIVED definition's source_a_id/source_b_id foreign keys
             // (schema v3) resolve at insert time regardless of the file's own id ordering.
             AssetTree.parentsFirst(data.assets.map { it.toDomain() }).forEach { assets.upsert(it) }
+            // Groups before schedules, and both before events: a group's members name assets, a
+            // schedule names an asset or a group plus a meter definition and a profile, a closure
+            // names a schedule, and an event may name one too. This is `MergeTable`'s order.
+            data.maintenanceGroups.forEach { groups.upsert(it.toDomain()) }
             val (entered, derived) = data.measurementDefinitions.partition { it.kind == DefinitionKind.ENTERED.name }
             entered.forEach { definitions.upsert(it.toDomain()) }
             derived.forEach { definitions.upsert(it.toDomain()) }
             data.eventProfiles.forEach { profiles.upsert(it.toDomain()) }
+            data.maintenanceSchedules.forEach { schedules.upsert(it.toDomain()) }
+            data.occurrenceClosures.forEach { closures.insert(it.toDomain()) }
             data.externalLinks.forEach { links.upsert(it.toDomain()) }
             data.nfcTags.forEach { tags.upsert(it.toDomain()) }
             data.assetEvents.forEach { events.upsert(it.toDomain()) }

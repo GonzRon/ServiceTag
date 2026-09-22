@@ -35,7 +35,14 @@ data class EventProfile(
     val fields: List<ProfileField>, val consumables: List<ProfileConsumable>,
 )
 
-enum class EventSource { MANUAL, IMPORT }
+/**
+ * All five members are declared at once although 1.2 only ever writes the first three:
+ * `enumOrCorrupt` throws `BackupCorrupt` on an unknown name, so a later archive carrying
+ * `TODOIST_SYNC` would be unreadable by a 1.2 build unless the format were bumped again. Declaring
+ * them now is free, and it is safe because an older build refuses a format-6 archive before it
+ * reads a single row.
+ */
+enum class EventSource { MANUAL, IMPORT, SCHEDULE_QUICK_COMPLETE, TODOIST_SYNC, TELEMETRY }
 
 data class Measurement(
     val id: String, val definitionId: DefinitionId,
@@ -56,6 +63,15 @@ data class AssetEvent(              // aggregate root; saved and loaded with its
     val source: EventSource, val sourceRef: String?,
     val createdAt: Long, val updatedAt: Long,
     val measurements: List<Measurement>, val consumables: List<ConsumableUsage>,
+    // 1.2: the occurrence link. `occurrenceOn` is stamped from the schedule's computedDueOn at
+    // write time — never the postponed date — and is immutable once written. Together with
+    // `scheduleId` and `assetId` it is a unique index, so a repeat completion is refused by the
+    // database rather than by a check in code. Both are null on every event that is not a
+    // completion, and SQLite treats NULLs as distinct, which is what makes the index inert there.
+    val scheduleId: ScheduleId? = null,
+    val occurrenceOn: String? = null,
+    /** True only for a minimal completion against a FORM schedule: the details are still owed. */
+    val detailsPending: Boolean = false,
 )
 
 /**

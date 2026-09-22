@@ -237,8 +237,15 @@ class MergePlannerTest {
         storedBytes: Map<String, StoredBytes> = emptyMap(),
         attachmentStoreConfigured: Boolean = true,
     ) = MergeSnapshot(
-        assets, tags, links, definitions, profiles, events, attachments,
-        storedBytes, attachmentStoreConfigured,
+        assets = assets,
+        tags = tags,
+        links = links,
+        definitions = definitions,
+        profiles = profiles,
+        events = events,
+        attachments = attachments,
+        storedBytes = storedBytes,
+        attachmentStoreConfigured = attachmentStoreConfigured,
     )
 
     /** The one decision the plan reached about [id] in [table]. */

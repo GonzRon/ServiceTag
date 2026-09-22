@@ -82,11 +82,16 @@ class StageABundleConformanceTest {
         val entries = readZipEntries(resourceBytes())
         val data = Json.parseToJsonElement(String(entries.getValue("data.json"))).jsonObject
 
-        // The root object itself: BackupData defaults four of its seven tables to emptyList(), so
+        // The root object itself: BackupData defaults seven of its ten tables to emptyList(), so
         // a *new* table added there tomorrow would never be emitted by the generator and would
-        // decode away silently unless the root's own key set is pinned here too.
+        // decode away silently unless the root's own key set is pinned here too. The fixture is a
+        // **format-5** archive and the generator writes format 5, so the three format-6 tables are
+        // subtracted by name — which keeps the guard live: a fourth table added to BackupData
+        // without a thought for the generator still fails here.
         assertEquals(
-            BackupData.serializer().descriptor.elementNames.toSet(), data.keys, "data.json root",
+            BackupData.serializer().descriptor.elementNames.toSet() - FORMAT_6_TABLES,
+            data.keys,
+            "data.json root",
         )
 
         assertKeysMatch(
@@ -127,7 +132,11 @@ class StageABundleConformanceTest {
         }
 
         val events = data.getValue("assetEvents").jsonArray
-        assertKeysMatch("assetEvents", events, AssetEventDto.serializer().descriptor.elementNames)
+        assertKeysMatch(
+            "assetEvents",
+            events,
+            AssetEventDto.serializer().descriptor.elementNames.toSet() - FORMAT_6_EVENT_FIELDS,
+        )
         events.forEach { event ->
             assertKeysMatch(
                 "assetEvents[].measurements",
@@ -161,5 +170,13 @@ class StageABundleConformanceTest {
 
     companion object {
         private const val RESOURCE_NAME = "stage-a-synthetic-estate.zip"
+
+        /**
+         * What format 6 added and the format-5 fixture therefore cannot carry. Named rather than
+         * derived, so the key-set guards stay exact: anything added after these still fails.
+         */
+        private val FORMAT_6_TABLES =
+            setOf("maintenanceGroups", "maintenanceSchedules", "occurrenceClosures")
+        private val FORMAT_6_EVENT_FIELDS = setOf("scheduleId", "occurrenceOn", "detailsPending")
     }
 }

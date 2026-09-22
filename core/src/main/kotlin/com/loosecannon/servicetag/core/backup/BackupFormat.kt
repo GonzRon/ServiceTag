@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.ConsumableUsage
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
@@ -19,15 +20,27 @@ import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.ExternalLink
+import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.LinkKind
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
+import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileField
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.SeasonBehavior
 import com.loosecannon.servicetag.core.model.StorageProvider
+import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
@@ -205,6 +218,91 @@ data class AssetEventDto(
     val updatedAt: Long,
     val measurements: List<MeasurementDto>,
     val consumables: List<ConsumableUsageDto>,
+    /** Format 6. The schedule this event completed an occurrence of, if any. */
+    val scheduleId: String? = null,
+    /** Format 6. The occurrence key, immutable once written. Null on every non-completion. */
+    val occurrenceOn: String? = null,
+    /** Format 6. A minimal completion against a FORM schedule still owes its details. */
+    val detailsPending: Boolean = false,
+)
+
+/**
+ * A membership window. Carries no `groupId`: a child row's owner is its position in the tree,
+ * exactly as [ProfileFieldDto] carries no `profileId`.
+ */
+@Serializable
+data class GroupMemberDto(
+    val id: String,
+    val assetId: String,
+    val sortOrder: Int,
+    val addedAt: Long,
+    val removedAt: Long?,
+)
+
+/** Format 6. Members travel inside, as a profile's fields do. */
+@Serializable
+data class MaintenanceGroupDto(
+    val id: String,
+    val name: String,
+    val description: String,
+    val archivedAt: Long?,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val members: List<GroupMemberDto>,
+)
+
+/** One enabled-provider row. Carries no `scheduleId`, for [GroupMemberDto]'s reason. */
+@Serializable
+data class ScheduleProviderDto(
+    val provider: String,
+    val enabled: Boolean,
+)
+
+/**
+ * Format 6. Exactly one of [assetId] and [groupId] is set — a rule `toDomain` enforces, since
+ * neither Room nor the wire format can.
+ */
+@Serializable
+data class MaintenanceScheduleDto(
+    val id: String,
+    val assetId: String?,
+    val groupId: String?,
+    val title: String,
+    val description: String,
+    val timeInterval: Int?,
+    val timeUnit: String?,
+    val timeBasis: String,
+    val anchorOn: String?,
+    val leadDays: Int,
+    val meterDefinitionId: String?,
+    val meterInterval: Double?,
+    val anchorMeter: Double?,
+    val meterLead: Double?,
+    val seasonBehavior: String,
+    val seasonReentry: String?,
+    val seasonReentryOffsetDays: Int?,
+    val completionMode: String,
+    val profileId: String?,
+    val remindersEnabled: Boolean,
+    val status: String,
+    val postponedDueOn: String?,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val providers: List<ScheduleProviderDto>,
+)
+
+/**
+ * Format 6. Its own row, **never nested inside the schedule**: closing a round would otherwise
+ * change the schedule's exported content and every later re-import of an unchanged schedule would
+ * be `CONTENT_DIFFERS`. Five fields, with no `updatedAt`, mirroring the immutable row.
+ */
+@Serializable
+data class OccurrenceClosureDto(
+    val id: String,
+    val scheduleId: String,
+    val occurrenceOn: String,
+    val closedOn: String,
+    val createdAt: Long,
 )
 
 /** Owner is `assetId` xor `eventId`; there is no SQL CHECK, so the readers are the rule (§11.5). */
@@ -237,6 +335,12 @@ data class BackupData(
     val eventProfiles: List<EventProfileDto> = emptyList(),
     val assetEvents: List<AssetEventDto> = emptyList(),
     val attachments: List<AttachmentDto> = emptyList(),
+    /** Format 6; members travel inside. Empty on every format ≤5 archive. */
+    val maintenanceGroups: List<MaintenanceGroupDto> = emptyList(),
+    /** Format 6; providers travel inside. Empty on every format ≤5 archive. */
+    val maintenanceSchedules: List<MaintenanceScheduleDto> = emptyList(),
+    /** Format 6; their own rows, never nested. Empty on every format ≤5 archive. */
+    val occurrenceClosures: List<OccurrenceClosureDto> = emptyList(),
 )
 
 /** A decoded archive: what it claims about itself, and what it holds. */
@@ -537,6 +641,9 @@ fun AssetEvent.toDto(): AssetEventDto = AssetEventDto(
     updatedAt = updatedAt,
     measurements = measurements.map { it.toDto() },
     consumables = consumables.map { it.toDto() },
+    scheduleId = scheduleId?.value,
+    occurrenceOn = occurrenceOn,
+    detailsPending = detailsPending,
 )
 
 fun AssetEventDto.toDomain(): AssetEvent = AssetEvent(
@@ -555,6 +662,9 @@ fun AssetEventDto.toDomain(): AssetEvent = AssetEvent(
     updatedAt = updatedAt,
     measurements = measurements.map { it.toDomain() },
     consumables = consumables.map { it.toDomain() },
+    scheduleId = scheduleId?.let(::ScheduleId),
+    occurrenceOn = occurrenceOn,
+    detailsPending = detailsPending,
 )
 
 fun Attachment.toDto(): AttachmentDto = AttachmentDto(
@@ -599,3 +709,134 @@ fun AttachmentDto.toDomain(): Attachment {
         updatedAt = updatedAt,
     )
 }
+
+// --- format 6: groups, schedules and closures ----------------------------------------------------
+
+fun GroupMember.toDto(): GroupMemberDto = GroupMemberDto(
+    id = id,
+    assetId = assetId.value,
+    sortOrder = sortOrder,
+    addedAt = addedAt,
+    removedAt = removedAt,
+)
+
+fun GroupMemberDto.toDomain(): GroupMember = GroupMember(
+    id = id,
+    assetId = AssetId(assetId),
+    sortOrder = sortOrder,
+    addedAt = addedAt,
+    removedAt = removedAt,
+)
+
+fun MaintenanceGroup.toDto(): MaintenanceGroupDto = MaintenanceGroupDto(
+    id = id.value,
+    name = name,
+    description = description,
+    archivedAt = archivedAt,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    members = members.map { it.toDto() },
+)
+
+fun MaintenanceGroupDto.toDomain(): MaintenanceGroup = MaintenanceGroup(
+    id = GroupId(id),
+    name = name,
+    description = description,
+    archivedAt = archivedAt,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    members = members.map { it.toDomain() },
+)
+
+fun ScheduleProviderRow.toDto(): ScheduleProviderDto = ScheduleProviderDto(
+    provider = provider,
+    enabled = enabled,
+)
+
+fun ScheduleProviderDto.toDomain(): ScheduleProviderRow = ScheduleProviderRow(
+    provider = provider,
+    enabled = enabled,
+)
+
+fun MaintenanceSchedule.toDto(): MaintenanceScheduleDto = MaintenanceScheduleDto(
+    id = id.value,
+    assetId = (target as? ScheduleTarget.AssetTarget)?.assetId?.value,
+    groupId = (target as? ScheduleTarget.GroupTarget)?.groupId?.value,
+    title = title,
+    description = description,
+    timeInterval = timeInterval,
+    timeUnit = timeUnit?.name,
+    timeBasis = timeBasis.name,
+    anchorOn = anchorOn,
+    leadDays = leadDays,
+    meterDefinitionId = meterDefinitionId?.value,
+    meterInterval = meterInterval,
+    anchorMeter = anchorMeter,
+    meterLead = meterLead,
+    seasonBehavior = seasonBehavior.name,
+    seasonReentry = seasonReentry,
+    seasonReentryOffsetDays = seasonReentryOffsetDays,
+    completionMode = completionMode.name,
+    profileId = profileId?.value,
+    remindersEnabled = remindersEnabled,
+    status = status.name,
+    postponedDueOn = postponedDueOn,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    providers = providers.map { it.toDto() },
+)
+
+/**
+ * The target is the one field the wire can spell in a way the domain cannot hold, so it is checked
+ * here: a row naming both sides, or neither, is refused before any import begins. The merge planner
+ * reads the DTO's two columns directly for the same reason — it must be able to *report*
+ * `SCHEDULE_TARGET_INVALID` on a row this function would throw on.
+ */
+fun MaintenanceScheduleDto.toDomain(): MaintenanceSchedule {
+    if ((assetId == null) == (groupId == null)) {
+        throw BackupCorrupt("schedule $id must name exactly one target, an asset or a group")
+    }
+    return MaintenanceSchedule(
+        id = ScheduleId(id),
+        target = assetId?.let { ScheduleTarget.AssetTarget(AssetId(it)) }
+            ?: ScheduleTarget.GroupTarget(GroupId(groupId!!)),
+        title = title,
+        description = description,
+        timeInterval = timeInterval,
+        timeUnit = timeUnit?.let { enumOrCorrupt<RecurrenceUnit>(it, "time unit", "schedule $id") },
+        timeBasis = enumOrCorrupt<TimeBasis>(timeBasis, "time basis", "schedule $id"),
+        anchorOn = anchorOn,
+        leadDays = leadDays,
+        meterDefinitionId = meterDefinitionId?.let(::DefinitionId),
+        meterInterval = meterInterval,
+        anchorMeter = anchorMeter,
+        meterLead = meterLead,
+        seasonBehavior = enumOrCorrupt<SeasonBehavior>(seasonBehavior, "season behavior", "schedule $id"),
+        seasonReentry = seasonReentry,
+        seasonReentryOffsetDays = seasonReentryOffsetDays,
+        completionMode = enumOrCorrupt<CompletionMode>(completionMode, "completion mode", "schedule $id"),
+        profileId = profileId?.let(::ProfileId),
+        remindersEnabled = remindersEnabled,
+        status = enumOrCorrupt<ScheduleStatus>(status, "schedule status", "schedule $id"),
+        postponedDueOn = postponedDueOn,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        providers = providers.map { it.toDomain() },
+    )
+}
+
+fun OccurrenceClosure.toDto(): OccurrenceClosureDto = OccurrenceClosureDto(
+    id = id,
+    scheduleId = scheduleId.value,
+    occurrenceOn = occurrenceOn,
+    closedOn = closedOn,
+    createdAt = createdAt,
+)
+
+fun OccurrenceClosureDto.toDomain(): OccurrenceClosure = OccurrenceClosure(
+    id = id,
+    scheduleId = ScheduleId(scheduleId),
+    occurrenceOn = occurrenceOn,
+    closedOn = closedOn,
+    createdAt = createdAt,
+)

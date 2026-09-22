@@ -11,11 +11,14 @@ import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -37,10 +40,13 @@ data class BackupSet(val data: ByteArray, val plan: ArtifactsPlan) {
  */
 class ExportBackupSet(
     private val assets: AssetRepository,
+    private val groups: GroupRepository,
     private val tags: TagRepository,
     private val links: LinkRepository,
     private val definitions: DefinitionRepository,
     private val profiles: ProfileRepository,
+    private val schedules: ScheduleRepository,
+    private val closures: ClosureRepository,
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
     private val uow: UnitOfWork,
@@ -62,6 +68,11 @@ class ExportBackupSet(
                 eventProfiles = profiles.all().map { it.toDto() },
                 assetEvents = events.all().map { it.toDto() },
                 attachments = rows.map { it.toDto() },
+                // `schedule_state` and `schedule_local_delivery` are deliberately not read here:
+                // the first is derived and rebuilt after any import, the second is device-local.
+                maintenanceGroups = groups.all().map { it.toDto() },
+                maintenanceSchedules = schedules.all().map { it.toDto() },
+                occurrenceClosures = closures.all().map { it.toDto() },
             ) to rows
         }
         val plan = ArtifactsPlan(

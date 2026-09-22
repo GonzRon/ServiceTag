@@ -219,6 +219,9 @@ class BackupCodecTest {
                 "profileFields" to 0, "profileConsumables" to 0,
                 "measurements" to 0, "consumableUsages" to 0,
                 "attachments" to 0,
+                "maintenanceGroups" to 0, "groupMembers" to 0,
+                "maintenanceSchedules" to 0, "scheduleProviders" to 0,
+                "occurrenceClosures" to 0,
             ),
             manifest.counts,
         )
@@ -263,11 +266,14 @@ class BackupCodecTest {
     fun `a newer format version is refused`() {
         val entries = unzip(encoded())
         val manifest = String(entries.getValue(BackupCodec.MANIFEST_ENTRY), Charsets.UTF_8)
-            .replace(Regex("\"formatVersion\"\\s*:\\s*5"), "\"formatVersion\": 6")
+            .replace(
+                Regex("\"formatVersion\"\\s*:\\s*${BackupCodec.FORMAT_VERSION}"),
+                "\"formatVersion\": ${BackupCodec.FORMAT_VERSION + 1}",
+            )
         entries[BackupCodec.MANIFEST_ENTRY] = manifest.toByteArray(Charsets.UTF_8)
         val e = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(rezip(entries)) }
-        assertEquals(6, e.found)
-        assertEquals(5, e.supported)
+        assertEquals(BackupCodec.FORMAT_VERSION + 1, e.found)
+        assertEquals(BackupCodec.FORMAT_VERSION, e.supported)
     }
 
     @Test
@@ -431,6 +437,9 @@ class BackupCodecTest {
                 "profileFields" to 1, "profileConsumables" to 1,
                 "measurements" to 1, "consumableUsages" to 1,
                 "attachments" to 0,
+                "maintenanceGroups" to 0, "groupMembers" to 0,
+                "maintenanceSchedules" to 0, "scheduleProviders" to 0,
+                "occurrenceClosures" to 0,
             ),
             decoded.manifest.counts,
         )
@@ -714,7 +723,7 @@ class BackupCodecTest {
         )
         val decoded = BackupCodec.decode(encoded(data))
         assertEquals(data, decoded.data)
-        assertEquals(5, decoded.manifest.formatVersion)
+        assertEquals(BackupCodec.FORMAT_VERSION, decoded.manifest.formatVersion)
     }
 
     @Test
@@ -802,7 +811,7 @@ class BackupCodecTest {
         )
         val decoded = BackupCodec.decode(encoded(data))
 
-        assertEquals(5, decoded.manifest.formatVersion)
+        assertEquals(BackupCodec.FORMAT_VERSION, decoded.manifest.formatVersion)
         assertEquals("set-1", decoded.manifest.backupSetId)
         assertEquals(1, decoded.manifest.artifactFormatVersion)
         assertEquals(2, decoded.manifest.artifactCount)

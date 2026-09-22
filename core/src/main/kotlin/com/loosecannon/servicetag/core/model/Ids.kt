@@ -20,3 +20,9 @@ value class EventId(val value: String)
 
 @JvmInline
 value class AttachmentId(val value: String)
+
+@JvmInline
+value class ScheduleId(val value: String)
+
+@JvmInline
+value class GroupId(val value: String)

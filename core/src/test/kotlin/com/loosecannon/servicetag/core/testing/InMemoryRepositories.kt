@@ -12,19 +12,27 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
+import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.LinkId
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
+import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
+import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import kotlinx.coroutines.flow.Flow
@@ -359,6 +367,113 @@ open class InMemoryAttachmentRepository : AttachmentRepository, Rollbackable, Wi
     override fun observeForOwner(owner: AttachmentOwner): Flow<List<Attachment>> = version.map {
         rows.values.filter { it.owner == owner }.sortedBy { it.displayName.lowercase() }
     }
+}
+
+class InMemoryGroupRepository : GroupRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, MaintenanceGroup>()
+    override var witness: TransactionWitness? = null
+    private val rig = UpsertRig("group")
+    var failOnUpsert: Int?
+        get() = rig.failOnUpsert
+        set(value) { rig.failOnUpsert = value }
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy) }
+    }
+
+    override suspend fun upsert(group: MaintenanceGroup) {
+        rig.check()
+        rows[group.id.value] = group
+    }
+
+    override suspend fun get(id: GroupId): MaintenanceGroup? = rows[id.value]
+
+    override suspend fun all(): List<MaintenanceGroup> {
+        witness?.observeAll()
+        return rows.values.toList()
+    }
+
+    override suspend fun deleteAll() { rows.clear() }
+}
+
+/**
+ * [deleteAll] clears [cascadesTo] as well, because that is what the schema does: a closure row has
+ * no delete of its own and leaves only by the CASCADE from its schedule. A fake with no closure
+ * store passes null, as a test that has no closures does.
+ */
+class InMemoryScheduleRepository(
+    private val cascadesTo: InMemoryClosureRepository? = null,
+) : ScheduleRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, MaintenanceSchedule>()
+    override var witness: TransactionWitness? = null
+    private val rig = UpsertRig("schedule")
+    var failOnUpsert: Int?
+        get() = rig.failOnUpsert
+        set(value) { rig.failOnUpsert = value }
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy) }
+    }
+
+    override suspend fun upsert(schedule: MaintenanceSchedule) {
+        rig.check()
+        rows[schedule.id.value] = schedule
+    }
+
+    override suspend fun get(id: ScheduleId): MaintenanceSchedule? = rows[id.value]
+
+    override suspend fun all(): List<MaintenanceSchedule> {
+        witness?.observeAll()
+        return rows.values.toList()
+    }
+
+    override suspend fun deleteAll() {
+        rows.clear()
+        cascadesTo?.cascadeFromSchedules()
+    }
+}
+
+/**
+ * Insert and query only, exactly as the port is. [cascadeFromSchedules] is not part of the port: it
+ * is how [InMemoryScheduleRepository] reproduces the CASCADE, and it is the only way a row leaves.
+ */
+class InMemoryClosureRepository : ClosureRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, OccurrenceClosure>()
+    override var witness: TransactionWitness? = null
+    private val rig = UpsertRig("closure")
+    var failOnInsert: Int?
+        get() = rig.failOnUpsert
+        set(value) { rig.failOnUpsert = value }
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy) }
+    }
+
+    override suspend fun insert(closure: OccurrenceClosure) {
+        rig.check()
+        // The unique index, as a fake: one row per `(schedule_id, occurrence_on)`.
+        val pair = closure.scheduleId.value to closure.occurrenceOn
+        if (rows.values.any { it.scheduleId.value to it.occurrenceOn == pair }) {
+            throw RiggedFailure("occurrence_closure already holds ${pair.first}/${pair.second}")
+        }
+        rows[closure.id] = closure
+    }
+
+    override suspend fun forSchedule(scheduleId: ScheduleId): List<OccurrenceClosure> =
+        rows.values.filter { it.scheduleId == scheduleId }.sortedBy { it.occurrenceOn }
+
+    override suspend fun find(scheduleId: ScheduleId, occurrenceOn: String): OccurrenceClosure? =
+        rows.values.firstOrNull { it.scheduleId == scheduleId && it.occurrenceOn == occurrenceOn }
+
+    override suspend fun all(): List<OccurrenceClosure> {
+        witness?.observeAll()
+        return rows.values.toList()
+    }
+
+    internal fun cascadeFromSchedules() { rows.clear() }
 }
 
 /**

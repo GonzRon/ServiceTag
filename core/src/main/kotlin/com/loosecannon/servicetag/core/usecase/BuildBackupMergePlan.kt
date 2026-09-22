@@ -8,10 +8,13 @@ import com.loosecannon.servicetag.core.merge.storedBytesOf
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -21,19 +24,22 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * Four steps and no more: decode — which refuses a corrupt or future-format file before anything
  * else happens — ask whether there is an attachment folder at all, hash and size whatever that
- * folder holds for the locators the archive names, and read the seven tables in one `uow.read` so
- * the planner sees a single consistent point in time rather than seven. The decision itself is
- * `mergePlanOf`, a pure function.
+ * folder holds for the locators the archive names, and read the ten canonical tables in one
+ * `uow.read` so the planner sees a single consistent point in time rather than ten. The decision
+ * itself is `mergePlanOf`, a pure function.
  *
- * The same nine collaborators, in the same order, as [ImportBackupReplace] — because the two are
+ * The same twelve collaborators, in the same order, as [ImportBackupReplace] — because the two are
  * the two halves of the same question, and a reader comparing them should have nothing to subtract.
  */
 class BuildBackupMergePlan(
     private val assets: AssetRepository,
+    private val groups: GroupRepository,
     private val tags: TagRepository,
     private val links: LinkRepository,
     private val definitions: DefinitionRepository,
     private val profiles: ProfileRepository,
+    private val schedules: ScheduleRepository,
+    private val closures: ClosureRepository,
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
     private val storage: AttachmentStorage,
@@ -50,7 +56,8 @@ class BuildBackupMergePlan(
         val stored = storedBytesOf(backup, store)
         val snapshot = uow.read {
             mergeSnapshotOf(
-                assets, tags, links, definitions, profiles, events, attachments, stored, configured,
+                assets, groups, tags, links, definitions, profiles, schedules, closures,
+                events, attachments, stored, configured,
             )
         }
         return mergePlanOf(backup, snapshot)

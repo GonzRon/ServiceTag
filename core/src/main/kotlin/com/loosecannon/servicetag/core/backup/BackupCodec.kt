@@ -22,7 +22,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
 /**
- * Backup format v5: a ZIP holding exactly two entries. This is the *data* archive; a format-5
+ * Backup format v6: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
  * backup set pairs it with an artifacts archive, and `backupSetId` is what ties the two together.
  *
  * ```
@@ -30,21 +30,28 @@ import kotlinx.serialization.json.Json
  *                    backupSetId, artifactFormatVersion, artifactCount, artifactBytes }
  * data.json       { assets: [...], nfcTags: [...], externalLinks: [...],
  *                    measurementDefinitions: [...], eventProfiles: [...], assetEvents: [...],
- *                    attachments: [...] }
+ *                    attachments: [...], maintenanceGroups: [...], maintenanceSchedules: [...],
+ *                    occurrenceClosures: [...] }
  * ```
  *
  * IDs are written verbatim, lists are sorted by id (children by sortOrder within their parent),
  * and the manifest carries the SHA-256 of the data entry, so the same input always produces the
  * same bytes and an edited file is refused. A format-1 file (the three original lists only), a
  * format-2 file (measurementDefinitions without kind/formula/sourceAId/sourceBId — every DERIVED
- * definition needs those), a format-3 file (assets without the §4 fields) and a format-4 file
- * (no attachments and none of the four new manifest fields) still decode: the new fields default
- * to ENTERED with no formula/sources, to empty/null asset fields, and to an empty attachment list
- * with an empty `backupSetId` and zero artifact tallies, respectively. JDK ZIP + JDK SHA-256 +
- * kotlinx-serialization only; no Android types anywhere in here.
+ * definition needs those), a format-3 file (assets without the §4 fields), a format-4 file
+ * (no attachments and none of the four new manifest fields) and a format-5 file (no groups, no
+ * schedules, no closures, and events with no occurrence link) still decode: the new fields default
+ * to ENTERED with no formula/sources, to empty/null asset fields, to an empty attachment list with
+ * an empty `backupSetId` and zero artifact tallies, and to three empty lists with every new event
+ * field at its default, respectively. **Restoring one never invents a schedule.** JDK ZIP + JDK
+ * SHA-256 + kotlinx-serialization only; no Android types anywhere in here.
+ *
+ * Two tables are deliberately absent. `schedule_state` is derived — the recompute function rebuilds
+ * it after any import — and `schedule_local_delivery` is device-local notification bookkeeping;
+ * neither is ever exported and neither is ever merged.
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 5
+    const val FORMAT_VERSION = 6
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -95,6 +102,16 @@ object BackupCodec {
                 )
             },
             attachments = data.attachments.sortedBy { it.id },
+            // Members tie-break on `id` because `sortOrder` is not promised unique within a parent
+            // and the planner's own normalisation is `(sortOrder, id)`; two stable sorts over two
+            // different bases would otherwise disagree. Providers sort by the only key they have.
+            maintenanceGroups = data.maintenanceGroups.sortedBy { it.id }.map { group ->
+                group.copy(members = group.members.sortedWith(compareBy({ it.sortOrder }, { it.id })))
+            },
+            maintenanceSchedules = data.maintenanceSchedules.sortedBy { it.id }.map { schedule ->
+                schedule.copy(providers = schedule.providers.sortedBy { it.provider })
+            },
+            occurrenceClosures = data.occurrenceClosures.sortedBy { it.id },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
         // The artifact tallies are derived here, in one place, from the rows themselves: a MANAGED
@@ -117,6 +134,11 @@ object BackupCodec {
                 "measurements" to sorted.assetEvents.sumOf { it.measurements.size },
                 "consumableUsages" to sorted.assetEvents.sumOf { it.consumables.size },
                 "attachments" to sorted.attachments.size,
+                "maintenanceGroups" to sorted.maintenanceGroups.size,
+                "groupMembers" to sorted.maintenanceGroups.sumOf { it.members.size },
+                "maintenanceSchedules" to sorted.maintenanceSchedules.size,
+                "scheduleProviders" to sorted.maintenanceSchedules.sumOf { it.providers.size },
+                "occurrenceClosures" to sorted.occurrenceClosures.size,
             ),
             dataSha256 = sha256Hex(dataBytes),
             backupSetId = backupSetId,
@@ -178,6 +200,9 @@ object BackupCodec {
         data.eventProfiles.forEach { it.toDomain() }
         data.assetEvents.forEach { it.toDomain() }
         data.attachments.forEach { it.toDomain() }
+        data.maintenanceGroups.forEach { it.toDomain() }
+        data.maintenanceSchedules.forEach { it.toDomain() }
+        data.occurrenceClosures.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
         // replays the insert loops in one transaction: a duplicate id or a reference to a row
@@ -324,6 +349,66 @@ object BackupCodec {
         uniqueIds("profileFields", profileFieldIds)
         uniqueIds("profileConsumables", profileConsumableIds)
 
+        // --- maintenance: groups, schedules and closures (format 6) -----------------------------
+        // Decided before the events loop, because an event may name a schedule.
+
+        val groupIds = uniqueIds("maintenanceGroups", data.maintenanceGroups.map { it.id })
+        val groupMemberIds = mutableListOf<String>()
+        data.maintenanceGroups.forEach { group ->
+            group.members.forEach { member ->
+                groupMemberIds += member.id
+                if (member.assetId !in assetIds) {
+                    throw BackupCorrupt(
+                        "maintenanceGroups: group ${group.id} member ${member.id} points at asset " +
+                            "${member.assetId}, which is not in assets",
+                    )
+                }
+            }
+        }
+        uniqueIds("groupMembers", groupMemberIds)
+
+        val scheduleIds = uniqueIds("maintenanceSchedules", data.maintenanceSchedules.map { it.id })
+        data.maintenanceSchedules.forEach { schedule ->
+            // Already proven nameable in the enum-check pass above, which is also where a row
+            // naming both targets or neither was refused; so exactly one of these two is non-null.
+            if (schedule.assetId != null && schedule.assetId !in assetIds) {
+                throw BackupCorrupt(
+                    "maintenanceSchedules: schedule ${schedule.id} points at asset " +
+                        "${schedule.assetId}, which is not in assets",
+                )
+            }
+            if (schedule.groupId != null && schedule.groupId !in groupIds) {
+                throw BackupCorrupt(
+                    "maintenanceSchedules: schedule ${schedule.id} points at group " +
+                        "${schedule.groupId}, which is not in maintenanceGroups",
+                )
+            }
+            if (schedule.meterDefinitionId != null && schedule.meterDefinitionId !in definitionsById) {
+                throw BackupCorrupt(
+                    "maintenanceSchedules: schedule ${schedule.id} points at definition " +
+                        "${schedule.meterDefinitionId}, which is not in measurementDefinitions",
+                )
+            }
+            if (schedule.profileId != null && schedule.profileId !in profileAssetIds) {
+                throw BackupCorrupt(
+                    "maintenanceSchedules: schedule ${schedule.id} points at profile " +
+                        "${schedule.profileId}, which is not in eventProfiles",
+                )
+            }
+        }
+
+        uniqueIds("occurrenceClosures", data.occurrenceClosures.map { it.id })
+        data.occurrenceClosures.forEach { closure ->
+            if (closure.scheduleId !in scheduleIds) {
+                throw BackupCorrupt(
+                    "occurrenceClosures: closure ${closure.id} points at schedule " +
+                        "${closure.scheduleId}, which is not in maintenanceSchedules",
+                )
+            }
+        }
+
+        // --- events ------------------------------------------------------------------------------
+
         uniqueIds("assetEvents", data.assetEvents.map { it.id })
         val measurementIds = mutableListOf<String>()
         val consumableUsageIds = mutableListOf<String>()
@@ -346,6 +431,12 @@ object BackupCodec {
                             "from a different asset",
                     )
                 }
+            }
+            if (event.scheduleId != null && event.scheduleId !in scheduleIds) {
+                throw BackupCorrupt(
+                    "assetEvents: event ${event.id} points at schedule ${event.scheduleId}, " +
+                        "which is not in maintenanceSchedules",
+                )
             }
             event.measurements.forEach { measurement ->
                 measurementIds += measurement.id

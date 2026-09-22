@@ -31,10 +31,13 @@ import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentStore
+import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
+import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
+import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
 import java.io.InputStream
@@ -71,13 +74,36 @@ class ImportBackupMergeTest {
         val profiles = InMemoryProfileRepository()
         val events = InMemoryEventRepository()
         val attachments = InMemoryAttachmentRepository()
-        val uow = FakeUnitOfWork(assets, tags, links, definitions, profiles, events, attachments)
+        val groups = InMemoryGroupRepository()
+        val closures = InMemoryClosureRepository()
+        val schedules = InMemoryScheduleRepository(closures)
+        val uow = FakeUnitOfWork(
+            assets, groups, tags, links, definitions, profiles, schedules, closures,
+            events, attachments,
+        )
+
+        /** How many times the apply asked for a total recompute, and what it had written by then. */
+        var rebuilds = 0
+        var writesAtRebuild: List<Int> = emptyList()
 
         val build = BuildBackupMergePlan(
-            assets, tags, links, definitions, profiles, events, attachments, storage, uow,
+            assets, groups, tags, links, definitions, profiles, schedules, closures,
+            events, attachments, storage, uow,
         )
         val apply = ApplyBackupMergePlan(
-            assets, tags, links, definitions, profiles, events, attachments, storage, uow,
+            assets, groups, tags, links, definitions, profiles, schedules, closures,
+            events, attachments, storage, uow,
+            rebuildAll = {
+                rebuilds += 1
+                writesAtRebuild = runBlocking {
+                    listOf(
+                        assets.all().size, groups.all().size, definitions.all().size,
+                        profiles.all().size, schedules.all().size, closures.all().size,
+                        links.all().size, tags.all().size, events.all().size,
+                        attachments.all().size,
+                    )
+                }
+            },
         )
         val merge = ImportBackupMerge(build, apply)
 
@@ -85,10 +111,13 @@ class ImportBackupMergeTest {
         fun everything(): List<Any> = runBlocking {
             listOf(
                 assets.all().sortedBy { it.id.value },
+                groups.all().sortedBy { it.id.value },
                 tags.all().sortedBy { it.id.value },
                 links.all().sortedBy { it.id.value },
                 definitions.all().sortedBy { it.id.value },
                 profiles.all().sortedBy { it.id.value },
+                schedules.all().sortedBy { it.id.value },
+                closures.all().sortedBy { it.id },
                 events.all().sortedBy { it.id.value },
                 attachments.all().sortedBy { it.id.value },
             )
@@ -146,7 +175,8 @@ class ImportBackupMergeTest {
     /** A real format-5 data archive of [f]'s rows, through the production export. */
     private fun exportOf(f: Fakes): ByteArray = runBlocking {
         ExportBackupSet(
-            f.assets, f.tags, f.links, f.definitions, f.profiles, f.events, f.attachments,
+            f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
+            f.closures, f.events, f.attachments,
             f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
             appVersion = "1.1.0", schemaVersion = 5,
         ).run().data

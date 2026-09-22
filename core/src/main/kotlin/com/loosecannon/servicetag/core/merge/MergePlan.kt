@@ -6,18 +6,29 @@ import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
+import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import java.security.MessageDigest
 
 /**
- * The seven canonical tables, **in the order a merge must write them**: every reference a row makes
+ * The ten canonical tables, **in the order a merge must write them**: every reference a row makes
  * points at a table declared before it (assets first, attachment rows last, when every owner is
  * in). The ordinal is also the first key conflicts are sorted by, which is what makes a report
  * deterministic.
+ *
+ * The three 1.2 members sit in dependency position rather than at the end. A group's members
+ * reference assets, so `GROUPS` follows `ASSETS`; a schedule references an asset or a group, a
+ * meter definition and a profile, so `SCHEDULES` follows all four; a closure references only a
+ * schedule, so `CLOSURES` follows it; an event may reference a schedule, and `EVENTS` already sat
+ * late enough to keep its place.
  */
-enum class MergeTable { ASSETS, DEFINITIONS, PROFILES, LINKS, TAGS, EVENTS, ATTACHMENTS }
+enum class MergeTable {
+    ASSETS, GROUPS, DEFINITIONS, PROFILES, SCHEDULES, CLOSURES, LINKS, TAGS, EVENTS, ATTACHMENTS
+}
 
 /**
  * What the plan decided about one incoming row.
@@ -104,6 +115,62 @@ enum class MergeReason {
 
     /** This phone has no attachment folder, so no attachment row's bytes could be looked for. */
     ATTACHMENT_STORE_NOT_CONFIGURED,
+
+    /**
+     * `maintenance_group_member(group_id, asset_id, added_at)` is unique and something else holds
+     * this window.
+     *
+     * An **archive-internal planner guard**, like [PROFILE_FIELD_DEFINITION_TAKEN]: `group_id` is
+     * part of the key, so a collision with a destination row implies a collision on the group's own
+     * id, which the `local != null` arms answer first. What is left is an archive disagreeing with
+     * itself — one group carrying the same `(asset, addedAt)` twice, or two of its groups filed
+     * under one id. Two phones that genuinely disagree about a group's membership disagree about
+     * the **group row's content**, because members are child rows of the group aggregate, and that
+     * surfaces as [CONTENT_DIFFERS] on `GROUPS` and never as this code.
+     */
+    GROUP_MEMBER_WINDOW_TAKEN,
+
+    /**
+     * Two membership rows claim an open window — `removed_at IS NULL` — for one `(group, asset)`.
+     *
+     * This guards a **use-case rule** rather than an index: a partial unique index is not
+     * expressible in Room, so the planner is the only place it can be checked before a write. An
+     * archive-internal guard for [GROUP_MEMBER_WINDOW_TAKEN]'s reason.
+     */
+    GROUP_MEMBER_ALREADY_OPEN,
+
+    /**
+     * A schedule row names **both** an asset and a group, or neither. There is no SQL `CHECK` — Room
+     * cannot declare one — so the shape is a rule the readers enforce, and a row that breaks it
+     * describes a schedule the domain cannot hold.
+     */
+    SCHEDULE_TARGET_INVALID,
+
+    /**
+     * A local closure under a different row id holds this `(schedule_id, occurrence_on)` and
+     * differs — a different `closed_on`, say. Two devices closed the same round on different dates,
+     * which is a disagreement for a human and never resolved by a timestamp.
+     */
+    CLOSURE_DIVERGED,
+
+    /** Two rows of one archive claim one `(schedule_id, occurrence_on)`, which is unique. */
+    CLOSURE_DUPLICATED_IN_ARCHIVE,
+
+    /**
+     * A local closure under a different row id already **is** this closure, field for field. It
+     * rides on an `IDENTICAL`: two devices that closed the same round on the same day merge
+     * cleanly, and matching on the row id alone would make this an `INSERT` that the unique index
+     * then refuses at apply time.
+     */
+    CLOSURE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW,
+
+    /**
+     * `asset_event(schedule_id, occurrence_on, asset_id)` is unique and another event holds it: two
+     * devices recorded the same member's completion of the same occurrence under different event
+     * ids. NULLs are distinct in SQLite, so the check is skipped — and the index inert — for every
+     * event that is not a completion.
+     */
+    SCHEDULE_OCCURRENCE_TAKEN,
 }
 
 /** A review hint (#44: "review hints only, never automatic identity"). It never blocks an apply. */
@@ -141,8 +208,11 @@ data class MergeTally(val insert: Int, val identical: Int, val conflict: Int, va
  */
 data class MergeWrites(
     val assets: List<Asset> = emptyList(),
+    val groups: List<MaintenanceGroup> = emptyList(),
     val definitions: List<MeasurementDefinition> = emptyList(),
     val profiles: List<EventProfile> = emptyList(),
+    val schedules: List<MaintenanceSchedule> = emptyList(),
+    val closures: List<OccurrenceClosure> = emptyList(),
     val links: List<ExternalLink> = emptyList(),
     val tags: List<TagBinding> = emptyList(),
     val events: List<AssetEvent> = emptyList(),
@@ -162,10 +232,13 @@ data class MergeWrites(
  */
 data class MergeSnapshot(
     val assets: List<Asset> = emptyList(),
+    val groups: List<MaintenanceGroup> = emptyList(),
     val tags: List<TagBinding> = emptyList(),
     val links: List<ExternalLink> = emptyList(),
     val definitions: List<MeasurementDefinition> = emptyList(),
     val profiles: List<EventProfile> = emptyList(),
+    val schedules: List<MaintenanceSchedule> = emptyList(),
+    val closures: List<OccurrenceClosure> = emptyList(),
     val events: List<AssetEvent> = emptyList(),
     val attachments: List<Attachment> = emptyList(),
     val storedBytes: Map<String, StoredBytes> = emptyMap(),
@@ -184,8 +257,11 @@ data class MergeReport(
     val backupSetId: String,
     val applicable: Boolean,
     val assets: MergeTally,
+    val groups: MergeTally,
     val definitions: MergeTally,
     val profiles: MergeTally,
+    val schedules: MergeTally,
+    val closures: MergeTally,
     val links: MergeTally,
     val tags: MergeTally,
     val events: MergeTally,
@@ -247,8 +323,11 @@ class MergePlan internal constructor(
         backupSetId = backup.manifest.backupSetId,
         applicable = applicable,
         assets = tally(MergeTable.ASSETS),
+        groups = tally(MergeTable.GROUPS),
         definitions = tally(MergeTable.DEFINITIONS),
         profiles = tally(MergeTable.PROFILES),
+        schedules = tally(MergeTable.SCHEDULES),
+        closures = tally(MergeTable.CLOSURES),
         links = tally(MergeTable.LINKS),
         tags = tally(MergeTable.TAGS),
         events = tally(MergeTable.EVENTS),
