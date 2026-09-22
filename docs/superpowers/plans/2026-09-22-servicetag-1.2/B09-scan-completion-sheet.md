@@ -26,7 +26,7 @@ Make a scan the fastest way to quiesce maintenance when the owner is standing at
 
 ## Interfaces
 
-**Consumes from B08:** `DueReadModel.forAsset(assetId)`, `DueItem`, `AttentionSection`. **Plus one scoped read-only seam of its own** (see below).
+**Consumes from B08:** `DueReadModel.forAsset(assetId)`, `DueItem`, `AttentionSection`. **Plus one scoped read-only seam of its own** (see below). **Amended at B07's review (2026-09-22):** from B07, the `QuickActionTarget` for "Done" on a FORM/meter schedule, which currently opens the schedule detail — this brief redirects it to B14's `CompletionFlow` (the one-line target change B07 prepared).
 
 **The last completion's readings need a read this brief must declare.** The sheet must show "the last completion's date and its **key readings**" (D5 §7A `:219-221`). `DueItem` carries `lastCompletedOn` but **not** the completion's measurement values, and it structurally cannot: profile values are heterogeneous per schedule, so a generic projection field would be the wrong shape. This brief therefore declares one **read-only** collaborator:
 
