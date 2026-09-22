@@ -31,9 +31,6 @@ import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
 import com.loosecannon.servicetag.di.AppGraph
-import kotlinx.serialization.DeserializationStrategy
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.SerializationStrategy
 
 /**
  * One method per `/v1` endpoint, and every one of them goes through the use case the UI goes
@@ -44,7 +41,11 @@ import kotlinx.serialization.SerializationStrategy
  * `ImportBackupMerge` call. There is deliberately no method for a wipe, a replace-import, an
  * export, an NFC write, an NFC bind or an attachment's bytes.
  *
- * **Nineteen collaborators plus two values, named one by one, with a `constructor(graph)` beside
+ * **1.2's endpoints are [MaintenanceHandlers]', not this class's**, and they hold the same rule:
+ * every write there is one use case call too. This class keeps the shipped surface plus the three
+ * counts [status] gained, which it asks that collaborator for.
+ *
+ * **Twenty collaborators plus two values, named one by one, with a `constructor(graph)` beside
  * them.** That is this app's pattern, stated at `AssetViewModels.kt:59`–`61`: *"Each takes the `AppGraph` members it
  * actually uses — the secondary constructor is what the Compose entry calls, the primary one is
  * what a test builds on a Room-backed fake graph."* It is the reason `ApiRouterTest` can drive the
@@ -87,6 +88,15 @@ internal class ApiHandlers(
     private val updateEvent: UpdateEvent,
     private val deleteEvent: DeleteEvent,
     private val importBackupMerge: ImportBackupMerge,
+    /**
+     * 1.2's own endpoints, as one collaborator rather than twenty.
+     *
+     * It lives here, and not as a second argument to [ApiRouter], so the Developer API screen's
+     * wiring is untouched: it hands over an `ApiHandlers` and knows nothing about what the
+     * router matches. [status] also asks it for the three counts `/v1/status` gained, which is
+     * why this class needs no schedule, group or closure repository of its own.
+     */
+    internal val maintenance: MaintenanceHandlers,
     private val appVersion: String,
     private val schemaVersion: Int,
 ) {
@@ -96,6 +106,7 @@ internal class ApiHandlers(
         graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
         graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
         graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
+        MaintenanceHandlers(graph),
         BuildConfig.VERSION_NAME, AppGraph.SCHEMA_VERSION,
     )
 
@@ -116,7 +127,7 @@ internal class ApiHandlers(
                 "profiles" to profiles.all().size,
                 "events" to events.all().size,
                 "attachments" to attachments.count(),
-            ),
+            ) + maintenance.counts(),
         ),
     )
 
@@ -271,9 +282,9 @@ internal class ApiHandlers(
         return try {
             ok(MergeReportResponse.serializer(), importBackupMerge.run(request.body).toResponse())
         } catch (e: MergeRefused) {
-            conflict(MergeReportResponse.serializer(), e.report.toResponse())
+            conflictResponse(MergeReportResponse.serializer(), e.report.toResponse())
         } catch (e: MergePlanStale) {
-            conflict(MergeReportResponse.serializer(), e.report.toResponse())
+            conflictResponse(MergeReportResponse.serializer(), e.report.toResponse())
         }
     }
 
@@ -283,41 +294,8 @@ internal class ApiHandlers(
     private suspend fun asset(id: String) =
         assets.get(AssetId(id)) ?: throw NoSuchAsset(AssetId(id))
 
-    private fun <T> ok(serializer: SerializationStrategy<T>, value: T): ApiResponse =
-        ApiResponse.json(200, "OK", ApiJson.encodeToString(serializer, value))
-
-    /** Named `createdResponse`, not `created`, so it cannot be misread as a local `val`. */
-    private fun <T> createdResponse(serializer: SerializationStrategy<T>, value: T): ApiResponse =
-        ApiResponse.json(201, "Created", ApiJson.encodeToString(serializer, value))
-
-    private fun <T> conflict(serializer: SerializationStrategy<T>, value: T): ApiResponse =
-        ApiResponse.json(409, "Conflict", ApiJson.encodeToString(serializer, value))
-
     private fun requireZip(request: ApiRequest) {
         val type = request.mediaType()
         if (type != ZIP_MEDIA_TYPE) throw ApiFailure.unsupportedMediaType(ZIP_MEDIA_TYPE, type)
-    }
-
-    /**
-     * The body as JSON, or a 415 for the wrong type and a 400 for the wrong shape.
-     *
-     * The decoder's own message is passed through, because with `ignoreUnknownKeys = false` that
-     * message is what names the misspelled field — the difference between a caller fixing a typo
-     * and a caller guessing. What it echoes is the caller's own body, back to the caller, over this
-     * phone's loopback address; nothing about the phone's data is in it.
-     */
-    private fun <T> ApiRequest.decode(serializer: DeserializationStrategy<T>): T {
-        val type = mediaType()
-        if (type != JSON_MEDIA_TYPE) throw ApiFailure.unsupportedMediaType(JSON_MEDIA_TYPE, type)
-        return try {
-            ApiJson.decodeFromString(serializer, body.decodeToString())
-        } catch (e: SerializationException) {
-            throw ApiFailure.badRequest(e.message ?: "that is not the JSON this endpoint wants")
-        }
-    }
-
-    private companion object {
-        const val JSON_MEDIA_TYPE = "application/json"
-        const val ZIP_MEDIA_TYPE = "application/zip"
     }
 }

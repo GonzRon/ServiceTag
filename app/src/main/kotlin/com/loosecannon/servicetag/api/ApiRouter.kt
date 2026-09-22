@@ -54,11 +54,17 @@ internal class ApiRouter(
     }
 
     /**
-     * The whole surface. Eighteen path shapes over twenty-one method-and-path rows; anything else is a 404, and a known shape with the
+     * The whole surface. Thirty-four path shapes over forty method-and-path rows; anything else is a 404, and a known shape with the
      * wrong verb is a 405. Written as an explicit `when` over the path's segments rather than a
      * table of regexes, so the set of things this listener answers can be read in one screen and
      * grepped in one line. Note that bare `/v1/import-merge` is **not** a route: the plan and the
      * apply are two different acts and neither is the default.
+     *
+     * 1.2 added nineteen of those rows — maintenance groups, schedules and their five operations,
+     * the read-only closure history and `/v1/due` — additively and at version 1 (D-19). **Nothing
+     * destructive came with them:** no verb removes a schedule, a group, a membership or a closure,
+     * no verb amends a closure, and there is no snooze endpoint, so each of those is a 404 or a 405
+     * because nothing below routes to it (invariants 43, 76).
      */
     private suspend fun route(request: ApiRequest): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -94,8 +100,54 @@ internal class ApiRouter(
                 "definitions" to "GET" -> handlers.listDefinitions(rest[1])
                 "profiles" to "GET" -> handlers.listProfiles(rest[1])
                 "events" to "GET" -> handlers.listEvents(rest[1])
+                // 1.2 — #55's asset → groups direction, and this asset's own schedules.
+                "groups" to "GET" -> handlers.maintenance.listAssetGroups(rest[1])
+                "schedules" to "GET" -> handlers.maintenance.listAssetSchedules(rest[1])
                 else -> throw ApiFailure.notFound(request.path)
             }
+
+            rest == listOf("groups") -> when (method) {
+                "GET" -> handlers.maintenance.listGroups()
+                "POST" -> handlers.maintenance.createGroup(request)
+                else -> notAllowed(request)
+            }
+
+            rest.size == 2 && rest[0] == "groups" -> when (method) {
+                "GET" -> handlers.maintenance.getGroup(rest[1])
+                "PATCH" -> handlers.maintenance.updateGroup(rest[1], request)
+                else -> notAllowed(request)
+            }
+
+            rest.size == 3 && rest[0] == "groups" -> when (rest[2] to method) {
+                "archive" to "POST" -> handlers.maintenance.archiveGroup(rest[1], request)
+                "schedules" to "GET" -> handlers.maintenance.listGroupSchedules(rest[1])
+                else -> throw ApiFailure.notFound(request.path)
+            }
+
+            rest == listOf("schedules") -> when (method) {
+                "GET" -> handlers.maintenance.listSchedules()
+                "POST" -> handlers.maintenance.createSchedule(request)
+                else -> notAllowed(request)
+            }
+
+            rest.size == 2 && rest[0] == "schedules" -> when (method) {
+                "GET" -> handlers.maintenance.getSchedule(rest[1])
+                "PATCH" -> handlers.maintenance.updateSchedule(rest[1], request)
+                else -> notAllowed(request)
+            }
+
+            rest.size == 3 && rest[0] == "schedules" -> when (rest[2] to method) {
+                "pause" to "POST" -> handlers.maintenance.pauseSchedule(rest[1], request)
+                "archive" to "POST" -> handlers.maintenance.archiveSchedule(rest[1], request)
+                "postpone" to "POST" -> handlers.maintenance.postponeSchedule(rest[1], request)
+                "complete" to "POST" -> handlers.maintenance.completeSchedule(rest[1], request)
+                "close-round" to "POST" -> handlers.maintenance.closeRound(rest[1], request)
+                "closures" to "GET" -> handlers.maintenance.listClosures(rest[1])
+                else -> throw ApiFailure.notFound(request.path)
+            }
+
+            rest == listOf("due") ->
+                if (method == "GET") handlers.maintenance.listDue() else notAllowed(request)
 
             rest == listOf("definitions") ->
                 if (method == "POST") handlers.saveDefinition(request) else notAllowed(request)

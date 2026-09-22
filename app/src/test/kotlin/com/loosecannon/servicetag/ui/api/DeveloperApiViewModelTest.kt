@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.api
 
 import com.loosecannon.servicetag.api.ApiHandlers
+import com.loosecannon.servicetag.api.maintenanceHandlersFor
 import com.loosecannon.servicetag.api.PAIRING_ALPHABET
 import com.loosecannon.servicetag.api.PAIRING_CODE_LENGTH
 import com.loosecannon.servicetag.testing.FakeGraph
@@ -32,6 +33,7 @@ class DeveloperApiViewModelTest {
         graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
         graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
         graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
+        maintenanceHandlersFor(graph),
         appVersion = "1.1.0",
         schemaVersion = 5,
     )

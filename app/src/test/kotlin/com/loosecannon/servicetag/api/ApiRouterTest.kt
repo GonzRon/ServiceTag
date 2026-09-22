@@ -54,6 +54,7 @@ class ApiRouterTest {
             graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
             graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
+            maintenanceHandlersFor(graph),
             appVersion = "1.1.0",
             schemaVersion = 5,
         ),
@@ -150,6 +151,21 @@ class ApiRouterTest {
             "DELETE" to "/v1/assets/$id",
             "DELETE" to "/v1/definitions/d1",
             "DELETE" to "/v1/profiles/p1",
+            // 1.2's additions (invariants 43, 76). A closure is immutable exported history, so
+            // neither a DELETE nor a PATCH reaches one; the snooze is device-local under D-13 and
+            // has no endpoint at all; and nothing deletes a schedule, a group or a membership row.
+            "DELETE" to "/v1/schedules/s1",
+            "DELETE" to "/v1/schedules",
+            "DELETE" to "/v1/groups/g1",
+            "DELETE" to "/v1/groups",
+            "DELETE" to "/v1/schedules/s1/closures",
+            "PATCH" to "/v1/schedules/s1/closures",
+            "POST" to "/v1/schedules/s1/closures",
+            "DELETE" to "/v1/schedules/s1/closures/c1",
+            "POST" to "/v1/schedules/s1/snooze",
+            "POST" to "/v1/snooze",
+            "DELETE" to "/v1/groups/g1/members/m1",
+            "DELETE" to "/v1/due",
         )) {
             val response = call(method, path, if (method == "GET") "" else "{}")
             assertTrue("$method $path answered ${response.status}", response.status == 404 || response.status == 405)
@@ -423,6 +439,7 @@ class ApiRouterTest {
                 graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
                 graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
                 graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
+                maintenanceHandlersFor(graph),
                 appVersion = "1.1.0",
                 schemaVersion = 5,
             ),

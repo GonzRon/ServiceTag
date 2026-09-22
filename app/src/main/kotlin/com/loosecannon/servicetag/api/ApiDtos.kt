@@ -47,7 +47,12 @@ internal data class StatusResponse(
     val apiVersion: Int,
     val schemaVersion: Int,
     val backupFormatVersion: Int,
-    /** One key per table: assets, tags, links, definitions, profiles, events, attachments. */
+    /**
+     * One key per table: assets, **groups**, tags, links, definitions, profiles, **schedules**,
+     * **closures**, events, attachments. The three in bold arrived with 1.2's maintenance tables;
+     * `schedule_state` and `schedule_local_delivery` are **not** here, because derived and
+     * device-local rows are not tables a client counts.
+     */
     val counts: Map<String, Int>,
 )
 
@@ -129,9 +134,15 @@ internal data class MergeReportResponse(
     val formatVersion: Int,
     val backupSetId: String,
     val applicable: Boolean,
+    // Write order, which is also `MergeTable`'s own order and the conflict sort key: a group's
+    // members reference assets, a schedule references an asset or a group, a closure references a
+    // schedule. Ten tables since format 6, not seven.
     val assets: MergeTallyDto,
+    val groups: MergeTallyDto,
     val definitions: MergeTallyDto,
     val profiles: MergeTallyDto,
+    val schedules: MergeTallyDto,
+    val closures: MergeTallyDto,
     val links: MergeTallyDto,
     val tags: MergeTallyDto,
     val events: MergeTallyDto,
@@ -154,8 +165,11 @@ internal fun MergeReport.toResponse() = MergeReportResponse(
     backupSetId = backupSetId,
     applicable = applicable,
     assets = assets.dto(),
+    groups = groups.dto(),
     definitions = definitions.dto(),
     profiles = profiles.dto(),
+    schedules = schedules.dto(),
+    closures = closures.dto(),
     links = links.dto(),
     tags = tags.dto(),
     events = events.dto(),
@@ -348,7 +362,7 @@ internal fun EventRequest.toCommand() = EventCommand(
  * reader does the same thing for a backup (`BackupFormat.kt:247`–`249`), with `BackupCorrupt` in
  * place of a status code.
  */
-private inline fun <reified E : Enum<E>> enumOr400(name: String, field: String): E =
+internal inline fun <reified E : Enum<E>> enumOr400(name: String, field: String): E =
     enumValues<E>().firstOrNull { it.name == name }
         ?: throw ApiFailure.badRequest(
             "$field must be one of ${enumValues<E>().joinToString(", ") { it.name }}, not \"$name\"",
