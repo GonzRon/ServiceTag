@@ -121,7 +121,7 @@ One test per hazard class. Unit tests for the projection; a small connected set 
 ## Review gate
 
 - Unit: `./gradlew :app:testDebugUnitTest --console=plain` → BUILD SUCCESSFUL, zero failures, zero skips; counts recorded.
-- Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.loosecannon.servicetag.ui.maintenance,com.loosecannon.servicetag.ui.dashboard --console=plain` → zero failures, zero skips; the review records the class and test counts.
+- Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.loosecannon.servicetag.ui.maintenance` and, in a SECOND invocation (a comma list runs only the first), `-Pandroid.testInstrumentationRunnerArguments.package=com.loosecannon.servicetag.ui.dashboard --console=plain` → zero failures, zero skips; the review records the class and test counts.
 - Structural, anchored:
   - `grep -n 'val TopLevelRoutes' -A 2 app/src/main/kotlin/com/loosecannon/servicetag/ui/nav/Route.kt` → three members, in the ruled order.
   - `grep -n 'fun Route.readsTags' -A 6 app/src/main/kotlin/com/loosecannon/servicetag/ui/nav/Route.kt` → unchanged: `Scan` and a supported `WriteTag` only.
