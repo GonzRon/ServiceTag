@@ -2,7 +2,6 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
-import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
@@ -10,7 +9,6 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
@@ -21,6 +19,7 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 import com.loosecannon.servicetag.core.schedule.listedForDue
 import com.loosecannon.servicetag.core.schedule.statusOf
+import com.loosecannon.servicetag.core.schedule.targetInService
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import java.time.LocalDate
 
@@ -256,12 +255,16 @@ class DueReadModel(
 
         fun group(id: GroupId): MaintenanceGroup? = groupsById[id.value]
 
-        /** Whether the schedule's target is something in service (#5 AC 3, D-16's lifecycle bound). */
-        fun targetInService(schedule: MaintenanceSchedule): Boolean = when (val target = schedule.target) {
-            is ScheduleTarget.AssetTarget -> asset(target.assetId)
-                ?.let { it.status == AssetStatus.ACTIVE && !it.isRetired } == true
-            is ScheduleTarget.GroupTarget -> group(target.groupId)?.archivedAt == null
-        }
+        /**
+         * #5 AC 3's lifecycle bound, delegated to the domain's own one copy of it.
+         *
+         * It moved to `core/.../core/schedule/` beside `listedForDue` when B10's health findings
+         * needed the same bound: decision 27's worry is exactly two copies of one predicate
+         * drifting, and a bound this surface and the health screen disagreed about would put a
+         * finding on the badge for a schedule no list will show.
+         */
+        fun targetInService(schedule: MaintenanceSchedule): Boolean =
+            schedule.targetInService(::asset, ::group)
 
         companion object {
             suspend fun of(assets: AssetRepository, groups: GroupRepository): World = World(

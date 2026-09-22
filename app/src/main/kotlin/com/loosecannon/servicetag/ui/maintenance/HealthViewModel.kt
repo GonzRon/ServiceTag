@@ -8,12 +8,14 @@ import com.loosecannon.servicetag.core.reminders.Severity
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.reminders.ReminderHealthCheck
+import com.loosecannon.servicetag.reminders.ReminderHealthRun
 import com.loosecannon.servicetag.reminders.ReminderRepair
 import com.loosecannon.servicetag.reminders.repairActionOf
 import com.loosecannon.servicetag.reminders.repairTargetOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -70,7 +72,14 @@ data class HealthRow(
     val message: String get() = finding.message
 }
 
-/** The Health section's state. [loaded] is why an empty list does not flash before the first run. */
+/**
+ * The Health section's state.
+ *
+ * [loaded] distinguishes "nothing is wrong" from "nothing has been asked yet". The **screen** draws
+ * the same thing either way — §17 ratifies no empty-state line, so there is nothing to say for
+ * either — so it is the tests that read it, and it is what a future ratified empty state would be
+ * gated on rather than on an empty list (fix round 1, nit 2).
+ */
 data class HealthState(
     val rows: List<HealthRow> = emptyList(),
     val loaded: Boolean = false,
@@ -89,18 +98,38 @@ data class HealthState(
  * of its own. Nothing cached means "not asked yet", which leaves the badge off: the honest answer
  * for a process that has not looked.
  */
-class ReminderHealth(private val check: ReminderHealthCheck) : HealthSummary {
+class ReminderHealth(private val check: ReminderHealthCheck) : HealthSummary, ReminderHealthRun {
 
     @Volatile
     private var cached: List<HealthFinding>? = null
 
+    private val _changes = MutableStateFlow(0)
+    override val changes: StateFlow<Int> = _changes.asStateFlow()
+
     override suspend fun worstSeverity(): Severity? = cached?.maxByOrNull { it.severity }?.severity
 
     /** Runs the check and caches what it found. The Health screen's own refresh, and launch's. */
-    suspend fun refresh(): List<HealthFinding> = check.run().also { cached = it }
+    suspend fun refresh(): List<HealthFinding> = check.run().also(::publish)
+
+    /**
+     * One pass for a background run: report, repair the unambiguous, and cache the result.
+     *
+     * This — not the bare check — is what the backstop worker drives, so a repair it applies reaches
+     * the badge instead of leaving it lit until the next launch (fix round 1, S3).
+     */
+    override suspend fun runAndRepair(): List<HealthFinding> = check.runAndRepair().also(::publish)
 
     /** Applies one automatic repair, and nothing else; the caller refreshes after it. */
     suspend fun repair(finding: HealthFinding) = check.repair(finding)
+
+    /**
+     * The cache, then the tick — in that order, because a surface woken by the tick reads the cache,
+     * and a tick published first is a wake-up to the previous answer.
+     */
+    private fun publish(findings: List<HealthFinding>) {
+        cached = findings
+        _changes.update { it + 1 }
+    }
 }
 
 /**
@@ -116,9 +145,20 @@ class ReminderHealth(private val check: ReminderHealthCheck) : HealthSummary {
 class HealthViewModel(
     private val health: ReminderHealth,
     private val prefs: AppPrefs,
+    /**
+     * B06's own reconcile — the same entry point the backstop worker and every platform receiver
+     * drive. A seam rather than the type, because nothing about this view model is Android-shaped
+     * and the one thing it needs from the delivery path is "make the shade match the schedules
+     * again".
+     */
+    private val resumeDelivery: suspend () -> Unit,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph) : this(graph.reminderHealth, graph.prefs)
+    constructor(graph: AppGraph) : this(
+        graph.reminderHealth,
+        graph.prefs,
+        { graph.reminderRuns.reconcileAll() },
+    )
 
     private val _state = MutableStateFlow(HealthState())
     val state: StateFlow<HealthState> = _state.asStateFlow()
@@ -143,7 +183,15 @@ class HealthViewModel(
         viewModelScope.launch {
             when (row.action) {
                 HealthAction.Automatic -> health.repair(row.finding)
-                HealthAction.TurnRemindersOn -> prefs.remindersEnabled = true
+                HealthAction.TurnRemindersOn -> {
+                    prefs.remindersEnabled = true
+                    // The write alone restores nothing (fix round 1, S4): B06 **takes down what it
+                    // was showing** when the switch goes off, so without this the one tap would put
+                    // nothing back until the next digest alarm — up to a day — or the next backstop.
+                    // `reconcile` receives the whole desired state, so driving it here is the same
+                    // call the worker makes and has no second effect of its own.
+                    resumeDelivery()
+                }
                 else -> return@launch
             }
             emit(health.refresh())

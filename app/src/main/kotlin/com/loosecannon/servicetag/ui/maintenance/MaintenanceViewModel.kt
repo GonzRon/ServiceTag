@@ -105,7 +105,11 @@ class MaintenanceViewModel(
             groups.observeAll(),
             refreshes,
             noticeDismissed,
-        ) { _, groupRows, _, dismissed ->
+            // The badge's own change signal, for the reason `DashboardViewModel` states: the health
+            // summary is a cache and nothing else here would re-read it when a check lands (B10 fix
+            // round 1, S3).
+            health.changes,
+        ) { _, groupRows, _, dismissed, _ ->
             groupRows to dismissed
         }
             .map { (groupRows, dismissed) ->

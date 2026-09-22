@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequest
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The backstop: every 12 h with a 4 h flex window, recompute every schedule's state, post whatever
@@ -51,17 +52,25 @@ class BackstopWorker(context: Context, parameters: WorkerParameters) : Coroutine
     /**
      * #27's second run point: this worker already runs on a schedule and already re-arms the alarm,
      * so the finding and its repair are one pass (master plan decision 32). Only the two
-     * unambiguous repairs are applied, by [ReminderHealthCheck] itself, and running them again on
-     * the next period changes nothing.
+     * unambiguous repairs are applied, by the health check itself, and running them again on the
+     * next period changes nothing.
+     *
+     * It drives the **cached summary** rather than the bare check, so a repair applied here reaches
+     * the badge instead of leaving it lit until the next launch (fix round 1, S3).
      *
      * It has its own `try`, deliberately: the sweep above has already succeeded by the time this
      * runs, and a health check that could turn that into a retry would cost the phone the whole
      * recompute and every notification it just posted.
      */
     private suspend fun repairHealth() {
-        val check = ReminderHealthDispatch.check ?: return
+        val health = ReminderHealthDispatch.run ?: return
         try {
-            check.runAndRepair()
+            health.runAndRepair()
+        } catch (e: CancellationException) {
+            // A cancelled worker is not a failed health check: swallowing this would report
+            // `Result.success()` for work the platform stopped, and break structured concurrency
+            // for everything this coroutine is still awaiting (fix round 1, S6).
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "the health check failed; the sweep itself succeeded", e)
         }

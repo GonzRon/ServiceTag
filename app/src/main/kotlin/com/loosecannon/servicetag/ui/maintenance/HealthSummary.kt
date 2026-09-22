@@ -1,6 +1,9 @@
 package com.loosecannon.servicetag.ui.maintenance
 
 import com.loosecannon.servicetag.core.reminders.Severity
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * The one question the dashboard's health badge asks, and the whole of what this brief knows about
@@ -24,7 +27,27 @@ import com.loosecannon.servicetag.core.reminders.Severity
  */
 interface HealthSummary {
     suspend fun worstSeverity(): Severity?
+
+    /**
+     * A **change signal**, because the cache above makes this interface pull-only and both badge
+     * surfaces read it inside a store-driven `combine` — so without one, nothing re-reads it when a
+     * check lands (B10 fix round 1, S3). Two failures came of that, and the second is the worse:
+     * a repair the backstop worker applied left the badge lit until the next launch, and the launch
+     * check races the dashboard's first emission, so on a **cold launch** on a phone with a ≥ WARN
+     * condition the badge could be absent for the whole session. §11.1 states the contract as a fact
+     * about findings — "a health badge appears when any finding is ≥ WARN" — not about a refresh
+     * point.
+     *
+     * It is a **counter and not the severity itself** on purpose: the value every surface acts on
+     * stays [worstSeverity]'s, so a summary that answers only that question is still a complete
+     * implementation and nothing has two sources for one answer. The default never ticks, which is
+     * the honest signal from a summary that never changes.
+     */
+    val changes: StateFlow<Int> get() = NEVER_CHANGES
 }
+
+/** For a summary whose answer cannot move — the default above, and [NoHealthFindings]. */
+private val NEVER_CHANGES: StateFlow<Int> = MutableStateFlow(0).asStateFlow()
 
 /**
  * The badge threshold of #5 and D3 §7.3 ("a badge on Home appears when any finding has severity
@@ -46,7 +69,13 @@ fun Severity?.showsBadge(): Boolean = this != null && ordinal >= Severity.WARN.o
  */
 const val REMINDER_FAILED = "REMINDER FAILED"
 
-/** No findings at all — the default every surface holds until B10 supplies a real check. */
+/**
+ * No findings at all.
+ *
+ * It was the default every surface held until B10 landed the real check; now that `AppGraph` wires
+ * `ReminderHealth`, it is a **test default** — the answer a suite wants when the badge is not what
+ * it is asserting. Its [changes] never ticks, which is correct: nothing about it can move.
+ */
 object NoHealthFindings : HealthSummary {
     override suspend fun worstSeverity(): Severity? = null
 }

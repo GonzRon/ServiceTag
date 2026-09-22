@@ -14,6 +14,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.MainActivity
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -49,6 +50,15 @@ class HealthScreenTest {
     @Before fun cancelTheAlarm() {
         app.graph.prefs.remindersEnabled = true
         app.graph.digestAlarm.cancel()
+    }
+
+    /**
+     * Put the real alarm back (fix round 1, nit 7). This class is the only one that cancels it, and
+     * a later class on the same emulator inheriting a cancelled alarm would be a fixture nobody
+     * declared — the second test leaves it armed by its own repair, but the first does not.
+     */
+    @After fun rearmTheAlarm() {
+        if (!app.graph.digestAlarm.armed()) app.graph.digestAlarm.arm()
     }
 
     private fun openHealth() {

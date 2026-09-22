@@ -112,8 +112,8 @@ import com.loosecannon.servicetag.reminders.QuickActionShape
 import com.loosecannon.servicetag.reminders.QuickActionShapeSource
 import com.loosecannon.servicetag.reminders.QuickActions
 import com.loosecannon.servicetag.reminders.ReconcileWorker
-import com.loosecannon.servicetag.reminders.ReminderNotifications
 import com.loosecannon.servicetag.reminders.ReminderHealthCheck
+import com.loosecannon.servicetag.reminders.ReminderNotifications
 import com.loosecannon.servicetag.reminders.ReminderRuns
 import com.loosecannon.servicetag.reminders.ReminderSnooze
 import com.loosecannon.servicetag.reminders.ScheduleCompletion
@@ -502,6 +502,8 @@ class AppGraph(private val context: Context) {
         alarm = digestAlarm,
         schedules = schedules,
         states = scheduleStateReader,
+        assets = assets,
+        groups = groups,
     )
 
     /**

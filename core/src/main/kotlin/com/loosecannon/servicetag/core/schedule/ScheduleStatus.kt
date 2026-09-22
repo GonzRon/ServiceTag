@@ -1,8 +1,15 @@
 package com.loosecannon.servicetag.core.schedule
 
+import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.isRetired
 import java.time.LocalDate
 
 /**
@@ -50,6 +57,39 @@ enum class DueStatus {
  */
 fun List<MaintenanceSchedule>.listedForDue(): List<MaintenanceSchedule> =
     filter { it.status != ScheduleStatus.ARCHIVED }
+
+/**
+ * Whether what this schedule is aimed at is still **in service** — #5 AC 3's bound, D-16's
+ * lifecycle rule — and the second of the two bounds every surface that answers "what needs
+ * attention" applies. [listedForDue] drops an archived *schedule*; this drops a live schedule on a
+ * thing that has left service.
+ *
+ * An out-of-service target's obligations are not what "needs attention" means, and they are not
+ * merely hidden: `BuildReminderSubjects` hands a retired obligation to the provider as
+ * `SubjectState.Withdrawn`, so the app has already **stopped trying to deliver** it. A surface that
+ * reported a delivery problem for one would be reporting a problem nothing is trying to solve.
+ *
+ * **One function, not one per surface** (master plan decision 27): a second copy of this predicate
+ * is the drift that decision exists to prevent, and it is the reason this is here rather than
+ * re-derived beside each caller. The lookups are parameters rather than repositories so this stays
+ * pure and testable, and so a caller that has already read every asset and group once — as every
+ * caller does — pays for one read and not one per schedule.
+ *
+ * **Transcribed unchanged** from the one place that already had it (`DueReadModel`'s `World`), so
+ * this is a move and not a new rule — including its one asymmetry: a **missing asset** answers
+ * false while a **missing group** answers true. Both are unreachable in the real store, because
+ * `maintenance_schedule`'s `asset_id` and `group_id` foreign keys are each `CASCADE`, so a schedule
+ * cannot outlive either target. Recorded rather than quietly normalised: changing it would change
+ * the shipped projection's answer, which is not a thing to do while moving code.
+ */
+fun MaintenanceSchedule.targetInService(
+    assetOf: (AssetId) -> Asset?,
+    groupOf: (GroupId) -> MaintenanceGroup?,
+): Boolean = when (val aim = target) {
+    is ScheduleTarget.AssetTarget ->
+        assetOf(aim.assetId)?.let { it.status == AssetStatus.ACTIVE && !it.isRetired } == true
+    is ScheduleTarget.GroupTarget -> groupOf(aim.groupId)?.archivedAt == null
+}
 
 /**
  * `status(schedule, state, T)` of D5 §1 — a pure function, never stored (invariant 18).

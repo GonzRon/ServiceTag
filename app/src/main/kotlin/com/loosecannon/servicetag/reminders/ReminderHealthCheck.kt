@@ -5,12 +5,15 @@ import androidx.work.WorkManager
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.reminders.HealthFinding
 import com.loosecannon.servicetag.core.reminders.ReminderProvider
 import com.loosecannon.servicetag.core.reminders.RepairAction
 import com.loosecannon.servicetag.core.reminders.Severity
 import com.loosecannon.servicetag.core.schedule.listedForDue
+import com.loosecannon.servicetag.core.schedule.targetInService
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,8 +22,10 @@ import kotlinx.coroutines.withContext
  * The identifier of each repair this app can offer, in **one** place.
  *
  * A [RepairAction] carries a code and nothing else, so the code is the whole of what a screen has
- * to go on: which automatic repair to run, which system screen to open, which in-app destination to
- * go to. Declared here rather than as literals at each construction site because three of them are
+ * to go on: which automatic repair to run, which system screen to open, which **in-app action the
+ * owner must take** — of which navigating somewhere is one kind and `TURN_REMINDERS_ON`, which
+ * flips the owner's own switch on their explicit tap, is the other. Declared here rather than as
+ * literals at each construction site because three of them are
  * built by [LocalReminderProvider] and all seven are labelled by the Health screen, and a code that
  * was spelled differently at those two ends would be a button that does nothing.
  *
@@ -84,13 +89,26 @@ class WorkManagerBackstop(private val context: Context) : BackstopWork {
 }
 
 /**
- * How [BackstopWorker] reaches the health check, for the same reason [ReminderRunDispatch] exists:
+ * One health pass as a background run performs it: report, repair what is unambiguous, and **publish
+ * the result** so the badge sees it.
+ *
+ * It exists so the worker drives the cached summary rather than the bare check (fix round 1, S3): a
+ * repair the worker applies has to reach the cache the badge reads, or the badge stays lit until the
+ * next launch. Declared here, in the package the worker lives in, and implemented by the summary in
+ * `ui/maintenance/` — so the dependency points from the UI at the delivery platform and not back.
+ */
+fun interface ReminderHealthRun {
+    suspend fun runAndRepair(): List<HealthFinding>
+}
+
+/**
+ * How [BackstopWorker] reaches the health run, for the same reason [ReminderRunDispatch] exists:
  * a worker is constructed by WorkManager and never through `AppGraph`. `ServiceTagApp.onCreate`
  * assigns it synchronously, before any `doWork` can run.
  */
 object ReminderHealthDispatch {
     @Volatile
-    var check: ReminderHealthCheck? = null
+    var run: ReminderHealthRun? = null
 }
 
 /**
@@ -129,6 +147,12 @@ class ReminderHealthCheck(
     private val alarm: DigestAlarm,
     private val schedules: ScheduleRepository,
     private val states: ScheduleStateReader,
+    /**
+     * Read for one thing only: whether what a schedule is aimed at is still in service. The bound
+     * itself is the domain's single `targetInService`, never re-derived here (decision 27).
+     */
+    private val assets: AssetRepository,
+    private val groups: GroupRepository,
     /**
      * Where the blocking platform reads happen. The standby bucket, the pending-alarm query and
      * WorkManager's future are all binder calls, and every caller of this class is on a scope whose
@@ -195,14 +219,21 @@ class ReminderHealthCheck(
     suspend fun repair(finding: HealthFinding): Boolean {
         val repair = finding.repair
         if (repair !is RepairAction.Automatic) return false
-        withContext(io) {
+        return withContext(io) {
             when (repairActionOf(repair.code)) {
-                ReminderRepair.ARM_DIGEST_ALARM -> if (!alarm.armed()) alarm.arm()
-                ReminderRepair.ENQUEUE_BACKSTOP -> if (!backstop.enqueued()) backstop.enqueue()
-                else -> Unit
+                ReminderRepair.ARM_DIGEST_ALARM -> {
+                    if (!alarm.armed()) alarm.arm()
+                    true
+                }
+                ReminderRepair.ENQUEUE_BACKSTOP -> {
+                    if (!backstop.enqueued()) backstop.enqueue()
+                    true
+                }
+                // A code this build cannot act on is answered honestly, so `runAndRepair` does not
+                // pay for a second pass that changed nothing (fix round 1, nit 9).
+                else -> false
             }
         }
-        return true
     }
 
     /**
@@ -223,9 +254,15 @@ class ReminderHealthCheck(
     /**
      * The two findings whose facts are in the store.
      *
-     * `SCHEDULE_NO_PROVIDER` is bounded by the **lifecycle**: only an ACTIVE schedule that was asked
-     * to remind someone can be missing a way to do it. Without that clause every paused and every
-     * archived schedule on the phone raises a finding that nothing can clear.
+     * **Both findings carry both lifecycle bounds** (fix round 1, S1/S2). `listedForDue()` drops an
+     * archived schedule; [inService] drops a live schedule on a retired asset or an archived group;
+     * and `status == ACTIVE` drops a paused one. Every clause earns its place: without the archive
+     * bound every retired schedule raises a finding nothing can clear; without the target bound the
+     * app reports a delivery problem for an obligation it has already withdrawn from delivery
+     * (`BuildReminderSubjects` hands a retired one over as `Withdrawn`) and sends the owner to edit
+     * a schedule on equipment they retired; and without `status == ACTIVE` a **paused** schedule is
+     * told it "need[s] a meter reading before [it] can come due", which is false of a schedule that
+     * cannot come due — §11.1's ruling is that a paused schedule needs nothing.
      *
      * `NO_DATA` is keyed on the **meter baseline**, not on the status word (master plan §17.1a's
      * constraint). `lastCompletedMeter` *is* the baseline: the recompute writes it as "the newest
@@ -239,7 +276,7 @@ class ReminderHealthCheck(
      * and a finding derived from nothing would be a guess.
      */
     private suspend fun scheduleFindings(): List<HealthFinding> = buildList {
-        val listed = schedules.all().listedForDue()
+        val listed = inService(schedules.all().listedForDue())
 
         val undeliverable = listed.filter {
             it.status == ScheduleStatus.ACTIVE &&
@@ -263,7 +300,8 @@ class ReminderHealthCheck(
         }
 
         val withoutBaseline = listed.filter { schedule ->
-            schedule.meterDefinitionId != null &&
+            schedule.status == ScheduleStatus.ACTIVE &&
+                schedule.meterDefinitionId != null &&
                 states.stateOf(schedule.id).let { it != null && it.lastCompletedMeter == null }
         }
         if (withoutBaseline.isNotEmpty()) {
@@ -284,6 +322,19 @@ class ReminderHealthCheck(
      * the same one. Nothing in the spec or the plan ranks them, and an order that depended on the
      * repository's row order would send the owner somewhere different on every run.
      */
+    /**
+     * The target-in-service bound, applied once per run rather than once per schedule: both reads
+     * happen here, and the predicate itself is the domain's single [targetInService] — never
+     * re-derived, because two copies of one lifecycle bound is the drift decision 27 forbids and
+     * would mean the badge carrying a finding for a schedule no list will show.
+     */
+    private suspend fun inService(rows: List<MaintenanceSchedule>): List<MaintenanceSchedule> {
+        if (rows.isEmpty()) return rows
+        val assetsById = assets.all().associateBy { it.id.value }
+        val groupsById = groups.all().associateBy { it.id.value }
+        return rows.filter { it.targetInService({ id -> assetsById[id.value] }, { id -> groupsById[id.value] }) }
+    }
+
     private fun targeted(action: String, rows: List<MaintenanceSchedule>): String =
         "$action${ReminderRepair.TARGET_SEPARATOR}${rows.minOf { it.id.value }}"
 }

@@ -1,13 +1,19 @@
 package com.loosecannon.servicetag.reminders
 
+import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.TerminationKind
+import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.reminders.HealthFinding
@@ -18,6 +24,7 @@ import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import com.loosecannon.servicetag.testing.dayMillis
+import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import java.io.File
 import java.time.LocalDate
@@ -62,6 +69,46 @@ internal class FakeScheduleRepository : ScheduleRepository {
     override suspend fun deleteAll() = rows.clear()
     override fun observeAll(): Flow<List<MaintenanceSchedule>> = flowOf(rows.values.toList())
 }
+
+/** In-memory assets: a health run reads them for one thing, the target's lifecycle. */
+internal class FakeAssetRepository : AssetRepository {
+    val rows = linkedMapOf<String, Asset>()
+
+    override suspend fun upsert(asset: Asset) { rows[asset.id.value] = asset }
+    override suspend fun get(id: AssetId): Asset? = rows[id.value]
+    override suspend fun all(): List<Asset> = rows.values.toList()
+    override suspend fun delete(id: AssetId) { rows.remove(id.value) }
+    override suspend fun deleteAll() = rows.clear()
+    override fun observeAll(): Flow<List<Asset>> = flowOf(rows.values.toList())
+}
+
+/** In-memory groups, for the same one question. */
+internal class FakeGroupRepository : GroupRepository {
+    val rows = linkedMapOf<String, MaintenanceGroup>()
+
+    override suspend fun upsert(group: MaintenanceGroup) { rows[group.id.value] = group }
+    override suspend fun get(id: GroupId): MaintenanceGroup? = rows[id.value]
+    override suspend fun all(): List<MaintenanceGroup> = rows.values.toList()
+    override suspend fun forAsset(assetId: AssetId): List<MaintenanceGroup> = emptyList()
+    override suspend fun allWindowsFor(assetId: AssetId): List<MaintenanceGroup> = emptyList()
+    override suspend fun deleteAll() = rows.clear()
+    override fun observeAll(): Flow<List<MaintenanceGroup>> = flowOf(rows.values.toList())
+    override fun observeForAsset(assetId: AssetId): Flow<List<MaintenanceGroup>> = flowOf(emptyList())
+}
+
+/** An asset in service unless a test retires or archives it. */
+internal fun assetOf(
+    id: String,
+    status: AssetStatus = AssetStatus.ACTIVE,
+    retiredOn: String? = null,
+): Asset = Asset(
+    id = AssetId(id),
+    name = "Pump house filter",
+    status = status,
+    retiredOn = retiredOn,
+    createdAt = dayMillis("2026-01-01"),
+    updatedAt = dayMillis("2026-01-01"),
+)
 
 private class HealthKeyValueStore : KeyValueStore {
     private val longs = mutableMapOf<String, Long>()
@@ -123,6 +170,8 @@ class ReminderHealthCheckTest {
     private val backstop = RecordingBackstop(isEnqueued = true)
     private val prefs = AppPrefs(HealthKeyValueStore())
     private val schedules = FakeScheduleRepository()
+    private val assets = FakeAssetRepository()
+    private val groups = FakeGroupRepository()
     private val states = mutableMapOf<String, ScheduleState>()
     private val clock = Clock { dayMillis("2026-09-22") }
 
@@ -150,6 +199,8 @@ class ReminderHealthCheckTest {
         alarm = alarm,
         schedules = schedules,
         states = ScheduleStateReader { states[it.value] },
+        assets = assets,
+        groups = groups,
         // The production check moves its blocking platform reads off the caller's thread; the
         // suite runs them on the test dispatcher so nothing is left in flight at assertion time.
         io = Dispatchers.Unconfined,
@@ -157,9 +208,23 @@ class ReminderHealthCheckTest {
 
     private suspend fun codes(): List<String> = check().run().map { it.code }
 
+    /**
+     * Stores the schedule, its derived row, and — unless the test has already put one there — a
+     * target **in service**.
+     *
+     * The seeding matters: with the target bound in place, a schedule whose asset this fake has
+     * never heard of is silent *because of the bound*, which would make every other control silent
+     * for the wrong reason. A test that is about the bound puts its own out-of-service row in first.
+     */
     private suspend fun add(schedule: MaintenanceSchedule, state: ScheduleState? = null) {
         schedules.upsert(schedule)
         state?.let { states[schedule.id.value] = it }
+        when (val target = schedule.target) {
+            is ScheduleTarget.AssetTarget ->
+                if (assets.get(target.assetId) == null) assets.upsert(assetOf(target.assetId.value))
+            is ScheduleTarget.GroupTarget ->
+                if (groups.get(target.groupId) == null) groups.upsert(groupOf(target.groupId.value))
+        }
     }
 
     // ---------------------------------------------------------------- NOTIFICATIONS_BLOCKED
@@ -437,6 +502,70 @@ class ReminderHealthCheckTest {
             statusOf(schedule, state, TODAY),
         )
         assertEquals("and no finding of any kind is raised for it", emptyList<String>(), codes())
+    }
+
+    /**
+     * `NO_DATA`'s lifecycle control (fix round 1, S1). A **PAUSED** schedule carrying a meter rule
+     * and no baseline is told nothing: "need\[s\] a meter reading before they can come due" is
+     * false of a schedule that cannot come due, and §11.1's ruling is that a paused schedule needs
+     * nothing. The same clause `SCHEDULE_NO_PROVIDER` already carried, for the reason the brief
+     * gives for it.
+     *
+     * Non-vacuous by construction: the identical schedule raises the finding while it is ACTIVE.
+     */
+    @Test
+    fun aPausedMeterScheduleWithNoBaselineIsSilent() = runTest {
+        val meterRule = scheduleOf(
+            id = "s1",
+            assetId = "a1",
+            timeInterval = null,
+            timeUnit = null,
+            anchorOn = null,
+            meterDefinitionId = "d1",
+            meterInterval = 100.0,
+        )
+        add(meterRule, derivedState("s1", effectiveDueOn = null))
+        assertEquals("active, it is the finding", listOf("NO_DATA"), codes())
+
+        schedules.upsert(meterRule.copy(status = ScheduleStatus.PAUSED))
+        assertEquals("paused, it needs nothing", emptyList<String>(), codes())
+    }
+
+    /**
+     * The target-in-service control for **both** store findings (fix round 1, S2). A schedule on a
+     * retired asset, or on an archived group, is an obligation the app has already withdrawn from
+     * delivery — `BuildReminderSubjects` hands a retired one to the provider as `Withdrawn` — so
+     * reporting "no way to deliver them" would be reporting a problem nothing is trying to solve,
+     * and the repair would send the owner to edit a schedule on equipment they retired.
+     *
+     * Non-vacuous twice over: each finding is shown first with its target in service, and the only
+     * thing that changes is the target's lifecycle.
+     */
+    @Test
+    fun aScheduleOnAnOutOfServiceTargetIsSilent() = runTest {
+        add(
+            scheduleOf(id = "s1", assetId = "a1").copy(providers = emptyList()),
+            derivedState("s1"),
+        )
+        add(
+            scheduleOf(
+                id = "g1",
+                groupId = "grp1",
+                meterDefinitionId = "d1",
+                meterInterval = 100.0,
+            ),
+            derivedState("g1"),
+        )
+        assertEquals(
+            "in service, both findings stand",
+            listOf("SCHEDULE_NO_PROVIDER", "NO_DATA"),
+            codes(),
+        )
+
+        assets.upsert(assetOf("a1", retiredOn = "2026-09-01"))
+        groups.upsert(groupOf("grp1", archivedAt = dayMillis("2026-09-01")))
+
+        assertEquals("out of service, neither does", emptyList<String>(), codes())
     }
 
     // ---------------------------------------------------------------- the repair policy

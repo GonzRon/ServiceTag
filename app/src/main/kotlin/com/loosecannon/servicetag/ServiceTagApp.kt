@@ -1,12 +1,13 @@
 package com.loosecannon.servicetag
 
 import android.app.Application
+import android.util.Log
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.reminders.BackstopWorker
 import com.loosecannon.servicetag.reminders.NotificationChannels
 import com.loosecannon.servicetag.reminders.QuickActionDispatch
-import com.loosecannon.servicetag.reminders.ReminderHealthDispatch
 import com.loosecannon.servicetag.reminders.ReminderDispatch
+import com.loosecannon.servicetag.reminders.ReminderHealthDispatch
 import com.loosecannon.servicetag.reminders.ReminderRunDispatch
 import kotlinx.coroutines.launch
 
@@ -33,7 +34,7 @@ class ServiceTagApp : Application() {
         QuickActionDispatch.handler = graph.quickActionRuns
         // And #27's check, for the backstop worker, which is constructed by WorkManager and never
         // through the graph.
-        ReminderHealthDispatch.check = graph.reminderHealthCheck
+        ReminderHealthDispatch.run = graph.reminderHealth
         // Unique periodic work with KEEP, so every process start is safe and none of them restarts
         // the period (spec §5.3). The alarm is armed by the run itself, not from here: the four
         // platform receivers, the digest fire and this worker all arm it, and an arm on the launch
@@ -44,6 +45,16 @@ class ServiceTagApp : Application() {
         // process. It **repairs nothing** — the backstop is where the finding and its repair are
         // one pass — and it is off this thread, because the check reads the standby bucket and
         // queries WorkManager, neither of which belongs on `onCreate`.
-        graph.appScope.launch { graph.reminderHealth.refresh() }
+        graph.appScope.launch {
+            // Guarded, because `appScope` carries no exception handler: an unguarded throw from a
+            // Room read or WorkManager's future would reach the thread's uncaught handler and take
+            // the process down on launch. A diagnostic must never be able to do that (fix round 1,
+            // S5) — the same reasoning the backstop's own health pass already carries.
+            try {
+                graph.reminderHealth.refresh()
+            } catch (e: Exception) {
+                Log.w("ServiceTagApp", "the launch health check failed; nothing else is affected", e)
+            }
+        }
     }
 }

@@ -199,7 +199,12 @@ class DashboardViewModel(
             // row *says* — each is only the signal to re-derive.
             combine(schedules.observeAll(), states.observeAll()) { _, _ -> Unit },
             refreshes,
-        ) { rows, _, _ -> rows }
+            // The badge's own change signal (B10 fix round 1, S3). `HealthSummary` is a cache —
+            // decision 32 forbids the check running per emission — so without this the badge would
+            // only ever be re-read when the *store* moved: a launch check landing after the first
+            // emission would leave a ≥ WARN badge absent for the whole session.
+            health.changes,
+        ) { rows, _, _, _ -> rows }
             .map { rows ->
                 StoreView(
                     rows = rows,
