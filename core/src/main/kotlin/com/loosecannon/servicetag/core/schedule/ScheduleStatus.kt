@@ -67,7 +67,7 @@ fun statusOf(schedule: MaintenanceSchedule, state: ScheduleState, today: LocalDa
         leadDays = schedule.leadDays,
     )
     val meter = if (!meterEvaluable) DueStatus.OK else meterStatus(
-        due = state.computedDueMeter!!,
+        due = state.computedDueMeter,
         current = state.currentMeter,
         lead = schedule.meterLead,
     )

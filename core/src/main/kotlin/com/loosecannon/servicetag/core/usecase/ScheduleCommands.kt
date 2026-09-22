@@ -177,7 +177,7 @@ internal fun scheduleProblems(
     if (!hasTime && !hasMeter) problems += ScheduleProblem.NoRuleSide
 
     if (hasTime) {
-        if (cmd.timeInterval!! < 1) problems += ScheduleProblem.TimeIntervalNotPositive
+        if (cmd.timeInterval < 1) problems += ScheduleProblem.TimeIntervalNotPositive
         if (cmd.timeUnit == null) problems += ScheduleProblem.TimeUnitRequired
         val anchor = cmd.anchorOn
         if (anchor == null) problems += ScheduleProblem.AnchorRequired
