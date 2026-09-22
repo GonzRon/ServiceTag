@@ -85,7 +85,20 @@ class SaveSchedule(
             ?.takeIf { it.target == cmd.target() }
             ?.let { recompute.occurrenceOf(it)?.openInstant }
             ?: now
-        val obliged = group?.let { boundedMembers(it, assets).openAt(obligedAt).size }
+        // **The better of the two instants**, so neither of them can trap the owner. Counting only
+        // at the open instant would refuse an edit for ever once a round had gone vacuous — the
+        // last member removed after the previous round terminated leaves an open instant that
+        // precedes the removal, and no later re-adding moves it — which closes the one door D-9
+        // makes the escape hatch, since a recurrence edit is the thing that abandons a stuck
+        // occurrence. Counting only at `now` is the refusal carry-forward (f) removed. A group that
+        // obliges somebody at *either* instant has somebody to work with; one that obliges nobody
+        // at both is the vacuous schedule invariants 74 and 77 refuse. On a create the two are the
+        // same instant, so the create refusal is unchanged.
+        val obliged = group?.let { bounded ->
+            boundedMembers(bounded, assets).let { members ->
+                maxOf(members.openAt(obligedAt).size, members.openAt(now).size)
+            }
+        }
         val problems = scheduleProblems(cmd, profileAssetId, meter, obliged)
         if (problems.isNotEmpty()) throw ScheduleValidation(problems)
 

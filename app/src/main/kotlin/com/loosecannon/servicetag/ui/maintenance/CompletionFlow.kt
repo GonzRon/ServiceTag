@@ -344,6 +344,7 @@ fun LogMaintenancePicker(
     due: DueReadModel,
     onDismiss: () -> Unit,
     onLogForm: (assetId: String, profileId: String?) -> Unit,
+    onOpenSchedule: (scheduleId: String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val items by produceState(initialValue = emptyList<DueItem>(), due) {
@@ -371,15 +372,27 @@ fun LogMaintenancePicker(
                     DueItemRow(
                         item = item,
                         onClick = {
-                            scope.launch {
-                                val outcome = flow.complete(
-                                    item.scheduleId,
-                                    (item.target as? ScheduleTarget.AssetTarget)?.assetId,
-                                )
-                                if (outcome is CompletionOutcome.NeedsForm) {
-                                    onLogForm(outcome.assetId.value, outcome.profileId?.value)
-                                }
+                            val asset = (item.target as? ScheduleTarget.AssetTarget)?.assetId
+                            if (asset == null) {
+                                // A **group** round is a checklist, and this flow cannot pick which
+                                // member did the work — it would have to write a maintenance record
+                                // onto somebody else's equipment (invariants 28, 29). Completing it
+                                // here with no member named is refused, so the row opens the screen
+                                // that has "Complete all", "Complete selected" and the checklist,
+                                // exactly as the form branch below leaves for its own form. A group
+                                // row is one row by D-15 and is routinely due, so the alternative is
+                                // a tap that closes the dialog and does nothing, with no ratified
+                                // string available to explain it.
                                 onDismiss()
+                                onOpenSchedule(item.scheduleId.value)
+                            } else {
+                                scope.launch {
+                                    val outcome = flow.complete(item.scheduleId, asset)
+                                    if (outcome is CompletionOutcome.NeedsForm) {
+                                        onLogForm(outcome.assetId.value, outcome.profileId?.value)
+                                    }
+                                    onDismiss()
+                                }
                             }
                         },
                     )

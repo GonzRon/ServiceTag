@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.ports.ClosureRepository
+import com.loosecannon.servicetag.core.ports.ScheduleLocalDelivery
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.listedForDue
 import com.loosecannon.servicetag.core.usecase.AssetCommand
@@ -16,11 +17,19 @@ import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
+import com.loosecannon.servicetag.reminders.DeliveryInput
+import com.loosecannon.servicetag.reminders.DigestPolicy
+import com.loosecannon.servicetag.reminders.Fixture
+import com.loosecannon.servicetag.reminders.ItemPost
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.meterDefinitionOf
 import com.loosecannon.servicetag.testing.scheduleOf
+import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -79,6 +88,7 @@ class ScheduleDetailViewModelTest {
         closeRoundUseCase = graph.closeRound,
         snoozer = graph.scheduleSnooze,
         today = graph.todayPort,
+        clock = graph.clock,
         completion = graph.completionFlow,
         scheduleId = scheduleId,
     )
@@ -172,10 +182,23 @@ class ScheduleDetailViewModelTest {
     /**
      * Matrix row **"the five operations collapsing"** — *snooze*: it changes **no date** and creates
      * **no event**, and the schedule still reads OVERDUE (invariant 20).
+     *
+     * **And it is a literal day from the tap, in a zone that is not UTC.** The instant is written
+     * through B06's `ReminderSnooze` and read by `DigestPolicy` against a **wall clock**
+     * (`snoozedUntilAt > nowMillis`), so a calendar-derived instant is a different quantity in
+     * every zone. The hour chosen here is the sharpest case the owner's own zone offers: at 20:00
+     * local on a April evening in UTC−4, midnight UTC of *tomorrow's local date* is **the tap
+     * instant itself**, so the previous arithmetic wrote a snooze that had already expired when it
+     * was written and suppressed nothing at all. The expected value is computed from the clock and
+     * not from the date — the old assertion restated the expression under test and so could not
+     * fail — and `DigestPolicy` itself is asked whether it suppresses.
      */
-    @Test fun snoozeChangesNoDateAndCreatesNoEvent() = runTest {
-        // A genuinely older row, because the D-27 pin means a schedule created through
-        // `saveSchedule` is never overdue on a fresh store.
+    @Test fun snoozeIsExactlyOneDayFromTheTapAndSuppressesTheDigest() = runTest {
+        // A device in a negative UTC offset whose clock says 20:00 local on the day of the tap.
+        val zone = ZoneId.of("America/New_York")
+        val tapped = ZonedDateTime.of(LocalDate.parse("2026-04-15"), LocalTime.of(20, 0), zone)
+        graph.now = tapped.toInstant().toEpochMilli()
+
         graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard")).let { mower ->
             graph.schedules.upsert(
                 scheduleOf("s-old", assetId = mower.id.value, title = "Blade sharpen", createdOn = "2026-01-01"),
@@ -192,20 +215,54 @@ class ScheduleDetailViewModelTest {
         vm.snooze()
         vm.state.first { !it.busy }
 
-        // Recorded in the device-local table, by B06's own use case, and nowhere else.
+        // Exactly twenty-four hours from the tap, in the device-local table, written by B06's own
+        // use case and nowhere else.
         val delivery = graph.scheduleLocalDelivery.get(id)!!
-        assertEquals(
-            LocalDate.parse("2026-04-16").toEpochDay() * 86_400_000L,
-            delivery.snoozedUntilAt,
+        val expected = tapped.toInstant().plus(Duration.ofDays(1)).toEpochMilli()
+        assertEquals(expected, delivery.snoozedUntilAt)
+        assertTrue(
+            "and it is in the future at the moment it is written, which UTC midnight was not",
+            delivery.snoozedUntilAt!! > graph.now,
         )
         assertEquals("and it is never exported or merged", 1, graph.scheduleLocalDelivery.all().size)
+
+        // The consumer's own answer: `DigestPolicy` posts nothing for a snoozed subject now and an
+        // hour before the snooze runs out, and posts again once it has.
+        assertEquals(emptyList<ItemPost>(), digestPosts(id, delivery, at = graph.now))
+        assertEquals(
+            emptyList<ItemPost>(),
+            digestPosts(id, delivery, at = expected - 3_600_000L),
+        )
+        assertTrue(
+            "once the day is up the subject is announced again",
+            digestPosts(id, delivery, at = expected + 1).isNotEmpty(),
+        )
+
         // No date column moved, no event appeared, and the status is unchanged: a snooze suppresses
         // delivery, it does not change what is true.
         assertEquals(before, graph.schedules.get(id)!!)
-        assertEquals(stateBefore.copy(computedAt = graph.scheduleStates.get(id)!!.computedAt), graph.scheduleStates.get(id)!!)
+        assertEquals(
+            stateBefore.copy(computedAt = graph.scheduleStates.get(id)!!.computedAt),
+            graph.scheduleStates.get(id)!!,
+        )
         assertEquals(0, graph.events.all().size)
         assertEquals(DueStatus.OVERDUE, vm.state.value.status)
     }
+
+    /** What `DigestPolicy` would post for this one OVERDUE subject carrying [row], at [at]. */
+    private fun digestPosts(id: ScheduleId, row: ScheduleLocalDelivery, at: Long): List<ItemPost> =
+        DigestPolicy.decide(
+            inputs = listOf(
+                DeliveryInput(
+                    subject = Fixture.subject(id.value, "2026-01-01"),
+                    facts = Fixture.facts(DueStatus.OVERDUE),
+                    delivery = row,
+                ),
+            ),
+            standingTags = emptySet(),
+            standingSummaryTag = null,
+            nowMillis = at,
+        ).posts
 
     /**
      * Matrix row **"the five operations collapsing"** — *postpone*: it changes only
@@ -514,5 +571,9 @@ class ScheduleDetailViewModelTest {
         assertFalse(archived.canComplete)
         assertFalse(archived.canClose)
         assertFalse(archived.canPostpone)
+        // Nor a snooze — there is no delivery left to suppress — and the screen withholds the
+        // recurrence edit too, which is the one action `SaveSchedule` would otherwise have accepted
+        // from a screen that withholds every other one.
+        assertFalse(archived.canSnooze)
     }
 }

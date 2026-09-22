@@ -385,19 +385,21 @@ class ScheduleEditViewModelTest {
     }
 
     /**
-     * Matrix row **"a provider row multiplying"**: the editor writes **at most one** enabled
-     * provider row, and switching reminders off writes the row disabled rather than a second one
-     * (#4 "Provider selection"; the multi-provider UI is #25).
+     * Matrix row **"a provider row multiplying"**: the editor writes **at most one** provider row —
+     * and now exactly one, because the row has no option word to pick from.
+     *
+     * §17.1c ratifies the "Remind me through" label and, deliberately, **no option**, so with the
+     * single `ProviderId` of decision 8 there is nothing for the screen to offer and the provider is
+     * not settable from it at all. What the command must still never do is write two rows, or drop
+     * the one it has — which is what the reminders-off round trip below is about (#4 "Provider
+     * selection"; the multi-provider UI is #25).
      */
-    @Test fun theEditorWritesAtMostOneProviderRow() = runTest {
+    @Test fun theEditorWritesExactlyOneProviderRowAndNeverLosesIt() = runTest {
         val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
         val vm = viewModel(targetAssetId = mower.id.value)
         vm.state.first { it.loaded }
         vm.onTitle("Blade sharpen")
         vm.onInterval("3")
-        // Every provider the editor knows about, chosen in turn: the state holds one value, so the
-        // command can carry one row however many times this is called.
-        ProviderId.entries.forEach(vm::onProvider)
         val saved = savedId(vm)
         vm.save()
 
@@ -405,6 +407,31 @@ class ScheduleEditViewModelTest {
         assertEquals(1, stored.providers.size)
         assertEquals(ProviderId.LOCAL.name, stored.providers.single().provider)
         assertTrue(stored.providers.single().enabled)
+
+        // Reminders **off**, then opened and saved again: the row must survive, disabled. Reading it
+        // back through an `enabled` filter dropped it here, and the next save wrote a schedule with
+        // reminders on and no provider at all — B10's `SCHEDULE_NO_PROVIDER` through the editor's
+        // ordinary path.
+        val off = viewModel(scheduleId = stored.id.value)
+        off.state.first { it.loaded }
+        off.onReminders(false)
+        val offSaved = savedId(off)
+        off.save()
+        val stopped = graph.schedules.get(offSaved.await())!!
+        assertFalse(stopped.remindersEnabled)
+        assertEquals("the row is kept, disabled", 1, stopped.providers.size)
+        assertFalse(stopped.providers.single().enabled)
+
+        // And switching them back on in a fresh session recovers a deliverable schedule.
+        val on = viewModel(scheduleId = stopped.id.value)
+        assertEquals(ProviderId.LOCAL, on.state.first { it.loaded }.provider)
+        on.onReminders(true)
+        val onSaved = savedId(on)
+        on.save()
+        val resumed = graph.schedules.get(onSaved.await())!!
+        assertTrue(resumed.remindersEnabled)
+        assertEquals(1, resumed.providers.size)
+        assertTrue("reminders on with no provider is the finding this prevents", resumed.providers.single().enabled)
     }
 
     /**
@@ -455,8 +482,18 @@ class ScheduleEditViewModelTest {
         assertEquals(0, requests)
     }
 
-    /** Every refusal marks a control, so a refused save is never a dead end with nothing said. */
-    @Test fun everyRefusalMarksAControl() {
+    /**
+     * Every refusal maps to a control — and the three that map to a control the screen does **not**
+     * mark are the three no interaction can provoke.
+     *
+     * The form renders a mark for TARGET, TITLE, INTERVAL, UNIT, ANCHOR, LEAD, METER,
+     * METER_INTERVAL and PROFILE. It renders none for SEASON, COMPLETION_MODE or PROVIDER, and that
+     * is safe only while those three refusals are unreachable through this editor: the season and
+     * completion-mode setters refuse the illegal value for a group target outright, and the provider
+     * is not settable at all. This test asserts the reachability rather than the mapping's
+     * non-blankness, because a name being non-blank is true of a dead end too.
+     */
+    @Test fun everyRefusalMapsToAControlAndTheUnmarkedThreeAreUnreachable() = runTest {
         val problems = listOf(
             ScheduleProblem.TargetInvalid,
             ScheduleProblem.EmptyGroupTarget,
@@ -478,13 +515,36 @@ class ScheduleEditViewModelTest {
             ScheduleProblem.MeterDefinitionNotAMeter(DefinitionId("d")),
             ScheduleProblem.UnknownProvider("TODOIST"),
         )
-        problems.forEach { problem ->
-            assertTrue("$problem marks nothing", fieldOf(problem).isNotBlank())
-        }
-        // And the marks are the fields, never sentences: the set is the field-name vocabulary.
+        problems.forEach { problem -> assertTrue("$problem maps nowhere", fieldOf(problem).isNotBlank()) }
+        assertEquals(problems.map(::fieldOf).toSet(), ScheduleEditState(problems = problems).marks)
+
+        // The three the screen does not mark, and why it does not have to.
+        val head = graph.createAsset.run(AssetCommand(name = "Sprinkler 1", category = "Irrigation"))
+        val group = aGroupOf(listOf(head.id))
+        val vm = viewModel(targetGroupId = group.id.value)
+        vm.state.first { it.loaded }
+
+        vm.onSeason(SeasonBehavior.FOLLOW_ASSET)
+        assertEquals("SEASON is unreachable: the setter refuses it", SeasonBehavior.IGNORE, vm.state.value.seasonBehavior)
+        vm.onCompletionMode(CompletionMode.FORM)
+        assertEquals("COMPLETION_MODE likewise", CompletionMode.QUICK, vm.state.value.completionMode)
+        // PROVIDER: not settable from the screen at all, and the only value it can hold is legal.
+        assertEquals(ProviderId.LOCAL, vm.state.value.provider)
         assertEquals(
-            problems.map(::fieldOf).toSet(),
-            ScheduleEditState(problems = problems).marks,
+            listOf(ScheduleField.SEASON, ScheduleField.COMPLETION_MODE, ScheduleField.PROVIDER),
+            listOf(
+                fieldOf(ScheduleProblem.SeasonFollowsAssetOnGroupTarget),
+                fieldOf(ScheduleProblem.FormCompletionOnGroupTarget),
+                fieldOf(ScheduleProblem.UnknownProvider("TODOIST")),
+            ),
         )
+
+        vm.onTitle("Head check")
+        vm.onInterval("3")
+        val saved = savedId(vm)
+        vm.save()
+        // The save goes through, so none of the three was provoked.
+        assertTrue(vm.state.first { !it.saving }.problems.isEmpty())
+        saved.await()
     }
 }

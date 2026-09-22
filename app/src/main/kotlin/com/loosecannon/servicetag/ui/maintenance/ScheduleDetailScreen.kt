@@ -115,7 +115,14 @@ fun ScheduleDetailScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = { onEditRecurrence(scheduleId) }) { Text("Edit") }
+                    // The brief's table offers the recurrence edit "always, **on an ACTIVE or
+                    // PAUSED schedule**" — so not on an archived one, whose every other action is
+                    // withheld. `SaveSchedule` would accept the edit, which is exactly why the
+                    // screen must not offer it: an archived schedule's rule, and its D-27 pin
+                    // floor, would be movable from the one screen that withholds everything else.
+                    if (!state.archived) {
+                        TextButton(onClick = { onEditRecurrence(scheduleId) }) { Text("Edit") }
+                    }
                     DetailOverflow(
                         paused = state.paused,
                         archived = state.archived,
@@ -222,11 +229,13 @@ fun ScheduleDetailScreen(
                         ) { Text(LOG_MAINTENANCE) }
                     }
                 }
-                OutlinedButton(
-                    onClick = model::snooze,
-                    enabled = !state.busy && !state.archived,
-                    shape = ControlShape,
-                ) { Text(SNOOZE) }
+                if (state.canSnooze) {
+                    OutlinedButton(
+                        onClick = model::snooze,
+                        enabled = !state.busy,
+                        shape = ControlShape,
+                    ) { Text(SNOOZE) }
+                }
                 if (state.canPostpone) {
                     OutlinedButton(
                         onClick = { postponing = true },
@@ -333,9 +342,13 @@ private fun MemberRow(
  * Unbounded on purpose, and the opposite of the close dialog's picker: a postponement is a one-off
  * override the owner can move again or remove, whereas a closure can never be amended — so the one
  * that is permanent is the one that is bounded (invariant 78, and spec §2.1's single override).
+ *
+ * `internal` rather than private because **B09 consumes it**: its Consumes line names
+ * "`PostponeSchedule`'s UI entry" and its sheet offers "Postpone", so the alternative is B09
+ * duplicating this affordance or bouncing the owner to this screen for it.
  */
 @Composable
-private fun PostponeDialog(initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+internal fun PostponeDialog(initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var dueOn by remember { mutableStateOf(initial) }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,

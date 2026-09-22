@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.Today
@@ -32,13 +33,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * How long a schedule's snooze suppresses its notifications for. The notification action is
- * "Snooze 1 day" (§17, B07) and the in-app action is the same length, because two snoozes of
- * different lengths under one ratified word would be two behaviours with one name.
+ * How long a schedule's snooze suppresses its notifications for: **a literal day from the tap**.
+ *
+ * It is a duration and not a calendar boundary, because that is how its consumer reads it —
+ * `DigestPolicy` suppresses while `snoozedUntilAt > nowMillis`, a **wall clock** comparison. An
+ * instant derived from a calendar date is a different quantity in every zone but UTC: midnight UTC
+ * of tomorrow's *local* date is 19:00 **today** in UTC−5, so a snooze taken that evening would be
+ * expired before it was written and would suppress nothing at all, and at every other hour it would
+ * be short of a day. The notification action is "Snooze 1 day" (§17, B07), and this is the same
+ * quantity as well as the same code (`ReminderSnooze`, through the seam).
  */
-private const val SNOOZE_DAYS = 1L
-
-private const val MILLIS_PER_DAY = 86_400_000L
+private const val SNOOZE_MILLIS = 86_400_000L
 
 /**
  * B06's `ReminderSnooze`, as this brief needs it: the **device-local instant only**.
@@ -120,6 +125,8 @@ data class ScheduleDetailState(
     val postponedDueOn: String? = null,
     val paused: Boolean = false,
     val archived: Boolean = false,
+    /** The schedule's own reminder switch: with it off there is no delivery to suppress. */
+    val remindersEnabled: Boolean = false,
     /** The RATIFIED "3 of 5 complete", or null for a round with no progress to report. */
     val progress: String? = null,
     val members: List<RoundMemberRow> = emptyList(),
@@ -153,6 +160,19 @@ data class ScheduleDetailState(
      * invariant 10).
      */
     val canPostpone: Boolean get() = !archived && hasTimeRule && effectiveDueOn != null
+
+    /**
+     * **"Snooze"** is offered when a notification **could be suppressed**, which is the brief's own
+     * condition and not "the schedule is not archived".
+     *
+     * A snooze suppresses delivery and changes nothing else, so it means something only where there
+     * is a delivery to suppress: reminders on, a status that notifies at all (`INACTIVE_SEASON`,
+     * `PAUSED` and `NO_DATA` never do, invariant 22), and a round that obliges somebody — the
+     * vacuous round of invariant 74 can never notify, and offering a snooze on it was a control for
+     * a thing that cannot happen.
+     */
+    val canSnooze: Boolean
+        get() = !archived && !requiredSetEmpty && remindersEnabled && status?.notifies == true
 
     /** A postponement that is set can always be put back, whatever the rule. */
     val canClearPostponement: Boolean get() = !archived && postponedDueOn != null
@@ -200,6 +220,7 @@ class ScheduleDetailViewModel(
     private val closeRoundUseCase: CloseRound,
     private val snoozer: ScheduleSnooze,
     private val today: Today,
+    private val clock: Clock,
     val completion: CompletionFlow,
     private val scheduleId: ScheduleId,
 ) : ViewModel() {
@@ -207,7 +228,7 @@ class ScheduleDetailViewModel(
     constructor(graph: AppGraph, scheduleId: String) : this(
         graph.schedules, graph.assets, graph.groups, graph.scheduleCompletions, graph.scheduleClosures,
         graph.recomputeSchedules, graph.postponeSchedule, graph.pauseSchedule,
-        graph.archiveSchedule, graph.closeRound, graph.scheduleSnooze, graph.today,
+        graph.archiveSchedule, graph.closeRound, graph.scheduleSnooze, graph.today, graph.clock,
         graph.completionFlow, ScheduleId(scheduleId),
     )
 
@@ -278,7 +299,14 @@ class ScheduleDetailViewModel(
             // emptiness never means complete (invariant 74).
             ?.let { (done, total) -> "$done of $total complete" }
 
+        // `busy` is carried across the rebuild rather than reset by it: `refresh()` is also called
+        // from `LifecycleResumeEffect`, so a resume arriving while an operation is in flight would
+        // otherwise re-open the gate `operate` closed. Benign today — the flow's one-prompt guard
+        // and the closure's unique index absorb a double — but it is a hole in the state machine
+        // and not a property worth leaning on.
+        val inFlight = _state.value.busy
         _state.value = ScheduleDetailState(
+            busy = inFlight,
             scheduleId = schedule.id,
             title = schedule.title,
             description = schedule.description,
@@ -291,6 +319,7 @@ class ScheduleDetailViewModel(
             postponedDueOn = schedule.postponedDueOn,
             paused = schedule.status == ScheduleStatus.PAUSED,
             archived = schedule.status == ScheduleStatus.ARCHIVED,
+            remindersEnabled = schedule.remindersEnabled,
             progress = progress,
             members = members,
             history = history.map { event ->
@@ -330,7 +359,7 @@ class ScheduleDetailViewModel(
      * what is true (invariant 20).
      */
     fun snooze() = operate {
-        snoozer.snooze(scheduleId, (today.localDate().plusDays(SNOOZE_DAYS).toEpochDay()) * MILLIS_PER_DAY)
+        snoozer.snooze(scheduleId, clock.nowMillis() + SNOOZE_MILLIS)
     }
 
     /**

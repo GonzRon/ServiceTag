@@ -148,6 +148,12 @@ fun ServiceTagRoot(
                                 logging = false
                                 backStack.add(Route.EventEntry(assetId, profileId, null))
                             },
+                            // A group round is a checklist this flow cannot complete without naming
+                            // a member, so its row opens the screen that can.
+                            onOpenSchedule = {
+                                logging = false
+                                backStack.add(Route.ScheduleDetail(it))
+                            },
                         )
                     }
                 }

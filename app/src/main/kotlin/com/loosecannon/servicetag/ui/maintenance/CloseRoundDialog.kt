@@ -83,17 +83,20 @@ fun CloseRoundDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(CLOSE_THIS_ROUND_CONFIRMATION)
+                // The shipped date field's own label and its `"Pick <label>"` content-description
+                // idiom (`AssetEditScreen.kt`), instantiated rather than re-worded.
+                val dateLabel = "Date"
                 MaintenanceField(
                     value = closedOn.toString(),
                     onValueChange = {},
-                    label = "Date",
+                    label = dateLabel,
                     // Read-only on purpose: the calendar is the only way to change it, so a date
                     // outside the range is unreachable and not merely marked.
                     readOnly = true,
                     mono = true,
                     trailingIcon = {
                         IconButton(onClick = { picking = true }) {
-                            Icon(ServiceTagIcons.CalendarMonth, contentDescription = "Pick Date")
+                            Icon(ServiceTagIcons.CalendarMonth, contentDescription = "Pick $dateLabel")
                         }
                     },
                 )

@@ -37,6 +37,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -49,7 +51,6 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.SeasonBehavior
 import com.loosecannon.servicetag.core.model.TimeBasis
-import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.reminders.NOTIFICATION_PERMISSION_RATIONALE
 import com.loosecannon.servicetag.ui.asset.DateField
@@ -123,17 +124,18 @@ fun ScheduleEditScreen(
         }
     }
 
-    val eyebrow = listOf(
-        if (state.editing) "EDIT SCHEDULE" else "NEW SCHEDULE",
-        state.targetName.uppercase(),
-    ).filter { it.isNotBlank() }.joinToString(" · ")
-
     Scaffold(
         topBar = {
             TopAppBar(
+                // **The app bar names the target and nothing else.** The create/edit words that
+                // stood here were this brief's own invented copy and are gone: §17 ratifies none
+                // for either state, the shell the owner arrived through already says which one it
+                // is, and the Asset's or group's name is stored **data** rather than a string this
+                // release had to draft. A comment must not restate a literal a reviewer greps for,
+                // so neither word appears above.
                 title = {
                     Text(
-                        text = eyebrow,
+                        text = state.targetName.uppercase(),
                         style = Eyebrow,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -249,12 +251,11 @@ fun ScheduleEditScreen(
             // D-12: the meter block belongs to an asset target and is **absent** for a group, which
             // is why the whole section is inside the guard rather than disabled inside it.
             if (!state.isGroup) {
-                MaintenanceSectionTitle(ALSO_DUE_BY_USE)
-                if (state.meters.isEmpty()) {
-                    // Nothing to count: the asset has no meter reading, and §17 ratifies no line
-                    // for that, so the section says only what its header already says.
-                    Spacer(Modifier.height(0.dp))
-                } else {
+                // No section heading here: the picker's own label **is** the ratified
+                // "Also due by use", and drawing it twice in one section reads as a mistake. An
+                // asset with no meter reading gets no block at all rather than a heading over
+                // nothing — §17 ratifies no line for "there is nothing to count".
+                if (state.meters.isNotEmpty()) {
                     MeterPicker(
                         meters = state.meters.map { it.id to it.label },
                         selected = state.meterDefinitionId,
@@ -323,23 +324,25 @@ fun ScheduleEditScreen(
                 QuietLine(ONE_TAP)
             }
 
+            // The RATIFIED row label, and **no option word** — §17.1c ratifies the label and,
+            // deliberately, no option for it. `ProviderId.name` was this brief's own invented copy
+            // and is gone: `LOCAL` is a wire value and a domain member (decision 8), not ratified
+            // display text. 1.2 has exactly one provider, so the single-choice row of #4 is a
+            // choice of one and the switch is the whole of it; the command still writes **at most
+            // one** enabled row, and #25 is the multi-provider UI this deliberately is not.
             MaintenanceSectionTitle(REMIND_ME_THROUGH)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp),
             ) {
-                Switch(checked = state.remindersEnabled, onCheckedChange = model::onReminders)
-                // Single-choice, and one enabled row at most (#4). 1.2 has one provider, so the row
-                // is a choice of one; #25 is the multi-provider UI and this is deliberately not it.
-                ProviderId.entries.forEach { provider ->
-                    ChoiceOption(
-                        label = provider.name,
-                        selected = state.provider == provider,
-                        enabled = state.remindersEnabled,
-                        onSelect = { model.onProvider(provider) },
-                    )
-                }
+                Switch(
+                    checked = state.remindersEnabled,
+                    onCheckedChange = model::onReminders,
+                    // The row's ratified heading is what names this control; there is no second
+                    // word for it to repeat.
+                    modifier = Modifier.semantics { contentDescription = REMIND_ME_THROUGH },
+                )
             }
 
             // **No foot button**, unlike the shipped editors, and deliberately: the app bar's

@@ -224,6 +224,9 @@ class ScheduleOperationsTest {
             )
             listOf(one.id, two.id)
         }
+        // One of the two members is done, so exactly one is outstanding — which is what the
+        // completion label's count must equal, by name rather than by coincidence.
+        val outstanding = members.size - 1
         val historyBefore = runBlocking {
             graph.events.all().map { it.id.value to it.assetId.value }.toSet()
         }
@@ -236,8 +239,9 @@ class ScheduleOperationsTest {
         rule.awaitText("1 of 2 complete")
         rule.onNodeWithText("Complete all").assertIsDisplayed()
         rule.onNodeWithText("Complete selected").assertIsDisplayed()
-        // The asset target's single-completion label is not what a group round offers.
-        rule.onAllNodesWithText("Log maintenance").assertCountEquals(members.size - 1)
+        // A group round offers the completion label **once per outstanding member**, on the
+        // checklist row — one member of the two is already done, so exactly one row carries it.
+        rule.onAllNodesWithText("Log maintenance").assertCountEquals(outstanding)
 
         // The gate is open, and the confirmation says what the action does **not** do.
         rule.onNodeWithText("Close this round").performClick()
@@ -299,6 +303,9 @@ class ScheduleOperationsTest {
         rule.onAllNodesWithText("Complete all").assertCountEquals(0)
         rule.onAllNodesWithText("Complete selected").assertCountEquals(0)
         rule.onAllNodesWithText("Log maintenance").assertCountEquals(0)
+        // Nor a snooze: a round that obliges nobody can never notify, so there is no delivery for a
+        // snooze to suppress and the control is withheld with all the others.
+        rule.onAllNodesWithText("Snooze").assertCountEquals(0)
         // §17 ratifies no word for this state, so it gets none — and never the meter-baseline one.
         rule.onAllNodesWithText("NO BASELINE").assertCountEquals(0)
         rule.onAllNodesWithText("0 of 0 complete").assertCountEquals(0)

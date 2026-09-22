@@ -120,6 +120,13 @@ data class ScheduleEditState(
     val completionMode: CompletionMode = CompletionMode.QUICK,
     val profileId: ProfileId? = null,
     val remindersEnabled: Boolean = true,
+    /**
+     * The one provider this release has (decision 8). It is **not settable from the screen**: §17.1c
+     * ratifies the row's label and no option word, so there is nothing for a second choice to be
+     * called, and with one member the single-choice row of #4 is a choice of one. Kept as state
+     * rather than hardcoded at the command, so #25's multi-provider UI is additive and a stored row
+     * naming a provider this build does not know is preserved rather than silently rewritten.
+     */
     val provider: ProviderId? = ProviderId.LOCAL,
     /** The asset's meter definitions, offered only for an asset target (D-12). */
     val meters: List<MeasurementDefinition> = emptyList(),
@@ -242,8 +249,15 @@ class ScheduleEditViewModel(
         completionMode = row.completionMode,
         profileId = row.profileId,
         remindersEnabled = row.remindersEnabled,
-        provider = row.providers.firstOrNull { it.enabled }
-            ?.let { enabled -> ProviderId.entries.firstOrNull { it.name == enabled.provider } },
+        // **Without the `enabled` filter, and never null.** Filtering on `enabled` lost the row of
+        // a reminders-off schedule: opening and saving one deleted its `schedule_provider` row with
+        // nothing said, and switching reminders back on in the same session then wrote
+        // `remindersEnabled = true` with **no** provider at all — B10's `SCHEDULE_NO_PROVIDER`
+        // finding, reached through the editor's ordinary path. The row carries its own `enabled`
+        // flag, so the provider and the switch are two facts and not one.
+        provider = row.providers.firstOrNull()
+            ?.let { stored -> ProviderId.entries.firstOrNull { it.name == stored.provider } }
+            ?: ProviderId.LOCAL,
         editing = true,
     )
 
@@ -319,12 +333,6 @@ class ScheduleEditViewModel(
     fun onReminders(value: Boolean) = _state.update { it.copy(remindersEnabled = value) }
 
     /**
-     * The provider row is **single-choice** (#4 "Provider selection"): one value, so the command can
-     * carry at most one enabled row and the multi-provider UI stays #25.
-     */
-    fun onProvider(value: ProviderId?) = clearing(ScheduleField.PROVIDER) { it.copy(provider = value) }
-
-    /**
      * D-11: the asset being scheduled already has a **similar operation through a group**.
      *
      * "Similar" is a case-insensitive `title` match against the schedules of the groups this Asset
@@ -346,7 +354,13 @@ class ScheduleEditViewModel(
                 .flatMap { schedules.forGroup(it.id) }
                 .any { it.id != scheduleId && it.title.trim().equals(typed, ignoreCase = true) }
         }
-        _state.update { it.copy(duplicateWarning = similar) }
+        // The title is re-read before the answer lands, because one query is launched per keystroke
+        // and two of them can finish out of order — which would leave the line answering a title
+        // the owner has already typed past. An answer about a title that is no longer there is
+        // dropped rather than shown.
+        _state.update { form ->
+            if (form.title.trim() == typed) form.copy(duplicateWarning = similar) else form
+        }
     }
 
     /**
