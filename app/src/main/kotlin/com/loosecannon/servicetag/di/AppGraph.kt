@@ -41,6 +41,8 @@ import com.loosecannon.servicetag.core.usecase.ArchiveGroup
 import com.loosecannon.servicetag.core.usecase.ArchiveSchedule
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.BuildBackupMergePlan
+import com.loosecannon.servicetag.core.usecase.CloseRound
+import com.loosecannon.servicetag.core.usecase.CompleteGroupMembers
 import com.loosecannon.servicetag.core.usecase.CompleteSchedule
 import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAsset
@@ -308,6 +310,11 @@ class AppGraph(private val context: Context) {
     // only place `removed_at` is ever stamped; nothing anywhere clears one.
     val saveGroup: SaveGroup = SaveGroup(groups, assets, uow, ids, clock)
     val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock)
+    val completeGroupMembers: CompleteGroupMembers = CompleteGroupMembers(
+        schedules, groups, events, closures, definitions, profiles, uow, ids, clock, recomputeSchedules,
+    )
+    val closeRound: CloseRound =
+        CloseRound(schedules, closures, uow, ids, clock, today, recomputeSchedules)
 
     internal companion object {
         const val DB_NAME = "servicetag.db"
