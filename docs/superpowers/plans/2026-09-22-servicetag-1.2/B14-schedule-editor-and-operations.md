@@ -24,7 +24,7 @@ The surface without which 1.2 ships an engine nobody can drive: create and edit 
 - `app/.../ui/asset/AssetDetailScreen.kt` — the "add a schedule for this asset" entry point. **B15 owns the schedules *section*** on that screen; this brief adds only the create entry.
 - `app/.../di/AppGraph.kt` — the two view-model factories and the completion-flow collaborator.
 
-**Untouched:** `core/**` — every rule is B02's or B03's use case, **called, never re-implemented**; `api/**`; `data/**`; `reminders/**` except the one call into B05's permission seam; `nfc/**`; `tools/`; `libs/`; `ui/theme/**`.
+**Untouched:** `core/**` — every rule is B02's or B03's use case, **called, never re-implemented**; `api/**`; `data/**`; `reminders/**` except the one call into B05's permission seam; `nfc/**`; `tools/`; `libs/`; `ui/theme/**`. **Amended at B14's review (2026-09-22):** carry-forwards (e) the QUICK-only rule for group targets, (f) the edit-safe `EmptyGroupTarget`, and (g) the provider-value rule live in `core/.../usecase/ScheduleCommands.kt` and `SaveSchedule.kt` (B02's files), so those two are touched here by ruling.
 
 ## Interfaces
 
@@ -126,7 +126,7 @@ The **action label** is already ratified; this is the confirmation sentence, and
 - Unit: `./gradlew :app:testDebugUnitTest --console=plain` → BUILD SUCCESSFUL, zero failures, zero skips; counts recorded.
 - Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.loosecannon.servicetag.ui.maintenance.ScheduleEditorTest` and, in a SECOND invocation (a comma list runs only the first), `-Pandroid.testInstrumentationRunnerArguments.class=com.loosecannon.servicetag.ui.maintenance.ScheduleOperationsTest --console=plain` → zero failures, zero skips.
 - Structural, anchored:
-  - `grep -rn 'NotificationPermission' app/src/main | grep -v 'reminders/NotificationPermission.kt'` → **only** this brief's view model.
+  - `grep -rn 'NotificationPermission' app/src/main | grep -v 'reminders/NotificationPermission.kt'` → **only** this brief's view model. **Amended at B14's review (2026-09-22):** B05's `AppGraph` field and B08's `granted()` read predate this brief, so the gate is narrowed to `request(` — exactly one call site, this brief's view model.
   - `grep -rnE '(SaveSchedule|CompleteSchedule|PostponeSchedule|CloseRound|CompleteGroupMembers|ReminderSnooze)' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance` shows the use cases **called**; `grep -rn 'EventRepository\|events.upsert\|ClosureRepository' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance` → **no match** (no rule re-implemented, no direct write).
   - `grep -rniE '\b(reschedule|rescheduleSchedule)\b' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance` → no match.
   - `grep -rn 'CloseRound' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance` shows the call reachable **only** from `CloseRoundDialog`'s confirmed path.
