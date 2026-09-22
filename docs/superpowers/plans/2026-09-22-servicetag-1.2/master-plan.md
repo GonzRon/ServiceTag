@@ -807,7 +807,7 @@ Run by the controller at the final tip, not by an implementer. Every grep is an 
 
 Every user-visible string 1.2 introduces, and **every one of them is now RATIFIED** — spec §9.1's set by D-24, and the remaining forty-four by the owner at the gate on **2026-09-22** (§17.1). **A brief may not paraphrase any of them**, and **no brief has a string left to draft.** Any string a brief finds it needs that this table does not list is still a **finding for the controller**, not a brief's to invent.
 
-**Every status and treatment word D12 already carries is pre-ratified with it** (`docs/design/12-visual-design-apollo-service-binder.md:274-296`, `:289`, `:311-313`, `:706-707`), which covers the seven status terms, the four dashboard section labels, and **REMINDER FAILED** for the failure family (B10) — D12 is approved visual-design direction recorded as part of the design authority.
+**Every status and treatment word D12 already carries is pre-ratified with it** (`docs/design/12-visual-design-apollo-service-binder.md:274-296`, `:289`, `:311-313`, `:706-707`), which covers the seven status terms, the four dashboard section labels, and **REMINDER FAILED** for the failure family (B10) — D12 is approved visual-design direction recorded as part of the design authority. **Ratified at B08's review (owner, 2026-09-22):** **"Dismiss"** — the accessibility (`contentDescription`) label of the dismissible "Reminders are off because notifications are blocked." line; never drawn as text. **Confirmed the same day:** **"REMINDER FAILED"** (the health badge label) stands on D12 §5's ratification — not a new string.
 
 | string | state | used by |
 |---|---|---|
