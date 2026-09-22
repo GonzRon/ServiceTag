@@ -1,0 +1,138 @@
+{
+  "formatVersion": 1,
+  "namespace": "bramblewick-hollow",
+  "bundleKey": "stage-a",
+  "asOf": "2026-09-21T00:00:00Z",
+  "tzId": "America/Denver",
+  "assets": [
+    {
+      "key": "greenhouse-heater",
+      "name": "Greenhouse Heater",
+      "category": "climate",
+      "description": "Propane-fired heater for the west greenhouse",
+      "notes": "runs October through April",
+      "manufacturer": "Bramblewick",
+      "model": "GH-100",
+      "serialNumber": "BW-GH100-0042",
+      "vendor": "Hollow Supply Co",
+      "location": "west greenhouse",
+      "warrantyNotes": "parts only, no labor",
+      "purchaseOn": "2024-03-15",
+      "inServiceOn": "2024-04-01",
+      "warrantyExpiresOn": "2027-03-15",
+      "purchasePriceMinor": 189900,
+      "currency": "USD",
+      "seasonStartMmdd": "10-01",
+      "seasonEndMmdd": "04-30",
+      "definitions": [
+        {
+          "key": "temp_c",
+          "label": "Temperature",
+          "unit": "C",
+          "valueType": "NUMBER",
+          "decimals": 1,
+          "rangeLow": -10,
+          "rangeHigh": 40
+        },
+        {
+          "key": "target_temp_c",
+          "label": "Target Temperature",
+          "unit": "C",
+          "valueType": "NUMBER",
+          "decimals": 1,
+          "rangeLow": 0,
+          "rangeHigh": 40
+        },
+        {
+          "key": "temp_drop_pct",
+          "label": "Temperature Drop",
+          "unit": "%",
+          "valueType": "NUMBER",
+          "kind": "DERIVED",
+          "formula": "PERCENT_DROP",
+          "sourceA": "temp_c",
+          "sourceB": "target_temp_c"
+        },
+        {
+          "key": "status_note",
+          "label": "Status Note",
+          "valueType": "TEXT"
+        },
+        {
+          "key": "is_running",
+          "label": "Is Running",
+          "valueType": "BOOLEAN"
+        }
+      ],
+      "profiles": [
+        {
+          "key": "seasonal-check",
+          "name": "Seasonal Check",
+          "eventKind": "MAINTENANCE",
+          "fields": [
+            {"definition": "temp_c", "required": true}
+          ],
+          "consumables": [
+            {"key": "filter", "name": "Filter Pad", "defaultQuantity": 1, "unit": "pcs"}
+          ]
+        }
+      ],
+      "events": [
+        {
+          "key": "spring-startup",
+          "kind": "MAINTENANCE",
+          "occurredOn": "2026-04-01",
+          "title": "Spring startup",
+          "notes": "swapped filter, checked pilot",
+          "profile": "seasonal-check",
+          "values": {
+            "temp_c": 18.5,
+            "target_temp_c": 20,
+            "is_running": true
+          },
+          "consumables": [
+            {"key": "filter", "name": "Filter Pad", "quantity": 1, "unit": "pcs"}
+          ]
+        },
+        {
+          "key": "fall-inspection",
+          "kind": "INSPECTION",
+          "occurredOn": "2026-09-15",
+          "title": "Fall inspection",
+          "values": {
+            "status_note": "Coils clean, no rust",
+            "is_running": false
+          }
+        }
+      ]
+    },
+    {
+      "key": "greenhouse-heater-thermostat",
+      "name": "Greenhouse Heater Thermostat",
+      "category": "climate",
+      "manufacturer": "Bramblewick",
+      "model": "TS-20",
+      "parent": "greenhouse-heater"
+    },
+    {
+      "key": "orchard-drone",
+      "name": "Orchard Survey Drone",
+      "category": "equipment",
+      "manufacturer": "Fenwick Aerial",
+      "model": "FA-Scout"
+    },
+    {
+      "key": "workshop-generator",
+      "name": "Workshop Generator",
+      "category": "power",
+      "manufacturer": "Corvid Power",
+      "model": "CP-5000",
+      "vendor": "Hollow Supply Co",
+      "purchaseOn": "2025-06-01",
+      "purchasePriceMinor": 249900,
+      "currency": "USD",
+      "warrantyExpiresOn": "2028-06-01",
+      "warrantyNotes": "2-year full coverage"
+    }
+  ]
+}

@@ -13,13 +13,38 @@ same archive bytes.
 
 ## Status
 
-Through Task 3 of the Stage-A bundle plan: the package skeleton, the validated source model
+Through Task 4 of the Stage-A bundle plan: the package skeleton, the validated source model
 (`servicetag_bundle.source`), deterministic ids and row mapping (`servicetag_bundle.ids`,
-`servicetag_bundle.rows`), and the archive writer plus CLI (`servicetag_bundle.archive`,
-`servicetag_bundle.cli`). It reads and fully validates a source document, derives every row's id,
-and writes a format-5 backup archive with a matching manifest — byte-identical across processes
-for the same source. Decoder conformance against the real Kotlin `BackupCodec` (a committed
-fixture, exercised from both sides) is Task 4.
+`servicetag_bundle.rows`), the archive writer plus CLI (`servicetag_bundle.archive`,
+`servicetag_bundle.cli`), and decoder conformance against the real Kotlin `BackupCodec`. It reads
+and fully validates a source document, derives every row's id, and writes a format-5 backup
+archive with a matching manifest — byte-identical across processes for the same source. A
+committed synthetic fixture (`fixtures/synthetic-estate.json`, fictional nouns and brands only)
+is built into a committed archive that both a Python golden test and a JVM test
+(`core/src/test/kotlin/.../backup/StageABundleConformanceTest.kt`) exercise from their own side.
+
+## Decoder conformance and regenerating the fixture archive
+
+`core/src/test/resources/stage-a-synthetic-estate.zip` is a format-5 backup archive built from
+`fixtures/synthetic-estate.json` by this tool's own CLI, committed so the JVM's
+`BackupCodec.decode` and this package's Python golden test (`tests/test_golden.py`) both exercise
+the exact same bytes. The Python test never compares raw zip bytes against it across machines
+(DEFLATE output depends on the zlib build the interpreter links against), only the decompressed
+payload of each entry, the pinned `ZipInfo` fields, and the `data.json` hash the decoder actually
+checks — see `tests/test_golden.py`'s module docstring.
+
+**Whenever the generator's output changes** (a field added to a row, an id derivation rule
+changed, a new table), regenerate the resource from the fixture and commit both files together in
+the same change:
+
+```
+uv run servicetag-bundle build fixtures/synthetic-estate.json \
+    ../../core/src/test/resources/stage-a-synthetic-estate.zip --force
+```
+
+Then run both suites (`uv run --frozen pytest` here, and `:core:test` on the Kotlin side) before
+committing — a stale resource fails the golden test and, separately, the JVM conformance test's
+DTO-key-set check, rather than passing on drifted data.
 
 ## The CLI
 
