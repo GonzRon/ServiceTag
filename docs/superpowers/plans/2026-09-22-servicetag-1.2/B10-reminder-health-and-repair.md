@@ -108,9 +108,9 @@ Because maintenance reminders are a reliability mechanism, the app must be able 
 - Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.loosecannon.servicetag.ui.maintenance.HealthScreenTest --console=plain`.
 - Structural, anchored:
   - `grep -rniE '\b(TODOIST_DISCONNECTED|PROJECTION_MISSING|PROJECTION_CONFLICT|PROJECTION_DUE_DRIFT|SYNC_STALE|OUTBOX_FAILING)\b' app/src/main core/src/main` → no match.
-  - `grep -rn 'RepairAction.Automatic' app/src/main/kotlin/com/loosecannon/servicetag/reminders/ReminderHealthCheck.kt` → exactly **two** sites: the alarm re-arm and the worker re-enqueue.
+  - `grep -rn 'RepairAction.Automatic' app/src/main/kotlin/com/loosecannon/servicetag/reminders/ReminderHealthCheck.kt` → exactly **two** sites: the alarm re-arm and the worker re-enqueue. **Amended at B10's resume (2026-09-22, controller ruling):** counted ACROSS `ReminderHealthCheck.kt` and B06's `LocalReminderProvider.kt` together — carry-forward (a) draws the three provider-side §17.1a sentences in B06's `health()` rather than restating them.
   - `grep -rniE '\bconflict\b' app/src/main/kotlin/com/loosecannon/servicetag/reminders/ReminderHealthCheck.kt` → no match, or only a comment stating that conflicts are never repaired.
-  - `grep -c 'HealthFinding(' app/src/main/kotlin/com/loosecannon/servicetag/reminders/ReminderHealthCheck.kt` → **7** construction sites, one per code.
+  - `grep -c 'HealthFinding(' app/src/main/kotlin/com/loosecannon/servicetag/reminders/ReminderHealthCheck.kt` → **7** construction sites, one per code. **Amended at B10's resume (2026-09-22, controller ruling):** counted ACROSS `ReminderHealthCheck.kt` and B06's `LocalReminderProvider.kt` together — carry-forward (a) draws the three provider-side §17.1a sentences in B06's `health()` rather than restating them.
   - `grep -rn 'ReminderHealthCheck' app/src/main | grep -vE '(ServiceTagApp|BackstopWorker|HealthViewModel|AppGraph|ReminderHealthCheck)\.kt'` → no match (the three run points and the wiring, and nothing else).
 
 ## Estimated size
