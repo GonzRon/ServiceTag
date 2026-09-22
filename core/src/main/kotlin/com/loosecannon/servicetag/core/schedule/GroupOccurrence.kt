@@ -75,6 +75,13 @@ data class GroupOccurrence(
  *   in the past (invariant 33).
  * - **the completed set** is the member assets holding an event with this `(schedule_id,
  *   occurrence_on)`.
+ *
+ * **Precondition on every function that takes a membership list.** The list must already be bounded
+ * by [withLifecycle]: these functions read the windows as given and know nothing about the member
+ * Assets, so a raw `MaintenanceGroup.members` yields a required set that includes archived and
+ * retired members and therefore **silently disagrees with `schedule_state`**. Prefer
+ * `RecomputeSchedules.occurrenceOf(schedule)`, which gathers the same inputs the engine rebuilds
+ * from and applies the bound; call these directly only with a list you bounded yourself.
  */
 object GroupOccurrences {
 
@@ -84,6 +91,9 @@ object GroupOccurrences {
      * The key is an ISO `YYYY-MM-DD` string because that is what the rows carry; the returned dates
      * are `LocalDate` because every consumer of an occurrence is doing calendar arithmetic with them
      * — the conversion happens once, here, rather than at each of them.
+     *
+     * [membership] must already be bounded by [withLifecycle] — see the class KDoc. A surface that
+     * wants an occurrence should ask `RecomputeSchedules.occurrenceOf` for it.
      */
     fun on(
         schedule: MaintenanceSchedule,
@@ -93,7 +103,10 @@ object GroupOccurrences {
         occurrenceOn: String,
     ): GroupOccurrence = OccurrenceBasis.of(schedule, events, closures, membership).occurrence(occurrenceOn)
 
-    /** Who has to do the work for the occurrence keyed [occurrenceOn]. */
+    /**
+     * Who has to do the work for the occurrence keyed [occurrenceOn]. [membership] must already be
+     * bounded by [withLifecycle] — see the class KDoc.
+     */
     fun requiredOn(
         schedule: MaintenanceSchedule,
         events: List<AssetEvent>,

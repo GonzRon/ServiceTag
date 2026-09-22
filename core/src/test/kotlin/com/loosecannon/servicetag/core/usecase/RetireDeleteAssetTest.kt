@@ -41,9 +41,10 @@ class RetireDeleteAssetTest {
     private val uow = FakeUnitOfWork(assets, events, attachments)
     private var now = 1_000L
     private val clock = Clock { now }
-    private val retire = RetireAsset(assets, uow, clock)
+    // Explicitly nothing: see AssetUseCasesTest. The seam has no default.
+    private val retire = RetireAsset(assets, uow, clock) { }
     private val delete = DeleteAsset(assets, events, attachments, storage, uow)
-    private val archive = ArchiveAsset(assets, uow, clock)
+    private val archive = ArchiveAsset(assets, uow, clock) { }
 
     private suspend fun store(id: String, name: String, parent: AssetId? = null): Asset {
         val asset = Asset(

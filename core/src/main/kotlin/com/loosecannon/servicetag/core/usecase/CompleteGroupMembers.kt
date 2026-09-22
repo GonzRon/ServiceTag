@@ -147,6 +147,13 @@ class CompleteGroupMembers(
             existing = null,
             ids = ids,
             now = now,
+            // **D-12 makes a group-targeted schedule QUICK-only**, so the second branch should never
+            // be taken; it is not dead, though, because nothing in the schedule command enforces
+            // `completionMode` for a group target yet — the rule reaches the two shape checks that
+            // cover `profileId` and the meter rule and stops there. Reading `MANUAL` here as
+            // evidence that FORM group schedules are supported would be exactly wrong: a group
+            // target carries no profile, so a form has nothing to collect. Recorded as a finding
+            // rather than enforced here, because the command's rules are the schedule brief's.
             source = if (schedule.completionMode == CompletionMode.QUICK) {
                 EventSource.SCHEDULE_QUICK_COMPLETE
             } else {

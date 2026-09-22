@@ -14,15 +14,15 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * 1.2: `retiredOn` is an **input to derived due state**, because it closes the Asset's membership
  * windows for any group round opening on or after it (D-16). [onLifecycleChanged] asks for the
- * rebuild that follows, inside the same transaction; it defaults to nothing for
- * [ArchiveAsset]'s reason. Because the date is back-datable, that rebuild is also what makes a
- * correction take effect at all.
+ * rebuild that follows, inside the same transaction, and has **no default** for [ArchiveAsset]'s
+ * reason. Because the date is back-datable, that rebuild is also what makes a correction take
+ * effect at all.
  */
 class RetireAsset(
     private val assets: AssetRepository,
     private val uow: UnitOfWork,
     private val clock: Clock,
-    private val onLifecycleChanged: suspend (AssetId) -> Unit = {},
+    private val onLifecycleChanged: suspend (AssetId) -> Unit,
 ) {
     suspend fun retire(id: AssetId, on: String): Asset {
         val date = on.trim()

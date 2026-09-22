@@ -88,6 +88,7 @@ class GroupCompletionTest {
     private val closeRound =
         CloseRound(countedSchedules, closures, uow, ids, clock, todayPort, recompute)
     private val logEvent = LogEvent(events, defs, profiles, assets, uow, ids, clock, recompute)
+    private val archiveAsset = ArchiveAsset(assets, uow, clock) { recompute.forAsset(it) }
 
     private suspend fun seedAsset(id: String): AssetId {
         val asset = Asset(id = AssetId(id), name = "Feeder $id", createdAt = 1L, updatedAt = 1L)
@@ -417,6 +418,32 @@ class GroupCompletionTest {
         assertFailsWith<OccurrenceNotCloseable> { closeRound.run(schedule.id) }
         assertEquals(1, events.all().size, "nothing was written by either refusal")
         assertEquals(emptyList(), closures.all())
+    }
+
+    /**
+     * The empty-group refusal counts the **lifecycle-bounded** windows, not the raw open ones: a
+     * group whose only open window names an **archived** Asset obliges nobody, so its first round
+     * could never terminate and the schedule is refused exactly as if the group had no members at
+     * all (D-16, invariants 74, 77).
+     *
+     * Un-archiving restores it, which is the assertion that says the windows themselves were never
+     * touched — the bound is a derivation, and the group is unchanged underneath it.
+     */
+    @Test
+    fun aGroupWhoseOnlyOpenMemberIsArchivedIsAlsoAnEmptyGroupTarget() = runTest {
+        val a1 = seedAsset("a1")
+        val groupId = seedGroup(listOf(a1))
+        val windows = assertNotNull(groups.get(groupId)).members
+
+        archiveAsset.run(a1)
+        val problems = assertFailsWith<ScheduleValidation> { seedSchedule(groupId) }.problems
+        assertTrue(ScheduleProblem.EmptyGroupTarget in problems)
+        assertEquals(emptyList(), schedules.all())
+        assertEquals(windows, assertNotNull(groups.get(groupId)).members)
+
+        archiveAsset.unarchive(a1)
+        val schedule = seedSchedule(groupId)
+        assertEquals(listOf(a1), assertNotNull(recompute.occurrenceOf(schedule)).required)
     }
 
     /** An asset-targeted schedule has no member list to be given one. */

@@ -15,14 +15,15 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * 1.2: the status is an **input to derived due state**, because an archived Asset is excluded from a
  * group round's required set (D-16). [onLifecycleChanged] is how the rebuild that follows is asked
- * for, inside the same transaction; it defaults to nothing so the two shipped tests that hold no
- * scheduling fakes at all still construct this use case with three arguments.
+ * for, inside the same transaction; it has **no default**, so a build that
+ * forgot to wire it does not compile — the alternative was a silent no-op shipping a build where
+ * archiving an Asset never rebuilt a group schedule's derived state.
  */
 class ArchiveAsset(
     private val assets: AssetRepository,
     private val uow: UnitOfWork,
     private val clock: Clock,
-    private val onLifecycleChanged: suspend (AssetId) -> Unit = {},
+    private val onLifecycleChanged: suspend (AssetId) -> Unit,
 ) {
     suspend fun run(id: AssetId): Asset = setStatus(id, AssetStatus.ARCHIVED)
 

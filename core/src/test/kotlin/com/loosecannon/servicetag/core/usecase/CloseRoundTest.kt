@@ -324,11 +324,45 @@ class CloseRoundTest {
         val before = assertFailsWith<ClosedOnOutOfRange> {
             closeRound.run(refused.id, closedOn = "2025-12-31")
         }
-        assertEquals("2026-01-01", before.openOn)
+        assertEquals("2026-01-01", before.earliestOn)
         assertFailsWith<ClosedOnOutOfRange> { closeRound.run(refused.id, closedOn = "2026-02-16") }
         assertFailsWith<BadScheduleDate> { closeRound.run(refused.id, closedOn = "next week") }
         assertNull(closures.find(refused.id, "2026-01-01"))
         assertEquals(3, closures.all().size)
+    }
+
+    /**
+     * The floor is the round's open date **clamped to today**, and the clamp is what keeps the range
+     * from ever being empty.
+     *
+     * The open instant's calendar date is taken at UTC, deliberately, for the engine's purity; today
+     * is the device-local date. In a negative UTC offset the two differ by a day on the round's
+     * opening evening — the round below opens at `2026-01-02T00:00Z` while the device says
+     * `2026-01-01` — and an unclamped floor would refuse the **default** and every value a caller
+     * could offer instead, leaving B14's "When was this done?" affordance an empty range. With the
+     * clamp the default is accepted and stored as today, and the refusal names the floor it used.
+     */
+    @Test
+    fun theDefaultIsAcceptedWhenTodayIsBehindTheOpenInstantsUtcDate() = runTest {
+        val a1 = seedAsset("a1")
+        now = dayMillis("2026-01-02")
+        val schedule = seedSchedule(seedGroup(listOf(a1)))
+        today = LocalDate.parse("2026-01-01")
+
+        val round = assertNotNull(recompute.occurrenceOf(schedule))
+        assertEquals("2026-01-02", round.openOn.toString(), "the open date is ahead of today")
+
+        val closure = closeRound.run(schedule.id)
+        assertEquals("2026-01-01", closure.closedOn, "the default is today, and today is accepted")
+        assertEquals(listOf(closure), closures.all())
+
+        // The next round opens at the same instant, so the clamped floor is what a refusal reports.
+        val refused = assertFailsWith<ClosedOnOutOfRange> {
+            closeRound.run(schedule.id, closedOn = "2025-12-31")
+        }
+        assertEquals("2026-01-01", refused.earliestOn)
+        assertEquals("2026-01-01", refused.today)
+        assertEquals(listOf(closure), closures.all())
     }
 
     /**

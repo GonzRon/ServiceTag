@@ -36,7 +36,8 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * - a round that obliges **nobody**: there is no round for a closure to be about (invariant 77).
  *
  * And `closedOn`, which is the date the recurrence advances from: it defaults to today and may lie
- * anywhere from the round's **open date** through today, inclusive. Anything else is refused,
+ * anywhere from the round's **open date, clamped to today**, through today, inclusive. Anything else
+ * is refused,
  * because the row can never be amended and an unbounded caller date would move a schedule's future
  * for good (invariant 78). The range is the same one D-25 gives a completion, so the API and the
  * in-app action cannot diverge.
@@ -65,10 +66,17 @@ class CloseRound(
         if (!occurrence.isActionable) throw OccurrenceNotCloseable(id, key)
 
         val todayOn = today.localDate()
+        // The floor is the round's open date **clamped to today**. The open instant's date is taken
+        // at UTC, for the engine's purity, while today is device-local, so in a negative UTC offset
+        // the two can differ by a day on the round's opening evening — and an unclamped floor would
+        // then leave the range empty, refusing the default and every value a caller could offer
+        // instead. Clamping weakens the stored bound in no ordinary case, because the open date is
+        // at or before today in every other one (invariant 78).
+        val floorOn = minOf(occurrence.openOn, todayOn)
         val asked = closedOn?.trim() ?: todayOn.toString()
         val parsed = parseDate(asked) ?: throw BadScheduleDate(asked)
-        if (parsed.isBefore(occurrence.openOn) || parsed.isAfter(todayOn)) {
-            throw ClosedOnOutOfRange(asked, occurrence.openOn.toString(), todayOn.toString())
+        if (parsed.isBefore(floorOn) || parsed.isAfter(todayOn)) {
+            throw ClosedOnOutOfRange(asked, floorOn.toString(), todayOn.toString())
         }
 
         val closure = OccurrenceClosure(

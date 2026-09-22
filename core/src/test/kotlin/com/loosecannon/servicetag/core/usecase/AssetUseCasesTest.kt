@@ -24,7 +24,9 @@ class AssetUseCasesTest {
     private var now = 1_000L
     private val clock = Clock { now }
     private val update = UpdateAsset(assets, uow, clock)
-    private val archive = ArchiveAsset(assets, uow, clock)
+    // No scheduling fakes here, so the lifecycle rebuild is explicitly nothing: the seam has
+    // no default, so a graph that forgot to wire it would not compile.
+    private val archive = ArchiveAsset(assets, uow, clock) { }
 
     private suspend fun store(
         name: String = "Pool pump",

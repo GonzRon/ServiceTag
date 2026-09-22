@@ -281,10 +281,12 @@ class ScheduleOperationsTest {
 
     /**
      * **A meter-only schedule cannot be postponed.** It has no occurrence date to move, so writing
-     * `postponed_due_on` would hand the sort key a date the schedule does not have — and
-     * `effectiveDueOn` is null only when there is no time rule (invariant 10). Clearing is still
-     * allowed whatever the rule, so a row that arrived carrying an override it should never have had
-     * can be cleaned up rather than stuck.
+     * `postponed_due_on` would hand the sort key a date the schedule does not have, which is what
+     * invariant 10 forbids — a null `effectiveDueOn` is the honest answer for a schedule with no time
+     * rule, and the schedule must not be given one by the back door. (The invariant's converse now
+     * has a second case, a group round that obliges nobody, which is not this test's subject.)
+     * Clearing is still allowed whatever the rule, so a row that arrived carrying an override it
+     * should never have had can be cleaned up rather than stuck.
      */
     @Test
     fun aMeterOnlyScheduleCannotBePostponedButCanBeCleared() = runTest {

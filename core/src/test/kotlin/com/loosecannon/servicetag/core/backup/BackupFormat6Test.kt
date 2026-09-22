@@ -474,6 +474,25 @@ class BackupFormat6Test {
         refuses("a schedule with an unknown lifecycle status") { d ->
             d.copy(maintenanceSchedules = listOf(assetSchedule().copy(status = "OVERDUE")))
         }
+        refuses("a meter-only schedule carrying a postponement") { d ->
+            // `assetSchedule()` already carries `postponedDueOn`; stripping its time rule leaves a
+            // schedule with no calendar occurrence for a postponement to replace, which would make
+            // `effectiveDueOn` non-null with no time rule. The postpone operation refuses it; without
+            // this the import is the way in.
+            //
+            // Mapped over the list rather than replacing it, deliberately: replacing it would drop
+            // the other schedule and this file's event and closure would then name an absent one, so
+            // the row would pass on somebody else's refusal.
+            d.copy(
+                maintenanceSchedules = d.maintenanceSchedules.map { schedule ->
+                    if (schedule.id == "s1") {
+                        schedule.copy(timeInterval = null, timeUnit = null, anchorOn = null)
+                    } else {
+                        schedule
+                    }
+                },
+            )
+        }
         refuses("a closure naming an absent schedule") { d ->
             d.copy(occurrenceClosures = listOf(closure().copy(scheduleId = "s-nowhere")))
         }

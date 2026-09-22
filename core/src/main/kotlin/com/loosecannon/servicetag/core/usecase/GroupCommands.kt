@@ -3,7 +3,13 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
+import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.schedule.GroupOccurrences
+import com.loosecannon.servicetag.core.schedule.MemberLifecycle
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 /**
  * The group editor's raw input, before [SaveGroup] turns it into a stored aggregate.
@@ -125,9 +131,59 @@ class OccurrenceNotCloseable(val id: ScheduleId, val occurrenceOn: String) :
  * never be amended: an unbounded caller value would permanently move a schedule's future on a fact
  * nothing can correct. It mirrors D-25's rule for completions, so the API and the in-app action
  * accept exactly the same range.
+ *
+ * [earliestOn] is the round's open date **clamped to today**, and is not always the open date. The
+ * open instant's calendar date is taken at UTC, for the engine's purity, while today is the
+ * device-local date; in a negative UTC offset the two can differ by a day on the round's opening
+ * evening, and an unclamped floor would then leave the range empty — no date a caller could pass,
+ * and B14's "When was this done?" affordance offered nothing at all. Clamping weakens the stored
+ * bound in no ordinary case, because the open date is at or before today in every other one.
  */
-class ClosedOnOutOfRange(val value: String, val openOn: String, val today: String) :
-    IllegalArgumentException("closedOn $value is outside $openOn..$today")
+class ClosedOnOutOfRange(val value: String, val earliestOn: String, val today: String) :
+    IllegalArgumentException("closedOn $value is outside $earliestOn..$today")
 
-/** The windows still running: at most one per asset, which is invariant 80's whole content. */
+/**
+ * The windows still running, as **stored**: at most one per asset, which is invariant 80's whole
+ * content.
+ *
+ * Deliberately *not* lifecycle-bounded. This is the set [SaveGroup] checks an add against, and a
+ * member whose Asset is archived still holds an open window there — adding a second one would still
+ * leave `(group, asset)` with two. "Who a round obliges" is the other question and is answered by
+ * [boundedMembers] and [openAt].
+ */
 internal fun MaintenanceGroup.openMembers(): List<GroupMember> = members.filter { it.removedAt == null }
+
+/**
+ * [group]'s membership windows, bounded by each member Asset's **own lifecycle** (D-16).
+ *
+ * One function, because two callers have to agree: the recompute, which hands the bounded list to
+ * the engine, and [SaveSchedule], which counts it to decide whether a group can carry a schedule at
+ * all. Two derivations of "who is a member" is how an editor comes to accept a schedule the engine
+ * then reports `NO_DATA` for ever.
+ *
+ * Nothing is written: the bound narrows the list this returns and never a stored row.
+ */
+internal suspend fun boundedMembers(group: MaintenanceGroup, assets: AssetRepository): List<GroupMember> {
+    val lifecycles = group.members.map { it.assetId }.distinct().mapNotNull { assetId ->
+        assets.get(assetId)?.let {
+            assetId to MemberLifecycle(
+                archived = it.status == AssetStatus.ARCHIVED,
+                retiredAt = it.retiredOn?.let(::startOfDayUtc),
+            )
+        }
+    }.toMap()
+    return GroupOccurrences.withLifecycle(group.members) { lifecycles[it] }
+}
+
+/** The windows covering [instant] — who a round opening then would oblige. */
+internal fun List<GroupMember>.openAt(instant: Long): List<GroupMember> =
+    filter { it.addedAt <= instant && (it.removedAt == null || it.removedAt > instant) }
+
+/**
+ * A retirement **date** as the instant its windows close at: midnight UTC, the inverse of the
+ * conversion [GroupOccurrences.dateOf] makes, so "retired on or before the round's open date" and
+ * "the window does not cover the open instant" are one question. UTC for the engine's own reason — a
+ * device-local conversion would make a derived round depend on an ambient zone.
+ */
+internal fun startOfDayUtc(date: String): Long =
+    LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()

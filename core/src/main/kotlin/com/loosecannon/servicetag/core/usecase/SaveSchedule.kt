@@ -36,10 +36,11 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *   This is why the other operations leave `updated_at` alone: only an edit moves the floor
  *   (invariant 25).
  *
- * A group-targeted schedule is refused on a group with **no open membership**. Its first round would
- * oblige nobody, and no later membership change rescues it: a member added afterwards joins the
- * round *after* the one already open, and a round that obliges nobody can neither be completed nor
- * closed, so the schedule would report `NO_DATA` for ever (invariants 74, 77).
+ * A group-targeted schedule is refused on a group that would **oblige nobody** — no open window, or
+ * none whose Asset's own lifecycle leaves it standing (D-16). Its first round would oblige nobody,
+ * and no later membership change rescues it: a member added afterwards joins the round *after* the
+ * one already open, and a round that obliges nobody can neither be completed nor closed, so the
+ * schedule would report `NO_DATA` for ever (invariants 74, 77).
  *
  * One `uow.write`: the row and the recompute commit together or not at all.
  */
@@ -62,8 +63,15 @@ class SaveSchedule(
         // Resolved before validation, not after, so "this group has no members" is collected with
         // every other bad-rule problem instead of arriving as a second round trip after the editor
         // has already fixed the first batch.
+        val now = clock.nowMillis()
         val group = cmd.targetGroupId?.let { groups.get(it) }
-        val problems = scheduleProblems(cmd, profileAssetId, meter, group?.openMembers()?.size)
+        // The **lifecycle-bounded** windows covering the instant the first round would open at, not
+        // the raw open ones: a group whose only member is archived, or retired by then, obliges
+        // nobody, and the editor has to hear that here rather than store a schedule the engine will
+        // report `NO_DATA` for ever. Counted with the same derivation the recompute uses, so the two
+        // cannot disagree.
+        val obliged = group?.let { boundedMembers(it, assets).openAt(now).size }
+        val problems = scheduleProblems(cmd, profileAssetId, meter, obliged)
         if (problems.isNotEmpty()) throw ScheduleValidation(problems)
 
         when (val target = cmd.target()!!) {
@@ -71,7 +79,6 @@ class SaveSchedule(
             is ScheduleTarget.GroupTarget -> group ?: throw NoSuchGroup(target.groupId)
         }
 
-        val now = clock.nowMillis()
         val candidate = MaintenanceSchedule(
             id = existing?.id ?: ScheduleId(ids.newId()),
             target = cmd.target()!!,
