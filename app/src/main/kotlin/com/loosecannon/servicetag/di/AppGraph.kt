@@ -92,7 +92,6 @@ import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
-import com.loosecannon.servicetag.data.room.entities.ScheduleLocalDeliveryEntity
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.SharedPrefsStore
 import com.loosecannon.servicetag.reminders.AndroidDigestAlarm
@@ -458,28 +457,13 @@ class AppGraph(private val context: Context) {
      * 1.2 — the in-app snooze: the **device-local instant only**, no `*_on` column and no event
      * (invariant 20).
      *
-     * `schedule_local_delivery` and its port are B06's (master plan decision 25), so this is the
-     * one-method seam B14's operations need rather than a `ScheduleLocalDeliveryRepository` this
-     * release would then own twice. It writes the row B01 already shipped, through B01's own DAO,
-     * and B06 replaces this field with its `ReminderSnooze` — which is why the nonce and
-     * notification columns are left exactly as they are found.
+     * `schedule_local_delivery` and its port are B06's (master plan decision 25), and B06's
+     * [reminderSnooze] is that use case — so the seam B14's operations take is satisfied by a method
+     * reference to it rather than by a second writer of one column. The notification action's
+     * "Snooze 1 day" and the in-app "Snooze" are therefore not merely the same length: they are the
+     * same code.
      */
-    val scheduleSnooze: ScheduleSnooze = ScheduleSnooze { scheduleId, untilAt ->
-        val dao = db.scheduleLocalDeliveryDao()
-        val existing = dao.byId(scheduleId.value)
-        dao.upsert(
-            existing?.copy(snoozedUntilAt = untilAt, updatedAt = clock.nowMillis())
-                ?: ScheduleLocalDeliveryEntity(
-                    scheduleId = scheduleId.value,
-                    snoozedUntilAt = untilAt,
-                    lastNotifiedAt = null,
-                    firstEntrySeen = false,
-                    actionNonce = null,
-                    nonceIssuedAt = null,
-                    updatedAt = clock.nowMillis(),
-                ),
-        )
-    }
+    val scheduleSnooze: ScheduleSnooze = ScheduleSnooze(reminderSnooze::snooze)
 
     internal companion object {
         const val DB_NAME = "servicetag.db"

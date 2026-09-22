@@ -15,6 +15,7 @@ import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
@@ -66,6 +67,7 @@ import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
+import com.loosecannon.servicetag.data.room.RoomScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
@@ -73,6 +75,7 @@ import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
+import com.loosecannon.servicetag.reminders.ReminderSnooze
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
 import com.loosecannon.servicetag.ui.maintenance.ScheduleSnooze
 import java.io.File
@@ -262,12 +265,16 @@ class FakeGraph(
     ) { java.time.ZoneOffset.UTC }
 
     /**
-     * What the in-app snooze wrote, per schedule. A map rather than the delivery table, because the
-     * point of the snooze test is that it wrote **no** date column and **no** event — so the seam
-     * only has to be observable, and B06 owns the table it will really write.
+     * The in-app snooze, over **B06's real use case and the real device-local table**: the seam
+     * B14's detail screen takes is satisfied by `ReminderSnooze::snooze`, so the notification
+     * action's "Snooze 1 day" and the in-app "Snooze" are the same code and not merely the same
+     * length. A snooze test therefore reads the row back out of [scheduleLocalDelivery] and can
+     * still assert the two things that matter: no `*_on` column moved, and no event was written.
      */
-    val snoozes: MutableMap<String, Long> = mutableMapOf()
-    val scheduleSnooze: ScheduleSnooze = ScheduleSnooze { id, untilAt -> snoozes[id.value] = untilAt }
+    val scheduleLocalDelivery: ScheduleLocalDeliveryRepository =
+        RoomScheduleLocalDeliveryRepository(db.scheduleLocalDeliveryDao())
+    val reminderSnooze: ReminderSnooze = ReminderSnooze(scheduleLocalDelivery, clock)
+    val scheduleSnooze: ScheduleSnooze = ScheduleSnooze(reminderSnooze::snooze)
 
     fun close() = db.close()
 

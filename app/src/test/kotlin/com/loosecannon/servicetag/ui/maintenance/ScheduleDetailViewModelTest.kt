@@ -192,11 +192,13 @@ class ScheduleDetailViewModelTest {
         vm.snooze()
         vm.state.first { !it.busy }
 
-        assertEquals("the snooze was recorded, device-locally", 1, graph.snoozes.size)
+        // Recorded in the device-local table, by B06's own use case, and nowhere else.
+        val delivery = graph.scheduleLocalDelivery.get(id)!!
         assertEquals(
             LocalDate.parse("2026-04-16").toEpochDay() * 86_400_000L,
-            graph.snoozes.getValue(id.value),
+            delivery.snoozedUntilAt,
         )
+        assertEquals("and it is never exported or merged", 1, graph.scheduleLocalDelivery.all().size)
         // No date column moved, no event appeared, and the status is unchanged: a snooze suppresses
         // delivery, it does not change what is true.
         assertEquals(before, graph.schedules.get(id)!!)
