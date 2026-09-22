@@ -268,11 +268,13 @@ class AppGraph(private val context: Context) {
 
     // Phase 1C — the asset form. Archive-first: no hard delete for an asset in Phase 1 (R-9).
     val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
-    val archiveAsset: ArchiveAsset = ArchiveAsset(assets, uow, clock)
+    val archiveAsset: ArchiveAsset =
+        ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
 
     // Phase 2B-2 — retirement is a date the person picks, not a status (spec §7), and delete is
     // the one destructive asset action: it refuses a parent that still has children.
-    val retireAsset: RetireAsset = RetireAsset(assets, uow, clock)
+    val retireAsset: RetireAsset =
+        RetireAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
     val deleteAsset: DeleteAsset = DeleteAsset(assets, events, attachments, attachmentStorage, uow)
 
     // Phase 2A — the maintenance journal.

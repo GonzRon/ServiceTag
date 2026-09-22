@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.schedule
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
@@ -403,6 +404,56 @@ class GroupOccurrenceTest {
             "2026-01-01",
             ScheduleRecompute.currentOccurrenceOn(schedule, emptyList(), emptyList(), membership),
         )
+    }
+
+    /**
+     * The lifecycle bound (D-16), as arithmetic: a retirement closes a window **at** its date, so
+     * the boundary is `retiredOn <= openOn` and nothing wider. Asserted on three rounds a day apart
+     * either side of the retirement, because a bound that is off by one day is the plausible error
+     * and nothing else here would catch it.
+     *
+     * An archived member is dropped outright — the known limit, because `AssetStatus` carries no
+     * instant to bound it with — and the **input list is not mutated**, which is what says the bound
+     * is a derivation and not an edit.
+     */
+    @Test
+    fun theLifecycleBoundClosesAWindowAtItsRetirementDateAndDropsAnArchivedMember() {
+        val members = groupOf(
+            members = listOf(Triple("a1", "2025-12-01", null), Triple("a2", "2025-12-01", null)),
+        ).members
+        val copy = members.map { it.copy() }
+        val retiredOnTheTwentieth = GroupOccurrences.withLifecycle(members) { assetId ->
+            when (assetId) {
+                AssetId("a2") -> MemberLifecycle(archived = false, retiredAt = dayMillis("2026-02-20"))
+                else -> null
+            }
+        }
+
+        fun requiredFor(openOn: String, bounded: List<GroupMember>) =
+            GroupOccurrences.requiredOn(
+                quarterly(createdOn = openOn), emptyList(), emptyList(), bounded, "2026-04-01",
+            )
+
+        assertEquals(listOf(AssetId("a1"), AssetId("a2")), requiredFor("2026-02-19", retiredOnTheTwentieth))
+        assertEquals(listOf(AssetId("a1")), requiredFor("2026-02-20", retiredOnTheTwentieth))
+        assertEquals(listOf(AssetId("a1")), requiredFor("2026-02-21", retiredOnTheTwentieth))
+
+        val archived = GroupOccurrences.withLifecycle(members) { assetId ->
+            when (assetId) {
+                AssetId("a1") -> MemberLifecycle(archived = true, retiredAt = null)
+                else -> null
+            }
+        }
+        assertEquals(listOf(AssetId("a2")), requiredFor("2026-02-19", archived))
+
+        // An already-closed window is only ever narrowed, never widened by a later retirement.
+        val closedEarlier = groupOf(members = listOf(Triple("a2", "2025-12-01", "2026-01-15"))).members
+        val stillClosedOnTheFifteenth = GroupOccurrences.withLifecycle(closedEarlier) {
+            MemberLifecycle(archived = false, retiredAt = dayMillis("2026-02-20"))
+        }
+        assertEquals(dayMillis("2026-01-15"), stillClosedOnTheFifteenth.single().removedAt)
+
+        assertEquals(copy, members, "the bound reads the windows, it never edits them")
     }
 
     /**

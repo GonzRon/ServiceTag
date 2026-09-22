@@ -111,6 +111,39 @@ object GroupOccurrences {
     ): Long = OccurrenceBasis.of(schedule, events, closures, emptyList()).openInstant(occurrenceOn)
 
     /**
+     * The membership windows as the occurrence derivation must read them: bounded by each member
+     * Asset's **own lifecycle** as the store records it (D-16).
+     *
+     * A window is not edited — nothing here is ever written back, and [SaveGroup] remains the only
+     * writer of a membership row. This is a derivation-time bound, applied to the list the pure
+     * functions are handed:
+     *
+     * - a **retired** member's window is closed at its `retiredOn`, so a round that opened *before*
+     *   the retirement still obliges it (D-10) and every round opening on or after that date does
+     *   not;
+     * - an **archived** member is dropped outright.
+     *
+     * **Known limit, against invariant 33's letter** (owner-flagged, `lifecycleChangedAt` deferred):
+     * neither bound is a stable instant. `AssetStatus` carries no timestamp at all, so an archive
+     * takes the member out of **every** round, past ones included; and `retiredOn` is deliberately
+     * back-datable ("I replaced this in April"), so a retirement recorded after the fact moves the
+     * bound and can change a round that has already opened. Both are treated as what they are — a
+     * deliberate correction of what the equipment is — rather than papered over with a proxy
+     * instant like `updated_at`, which any unrelated edit would move. The consequence to know: a
+     * round that shrinks this way can become complete, and one that empties stops being a
+     * termination at all.
+     */
+    fun withLifecycle(
+        members: List<GroupMember>,
+        lifecycleOf: (AssetId) -> MemberLifecycle?,
+    ): List<GroupMember> = members.mapNotNull { row ->
+        val lifecycle = lifecycleOf(row.assetId) ?: return@mapNotNull row
+        if (lifecycle.archived) return@mapNotNull null
+        val retiredAt = lifecycle.retiredAt ?: return@mapNotNull row
+        row.copy(removedAt = row.removedAt?.let { minOf(it, retiredAt) } ?: retiredAt)
+    }
+
+    /**
      * An instant's calendar date.
      *
      * Converted at **UTC**, exactly as the D-27 pin's floor is and for the same reason: a
@@ -122,6 +155,15 @@ object GroupOccurrences {
     fun dateOf(instant: Long): LocalDate =
         Instant.ofEpochMilli(instant).atZone(ZoneOffset.UTC).toLocalDate()
 }
+
+/**
+ * One member Asset's lifecycle, reduced to the two things a membership window has to respect.
+ *
+ * [retiredAt] is the retirement **date** at midnight UTC — the same conversion
+ * [GroupOccurrences.dateOf] inverts — so "retired on or before the round's open date" and "the
+ * window does not cover the open instant" are the same question.
+ */
+data class MemberLifecycle(val archived: Boolean, val retiredAt: Long?)
 
 /**
  * One schedule's occurrence history, indexed once: the rows of each occurrence key, the keys in

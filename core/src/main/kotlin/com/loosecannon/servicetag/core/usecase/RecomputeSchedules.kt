@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
@@ -17,8 +18,11 @@ import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 import com.loosecannon.servicetag.core.schedule.GroupOccurrences
+import com.loosecannon.servicetag.core.schedule.MemberLifecycle
 import com.loosecannon.servicetag.core.schedule.ScheduleRecompute
 import com.loosecannon.servicetag.core.schedule.SeasonWindow
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 /**
  * The collaborator that turns "this changed" into "these schedules' derived state was rebuilt", and
@@ -138,9 +142,12 @@ class RecomputeSchedules(
      * its Asset's season window; a group-targeted one reads every member's events and the group's
      * membership rows, and no window at all, because a group target is `IGNORE` season only.
      *
-     * A group's members are read here rather than filtered here: which of them the current
-     * occurrence *requires* is the groups brief's derivation, and this only has to hand it
-     * everything that derivation needs.
+     * A group's members are read here and **bounded by their Assets' lifecycles** here, and by
+     * nothing else: which of the remaining windows the current occurrence *requires* is the engine's
+     * derivation, and this only has to hand it everything that derivation needs. The lifecycle bound
+     * lives at this seam because it is the one place that holds both the membership rows and the
+     * Assets — the engine takes no repository — and because putting it here means the round a use
+     * case validates against and the round the engine terminates are bounded identically.
      */
     private suspend fun inputsFor(schedule: MaintenanceSchedule): RebuildInputs =
         when (val target = schedule.target) {
@@ -154,13 +161,34 @@ class RecomputeSchedules(
             }
             is ScheduleTarget.GroupTarget -> {
                 val members = groups.get(target.groupId)?.members.orEmpty()
+                // Resolved up front, one read per distinct member, because the bound itself is a
+                // pure function and takes no repository.
+                val lifecycles = members.map { it.assetId }.distinct().mapNotNull { assetId ->
+                    assets.get(assetId)?.let {
+                        assetId to MemberLifecycle(
+                            archived = it.status == AssetStatus.ARCHIVED,
+                            retiredAt = it.retiredOn?.let(::startOfDayUtc),
+                        )
+                    }
+                }.toMap()
                 RebuildInputs(
+                    // Every member's events, including a member the lifecycle bound removes: its
+                    // completions still terminate the rounds its window did cover.
                     events = members.map { it.assetId }.distinct().flatMap { events.forAsset(it) },
-                    membership = members,
+                    membership = GroupOccurrences.withLifecycle(members) { lifecycles[it] },
                     season = null,
                 )
             }
         }
+
+    /**
+     * A retirement **date** as the instant a window closes at: midnight UTC, the inverse of the
+     * conversion [GroupOccurrences.dateOf] makes, so "retired on or before the round's open date"
+     * and "the window does not cover the open instant" are one question. UTC for the engine's own
+     * reason — a device-local conversion would make a derived round depend on an ambient zone.
+     */
+    private fun startOfDayUtc(date: String): Long =
+        LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
 
     private data class RebuildInputs(
         val events: List<AssetEvent>,

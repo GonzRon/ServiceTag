@@ -57,9 +57,9 @@ class GroupMembershipTest {
 
     private var seq = 0
     private val ids = IdGenerator { "id-${++seq}" }
-    private var now = dayMillis("2026-02-10")
+    private var now = dayMillis("2026-01-01")
     private val clock = Clock { now }
-    private var today = LocalDate.parse("2026-02-10")
+    private var today = LocalDate.parse("2026-04-15")
     private val todayPort = Today { today }
 
     private val recompute =
@@ -68,14 +68,29 @@ class GroupMembershipTest {
     private val archiveGroup = ArchiveGroup(groups, uow, clock)
     private val saveSchedule =
         SaveSchedule(schedules, assets, groups, defs, profiles, uow, ids, clock, recompute)
-    private val archiveAsset = ArchiveAsset(assets, uow, clock)
-    private val retireAsset = RetireAsset(assets, uow, clock)
+    private val completeMembers = CompleteGroupMembers(
+        schedules, groups, events, closures, defs, profiles, uow, ids, clock, recompute,
+    )
+    private val archiveAsset = ArchiveAsset(assets, uow, clock) { recompute.forAsset(it) }
+    private val retireAsset = RetireAsset(assets, uow, clock) { recompute.forAsset(it) }
 
     private suspend fun seedAsset(id: String): AssetId {
         val asset = Asset(id = AssetId(id), name = "Feeder $id", createdAt = 1L, updatedAt = 1L)
         assets.upsert(asset)
         return asset.id
     }
+
+    private suspend fun groupSchedule(groupId: GroupId) = saveSchedule.run(
+        null,
+        ScheduleCommand(
+            targetAssetId = null,
+            targetGroupId = groupId,
+            title = "Top up feeders",
+            timeInterval = 3,
+            timeUnit = RecurrenceUnit.MONTH,
+            anchorOn = "2026-01-01",
+        ),
+    )
 
     private fun command(vararg members: GroupMemberInput, name: String = "North run") =
         GroupCommand(name = name, members = members.toList())
@@ -277,42 +292,71 @@ class GroupMembershipTest {
     }
 
     /**
-     * Archiving or retiring a member **Asset** leaves its membership windows byte-identical and the
-     * open round's required set unchanged (D-10).
+     * D-16, the side that still counts (with D-10): a member **retired after a round opened** is
+     * still required for it. The obligation was real when the round opened, and the way out of it is
+     * to finish the round or to close it — not to have the past quietly rewritten.
      *
-     * D-16 also asks that a new round exclude such a member "per lifecycle". That half is **not**
-     * implemented here and the reason is in the report: `AssetStatus` carries no instant at all and
-     * `retiredOn` is deliberately backdatable ("I replaced this in April"), so every available
-     * proxy would let a change that is not a membership operation rewrite a *past* round's required
-     * set — which is the one thing invariant 33 forbids outright. The explicit, dated way to take a
-     * member out of future rounds is to remove it from the group, which is asserted above.
+     * The stored windows are byte-identical throughout: the lifecycle bound is applied to the list
+     * the derivation reads, never written back, and [SaveGroup] remains the only writer of a row.
      */
     @Test
-    fun archivingOrRetiringAMemberAssetLeavesItsWindowsAndTheOpenRoundAlone() = runTest {
+    fun aMemberRetiredAfterARoundOpenedIsStillRequiredForIt() = runTest {
         val a1 = seedAsset("a1")
         val a2 = seedAsset("a2")
         val group = saveGroup.run(null, command(add(a1, 0), add(a2, 1)))
-        val schedule = saveSchedule.run(
-            null,
-            ScheduleCommand(
-                targetAssetId = null,
-                targetGroupId = group.id,
-                title = "Top up feeders",
-                timeInterval = 3,
-                timeUnit = RecurrenceUnit.MONTH,
-                anchorOn = "2026-01-01",
-            ),
-        )
+        val schedule = groupSchedule(group.id)
         val before = assertNotNull(recompute.occurrenceOf(schedule))
+        assertEquals(listOf(a1, a2), before.required)
+        assertEquals("2026-01-01", before.openOn.toString())
 
         now = dayMillis("2026-03-01")
-        archiveAsset.run(a1)
         retireAsset.retire(a2, "2026-02-20")
 
-        assertEquals(group.members, groups.get(group.id)!!.members)
+        assertEquals(group.members, groups.get(group.id)!!.members, "no window was written")
         val after = assertNotNull(recompute.occurrenceOf(schedule))
-        assertEquals(before.required, after.required)
+        assertEquals(before.required, after.required, "the round opened before the retirement")
         assertEquals(before.openInstant, after.openInstant)
+    }
+
+    /**
+     * D-16, the side that does not: a member whose `retiredOn` is **on or before a new round's open
+     * date** is excluded from it, and an **archived** member is excluded outright.
+     *
+     * **The known limit, stated against invariant 33's letter** (owner-flagged; the
+     * `lifecycleChangedAt` column is deferred): neither bound is a stable instant. A retirement is
+     * deliberately back-datable, so recording one after the fact moves the bound and can change a
+     * round that has already opened; and `AssetStatus` carries no timestamp at all, so an archive
+     * takes the member out of **every** round, this one included. Both are treated as what they are
+     * — a correction of what the equipment is — rather than approximated with `updated_at`, which
+     * any unrelated edit would move. The visible consequence is asserted here: when the bound empties
+     * a round, the schedule reports `NO_DATA` rather than advancing on nobody's work.
+     */
+    @Test
+    fun aMemberRetiredBeforeARoundOpenedIsExcludedFromItAndAnArchivedOneEntirely() = runTest {
+        val a1 = seedAsset("a1")
+        val a2 = seedAsset("a2")
+        val group = saveGroup.run(null, command(add(a1, 0), add(a2, 1)))
+        val schedule = groupSchedule(group.id)
+
+        now = dayMillis("2026-03-01")
+        retireAsset.retire(a2, "2026-02-20")
+        // Finishing the first round is what opens the next one, on 2026-03-01 — after a2 retired.
+        completeMembers.all(schedule.id, CompletionCommand(occurredOn = "2026-03-01", tzId = "UTC"))
+
+        val next = assertNotNull(recompute.occurrenceOf(schedule))
+        assertEquals("2026-04-01", next.occurrenceOn.toString())
+        assertEquals("2026-03-01", next.openOn.toString())
+        assertEquals(listOf(a1), next.required, "a2 retired on or before this round's open date")
+
+        archiveAsset.run(a1)
+        val emptied = assertNotNull(recompute.occurrenceOf(schedule))
+        assertEquals(emptyList(), emptied.required)
+        assertEquals(false, emptied.isActionable)
+
+        // Nothing was written to any window, and the round that was already finished stays finished.
+        assertEquals(group.members, groups.get(group.id)!!.members)
+        assertEquals(2, events.all().size)
+        assertNull(assertNotNull(states.get(schedule.id)).computedDueOn)
     }
 
     /**
