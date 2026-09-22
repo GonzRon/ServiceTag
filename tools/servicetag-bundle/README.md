@@ -4,23 +4,24 @@ Turns a private normalized inventory (assets, child assets, measurement definiti
 profiles, known maintenance history) into a ServiceTag format-5 backup archive with deterministic
 ids, so the archive can be loaded onto a phone through the 1.1.0 Developer API's `import_merge`
 (plan first, then apply) and re-loaded idempotently — a second plan against the same source is all
-`CONTENT_IDENTICAL`.
+`IDENTICAL`.
 
 This package is stdlib-only at runtime (`json`, `zipfile`, `hashlib`, `uuid`, `datetime`): no
 third-party dependency ships with the built tool. It never reads the clock, the environment, or
-the filesystem beyond the one source path it is given — the same source bytes always produce the
-same archive bytes.
+the filesystem beyond the one source path it is given — on the same machine, the same source bytes
+always produce the same archive bytes (see the cross-machine caveat below).
 
 ## Status
 
-Through Task 4 of the Stage-A bundle plan: the package skeleton, the validated source model
-(`servicetag_bundle.source`), deterministic ids and row mapping (`servicetag_bundle.ids`,
+Complete through Task 5 of the Stage-A bundle plan: the package skeleton, the validated source
+model (`servicetag_bundle.source`), deterministic ids and row mapping (`servicetag_bundle.ids`,
 `servicetag_bundle.rows`), the archive writer plus CLI (`servicetag_bundle.archive`,
-`servicetag_bundle.cli`), and decoder conformance against the real Kotlin `BackupCodec`. It reads
-and fully validates a source document, derives every row's id, and writes a format-5 backup
-archive with a matching manifest — byte-identical across processes for the same source. A
-committed synthetic fixture (`fixtures/synthetic-estate.json`, fictional nouns and brands only)
-is built into a committed archive that both a Python golden test and a JVM test
+`servicetag_bundle.cli`), decoder conformance against the real Kotlin `BackupCodec`, and the load
+runbook (see "Loading a bundle" below). It reads and fully validates a source document, derives
+every row's id, and writes a format-5 backup archive with a matching manifest — byte-identical
+across processes for the same source. A committed synthetic fixture
+(`fixtures/synthetic-estate.json`, fictional nouns and brands only) is built into a committed
+archive that both a Python golden test and a JVM test
 (`core/src/test/kotlin/.../backup/StageABundleConformanceTest.kt`) exercise from their own side.
 
 ## Decoder conformance and regenerating the fixture archive
@@ -163,7 +164,7 @@ A single JSON document (UTF-8, `.json`). Top level:
 | `bundleKey` | string | non-empty; distinguishes bundles that share a namespace (`stage-a`) |
 | `asOf` | string | ISO-8601 instant with an explicit offset (`Z` or `±HH:MM`), e.g. `2026-09-21T00:00:00Z`; the one clock |
 | `tzId` | string | must be in `zoneinfo.available_timezones()`; default for events |
-| `deferred` | object | optional; any JSON the owner wants to keep beside the data; the generator ignores it, never emits it, and a later `check` command reports that it is present |
+| `deferred` | object | optional; any JSON the owner wants to keep beside the data; the generator ignores it, never emits it, and the `check` command reports that it is present |
 | `assets` | array | in the order they should appear; each an **asset object** |
 
 **Asset object:** `key` (string, unique across the source, `^[a-z0-9][a-z0-9-]{0,63}$`), `name`
@@ -205,8 +206,8 @@ unit}`, keys unique within the event).
 Nothing private enters git: no household inventory, equipment names, locations, task titles, or
 the private dataset. Every fixture in this repository uses fictional nouns and fictional brands.
 The private source file and the archives built from it live in the owner's documents folder or
-gitignored storage — never in this repo (see `.gitignore`) — and later the CLI works with paths
-outside the repository.
+gitignored storage — never in this repo (see `.gitignore`) — and the CLI works with paths outside
+the repository.
 
 ## Development
 
