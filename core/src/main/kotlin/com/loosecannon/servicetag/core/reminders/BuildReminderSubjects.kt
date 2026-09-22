@@ -147,7 +147,7 @@ class BuildReminderSubjects(
         return RuleFacts(
             basis = if (hasSeries) schedule.timeBasis else null,
             interval = schedule.timeInterval,
-            unit = schedule.timeUnit,
+            unit = if (hasSeries) schedule.timeUnit else null,
             hasMeter = schedule.meterDefinitionId != null,
             seasonal = schedule.seasonBehavior == SeasonBehavior.FOLLOW_ASSET,
         )
@@ -168,14 +168,10 @@ class BuildReminderSubjects(
         subjectState: SubjectState,
         today: LocalDate,
     ): String {
-        val cleared = when (subjectState) {
-            SubjectState.Active, is SubjectState.Parked -> false
-            SubjectState.Completed, SubjectState.Withdrawn -> true
-        }
         // A subject the provider is being told to let go of has nothing to show, and there is no
         // ratified word for "withdrawn" to show it with. The derived status word is not asked for
         // either: for an archived row it is the fail-safe `PAUSED`, which would be a lie here.
-        if (cleared) return ""
+        if (subjectState.isCleared) return ""
         return listOfNotNull(
             statusTerm(statusOf(schedule, state, today), schedule, state),
             progressOf(schedule),

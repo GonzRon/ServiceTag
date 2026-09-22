@@ -11,9 +11,14 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * Archiving is a column, exactly as it is for an Asset, a definition and a profile: the completion
  * events keep pointing at the schedule, the closures keep their rounds, and nothing in 1.2 deletes
- * a schedule row at all. An archived schedule is excluded from the dashboard, the Maintenance
- * lists, the due totals and every provider projection — the filter lives in one place, the domain's
- * `listedForDue`, so the four surfaces cannot disagree about it.
+ * a schedule row at all. An archived schedule is excluded from the dashboard, the Maintenance lists
+ * and the due totals — the filter lives in one place, the domain's `listedForDue`, so those
+ * surfaces cannot disagree about it.
+ *
+ * **The reminder subject builder is the exception**, and deliberately: it reads every schedule and
+ * an archived one arrives as a `Withdrawn` subject, so the provider is told to let go rather than
+ * left to infer it from an absence (spec §2.5). Archiving therefore still reaches a provider — as a
+ * withdrawal, on the next reconcile.
  *
  * Like [PauseSchedule] it leaves `updated_at` alone, for the same reason: the stamp's date is the
  * D-27 pin's floor and archiving is not a rule change (invariant 25).

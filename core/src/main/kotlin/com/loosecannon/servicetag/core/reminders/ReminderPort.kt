@@ -68,6 +68,19 @@ sealed interface SubjectState {
 }
 
 /**
+ * Whether this state means **stop holding the subject**, as opposed to show it.
+ *
+ * One predicate rather than the same `when` written out in each provider, because the two states
+ * that answer yes are the two a provider must treat identically, and every implementation counting
+ * them differently is a different number on the same health screen. A parked subject answers **no**:
+ * it is still held, and still shown, with its re-entry date.
+ */
+val SubjectState.isCleared: Boolean get() = when (this) {
+    SubjectState.Active, is SubjectState.Parked -> false
+    SubjectState.Completed, SubjectState.Withdrawn -> true
+}
+
+/**
  * The recurrence rule's **facts**, never the entity that holds them.
  *
  * This is what a provider with a recurrence engine of its own consumes to decide whether it can
@@ -105,6 +118,23 @@ data class ReminderSubject(
 /**
  * What one [ReminderProvider.reconcile] did, in the coarsest terms that are still useful: enough for
  * a health screen and for diagnostics, and not enough to name a mechanism.
+ *
+ * The three counters are **defined here, not left to each provider**, because a health screen and a
+ * diagnostics report render the same numbers from different providers and two meanings for one
+ * number is worse than no number:
+ *
+ * - [posted] — subjects the provider is now showing that it was not showing in this form before:
+ *   shown for the first time, or re-shown because the content hash changed. A subject whose state
+ *   [isCleared] is **never** posted.
+ * - [cleared] — subjects the provider **stopped** holding in this call, whether they left the list
+ *   altogether (absence is the cancel: the list is the whole desired state) or were still in it
+ *   with a state that says to let go. A subject the provider was not holding is not cleared, which
+ *   is what keeps a standing withdrawal from reporting a clearance on every run for ever.
+ * - [unchanged] — same key, same content hash: nothing to do, and the reason calling `reconcile`
+ *   twice has no second effect.
+ *
+ * So `posted + unchanged` is the number of subjects the provider holds after the call, and
+ * [cleared] is disjoint from both.
  *
  * [problems] are sentences a provider has already composed for display; the port takes them as
  * given because only the implementation knows what went wrong on its own side.
@@ -164,9 +194,11 @@ data class HealthFinding(
  * reports what is wrong with it.
  *
  * [reconcile] is the entire write surface. It receives the desired state of every subject this
- * provider owns and makes the provider match it: a subject that is not in the list is one the
- * provider must no longer be holding. Calling it twice with the same list therefore has no second
- * effect, which is a property of the signature and not of anyone's discipline.
+ * provider owns and makes the provider match it: **a subject that is not in the list is one the
+ * provider must no longer be holding**, and so is one whose state [isCleared]. Calling it twice
+ * with the same list therefore has no second effect, which is a property of the signature and not
+ * of anyone's discipline. [ReconcileReport] defines what each of the three counters counts, and an
+ * implementation is expected to obey those definitions rather than invent its own.
  */
 interface ReminderProvider {
     val id: ProviderId

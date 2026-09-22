@@ -39,8 +39,14 @@ enum class DueStatus {
 }
 
 /**
- * The schedules every due list, dashboard section and provider projection is built from: an
- * archived schedule is out of all of them, and this is the one place that filter lives.
+ * The schedules every **due** list and dashboard section is built from: an archived schedule is out
+ * of all of them, and this is the one place that filter lives.
+ *
+ * **Not the reminder subject builder.** That one read side deliberately does *not* apply this
+ * filter: it reads every schedule, and an ARCHIVED one arrives as a `Withdrawn` subject, because a
+ * provider has to be **told** to let go of something it is holding and cannot infer it from an
+ * absence (spec §2.5). Filtering here and there would leave a standing reminder for retired
+ * equipment with nothing left to clear it.
  */
 fun List<MaintenanceSchedule>.listedForDue(): List<MaintenanceSchedule> =
     filter { it.status != ScheduleStatus.ARCHIVED }

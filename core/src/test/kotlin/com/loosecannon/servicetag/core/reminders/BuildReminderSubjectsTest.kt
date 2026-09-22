@@ -221,7 +221,17 @@ class BuildReminderSubjectsTest {
     fun aGroupTargetedScheduleIsOneSubjectCarryingItsProgress() = runTest {
         val members = listOf("a1", "a2", "a3", "a4", "a5")
         members.forEach { seedAsset(it) }
-        groups.upsert(groupOf(id = "g1", members = members.map { Triple(it, "2025-12-01", null) }))
+        groups.upsert(
+            groupOf(
+                id = "g1",
+                // "a5" was removed **after** this round opened, so it is still required for it
+                // (D-10). That is what separates the required set from the membership list here: a
+                // denominator counted off the still-open windows would read four, not five.
+                members = members.map { assetId ->
+                    Triple(assetId, "2025-12-01", if (assetId == "a5") "2026-02-01" else null)
+                },
+            ),
+        )
         schedules.upsert(
             scheduleOf(
                 id = "s1",
@@ -248,6 +258,45 @@ class BuildReminderSubjectsTest {
         assertEquals(1, subjects.size, "a group is one subject, never one per member")
         assertEquals("OVERDUE · 3 of 5 complete", subjects.single().body)
         assertEquals(LocalDate.parse("2026-04-06"), subjects.single().dueOn)
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // hazard: invariant 74 on the reminder surface — a round nobody is required for reaching a
+    // provider as a dated obligation. The reminder projection is the one consumer of that rule with
+    // no owner in the plan's list, and it is correct here only because the engine nulls both the
+    // computed and the postponed date for a non-actionable round.
+    // ------------------------------------------------------------------------------------------
+
+    @Test
+    fun anEmptiedGroupsRoundArrivesDatelessAndBodiless() = runTest {
+        seedAsset("a1")
+        // The one window closed before the schedule — and so before its first round — even opened.
+        groups.upsert(
+            groupOf(id = "g-empty", members = listOf(Triple("a1", "2025-11-01", "2025-12-01"))),
+        )
+        schedules.upsert(
+            scheduleOf(
+                id = "s1",
+                assetId = null,
+                groupId = "g-empty",
+                timeInterval = 1,
+                timeUnit = RecurrenceUnit.WEEK,
+                anchorOn = "2026-04-06",
+            ),
+        )
+        rebuild()
+
+        val subject = localSubjects().single()
+        assertNull(subject.dueOn, "a round nobody is required for is never handed over as due")
+        assertEquals(
+            "",
+            subject.body,
+            "and never told it needs a baseline, which is not what is missing",
+        )
+        // Emptiness is carried by the absent date and the empty body, not by a state of its own:
+        // no `SubjectState` member means "there is nothing to do", and inventing one here would be
+        // a rule neither the spec nor the brief states.
+        assertEquals(SubjectState.Active, subject.state)
     }
 
     // ------------------------------------------------------------------------------------------
@@ -327,6 +376,14 @@ class BuildReminderSubjectsTest {
                 meterDefinitionId = "d1", meterInterval = 250.0, anchorMeter = 0.0,
             ),
         )
+        // A unit with no interval: unreachable through command validation, reachable from a decoded
+        // archive, which maps the two columns independently.
+        schedules.upsert(
+            scheduleOf(
+                id = "s-stray-unit", timeUnit = RecurrenceUnit.MONTH,
+                meterDefinitionId = "d1", meterInterval = 250.0, anchorMeter = 0.0,
+            ),
+        )
         rebuild()
 
         val subjects = localSubjects()
@@ -345,6 +402,11 @@ class BuildReminderSubjectsTest {
         assertEquals(
             RuleFacts(TimeBasis.FIXED, 1, RecurrenceUnit.YEAR, hasMeter = true, seasonal = false),
             subjectFor(subjects, "s-both").rule,
+        )
+        assertEquals(
+            RuleFacts(null, null, null, hasMeter = true, seasonal = false),
+            subjectFor(subjects, "s-stray-unit").rule,
+            "no interval is no series, so all three series facts are null together",
         )
 
         val carried = ReminderSubject::class.java.declaredFields.map { it.type.name }

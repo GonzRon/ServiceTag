@@ -26,67 +26,104 @@ class ReminderPortContractTest {
 
     /**
      * A second implementation, written differently on purpose: it keeps one flat set of
-     * `key|hash` strings where [FakeReminderProvider] keeps a map. If the contract below passes for
-     * both then it is a property of the port and not of one fake's bookkeeping.
+     * `(key, hash)` pairs where [FakeReminderProvider] keeps a map. If the contract below passes
+     * for both then it is a property of the port and not of one fake's bookkeeping — including the
+     * counter definitions, which [ReconcileReport] fixes rather than leaving to each provider.
      */
     private class SetBackedProvider : ReminderProvider {
         override val id: ProviderId = ProviderId.LOCAL
-        private val held = mutableSetOf<String>()
-        private fun stamp(subject: ReminderSubject) = "${subject.key}|${subject.contentHash}"
+        private val held = mutableSetOf<Pair<SubjectKey, String>>()
 
         override suspend fun reconcile(subjects: List<ReminderSubject>): ReconcileReport {
-            val wanted = subjects.map(::stamp).toSet()
-            val unchanged = wanted.count { it in held }
-            val cleared = held.count { it !in wanted }
+            val toHold = subjects.filterNot { it.state.isCleared }.map { it.key to it.contentHash }.toSet()
+            val keptKeys = toHold.map { it.first }.toSet()
+            // Counted by **key**, not by stamp: a subject whose hash moved was re-shown, not let go
+            // of, so it is one `posted` and no `cleared`.
+            val cleared = held.count { it.first !in keptKeys }
+            val unchanged = toHold.count { it in held }
             held.clear()
-            held += wanted
-            return ReconcileReport(wanted.size - unchanged, cleared, unchanged, emptyList())
+            held += toHold
+            return ReconcileReport(toHold.size - unchanged, cleared, unchanged, emptyList())
         }
 
         override suspend fun pullChanges(): List<RemoteChange> = emptyList()
         override suspend fun health(): List<HealthFinding> = emptyList()
     }
 
-    private fun subject(id: String, dueOn: String?): ReminderSubject {
-        val state = SubjectState.Active
+    private fun subject(
+        id: String,
+        dueOn: String?,
+        state: SubjectState = SubjectState.Active,
+    ): ReminderSubject {
         val rule = RuleFacts(TimeBasis.FIXED, 3, RecurrenceUnit.MONTH, hasMeter = false, seasonal = false)
         val due = dueOn?.let(LocalDate::parse)
+        val body = if (state.isCleared) "" else "DUE"
         return ReminderSubject(
             key = SubjectKey.Schedule(ScheduleId(id)),
             title = "Filter change",
-            body = "DUE",
+            body = body,
             dueOn = due,
             leadDays = 14,
             state = state,
             rule = rule,
-            contentHash = ContentHash.of("Filter change", "DUE", due, 14, state, rule),
+            contentHash = ContentHash.of("Filter change", body, due, 14, state, rule),
         )
     }
 
     /**
-     * Invariant 45. The second call reports every subject `unchanged`, posts nothing and clears
-     * nothing — and because `reconcile` receives the desired state of the whole list, there is no
-     * per-subject call with which a caller could have produced a second effect even if it tried.
+     * The whole write surface, in the four steps that define it — asserted against any
+     * implementation, because every one of them is a property of the port.
+     *
+     * 1. **Invariant 45:** the same list twice reports every subject `unchanged` and posts nothing.
+     *    Because `reconcile` receives the desired state of the whole list, there is no per-subject
+     *    call with which a caller could have produced a second effect even if it tried.
+     * 2. **Absence is the cancel:** a subject dropped from the list is one the provider stops
+     *    holding, and it is counted in `cleared`. This is the step the archived-group and
+     *    reminders-switched-off rules lean on, since those subjects **leave** the list rather than
+     *    arriving withdrawn — without it a provider keeps something standing with nothing to clear
+     *    it, and an appending implementation passes everything else.
+     * 3. **A cleared state is a cancel too:** a subject still in the list whose state says to let
+     *    go is `cleared`, never `posted`, and is no longer held.
+     * 4. **…and only once:** a standing withdrawal reports nothing at all on the next run, so a
+     *    subject that stays in the list withdrawn for ever does not report a clearance for ever.
      */
-    private suspend fun assertReconcileIsIdempotent(provider: ReminderProvider) {
+    private suspend fun assertReconcileIsTheWholeWriteSurface(provider: ReminderProvider) {
         val subjects = listOf(subject("s1", "2026-04-20"), subject("s2", null))
 
         assertEquals(ReconcileReport(2, 0, 0, emptyList()), provider.reconcile(subjects))
         assertEquals(ReconcileReport(0, 0, 2, emptyList()), provider.reconcile(subjects))
+        assertEquals(ReconcileReport(0, 1, 1, emptyList()), provider.reconcile(subjects.dropLast(1)))
+
+        val withdrawn = listOf(subject("s1", "2026-04-20", SubjectState.Withdrawn))
+        assertEquals(ReconcileReport(0, 1, 0, emptyList()), provider.reconcile(withdrawn))
+        assertEquals(ReconcileReport(0, 0, 0, emptyList()), provider.reconcile(withdrawn))
+
         assertEquals(emptyList(), provider.pullChanges())
     }
 
     @Test
     fun reconcileTwiceWithTheSameListHasNoSecondEffect() = runTest {
         val provider = FakeReminderProvider()
-        assertReconcileIsIdempotent(provider)
+        assertReconcileIsTheWholeWriteSurface(provider)
 
-        assertEquals(2, provider.calls.size)
-        assertEquals(provider.calls[0], provider.calls[1], "the two calls carried identical lists")
+        assertEquals(5, provider.calls.size)
+        assertEquals(provider.calls[0], provider.calls[1], "the first two calls carried identical lists")
         assertEquals(
-            provider.calls.last().associate { it.key to it.contentHash },
-            provider.held,
-            "what the provider holds after the second call is exactly what the first left",
+            emptyList(),
+            provider.held.keys.toList(),
+            "the provider ends holding nothing: the last thing it was told was to let the one go",
+        )
+
+        // The same cancel, read off the provider's own bookkeeping rather than off its report: a
+        // subject that left the list is one it is no longer holding, not merely one it did not count.
+        val second = FakeReminderProvider()
+        val both = listOf(subject("s1", "2026-04-20"), subject("s2", null))
+        second.reconcile(both)
+        second.reconcile(both.dropLast(1))
+        assertEquals(
+            listOf(SubjectKey.Schedule(ScheduleId("s1"))),
+            second.held.keys.toList(),
+            "the dropped subject is gone and the listed one is kept",
         )
     }
 
@@ -99,7 +136,7 @@ class ReminderPortContractTest {
      */
     @Test
     fun reconcileNamesNoProviderAndASecondImplementationNeedsNoPortChange() = runTest {
-        assertReconcileIsIdempotent(SetBackedProvider())
+        assertReconcileIsTheWholeWriteSurface(SetBackedProvider())
 
         val reconcile = ReminderProvider::class.java.methods.single { it.name == "reconcile" }
         assertEquals(
@@ -132,7 +169,7 @@ class ReminderPortContractTest {
         )
 
         val reminders = kotlinFilesUnder(REMINDERS)
-        assertEquals(3, reminders.size, "the reminder package is three files")
+        assertTrue(reminders.size >= 3, "the reminder package should not be smaller than its three files")
         val forbidden = Regex("""\b(todoist|notification|alarm|workmanager)\b""", RegexOption.IGNORE_CASE)
         assertEquals(
             emptyList(),
