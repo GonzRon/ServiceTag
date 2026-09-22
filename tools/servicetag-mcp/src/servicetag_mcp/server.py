@@ -89,6 +89,24 @@ TOOL_NAMES: tuple[str, ...] = (
     "delete_event",
     "list_tag_bindings",
     "import_merge",
+    # 1.2 — the maintenance surface (master plan §10). Seventeen, taking the total to 38.
+    "list_groups",
+    "get_group",
+    "list_asset_groups",
+    "create_group",
+    "update_group",
+    "archive_group",
+    "list_schedules",
+    "get_schedule",
+    "create_schedule",
+    "update_schedule",
+    "pause_schedule",
+    "archive_schedule",
+    "postpone_schedule",
+    "complete_schedule",
+    "close_round",
+    "list_closures",
+    "list_due",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -967,6 +985,578 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
         report_statuses=(409,),
         timeout=_IMPORT_TIMEOUT,
     )
+
+
+# --- 1.2, the maintenance surface -----------------------------------------------------------------
+#
+# Seventeen tools over master plan §9's nineteen routes. Everything above's conventions hold
+# unchanged: an unknown argument is refused before the body runs, a create sends only what it was
+# given, an edit reads the row and overlays only what it was given, an **omitted** argument and an
+# explicit **`null`** both mean "leave alone", and clearing is by name through `clear_fields`.
+#
+# Two tools deliberately have **no** overlay — `complete_schedule` and `close_round` — for
+# `update_event`'s reason turned up a notch: each records a **new fact**, and there is nothing about
+# a new fact to inherit from a row. Overlaying one would invent provenance.
+#
+# And there is nothing destructive here at all: no delete-group, no delete-schedule, no
+# delete-closure, no snooze. The API has no route for any of them.
+
+
+@mcp.tool()
+def list_groups() -> dict[str, Any]:
+    """Every maintenance group, archived ones included, by name.
+
+    A group is a set of assets one job is done across — "every hydrant on the north run". It is not
+    an asset, holds no NFC tag and is never part of the asset tree.
+    """
+    return _call("GET", "/v1/groups")
+
+
+@mcp.tool()
+def get_group(group_id: str) -> dict[str, Any]:
+    """One group with its membership windows, in the same shape a backup archive carries it.
+
+    Each member row carries its own durable `id`, the `addedAt` instant its window opened and
+    `removedAt` — `null` while it is still running. A removed member's row is **kept**, closed: that
+    is what lets every past round still say who it obliged.
+    """
+    return _call("GET", f"/v1/groups/{_path_id(group_id, field='group_id')}")
+
+
+@mcp.tool()
+def list_asset_groups(asset_id: str) -> dict[str, Any]:
+    """The groups one asset is an **open** member of."""
+    return _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/groups")
+
+
+@mcp.tool()
+def create_group(
+    name: str,
+    description: str | None = None,
+    members: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Create a maintenance group.
+
+    `members` is `[{"assetId": ..., "sortOrder": 0}]`. Each entry opens a membership window stamped
+    with the moment of this call — **you cannot set `addedAt` or `removedAt`**, here or anywhere:
+    when a member joined and left is a fact the app records, not one a caller writes. An entry may
+    carry `sortOrder` to fix the display order; it defaults to 0.
+
+    Every field is optional but `name`: an omitted one is the API's own default for a brand-new row,
+    not something being cleared.
+    """
+    return _call(
+        "POST",
+        "/v1/groups",
+        json_body=_body(name=name, description=description, members=members),
+        content_type="application/json",
+    )
+
+
+_GROUP_TEXT_CLEARABLE: frozenset[str] = frozenset({"description"})
+_GROUP_LIST_CLEARABLE: frozenset[str] = frozenset({"members"})
+_GROUP_CLEARABLE_FIELDS: frozenset[str] = _GROUP_TEXT_CLEARABLE | _GROUP_LIST_CLEARABLE
+"""`name` is absent on purpose: the app requires it non-blank, so it can never be cleared."""
+
+
+@mcp.tool()
+def update_group(
+    group_id: str,
+    name: str | None = None,
+    description: str | None = None,
+    members: list[dict[str, Any]] | None = None,
+    clear_fields: list[str] | None = None,
+) -> dict[str, Any]:
+    """Edit a group, including who is in it.
+
+    **Two layers, as everywhere above.** `PATCH /v1/groups/{id}` is a full replacement; this tool
+    reads the group first, overlays only what you supplied, and submits the whole thing. An omitted
+    argument and one sent as `null` both leave the current value alone.
+
+    **The member list is the case to read twice.** Left alone, every currently open membership is
+    kept — each one is re-sent by its own `id`, which is what keeps its window and its `addedAt`
+    exactly where they are. **Supply a list and it replaces the membership wholesale**: every open
+    window your list omits is **closed** (`removedAt` stamped), and nothing is ever deleted, so every
+    past round still knows who it obliged. Include an existing window's `id` to keep it; leave the
+    `id` off an entry to **add** that asset — and an add for an asset that already has an open window
+    is refused by the app, because the caller meant "keep it" and the way to say that is to send its
+    `id`.
+
+    **Closing every membership is `clear_fields=["members"]`.** It has to be by name: under the
+    null-means-unchanged rule an omitted or `null` `members` means "leave alone", so without a name
+    there would be no way to say "nobody is in this group any more" at all. `description` is
+    clearable the same way (or simply pass `""`). `name` can never be cleared.
+
+    Removed members come back as **new** rows with new ids if you add them again later — a window
+    that closed stays closed, always.
+    """
+    supplied = {"description": description, "members": members}
+    to_clear = _validate_clear_fields(clear_fields, _GROUP_CLEARABLE_FIELDS, supplied)
+
+    path = f"/v1/groups/{_path_id(group_id, field='group_id')}"
+    current = _field(_call("GET", path), "group", of="the group lookup")
+
+    def kept_members() -> list[dict[str, Any]]:
+        rows = _list_field(current, "members", of="the group")
+        kept: list[dict[str, Any]] = []
+        for index in range(len(rows)):
+            entry = _entry(rows, index, of="the group's members")
+            entry_of = f"the group's members[{index}]"
+            # A window that has already closed is left out rather than re-sent: the app leaves a
+            # closed row alone whether or not its id arrives, and sending one back would read as a
+            # claim that a finished membership is still current.
+            if _field(entry, "removedAt", of=entry_of) is not None:
+                continue
+            member_id = _field(entry, "id", of=entry_of)
+            asset_id = _field(entry, "assetId", of=entry_of)
+            sort_order = _field(entry, "sortOrder", of=entry_of)
+            kept.append({"id": member_id, "assetId": asset_id, "sortOrder": sort_order})
+        return kept
+
+    body = {
+        "name": _overlay(_field(current, "name", of="the group"), name),
+        "description": _overlay_or_clear(
+            _field(current, "description", of="the group"), description, "description",
+            to_clear, when_cleared="",
+        ),
+        "members": [] if "members" in to_clear else (kept_members() if members is None else members),
+    }
+    return _call("PATCH", path, json_body=body, content_type="application/json")
+
+
+@mcp.tool()
+def archive_group(group_id: str, archived: bool = True) -> dict[str, Any]:
+    """Archive or unarchive a group. Archive is not delete: the group and its schedules are hidden
+    and every membership window and past round is kept."""
+    return _call(
+        "POST",
+        f"/v1/groups/{_path_id(group_id, field='group_id')}/archive",
+        json_body={"archived": archived},
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def list_schedules(asset_id: str | None = None, group_id: str | None = None) -> dict[str, Any]:
+    """Maintenance schedules: all of them, or one asset's, or one group's.
+
+    With no argument, every schedule on the phone. With `asset_id`, the schedules **targeting that
+    asset** — never a group's, even a group that asset belongs to; ask `list_asset_groups` and then
+    this tool with `group_id` for those. With `group_id`, that group's. Pass one scope or neither,
+    never both.
+    """
+    if asset_id and group_id:
+        raise ToolError("pass asset_id or group_id, not both — they are two different questions")
+    if asset_id:
+        return _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/schedules")
+    if group_id:
+        return _call("GET", f"/v1/groups/{_path_id(group_id, field='group_id')}/schedules")
+    return _call("GET", "/v1/schedules")
+
+
+@mcp.tool()
+def get_schedule(schedule_id: str) -> dict[str, Any]:
+    """One schedule, plus what the engine derives from it.
+
+    Answers `{schedule, state, status, computedForOn}`. `state` is the derived row — due date, due
+    meter, current meter, last completion, last termination — and `status` is one of `OK`,
+    `DUE_SOON`, `DUE`, `OVERDUE`, `INACTIVE_SEASON`, `PAUSED`, `NO_DATA`, **computed at read time
+    and never stored**. `computedForOn` is the local date it was computed for, so you always know
+    which day the answer is about.
+    """
+    return _call("GET", f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}")
+
+
+@mcp.tool()
+def create_schedule(
+    title: str,
+    target_asset_id: str | None = None,
+    target_group_id: str | None = None,
+    description: str | None = None,
+    time_interval: int | None = None,
+    time_unit: str | None = None,
+    time_basis: str | None = None,
+    anchor_on: str | None = None,
+    lead_days: int | None = None,
+    meter_definition_id: str | None = None,
+    meter_interval: float | None = None,
+    anchor_meter: float | None = None,
+    meter_lead: float | None = None,
+    season_behavior: str | None = None,
+    season_reentry: str | None = None,
+    season_reentry_offset_days: int | None = None,
+    completion_mode: str | None = None,
+    profile_id: str | None = None,
+    reminders_enabled: bool | None = None,
+    providers: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Create a maintenance schedule.
+
+    **Exactly one target**: `target_asset_id` or `target_group_id`, never both and never neither.
+    **At least one rule side**: a time rule (`time_interval` + `time_unit` + `anchor_on`) or a meter
+    rule (`meter_definition_id` + `meter_interval`), or both — with both, whichever comes first wins.
+
+    `time_unit` is `DAY`｜`WEEK`｜`MONTH`｜`YEAR`. `time_basis` is `FIXED` (the series runs from
+    `anchor_on` whenever the work is actually done) or `COMPLETION` (the next one is an interval
+    after the last one was finished); it defaults to `FIXED`. `lead_days` is how many days early the
+    schedule starts reading DUE SOON. `anchor_on` is ISO `YYYY-MM-DD`; `season_reentry` is `MM-DD`.
+
+    `completion_mode` is `QUICK` (one tap) or `FORM`, which collects a quick action's readings —
+    pass `profile_id` for that. `season_behavior` is `IGNORE` or `FOLLOW_ASSET`. `providers` is
+    `[{"provider": "LOCAL", "enabled": true}]`; `LOCAL` is the only provider in 1.2.
+
+    **A group target is narrower**, and the app enforces all of it: no meter rule, no `profile_id`,
+    `completion_mode` `QUICK` only, `season_behavior` `IGNORE` only — and the group must already
+    have a member, or the schedule's first round would oblige nobody.
+
+    `season_reentry` and `season_reentry_offset_days` are stored and not read in 1.2.
+    """
+    return _call(
+        "POST",
+        "/v1/schedules",
+        json_body=_body(
+            title=title,
+            targetAssetId=target_asset_id,
+            targetGroupId=target_group_id,
+            description=description,
+            timeInterval=time_interval,
+            timeUnit=time_unit,
+            timeBasis=time_basis,
+            anchorOn=anchor_on,
+            leadDays=lead_days,
+            meterDefinitionId=meter_definition_id,
+            meterInterval=meter_interval,
+            anchorMeter=anchor_meter,
+            meterLead=meter_lead,
+            seasonBehavior=season_behavior,
+            seasonReentry=season_reentry,
+            seasonReentryOffsetDays=season_reentry_offset_days,
+            completionMode=completion_mode,
+            profileId=profile_id,
+            remindersEnabled=reminders_enabled,
+            providers=providers,
+        ),
+        content_type="application/json",
+    )
+
+
+_SCHEDULE_TEXT_CLEARABLE: frozenset[str] = frozenset({"description"})
+_SCHEDULE_LIST_CLEARABLE: frozenset[str] = frozenset({"providers"})
+_SCHEDULE_NULLABLE_CLEARABLE: frozenset[str] = frozenset({
+    "target_asset_id", "target_group_id",
+    "time_interval", "time_unit", "anchor_on",
+    "meter_definition_id", "meter_interval", "anchor_meter", "meter_lead",
+    "season_reentry", "season_reentry_offset_days", "profile_id",
+})
+_SCHEDULE_CLEARABLE_FIELDS: frozenset[str] = (
+    _SCHEDULE_TEXT_CLEARABLE | _SCHEDULE_LIST_CLEARABLE | _SCHEDULE_NULLABLE_CLEARABLE
+)
+"""Every nullable field of the command, and nothing else.
+
+`title` is required. `time_basis`, `season_behavior` and `completion_mode` are enums the app would
+refuse blank — change one by *passing* the new value. `lead_days` and `reminders_enabled` are not
+nullable at all, so `0` and `false` already say what "cleared" would mean. `postponed_due_on` and
+`status` are not in this command: they have their own tools (`postpone_schedule`, `pause_schedule`,
+`archive_schedule`).
+
+**The two target ids are here for one reason**: exactly one of them may be set, so moving a schedule
+from an asset to a group means supplying the new one *and* clearing the old — an overlay would
+otherwise keep both and the app would refuse the pair."""
+
+
+@mcp.tool()
+def update_schedule(
+    schedule_id: str,
+    title: str | None = None,
+    target_asset_id: str | None = None,
+    target_group_id: str | None = None,
+    description: str | None = None,
+    time_interval: int | None = None,
+    time_unit: str | None = None,
+    time_basis: str | None = None,
+    anchor_on: str | None = None,
+    lead_days: int | None = None,
+    meter_definition_id: str | None = None,
+    meter_interval: float | None = None,
+    anchor_meter: float | None = None,
+    meter_lead: float | None = None,
+    season_behavior: str | None = None,
+    season_reentry: str | None = None,
+    season_reentry_offset_days: int | None = None,
+    completion_mode: str | None = None,
+    profile_id: str | None = None,
+    reminders_enabled: bool | None = None,
+    providers: list[dict[str, Any]] | None = None,
+    clear_fields: list[str] | None = None,
+) -> dict[str, Any]:
+    """Edit a schedule's rule.
+
+    Reads the schedule first and overlays only what you supplied, so nothing about calling this
+    requires stating all twenty fields. An omitted argument and one sent as `null` both leave the
+    current value alone; a supplied non-null value replaces it.
+
+    Clearing is by name: `clear_fields=["meter_definition_id", "meter_interval"]` takes the meter
+    rule off, `clear_fields=["profile_id"]` unlinks the quick action. `title` can never be cleared,
+    and `time_basis`, `season_behavior` and `completion_mode` are changed by passing the new value
+    rather than by clearing. `lead_days=0` and `reminders_enabled=false` say themselves what
+    clearing them would mean.
+
+    **Moving the target takes two arguments, not one.** Exactly one of `target_asset_id` and
+    `target_group_id` may be set, and the overlay keeps whichever the schedule already has — so
+    supplying the new one alone would submit both and be refused. Pass the new target and
+    `clear_fields` the old one in the same call.
+
+    **What an edit does beyond the fields.** A rule change clears any postponement, **abandons an
+    open partially complete group round** — the member completions already recorded stay as truthful
+    history and the edited rule opens the next round — and moves a never-terminated schedule's due
+    date to the first series date on or after today, so re-anchoring an old schedule does not pin it
+    immediately overdue. Pausing, archiving and postponing are **not** here: each is its own tool,
+    so an edit can never quietly do one of them.
+    """
+    supplied = {
+        "description": description,
+        "target_asset_id": target_asset_id,
+        "target_group_id": target_group_id,
+        "time_interval": time_interval,
+        "time_unit": time_unit,
+        "anchor_on": anchor_on,
+        "meter_definition_id": meter_definition_id,
+        "meter_interval": meter_interval,
+        "anchor_meter": anchor_meter,
+        "meter_lead": meter_lead,
+        "season_reentry": season_reentry,
+        "season_reentry_offset_days": season_reentry_offset_days,
+        "profile_id": profile_id,
+        "providers": providers,
+    }
+    to_clear = _validate_clear_fields(clear_fields, _SCHEDULE_CLEARABLE_FIELDS, supplied)
+
+    path = f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}"
+    current = _field(_call("GET", path), "schedule", of="the schedule lookup")
+
+    def nullable(key: str, given: Any, name: str) -> Any:
+        return _overlay_or_clear(
+            _field(current, key, of="the schedule"), given, name, to_clear, when_cleared=None,
+        )
+
+    def kept_providers() -> list[dict[str, Any]]:
+        rows = _list_field(current, "providers", of="the schedule")
+        kept: list[dict[str, Any]] = []
+        for index in range(len(rows)):
+            entry = _entry(rows, index, of="the schedule's providers")
+            entry_of = f"the schedule's providers[{index}]"
+            kept.append({
+                "provider": _field(entry, "provider", of=entry_of),
+                "enabled": _field(entry, "enabled", of=entry_of),
+            })
+        return kept
+
+    body = {
+        "title": _overlay(_field(current, "title", of="the schedule"), title),
+        # The row reports `assetId`/`groupId`; the command takes `targetAssetId`/`targetGroupId`,
+        # because the pair is a choice of target and not two fields of a row (`docs/api/v1.md`).
+        "targetAssetId": nullable("assetId", target_asset_id, "target_asset_id"),
+        "targetGroupId": nullable("groupId", target_group_id, "target_group_id"),
+        "description": _overlay_or_clear(
+            _field(current, "description", of="the schedule"), description, "description",
+            to_clear, when_cleared="",
+        ),
+        "timeInterval": nullable("timeInterval", time_interval, "time_interval"),
+        "timeUnit": nullable("timeUnit", time_unit, "time_unit"),
+        "timeBasis": _overlay(_field(current, "timeBasis", of="the schedule"), time_basis),
+        "anchorOn": nullable("anchorOn", anchor_on, "anchor_on"),
+        "leadDays": _overlay(_field(current, "leadDays", of="the schedule"), lead_days),
+        "meterDefinitionId": nullable("meterDefinitionId", meter_definition_id, "meter_definition_id"),
+        "meterInterval": nullable("meterInterval", meter_interval, "meter_interval"),
+        "anchorMeter": nullable("anchorMeter", anchor_meter, "anchor_meter"),
+        "meterLead": nullable("meterLead", meter_lead, "meter_lead"),
+        "seasonBehavior": _overlay(
+            _field(current, "seasonBehavior", of="the schedule"), season_behavior,
+        ),
+        "seasonReentry": nullable("seasonReentry", season_reentry, "season_reentry"),
+        "seasonReentryOffsetDays": nullable(
+            "seasonReentryOffsetDays", season_reentry_offset_days, "season_reentry_offset_days",
+        ),
+        "completionMode": _overlay(
+            _field(current, "completionMode", of="the schedule"), completion_mode,
+        ),
+        "profileId": nullable("profileId", profile_id, "profile_id"),
+        "remindersEnabled": _overlay(
+            _field(current, "remindersEnabled", of="the schedule"), reminders_enabled,
+        ),
+        "providers": [] if "providers" in to_clear else (
+            kept_providers() if providers is None else providers
+        ),
+    }
+    return _call("PATCH", path, json_body=body, content_type="application/json")
+
+
+@mcp.tool()
+def pause_schedule(schedule_id: str, paused: bool = True) -> dict[str, Any]:
+    """Pause or resume a schedule. A paused one never notifies and never counts as due; it keeps its
+    history and its rule, and resuming picks the rule back up where it stands."""
+    return _call(
+        "POST",
+        f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/pause",
+        json_body={"paused": paused},
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def archive_schedule(schedule_id: str, archived: bool = True) -> dict[str, Any]:
+    """Archive or unarchive a schedule. Archive is not delete: it disappears from every due list and
+    its completions and closures are kept. There is deliberately no tool that deletes one."""
+    return _call(
+        "POST",
+        f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/archive",
+        json_body={"archived": archived},
+        content_type="application/json",
+    )
+
+
+_POSTPONE_CLEARABLE_FIELDS: frozenset[str] = frozenset({"postponed_due_on"})
+
+
+@mcp.tool()
+def postpone_schedule(
+    schedule_id: str,
+    postponed_due_on: str | None = None,
+    clear_fields: list[str] | None = None,
+) -> dict[str, Any]:
+    """Move **this one occurrence** to a later date. Changes no rule and creates no event.
+
+    The next occurrence still comes from the rule, so a postponement is a one-off agreement and
+    never a reschedule. Completing or closing the round clears it, and so does a rule edit.
+
+    **Clearing a postponement is `clear_fields=["postponed_due_on"]`**, by name, and this is the
+    sharpest case of the convention on this server: an omitted argument and an explicit `null` both
+    mean "leave alone", so `postponed_due_on=None` **cannot** put the occurrence back where the rule
+    says — even though the wire route itself does accept a literal `null` for exactly that. Passing
+    a date and naming the field to clear in one call is refused rather than guessed at.
+
+    A **meter-only** schedule has no occurrence date to move and the app refuses a postponement on
+    one; clearing is always allowed, so a row that arrived with one set can still be cleaned up.
+    """
+    to_clear = _validate_clear_fields(
+        clear_fields, _POSTPONE_CLEARABLE_FIELDS, {"postponed_due_on": postponed_due_on},
+    )
+    path = f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}"
+    if "postponed_due_on" in to_clear:
+        value: str | None = None
+    elif postponed_due_on is not None:
+        value = postponed_due_on
+    else:
+        current = _field(_call("GET", path), "schedule", of="the schedule lookup")
+        value = _field(current, "postponedDueOn", of="the schedule")
+    return _call(
+        "POST", f"{path}/postpone",
+        json_body={"postponedDueOn": value},
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def complete_schedule(
+    schedule_id: str,
+    occurred_on: str,
+    tz_id: str,
+    asset_id: str | None,
+    occurred_time: str | None,
+    notes: str,
+    values: dict[str, str],
+    consumables: list[dict[str, str]],
+) -> dict[str, Any]:
+    """Record that the current occurrence was done. **The only way to log a completion.**
+
+    Like `update_event`, this tool has **no overlay and no defaults**: a completion is a new fact,
+    and there is nothing about it to inherit from a row. Every argument is required — pass
+    `notes=""`, `values={}`, `consumables=[]` and `occurred_time=None` for none of those, and
+    `asset_id=None` when the schedule targets a single asset.
+
+    **A group-targeted schedule is completed one member at a time**, and `asset_id` says which
+    member did the work: completing a five-member round is five calls, and the round only advances
+    once every member it obliges is done. `asset_id` is **required** there and is checked against
+    the members this round actually obliges. For an asset-targeted schedule it must be `None` or
+    that schedule's own asset.
+
+    `occurred_on` is ISO `YYYY-MM-DD` and may be any past date — the date you send is the date
+    stored, so a job done last Tuesday is logged as last Tuesday. `occurred_time` is `HH:MM`.
+    `values` is keyed by definition id, the text a person would type; `consumables` is
+    `{"name", "quantity", "unit"}`. You never send the occurrence key: the app stamps it from the
+    schedule's own computed due date, which is what makes a repeat harmless rather than a duplicate.
+
+    A `FORM` schedule completed with no `values` and no `consumables` is accepted and recorded with
+    `detailsPending: true` — the quick path exists, and the row still says the form is owed.
+
+    Two refusals worth knowing: a member already recorded for this round answers
+    `SCHEDULE_OCCURRENCE_TAKEN`, and a round that was **closed** answers `OCCURRENCE_CLOSED` — work
+    done after a round is closed is logged with `log_event`, with no schedule link, and that still
+    succeeds.
+    """
+    return _call(
+        "POST",
+        f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/complete",
+        json_body={
+            "occurredOn": occurred_on,
+            "occurredTime": occurred_time,
+            "tzId": tz_id,
+            "notes": notes,
+            "values": values,
+            "consumables": consumables,
+            "assetId": asset_id,
+        },
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def close_round(schedule_id: str, closed_on: str | None) -> dict[str, Any]:
+    """End a round that nobody finished, **without claiming the outstanding members were serviced**.
+
+    That sentence is the whole point of this tool. It writes one immutable `occurrence_closure` row
+    and nothing else: **no event on any asset**, so it never says work was done, and no column on
+    the schedule. The recurrence advances from the closing date exactly as it would from a
+    completion, and the member completions that *were* recorded stay as truthful history.
+
+    **The row can never be amended or deleted.** There is no tool and no route that edits or removes
+    a closure — it is exported history, and a closure that could be rewritten could rewrite a
+    schedule's past. Closing the same round twice is refused and the first closure stands.
+
+    `closed_on` is required, and `None` means today. Any date from the round's **open date** through
+    today is accepted; a future one, or one before the round opened, is refused — the row is
+    permanent and an unbounded date would move the schedule's future for good.
+
+    Offered on **group-targeted** schedules only, and only on a round that obliges somebody: a round
+    with no required members is not a round, and closing one is refused rather than recorded.
+    """
+    return _call(
+        "POST",
+        f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/close-round",
+        json_body={"closedOn": closed_on},
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def list_closures(schedule_id: str) -> dict[str, Any]:
+    """One schedule's closed rounds, oldest first. **Read-only, and sparse by construction**: a round
+    that was finished normally leaves no row here, so a schedule always done on time carries none at
+    all for its whole life."""
+    return _call("GET", f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/closures")
+
+
+@mcp.tool()
+def list_due() -> dict[str, Any]:
+    """Due work, in the order the phone's own dashboard shows it.
+
+    Each item carries the schedule's status, its due date and due meter, its last completion, and —
+    for a group-targeted schedule — `membersRequired` and `membersComplete`. A group is **one** item
+    counted **once**, however many members are outstanding. `rank` is its 0-based position in that
+    order, so the app's ordering can be reproduced without re-deriving it. Archived schedules never
+    appear.
+    """
+    return _call("GET", "/v1/due")
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

@@ -40,6 +40,23 @@ EXPECTED_TOOLS = (
     "delete_event",
     "list_tag_bindings",
     "import_merge",
+    "list_groups",
+    "get_group",
+    "list_asset_groups",
+    "create_group",
+    "update_group",
+    "archive_group",
+    "list_schedules",
+    "get_schedule",
+    "create_schedule",
+    "update_schedule",
+    "pause_schedule",
+    "archive_schedule",
+    "postpone_schedule",
+    "complete_schedule",
+    "close_round",
+    "list_closures",
+    "list_due",
 )
 
 
@@ -49,7 +66,7 @@ def body_of(recorded) -> dict:
 
 def test_every_tool_the_design_names_is_registered() -> None:
     assert server_module.TOOL_NAMES == EXPECTED_TOOLS
-    assert len(EXPECTED_TOOLS) == 21
+    assert len(EXPECTED_TOOLS) == 38
     for name in EXPECTED_TOOLS:
         assert callable(getattr(server_module, name)), f"{name} is missing"
 
