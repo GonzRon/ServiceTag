@@ -114,42 +114,56 @@ class ManifestContractTest {
     }
 
     /**
-     * Invariant 55's mechanism: no receiver declared in this brief may ever construct an
-     * `Activity` `Intent` or call `startActivity` — that door stays shut structurally, at the
-     * declaration, rather than relying on it never being found in a later brief. Scoped to the
-     * whole `reminders/` package (widened from `ReminderReceivers.kt` alone, B05 fix round 1,
-     * finding 17), so a trampoline built in a sibling file this package gains later is caught too.
+     * Invariant 55's mechanism: no receiver declared in this brief may ever start an `Activity`
+     * from `onReceive` — that door stays shut structurally, at the declaration, rather than
+     * relying on it never being found in a later brief.
+     *
+     * Two clauses, two different scopes (B05 fix round 2, finding 19; the first fix round's
+     * single package-wide scope was too broad for the second clause). `startActivity` stays
+     * forbidden across the **whole** `reminders/` package: no file under it — not B06's alarm
+     * code, not B07's quick actions — has any legitimate reason to call it. `Intent(` is scoped
+     * to files that **declare a `BroadcastReceiver` subclass**: invariant 55 forbids a receiver
+     * starting an activity, not an `Intent` existing in the package, and B06's `DigestAlarm.kt`
+     * and B07's `QuickActions.kt` both legitimately build `Intent`s for their `PendingIntent`s —
+     * the *correct*, non-trampoline shape — without themselves being receivers.
      */
     @Test
     fun noReceiverInThisPackageStartsAnActivity() {
         remindersSourceFiles().forEach { file ->
             val source = file.readText()
             assertTrue("${file.name} must not call startActivity", "startActivity" !in source)
-            assertTrue("${file.name} must not construct an Intent(", "Intent(" !in source)
+            if ("BroadcastReceiver" in source) {
+                assertTrue("${file.name} declares a BroadcastReceiver and must not construct an Intent(", "Intent(" !in source)
+            }
         }
     }
 
     /**
      * S4 (B05 fix round 1, finding 6): the other half of the class→kind pairing
      * `ReminderReceiversTest.eachReceiverClassCarriesItsOwnKind` proves — here, each receiver
-     * *name* is paired with the manifest `<action>` it is actually invoked for. Together the two
-     * ends of the wiring (which broadcast reaches a class, and which kind that class forwards) are
-     * both asserted; neither alone would catch a class hard-coded against the wrong action.
+     * *name* is paired with the manifest `<action>`(s) it is actually invoked for. Together the
+     * two ends of the wiring (which broadcast reaches a class, and which kind that class forwards)
+     * are both asserted; neither alone would catch a class hard-coded against the wrong action.
+     *
+     * List-valued, not `.single()` (B05 fix round 2, finding 23): B07's `QuickActionReceiver` is
+     * explicitly "none — explicit intent only", so once it lands `.single()` would throw
+     * `NoSuchElementException` instead of reporting a clean expected-vs-actual diff. This brief's
+     * four each carry exactly one action; that is what the expected map's single-element lists say.
      */
     @Test
     fun eachReceiverNameFiltersItsOwnAction() {
         val expected = mapOf(
-            "com.loosecannon.servicetag.reminders.BootCompletedReceiver" to "android.intent.action.BOOT_COMPLETED",
-            "com.loosecannon.servicetag.reminders.TimeSetReceiver" to "android.intent.action.TIME_SET",
-            "com.loosecannon.servicetag.reminders.TimezoneChangedReceiver" to "android.intent.action.TIMEZONE_CHANGED",
-            "com.loosecannon.servicetag.reminders.DateChangedReceiver" to "android.intent.action.DATE_CHANGED",
+            "com.loosecannon.servicetag.reminders.BootCompletedReceiver" to listOf("android.intent.action.BOOT_COMPLETED"),
+            "com.loosecannon.servicetag.reminders.TimeSetReceiver" to listOf("android.intent.action.TIME_SET"),
+            "com.loosecannon.servicetag.reminders.TimezoneChangedReceiver" to listOf("android.intent.action.TIMEZONE_CHANGED"),
+            "com.loosecannon.servicetag.reminders.DateChangedReceiver" to listOf("android.intent.action.DATE_CHANGED"),
         )
 
         val actual = manifest.elements("receiver").associate { receiver ->
             val name = receiver.androidAttr("name")!!
             val actionNodes = receiver.getElementsByTagName("action")
             val actions = (0 until actionNodes.length).map { (actionNodes.item(it) as Element).androidAttr("name") }
-            name to actions.single()
+            name to actions
         }
 
         assertEquals(expected, actual)

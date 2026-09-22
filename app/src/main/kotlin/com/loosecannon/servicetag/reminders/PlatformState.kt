@@ -50,6 +50,10 @@ internal fun channelImportanceOf(rawImportance: Int?): ChannelImportance = when 
 /**
  * Battery restriction is checked first: an OEM that has restricted the app's battery use is the
  * more actionable fact, and the two are not mutually exclusive on every OEM's own bucket rules.
+ *
+ * **Controller ruling 2026-09-22:** "`BATTERY_RESTRICTED` explains before the standby bucket
+ * because it is the condition the owner can act on directly." Carried to B10, which reads this
+ * precedence when it picks which of the two explanations a phone that is both gets.
  */
 internal fun appRestrictionOf(backgroundRestricted: Boolean, standbyBucket: Int): AppRestriction = when {
     backgroundRestricted -> AppRestriction.BATTERY_RESTRICTED

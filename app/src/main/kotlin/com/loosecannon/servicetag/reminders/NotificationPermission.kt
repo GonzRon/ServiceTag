@@ -33,7 +33,12 @@ const val NOTIFICATION_PERMISSION_RATIONALE =
  * reference this type (#24 AC 1). One Android-backed implementation, [AndroidNotificationPermission].
  */
 interface NotificationPermission {
-    /** Whether notifications work right now — the runtime permission on API 33+, the app-level toggle below it. */
+    /**
+     * The runtime permission on API 33+, the app-level notification toggle below it (B05 fix
+     * round 2, finding 22: "whether notifications work right now" overstated this — the runtime
+     * permission can be granted on 33+ while the app-level toggle, [PlatformState.notificationsEnabled],
+     * is off, and that combination is a real, distinct fact this member does not carry).
+     */
     fun granted(): Boolean
 
     /** Whether the OS wants a rationale shown before the next request (a prior denial, not "never ask again"). */
@@ -64,11 +69,26 @@ internal fun grantedOf(sdkInt: Int, notificationsEnabled: Boolean, permissionChe
  * in, and rather than registering its own `ActivityLifecycleCallbacks` per instance: `AppGraph` is
  * built more than once against the same process in the connected suite, and a callback per
  * instance is a callback that never unregisters (B05 fix round 1, finding 9).
+ *
+ * **Registration must happen eagerly, from [init], not on first read (B05 fix round 2, finding
+ * 18 — a blocking regression fix round 1 introduced).** The lazy version registered the callback
+ * only when `resumedActivity` was first read, which only ever happens from `shouldExplain()` or
+ * `request()` — both called while an activity is *already* resumed, so `onActivityResumed` never
+ * fires for that activity and the first `request()` a process ever makes silently reports a
+ * denial with no system dialog shown. Registering here, in the constructor `AppGraph` runs inside
+ * `Application.onCreate`, restores the property this depends on: the callback is in place before
+ * any activity can resume. [ResumedActivityTracker.ensureRegistered] stays idempotent per
+ * `Application`, so this constructor running more than once — the connected suite's extra
+ * `AppGraph` builds — still registers exactly one callback per real process.
  */
 class AndroidNotificationPermission(private val context: Context) : NotificationPermission {
 
+    init {
+        application(context)?.let(ResumedActivityTracker::ensureRegistered)
+    }
+
     private val resumedActivity: ComponentActivity?
-        get() = (context.applicationContext as? Application)?.let(ResumedActivityTracker::resumedActivityIn)
+        get() = application(context)?.let(ResumedActivityTracker::resumedActivityIn)
 
     override fun granted(): Boolean = grantedOf(
         sdkInt = Build.VERSION.SDK_INT,
@@ -122,41 +142,75 @@ class AndroidNotificationPermission(private val context: Context) : Notification
 }
 
 /**
+ * `AppGraph` always hands [AndroidNotificationPermission] the real `Application` instance
+ * directly (`ServiceTagApp.onCreate` builds it with `this`), so this checks [context] itself
+ * first rather than going straight to `context.applicationContext` — a real difference under this
+ * module's `unitTests.isReturnDefaultValues = true` stubs, where `Context.getApplicationContext()`
+ * is itself a stubbed method that always answers `null`, regardless of what a real `Application`
+ * would return. `NotificationPermissionTest` constructs a bare `Application()` and hands it
+ * straight in for exactly this reason.
+ */
+internal fun application(context: Context): Application? = context as? Application ?: context.applicationContext as? Application
+
+/**
  * One `Application.ActivityLifecycleCallbacks` per `Application`, however many
- * [AndroidNotificationPermission] instances end up reading it (B05 fix round 1, finding 9). Keyed
+ * [AndroidNotificationPermission] instances end up calling it (B05 fix round 1, finding 9). Keyed
  * by identity in a `WeakHashMap` so neither the tracker nor the resumed activity it holds outlives
  * the `Application` — production builds exactly one and never revisits this, the connected suite
  * builds several against the one real process and this is what stops that from registering a
  * callback, and its strong `ComponentActivity` reference, once per build.
+ *
+ * `internal`, not `private` (B05 fix round 2, finding 18): `NotificationPermissionTest` asserts
+ * eager registration directly, which needs to see this object.
  */
-private object ResumedActivityTracker {
+internal object ResumedActivityTracker {
     private val perApplication = Collections.synchronizedMap(WeakHashMap<Application, PerApplication>())
+
+    /**
+     * Registers the callback for [app] if nothing has yet, and does nothing otherwise. The only
+     * intended caller is [AndroidNotificationPermission]'s constructor — eagerly, so the callback
+     * is in place before any activity can resume (finding 18).
+     */
+    fun ensureRegistered(app: Application) {
+        trackerFor(app)
+    }
 
     fun resumedActivityIn(app: Application): ComponentActivity? = trackerFor(app).resumed
 
-    private fun trackerFor(app: Application): PerApplication = perApplication.getOrPut(app) {
-        val tracker = PerApplication()
-        app.registerActivityLifecycleCallbacks(
-            object : Application.ActivityLifecycleCallbacks {
-                override fun onActivityResumed(activity: Activity) {
-                    tracker.resumed = activity as? ComponentActivity
-                }
+    /** Test-only: whether [app] already has a registered tracker, without creating one. */
+    internal fun isRegisteredFor(app: Application): Boolean = perApplication.containsKey(app)
 
-                override fun onActivityPaused(activity: Activity) {
-                    if (tracker.resumed === activity) tracker.resumed = null
-                }
+    /**
+     * `synchronized`, not a bare `getOrPut` over the `synchronizedMap` (B05 fix round 2, finding
+     * 20): `synchronizedMap` locks each individual `get`/`put` call, but `getOrPut` is a `get`
+     * then a `put` with no lock held *across* them, so two concurrent first calls for the same
+     * `Application` could each pass the `get`, and each register its own callback.
+     */
+    private fun trackerFor(app: Application): PerApplication = synchronized(perApplication) {
+        perApplication.getOrPut(app) {
+            val tracker = PerApplication()
+            app.registerActivityLifecycleCallbacks(
+                object : Application.ActivityLifecycleCallbacks {
+                    override fun onActivityResumed(activity: Activity) {
+                        tracker.resumed = activity as? ComponentActivity
+                    }
 
-                override fun onActivityDestroyed(activity: Activity) {
-                    if (tracker.resumed === activity) tracker.resumed = null
-                }
+                    override fun onActivityPaused(activity: Activity) {
+                        if (tracker.resumed === activity) tracker.resumed = null
+                    }
 
-                override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
-                override fun onActivityStarted(activity: Activity) = Unit
-                override fun onActivityStopped(activity: Activity) = Unit
-                override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
-            },
-        )
-        tracker
+                    override fun onActivityDestroyed(activity: Activity) {
+                        if (tracker.resumed === activity) tracker.resumed = null
+                    }
+
+                    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+                    override fun onActivityStarted(activity: Activity) = Unit
+                    override fun onActivityStopped(activity: Activity) = Unit
+                    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+                },
+            )
+            tracker
+        }
     }
 
     private class PerApplication {

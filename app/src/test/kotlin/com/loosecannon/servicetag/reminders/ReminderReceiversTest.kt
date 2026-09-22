@@ -1,8 +1,10 @@
 package com.loosecannon.servicetag.reminders
 
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
 import org.junit.Test
 
@@ -57,5 +59,15 @@ class ReminderReceiversTest {
         assertEquals(PlatformEventKind.TIME_SET, TimeSetReceiver().kind)
         assertEquals(PlatformEventKind.TIMEZONE_CHANGED, TimezoneChangedReceiver().kind)
         assertEquals(PlatformEventKind.DATE_CHANGED, DateChangedReceiver().kind)
+    }
+
+    /**
+     * B05 fix round 2, finding 21: B2's whole fix was this handler — without it, an exception
+     * from B06's trigger on the `BOOT_COMPLETED` path crashes the process. Nothing failed this
+     * suite if a later edit dropped it; this is the guard.
+     */
+    @Test
+    fun theDispatchScopeCarriesAnExceptionHandlerSoATriggerFailureCannotCrashTheProcess() {
+        assertNotNull(ReminderDispatch.scope.coroutineContext[CoroutineExceptionHandler])
     }
 }

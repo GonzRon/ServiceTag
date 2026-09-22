@@ -143,8 +143,13 @@ dependencies {
 // output existing or being current to pass. Build wiring, not product code — the manifest-merger
 // output path itself is untouched — so it stays inside this brief's scope even though this file
 // is otherwise on the brief's Untouched list.
-afterEvaluate {
-    tasks.named("testDebugUnitTest") {
-        dependsOn("processDebugManifest")
-    }
+//
+// `withType<Test>()`, not `tasks.named("testDebugUnitTest")` (B05 fix round 2, finding 24): the
+// narrower wiring only covered the debug variant, so a plain `:app:test` — which also runs
+// `testReleaseUnitTest` — hit MergedManifestContractTest's own "no merged manifest on disk"
+// failure for a variant nothing gates on (CI and the release workflow both run
+// `:app:testDebugUnitTest` specifically). Every unit-test task in this module reads the same
+// debug-built manifest; none of this brief's assertions are variant-specific.
+tasks.withType<Test>().configureEach {
+    dependsOn("processDebugManifest")
 }
