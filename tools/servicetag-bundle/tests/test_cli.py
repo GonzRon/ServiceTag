@@ -1,0 +1,152 @@
+"""The CLI test matrix from the task brief: `check`, `build`, `inspect` -- exit codes, stderr
+`path: message` lines, and the write-nothing-on-failure invariant.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from servicetag_bundle.cli import main
+from test_archive import rich_source
+
+
+def _write_source(path: Path, obj: dict) -> Path:
+    path.write_text(json.dumps(obj), encoding="utf-8")
+    return path
+
+
+# ---- check ----------------------------------------------------------------------------------
+
+def test_check_valid_source_exits_zero(tmp_path, capsys):
+    source_path = _write_source(tmp_path / "source.json", rich_source())
+    code = main(["check", str(source_path)])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert str(source_path) in out
+
+
+def test_check_invalid_source_exits_one_with_path_on_stderr_and_creates_nothing(tmp_path, capsys):
+    bad = dict(rich_source())
+    bad["formatVersion"] = 2
+    source_path = _write_source(tmp_path / "source.json", bad)
+    before = set(tmp_path.iterdir())
+
+    code = main(["check", str(source_path)])
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert err.strip() == "formatVersion: must be 1"
+    assert set(tmp_path.iterdir()) == before
+
+
+def test_check_reports_a_present_deferred(tmp_path, capsys):
+    source = rich_source()
+    source["deferred"] = {"note": "kept aside"}
+    source_path = _write_source(tmp_path / "source.json", source)
+
+    code = main(["check", str(source_path)])
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "deferred" in out.lower()
+
+
+# ---- build ------------------------------------------------------------------------------------
+
+def test_build_invalid_source_writes_nothing(tmp_path, capsys):
+    bad = dict(rich_source())
+    bad["formatVersion"] = 2
+    source_path = _write_source(tmp_path / "source.json", bad)
+    out_path = tmp_path / "out.zip"
+
+    code = main(["build", str(source_path), str(out_path)])
+
+    assert code == 1
+    assert not out_path.exists()
+    assert capsys.readouterr().err.strip() == "formatVersion: must be 1"
+
+
+def test_build_writes_exactly_one_file_at_the_given_path(tmp_path, capsys):
+    source_path = _write_source(tmp_path / "source.json", rich_source())
+    out_path = tmp_path / "out.zip"
+    before = set(tmp_path.iterdir())
+
+    code = main(["build", str(source_path), str(out_path)])
+
+    assert code == 0
+    after = set(tmp_path.iterdir())
+    assert after - before == {out_path}
+    out = capsys.readouterr().out
+    assert "backupSetId=" in out
+    assert "assets=1" in out
+
+
+def test_build_does_not_create_missing_parent_directories(tmp_path, capsys):
+    source_path = _write_source(tmp_path / "source.json", rich_source())
+    out_path = tmp_path / "missing-dir" / "out.zip"
+
+    code = main(["build", str(source_path), str(out_path)])
+
+    assert code == 1
+    assert not out_path.parent.exists()
+    err = capsys.readouterr().err
+    assert str(out_path) in err
+
+
+def test_build_without_force_refuses_an_existing_output(tmp_path, capsys):
+    source_path = _write_source(tmp_path / "source.json", rich_source())
+    out_path = tmp_path / "out.zip"
+    out_path.write_bytes(b"already here")
+
+    code = main(["build", str(source_path), str(out_path)])
+
+    assert code == 1
+    assert out_path.read_bytes() == b"already here"
+    err = capsys.readouterr().err
+    assert str(out_path) in err
+
+
+def test_build_with_force_overwrites_an_existing_output(tmp_path, capsys):
+    source_path = _write_source(tmp_path / "source.json", rich_source())
+    out_path = tmp_path / "out.zip"
+    out_path.write_bytes(b"already here")
+
+    code = main(["build", str(source_path), str(out_path), "--force"])
+
+    assert code == 0
+    assert out_path.read_bytes() != b"already here"
+
+
+def test_build_refuses_an_archive_over_the_size_cap(tmp_path, capsys, monkeypatch):
+    import servicetag_bundle.archive as archive_module
+
+    monkeypatch.setattr(archive_module, "MAX_ARCHIVE_BYTES", 10)
+    source_path = _write_source(tmp_path / "source.json", rich_source())
+    out_path = tmp_path / "out.zip"
+
+    code = main(["build", str(source_path), str(out_path)])
+
+    assert code == 1
+    assert not out_path.exists()
+    err = capsys.readouterr().err
+    assert str(out_path) in err
+    assert "byte" in err
+
+
+# ---- inspect ------------------------------------------------------------------------------------
+
+def test_inspect_prints_counts_and_size_of_a_built_archive(tmp_path, capsys):
+    source_path = _write_source(tmp_path / "source.json", rich_source())
+    out_path = tmp_path / "out.zip"
+    main(["build", str(source_path), str(out_path)])
+    capsys.readouterr()  # discard build's output
+
+    code = main(["inspect", str(out_path)])
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert str(out_path.stat().st_size) in out
+    assert "assets=1" in out
+    assert "formatVersion=5" in out
+    assert "schemaVersion=5" in out

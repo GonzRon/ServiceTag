@@ -6,6 +6,9 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
 
+[project.scripts]
+servicetag-bundle = "servicetag_bundle.cli:main"
+
 [dependency-groups]
 dev = ["pytest>=8.3,<9"]
 

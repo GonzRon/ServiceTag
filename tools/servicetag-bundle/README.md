@@ -13,10 +13,42 @@ same archive bytes.
 
 ## Status
 
-This is Task 1 of the Stage-A bundle plan: the package skeleton and the validated source model
-(`servicetag_bundle.source`). It reads and fully validates a source document into a tree of frozen
-dataclasses; it does not yet derive ids or write an archive. **The CLI arrives in Task 3** —
-for now this package is a library, exercised by its test suite.
+Through Task 3 of the Stage-A bundle plan: the package skeleton, the validated source model
+(`servicetag_bundle.source`), deterministic ids and row mapping (`servicetag_bundle.ids`,
+`servicetag_bundle.rows`), and the archive writer plus CLI (`servicetag_bundle.archive`,
+`servicetag_bundle.cli`). It reads and fully validates a source document, derives every row's id,
+and writes a format-5 backup archive with a matching manifest — byte-identical across processes
+for the same source. Decoder conformance against the real Kotlin `BackupCodec` (a committed
+fixture, exercised from both sides) is Task 4.
+
+## The CLI
+
+Installed as `servicetag-bundle` (`uv run servicetag-bundle ...` from this directory, or
+`uv tool install .` elsewhere). Three subcommands:
+
+```
+servicetag-bundle check SOURCE
+```
+
+Validates `SOURCE` only — writes nothing. Exits 0 if it's a valid source document, printing
+whether it carries a `deferred` payload; exits 1 with `path: message` on stderr (the JSON path of
+the first thing wrong) if it doesn't.
+
+```
+servicetag-bundle build SOURCE OUT [--force]
+```
+
+Validates `SOURCE`, then writes a format-5 backup archive to `OUT` and prints its `backupSetId`
+and table counts. Refuses to overwrite an existing `OUT` unless `--force` is given; refuses to
+create `OUT`'s parent directory; refuses an archive over the 4 MiB import cap. Writes nothing on
+any failure.
+
+```
+servicetag-bundle inspect ARCHIVE
+```
+
+Prints `ARCHIVE`'s manifest — format/schema/app versions, `backupSetId`, table counts, and the
+archive's size on disk — without decoding any row.
 
 ## The source format
 
