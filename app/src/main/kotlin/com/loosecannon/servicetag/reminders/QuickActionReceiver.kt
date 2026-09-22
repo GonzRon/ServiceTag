@@ -12,6 +12,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /** Which of the two nonce-checked writes a delivered broadcast is asking for. */
 enum class QuickActionKind { COMPLETE, SNOOZE }
@@ -54,16 +55,24 @@ internal const val ONE_DAY_MILLIS: Long = 24L * 60L * 60L * 1000L
 /**
  * The nonce gate and the two writes behind it (§12.1, D-21, invariant 56).
  *
- * The order is the contract: **the nonce is consumed before anything else is read or written**, so a
- * forged broadcast never reaches a use case and a replayed one finds the value spent. Consuming is
- * the same `upsert` that clears it, which is what makes a redelivery a no-op rather than a race.
+ * **The gate and the write are one transaction** (brief, *The nonce's life*: "the use case runs, and
+ * the nonce is **cleared** in the **same transaction** as the write"). Consuming first inside it is
+ * what a replay meets — the second delivery finds the value spent — and committing the two together
+ * is what the crash case needs: a process death between the clear and the event would otherwise
+ * spend the nonce and write nothing, and the owner's tap would be lost with the notification's
+ * action already dead. Rolled back together, the nonce is still in the row and the retry works
+ * (fix round 1, finding 1).
  *
- * `reconcile` runs **whether or not the nonce was accepted** (controller carry-forward (d)). A
- * refused action is a silent no-op on the domain, but the notification that carried it is stale by
- * definition — it was issued against a nonce that has since been replaced or spent — and leaving it
- * standing would leave the owner tapping a dead action for ever. Nothing about the schedule is
- * written on that path: the run posts and cancels notifications and writes the device-local
- * bookkeeping, and that is all.
+ * `CompleteSchedule` opens a write of its own; Room joins an active transaction rather than
+ * starting a second, so the event, the conditional postponement clear, the recompute and this
+ * clear all commit or roll back as one.
+ *
+ * `reconcile` runs **whether or not the nonce was accepted**, and now also when the write throws
+ * (controller carry-forward (d); fix round 1, nit 7). A refused action is a silent no-op on the
+ * domain, but the notification that carried it is stale by definition — it was issued against a
+ * nonce that has since been replaced or spent — and leaving it standing would leave the owner
+ * tapping a dead action for ever. It is deliberately **outside** the transaction: it posts to the
+ * shade and reads the platform, neither of which belongs inside a database write.
  *
  * Invariant 17 holds by construction: the only write surfaces here are the completion use case and
  * the device-local row, and no file under `reminders/` names a state repository at all.
@@ -72,21 +81,28 @@ class QuickActionRuns(
     private val nonces: NonceStore,
     private val completion: ScheduleCompletion,
     private val snooze: ReminderSnooze,
+    private val uow: UnitOfWork,
     private val reconcile: suspend () -> Unit,
     private val clock: Clock,
 ) : QuickActionHandler {
 
     override suspend fun perform(command: QuickActionCommand) {
-        if (nonces.consume(command.scheduleId, command.nonce)) {
-            when (command.kind) {
-                QuickActionKind.COMPLETE -> completion.complete(command.scheduleId)
-                // Invariant 20: one column of one device-local row. No date moves and no event is
-                // written — which is the confusion #11 and D-13 exist to prevent, and the reason
-                // the snooze was never allowed anywhere near `postponed_due_on`.
-                QuickActionKind.SNOOZE -> snooze.snooze(command.scheduleId, clock.nowMillis() + ONE_DAY_MILLIS)
+        try {
+            uow.write {
+                if (nonces.consume(command.scheduleId, command.nonce)) {
+                    when (command.kind) {
+                        QuickActionKind.COMPLETE -> completion.complete(command.scheduleId)
+                        // Invariant 20: one column of one device-local row. No date moves and no
+                        // event is written — the confusion #11 and D-13 exist to prevent, and the
+                        // reason the snooze was never allowed near `postponed_due_on`.
+                        QuickActionKind.SNOOZE ->
+                            snooze.snooze(command.scheduleId, clock.nowMillis() + ONE_DAY_MILLIS)
+                    }
+                }
             }
+        } finally {
+            reconcile()
         }
-        reconcile()
     }
 }
 

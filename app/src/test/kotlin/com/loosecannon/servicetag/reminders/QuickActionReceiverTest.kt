@@ -3,8 +3,10 @@ package com.loosecannon.servicetag.reminders
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.UnitOfWork
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -28,13 +30,36 @@ class QuickActionReceiverTest {
     private val completed = mutableListOf<ScheduleId>()
     private var reconciles = 0
 
-    private fun runs() = QuickActionRuns(
+    private fun runs(completion: ScheduleCompletion = ScheduleCompletion { completed += it }) = QuickActionRuns(
         nonces = nonces,
-        completion = ScheduleCompletion { completed += it },
+        completion = completion,
         snooze = snooze,
+        uow = uow,
         reconcile = { reconciles++ },
         clock = clock,
     )
+
+    /**
+     * A transaction, as far as this brief's rows can see one: everything the block writes into the
+     * delivery table commits together, and a throw puts the table back exactly as it was.
+     *
+     * A pass-through fake would let `aFailingWriteLeavesTheNonceIntact` pass for the wrong reason —
+     * the point of that row is that the **rollback** is what keeps the nonce, not the ordering.
+     */
+    private val uow = object : UnitOfWork {
+        override suspend fun <T> write(block: suspend () -> T): T {
+            val before = LinkedHashMap(delivery.rows)
+            return try {
+                block()
+            } catch (e: Throwable) {
+                delivery.rows.clear()
+                delivery.rows.putAll(before)
+                throw e
+            }
+        }
+
+        override suspend fun <T> read(block: suspend () -> T): T = block()
+    }
 
     private val id = ScheduleId("s1")
 
@@ -118,6 +143,7 @@ class QuickActionReceiverTest {
             nonces = NonceStore(delivery, IdGenerator { "nonce-9" }, clock),
             completion = ScheduleCompletion { completed += it },
             snooze = ReminderSnooze(delivery, clock),
+            uow = uow,
             reconcile = { reconciles++ },
             clock = clock,
         )
@@ -163,6 +189,41 @@ class QuickActionReceiverTest {
         assertNull(commandFrom(QuickActionReceiver.ACTION_COMPLETE, "s1", null))
         assertNull(commandFrom(QuickActionReceiver.ACTION_COMPLETE, "", "nonce-1"))
         assertNull(commandFrom(QuickActionReceiver.ACTION_COMPLETE, "s1", ""))
+    }
+
+    /**
+     * D-21's "same transaction" clause, from the side that needs it (fix round 1, finding 1).
+     *
+     * The gate is consumed **inside** the write the action performs, so a database failure — or a
+     * process death — between clearing the nonce and writing the event rolls **both** back. The
+     * nonce is still in the row, the notification still standing in the shade still authorises it,
+     * and `QuickActionWorker`'s retry completes the tap. Consumed in a transaction of its own, the
+     * same failure would have spent the nonce and written nothing: a tap silently lost, with the
+     * action already dead.
+     *
+     * `reconcile` still runs, because it is in a `finally` and outside the transaction (nit 7).
+     */
+    @Test
+    fun aFailingWriteLeavesTheNonceIntactAndStillReconciles() = runTest {
+        val nonce = nonces.issue(id)
+        val failing = runs(completion = ScheduleCompletion { error("the database was busy") })
+
+        var thrown: Throwable? = null
+        try {
+            failing.perform(QuickActionCommand(QuickActionKind.COMPLETE, id, nonce))
+        } catch (e: Exception) {
+            thrown = e
+        }
+
+        assertNotNull("the worker has to see the failure to retry it", thrown)
+        assertEquals("the nonce rolled back with the write", nonce, delivery.get(id)?.actionNonce)
+        assertEquals("and the retry spends it properly", emptyList<ScheduleId>(), completed)
+        assertEquals("the reconcile ran even so", 1, reconciles)
+
+        // The retry: the same broadcast, the same nonce, and this time the write succeeds.
+        runs().perform(QuickActionCommand(QuickActionKind.COMPLETE, id, nonce))
+        assertEquals(listOf(id), completed)
+        assertNull(delivery.get(id)?.actionNonce)
     }
 
     /**

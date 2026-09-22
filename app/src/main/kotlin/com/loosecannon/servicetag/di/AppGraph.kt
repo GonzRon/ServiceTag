@@ -284,6 +284,10 @@ class AppGraph(private val context: Context) {
             )
         },
         snooze = reminderSnooze,
+        // The gate and the write commit together (D-21, fix round 1, finding 1): `CompleteSchedule`
+        // opens a write of its own and Room joins this one rather than starting a second, so a
+        // crash between the clear and the event rolls both back and the tap survives as a retry.
+        uow = uow,
         reconcile = { reminderRuns.reconcileAll() },
         clock = clock,
     )

@@ -8,7 +8,10 @@ import com.loosecannon.servicetag.core.reminders.ReminderProvider
 import com.loosecannon.servicetag.core.reminders.ReminderSubject
 import com.loosecannon.servicetag.core.reminders.RemoteChange
 import java.time.LocalDate
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -219,6 +222,72 @@ class BackstopWorkerTest {
         assertEquals(
             "the backstop is already inside a worker, so it sweeps inline and enqueues nothing",
             listOf("rebuild", "subjects", "reconcile"),
+            order,
+        )
+    }
+
+    /**
+     * **One sweep at a time** (fix round 1, finding 2).
+     *
+     * Three entry points reach `reconcileAll` under three different unique work names — the digest
+     * alarm's reconcile worker, the periodic backstop and B07's quick-action worker — so nothing
+     * outside this class serialises them. Overlapping them is not merely wasteful: the provider
+     * reads every delivery row at the top of a run and writes those **pre-run** rows back at the
+     * end, so a second run holding an older snapshot restores a nonce the first has just replaced,
+     * and the notification standing in the shade then authorises a value the row no longer holds.
+     *
+     * Asserted with a gate rather than a clock: the first sweep parks inside `rebuildAll`, the
+     * second is started and handed the scheduler, and the proof is that it has **not** entered.
+     * Releasing the first then lets the second run to completion behind it — two whole sweeps, in
+     * order, with no interleaving.
+     */
+    @Test
+    fun twoConcurrentSweepsRunOneAfterTheOtherAndNeverInterleave() = runTest {
+        val order = mutableListOf<String>()
+        val firstIsInside = CompletableDeferred<Unit>()
+        val releaseTheFirst = CompletableDeferred<Unit>()
+        var entered = 0
+        val provider = object : ReminderProvider {
+            override val id = ProviderId.LOCAL
+            override suspend fun reconcile(subjects: List<ReminderSubject>): ReconcileReport {
+                order += "out"
+                return ReconcileReport(0, 0, 0, emptyList())
+            }
+            override suspend fun pullChanges(): List<RemoteChange> = emptyList()
+            override suspend fun health(): List<HealthFinding> = emptyList()
+        }
+        val runs = ReminderRuns(
+            rebuildAll = {
+                val n = ++entered
+                order += "in$n"
+                if (n == 1) {
+                    firstIsInside.complete(Unit)
+                    releaseTheFirst.await()
+                }
+            },
+            subjectsFor = { _, _ -> emptyList() },
+            provider = provider,
+            alarm = RecordingDigestAlarm(isArmed = true),
+            today = today,
+            enqueueReconcile = { },
+        )
+
+        val first = launch { runs.reconcileAll() }
+        firstIsInside.await()
+        val second = launch { runs.reconcileAll() }
+        // Hand the scheduler over repeatedly: unserialised, the second sweep would be well inside
+        // `rebuildAll` by now and would have recorded "in2".
+        repeat(3) { yield() }
+
+        assertEquals("the second sweep is queued on the lock, not inside it", listOf("in1"), order)
+
+        releaseTheFirst.complete(Unit)
+        first.join()
+        second.join()
+
+        assertEquals(
+            "two whole sweeps, in order: no second run ever read a row the first had not finished writing",
+            listOf("in1", "out", "in2", "out"),
             order,
         )
     }

@@ -192,8 +192,18 @@ class AndroidQuickActionIntents(private val context: Context) : QuickActionInten
         return PendingIntent.getActivity(app, requestCode, target, flags or PendingIntent.FLAG_IMMUTABLE)
     }
 
-    private fun scheduleUri(id: ScheduleId): Uri =
-        Uri.parse("${DeepLinkRoute.SCHEME}://$SCHEDULE_HOST/${id.value}")
+    /**
+     * Built rather than parsed (fix round 1, nit 6). Production ids are canonical uuids, so
+     * `Uri.parse` on an interpolated string is safe today — but an id from an imported archive, or
+     * any id carrying a character a URI reserves, would produce a link `DeepLinkRoute.parse` then
+     * rejects as malformed, and the owner's "Open" would raise the not-here message instead of
+     * navigating. `appendPath` encodes the segment, which removes the class rather than the case.
+     */
+    private fun scheduleUri(id: ScheduleId): Uri = Uri.Builder()
+        .scheme(DeepLinkRoute.SCHEME)
+        .authority(SCHEDULE_HOST)
+        .appendPath(id.value)
+        .build()
 
     internal companion object {
         /**

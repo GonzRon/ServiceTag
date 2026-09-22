@@ -15,6 +15,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * The platform events the four re-arm receivers below dispatch (spec §5.4). What each one
@@ -216,8 +218,32 @@ class ReminderRuns(
         if (!alarm.armed()) alarm.arm()
     }
 
-    override suspend fun reconcileAll(): ReconcileReport {
+    /**
+     * The sweep, and **one at a time** (fix round 1, finding 2).
+     *
+     * Three entry points reach this — the digest alarm's reconcile worker, the periodic backstop
+     * and B07's quick-action worker — under three different unique work names, so WorkManager
+     * serialises none of them against the others. Overlapping sweeps are not merely wasteful:
+     * `LocalReminderProvider.reconcile` reads every delivery row at the top of the run and the
+     * digest policy carries those **pre-run** rows into the rows it writes back, so a second run
+     * holding an older snapshot can restore a nonce that the first run has just replaced. The
+     * notification standing in the shade then carries one value and the row holds another, and the
+     * owner's "Done" is a silent no-op that nothing repairs until the content hash moves.
+     *
+     * A `Mutex` and not a work name, because the three entry points are three workers and a shared
+     * name would still leave the backstop outside; and held for the whole sweep, because the
+     * snapshot is taken inside it.
+     */
+    override suspend fun reconcileAll(): ReconcileReport = sweeping.withLock {
         rebuildAll()
-        return provider.reconcile(subjectsFor(provider.id, today.localDate()))
+        provider.reconcile(subjectsFor(provider.id, today.localDate()))
     }
+
+    /**
+     * Per instance, which is per process: `AppGraph` builds exactly one [ReminderRuns] and both
+     * dispatch seams point at it, so every sweep this process runs queues on this one lock. Two
+     * *processes* cannot overlap here — WorkManager runs this app's workers in one process — and a
+     * lock is not a database constraint in any case.
+     */
+    private val sweeping = Mutex()
 }
