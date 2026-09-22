@@ -171,7 +171,7 @@ def _validate_unique(items: list, key_attr: str, path_prefix: str, label: str) -
 
 def _parse_definition(obj: Any, asset_path: str, index: int) -> Definition:
     p = f"{asset_path}.definitions[{index}]"
-    _check_keys(obj, _DEFINITION_KEYS, {"key", "label"}, p)
+    _check_keys(obj, _DEFINITION_KEYS, {"key", "label", "valueType"}, p)
 
     key = _require_str(obj, "key", p)
     if not _DEFINITION_KEY.match(key):
@@ -179,7 +179,7 @@ def _parse_definition(obj: Any, asset_path: str, index: int) -> Definition:
     label = _require_str(obj, "label", p)
     unit = _optional_str(obj, "unit", p)
 
-    value_type = obj.get("valueType", "NUMBER")
+    value_type = obj.get("valueType")
     if value_type not in VALUE_TYPES:
         raise SourceError(_join(p, "valueType"), "must be NUMBER, TEXT or BOOLEAN")
 
@@ -537,6 +537,8 @@ def parse(obj: dict) -> Source:
     tz_id = _validate_tz(obj.get("tzId"), "tzId")
     as_of = _parse_as_of(obj.get("asOf"), "asOf")
     deferred = obj.get("deferred")
+    if deferred is not None and not isinstance(deferred, dict):
+        raise SourceError("deferred", "must be an object")
 
     assets_raw = obj.get("assets")
     if not isinstance(assets_raw, list):

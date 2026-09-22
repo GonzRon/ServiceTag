@@ -15,7 +15,7 @@ same archive bytes.
 
 This is Task 1 of the Stage-A bundle plan: the package skeleton and the validated source model
 (`servicetag_bundle.source`). It reads and fully validates a source document into a tree of frozen
-dataclasses; it does not yet derive ids or write an archive. **The CLI arrives in a later task** —
+dataclasses; it does not yet derive ids or write an archive. **The CLI arrives in Task 3** —
 for now this package is a library, exercised by its test suite.
 
 ## The source format

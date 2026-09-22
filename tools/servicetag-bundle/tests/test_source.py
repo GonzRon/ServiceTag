@@ -23,7 +23,7 @@ def assert_rejects(source: dict, expected_path: str) -> None:
 
 def test_accepts_minimal_source_with_defaults():
     source = source_with(
-        definitions=[{"key": "ph", "label": "pH"}],
+        definitions=[{"key": "ph", "label": "pH", "valueType": "NUMBER"}],
         profiles=[{"key": "water-test", "name": "Water Test", "eventKind": "MEASUREMENT"}],
         events=[{"key": "e1", "kind": "NOTE", "occurredOn": "2026-09-21", "title": "Checked in"}],
     )
@@ -60,6 +60,10 @@ def test_rejects_unknown_top_level_key():
 
 def test_rejects_unknown_tz():
     assert_rejects(mutate(minimal_source(), "tzId", "Mars/OlympusMons"), "tzId")
+
+
+def test_rejects_deferred_that_is_not_an_object():
+    assert_rejects(mutate(minimal_source(), "deferred", ["not", "an", "object"]), "deferred")
 
 
 # ---- asset-level rejections ----------------------------------------------------------------------
@@ -135,9 +139,16 @@ def test_rejects_currency_right_shape_not_in_allow_list():
 
 # ---- definition rejections -----------------------------------------------------------------------
 
+def test_rejects_definition_missing_value_type():
+    assert_rejects(
+        source_with(definitions=[{"key": "ph", "label": "pH"}]),
+        "assets[0].definitions[0].valueType",
+    )
+
+
 def test_rejects_definition_key_violating_pattern():
     assert_rejects(
-        source_with(definitions=[{"key": "Bad-Key", "label": "Bad"}]),
+        source_with(definitions=[{"key": "Bad-Key", "label": "Bad", "valueType": "NUMBER"}]),
         "assets[0].definitions[0].key",
     )
 
@@ -145,8 +156,8 @@ def test_rejects_definition_key_violating_pattern():
 def test_rejects_duplicate_definition_keys():
     assert_rejects(
         source_with(definitions=[
-            {"key": "ph", "label": "pH"},
-            {"key": "ph", "label": "pH again"},
+            {"key": "ph", "label": "pH", "valueType": "NUMBER"},
+            {"key": "ph", "label": "pH again", "valueType": "NUMBER"},
         ]),
         "assets[0].definitions[1].key",
     )
@@ -164,7 +175,7 @@ def test_rejects_rangeLow_on_text_definition():
 def test_rejects_rangeLow_greater_than_rangeHigh():
     assert_rejects(
         source_with(definitions=[
-            {"key": "ph", "label": "pH", "rangeLow": 10, "rangeHigh": 5},
+            {"key": "ph", "label": "pH", "valueType": "NUMBER", "rangeLow": 10, "rangeHigh": 5},
         ]),
         "assets[0].definitions[0].rangeHigh",
     )
@@ -172,14 +183,18 @@ def test_rejects_rangeLow_greater_than_rangeHigh():
 
 def test_rejects_decimals_out_of_range():
     assert_rejects(
-        source_with(definitions=[{"key": "ph", "label": "pH", "decimals": 5}]),
+        source_with(definitions=[
+            {"key": "ph", "label": "pH", "valueType": "NUMBER", "decimals": 5},
+        ]),
         "assets[0].definitions[0].decimals",
     )
 
 
 def test_rejects_derived_without_sources():
     assert_rejects(
-        source_with(definitions=[{"key": "drop", "label": "Drop", "kind": "DERIVED"}]),
+        source_with(definitions=[
+            {"key": "drop", "label": "Drop", "valueType": "NUMBER", "kind": "DERIVED"},
+        ]),
         "assets[0].definitions[0].formula",
     )
 
@@ -187,12 +202,12 @@ def test_rejects_derived_without_sources():
 def test_rejects_derived_source_is_derived():
     assert_rejects(
         source_with(definitions=[
-            {"key": "raw1", "label": "Raw1"},
-            {"key": "raw2", "label": "Raw2"},
-            {"key": "mid", "label": "Mid", "kind": "DERIVED", "formula": "PERCENT_DROP",
-             "sourceA": "raw1", "sourceB": "raw2"},
-            {"key": "bad", "label": "Bad", "kind": "DERIVED", "formula": "PERCENT_DROP",
-             "sourceA": "mid", "sourceB": "raw2"},
+            {"key": "raw1", "label": "Raw1", "valueType": "NUMBER"},
+            {"key": "raw2", "label": "Raw2", "valueType": "NUMBER"},
+            {"key": "mid", "label": "Mid", "valueType": "NUMBER", "kind": "DERIVED",
+             "formula": "PERCENT_DROP", "sourceA": "raw1", "sourceB": "raw2"},
+            {"key": "bad", "label": "Bad", "valueType": "NUMBER", "kind": "DERIVED",
+             "formula": "PERCENT_DROP", "sourceA": "mid", "sourceB": "raw2"},
         ]),
         "assets[0].definitions[3].sourceA",
     )
@@ -202,9 +217,9 @@ def test_rejects_derived_source_not_number():
     assert_rejects(
         source_with(definitions=[
             {"key": "raw1", "label": "Raw1", "valueType": "TEXT"},
-            {"key": "raw2", "label": "Raw2"},
-            {"key": "drop", "label": "Drop", "kind": "DERIVED", "formula": "PERCENT_DROP",
-             "sourceA": "raw1", "sourceB": "raw2"},
+            {"key": "raw2", "label": "Raw2", "valueType": "NUMBER"},
+            {"key": "drop", "label": "Drop", "valueType": "NUMBER", "kind": "DERIVED",
+             "formula": "PERCENT_DROP", "sourceA": "raw1", "sourceB": "raw2"},
         ]),
         "assets[0].definitions[2].sourceA",
     )
@@ -215,14 +230,14 @@ def test_rejects_derived_source_of_another_asset():
     source["assets"] = [
         {
             "key": "widget-mixer", "name": "Widget Mixer",
-            "definitions": [{"key": "raw", "label": "Raw"}],
+            "definitions": [{"key": "raw", "label": "Raw", "valueType": "NUMBER"}],
         },
         {
             "key": "widget-fan", "name": "Widget Fan",
             "definitions": [
-                {"key": "raw2", "label": "Raw2"},
-                {"key": "drop", "label": "Drop", "kind": "DERIVED", "formula": "PERCENT_DROP",
-                 "sourceA": "raw", "sourceB": "raw2"},
+                {"key": "raw2", "label": "Raw2", "valueType": "NUMBER"},
+                {"key": "drop", "label": "Drop", "valueType": "NUMBER", "kind": "DERIVED",
+                 "formula": "PERCENT_DROP", "sourceA": "raw", "sourceB": "raw2"},
             ],
         },
     ]
@@ -232,8 +247,8 @@ def test_rejects_derived_source_of_another_asset():
 def test_rejects_derived_definition_that_is_text():
     assert_rejects(
         source_with(definitions=[
-            {"key": "raw1", "label": "Raw1"},
-            {"key": "raw2", "label": "Raw2"},
+            {"key": "raw1", "label": "Raw1", "valueType": "NUMBER"},
+            {"key": "raw2", "label": "Raw2", "valueType": "NUMBER"},
             {"key": "drop", "label": "Drop", "valueType": "TEXT", "kind": "DERIVED",
              "formula": "PERCENT_DROP", "sourceA": "raw1", "sourceB": "raw2"},
         ]),
@@ -244,10 +259,10 @@ def test_rejects_derived_definition_that_is_text():
 def test_rejects_derived_definition_that_is_a_meter():
     assert_rejects(
         source_with(definitions=[
-            {"key": "raw1", "label": "Raw1"},
-            {"key": "raw2", "label": "Raw2"},
-            {"key": "drop", "label": "Drop", "isMeter": True, "kind": "DERIVED",
-             "formula": "PERCENT_DROP", "sourceA": "raw1", "sourceB": "raw2"},
+            {"key": "raw1", "label": "Raw1", "valueType": "NUMBER"},
+            {"key": "raw2", "label": "Raw2", "valueType": "NUMBER"},
+            {"key": "drop", "label": "Drop", "valueType": "NUMBER", "isMeter": True,
+             "kind": "DERIVED", "formula": "PERCENT_DROP", "sourceA": "raw1", "sourceB": "raw2"},
         ]),
         "assets[0].definitions[2].isMeter",
     )
@@ -256,9 +271,9 @@ def test_rejects_derived_definition_that_is_a_meter():
 def test_rejects_derived_two_sources_the_same_key():
     assert_rejects(
         source_with(definitions=[
-            {"key": "raw1", "label": "Raw1"},
-            {"key": "drop", "label": "Drop", "kind": "DERIVED", "formula": "PERCENT_DROP",
-             "sourceA": "raw1", "sourceB": "raw1"},
+            {"key": "raw1", "label": "Raw1", "valueType": "NUMBER"},
+            {"key": "drop", "label": "Drop", "valueType": "NUMBER", "kind": "DERIVED",
+             "formula": "PERCENT_DROP", "sourceA": "raw1", "sourceB": "raw1"},
         ]),
         "assets[0].definitions[1].sourceB",
     )
@@ -267,10 +282,10 @@ def test_rejects_derived_two_sources_the_same_key():
 def test_rejects_derived_source_that_is_a_meter():
     assert_rejects(
         source_with(definitions=[
-            {"key": "raw1", "label": "Raw1", "isMeter": True},
-            {"key": "raw2", "label": "Raw2"},
-            {"key": "drop", "label": "Drop", "kind": "DERIVED", "formula": "PERCENT_DROP",
-             "sourceA": "raw1", "sourceB": "raw2"},
+            {"key": "raw1", "label": "Raw1", "valueType": "NUMBER", "isMeter": True},
+            {"key": "raw2", "label": "Raw2", "valueType": "NUMBER"},
+            {"key": "drop", "label": "Drop", "valueType": "NUMBER", "kind": "DERIVED",
+             "formula": "PERCENT_DROP", "sourceA": "raw1", "sourceB": "raw2"},
         ]),
         "assets[0].definitions[2].sourceA",
     )
@@ -282,10 +297,10 @@ def test_rejects_profile_field_naming_derived_definition():
     assert_rejects(
         source_with(
             definitions=[
-                {"key": "raw1", "label": "Raw1"},
-                {"key": "raw2", "label": "Raw2"},
-                {"key": "drop", "label": "Drop", "kind": "DERIVED", "formula": "PERCENT_DROP",
-                 "sourceA": "raw1", "sourceB": "raw2"},
+                {"key": "raw1", "label": "Raw1", "valueType": "NUMBER"},
+                {"key": "raw2", "label": "Raw2", "valueType": "NUMBER"},
+                {"key": "drop", "label": "Drop", "valueType": "NUMBER", "kind": "DERIVED",
+                 "formula": "PERCENT_DROP", "sourceA": "raw1", "sourceB": "raw2"},
             ],
             profiles=[{
                 "key": "water-test", "name": "Water Test", "eventKind": "MEASUREMENT",
@@ -301,7 +316,7 @@ def test_rejects_profile_field_naming_other_asset_definition():
     source["assets"] = [
         {
             "key": "widget-mixer", "name": "Widget Mixer",
-            "definitions": [{"key": "ph", "label": "pH"}],
+            "definitions": [{"key": "ph", "label": "pH", "valueType": "NUMBER"}],
             "profiles": [{
                 "key": "water-test", "name": "Water Test", "eventKind": "MEASUREMENT",
                 "fields": [{"definition": "salinity"}],
@@ -309,7 +324,7 @@ def test_rejects_profile_field_naming_other_asset_definition():
         },
         {
             "key": "widget-fan", "name": "Widget Fan",
-            "definitions": [{"key": "salinity", "label": "Salinity"}],
+            "definitions": [{"key": "salinity", "label": "Salinity", "valueType": "NUMBER"}],
         },
     ]
     assert_rejects(source, "assets[0].profiles[0].fields[0].definition")
@@ -350,7 +365,7 @@ def test_rejects_duplicate_consumable_keys_within_a_profile():
 def test_rejects_profile_listing_one_definition_twice():
     assert_rejects(
         source_with(
-            definitions=[{"key": "ph", "label": "pH"}],
+            definitions=[{"key": "ph", "label": "pH", "valueType": "NUMBER"}],
             profiles=[{
                 "key": "water-test", "name": "Water Test", "eventKind": "MEASUREMENT",
                 "fields": [{"definition": "ph"}, {"definition": "ph"}],
@@ -384,10 +399,10 @@ def test_rejects_event_value_for_derived_definition():
     assert_rejects(
         source_with(
             definitions=[
-                {"key": "raw1", "label": "Raw1"},
-                {"key": "raw2", "label": "Raw2"},
-                {"key": "drop", "label": "Drop", "kind": "DERIVED", "formula": "PERCENT_DROP",
-                 "sourceA": "raw1", "sourceB": "raw2"},
+                {"key": "raw1", "label": "Raw1", "valueType": "NUMBER"},
+                {"key": "raw2", "label": "Raw2", "valueType": "NUMBER"},
+                {"key": "drop", "label": "Drop", "valueType": "NUMBER", "kind": "DERIVED",
+                 "formula": "PERCENT_DROP", "sourceA": "raw1", "sourceB": "raw2"},
             ],
             events=[{
                 "key": "e1", "kind": "MEASUREMENT", "occurredOn": "2026-09-21", "title": "Check",
@@ -401,7 +416,7 @@ def test_rejects_event_value_for_derived_definition():
 def test_rejects_number_value_given_as_a_string():
     assert_rejects(
         source_with(
-            definitions=[{"key": "ph", "label": "pH"}],
+            definitions=[{"key": "ph", "label": "pH", "valueType": "NUMBER"}],
             events=[{
                 "key": "e1", "kind": "MEASUREMENT", "occurredOn": "2026-09-21", "title": "Check",
                 "values": {"ph": "7.2"},
@@ -479,7 +494,7 @@ def test_rejects_duplicate_consumable_keys_within_an_event():
         ),
         pytest.param(
             source_with(
-                definitions=[{"key": "ph", "label": "pH"}],
+                definitions=[{"key": "ph", "label": "pH", "valueType": "NUMBER"}],
                 profiles=[{"key": "water-test", "name": "Water Test", "eventKind": "MEASUREMENT",
                            "fields": [{"definition": "ph", "bogus": True}]}],
             ),
