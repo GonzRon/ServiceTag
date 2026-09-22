@@ -261,3 +261,42 @@ def test_build_force_onto_a_directory_reports_cleanly_not_a_traceback(tmp_path, 
     assert "Traceback" not in err
     assert out_path.is_dir()  # untouched
     assert set(tmp_path.iterdir()) == {out_path, source_path}  # no stray ".partial" temp file
+
+
+def test_inspect_a_manifest_that_is_not_an_object_reports_cleanly_not_a_traceback(tmp_path, capsys):
+    """A `manifest.json` that decodes to a JSON list, string or number parses cleanly but isn't a
+    manifest -- `key not in manifest` would otherwise raise or misbehave instead of one clean
+    `path: message` line."""
+    archive_path = tmp_path / "not-an-object.zip"
+    with zipfile.ZipFile(archive_path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps([1, 2, 3]).encode("utf-8"))
+        zf.writestr("data.json", b"{}")
+
+    code = main(["inspect", str(archive_path)])
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert str(archive_path) in err
+    assert "not a JSON object" in err
+    assert "Traceback" not in err
+
+
+def test_inspect_counts_that_is_not_an_object_reports_cleanly_not_a_traceback(tmp_path, capsys):
+    """`counts` present but not a JSON object (e.g. a list) parses past the missing-fields check
+    but `.items()` on it would otherwise raise `AttributeError` instead of one clean line."""
+    archive_path = tmp_path / "bad-counts.zip"
+    manifest = json.dumps(
+        {"formatVersion": 5, "appVersion": "servicetag-bundle/0.1.0", "schemaVersion": 5,
+         "createdAt": 0, "counts": [1, 2, 3], "dataSha256": "0" * 64}
+    ).encode("utf-8")
+    with zipfile.ZipFile(archive_path, "w") as zf:
+        zf.writestr("manifest.json", manifest)
+        zf.writestr("data.json", b"{}")
+
+    code = main(["inspect", str(archive_path)])
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert str(archive_path) in err
+    assert "counts is not a JSON object" in err
+    assert "Traceback" not in err

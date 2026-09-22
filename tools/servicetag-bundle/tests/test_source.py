@@ -577,3 +577,28 @@ def test_rejects_non_finite_number_via_load_source(tmp_path):
     with pytest.raises(SourceError) as excinfo:
         load_source(path)
     assert excinfo.value.path == "assets[0].definitions[0].rangeLow"
+
+
+def test_rejects_an_integer_too_large_for_a_float():
+    # `math.isfinite` raises `OverflowError` on an `int` this large instead of returning a bool --
+    # `_is_number` has to catch that and reject it like any other not-a-number, not crash.
+    huge = 10**400
+    source = source_with(definitions=[
+        {"key": "ph", "label": "pH", "valueType": "NUMBER", "rangeLow": huge},
+    ])
+    assert_rejects(source, "assets[0].definitions[0].rangeLow")
+
+
+# ---- purchasePriceMinor's Long bound ------------------------------------------------------------
+#
+# The field decodes into a Kotlin `Long` on the phone; a value the decoder can't represent has to
+# be rejected here, at its JSON path, rather than shipped in an archive that fails to decode.
+
+def test_rejects_price_over_a_64_bit_long():
+    assert_rejects(source_with(purchasePriceMinor=2**70, currency="USD"),
+                    "assets[0].purchasePriceMinor")
+
+
+def test_accepts_price_at_the_64_bit_long_max():
+    result = parse_source(source_with(purchasePriceMinor=2**63 - 1, currency="USD"))
+    assert result.assets[0].purchasePriceMinor == 2**63 - 1

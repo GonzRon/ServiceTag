@@ -81,12 +81,24 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         print(f"{archive_path}: {e}", file=sys.stderr)
         return 1
 
+    # manifest.json must decode to a JSON object -- a list, a string or a bare number parses
+    # cleanly but isn't a manifest, and `key not in manifest` below would otherwise raise (an
+    # int or null isn't iterable) or silently do the wrong thing (a list) instead of reporting
+    # one clean line.
+    if not isinstance(manifest, dict):
+        print(f"{archive_path}: manifest.json is not a JSON object", file=sys.stderr)
+        return 1
+
     # The six fields every manifest must carry are required here too: a manifest missing one of
     # them is corrupt, not old, and `inspect` says so instead of printing a false clean bill of
     # health. Only the four format-5-only fields (`backupSetId`/`artifact*`) may default.
     missing = [key for key in _REQUIRED_MANIFEST_FIELDS if key not in manifest]
     if missing:
         print(f"{archive_path}: manifest.json is missing {', '.join(missing)}", file=sys.stderr)
+        return 1
+
+    if not isinstance(manifest["counts"], dict):
+        print(f"{archive_path}: manifest.json's counts is not a JSON object", file=sys.stderr)
         return 1
 
     print(f"{archive_path}: {size} bytes")

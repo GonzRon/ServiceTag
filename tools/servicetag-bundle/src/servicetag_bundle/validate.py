@@ -48,6 +48,10 @@ _MMDD = re.compile(r"^\d{2}-\d{2}$")
 # shape-only too, but `Money.fractionDigits` is what actually resolves a code).
 _CURRENCY_SHAPE = re.compile(r"^[A-Z]{3}$")
 
+# `purchasePriceMinor` decodes into a Kotlin `Long`; anything past this is a decode failure on
+# the phone, not a Python one, so the generator is the gate.
+_KOTLIN_LONG_MAX = 2**63 - 1
+
 _SOURCE_KEYS = {"formatVersion", "namespace", "bundleKey", "asOf", "tzId", "deferred", "assets"}
 _ASSET_KEYS = {
     "key", "name", "category", "description", "notes", "manufacturer", "model", "serialNumber",
@@ -80,10 +84,15 @@ def _is_number(value: Any) -> bool:
     (both from a source file's raw text and from an already-parsed dict built by hand), and
     `json.dumps(..., allow_nan=False)` -- the pinned archive writer -- would later fail on one with
     no source path attached. Rejecting it here, at every field that accepts a JSON number, is the
-    one gate."""
+    one gate. An `int` too large to convert to a `float` makes `math.isfinite` raise
+    `OverflowError` instead of returning a bool -- that is still not a valid JSON number for this
+    tool's purposes, so it is rejected too, at its JSON path, rather than crashing."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
-    return math.isfinite(value)
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def _check_keys(obj: Any, allowed: set[str], required: set[str], path: str) -> None:
@@ -451,6 +460,8 @@ def _parse_asset(obj: Any, index: int, source_tz: str) -> Asset:
             raise SourceError(_join(p, "purchasePriceMinor"), "must be an integer")
         if price < 0:
             raise SourceError(_join(p, "purchasePriceMinor"), "must not be negative")
+        if price > _KOTLIN_LONG_MAX:
+            raise SourceError(_join(p, "purchasePriceMinor"), "must not exceed a 64-bit Long")
         if currency is None:
             raise SourceError(_join(p, "currency"), "required when purchasePriceMinor is present")
     if currency is not None:
