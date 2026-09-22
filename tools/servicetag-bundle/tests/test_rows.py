@@ -438,3 +438,47 @@ def test_sort_order_is_the_position_in_the_source_array():
 
     definitions = sorted(built["measurementDefinitions"], key=lambda d: d["sortOrder"])
     assert [d["key"] for d in definitions] == ["ph", "temp", "notes_field", "running", "wear_pct"]
+
+
+# ---- declared null invariants and the DERIVED mapping -----------------------------------------
+#
+# The field-set tests above prove these keys exist on every row; they never look at the values, so
+# e.g. `archivedAt = as_of_millis` (every definition silently archived) would still pass them.
+
+def test_asset_template_key_and_retired_on_are_always_null():
+    built = _built()
+    for row in built["assets"]:
+        assert row["templateKey"] is None
+        assert row["retiredOn"] is None
+
+
+def test_definition_archived_at_is_always_null():
+    built = _built()
+    for row in built["measurementDefinitions"]:
+        assert row["archivedAt"] is None
+
+
+def test_profile_archived_at_and_template_key_are_always_null():
+    built = _built()
+    for row in built["eventProfiles"]:
+        assert row["archivedAt"] is None
+        assert row["templateKey"] is None
+
+
+def test_derived_definition_carries_its_formula_and_resolved_sources():
+    built = _built()
+    ns = _ns()
+    wear_pct = next(d for d in built["measurementDefinitions"] if d["key"] == "wear_pct")
+    assert wear_pct["kind"] == "DERIVED"
+    assert wear_pct["formula"] == "PERCENT_DROP"
+    assert wear_pct["sourceAId"] == row_id(ns, "definition:widget-mixer/ph")
+    assert wear_pct["sourceBId"] == row_id(ns, "definition:widget-mixer/temp")
+
+
+def test_entered_definitions_carry_no_derived_fields():
+    built = _built()
+    for row in built["measurementDefinitions"]:
+        if row["kind"] == "ENTERED":
+            assert row["formula"] is None
+            assert row["sourceAId"] is None
+            assert row["sourceBId"] is None

@@ -5,12 +5,13 @@ the exact `SourceError.path` alongside the rejection itself, since that path is 
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 import pytest
 
 from conftest import minimal_source, mutate, source_with
-from servicetag_bundle.source import SourceError, parse_source
+from servicetag_bundle.source import SourceError, load_source, parse_source
 
 
 def assert_rejects(source: dict, expected_path: str) -> None:
@@ -549,3 +550,30 @@ def test_accepts_deferred_arbitrary_shape_and_reports():
     source = mutate(minimal_source(), "deferred", deferred)
     result = parse_source(source)
     assert result.deferred == deferred
+
+
+# ---- non-finite numbers, one test per entry point ------------------------------------------------
+#
+# `json.loads` accepts the bare tokens `NaN`/`Infinity`/`-Infinity` as a non-standard extension, so
+# a non-finite number can arrive either already parsed (a caller builds the dict by hand, e.g. a
+# test or a future in-process caller of `parse_source`) or via `load_source`'s own file read. The
+# archive writer's pinned `json.dumps(..., allow_nan=False)` would otherwise fail on one with no
+# source path attached.
+
+def test_rejects_non_finite_number_via_parse_source():
+    source = source_with(definitions=[
+        {"key": "ph", "label": "pH", "valueType": "NUMBER", "rangeLow": float("inf")},
+    ])
+    assert_rejects(source, "assets[0].definitions[0].rangeLow")
+
+
+def test_rejects_non_finite_number_via_load_source(tmp_path):
+    source = source_with(definitions=[
+        {"key": "ph", "label": "pH", "valueType": "NUMBER", "rangeLow": float("nan")},
+    ])
+    path = tmp_path / "source.json"
+    path.write_text(json.dumps(source, allow_nan=True), encoding="utf-8")
+
+    with pytest.raises(SourceError) as excinfo:
+        load_source(path)
+    assert excinfo.value.path == "assets[0].definitions[0].rangeLow"

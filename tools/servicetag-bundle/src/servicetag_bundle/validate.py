@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import zoneinfo
 from datetime import date, datetime, timezone
@@ -74,7 +75,15 @@ def _join(path: str, key: str) -> str:
 
 
 def _is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    """A JSON number: an `int` or `float`, never a `bool`, and never non-finite. Python's
+    `json.loads` accepts the bare tokens `NaN`/`Infinity`/`-Infinity` as a non-standard extension
+    (both from a source file's raw text and from an already-parsed dict built by hand), and
+    `json.dumps(..., allow_nan=False)` -- the pinned archive writer -- would later fail on one with
+    no source path attached. Rejecting it here, at every field that accepts a JSON number, is the
+    one gate."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return math.isfinite(value)
 
 
 def _check_keys(obj: Any, allowed: set[str], required: set[str], path: str) -> None:

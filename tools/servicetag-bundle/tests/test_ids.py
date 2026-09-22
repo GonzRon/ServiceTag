@@ -11,6 +11,7 @@ from servicetag_bundle.ids import namespace_of, row_id
 from servicetag_bundle.source import parse_source
 
 from conftest import minimal_source
+from test_rows import _all_ids, _built, _ns
 
 
 def _independent_ns(namespace: str) -> uuid.UUID:
@@ -86,3 +87,29 @@ def test_different_namespace_yields_a_different_id_for_the_same_key():
     a = row_id(_independent_ns("widget-farm"), "asset:widget-mixer")
     b = row_id(_independent_ns("gadget-ranch"), "asset:widget-mixer")
     assert a != b
+
+
+# ---- the key table bound to a real build ------------------------------------------------------
+#
+# The tests above prove the *formula*: a literal key in, a `uuid5` out. None of them look at a row
+# `build_rows` actually emits, so a key format change in `rows.py` (`measurement:` -> `m:`, or
+# dropping `<assetKey>` from a key) would leave every test above green. This test closes that gap:
+# every id-bearing value anywhere in `test_rows._rich_source()`'s built rows must be exactly the
+# `row_id` set of the plan's key table transcribed against that fixture's own keys -- no extra id,
+# none missing.
+
+def test_every_row_id_matches_the_documented_key_table():
+    keys = (
+        [f"asset:{k}" for k in ("widget-mixer", "widget-fan")]
+        + [f"definition:widget-mixer/{k}"
+           for k in ("ph", "temp", "notes_field", "running", "wear_pct")]
+        + ["profile:widget-mixer/water-test"]
+        + [f"profile-field:widget-mixer/water-test/{k}" for k in ("ph", "temp")]
+        + ["profile-consumable:widget-mixer/water-test/filter"]
+        + [f"event:widget-mixer/{k}" for k in ("e1", "e2", "e3")]
+        + [f"measurement:widget-mixer/e1/{k}"
+           for k in ("ph", "temp", "notes_field", "running")]
+        + ["measurement:widget-mixer/e3/running",
+           "consumable-usage:widget-mixer/e1/filter"]
+    )
+    assert _all_ids(_built()) == {row_id(_ns(), k) for k in keys}
