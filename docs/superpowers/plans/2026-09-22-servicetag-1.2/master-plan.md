@@ -608,7 +608,7 @@ Spec §6's eighty, each restated in a few words with the brief whose test matrix
 | 7 | a name, location or category is never identity, in the domain or in a merge | B01, B03, B15 (UI) |
 | 8 | a membership row is never hard-deleted while a completion or closure references a covered occurrence | B03, B12, B15 (UI) |
 | 9 | at most one current occurrence per schedule | B02 |
-| 10 | `effectiveDueOn` is null only when there is no time rule | B02 |
+| 10 | `effectiveDueOn` is null only when there is no time rule **or the current occurrence's required set is empty** (amended at B03's review, 2026-09-22: invariant 74 nulls both due dates for a round that obliges nobody; the spec's wording is B13's edit) | B02, B03 |
 | 11 | every FIXED `computedDueOn` lies on `anchorOn + k·interval` | B02 |
 | 12 | COMPLETION: `computedDueOn == lastTerminationEffectiveOn + interval` when a termination exists | B02 |
 | 13 | a very late termination produces exactly one next occurrence — never a backlog | B02 |
