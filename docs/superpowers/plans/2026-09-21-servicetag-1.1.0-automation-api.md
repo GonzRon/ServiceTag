@@ -1135,8 +1135,8 @@ class MergePlannerTest {
     @Test
     fun `manufacturer model and serial produce a duplicate candidate and change nothing`() {
         val plan = mergePlanOf(
-            backupOf(assets = listOf(asset("a-import", "Mower", manufacturer = "Cub Cadet", model = "XT1", serial = "SN-7"))),
-            snapshotOf(assets = listOf(asset("a-local", "Garage mower", manufacturer = "Cub Cadet", model = "XT1", serial = "SN-7"))),
+            backupOf(assets = listOf(asset("a-import", "Mower", manufacturer = "Northwind Outdoor", model = "NW-100", serial = "SN-7"))),
+            snapshotOf(assets = listOf(asset("a-local", "Garage mower", manufacturer = "Northwind Outdoor", model = "NW-100", serial = "SN-7"))),
         )
 
         assertTrue(plan.applicable)

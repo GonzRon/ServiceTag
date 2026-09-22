@@ -304,7 +304,7 @@ class MergePlannerTest {
      */
     @Test
     fun `rows already here with identical content are IDENTICAL and nothing is written`() {
-        val rows = listOf(asset("a1", "Hot tub", manufacturer = "Cub Cadet", model = "XT1", serial = "SN-7"))
+        val rows = listOf(asset("a1", "Hot tub", manufacturer = "Northwind Outdoor", model = "NW-100", serial = "SN-7"))
         val plan = mergePlanOf(backupOf(assets = rows), snapshotOf(assets = rows))
 
         assertTrue(plan.applicable)
@@ -1227,8 +1227,8 @@ class MergePlannerTest {
     @Test
     fun `manufacturer model and serial produce a duplicate candidate and change nothing`() {
         val plan = mergePlanOf(
-            backupOf(assets = listOf(asset("a-import", "Mower", manufacturer = "Cub Cadet", model = "XT1", serial = "SN-7"))),
-            snapshotOf(assets = listOf(asset("a-local", "Garage mower", manufacturer = "Cub Cadet", model = "XT1", serial = "SN-7"))),
+            backupOf(assets = listOf(asset("a-import", "Mower", manufacturer = "Northwind Outdoor", model = "NW-100", serial = "SN-7"))),
+            snapshotOf(assets = listOf(asset("a-local", "Garage mower", manufacturer = "Northwind Outdoor", model = "NW-100", serial = "SN-7"))),
         )
 
         assertTrue(plan.applicable)
