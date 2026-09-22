@@ -42,7 +42,7 @@ Make a scan the fastest way to quiesce maintenance when the owner is standing at
 
 | status | on the sheet? |
 |---|---|
-| `OVERDUE`, `DUE` | **always** |
+| `OVERDUE`, `DUE` | **always** **Amended at B09's review (2026-09-22):** shown whenever the row has a date or a meter line; a repairable `NO_DATA` row has neither and shows its repair label only — §17 ratifies no 'needs a baseline' sentence. |
 | `NO_DATA` | **only when it has a repair action** — the missing meter baseline, offered as **"Log meter reading"** |
 | `DUE_SOON` | **only as a passenger**: when the sheet is already open for another actionable item. **Never alone** |
 | `OK`, `INACTIVE_SEASON`, `PAUSED` | **never** |
@@ -124,7 +124,7 @@ One test per hazard class; unit tests over the view model with a seeded read mod
   - `grep -n 'fun Route.readsTags' -A 6 app/src/main/kotlin/com/loosecannon/servicetag/ui/nav/Route.kt` → unchanged; `grep -c 'MaintenanceSheet' app/src/main/kotlin/com/loosecannon/servicetag/ui/nav/Route.kt` counts the route key and no `readsTags` entry.
   - `grep -rn 'Resolution\.' app/src/main/kotlin/com/loosecannon/servicetag/ui/scan app/src/main/kotlin/com/loosecannon/servicetag/ui/nav` shows an **exhaustive** `when` over `Resolution` with no `else ->` on the path that reaches the sheet.
   - `grep -rn 'enableReaderMode\|NfcReaderModeSession' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance` → no match.
-  - `grep -rnE '(CompleteSchedule|CompleteGroupMembers|CloseRound|ReminderSnooze|PostponeSchedule)' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/MaintenanceSheetViewModel.kt` shows the use cases **called**.
+  - `grep -rnE '(CompleteSchedule|CompleteGroupMembers|CloseRound|ReminderSnooze|PostponeSchedule)' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/MaintenanceSheetViewModel.kt` shows the use cases **called**. **Amended at B09's review (2026-09-22):** completion is `CompletionFlow`'s by contract — restate against `CompletionFlow.kt`; on non-comment lines the sheet's own matches are the `PostponeSchedule` import and constructor field only.
   - **The write-surface grep, narrowed to the write methods** so the read-only `LastCompletionReadings` seam is not caught by it: `grep -rnE '(events|closures)\.(upsert|insert|delete)' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/MaintenanceSheetViewModel.kt` → **no match** (no second completion path). A bare `EventRepository` identifier is **not** the pattern: the sheet legitimately reads an event's measurements through the declared seam, and the earlier form of this grep would have failed a correct implementation.
   - `grep -rn 'CloseRound' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/MaintenanceSheet.kt` → no match: **"Close this round" is not on the sheet** (spec §1.2 offers it in the editor only).
 
