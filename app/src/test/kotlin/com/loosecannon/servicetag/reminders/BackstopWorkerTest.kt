@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.reminders.RemoteChange
 import java.time.LocalDate
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -73,12 +74,14 @@ class BackstopWorkerTest {
         provider: ReminderProvider = RecordingProvider(),
         rebuilds: MutableList<Unit> = mutableListOf(),
         subjects: List<ReminderSubject> = emptyList(),
+        enqueued: MutableList<Unit> = mutableListOf(),
     ) = ReminderRuns(
         rebuildAll = { rebuilds += Unit },
         subjectsFor = { _, _ -> subjects },
         provider = provider,
         alarm = alarm,
         today = today,
+        enqueueReconcile = { enqueued += Unit },
     )
 
     /**
@@ -118,19 +121,28 @@ class BackstopWorkerTest {
     }
 
     /**
-     * The matrix's "the alarm never re-arms after firing" row. `setAndAllowWhileIdle` is one shot:
+     * The matrix's "the alarm never re-arms after firing" row. The inexact alarm is one shot:
      * handling the fire is what arms tomorrow's, and without that step the phone reminds once and
      * never again.
+     *
+     * The **re-arm happens in the broadcast window and the sweep does not** (fix round 1, finding
+     * 4): arming is one synchronous `AlarmManager` call, and if it travelled with the work then a
+     * deferred worker would also mean no alarm tomorrow — the one failure the backstop exists to
+     * catch, made more likely rather than less.
      */
     @Test
-    fun handlingTheFireArmsTheNextDay() = runTest {
+    fun handlingTheFireArmsTheNextDayAndHandsTheSweepToAWorker() = runTest {
         val alarm = RecordingDigestAlarm(isArmed = false)
         val provider = RecordingProvider()
+        val rebuilds = mutableListOf<Unit>()
+        val enqueued = mutableListOf<Unit>()
 
-        runs(alarm, provider).onDigestFired()
+        runs(alarm, provider, rebuilds, enqueued = enqueued).onDigestFired()
 
         assertEquals(1, alarm.arms)
-        assertEquals(1, provider.calls.size)
+        assertEquals("the sweep is enqueued", 1, enqueued.size)
+        assertEquals("and nothing of it ran inline", 0, rebuilds.size)
+        assertEquals(0, provider.calls.size)
     }
 
     /**
@@ -138,20 +150,46 @@ class BackstopWorkerTest {
      * and `TIMEZONE_CHANGED` — unconditionally, because each of them either cleared the alarm or
      * moved the instant it should be set for, and `armed()` cannot tell a stale instant from a
      * current one. `DATE_CHANGED` takes the same path: `T` moved, so the next instant did too.
+     *
+     * And in every case the sweep is **handed to a worker**, never run inline: a receiver has
+     * roughly ten seconds, `goAsync()` does not extend that, and a rebuild of every schedule
+     * followed by a post per subject is not a ten-second job on a cold doze-woken process
+     * (fix round 1, finding 4).
      */
     @Test
-    fun everyPlatformEventReArmsTheAlarmAndReconciles() = runTest {
+    fun everyPlatformEventReArmsTheAlarmAndHandsTheSweepToAWorker() = runTest {
         PlatformEventKind.entries.forEach { kind ->
             val alarm = RecordingDigestAlarm(isArmed = true)
             val provider = RecordingProvider()
             val rebuilds = mutableListOf<Unit>()
+            val enqueued = mutableListOf<Unit>()
 
-            runs(alarm, provider, rebuilds).onPlatformEvent(kind)
+            runs(alarm, provider, rebuilds, enqueued = enqueued).onPlatformEvent(kind)
 
             assertEquals("$kind must re-arm even when an alarm is already pending", 1, alarm.arms)
-            assertEquals("$kind recomputes before it posts", 1, rebuilds.size)
-            assertEquals("$kind reconciles", 1, provider.calls.size)
+            assertEquals("$kind enqueues the sweep", 1, enqueued.size)
+            assertEquals("$kind must not recompute inside the broadcast window", 0, rebuilds.size)
+            assertEquals("$kind must not reconcile inside the broadcast window", 0, provider.calls.size)
         }
+    }
+
+    /**
+     * The other end of the same fix: what the worker runs. `reconcileAll` is the sweep the receivers
+     * hand off, and it does the whole of it — rebuild, subjects, reconcile — with **no** alarm
+     * arming of its own, because the receiver already did that and the backstop asks its own
+     * question.
+     */
+    @Test
+    fun theWorkerSideRunsTheWholeSweepAndArmsNothing() = runTest {
+        val alarm = RecordingDigestAlarm(isArmed = true)
+        val provider = RecordingProvider()
+        val rebuilds = mutableListOf<Unit>()
+
+        runs(alarm, provider, rebuilds).reconcileAll()
+
+        assertEquals(1, rebuilds.size)
+        assertEquals(1, provider.calls.size)
+        assertEquals("the sweep is not an arming point", 0, alarm.arms)
     }
 
     /** The order is load-bearing: a reconcile before the recompute posts yesterday's answer. */
@@ -175,20 +213,36 @@ class BackstopWorkerTest {
             provider = provider,
             alarm = alarm,
             today = today,
+            enqueueReconcile = { order += "enqueue" },
         ).onBackstop()
 
-        assertEquals(listOf("rebuild", "subjects", "reconcile"), order)
+        assertEquals(
+            "the backstop is already inside a worker, so it sweeps inline and enqueues nothing",
+            listOf("rebuild", "subjects", "reconcile"),
+            order,
+        )
     }
 
     /**
-     * The backstop's period, read off the request this brief builds rather than waited for: 12 h
-     * with a 4 h flex window (spec 5.3). A one-character slip here is a backstop that runs twelve
-     * times a day or once a week, and neither would fail any behavioural row above.
+     * The two periods and the two unique names, locked against an edit (spec 5.3).
+     *
+     * These assertions restate the constants' own literals and so cannot catch the failure that
+     * actually matters — a `PeriodicWorkRequest` built with period and flex **swapped** (fix
+     * round 1, nit 6). `WorkRequest.workSpec` is `@RestrictTo`, so the honest place for that is the
+     * connected class, and `ReminderPlatformDeviceProofTest.theUniquePeriodicWorkIsEnqueuedExactlyOnceAcrossTwoLaunches`
+     * now reads `WorkInfo.periodicityInfo` back off WorkManager and asserts both values. What is
+     * left here is the value it does have: a later edit to either constant, or either name, fails.
      */
     @Test
     fun theBackstopPeriodIsTwelveHoursWithAFourHourFlex() {
         assertEquals(12L * 60L * 60L * 1000L, BackstopWorker.PERIOD_MILLIS)
         assertEquals(4L * 60L * 60L * 1000L, BackstopWorker.FLEX_MILLIS)
         assertEquals("reminder-backstop", BackstopWorker.UNIQUE_NAME)
+        assertEquals("reminder-reconcile", ReconcileWorker.UNIQUE_NAME)
+        assertNotEquals(
+            "two unique names, so a coalescing sweep can never displace the periodic backstop",
+            BackstopWorker.UNIQUE_NAME,
+            ReconcileWorker.UNIQUE_NAME,
+        )
     }
 }

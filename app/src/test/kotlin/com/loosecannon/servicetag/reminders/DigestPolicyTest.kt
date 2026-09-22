@@ -85,7 +85,8 @@ class DigestPolicyTest {
         standing: Set<String> = emptySet(),
         standingSummary: String? = null,
         now: Long = Fixture.NOW,
-    ) = DigestPolicy.decide(inputs, standing, standingSummary, now)
+        muted: Set<String> = emptySet(),
+    ) = DigestPolicy.decide(inputs, standing, standingSummary, now) { it !in muted }
 
     /**
      * The matrix's "the digest shouting" row, and #21 AC 1's off-device half. A schedule due
@@ -227,9 +228,18 @@ class DigestPolicyTest {
 
     /**
      * The matrix's "a snoozed schedule notified" row, and invariant 20. While snoozed the subject
-     * produces **nothing** — no per-item post, no count in any summary clause — its due date is
-     * untouched (the subject still carries it), its status is still OVERDUE, and its delivery row is
-     * left exactly as it stands so the snooze and its nonce both survive the run.
+     * produces **nothing** — no per-item post, no count in any summary clause — and the policy
+     * writes no row for it, so the snooze keeps its own instant rather than being overwritten by
+     * the run that found it.
+     *
+     * That a snooze moves no `*_on` column and creates no event is structural rather than asserted
+     * here: `DigestPolicy` can only return `ScheduleLocalDelivery` rows, and `ReminderSnooze` writes
+     * one column of one device-local row, which
+     * `LocalReminderProviderTest.theSnoozeAndTheNonceWriteOneDeviceLocalRowAndNothingElse` proves.
+     * Two assertions that compared the fixture with itself used to stand here and read as proof;
+     * they are gone (fix round 1, nit 8). The **nonce** is a separate question: when a snooze
+     * cancels a standing notification, `LocalReminderProvider.clearNoncesFor` clears it, correctly,
+     * per D-21.
      */
     @Test
     fun aSnoozedSubjectProducesNothingAndKeepsItsDateAndItsRow() {
@@ -240,9 +250,7 @@ class DigestPolicyTest {
 
         assertEquals(emptyList<ItemPost>(), decision.posts)
         assertEquals(null, decision.summary)
-        assertEquals("nothing is written, so the snooze and the nonce both stand", emptyList<Any>(), decision.rows)
-        assertEquals(LocalDate.parse("2026-05-30"), subject.dueOn)
-        assertEquals(DueStatus.OVERDUE, Fixture.facts(DueStatus.OVERDUE).status)
+        assertEquals("the policy writes no row, so the snooze keeps its own instant", emptyList<Any>(), decision.rows)
 
         // The instant passing is all it takes; nothing had to clear the column.
         val after = decide(
@@ -320,6 +328,42 @@ class DigestPolicyTest {
         assertEquals("a day short of three posts nothing", 0, postsAfter(DigestPolicy.RENOTIFY_MILLIS - 1L))
         assertEquals("three days on it announces again", 1, postsAfter(DigestPolicy.RENOTIFY_MILLIS))
 
+        // Swiped away: the notification has left `activeNotifications`, so nothing is standing —
+        // and the three-day gate is driven by `last_notified_at`, not by what is in the shade
+        // (fix round 1, finding 3). Re-posting on the very next run, i.e. within 12 h, is exactly
+        // the every-run fatigue #26 exists to fix later and #21 promises not to cause now.
+        val swipedAway = decide(
+            inputs = listOf(DeliveryInput(subject, facts, Fixture.row("s1", lastNotifiedAt = Fixture.NOW))),
+            standing = emptySet(),
+            now = Fixture.NOW + DigestPolicy.RENOTIFY_MILLIS - 1L,
+        )
+        assertEquals("a dismissed overdue reminder does not come back before three days", 0, swipedAway.posts.size)
+        assertEquals("it is still counted: the obligation has not gone away", "1 overdue.", swipedAway.summary?.body)
+
+        // …and a DUE subject is untouched by the rule: it is due for one day and then it is overdue.
+        val dueSwipedAway = decide(
+            listOf(
+                DeliveryInput(
+                    Fixture.subject("s3", "2026-06-15"),
+                    Fixture.facts(DueStatus.DUE),
+                    Fixture.row("s3", lastNotifiedAt = Fixture.NOW),
+                ),
+            ),
+        )
+        assertEquals(1, dueSwipedAway.posts.size)
+
+        // A subject whose content **moved** is a replacement, not a re-announcement: its stale
+        // notification is about to be cancelled, so suppressing the new one would leave the owner
+        // with nothing in the shade for up to three days.
+        val moved = Fixture.subject("s1", "2026-05-30", stamp = "v2")
+        val replaced = decide(
+            inputs = listOf(DeliveryInput(moved, facts, Fixture.row("s1", lastNotifiedAt = Fixture.NOW))),
+            standing = setOf(tag),
+            now = Fixture.NOW + 60_000L,
+        )
+        assertEquals(1, replaced.posts.size)
+        assertEquals(listOf(tag), replaced.cancelTags)
+
         val dueSoon = Fixture.subject("s2", "2026-06-20")
         val seen = decide(
             listOf(DeliveryInput(dueSoon, Fixture.facts(DueStatus.DUE_SOON), Fixture.row("s2", firstEntrySeen = true))),
@@ -366,6 +410,58 @@ class DigestPolicyTest {
         )
         assertEquals(emptyList<ItemPost>(), populated.posts)
         assertEquals("1 overdue.", populated.summary?.body)
+    }
+
+    /**
+     * Muting one channel must not silence the other (fix round 1, finding 2).
+     *
+     * An owner who sets "Maintenance due" to *None* in system settings has silenced the DEFAULT
+     * channel and nothing else, so the OVERDUE item still goes out on the un-muted HIGH channel —
+     * a notification Android itself would have delivered. Spec §5.5 makes a muted channel
+     * *detectable*; it does not make one muted channel a global mute, and D-22's principle is that
+     * a platform refusal is surfaced and never widened.
+     *
+     * The muted item is still **counted** — the obligation is real and the digest must not
+     * under-report it — but it is not stamped, because a `last_notified_at` for an announcement
+     * nobody received would suppress the real one for three days once the owner un-muted.
+     */
+    @Test
+    fun aMutedChannelSkipsOnlyItsOwnPosts() {
+        val decision = decide(
+            inputs = listOf(
+                DeliveryInput(Fixture.subject("s1", "2026-05-30"), Fixture.facts(DueStatus.OVERDUE), null),
+                DeliveryInput(Fixture.subject("s2", "2026-06-15"), Fixture.facts(DueStatus.DUE), null),
+            ),
+            muted = setOf(NotificationChannels.DUE),
+        )
+
+        assertEquals(
+            "the overdue item is still posted on the un-muted channel",
+            listOf(NotificationChannels.OVERDUE),
+            decision.posts.map { it.channelId },
+        )
+        assertEquals("the summary rides the muted channel, so it is skipped", null, decision.summary)
+        assertEquals(
+            "only the item that was actually announced is stamped",
+            listOf("s1"),
+            decision.rows.map { it.scheduleId.value },
+        )
+
+        // The mirror image: muting the HIGH channel loses the overdue item and keeps the due one
+        // and the digest.
+        val overdueMuted = decide(
+            inputs = listOf(
+                DeliveryInput(Fixture.subject("s1", "2026-05-30"), Fixture.facts(DueStatus.OVERDUE), null),
+                DeliveryInput(Fixture.subject("s2", "2026-06-15"), Fixture.facts(DueStatus.DUE), null),
+            ),
+            muted = setOf(NotificationChannels.OVERDUE),
+        )
+        assertEquals(listOf(NotificationChannels.DUE), overdueMuted.posts.map { it.channelId })
+        assertEquals(
+            "and the digest still counts both, because both still need attention",
+            "1 overdue, 1 due.",
+            overdueMuted.summary?.body,
+        )
     }
 
     /**

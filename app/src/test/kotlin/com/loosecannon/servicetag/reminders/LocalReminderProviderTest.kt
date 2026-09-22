@@ -74,13 +74,15 @@ internal class GrantablePermission(var isGranted: Boolean = true) : Notification
     override suspend fun request(): Boolean = isGranted
 }
 
+/** Per channel, because muting one of the two must not silence the other (fix round 1, finding 2). */
 internal class MutablePlatformState(
     var enabled: Boolean = true,
-    var importance: ChannelImportance = ChannelImportance.DEFAULT,
+    val importances: MutableMap<String, ChannelImportance> = mutableMapOf(),
     var restriction: AppRestriction = AppRestriction.NORMAL,
 ) : PlatformState {
     override fun notificationsEnabled(): Boolean = enabled
-    override fun channelImportance(channelId: String): ChannelImportance = importance
+    override fun channelImportance(channelId: String): ChannelImportance =
+        importances[channelId] ?: ChannelImportance.DEFAULT
     override fun appRestricted(): AppRestriction = restriction
 }
 
@@ -114,11 +116,23 @@ class LocalReminderProviderTest {
     private val prefs = AppPrefs(MapKeyValueStore())
     private val clock = Clock { Fixture.NOW }
 
-    /** Every subject in these tests is DUE, whatever its date: the status is the facts', not the date's. */
+    /**
+     * The status is the facts', never the date's — which is the whole of carry-forward (c). Subjects
+     * are DUE unless a test puts their key in [overdue], and a key this source has never been shown
+     * answers null, which is how a vanished schedule is simulated.
+     */
     private val facts = DeliveryFactsSource { key ->
-        Fixture.facts(DueStatus.DUE, ownerName = "Pump house filter").takeIf { key in known }
+        if (key !in known) {
+            null
+        } else {
+            Fixture.facts(
+                status = if (key in overdue) DueStatus.OVERDUE else DueStatus.DUE,
+                ownerName = "Pump house filter",
+            )
+        }
     }
     private val known = mutableSetOf<SubjectKey>()
+    private val overdue = mutableSetOf<SubjectKey>()
 
     private fun provider() = LocalReminderProvider(
         facts = facts,
@@ -266,31 +280,75 @@ class LocalReminderProviderTest {
     /**
      * The global switch behaves exactly as a denied permission does, for the same reason: it
      * silences delivery and disables nothing. Its finding is the ratified `REMINDERS_GLOBALLY_OFF`
-     * sentence, and a muted or never-created channel folds into `NOTIFICATIONS_BLOCKED`, which is
-     * the one code the spec ships for "the system will not show this".
+     * sentence.
+     *
+     * And it **takes down what was showing** (fix round 1, finding 5). D-22 requires that nothing
+     * be *disabled* — the alarm is still armed below — but it does not require a stale posted set to
+     * outlive the switch that stopped the posting: those notifications carry no action and no
+     * content intent, so leaving them would leave the owner inert text to swipe by hand while the
+     * health screen says reminders are off. Their nonces go with them, which is D-21's
+     * "on … reconcile" clause.
      */
     @Test
-    fun theGlobalSwitchAndAMutedChannelBothSilenceWithoutDisabling() = runTest {
+    fun theGlobalSwitchSilencesAndTakesDownWhatWasShowing() = runTest {
         val provider = provider()
+        val nonces = NonceStore(delivery, IdGenerator { "nonce-1" }, clock)
+        provider.reconcile(listOf(subject("s1", "2026-04-20"), subject("s2", "2026-04-21")))
+        nonces.issue(ScheduleId("s1"))
+        assertEquals(2, notifications.standingItems().size)
+
         prefs.remindersEnabled = false
+        val report = provider.reconcile(listOf(subject("s1", "2026-04-20"), subject("s2", "2026-04-21")))
 
-        assertEquals(0, provider.reconcile(listOf(subject("s1", "2026-04-20"))).posted)
-        assertTrue(alarm.armed())
-        assertEquals(
-            listOf("REMINDERS_GLOBALLY_OFF"),
-            provider.health().map { it.code },
-        )
+        assertEquals(0, report.posted)
+        assertEquals("cleared honestly carries what was taken down", 2, report.cleared)
+        assertEquals(emptySet<String>(), notifications.standingItems())
+        assertEquals(null, notifications.summary)
+        assertEquals("a nonce with nothing standing to authorise is gone", null, delivery.get(ScheduleId("s1"))?.actionNonce)
+        assertTrue("and nothing was disabled: the alarm is still armed", alarm.armed())
+
+        assertEquals(listOf("REMINDERS_GLOBALLY_OFF"), provider.health().map { it.code })
         assertEquals("Reminders are turned off in ServiceTag.", provider.health().single().message)
+    }
 
-        prefs.remindersEnabled = true
-        platform.importance = ChannelImportance.MUTED
-        assertEquals(0, provider.reconcile(listOf(subject("s1", "2026-04-20"))).posted)
-        assertEquals(listOf("NOTIFICATIONS_BLOCKED"), provider.health().map { it.code })
+    /**
+     * Muting one channel is not a global mute (fix round 1, finding 2). An owner who sets
+     * "Maintenance due" to *None* has silenced the DEFAULT channel and nothing else, so the
+     * **OVERDUE item is still posted** on the un-muted HIGH channel — a notification Android itself
+     * would have delivered.
+     *
+     * `health()` still folds any muted or absent channel into `NOTIFICATIONS_BLOCKED` (R8), because
+     * that is the one code the spec ships for "the system will not show this" and it is true of the
+     * half that is muted.
+     */
+    @Test
+    fun aMutedDueChannelStillPostsTheOverdueItem() = runTest {
+        val provider = provider()
+        overdue += SubjectKey.Schedule(ScheduleId("s2"))
+        platform.importances[NotificationChannels.DUE] = ChannelImportance.MUTED
 
-        platform.importance = ChannelImportance.HIGH
-        alarm.cancel()
+        val report = provider.reconcile(listOf(subject("s1", "2026-04-20"), subject("s2", "2026-04-21")))
+
         assertEquals(
-            "a missing alarm is its own finding, with the ratified sentence",
+            "the overdue item went out; the due one is the platform's own refusal",
+            listOf(NotificationChannels.OVERDUE),
+            notifications.postedItems.map { it.channelId },
+        )
+        assertEquals(1, report.posted)
+        assertEquals(listOf("NOTIFICATIONS_BLOCKED"), provider.health().map { it.code })
+        assertEquals(
+            "Notifications are turned off, so maintenance reminders will not arrive.",
+            provider.health().single().message,
+        )
+    }
+
+    /** A missing alarm is its own finding, with its own ratified sentence. */
+    @Test
+    fun aMissingAlarmIsItsOwnFinding() = runTest {
+        val provider = provider()
+        alarm.cancel()
+
+        assertEquals(
             "The daily reminder check is not scheduled, so today's maintenance may go unannounced.",
             provider.health().single { it.code == "DIGEST_ALARM_MISSING" }.message,
         )

@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.reminders
 
+import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -95,6 +96,30 @@ class DigestAlarmTest {
     }
 
     /**
+     * Master plan §16's `FLAG_IMMUTABLE` release proof, held here so a reformat cannot break it
+     * again (fix round 1, finding 1).
+     *
+     * The proof is **line-based** — a `PendingIntent.getBroadcast`/`getActivity`/`getService` line
+     * that does not also carry `FLAG_IMMUTABLE` must number 0 across `app/src/main` — and this
+     * brief introduced the repository's first `PendingIntent` of any kind. The substantive rule
+     * (invariant 54: every pending intent immutable) held throughout; what broke was the proof,
+     * because the argument list was wrapped across five lines. Asserting the shape here means the
+     * next author to touch this file, or to add B07's action intents, is told at once rather than
+     * at the release gate.
+     */
+    @Test
+    fun everyPendingIntentIsImmutableOnItsOwnLine() {
+        val call = Regex("""PendingIntent\.(getBroadcast|getActivity|getService)""")
+        val offenders = mainSourceFiles().flatMap { file ->
+            file.readText().lines()
+                .filter { call.containsMatchIn(it) && "FLAG_IMMUTABLE" !in it }
+                .map { "${file.name}: ${it.trim()}" }
+        }
+
+        assertEquals(emptyList<String>(), offenders)
+    }
+
+    /**
      * Invariant 17: derived state has one writer. Every entry point in this brief goes through the
      * recompute seam, and nothing under `reminders/` may reach `schedule_state` directly.
      */
@@ -107,4 +132,15 @@ class DigestAlarmTest {
             )
         }
     }
+}
+
+/**
+ * Every `.kt` under `app/src/main`, for the one assertion that has to be as wide as the release
+ * grep it stands in for.
+ */
+private fun mainSourceFiles(): List<File> {
+    val relative = "src/main/kotlin"
+    val root = listOf(File(relative), File("app/$relative")).firstOrNull { it.isDirectory }
+        ?: error("cannot find $relative from ${File(".").absolutePath}")
+    return root.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
 }

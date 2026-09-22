@@ -3,20 +3,25 @@ package com.loosecannon.servicetag.reminders
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import kotlinx.coroutines.launch
 
 /**
- * The digest alarm's own receiver: run the digest, then arm tomorrow's.
+ * The digest alarm's own receiver: arm tomorrow's alarm, hand the sweep to a worker, return.
  *
  * It is **manifest-declared**, non-exported, and the only component in this brief that is: an alarm
  * has to survive the process it was armed from, so a runtime-registered receiver would be gone by
  * the time it fired (controller ruling, 2026-09-22 — this brief adds exactly one manifest element
  * and it is this `<receiver>`).
  *
- * It starts nothing. The re-arm and the posting both happen inside [ReminderRunDispatch]'s run;
- * `goAsync()` does not lift the roughly ten-second broadcast budget, which is why the run hands
- * its real work to the same recompute-then-reconcile sequence the backstop uses rather than
- * drawing anything itself.
+ * **Nothing heavy runs here** (fix round 1, finding 4). The first version ran the whole
+ * recompute-then-reconcile sweep inline under `goAsync()`, which does not lift the roughly
+ * ten-second broadcast budget: this is the one path that fires at 09:00 on a phone nobody is
+ * looking at, often on a cold doze-woken process, and overrunning the budget there means the
+ * process is killed part-way through a reconcile. [ReminderRun.onDigestFired] now does two cheap
+ * synchronous things — one `AlarmManager` call and one unique work enqueue — so this receiver needs
+ * no `goAsync()` and no coroutine at all, and [ReconcileWorker] does the sweep under WorkManager's
+ * own budget.
+ *
+ * It starts nothing.
  *
  * A run that has not been assigned yet is **dropped**, for [ReminderDispatch]'s reason: the
  * assignment is synchronous in `Application.onCreate`, which always completes before any
@@ -25,14 +30,6 @@ import kotlinx.coroutines.launch
  */
 internal class DigestReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val run = ReminderRunDispatch.run ?: return
-        val pending = goAsync()
-        ReminderDispatch.scope.launch {
-            try {
-                run.onDigestFired()
-            } finally {
-                pending.finish()
-            }
-        }
+        ReminderRunDispatch.run?.onDigestFired()
     }
 }

@@ -6,12 +6,16 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import androidx.work.ListenableWorker
 import androidx.work.WorkManager
+import androidx.work.testing.TestListenableWorkerBuilder
 import com.loosecannon.servicetag.ServiceTagApp
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.reminders.SubjectKey
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -83,6 +87,41 @@ class ReminderPlatformDeviceProofTest {
 
         assertEquals("still one worker after the second", 1, second.size)
         assertEquals("and it is the same one: KEEP did not restart the period", first.single().id, second.single().id)
+
+        // Read back off WorkManager, which is the only place the two values can be seen apart
+        // (`WorkRequest.workSpec` is `@RestrictTo`): a builder called with period and flex **swapped**
+        // is the failure the unit test's constant assertions cannot catch (fix round 1, nit 6).
+        val periodicity = second.single().periodicityInfo
+        assertEquals(BackstopWorker.PERIOD_MILLIS, periodicity?.repeatIntervalMillis)
+        assertEquals(BackstopWorker.FLEX_MILLIS, periodicity?.flexIntervalMillis)
+    }
+
+    /**
+     * The receivers' hand-off, against the real WorkManager (fix round 1, finding 4).
+     *
+     * A `BroadcastReceiver` has roughly ten seconds and `goAsync()` does not extend it, so the
+     * digest fire and the four platform events now enqueue this one-shot and return. Two facts are
+     * worth a device: that the enqueue really produces **one** unique work however many events
+     * arrive together, and that the worker's own body succeeds when it runs — driven directly
+     * through the WorkManager test harness rather than waited for, so nothing here touches a clock.
+     */
+    @Test
+    fun theReceiversSweepIsOneUniqueWorkAndItsWorkerSucceeds() {
+        val work = WorkManager.getInstance(context)
+
+        ReconcileWorker.enqueue(context)
+        ReconcileWorker.enqueue(context)
+        val infos = work.getWorkInfosForUniqueWork(ReconcileWorker.UNIQUE_NAME).get()
+
+        assertEquals("two events coalesce into one sweep", 1, infos.size)
+        assertNotEquals(
+            "and it never displaces the periodic backstop",
+            BackstopWorker.UNIQUE_NAME,
+            ReconcileWorker.UNIQUE_NAME,
+        )
+
+        val worker = TestListenableWorkerBuilder<ReconcileWorker>(context).build()
+        assertEquals(ListenableWorker.Result.success(), runBlocking { worker.doWork() })
     }
 
     /**
@@ -134,6 +173,7 @@ class ReminderPlatformDeviceProofTest {
             title = "Pump house filter — Filter change",
             body = "Overdue since 30 May 2026.",
             statusWord = DigestPolicy.WORD_OVERDUE,
+            meter = false,
             actions = listOf(DigestPolicy.ACTION_DONE, DigestPolicy.ACTION_SNOOZE_ONE_DAY, DigestPolicy.ACTION_OPEN),
         )
 

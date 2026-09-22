@@ -60,6 +60,9 @@ androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version
 # compose ui-test pulls espresso 3.5.0, which reflects into a hidden InputManager method Android 17 removed; 3.7.0 fixes it
 androidx-test-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "androidxEspresso" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
+# The WorkManager test harness, instrumented source set only: it drives a worker directly, which is
+# the honest way to prove the receivers hand their sweep off rather than run it (B06 fix round 1).
+androidx-work-testing = { group = "androidx.work", name = "work-testing", version.ref = "work" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

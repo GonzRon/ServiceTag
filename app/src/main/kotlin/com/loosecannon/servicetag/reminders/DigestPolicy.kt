@@ -56,6 +56,7 @@ object DigestPolicy {
         standingTags: Set<String>,
         standingSummaryTag: String?,
         nowMillis: Long,
+        channelDelivers: (String) -> Boolean = { true },
     ): DigestDecision {
         val shown = mutableListOf<ItemPost>()
         val posts = mutableListOf<ItemPost>()
@@ -108,15 +109,41 @@ object DigestPolicy {
                     }
                 }
                 DueStatus.DUE, DueStatus.OVERDUE -> {
+                    // Counted first, and counted even when the channel it would go on is muted: the
+                    // obligation is real, the summary rides a different channel, and a digest that
+                    // quietly under-counted because of a system setting would be a lie about how
+                    // much needs attention.
                     if (status == DueStatus.OVERDUE) overdue++ else due++
                     val post = itemPost(subject, facts)
+                    if (!channelDelivers(post.channelId)) {
+                        // The platform will not show this one. Nothing is posted, nothing is stamped
+                        // — a `last_notified_at` for an announcement that never reached anybody
+                        // would suppress the real one for three days once the owner un-muted — and
+                        // nothing is held, so a standing notification from before the mute is
+                        // cancelled rather than left behind as a thing this provider claims to
+                        // maintain (fix round 1, finding 2).
+                        return@forEach
+                    }
                     shown += post
                     val standing = post.tag in standingTags
                     if (standing) unchanged++
+                    // A standing notification for this subject in some **other** form: its content
+                    // moved, so the stale one is about to be cancelled and the new one has to take
+                    // its place. That is a replacement, not a re-announcement, and the three-day
+                    // rule must not swallow it or the owner is left with nothing in the shade.
+                    val replaced = !standing && standingTags.any { it.scheduleIdOfTag() == post.tag.scheduleIdOfTag() }
                     val lastNotifiedAt = row?.lastNotifiedAt
-                    val reNotify = status == DueStatus.OVERDUE &&
-                        (lastNotifiedAt == null || nowMillis - lastNotifiedAt >= RENOTIFY_MILLIS)
-                    if (!standing || reNotify) {
+                    // D-5, and the brief's matrix row: the three-day gate is driven by
+                    // `last_notified_at` **whether or not the tag is still standing** (fix round 1,
+                    // finding 3). A notification the owner swiped away leaves `activeNotifications`,
+                    // and re-posting it on the next run would be the every-run fatigue #21 promises
+                    // not to cause. DUE is unchanged: it is due for one day and then it is overdue.
+                    val shouldPost = if (status == DueStatus.OVERDUE) {
+                        replaced || lastNotifiedAt == null || nowMillis - lastNotifiedAt >= RENOTIFY_MILLIS
+                    } else {
+                        !standing
+                    }
+                    if (shouldPost) {
                         posts += post
                         rows += (row ?: blankRow(subject.key, nowMillis)).copy(
                             lastNotifiedAt = nowMillis,
@@ -136,7 +163,10 @@ object DigestPolicy {
 
         val total = overdue + due + dueSoon
         val summaryTag = if (total == 0) null else "$total|$overdue|$due|$dueSoon"
-        val summary = if (total == 0 || summaryTag == standingSummaryTag) {
+        // The summary rides `maintenance_due`, so muting that channel loses the digest — Android's
+        // own doing, and not a reason to widen the silence to the OVERDUE channel (finding 2).
+        val summaryDelivers = channelDelivers(NotificationChannels.DUE)
+        val summary = if (total == 0 || !summaryDelivers || summaryTag == standingSummaryTag) {
             null
         } else {
             SummaryPost(
@@ -155,7 +185,7 @@ object DigestPolicy {
             // because there is nothing left to announce or because the counts moved: the tag is
             // part of the notification's identity, so posting a new one beside a stale one would
             // leave the owner two summaries disagreeing about how much needs attention.
-            cancelSummary = standingSummaryTag != null && standingSummaryTag != summaryTag,
+            cancelSummary = standingSummaryTag != null && (standingSummaryTag != summaryTag || !summaryDelivers),
             rows = rows.distinctBy { it.scheduleId.value },
             report = ReconcileReport(
                 posted = shown.size - unchanged,
@@ -205,6 +235,10 @@ object DigestPolicy {
             // by the body's own first word — never by an accent colour and never by an icon alone
             // (#11's and #21's Visual design sections).
             statusWord = if (overdue) WORD_OVERDUE else WORD_DUE,
+            // A fact, not an inference. The icon used to be chosen by matching the body against the
+            // ratified meter wording, which would have silently reverted to the clock if §17.1e were
+            // ever reworded (fix round 1, nit 7).
+            meter = meter != null,
             // D-7: "Done" on a group either completes nothing or falsely completes everyone, so a
             // group-targeted schedule's notification offers "Open" and nothing else.
             actions = if (facts.groupTargeted) {
@@ -306,6 +340,8 @@ data class ItemPost(
     val title: String,
     val body: String,
     val statusWord: String,
+    /** Whether a crossed meter threshold is what came due, which selects the icon. */
+    val meter: Boolean,
     val actions: List<String>,
 )
 

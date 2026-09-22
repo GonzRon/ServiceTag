@@ -99,15 +99,29 @@ class ScheduleDeliveryFacts(
         val dueOn = state.effectiveDueOn?.let(LocalDate::parse)
         if (dueOn != null && !dueOn.isAfter(on)) return null
         val definition = definitions.get(definitionId)
-        val decimals = definition?.decimals ?: 0
         return MeterReading(
-            dueAt = format(threshold, decimals),
-            now = format(current, decimals),
+            dueAt = format(threshold),
+            now = format(current),
             unit = definition?.unit.orEmpty(),
         )
     }
 
-    private fun format(value: Double, decimals: Int): String = "%.${decimals.coerceIn(0, 6)}f".format(value)
+    /**
+     * The same digits B08's dashboard row shows for the same two values, and **locale-independent**
+     * (fix round 1, nit 9).
+     *
+     * `"%.2f".format(v)` resolves `Locale.getDefault()`, so on a comma-decimal locale the ratified
+     * "Due at \<n\> \<unit\>, now \<n\>." would read "Due at 500,0 hours, now 512,0." — a comma
+     * inside a sentence whose own separator is a comma. `Long.toString` and `Double.toString` are
+     * locale-invariant, which is why this is the shape `ui/journal/JournalFormat.kt:70`'s
+     * `formatNumber` uses and the shape `ui/maintenance/DueItemRow.kt:141`'s `meterLine` renders
+     * this very string with. Transcribed rather than imported: the delivery path does not depend on
+     * a UI formatting file, and the two must agree — a reviewer changing one should change both.
+     */
+    private fun format(value: Double): String {
+        val whole = value.toLong()
+        return if (value == whole.toDouble()) whole.toString() else value.toString()
+    }
 }
 
 /**
@@ -147,13 +161,8 @@ class LocalReminderProvider(
         // unarmed (D-22, invariant 61), and only when the alarm is gone, so a second identical call
         // still has no second effect (invariant 45).
         if (!alarm.armed()) alarm.arm()
-        if (!deliverable()) {
-            // Not "nothing happened": the caller already recomputed, and the alarm and the backstop
-            // are somebody else's and still running. Nothing is *posted*, and the three counters
-            // honestly report that this provider is showing nothing.
-            return ReconcileReport(0, 0, 0, listOf(SILENCED))
-        }
         val now = clock.nowMillis()
+        if (!deliveryEnabled()) return silence(now)
         val inputs = subjects.map { subject ->
             DeliveryInput(
                 subject = subject,
@@ -167,6 +176,11 @@ class LocalReminderProvider(
             standingTags = notifications.standingItems(),
             standingSummaryTag = notifications.standingSummary(),
             nowMillis = now,
+            // Per channel, not globally (fix round 1, finding 2): an owner who sets "Maintenance
+            // due" to None must still get overdue reminders on the un-muted HIGH channel. Spec
+            // §5.5 makes a muted channel *detectable*, and D-22's principle is that a platform
+            // refusal is surfaced and never widened.
+            channelDelivers = { channelId -> platform.channelImportance(channelId).delivers },
         )
 
         // Cancel before posting: a subject whose content moved has a stale tag standing beside its
@@ -247,8 +261,42 @@ class LocalReminderProvider(
         }
     }
 
-    private fun deliverable(): Boolean = prefs.remindersEnabled && notificationsAvailable()
+    /**
+     * Reminders switched off, the permission refused, or notifications switched off for the whole
+     * app: this provider stops showing anything, and **takes down what it was showing** (fix
+     * round 1, finding 5).
+     *
+     * D-22 requires that nothing be *disabled* — the alarm was armed above this, the backstop is
+     * enqueued elsewhere, the preferences stay writable and the recompute already ran — but it does
+     * not require a stale posted set to outlive the switch that stopped the posting. Those
+     * notifications carry no action and no content intent, so leaving them would leave the owner
+     * inert text to swipe by hand while the health screen says reminders are off. Their nonces go
+     * with them, which is D-21's "on … reconcile" clause.
+     *
+     * `cleared` honestly carries the count; `posted` and `unchanged` are zero because this provider
+     * is now showing nothing.
+     */
+    private suspend fun silence(nowMillis: Long): ReconcileReport {
+        val standing = notifications.standingItems().toList()
+        standing.forEach(notifications::cancelItem)
+        if (notifications.standingSummary() != null) notifications.cancelSummary()
+        clearNoncesFor(standing, nowMillis)
+        return ReconcileReport(0, standing.size, 0, listOf(SILENCED))
+    }
 
+    /**
+     * Whether this provider runs at all: the owner's own switch, the runtime permission, and the
+     * app-level notification toggle. **Not** a channel test — a muted channel is decided per post,
+     * because muting one of the two must not silence the other (finding 2).
+     */
+    private fun deliveryEnabled(): Boolean =
+        prefs.remindersEnabled && permission.granted() && platform.notificationsEnabled()
+
+    /**
+     * Whether the system will show anything at all, which is a wider question than
+     * [deliveryEnabled] and is only asked by [health]: a muted or never-created channel folds into
+     * `NOTIFICATIONS_BLOCKED` (R8) even though it no longer stops the run.
+     */
     private fun notificationsAvailable(): Boolean =
         permission.granted() &&
             platform.notificationsEnabled() &&

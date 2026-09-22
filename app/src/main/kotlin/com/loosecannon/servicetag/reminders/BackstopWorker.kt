@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequest
 import androidx.work.PeriodicWorkRequest
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -73,6 +75,59 @@ class BackstopWorker(context: Context, parameters: WorkerParameters) : Coroutine
         fun enqueue(context: Context) {
             WorkManager.getInstance(context.applicationContext)
                 .enqueueUniquePeriodicWork(UNIQUE_NAME, ExistingPeriodicWorkPolicy.KEEP, request())
+        }
+    }
+}
+
+/**
+ * The sweep, out of the broadcast window: rebuild every schedule's derived state, ask for the
+ * subjects it implies, reconcile (fix round 1, finding 4).
+ *
+ * It exists because a `BroadcastReceiver` has roughly ten seconds and `goAsync()` does not extend
+ * that. The digest alarm's receiver and the four platform receivers each now do one cheap
+ * `AlarmManager` call and one enqueue of this worker, and return — so the work that actually reads
+ * the database and posts notifications runs under WorkManager's own budget, on a process the system
+ * will not kill part-way through, and survives being deferred rather than being lost.
+ *
+ * Enqueued as **unique one-shot** work with `KEEP`, so a boot that also changes the time zone, or a
+ * digest fire that lands next to a date change, coalesces into one sweep instead of three. That is
+ * safe because the sweep is idempotent by construction: `reconcile` receives the whole desired
+ * state, so running it once instead of three times loses nothing.
+ */
+class ReconcileWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
+
+    override suspend fun doWork(): Result {
+        val run = ReminderRunDispatch.run
+        if (run == null) {
+            Log.w(TAG, "a reconcile ran before a reminder policy was assigned; nothing to do")
+            return Result.success()
+        }
+        return try {
+            run.reconcileAll()
+            Result.success()
+        } catch (e: Exception) {
+            Log.w(TAG, "the reconcile run failed; WorkManager will retry it", e)
+            Result.retry()
+        }
+    }
+
+    companion object {
+        /** One name, so overlapping platform events coalesce into one sweep. */
+        const val UNIQUE_NAME = "reminder-reconcile"
+
+        private const val TAG = "ReconcileWorker"
+
+        internal fun request(): OneTimeWorkRequest = OneTimeWorkRequest.Builder(ReconcileWorker::class.java).build()
+
+        /**
+         * `KEEP`, not `REPLACE`: a second event arriving while a sweep is queued or running should
+         * join it, not restart it. Once the previous one has finished, `KEEP` no longer has
+         * anything to keep and the new request runs, which is what makes this safe to call from
+         * every receiver on every event.
+         */
+        fun enqueue(context: Context) {
+            WorkManager.getInstance(context.applicationContext)
+                .enqueueUniqueWork(UNIQUE_NAME, ExistingWorkPolicy.KEEP, request())
         }
     }
 }

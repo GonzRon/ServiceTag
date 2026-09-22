@@ -103,6 +103,7 @@ import com.loosecannon.servicetag.reminders.LocalReminderProvider
 import com.loosecannon.servicetag.reminders.NonceStore
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.reminders.PlatformState
+import com.loosecannon.servicetag.reminders.ReconcileWorker
 import com.loosecannon.servicetag.reminders.ReminderNotifications
 import com.loosecannon.servicetag.reminders.ReminderRuns
 import com.loosecannon.servicetag.reminders.ReminderSnooze
@@ -220,6 +221,10 @@ class AppGraph(private val context: Context) {
         provider = localReminderProvider,
         alarm = digestAlarm,
         today = today,
+        // A receiver has roughly ten seconds and the sweep is a rebuild of every schedule plus a
+        // post per subject, so the receivers enqueue this and return (B06 fix round 1, finding 4).
+        // A seam rather than a `Context` field: nothing about the run itself is Android-shaped.
+        enqueueReconcile = { ReconcileWorker.enqueue(context.applicationContext) },
     )
 
     /**

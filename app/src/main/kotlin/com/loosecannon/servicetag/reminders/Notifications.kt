@@ -61,12 +61,18 @@ class AndroidReminderNotifications(private val context: Context) : ReminderNotif
             .setSmallIcon(iconFor(post))
             .setColor(accentFor(post).toArgb())
             .setContentTitle(post.title)
-            .setContentText(post.body)
             .setSubText(post.statusWord)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(post.body))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(false)
             .setOnlyAlertOnce(false)
+        // A body is only set when there is one. The empty case is unreachable today — a DUE or
+        // OVERDUE subject carries either a date or a crossed meter threshold — and that is exactly
+        // why it must not ship a blank sentence if it ever becomes reachable: a title-only
+        // notification is a worse answer than a missing line (fix round 1, nit 13).
+        if (post.body.isNotEmpty()) {
+            builder.setContentText(post.body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(post.body))
+        }
         notify(post.tag, ITEM_ID, builder)
     }
 
@@ -111,9 +117,11 @@ class AndroidReminderNotifications(private val context: Context) : ReminderNotif
     /**
      * The icon is the second, non-colour carrier of the distinction: a counter for a crossed meter
      * threshold, an active bell for something already past due, a clock for something due today.
+     * Chosen from [ItemPost.meter] and the status word — never by matching the body against a
+     * ratified sentence, which would break silently if §17.1e were reworded.
      */
     private fun iconFor(post: ItemPost): Int = when {
-        post.body.startsWith(METER_BODY_PREFIX) -> R.drawable.ic_speed
+        post.meter -> R.drawable.ic_speed
         post.statusWord == DigestPolicy.WORD_OVERDUE -> R.drawable.ic_notifications_active
         else -> R.drawable.ic_schedule
     }
@@ -131,8 +139,5 @@ class AndroidReminderNotifications(private val context: Context) : ReminderNotif
 
         /** One id for the one summary. */
         const val SUMMARY_ID = 2200
-
-        /** The ratified meter body's own opening, which is what makes the meter icon selectable. */
-        const val METER_BODY_PREFIX = "Due at "
     }
 }

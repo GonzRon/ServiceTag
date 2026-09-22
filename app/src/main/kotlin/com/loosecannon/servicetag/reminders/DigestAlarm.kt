@@ -106,12 +106,21 @@ class AndroidDigestAlarm(
     private fun alarmManager(): AlarmManager? =
         context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
 
-    private fun pendingIntent(flags: Int): PendingIntent? = PendingIntent.getBroadcast(
-        context.applicationContext,
-        REQUEST_CODE,
-        Intent(context.applicationContext, DigestReceiver::class.java).setAction(ACTION_DIGEST),
-        flags or PendingIntent.FLAG_IMMUTABLE,
-    )
+    /**
+     * The `getBroadcast` call and its `FLAG_IMMUTABLE` argument sit on **one physical line**,
+     * deliberately (fix round 1, finding 1). Master plan §16's release proof is line-based —
+     * `PendingIntent\.(getBroadcast|getActivity|getService)` lines that do not also carry
+     * `FLAG_IMMUTABLE` must number **0** — and this is the repository's first `PendingIntent` of any
+     * kind, so a wrapped argument list turned that proof from 0 to 1 while invariant 54 itself still
+     * held. The target intent is hoisted to a local to keep the call inside the line budget, and
+     * `DigestAlarmTest.everyPendingIntentIsImmutableOnItsOwnLine` now holds the shape so a later
+     * reformat cannot quietly break the gate again.
+     */
+    private fun pendingIntent(flags: Int): PendingIntent? {
+        val app = context.applicationContext
+        val target = Intent(app, DigestReceiver::class.java).setAction(ACTION_DIGEST)
+        return PendingIntent.getBroadcast(app, REQUEST_CODE, target, flags or PendingIntent.FLAG_IMMUTABLE)
+    }
 
     internal companion object {
         /**

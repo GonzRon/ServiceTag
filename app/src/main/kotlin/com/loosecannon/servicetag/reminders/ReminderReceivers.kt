@@ -115,10 +115,19 @@ internal class DateChangedReceiver : PlatformEventReceiver(PlatformEventKind.DAT
  * parameter would hide inside a `when`.
  */
 interface ReminderRun {
-    /** The digest alarm fired: run, then arm the next one. */
-    suspend fun onDigestFired()
+    /**
+     * The digest alarm fired. **Broadcast-safe and not `suspend`**: it arms tomorrow's alarm — one
+     * cheap `AlarmManager` call — and hands the sweep to a worker (fix round 1, finding 4).
+     */
+    fun onDigestFired()
 
-    /** The periodic backstop woke: run, and arm only if the alarm has gone. */
+    /**
+     * The sweep itself: rebuild derived state, ask for the subjects it implies, reconcile. This is
+     * the work that must never run inside a broadcast, and [ReconcileWorker] is what runs it.
+     */
+    suspend fun reconcileAll(): ReconcileReport
+
+    /** The periodic backstop woke: the sweep, and an arm only if the alarm has gone. */
     suspend fun onBackstop()
 }
 
@@ -162,37 +171,52 @@ class ReminderRuns(
     private val provider: ReminderProvider,
     private val alarm: DigestAlarm,
     private val today: Today,
+    private val enqueueReconcile: () -> Unit,
 ) : ReminderTrigger, ReminderRun {
 
     /**
-     * Every one of the four platform events re-arms **unconditionally**. A boot cleared the alarm;
-     * a clock or zone change moved the instant it should be set for; a date change moved `T` and so
-     * moved the next instant too. `armed()` cannot tell an alarm pending for a stale instant from a
-     * current one, and `arm()` replaces rather than adds, so asking the question would only ever
-     * let a wrong answer stand.
+     * Every one of the four platform events re-arms **unconditionally**, then hands the sweep to a
+     * worker. A boot cleared the alarm; a clock or zone change moved the instant it should be set
+     * for; a date change moved `T` and so moved the next instant too. `armed()` cannot tell an
+     * alarm pending for a stale instant from a current one, and `arm()` replaces rather than adds,
+     * so asking the question would only ever let a wrong answer stand.
+     *
+     * **Nothing heavy happens here** (fix round 1, finding 4). `goAsync()` does not lift the
+     * roughly ten-second broadcast budget, and the sweep is a rebuild of every schedule followed by
+     * a Room read per subject and a `notify` per post; overrunning the budget on a cold,
+     * doze-woken process means the process is killed mid-reconcile. So the two things that happen
+     * in the broadcast window are one `AlarmManager` call and one work enqueue, both cheap, and
+     * `ReconcileWorker` does the rest under WorkManager's own budget.
      */
     override suspend fun onPlatformEvent(kind: PlatformEventKind) {
-        reconcileAll()
         alarm.arm()
+        enqueueReconcile()
     }
 
-    /** The inexact alarm is one shot: handling the fire is what arms tomorrow's. */
-    override suspend fun onDigestFired() {
-        reconcileAll()
+    /**
+     * The inexact alarm is one shot: handling the fire is what arms tomorrow's.
+     *
+     * The **re-arm stays in the receiver** and the sweep does not. Deliberately: arming is a single
+     * synchronous `AlarmManager` call, and if it travelled with the work then a deferred or dropped
+     * worker would also mean no alarm tomorrow — the one failure the backstop exists to catch, made
+     * more likely rather than less.
+     */
+    override fun onDigestFired() {
         alarm.arm()
+        enqueueReconcile()
     }
 
     /**
      * The backstop re-arms **only if the alarm is gone**, which is the whole of what it is for.
      * Arming an already-pending alarm twice a day would be harmless and would also stop this being
-     * a statement about a missing alarm.
+     * a statement about a missing alarm. It is already inside a worker, so it sweeps inline.
      */
     override suspend fun onBackstop() {
         reconcileAll()
         if (!alarm.armed()) alarm.arm()
     }
 
-    private suspend fun reconcileAll(): ReconcileReport {
+    override suspend fun reconcileAll(): ReconcileReport {
         rebuildAll()
         return provider.reconcile(subjectsFor(provider.id, today.localDate()))
     }
