@@ -5,29 +5,28 @@ import com.loosecannon.servicetag.core.backup.BackupNewerFormat
 import com.loosecannon.servicetag.core.ports.StoreIoException
 import com.loosecannon.servicetag.core.usecase.AssetCycle
 import com.loosecannon.servicetag.core.usecase.AssetHasChildren
+import com.loosecannon.servicetag.core.usecase.AssetMembershipReferenced
 import com.loosecannon.servicetag.core.usecase.AssetValidation
+import com.loosecannon.servicetag.core.usecase.BadScheduleDate
+import com.loosecannon.servicetag.core.usecase.CloseNotSupported
+import com.loosecannon.servicetag.core.usecase.ClosedOnOutOfRange
 import com.loosecannon.servicetag.core.usecase.DefinitionInUse
 import com.loosecannon.servicetag.core.usecase.DefinitionValidation
 import com.loosecannon.servicetag.core.usecase.DefinitionWouldBreakDerived
 import com.loosecannon.servicetag.core.usecase.DefinitionWouldBreakProfiles
 import com.loosecannon.servicetag.core.usecase.EventOwnership
 import com.loosecannon.servicetag.core.usecase.EventValidation
+import com.loosecannon.servicetag.core.usecase.GroupCompletionNotSupported
+import com.loosecannon.servicetag.core.usecase.GroupProblem
+import com.loosecannon.servicetag.core.usecase.GroupValidation
+import com.loosecannon.servicetag.core.usecase.MemberCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.MergePlanStale
 import com.loosecannon.servicetag.core.usecase.MergeRefused
 import com.loosecannon.servicetag.core.usecase.NoSuchAsset
 import com.loosecannon.servicetag.core.usecase.NoSuchDefinition
 import com.loosecannon.servicetag.core.usecase.NoSuchEvent
-import com.loosecannon.servicetag.core.usecase.NoSuchProfile
-import com.loosecannon.servicetag.core.usecase.ProfileValidation
-import com.loosecannon.servicetag.core.usecase.UnknownTemplate
-import com.loosecannon.servicetag.core.usecase.BadScheduleDate
-import com.loosecannon.servicetag.core.usecase.CloseNotSupported
-import com.loosecannon.servicetag.core.usecase.ClosedOnOutOfRange
-import com.loosecannon.servicetag.core.usecase.GroupCompletionNotSupported
-import com.loosecannon.servicetag.core.usecase.GroupProblem
-import com.loosecannon.servicetag.core.usecase.GroupValidation
-import com.loosecannon.servicetag.core.usecase.MemberCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.NoSuchGroup
+import com.loosecannon.servicetag.core.usecase.NoSuchProfile
 import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
 import com.loosecannon.servicetag.core.usecase.NotAGroupMember
 import com.loosecannon.servicetag.core.usecase.NotARequiredMember
@@ -36,9 +35,12 @@ import com.loosecannon.servicetag.core.usecase.OccurrenceAlreadyComplete
 import com.loosecannon.servicetag.core.usecase.OccurrenceClosed
 import com.loosecannon.servicetag.core.usecase.OccurrenceNotActionable
 import com.loosecannon.servicetag.core.usecase.OccurrenceNotCloseable
+import com.loosecannon.servicetag.core.usecase.ProfileValidation
 import com.loosecannon.servicetag.core.usecase.ScheduleArchived
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
 import com.loosecannon.servicetag.core.usecase.ScheduleValidation
+import com.loosecannon.servicetag.core.usecase.UnknownTemplate
+
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -192,12 +194,16 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     // name, exactly as the shipped rows do.
     is ScheduleValidation -> errorResponse(
         422, "Unprocessable Content",
+        // `SCHEDULE_INVALID` is the fallback for a refusal that named no problem. It is
+        // unreachable — every throw site collects at least one — and it is documented in
+        // `docs/api/v1.md` anyway, because it is still a value `error.code` can carry.
         e.problems.firstOrNull()?.let(::scheduleProblemCode) ?: "SCHEDULE_INVALID",
         "the schedule was refused",
         e.problems.map { it.toString() },
     )
     is GroupValidation -> errorResponse(
         422, "Unprocessable Content",
+        // `GROUP_INVALID`, the same fallback for the same reason. Also documented.
         e.problems.firstOrNull()?.let(::groupProblemCode) ?: "GROUP_INVALID",
         "the group was refused",
         e.problems.map { it.toString() },
@@ -256,6 +262,14 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     is MemberCompletionNotSupported -> errorResponse(
         409, "Conflict", "MEMBER_COMPLETION_NOT_SUPPORTED",
         "this schedule targets an asset, not a group",
+    )
+    // Invariant 8's refusal, raised by `DeleteAsset`: a membership row may not be hard-deleted
+    // while a completion or a closure references an occurrence its window covered. **No route calls
+    // `DeleteAsset`** — deleting an asset has no endpoint — so this is defence in depth, and it
+    // takes 1.2's UPPER_SNAKE spelling because the rule it enforces is 1.2's, not 1.1.0's.
+    is AssetMembershipReferenced -> errorResponse(
+        409, "Conflict", "ASSET_MEMBERSHIP_REFERENCED",
+        "this asset is still a member of a group whose history references it",
     )
     is NoSuchAsset -> errorResponse(404, "Not Found", "no_such_asset", "no such asset")
     is NoSuchEvent -> errorResponse(404, "Not Found", "no_such_event", "no such event")

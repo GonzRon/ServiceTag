@@ -268,6 +268,12 @@ internal class MaintenanceHandlers(
      *
      * The two termination fields are read off `schedule_state`, which `DueItem` does not carry —
      * a read of derived state, never a write.
+     *
+     * That second read is **deliberate duplication**, not an oversight: `DueReadModel.project`
+     * already held the state row, but `DueItem` is B08's type and this brief may not add a field to
+     * it, so the alternative is either a wire shape missing two of §9.3's sixteen fields or a change
+     * to somebody else's file. Carrying `lastTerminationEffectiveOn`/`lastTerminationKind` on
+     * `DueItem` would retire this loop, and that is B08's to do if 1.3 wants it.
      */
     suspend fun listDue(): ApiResponse {
         val items = due.items()

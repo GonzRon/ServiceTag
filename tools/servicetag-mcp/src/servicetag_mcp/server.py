@@ -215,8 +215,9 @@ def _field(row: Any, key: str, *, of: str) -> Any:
     """A response field, read defensively (R1). `row[key]` unguarded lets `KeyError`/`TypeError`
     past `_call`'s conversion seam the moment the shape is not what an overlay tool expects — a
     version skew, or `SERVICETAG_API_BASE_URL` pointed at something that answers 200 but is not
-    this API. Used for every subscript an overlay tool applies to a response: the top-level
-    `"asset"`/`"definitions"`/`"profiles"` wrapper and each field read off the row it finds."""
+    this API. Used for every subscript an overlay tool applies to a response: the top-level wrapper
+    — `"asset"`, `"definitions"`, `"profiles"`, and since 1.2 `"group"` and `"schedule"` — and each
+    field read off the row it finds."""
     try:
         return row[key]
     except (KeyError, TypeError) as exc:

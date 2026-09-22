@@ -54,7 +54,7 @@ internal class ApiRouter(
     }
 
     /**
-     * The whole surface. Thirty-four path shapes over forty method-and-path rows; anything else is a 404, and a known shape with the
+     * The whole surface. Thirty-three path shapes over forty method-and-path rows; anything else is a 404, and a known shape with the
      * wrong verb is a 405. Written as an explicit `when` over the path's segments rather than a
      * table of regexes, so the set of things this listener answers can be read in one screen and
      * grepped in one line. Note that bare `/v1/import-merge` is **not** a route: the plan and the

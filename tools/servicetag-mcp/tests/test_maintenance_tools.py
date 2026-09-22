@@ -350,32 +350,45 @@ def test_update_schedule_leaves_every_field_alone_for_an_explicit_none(paired) -
 
 
 @pytest.mark.parametrize(
-    ("name", "wire", "cleared"),
+    ("name", "wire", "cleared", "row"),
     [
-        ("description", "description", ""),
-        ("target_asset_id", "targetAssetId", None),
-        ("time_interval", "timeInterval", None),
-        ("time_unit", "timeUnit", None),
-        ("anchor_on", "anchorOn", None),
-        ("meter_definition_id", "meterDefinitionId", None),
-        ("meter_interval", "meterInterval", None),
-        ("anchor_meter", "anchorMeter", None),
-        ("meter_lead", "meterLead", None),
-        ("season_reentry", "seasonReentry", None),
-        ("season_reentry_offset_days", "seasonReentryOffsetDays", None),
-        ("profile_id", "profileId", None),
-        ("providers", "providers", []),
+        ("description", "description", "", {}),
+        ("target_asset_id", "targetAssetId", None, {}),
+        # A group-targeted row, so clearing this one empties a value it actually held rather than
+        # agreeing with a `None` that was already there (review S4).
+        ("target_group_id", "targetGroupId", None, {"assetId": None, "groupId": "g1"}),
+        ("time_interval", "timeInterval", None, {}),
+        ("time_unit", "timeUnit", None, {}),
+        ("anchor_on", "anchorOn", None, {}),
+        ("meter_definition_id", "meterDefinitionId", None, {}),
+        ("meter_interval", "meterInterval", None, {}),
+        ("anchor_meter", "anchorMeter", None, {}),
+        ("meter_lead", "meterLead", None, {}),
+        ("season_reentry", "seasonReentry", None, {}),
+        ("season_reentry_offset_days", "seasonReentryOffsetDays", None, {}),
+        ("profile_id", "profileId", None, {}),
+        ("providers", "providers", [], {}),
     ],
 )
-def test_every_clearable_schedule_field_clears_by_name(paired, name, wire, cleared) -> None:
-    """The audit, one row per nullable argument: `None` left it alone in the test above, and the
-    documented `clear_fields` name is what empties it."""
-    paired.reply(
-        "GET", "/v1/schedules/s1", 200,
-        _schedule_row(
-            meterDefinitionId="d1", meterInterval=100.0, anchorMeter=0.0, meterLead=10.0,
-            seasonReentry="04-01", seasonReentryOffsetDays=7,
-        ),
+def test_every_clearable_schedule_field_clears_by_name(paired, name, wire, cleared, row) -> None:
+    """The audit, one row per clearable argument — all fourteen of
+    `_SCHEDULE_CLEARABLE_FIELDS`: `None` left each of them alone in the test above, and the
+    documented `clear_fields` name is what empties it.
+
+    Each row is seeded with a value to lose, so a passing assertion cannot be a `None` agreeing
+    with a `None`.
+    """
+    seeded = {
+        "meterDefinitionId": "d1", "meterInterval": 100.0, "anchorMeter": 0.0, "meterLead": 10.0,
+        "seasonReentry": "04-01", "seasonReentryOffsetDays": 7,
+    }
+    seeded.update(row)
+    paired.reply("GET", "/v1/schedules/s1", 200, _schedule_row(**seeded))
+    # The row reports `assetId`/`groupId` where the command takes `targetAssetId`/`targetGroupId`,
+    # so the "something to lose" check reads the row's own key.
+    row_key = {"targetAssetId": "assetId", "targetGroupId": "groupId"}.get(wire, wire)
+    assert _schedule_row(**seeded)["schedule"][row_key] != cleared, (
+        f"{name} must start with something to lose"
     )
     server_module.update_schedule(schedule_id="s1", clear_fields=[name])
     assert body_of(paired.last())[wire] == cleared
@@ -503,6 +516,17 @@ def test_every_maintenance_tool_that_overlays_has_a_clear_path_and_no_other_does
             # And its docstring says what "cleared" means, per field — the README's table is the
             # long form of the same promise.
             assert "clear_fields" in (getattr(server_module, name).__doc__ or ""), name
+
+
+def test_the_schedule_audit_covers_every_clearable_field() -> None:
+    """The parametrize list above and `_SCHEDULE_CLEARABLE_FIELDS` must be the same set — a field
+    added to one and not the other is exactly the hole this audit exists to close (review S4)."""
+    marker = next(
+        m for m in test_every_clearable_schedule_field_clears_by_name.pytestmark
+        if m.name == "parametrize"
+    )
+    covered = {row[0] for row in marker.args[1]}
+    assert covered == set(server_module._SCHEDULE_CLEARABLE_FIELDS)
 
 
 def test_every_clearable_name_an_overlay_publishes_is_one_of_its_own_arguments() -> None:

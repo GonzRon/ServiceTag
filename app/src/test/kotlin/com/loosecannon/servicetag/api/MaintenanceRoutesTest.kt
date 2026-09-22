@@ -1,9 +1,11 @@
 package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.usecase.AssetMembershipReferenced
 import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.OccurrenceAlreadyComplete
 import com.loosecannon.servicetag.core.usecase.SaveGroup
@@ -220,7 +222,7 @@ class MaintenanceRoutesTest {
         runBlocking {
             graph.closures.insert(
                 OccurrenceClosure(
-                    id = "00000000-0000-4000-8000-imported0001",
+                    id = "00000000-0000-4000-8000-100000000001",
                     scheduleId = ScheduleId(schedule),
                     occurrenceOn = open.occurrenceOn.toString(),
                     closedOn = "2026-02-05",
@@ -264,7 +266,7 @@ class MaintenanceRoutesTest {
         runBlocking {
             graph.closures.insert(
                 OccurrenceClosure(
-                    id = "00000000-0000-4000-8000-imported0002",
+                    id = "00000000-0000-4000-8000-100000000002",
                     scheduleId = ScheduleId(schedule),
                     occurrenceOn = open.occurrenceOn.toString(),
                     closedOn = "2026-02-05",
@@ -298,6 +300,27 @@ class MaintenanceRoutesTest {
         )
     }
 
+    /**
+     * `ASSET_MEMBERSHIP_REFERENCED` maps to 409 by name.
+     *
+     * Invariant 8's refusal: a membership row may not be hard-deleted while a completion or a
+     * closure references an occurrence its window covered, so `DeleteAsset` refuses an asset that
+     * still holds one. **No 1.2 route calls `DeleteAsset`** — deleting an asset has no endpoint and
+     * `ApiRouterTest.theDestructiveUseCasesHaveNoRoute` asserts it — so this is defence in depth,
+     * like the two completion-dispatch refusals: were the domain ever reached, the wire says 409 and
+     * names it rather than 500.
+     */
+    @Test fun assetMembershipReferencedMapsTo409ByName() {
+        val response = mapDomainFailure(
+            AssetMembershipReferenced(AssetId("a1"), listOf(GroupId("g1"))),
+        )
+        assertEquals(409, response.status)
+        assertEquals(
+            "ASSET_MEMBERSHIP_REFERENCED",
+            ApiJson.decodeFromString(ApiErrorBody.serializer(), response.body.decodeToString()).error.code,
+        )
+    }
+
     /** `OCCURRENCE_NOT_CLOSEABLE`: a round that obliges nobody is not a round (invariant 77). */
     @Test fun closingARoundThatObligesNobodyIs409OccurrenceNotCloseable() {
         val a1 = createAsset("Pump A")
@@ -315,6 +338,53 @@ class MaintenanceRoutesTest {
         runBlocking { assertEquals(emptyList<OccurrenceClosure>(), graph.closures.all()) }
     }
 
+    /**
+     * `COMPLETION_MEMBER_REQUIRED`: **the one validation this route owns.**
+     *
+     * `CompleteGroupMembers` cannot raise it — an empty member list is legal to it and answers
+     * "nothing to record" — so a body with no `assetId` on a group target would otherwise be
+     * indistinguishable from a repeat, and answer 409 for the wrong reason. §9.2 makes `assetId`
+     * required there, and this is the route saying so.
+     */
+    @Test fun aGroupCompletionWithNoMemberNamedIs422CompletionMemberRequired() {
+        val a1 = createAsset("Pump A")
+        val schedule = createGroupSchedule(createGroup("North run", a1))
+
+        val refused = call("POST", "/v1/schedules/$schedule/complete", completionBody())
+        assertEquals(422, refused.status)
+        assertEquals("COMPLETION_MEMBER_REQUIRED", refused.code())
+        runBlocking { assertEquals(emptyList<Any>(), graph.events.all()) }
+
+        // And naming the member is all it takes for the very same body to be accepted.
+        assertEquals(201, call("POST", "/v1/schedules/$schedule/complete", completionBody(a1)).status)
+    }
+
+    /**
+     * `OCCURRENCE_NOT_ACTIONABLE`: completing a round that obliges nobody.
+     *
+     * Reachable at the wire, not defence in depth — `CompleteGroupMembers.openRound` raises it
+     * before any member check, so it is the answer for the very state
+     * `closingARoundThatObligesNobodyIs409OccurrenceNotCloseable` builds: the member left, the round
+     * it was still required for was finished, and the round that opened after obliges nobody.
+     * Emptiness is never completeness, and it is never actionability either (invariants 74, 77).
+     */
+    @Test fun completingARoundThatObligesNobodyIs409OccurrenceNotActionable() {
+        val a1 = createAsset("Pump A")
+        val group = createGroup("North run", a1)
+        val schedule = createGroupSchedule(group)
+
+        graph.now = dayMillis("2026-02-02")
+        call("PATCH", "/v1/groups/$group", """{"name":"North run","members":[]}""")
+        graph.now = dayMillis("2026-02-03")
+        assertEquals(201, call("POST", "/v1/schedules/$schedule/complete", completionBody(a1)).status)
+
+        val before = runBlocking { graph.events.all().size }
+        val refused = call("POST", "/v1/schedules/$schedule/complete", completionBody(a1))
+        assertEquals(409, refused.status)
+        assertEquals("OCCURRENCE_NOT_ACTIONABLE", refused.code())
+        runBlocking { assertEquals(before, graph.events.all().size) }
+    }
+
     /** `MEMBER_ALREADY_OPEN`: an add for an asset that already holds an open window (invariant 80). */
     @Test fun addingAMemberThatIsAlreadyOpenIs422MemberAlreadyOpen() {
         val a1 = createAsset("Pump A")
@@ -327,7 +397,7 @@ class MaintenanceRoutesTest {
         assertEquals(422, refused.status)
         assertEquals("MEMBER_ALREADY_OPEN", refused.code())
         assertTrue(refused.problems().toString(), refused.problems().any { it.contains("MemberAlreadyOpen") })
-        runBlocking { assertEquals(1, graph.groups.get(com.loosecannon.servicetag.core.model.GroupId(group))!!.members.size) }
+        runBlocking { assertEquals(1, graph.groups.get(GroupId(group))!!.members.size) }
     }
 
     /** A group-targeted schedule on an **empty group** is refused at the command (invariants 74, 77). */

@@ -48,10 +48,13 @@ internal data class StatusResponse(
     val schemaVersion: Int,
     val backupFormatVersion: Int,
     /**
-     * One key per table: assets, **groups**, tags, links, definitions, profiles, **schedules**,
-     * **closures**, events, attachments. The three in bold arrived with 1.2's maintenance tables;
-     * `schedule_state` and `schedule_local_delivery` are **not** here, because derived and
-     * device-local rows are not tables a client counts.
+     * One key per table — assets, **groups**, tags, links, definitions, profiles, **schedules**,
+     * **closures**, events, attachments — listed here in `MergeTable`'s write order for reading,
+     * which is **not** the JSON's key order and is not contract; a client reads by key.
+     *
+     * The three in bold arrived with 1.2's maintenance tables. `schedule_state` and
+     * `schedule_local_delivery` are **not** here, because derived and device-local rows are not
+     * tables a client counts.
      */
     val counts: Map<String, Int>,
 )

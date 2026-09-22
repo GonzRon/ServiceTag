@@ -1,9 +1,9 @@
 package com.loosecannon.servicetag.ui.api
 
 import com.loosecannon.servicetag.api.ApiHandlers
-import com.loosecannon.servicetag.api.maintenanceHandlersFor
 import com.loosecannon.servicetag.api.PAIRING_ALPHABET
 import com.loosecannon.servicetag.api.PAIRING_CODE_LENGTH
+import com.loosecannon.servicetag.api.maintenanceHandlersFor
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.net.InetAddress
 import java.net.ServerSocket
