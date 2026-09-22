@@ -61,8 +61,17 @@ sealed interface Route : NavKey {
      */
     @Serializable data object Maintenance : Route
 
-    /** One schedule, in full. Reached from a due row, the Schedules list and the schedule deep link. */
-    @Serializable data class ScheduleDetail(val id: String) : Route
+    /**
+     * One schedule, in full. Reached from a due row, the Schedules list and the schedule deep link.
+     *
+     * [complete] is B07's **"Done"** on a `FORM` schedule, or on a `QUICK` one carrying a meter
+     * rule: the notification cannot fabricate what the owner alone has, so its action opens this
+     * screen **with B14's `CompletionFlow` already asking "When was this done?"** rather than
+     * leaving the owner to find the button (#50's redirect, amended into B09 at B07's review). It
+     * defaults false, so every other way in — the deep link included — is unchanged: an external
+     * `servicetag://schedule/<uuid>` still only navigates (invariant 57).
+     */
+    @Serializable data class ScheduleDetail(val id: String, val complete: Boolean = false) : Route
 
     /**
      * New when [scheduleId] is null, and then aimed at exactly one target: [targetAssetId] or

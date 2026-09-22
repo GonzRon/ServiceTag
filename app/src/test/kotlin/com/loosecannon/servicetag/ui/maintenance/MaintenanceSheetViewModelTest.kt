@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import com.loosecannon.servicetag.core.links.DeepLinkRoute
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.LinkId
@@ -19,6 +20,8 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.Resolution
+import com.loosecannon.servicetag.routeForDeepLink
+import com.loosecannon.servicetag.routeForQuickCompletion
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.groupOf
@@ -623,6 +626,35 @@ class MaintenanceSheetViewModelTest {
         assertFalse(Route.MaintenanceSheet("a1", null).readsTags())
         assertFalse(TopLevelRoutes.any { it is Route.MaintenanceSheet })
         assertTrue("and the routes that do read tags still do", Route.Scan.readsTags())
+    }
+
+    // ---------------------------------------------------------------- B07's Done redirect
+
+    /**
+     * B07's review left this brief the one-line target change (#50's redirect): **"Done"** on a
+     * `FORM` schedule, or a `QUICK` one carrying a meter rule, no longer merely opens the schedule
+     * — it opens it with B14's canonical `CompletionFlow` already asking "When was this done?", so
+     * the notification path and this sheet share the **one** completion mechanism.
+     *
+     * The two halves the failure would hide are both here: the redirect names a destination and
+     * writes nothing, and an **external** `servicetag://schedule/<uuid>` is untouched — it still
+     * only navigates, so nobody outside the app can open a completion affordance (invariant 57).
+     */
+    @Test fun doneOnAFormOrMeterScheduleLandsOnTheCanonicalCompletionFlow() {
+        val id = "123e4567-e89b-12d3-a456-426614174000"
+        val link = DeepLinkRoute.parse("servicetag", "schedule", listOf(id))
+
+        assertEquals(Route.ScheduleDetail(id, complete = true), routeForQuickCompletion(link))
+        assertEquals(
+            "an external link is unchanged and opens no completion flow",
+            Route.ScheduleDetail(id),
+            routeForDeepLink(link),
+        )
+        assertFalse((routeForDeepLink(link) as Route.ScheduleDetail).complete)
+        // Nothing but a well-formed schedule link can carry the instruction anywhere.
+        assertNull(routeForQuickCompletion(DeepLinkRoute.parse("servicetag", "asset", listOf(id))))
+        assertNull(routeForQuickCompletion(DeepLinkRoute.parse("servicetag", "schedule", listOf("nope"))))
+        assertNull(routeForQuickCompletion(null))
     }
 
     // ---------------------------------------------------------------- helpers

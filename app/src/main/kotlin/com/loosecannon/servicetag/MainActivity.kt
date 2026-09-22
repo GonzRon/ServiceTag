@@ -79,6 +79,13 @@ class MainActivity : ComponentActivity() {
         if (intent.action != Intent.ACTION_VIEW) return null
         val uri = intent.data
         val link = DeepLinkRoute.parse(uri?.scheme, uri?.host, uri?.pathSegments.orEmpty())
+        // B07's "Done" on a schedule whose completion needs the owner. The extra rides on an
+        // **explicit** `PendingIntent` this app built for its own notification, and it is read only
+        // for a link that is already a well-formed schedule link — so an outside intent carrying
+        // the same extra buys nothing a plain `servicetag://schedule/<uuid>` does not already do.
+        if (intent.getBooleanExtra(EXTRA_COMPLETE_SCHEDULE, false)) {
+            routeForQuickCompletion(link)?.let { return it }
+        }
         // A link this app answers but cannot make a destination of — a malformed id, or a tag
         // payload written by a newer format — says so. A link that is not ours at all says nothing.
         return routeForDeepLink(link) ?: if (link == null) null else malformed()
@@ -92,6 +99,9 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_TAG_FORMAT = "tag_format"
         const val EXTRA_TAG_KEY = "tag_key"
+
+        /** B07's "Done" on a FORM or meter schedule: open the schedule *and* the completion flow. */
+        const val EXTRA_COMPLETE_SCHEDULE = "complete_schedule"
     }
 }
 
@@ -105,8 +115,9 @@ class MainActivity : ComponentActivity() {
  * but points at nothing.
  *
  * 1.2 adds the `schedule` host, routed to [Route.ScheduleDetail] exactly as the two shipped links
- * are routed and with **no** mutation on the way: it is what a notification's "Open" action, and
- * "Done" on a schedule whose completion needs the owner, both open.
+ * are routed and with **no** mutation on the way: it is what a notification's "Open" action opens,
+ * and what an external link can ever reach. "Done" on a schedule whose completion needs the owner
+ * goes through [routeForQuickCompletion] instead.
  */
 internal fun routeForDeepLink(link: DeepLink?): Route? = when (link) {
     is DeepLink.Asset -> Route.AssetDetail(link.id.value)
@@ -116,3 +127,18 @@ internal fun routeForDeepLink(link: DeepLink?): Route? = when (link) {
     }
     is DeepLink.Malformed, null -> null
 }
+
+/**
+ * Where B07's **"Done"** lands for a `FORM` schedule, or a `QUICK` one carrying a meter rule: the
+ * schedule, with B14's `CompletionFlow` already open (#50's redirect, B09's amendment).
+ *
+ * **Pure, and file-level for [routeForDeepLink]'s reason**, so the redirect is an assertable fact
+ * rather than a reading of `routeFrom`. It still only names a destination — the completion writes
+ * nothing until the owner answers "When was this done?", which is what keeps a notification action
+ * from being a mutation nobody confirmed (invariant 57, §12.1's carve-out).
+ *
+ * Anything that is not a well-formed schedule link is **no** destination at all, so the instruction
+ * cannot be pointed at another screen.
+ */
+internal fun routeForQuickCompletion(link: DeepLink?): Route? =
+    (link as? DeepLink.Schedule)?.let { Route.ScheduleDetail(it.id.value, complete = true) }

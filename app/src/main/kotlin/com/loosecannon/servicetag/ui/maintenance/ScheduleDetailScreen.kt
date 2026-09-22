@@ -77,6 +77,13 @@ fun ScheduleDetailScreen(
     onBack: () -> Unit,
     onEditRecurrence: (String) -> Unit,
     onLogForm: (assetId: String, profileId: String?) -> Unit,
+    /**
+     * B07's **"Done"** on a `FORM` schedule, or a `QUICK` one carrying a meter rule, arrives with
+     * this set: the canonical [CompletionFlow] opens on arrival, so the notification's action lands
+     * on the question rather than on a screen the owner then has to find a button on (#50's
+     * redirect, B09's amendment). **Once per arrival**, and every other way in leaves it false.
+     */
+    startCompletion: Boolean = false,
 ) {
     val model: ScheduleDetailViewModel =
         viewModel(key = scheduleId) { ScheduleDetailViewModel(graph, scheduleId) }
@@ -90,6 +97,11 @@ fun ScheduleDetailScreen(
     }
     LaunchedEffect(model) {
         model.needsForm.collect { form -> onLogForm(form.assetId.value, form.profileId?.value) }
+    }
+    // Keyed on the model rather than on the flag, so a resume — which re-derives — does not re-ask
+    // a question the owner has already answered or backed out of.
+    LaunchedEffect(model) {
+        if (startCompletion) model.complete()
     }
 
     var closing by remember { mutableStateOf(false) }

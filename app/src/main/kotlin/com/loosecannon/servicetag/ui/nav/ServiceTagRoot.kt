@@ -354,6 +354,9 @@ fun ServiceTagRoot(
                     ScheduleDetailScreen(
                         graph = graph,
                         scheduleId = key.id,
+                        // B07's "Done" on a FORM or meter schedule lands on the canonical
+                        // completion flow; every other way here leaves it false.
+                        startCompletion = key.complete,
                         onBack = { backStack.removeLastOrNull() },
                         // The recurrence edit is the editor, and the editor is the only path to a
                         // rule column: the five operations never write one (master plan §5.2).

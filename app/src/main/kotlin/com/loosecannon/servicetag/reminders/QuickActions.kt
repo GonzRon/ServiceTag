@@ -156,10 +156,13 @@ class AndroidQuickActionIntents(private val context: Context) : QuickActionInten
                 target.scheduleId,
                 target.nonce,
             )
-            // Until B14's completion form has a route of its own, "Done" on a form or meter
-            // schedule opens the schedule, which is where that flow will live; what this brief
-            // fixes is that it is an **activity** and that it writes nothing on the way (#11 AC 2).
-            is QuickActionTarget.CompletionForm -> activity(app, REQUEST_COMPLETION_FORM, target.scheduleId)
+            // B09's amendment, now that B14 has landed: "Done" on a form or meter schedule opens
+            // the schedule **with the canonical `CompletionFlow` already asking "When was this
+            // done?"** — the one completion mechanism, rather than a screen the owner then has to
+            // find a button on. It is still an **activity** and it still writes nothing on the way
+            // (#11 AC 2, invariant 55).
+            is QuickActionTarget.CompletionForm ->
+                activity(app, REQUEST_COMPLETION_FORM, target.scheduleId, complete = true)
             is QuickActionTarget.OpenSchedule -> activity(app, REQUEST_OPEN, target.scheduleId)
         }
     }
@@ -184,11 +187,20 @@ class AndroidQuickActionIntents(private val context: Context) : QuickActionInten
      * this app's single activity: an explicit component means no other app can answer it, and
      * `MainActivity` turns it into a route and does nothing else (invariant 57).
      */
-    private fun activity(app: Context, requestCode: Int, id: ScheduleId): PendingIntent {
+    private fun activity(
+        app: Context,
+        requestCode: Int,
+        id: ScheduleId,
+        complete: Boolean = false,
+    ): PendingIntent {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT
         val target = Intent(app, MainActivity::class.java)
             .setAction(Intent.ACTION_VIEW)
             .setData(scheduleUri(id))
+        // The two activity targets share an action and a data uri and differ by **request code**,
+        // which is part of `PendingIntent` identity where an extra is not — so this instruction
+        // cannot leak onto the "Open" action's pending intent.
+        if (complete) target.putExtra(MainActivity.EXTRA_COMPLETE_SCHEDULE, true)
         return PendingIntent.getActivity(app, requestCode, target, flags or PendingIntent.FLAG_IMMUTABLE)
     }
 
