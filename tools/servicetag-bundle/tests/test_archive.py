@@ -90,11 +90,12 @@ def _source():
 
 
 def asymmetric_source() -> dict[str, Any]:
-    """A source where every nested tally differs from its parent table's size (2 assets, 2
-    definitions, 1 profile with 2 fields and 3 consumables, 2 events -- one with 2 values and 2
-    consumable usages) so a writer that summed the wrong list (e.g. `len(eventProfiles)` where it
-    should sum `len(p["fields"]) for p in eventProfiles`) cannot pass by accident the way a
-    fixture with exactly one of everything would."""
+    """A source where every nested tally differs from its parent table's size *and* from every
+    other table's size (2 assets, 4 definitions, 1 profile with 2 fields and 3 consumables, 2
+    events -- `e1` with 3 values and 3 consumable usages, `e2` bare) so a writer that summed the
+    wrong list -- `len(assetEvents)` where it should sum `len(e["measurements"]) for e in
+    assetEvents`, say -- cannot pass by coincidence the way `measurements == consumableUsages ==
+    len(assetEvents) == 2` once did here."""
     return {
         "formatVersion": 1,
         "namespace": "widget-farm",
@@ -113,6 +114,8 @@ def asymmetric_source() -> dict[str, Any]:
                 "definitions": [
                     {"key": "ph", "label": "pH", "valueType": "NUMBER"},
                     {"key": "temp", "label": "Temperature", "valueType": "NUMBER"},
+                    {"key": "humidity", "label": "Humidity", "valueType": "NUMBER"},
+                    {"key": "pressure", "label": "Pressure", "valueType": "NUMBER"},
                 ],
                 "profiles": [
                     {
@@ -137,10 +140,11 @@ def asymmetric_source() -> dict[str, Any]:
                         "occurredOn": "2026-09-20",
                         "title": "Morning check",
                         "profile": "water-test",
-                        "values": {"ph": 7.5, "temp": 68},
+                        "values": {"ph": 7.5, "temp": 68, "humidity": 55},
                         "consumables": [
                             {"key": "filter", "name": "Filter", "quantity": 1, "unit": "pcs"},
                             {"key": "salt", "name": "Salt", "quantity": 1, "unit": "kg"},
+                            {"key": "wipes", "name": "Wipes", "quantity": 2, "unit": "pcs"},
                         ],
                     },
                     {
@@ -368,13 +372,13 @@ def test_manifest_counts_match_backup_codec_keys_and_numbers():
         "assets": 2,
         "nfcTags": 0,
         "externalLinks": 0,
-        "measurementDefinitions": 2,
+        "measurementDefinitions": 4,
         "eventProfiles": 1,
         "assetEvents": 2,
         "profileFields": 2,
         "profileConsumables": 3,
-        "measurements": 2,
-        "consumableUsages": 2,
+        "measurements": 3,
+        "consumableUsages": 3,
         "attachments": 0,
     }
 
@@ -454,3 +458,19 @@ def test_write_archive_leaves_nothing_behind_on_a_mid_write_failure(tmp_path, mo
 
     assert not out.exists()
     assert list(tmp_path.iterdir()) == []  # the ".partial" temp file was cleaned up too
+
+
+def test_write_archive_does_not_disturb_a_pre_existing_partial_sibling(tmp_path):
+    """The temp name used to be the predictable `out.name + ".partial"`; a build would silently
+    clobber a pre-existing file under that exact name. `tempfile.mkstemp` picks a unique name, so
+    that old sibling is never touched."""
+    out = tmp_path / "out.zip"
+    stray = tmp_path / (out.name + ".partial")
+    stray.write_bytes(b"unrelated sibling content")
+
+    write_archive(_source(), out)
+
+    assert stray.read_bytes() == b"unrelated sibling content"
+    assert out.exists()
+    leftovers = [p for p in tmp_path.iterdir() if p not in (out, stray)]
+    assert leftovers == []  # no stray mkstemp temp file left behind on success either

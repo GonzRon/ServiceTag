@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -142,9 +143,12 @@ def write_archive(source: Source, out: Path) -> dict[str, Any]:
     """Builds the archive and writes it to `out`, refusing -- without writing anything -- an
     archive over `MAX_ARCHIVE_BYTES`. Returns the manifest dict as written.
 
-    Atomic: the archive is written to a temporary file beside `out` and moved into place with
-    `os.replace`, and the temporary file is removed on any failure -- a full disk, a signal, a
-    permission error -- so a failed `write_archive` never leaves a truncated file at `out`.
+    Atomic: the archive is written to a uniquely-named temporary file beside `out`
+    (`tempfile.mkstemp`, not a predictable `out.name + ".partial"` -- a predictable name could
+    silently clobber an unrelated sibling file, or race a concurrent build to the same `out`) and
+    moved into place with `os.replace`; the temporary file is removed on any failure -- a full
+    disk, a signal, a permission error -- so a failed `write_archive` never leaves a truncated
+    file at `out`, and never disturbs anything already there under that temp name.
 
     Does not create `out`'s parent directory (a missing parent surfaces as the underlying
     `OSError`) and does not check whether `out` already exists: overwrite policy belongs to the
@@ -152,9 +156,11 @@ def write_archive(source: Source, out: Path) -> dict[str, Any]:
     """
     manifest, archive = _build(source)
     out = Path(out)
-    tmp = out.with_name(out.name + ".partial")
+    fd, tmp_name = tempfile.mkstemp(dir=out.parent, prefix=f".{out.name}.", suffix=".partial")
+    tmp = Path(tmp_name)
     try:
-        tmp.write_bytes(archive)
+        with os.fdopen(fd, "wb") as f:
+            f.write(archive)
         os.replace(tmp, out)
     except BaseException:
         tmp.unlink(missing_ok=True)

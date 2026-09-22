@@ -28,8 +28,11 @@ EVENT_KINDS = (
 
 
 class SourceError(ValueError):
-    """A source document failed validation. `path` is the JSON path of the offending value,
-    dotted-and-bracketed like `assets[3].definitions[1].key` (`""` for the document itself)."""
+    """A source document failed validation, or (raised by `load_source` itself) could not even be
+    read or parsed. `path` is the JSON path of the offending value, dotted-and-bracketed like
+    `assets[3].definitions[1].key` (`""` for the document itself) -- except when the failure is in
+    reading or parsing the file rather than in its contents, in which case `path` is the source
+    file's own filesystem path instead."""
 
     def __init__(self, path: str, message: str) -> None:
         super().__init__(f"{path}: {message}" if path else message)

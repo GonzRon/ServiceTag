@@ -14,6 +14,13 @@ from typing import Any
 from .archive import ArchiveTooLarge, MANIFEST_ENTRY, write_archive
 from .source import SourceError, load_source
 
+#: `BackupManifest` fields with no default (`BackupFormat.kt:48-53`) -- missing any of these means
+#: the manifest is corrupt, not merely old. The other four (`backupSetId`, `artifactFormatVersion`,
+#: `artifactCount`, `artifactBytes`) default on the Kotlin side too, so `inspect` may default them.
+_REQUIRED_MANIFEST_FIELDS = (
+    "formatVersion", "appVersion", "schemaVersion", "createdAt", "counts", "dataSha256",
+)
+
 
 def _cmd_check(args: argparse.Namespace) -> int:
     source_path = Path(args.source)
@@ -74,17 +81,21 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         print(f"{archive_path}: {e}", file=sys.stderr)
         return 1
 
-    # `manifest.get(..., "-")` throughout: a format <=4 archive's manifest legitimately lacks
-    # `backupSetId`/`artifact*` (the "four new" format-5 fields), and even older ones may lack
-    # more -- `inspect` reports what's there rather than crashing on what isn't.
+    # The six fields every manifest must carry are required here too: a manifest missing one of
+    # them is corrupt, not old, and `inspect` says so instead of printing a false clean bill of
+    # health. Only the four format-5-only fields (`backupSetId`/`artifact*`) may default.
+    missing = [key for key in _REQUIRED_MANIFEST_FIELDS if key not in manifest]
+    if missing:
+        print(f"{archive_path}: manifest.json is missing {', '.join(missing)}", file=sys.stderr)
+        return 1
+
     print(f"{archive_path}: {size} bytes")
     print(
-        f"formatVersion={manifest.get('formatVersion', '-')} "
-        f"schemaVersion={manifest.get('schemaVersion', '-')} "
-        f"appVersion={manifest.get('appVersion', '-')}"
+        f"formatVersion={manifest['formatVersion']} schemaVersion={manifest['schemaVersion']} "
+        f"appVersion={manifest['appVersion']}"
     )
     print(f"backupSetId={manifest.get('backupSetId', '-')}")
-    for key, value in manifest.get("counts", {}).items():
+    for key, value in manifest["counts"].items():
         print(f"{key}={value}")
     return 0
 

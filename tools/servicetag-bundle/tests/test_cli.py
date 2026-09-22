@@ -175,6 +175,27 @@ def test_inspect_a_format_le4_manifest_reports_cleanly_instead_of_a_keyerror(tmp
     assert "assets=0" in out
 
 
+def test_inspect_a_corrupt_manifest_reports_missing_fields_not_a_false_clean_bill(tmp_path, capsys):
+    """Only the four format-5-only fields may default; `formatVersion`, `appVersion`,
+    `schemaVersion`, `createdAt`, `counts`, `dataSha256` have no default in `BackupManifest` --
+    missing any of them means the manifest is corrupt, and `inspect` must say so and exit 1,
+    never print all-dashes and exit 0 as though the archive were merely old."""
+    archive_path = tmp_path / "corrupt.zip"
+    with zipfile.ZipFile(archive_path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps({"nothing": 1}).encode("utf-8"))
+        zf.writestr("data.json", b"{}")
+
+    code = main(["inspect", str(archive_path)])
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "manifest.json is missing" in err
+    for field in (
+        "formatVersion", "appVersion", "schemaVersion", "createdAt", "counts", "dataSha256",
+    ):
+        assert field in err
+
+
 # ---- never a traceback (S4) ------------------------------------------------------------------
 
 def test_check_missing_source_file_reports_cleanly_not_a_traceback(tmp_path, capsys):
