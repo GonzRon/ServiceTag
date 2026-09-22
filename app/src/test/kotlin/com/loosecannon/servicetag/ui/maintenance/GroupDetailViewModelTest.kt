@@ -72,8 +72,25 @@ class GroupDetailViewModelTest {
         recompute = graph.recomputeSchedules,
         archiveGroup = graph.archiveGroup,
         today = graph.todayPort,
+        completion = graph.completionFlow,
         id = GroupId(id),
     )
+
+    /** Answers the flow's affordance as soon as it opens, with the date given. */
+    private suspend fun answer(occurredOn: String) {
+        graph.completionFlow.prompt.first { it != null }
+        assertTrue(graph.completionFlow.submit(CompletionAnswer(occurredOn = occurredOn)))
+    }
+
+    /** Five sprinklers, a group, and a group-targeted round open on them. */
+    private suspend fun aRound(members: Int = 5): Pair<String, List<Asset>> {
+        val assets = (1..members).map { asset("Sprinkler $it") }
+        graph.groups.upsert(
+            groupOf("g1", name = "North run", members = assets.map { Triple(it.id.value, "2026-01-01", null) }),
+        )
+        seed(scheduleOf("s-group", assetId = null, groupId = "g1", title = "Head check", anchorOn = "2026-01-01", leadDays = 0))
+        return "s-group" to assets
+    }
 
     private fun readModel(): DueReadModel = DueReadModel(
         graph.schedules, graph.scheduleStates, graph.assets, graph.groups,
@@ -262,12 +279,98 @@ class GroupDetailViewModelTest {
     }
 
     /**
-     * Matrix rows "a member completed by the wrong path" and "a group becoming equipment", as far as
-     * this screen can reach them: it writes **no event at all** and creates **no asset**. B14 owns
-     * the completion flow, so until it lands a member completion is reached by opening the schedule,
-     * and the one write this screen makes is `archived_at`.
+     * Matrix row "a member completed by the wrong path", the **selected** half (invariants 28, 29).
+     *
+     * Two of five named, and exactly two events are written — on those two assets, both carrying
+     * the round's own occurrence key. The other three members' history is asserted **byte-identical**
+     * either side of the write, which is the fact a "complete the group" button would break.
+     *
+     * The write itself is [CompletionFlow]'s and therefore `CompleteGroupMembers`': this screen
+     * calls the one completion mechanism and re-implements none of it (master plan decision 36).
      */
-    @Test fun theScreenWritesNoEventAndCreatesNoAsset() = runTest {
+    @Test fun completeSelectedMarksThoseMembersAndLeavesEveryOtherHistoryAlone() = runTest {
+        val (scheduleId, assets) = aRound()
+        val vm = viewModel("g1")
+        backgroundScope.launch { vm.state.collect() }
+        val before = vm.state.first { it != null && it.schedules.isNotEmpty() }!!
+        val key = before.schedules.single().checklist.size
+        assertEquals(5, key)
+        val untouched = assets.drop(2).map { it.id }
+        val historyBefore = untouched.associateWith { graph.events.forAsset(it) }
+
+        vm.completeSelected(ScheduleId(scheduleId), assets.take(2).map { it.id })
+        answer("2026-04-15")
+        vm.busy.first { !it }
+
+        val written = vm.state.first { it != null && it.schedules.single().progress == "2 of 5 complete" }!!
+        val row = written.schedules.single()
+        assertTrue("two of five is a round still running", row.roundOpen)
+        assertEquals(2, row.checklist.count { it.complete })
+        assertEquals(
+            assets.take(2).map { it.name }.toSet(),
+            row.checklist.filter { it.complete }.map { it.name }.toSet(),
+        )
+
+        val events = graph.events.all()
+        assertEquals(2, events.size)
+        assertEquals(assets.take(2).map { it.id }.toSet(), events.map { it.assetId }.toSet())
+        assertTrue("both carry the schedule", events.all { it.scheduleId == ScheduleId(scheduleId) })
+        assertEquals("and one occurrence key between them", 1, events.map { it.occurrenceOn }.distinct().size)
+        assertEquals(historyBefore, untouched.associateWith { graph.events.forAsset(it) })
+    }
+
+    /**
+     * "Complete all": one event per outstanding required member, in one write, and **no** event for
+     * anybody the round does not oblige. The member list is derived inside the use case, which is
+     * why a surface cannot complete somebody who is not required (invariants 28, 29, 31).
+     */
+    @Test fun completeAllWritesOneEventPerOutstandingRequiredMember() = runTest {
+        val (scheduleId, assets) = aRound(members = 3)
+        // A fourth sprinkler that is in no group at all: the round must not touch it.
+        val stranger = asset("Sprinkler 9")
+        val vm = viewModel("g1")
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it != null && it.schedules.isNotEmpty() }
+
+        vm.completeAll(ScheduleId(scheduleId))
+        answer("2026-04-15")
+        vm.busy.first { !it }
+
+        val events = vm.state.first { it != null }.let { graph.events.all() }
+        assertEquals(3, events.size)
+        assertEquals(assets.map { it.id }.toSet(), events.map { it.assetId }.toSet())
+        assertEquals(1, events.map { it.occurrenceOn }.distinct().size)
+        assertTrue("a non-member is never written to", graph.events.forAsset(stranger.id).isEmpty())
+    }
+
+    /**
+     * A **single** member, through the same flow: `CompletionFlow.complete(scheduleId, assetId)`.
+     * One event, on that member, and nothing on anybody else — the shape the brief asks a member
+     * completion to take.
+     */
+    @Test fun completingOneMemberWritesThatMemberOnly() = runTest {
+        val (scheduleId, assets) = aRound(members = 3)
+        val vm = viewModel("g1")
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it != null && it.schedules.isNotEmpty() }
+
+        vm.completeMember(ScheduleId(scheduleId), assets.first().id)
+        answer("2026-04-15")
+        vm.busy.first { !it }
+
+        val written = vm.state.first { it != null && it.schedules.single().progress == "1 of 3 complete" }!!
+        assertEquals(listOf(assets.first().name), written.schedules.single().checklist.filter { it.complete }.map { it.name })
+        assertEquals(1, graph.events.all().size)
+        assertEquals(assets.first().id, graph.events.all().single().assetId)
+        assertTrue(assets.drop(1).all { graph.events.forAsset(it.id).isEmpty() })
+    }
+
+    /**
+     * The writes this screen does **not** make. Archiving is one column and no cascade; nothing here
+     * creates an `Asset` or gives one a parent, which is the "fake parent asset" shortcut arrived at
+     * through the UI (invariants 4, 5). A member completion is the flow's, and only the flow's.
+     */
+    @Test fun archivingWritesNoEventAndCreatesNoAsset() = runTest {
         val members = (1..2).map { asset("Sprinkler $it") }
         graph.groups.upsert(
             groupOf("g1", name = "North run", members = members.map { Triple(it.id.value, "2026-01-01", null) }),

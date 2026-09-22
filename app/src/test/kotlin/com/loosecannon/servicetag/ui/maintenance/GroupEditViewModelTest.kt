@@ -91,6 +91,8 @@ class GroupEditViewModelTest {
         assertEquals("North run", group.name)
         assertEquals(listOf(one.id), group.members.map { it.assetId })
         assertNull(group.members.single().removedAt)
+        // The editor writes membership and nothing else: a completion is the flow's, on the detail.
+        assertTrue(graph.events.all().isEmpty())
     }
 
     /**

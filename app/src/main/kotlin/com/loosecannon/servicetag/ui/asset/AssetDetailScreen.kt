@@ -84,7 +84,6 @@ import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.components.TypedConfirmDialog
-import com.loosecannon.servicetag.ui.maintenance.SCHEDULES_SECTION
 import com.loosecannon.servicetag.ui.journal.eventDetailLine
 import com.loosecannon.servicetag.ui.journal.formatTarget
 import com.loosecannon.servicetag.ui.journal.formatValue

@@ -375,8 +375,13 @@ fun ServiceTagRoot(
                         // Asset and has nothing of its own to show about the thing (invariant 4).
                         onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
                         // A round's checklist opens the schedule, which is where the round itself
-                        // — its date affordance and its close — lives (B14).
+                        // — its postponement, its snooze and its close — lives (B14).
                         onOpenSchedule = { backStack.add(Route.ScheduleDetail(it)) },
+                        // A `FORM` member completion is collected by that member's own profile
+                        // form, exactly as the schedule detail collects one.
+                        onLogForm = { assetId, profileId ->
+                            backStack.add(Route.EventEntry(assetId, profileId, null))
+                        },
                     )
                 }
                 entry<Route.GroupEdit> { key ->

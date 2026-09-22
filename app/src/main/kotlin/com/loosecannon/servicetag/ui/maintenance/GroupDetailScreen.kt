@@ -2,6 +2,8 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,18 +11,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,12 +31,16 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.StatusBadge
@@ -58,7 +65,7 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
  * D-26: `description` is the **only** context a group carries. The field #55's sketch proposed
  * is in neither the aggregate nor these screens, so nothing here could draw one.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun GroupDetailScreen(
     graph: AppGraph,
@@ -67,14 +74,23 @@ fun GroupDetailScreen(
     onEdit: (String) -> Unit,
     onOpenAsset: (String) -> Unit,
     onOpenSchedule: (String) -> Unit,
+    /** A `FORM` member completion is collected by that member's own profile form. */
+    onLogForm: (assetId: String, profileId: String?) -> Unit,
 ) {
     val model: GroupDetailViewModel = viewModel(key = groupId) { GroupDetailViewModel(graph, groupId) }
     val state by model.state.collectAsStateWithLifecycle()
     val missing by model.missing.collectAsStateWithLifecycle()
+    val busy by model.busy.collectAsStateWithLifecycle()
+    // Which members are ticked, per schedule. It lives here because it is a selection and not a
+    // fact about the round: nothing is written until one of the two ratified actions is tapped.
+    var selected by remember(groupId) { mutableStateOf(emptyMap<String, Set<String>>()) }
 
     // A restored back stack or a replacing import can name a group that is not there any more.
     // Leaving is the honest answer; an empty screen would pretend it still exists.
     LaunchedEffect(missing) { if (missing) onBack() }
+    LaunchedEffect(model) {
+        model.needsForm.collect { form -> onLogForm(form.assetId.value, form.profileId?.value) }
+    }
 
     val current = state
     Scaffold(
@@ -105,6 +121,9 @@ fun GroupDetailScreen(
             )
         },
     ) { padding ->
+        // The one completion affordance, wherever a flow is driven: "When was this done?" is asked
+        // the same way here as on the schedule, the scan sheet and the quick action.
+        CompletionFlowHost(model.completion)
         if (current == null) {
             QuietLine("Loading…", Modifier.padding(padding).padding(16.dp))
             return@Scaffold
@@ -157,9 +176,30 @@ fun GroupDetailScreen(
                 if (index > 0) {
                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 }
+                val key = schedule.scheduleId.value
                 GroupScheduleBlock(
                     row = schedule,
-                    onClick = { onOpenSchedule(schedule.scheduleId.value) },
+                    selected = selected[key].orEmpty(),
+                    busy = busy,
+                    onClick = { onOpenSchedule(key) },
+                    onSelect = { assetId, on ->
+                        val now = selected[key].orEmpty()
+                        selected = selected + (key to if (on) now + assetId else now - assetId)
+                    },
+                    onCompleteAll = {
+                        model.completeAll(schedule.scheduleId)
+                        selected = selected - key
+                    },
+                    onCompleteSelected = {
+                        model.completeSelected(
+                            schedule.scheduleId,
+                            schedule.checklist
+                                .filter { !it.complete && it.assetId.value in selected[key].orEmpty() }
+                                .map { it.assetId },
+                        )
+                        selected = selected - key
+                    },
+                    onCompleteMember = { model.completeMember(schedule.scheduleId, it) },
                 )
             }
             Spacer(Modifier.height(24.dp))
@@ -203,28 +243,42 @@ const val MEMBERS_SECTION = "Assets"
 
 /**
  * One schedule of the group: its title and status word, the RATIFIED progress form, and the round's
- * checklist — the required members, each marked when it is done.
+ * checklist — the required members, each with whether it is done and the two ways to record it.
  *
- * The check is a glyph and not a word: §17 ratifies no wording for "this one is done", and the
- * ratified progress line above already says how many of them are. A round that obliges nobody gets
- * neither a progress line nor a status treatment, for the reasons `DueItemRow` records.
+ * **Only the title row opens the schedule.** The checklist below it is interactive, and a block that
+ * was clickable as a whole would swallow the checkboxes' own taps; the schedule is where the round's
+ * other operations — its postponement, its snooze and its close — live, and "Close this round" is
+ * B14's action and is deliberately not offered here.
  *
- * Tapping the block opens the schedule, which is where a member completion is recorded.
+ * The two ratified round actions appear only while the round can still take one: a round that
+ * obliges nobody is never offered for completion (invariant 74), and a finished one has nothing
+ * outstanding to complete.
+ *
+ * A round that obliges nobody also gets no progress line and no status treatment, for the reasons
+ * `DueItemRow` records.
  */
 @Composable
-private fun GroupScheduleBlock(row: GroupScheduleRow, onClick: () -> Unit) {
+private fun GroupScheduleBlock(
+    row: GroupScheduleRow,
+    selected: Set<String>,
+    busy: Boolean,
+    onClick: () -> Unit,
+    onSelect: (String, Boolean) -> Unit,
+    onCompleteAll: () -> Unit,
+    onCompleteSelected: () -> Unit,
+    onCompleteMember: (AssetId) -> Unit,
+) {
     val colors = statusColors(row.status, LocalServiceTagSemanticColors.current)
     Column(
         verticalArrangement = Arrangement.spacedBy(2.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .heightIn(min = 56.dp)
             .padding(horizontal = 16.dp, vertical = 11.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 56.dp),
         ) {
             Text(
                 text = row.title,
@@ -242,22 +296,55 @@ private fun GroupScheduleBlock(row: GroupScheduleRow, onClick: () -> Unit) {
         }
         row.progress?.let { QuietLine(it) }
         row.checklist.forEach { member ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                if (member.complete) {
-                    Icon(
-                        imageVector = Icons.Outlined.CheckCircle,
-                        contentDescription = null,
-                        tint = LocalServiceTagSemanticColors.current.maintenanceOkay.foreground,
-                        modifier = Modifier.size(16.dp),
-                    )
-                } else {
-                    Spacer(Modifier.size(16.dp))
+            MemberChecklistRow(
+                member = member,
+                checked = member.assetId.value in selected,
+                busy = busy,
+                onCheck = { onSelect(member.assetId.value, it) },
+                onComplete = { onCompleteMember(member.assetId) },
+            )
+        }
+        if (row.canComplete) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // The two RATIFIED labels. "Complete all" derives its own member list inside the
+                // use case, so a surface cannot complete somebody the round does not oblige.
+                Button(onClick = onCompleteAll, enabled = !busy, shape = ControlShape) {
+                    Text(COMPLETE_ALL)
                 }
-                QuietLine(member.name)
+                OutlinedButton(
+                    onClick = onCompleteSelected,
+                    enabled = !busy && selected.isNotEmpty(),
+                    shape = ControlShape,
+                ) { Text(COMPLETE_SELECTED) }
             }
+        }
+    }
+}
+
+/** One member of the round: its name, whether it is done, and the two ways to record it. */
+@Composable
+private fun MemberChecklistRow(
+    member: GroupMemberRow,
+    checked: Boolean,
+    busy: Boolean,
+    onCheck: (Boolean) -> Unit,
+    onComplete: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+    ) {
+        Checkbox(
+            checked = member.complete || checked,
+            onCheckedChange = onCheck,
+            enabled = !member.complete && !busy,
+        )
+        QuietLine(member.name, modifier = Modifier.weight(1f))
+        if (!member.complete) {
+            // The RATIFIED label of the canonical flow's entry point, which is what this is: one
+            // member, through `CompletionFlow`, writing nothing of its own.
+            TextButton(onClick = onComplete, enabled = !busy) { Text(LOG_MAINTENANCE) }
         }
     }
 }

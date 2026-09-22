@@ -1,9 +1,12 @@
 package com.loosecannon.servicetag.ui.maintenance
 
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasTextExactly
+import androidx.compose.ui.test.isEnabled
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -55,6 +58,10 @@ class GroupScreensTest {
      * round, so the only place a member's name appears on its screen is the members list — which is
      * exactly what that test has to read at each step.
      *
+     * North run holds **three** members with one done, so completing a second leaves the round
+     * open: a round whose last outstanding member is completed is finished, and the engine opens
+     * the next one — which is correct, and would make "the progress moved" the wrong assertion.
+     *
      * Everything goes through the production use cases, so the membership windows are stamped before
      * the schedule is created and the round therefore opens on an instant they cover.
      */
@@ -63,11 +70,16 @@ class GroupScreensTest {
         runBlocking {
             val one = graph.createAsset.run(AssetCommand(name = "Sprinkler 1", category = "Irrigation"))
             val two = graph.createAsset.run(AssetCommand(name = "Sprinkler 2", category = "Irrigation"))
+            val three = graph.createAsset.run(AssetCommand(name = "Sprinkler 3", category = "Irrigation"))
             val north = graph.saveGroup.run(
                 null,
                 GroupCommand(
                     name = "North run",
-                    members = listOf(GroupMemberInput(assetId = one.id), GroupMemberInput(assetId = two.id)),
+                    members = listOf(
+                        GroupMemberInput(assetId = one.id),
+                        GroupMemberInput(assetId = two.id),
+                        GroupMemberInput(assetId = three.id),
+                    ),
                 ),
             )
             graph.saveGroup.run(
@@ -133,7 +145,7 @@ class GroupScreensTest {
 
         rule.awaitText("Maintenance group")
         // The round's progress, from the occurrence and not from the membership count.
-        rule.awaitText("1 of 2 complete")
+        rule.awaitText("1 of 3 complete")
         rule.awaitText("Head check")
 
         rule.onAllNodesWithText("Open asset")[0].performScrollTo().performClick()
@@ -167,7 +179,7 @@ class GroupScreensTest {
 
         rule.onNode(hasTextExactly("North run") and hasClickAction()).performScrollTo().performClick()
         rule.awaitText("Maintenance group")
-        rule.awaitText("1 of 2 complete")
+        rule.awaitText("1 of 3 complete")
     }
 
     /**
@@ -245,9 +257,51 @@ class GroupScreensTest {
 
         val stored = runBlocking { app.graph.groups.all().single { it.name == "North run" } }
         assert(stored.archivedAt != null) { "the column was written" }
-        assert(stored.members.size == 2) { "archive cascades nothing: ${stored.members}" }
+        assert(stored.members.size == 3) { "archive cascades nothing: ${stored.members}" }
         val events = runBlocking { app.graph.events.all() }
         assert(events.size == 1) { "the member completion is retained: $events" }
+    }
+
+    /**
+     * The round's checklist and its two RATIFIED actions, on the real back stack: ticking the one
+     * outstanding member and tapping **"Complete selected"** opens the canonical affordance —
+     * **"When was this done?"** — and the confirm writes **one** event, on that member, through
+     * `CompletionFlow` and therefore `CompleteGroupMembers` (invariants 28, 29).
+     *
+     * The seeded round already has one of its three members done, so "1 of 3 complete" before and
+     * "2 of 3 complete" after is the whole arithmetic — the round is still open, which is what
+     * makes the progress line the right thing to read — and the event count moving by exactly one
+     * is the proof that nothing else was written. *Which* member it was is asserted exactly on the
+     * JVM; here it is asserted to be one of the two the round still owed.
+     */
+    @Test fun theRoundsChecklistCompletesTheSelectedMemberThroughTheRatifiedAction() {
+        aStoreWithGroups()
+        openMaintenance()
+        rule.onNode(hasTextExactly("North run") and hasClickAction()).performScrollTo().performClick()
+
+        rule.awaitText("1 of 3 complete")
+        rule.onNodeWithText("Complete all").assertIsDisplayed()
+        rule.onNodeWithText("Complete selected").assertIsDisplayed()
+
+        val before = runBlocking { app.graph.events.all().size }
+
+        // An outstanding member's own checkbox: the completed one's is checked and disabled, so
+        // the enabled toggles are the two the round still owes.
+        rule.onAllNodes(isToggleable() and isEnabled())[0].performScrollTo().performClick()
+        rule.onNodeWithText("Complete selected").performScrollTo().performClick()
+
+        // The one completion affordance, shared with the schedule, the sheet and the quick action.
+        rule.awaitText("When was this done?")
+        rule.onNodeWithText("Save").performClick()
+
+        rule.awaitText("2 of 3 complete")
+        val after = runBlocking { app.graph.events.all() }
+        assert(after.size == before + 1) { "one member, one event: ${after.size} vs $before" }
+        val written = after.maxBy { it.createdAt }
+        val owed = setOf(assetIdOf("Sprinkler 2"), assetIdOf("Sprinkler 3"))
+        assert(written.assetId.value in owed) { "a member the round owed, and only one: $written" }
+        assert(written.scheduleId != null) { "the completion carries its schedule: $written" }
+        assert(written.occurrenceOn != null) { "and its occurrence key: $written" }
     }
 
     private fun assetIdOf(name: String): String =

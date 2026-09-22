@@ -18,8 +18,13 @@ import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.core.usecase.ArchiveGroup
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.di.AppGraph
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -62,7 +67,14 @@ data class GroupScheduleRow(
     val progress: String?,
     val checklist: List<GroupMemberRow>,
     val roundOpen: Boolean,
-)
+) {
+    /**
+     * Whether the round can still take a completion: it obliges somebody and somebody is still
+     * outstanding. A round that obliges nobody is never offered for completion (invariant 74), and
+     * emptiness is not the same question as completeness.
+     */
+    val canComplete: Boolean get() = !requiredSetEmpty && roundOpen && checklist.any { !it.complete }
+}
 
 /**
  * One maintenance group, in full: what it is, who is in it now, and what its rounds are asking for.
@@ -95,9 +107,12 @@ data class GroupDetailState(
  * `listedForDue()` still bounds the list — carry-forward (a) — so an archived *schedule* is absent
  * here as it is everywhere.
  *
- * **Nothing here completes anything.** The canonical completion path is B14's `CompletionFlow`, and
- * until it lands a member completion is reached by opening the schedule; a completion written from
- * this screen's own hand would be the second write path #50 forbids.
+ * **It completes nothing itself.** The round's two ratified actions and a single member's are all
+ * [CompletionFlow] calls, which is the one completion mechanism in 1.2 (master plan decision 36):
+ * the occurrence key, the idempotence index, the conditional postponement clear and the recompute
+ * are the use cases', and a completion written from this screen's own hand would be the second
+ * write path #50 forbids. The round itself — its date affordance, its postponement and its close —
+ * belongs to the schedule, which the checklist opens.
  */
 class GroupDetailViewModel(
     private val groups: GroupRepository,
@@ -107,6 +122,8 @@ class GroupDetailViewModel(
     private val recompute: RecomputeSchedules,
     private val archiveGroup: ArchiveGroup,
     private val today: Today,
+    /** The one completion mechanism. Exposed because the screen draws its affordance. */
+    val completion: CompletionFlow,
     private val id: GroupId,
 ) : ViewModel() {
 
@@ -118,10 +135,23 @@ class GroupDetailViewModel(
         graph.recomputeSchedules,
         graph.archiveGroup,
         graph.today,
+        graph.completionFlow,
         GroupId(id),
     )
 
     private val rows = groups.observeAll()
+
+    private val _busy = MutableStateFlow(false)
+
+    /** Whether a completion is in flight; the round's actions are disabled while it is. */
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    /** A `FORM` member completion is collected by that member's profile form; the screen navigates. */
+    private val _needsForm = MutableSharedFlow<CompletionOutcome.NeedsForm>(
+        replay = 0,
+        extraBufferCapacity = 1,
+    )
+    val needsForm: SharedFlow<CompletionOutcome.NeedsForm> = _needsForm.asSharedFlow()
 
     val state: StateFlow<GroupDetailState?> =
         combine(rows, schedules.observeAll(), states.observeAll()) { groupRows, _, _ ->
@@ -142,6 +172,46 @@ class GroupDetailViewModel(
     /** Archive is one column and no cascade: every window, completion and closure survives it. */
     fun setArchived(archived: Boolean) {
         viewModelScope.launch { archiveGroup.run(id, archived) }
+    }
+
+    /**
+     * **"Complete all"**: every required member of the round that is not yet done, in one write.
+     *
+     * The member list is derived inside `CompleteGroupMembers`, not here, which is what stops a
+     * surface completing somebody the round does not oblige (invariants 28, 29).
+     */
+    fun completeAll(scheduleId: ScheduleId) = operate { completion.completeAll(scheduleId) }
+
+    /** **"Complete selected"**: exactly the members named, and no other (invariants 28, 29). */
+    fun completeSelected(scheduleId: ScheduleId, assetIds: List<AssetId>) = operate {
+        if (assetIds.isNotEmpty()) completion.completeSelected(scheduleId, assetIds)
+    }
+
+    /**
+     * One member, done. The same flow, with the member named: a group target with no member named
+     * is refused rather than guessed at, so the id is always passed.
+     */
+    fun completeMember(scheduleId: ScheduleId, assetId: AssetId) = operate {
+        val outcome = completion.complete(scheduleId, assetId)
+        if (outcome is CompletionOutcome.NeedsForm) _needsForm.tryEmit(outcome)
+    }
+
+    /**
+     * Runs one completion with [busy] held.
+     *
+     * Nothing is refreshed afterwards and nothing needs to be: a completion ends in the recompute,
+     * which upserts `schedule_state`, and this screen's state is derived from that table's own flow
+     * (invariants 17, 18).
+     */
+    private fun operate(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            _busy.value = true
+            try {
+                block()
+            } finally {
+                _busy.value = false
+            }
+        }
     }
 
     private suspend fun detailOf(group: MaintenanceGroup): GroupDetailState {
