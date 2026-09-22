@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.model.shapeMatches
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
@@ -39,6 +40,18 @@ data class EventCommand(
     val notes: String,
     val values: Map<DefinitionId, String>,
     val consumables: List<ConsumableInput>,
+    /**
+     * 1.2, the occurrence link. A completion names the schedule it satisfies and the occurrence key
+     * it claims; every other event leaves both null. They default so that no existing caller —
+     * and no route that must not be able to create a completion — has to mention them.
+     *
+     * `occurrenceOn` is **immutable once written**: [buildEvent] keeps the stored value on an edit
+     * and only ever takes this one on the first write.
+     */
+    val scheduleId: ScheduleId? = null,
+    val occurrenceOn: String? = null,
+    /** True only for a minimal completion against a FORM schedule: the details are still owed. */
+    val detailsPending: Boolean = false,
 )
 
 /** One thing wrong with an [EventCommand]'s fields, reported so a form can mark the right row. */
@@ -144,6 +157,7 @@ internal suspend fun buildEvent(
     existing: AssetEvent?,
     ids: IdGenerator,
     now: Long,
+    source: EventSource = EventSource.MANUAL,
 ): AssetEvent {
     val problems = mutableListOf<FieldProblem>()
 
@@ -231,11 +245,18 @@ internal suspend fun buildEvent(
         occurredTime = cmd.occurredTime,
         tzId = cmd.tzId,
         notes = cmd.notes.trim(),
-        source = existing?.source ?: EventSource.MANUAL,
+        source = existing?.source ?: source,
         sourceRef = existing?.sourceRef,
         createdAt = existing?.createdAt ?: now,
         updatedAt = now,
         measurements = orderedMeasurements,
         consumables = consumables,
+        // An ordinary edit of a completion keeps its link: a form that knows nothing about
+        // schedules must not be able to orphan one by leaving the field out.
+        scheduleId = cmd.scheduleId ?: existing?.scheduleId,
+        // Immutable once written, which is what keeps the idempotence index meaningful.
+        occurrenceOn = existing?.occurrenceOn ?: cmd.occurrenceOn,
+        // An edit that supplies the owed details clears the flag, which is the badge going away.
+        detailsPending = cmd.detailsPending,
     )
 }

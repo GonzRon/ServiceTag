@@ -38,11 +38,11 @@ data class ImportReport(
  * The bytes of the attachment rows this replaces are swept *after* the commit, best effort: a
  * store that will not co-operate leaves an orphaned file for 4B, never a half-undone import.
  *
- * **A restore does not recompute derived schedule state yet.** Every canonical row is replaced
- * here, so every schedule's derived due state is stale the moment this returns; the recompute is
- * the scheduling-engine brief's, which wires it the way [ApplyBackupMergePlan] already takes it as
- * a seam. Nothing at this tip writes derived state, so there is nothing stale to read — but this is
- * where the recompute belongs when it exists.
+ * **The post-restore rebuild is total, for [ApplyBackupMergePlan]'s reasons.** Every canonical row
+ * is replaced here, so every schedule's derived due state describes data that is gone: the wipe
+ * takes `schedule_state` with it through the CASCADE, and [rebuildAll] fills it again from the
+ * history the file brought, inside this transaction, after the last insert. Derived state is
+ * rebuilt after **any** import, and a restore is the import that replaces the most.
  */
 class ImportBackupReplace(
     private val assets: AssetRepository,
@@ -57,6 +57,13 @@ class ImportBackupReplace(
     private val attachments: AttachmentRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
+    /**
+     * Recomputes the derived state of **every** schedule. It runs inside this restore's
+     * transaction, after the last insert, exactly once — a seam rather than a direct call for the
+     * reason [ApplyBackupMergePlan] states: the derived state is never in the file, and the engine
+     * that computes it is not this layer's concern.
+     */
+    private val rebuildAll: suspend () -> Unit,
 ) {
     suspend fun run(bytes: ByteArray): ImportReport {
         val backup = BackupCodec.decode(bytes) // outside the transaction: refuse before touching data
@@ -103,6 +110,9 @@ class ImportBackupReplace(
             data.assetEvents.forEach { events.upsert(it.toDomain()) }
             // Attachment rows go last: every owner, asset or event, is already in.
             data.attachments.forEach { attachments.upsert(it.toDomain()) }
+
+            // After every write, inside the same transaction, once.
+            rebuildAll()
 
             doomed - data.attachments.map { it.storageLocator }.toSet()
         }

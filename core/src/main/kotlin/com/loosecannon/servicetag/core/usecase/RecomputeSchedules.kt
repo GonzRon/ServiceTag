@@ -1,0 +1,130 @@
+package com.loosecannon.servicetag.core.usecase
+
+import com.loosecannon.servicetag.core.model.AssetEvent
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.GroupMember
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleState
+import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.ClosureRepository
+import com.loosecannon.servicetag.core.ports.EventRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
+import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.schedule.ScheduleRecompute
+import com.loosecannon.servicetag.core.schedule.SeasonWindow
+
+/**
+ * The collaborator that turns "this changed" into "these schedules' derived state was rebuilt", and
+ * **the only caller of [ScheduleStateRepository.upsert]** (invariant 17).
+ *
+ * It exists because "every event insert, update and delete rebuilds" is a closure over group
+ * membership that no single use case can compute: an event on one Asset touches that Asset's own
+ * schedules *and* every group schedule whose required set contains it. Putting that closure in each
+ * event use case would duplicate it four times and let the four drift; putting it here means each
+ * of them asks one question — [forAsset] — and the answer is always the whole closure.
+ *
+ * It reads the clock exactly once per rebuild, to stamp `computedAt`. The engine itself cannot:
+ * `rebuild` is a pure function and a pure function has no clock, which is what makes it idempotent.
+ *
+ * [groupSchedulesRequiring] is the groups brief's half of the closure. Until it is supplied, an
+ * event on an Asset rebuilds that Asset's own schedules — the asset path, which this brief's tests
+ * cover — and the group path is a seam with one name rather than an assumption spread over four
+ * call sites.
+ */
+class RecomputeSchedules(
+    private val schedules: ScheduleRepository,
+    private val states: ScheduleStateRepository,
+    private val events: EventRepository,
+    private val closures: ClosureRepository,
+    private val groups: GroupRepository,
+    private val assets: AssetRepository,
+    private val today: Today,
+    private val clock: Clock,
+    private val groupSchedulesRequiring: suspend (AssetId) -> List<MaintenanceSchedule> = { emptyList() },
+) {
+    /** The Asset's own schedules, plus every group schedule that requires it. */
+    suspend fun forAsset(assetId: AssetId) {
+        (schedules.forAsset(assetId) + groupSchedulesRequiring(assetId))
+            .distinctBy { it.id.value }
+            .forEach { rebuild(it) }
+    }
+
+    /** One schedule, after an edit or an operation on it. A schedule that has gone is a no-op. */
+    suspend fun forSchedule(id: ScheduleId) {
+        schedules.get(id)?.let { rebuild(it) }
+    }
+
+    /**
+     * Every schedule in the database. This is the digest's and the backstop's sweep, and it is what
+     * both import paths call: rather than enumerate which schedules an imported event, membership
+     * row, closure or meter reading could have touched, the import rebuilds all of them inside its
+     * own transaction. At this scale it is cheap and provably complete.
+     */
+    suspend fun all() {
+        schedules.all().forEach { rebuild(it) }
+    }
+
+    /**
+     * The schedule's derived state **as it is now**, computed rather than read back out of the
+     * table. A completion stamps its `occurrence_on` from this, so that the key it claims is the
+     * occurrence the engine currently says is open and never a state row that a concurrent write
+     * left a day behind.
+     */
+    suspend fun stateOf(schedule: MaintenanceSchedule): ScheduleState {
+        val inputs = inputsFor(schedule)
+        val state = ScheduleRecompute.rebuild(
+            schedule = schedule,
+            events = inputs.events,
+            closures = closures.forSchedule(schedule.id),
+            membership = inputs.membership,
+            today = today.localDate(),
+            season = inputs.season,
+        )
+        // `rebuild` leaves `computedAt` at 0 because it has no clock; this is where it is stamped.
+        return state.copy(computedAt = clock.nowMillis())
+    }
+
+    private suspend fun rebuild(schedule: MaintenanceSchedule) {
+        states.upsert(stateOf(schedule))
+    }
+
+    /**
+     * What one schedule's rebuild reads. An asset-targeted schedule reads its Asset's events and
+     * its Asset's season window; a group-targeted one reads every member's events and the group's
+     * membership rows, and no window at all, because a group target is `IGNORE` season only.
+     *
+     * A group's members are read here rather than filtered here: which of them the current
+     * occurrence *requires* is the groups brief's derivation, and this only has to hand it
+     * everything that derivation needs.
+     */
+    private suspend fun inputsFor(schedule: MaintenanceSchedule): RebuildInputs =
+        when (val target = schedule.target) {
+            is ScheduleTarget.AssetTarget -> {
+                val asset = assets.get(target.assetId)
+                RebuildInputs(
+                    events = events.forAsset(target.assetId),
+                    membership = emptyList(),
+                    season = asset?.let { SeasonWindow(it.seasonStartMmdd, it.seasonEndMmdd) },
+                )
+            }
+            is ScheduleTarget.GroupTarget -> {
+                val members = groups.get(target.groupId)?.members.orEmpty()
+                RebuildInputs(
+                    events = members.map { it.assetId }.distinct().flatMap { events.forAsset(it) },
+                    membership = members,
+                    season = null,
+                )
+            }
+        }
+
+    private data class RebuildInputs(
+        val events: List<AssetEvent>,
+        val membership: List<GroupMember>,
+        val season: SeasonWindow?,
+    )
+}

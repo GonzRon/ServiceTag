@@ -26,7 +26,9 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.ports.UuidGenerator
 import com.loosecannon.servicetag.core.usecase.AddAttachment
@@ -35,8 +37,10 @@ import com.loosecannon.servicetag.core.usecase.ApplyBackupMergePlan
 import com.loosecannon.servicetag.core.usecase.ArchiveAsset
 import com.loosecannon.servicetag.core.usecase.ArchiveDefinition
 import com.loosecannon.servicetag.core.usecase.ArchiveProfile
+import com.loosecannon.servicetag.core.usecase.ArchiveSchedule
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.BuildBackupMergePlan
+import com.loosecannon.servicetag.core.usecase.CompleteSchedule
 import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAttachment
@@ -47,7 +51,10 @@ import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LogEvent
+import com.loosecannon.servicetag.core.usecase.PauseSchedule
+import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
+import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
 import com.loosecannon.servicetag.core.usecase.ReorderProfiles
 import com.loosecannon.servicetag.core.usecase.ResolveTag
@@ -55,6 +62,7 @@ import com.loosecannon.servicetag.core.usecase.RestoreArtifacts
 import com.loosecannon.servicetag.core.usecase.RetireAsset
 import com.loosecannon.servicetag.core.usecase.SaveDefinition
 import com.loosecannon.servicetag.core.usecase.SaveProfile
+import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.StoreIsEmpty
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
@@ -74,6 +82,7 @@ import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
+import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.prefs.AppPrefs
@@ -83,6 +92,7 @@ import com.loosecannon.servicetag.reminders.AndroidPlatformState
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.reminders.PlatformState
 import java.io.File
+import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -115,6 +125,25 @@ class AppGraph(private val context: Context) {
     val groups: GroupRepository = RoomGroupRepository(db.maintenanceGroupDao())
     val schedules: ScheduleRepository = RoomScheduleRepository(db.maintenanceScheduleDao())
     val closures: ClosureRepository = RoomClosureRepository(db.occurrenceClosureDao())
+
+    /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
+    val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
+
+    /**
+     * `T`, the device-local date. [clock] answers in milliseconds and every due date in 1.2 is a
+     * date: the screens, the digest run and the backstop all read this one value, and the engine
+     * itself never reads it — it is handed `T` as an argument.
+     */
+    val today: Today = Today { LocalDate.now() }
+
+    /**
+     * The one path into derived state (invariant 17), and the closure every event write asks for:
+     * this Asset's schedules plus every group schedule that requires it. The group half of that
+     * closure arrives with the groups work; until then the seam answers with nothing.
+     */
+    val recomputeSchedules: RecomputeSchedules = RecomputeSchedules(
+        schedules, scheduleStates, events, closures, groups, assets, today, clock,
+    )
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
 
     // #24 — the platform-ownership seams B06, B07, B10 and B14 compile against (master plan §12).
@@ -179,6 +208,8 @@ class AppGraph(private val context: Context) {
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, attachmentStorage, uow,
+        // Derived state is rebuilt after any import, and the wipe took it with the schedule rows.
+        rebuildAll = { recomputeSchedules.all() },
     )
 
     /**
@@ -194,11 +225,10 @@ class AppGraph(private val context: Context) {
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, attachmentStorage, uow,
-        // The total post-apply recompute. Nothing writes derived state at this tip, so there is
-        // nothing to recompute yet and the seam is a no-op; the engine that fills it arrives with
-        // the schedule domain, and the apply's contract — once, inside, after every write — is
-        // already asserted against this seam.
-        rebuildAll = { },
+        // The total post-apply recompute, wired to the engine: an imported event, membership row,
+        // closure or meter reading can each move a due date, and rebuilding every schedule inside
+        // the apply's own transaction is cheaper than enumerating which.
+        rebuildAll = { recomputeSchedules.all() },
     )
     val importBackupMerge: ImportBackupMerge =
         ImportBackupMerge(buildBackupMergePlan, applyBackupMergePlan)
@@ -242,9 +272,12 @@ class AppGraph(private val context: Context) {
     val deleteAsset: DeleteAsset = DeleteAsset(assets, events, attachments, attachmentStorage, uow)
 
     // Phase 2A — the maintenance journal.
-    val logEvent: LogEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock)
-    val updateEvent: UpdateEvent = UpdateEvent(events, definitions, profiles, uow, ids, clock)
-    val deleteEvent: DeleteEvent = DeleteEvent(events, attachments, attachmentStorage, uow)
+    val logEvent: LogEvent =
+        LogEvent(events, definitions, profiles, assets, uow, ids, clock, recomputeSchedules)
+    val updateEvent: UpdateEvent =
+        UpdateEvent(events, definitions, profiles, uow, ids, clock, recomputeSchedules)
+    val deleteEvent: DeleteEvent =
+        DeleteEvent(events, attachments, attachmentStorage, uow, recomputeSchedules)
 
     // Phase 2B-1 — the definition and profile editors. Archive is the ordinary retirement; delete
     // exists only for a row nothing references yet, and each use case checks that before writing.
@@ -257,6 +290,17 @@ class AppGraph(private val context: Context) {
     val archiveProfile: ArchiveProfile = ArchiveProfile(profiles, uow, clock)
     val deleteProfile: DeleteProfile = DeleteProfile(profiles, uow)
     val reorderProfiles: ReorderProfiles = ReorderProfiles(profiles, uow, clock)
+
+    // 1.2 — the schedule operations. Each does exactly what it says and no two of them collapse
+    // into a generic reschedule: only `saveSchedule` writes a rule column, only it moves the pin's
+    // floor, and a completion touches the schedule row only to clear a postponement.
+    val saveSchedule: SaveSchedule =
+        SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recomputeSchedules)
+    val completeSchedule: CompleteSchedule =
+        CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recomputeSchedules)
+    val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)
+    val pauseSchedule: PauseSchedule = PauseSchedule(schedules, uow, recomputeSchedules)
+    val archiveSchedule: ArchiveSchedule = ArchiveSchedule(schedules, uow, recomputeSchedules)
 
     internal companion object {
         const val DB_NAME = "servicetag.db"

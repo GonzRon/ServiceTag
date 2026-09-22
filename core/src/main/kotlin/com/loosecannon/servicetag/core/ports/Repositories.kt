@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import kotlinx.coroutines.flow.Flow
@@ -128,7 +129,32 @@ interface ScheduleRepository {
     suspend fun upsert(schedule: MaintenanceSchedule)
     suspend fun get(id: ScheduleId): MaintenanceSchedule?
     suspend fun all(): List<MaintenanceSchedule>
+
+    /** The schedules aimed at this Asset — its own, never a group's. */
+    suspend fun forAsset(assetId: AssetId): List<MaintenanceSchedule>
+
+    /** The schedules aimed at this group. One of them may require this Asset; that is not this question. */
+    suspend fun forGroup(groupId: GroupId): List<MaintenanceSchedule>
     suspend fun deleteAll()
+    fun observeAll(): Flow<List<MaintenanceSchedule>>
+}
+
+/**
+ * 1.2, the **derived** half: one row per schedule, every column recomputable from configuration,
+ * events, closures, membership and today.
+ *
+ * `upsert` has exactly one caller — the recompute — and that is the whole point of the port
+ * (invariant 17). There is no partial update and no per-column setter here, because either of them
+ * would be a second write path into derived state, and a second write path is how a due date and
+ * the history it is derived from stop agreeing. It is never exported and never merged: `deleteAll`
+ * exists for the replace import's wipe, and the recompute that follows the import fills it again.
+ */
+interface ScheduleStateRepository {
+    suspend fun upsert(state: ScheduleState)
+    suspend fun get(scheduleId: ScheduleId): ScheduleState?
+    suspend fun all(): List<ScheduleState>
+    suspend fun deleteAll()
+    fun observeAll(): Flow<List<ScheduleState>>
 }
 
 /**

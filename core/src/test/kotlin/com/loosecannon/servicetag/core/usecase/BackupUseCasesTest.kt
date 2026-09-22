@@ -233,7 +233,7 @@ class BackupUseCasesTest {
         ImportBackupReplace(
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
             f.closures, f.events, f.attachments,
-            f.storage, f.uow,
+            f.storage, f.uow, rebuildAll = { },
         ).run(bytes)
     }
 

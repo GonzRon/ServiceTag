@@ -16,7 +16,9 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.ApplyTemplate
@@ -36,6 +38,7 @@ import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
+import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
 import com.loosecannon.servicetag.core.usecase.ReorderProfiles
 import com.loosecannon.servicetag.core.usecase.RestoreArtifacts
@@ -55,6 +58,7 @@ import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
+import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
@@ -103,6 +107,16 @@ class FakeGraph(
     val groups: GroupRepository = RoomGroupRepository(db.maintenanceGroupDao())
     val schedules: ScheduleRepository = RoomScheduleRepository(db.maintenanceScheduleDao())
     val closures: ClosureRepository = RoomClosureRepository(db.occurrenceClosureDao())
+    val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
+
+    /** `T`, injected: a test says which day it is and the engine answers the same way every run. */
+    var today: java.time.LocalDate = java.time.LocalDate.parse("2026-02-10")
+    val todayPort: Today = Today { today }
+
+    /** The real recompute over the real tables, so an event write in a test rebuilds for real. */
+    val recomputeSchedules: RecomputeSchedules = RecomputeSchedules(
+        schedules, scheduleStates, events, closures, groups, assets, todayPort, clock,
+    )
 
     /**
      * The store a test drives by hand: `state` is a `var` and the bytes are a map, so a refusal
@@ -135,9 +149,12 @@ class FakeGraph(
     val ndefCodec: NdefCodec = NdefCodec(tagIdentity)
 
     val provisionTag: ProvisionTag = ProvisionTag(tags, assets, uow, ids, clock)
-    val logEvent: LogEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock)
-    val updateEvent: UpdateEvent = UpdateEvent(events, definitions, profiles, uow, ids, clock)
-    val deleteEvent: DeleteEvent = DeleteEvent(events, attachments, attachmentStorage, uow)
+    val logEvent: LogEvent =
+        LogEvent(events, definitions, profiles, assets, uow, ids, clock, recomputeSchedules)
+    val updateEvent: UpdateEvent =
+        UpdateEvent(events, definitions, profiles, uow, ids, clock, recomputeSchedules)
+    val deleteEvent: DeleteEvent =
+        DeleteEvent(events, attachments, attachmentStorage, uow, recomputeSchedules)
     val saveDefinition: SaveDefinition =
         SaveDefinition(definitions, events, profiles, assets, uow, ids, clock)
     val archiveDefinition: ArchiveDefinition = ArchiveDefinition(definitions, uow, clock)
@@ -177,9 +194,13 @@ class FakeGraph(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
     )
+    /** How many times a restore asked for the total recompute, beside `rebuilds` for an apply. */
+    var restoreRebuilds = 0
+
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, attachmentStorage, uow,
+        rebuildAll = { restoreRebuilds += 1; recomputeSchedules.all() },
     )
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,

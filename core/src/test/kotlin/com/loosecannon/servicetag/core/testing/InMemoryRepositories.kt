@@ -21,6 +21,8 @@ import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleState
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
@@ -33,6 +35,7 @@ import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import kotlinx.coroutines.flow.Flow
@@ -404,22 +407,25 @@ class InMemoryGroupRepository : GroupRepository, Rollbackable, Witnessed {
  */
 class InMemoryScheduleRepository(
     private val cascadesTo: InMemoryClosureRepository? = null,
+    private val statesCascadeTo: InMemoryScheduleStateRepository? = null,
 ) : ScheduleRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, MaintenanceSchedule>()
     override var witness: TransactionWitness? = null
     private val rig = UpsertRig("schedule")
+    private val version = MutableStateFlow(0)
     var failOnUpsert: Int?
         get() = rig.failOnUpsert
         set(value) { rig.failOnUpsert = value }
 
     override fun snapshot(): () -> Unit {
         val copy = LinkedHashMap(rows)
-        return { rows.clear(); rows.putAll(copy) }
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
     }
 
     override suspend fun upsert(schedule: MaintenanceSchedule) {
         rig.check()
         rows[schedule.id.value] = schedule
+        version.value += 1
     }
 
     override suspend fun get(id: ScheduleId): MaintenanceSchedule? = rows[id.value]
@@ -429,10 +435,65 @@ class InMemoryScheduleRepository(
         return rows.values.toList()
     }
 
+    override suspend fun forAsset(assetId: AssetId): List<MaintenanceSchedule> =
+        rows.values.filter { (it.target as? ScheduleTarget.AssetTarget)?.assetId == assetId }
+            .sortedWith(compareBy({ it.title }, { it.id.value }))
+
+    override suspend fun forGroup(groupId: GroupId): List<MaintenanceSchedule> =
+        rows.values.filter { (it.target as? ScheduleTarget.GroupTarget)?.groupId == groupId }
+            .sortedWith(compareBy({ it.title }, { it.id.value }))
+
     override suspend fun deleteAll() {
         rows.clear()
+        version.value += 1
         cascadesTo?.cascadeFromSchedules()
+        statesCascadeTo?.cascadeFromSchedules()
     }
+
+    override fun observeAll(): Flow<List<MaintenanceSchedule>> = version.map {
+        rows.values.sortedWith(compareBy({ it.title }, { it.id.value }))
+    }
+}
+
+/**
+ * The derived state, in a map. [cascadeFromSchedules] is not part of the port and is not a delete
+ * path: it is how [InMemoryScheduleRepository] reproduces the CASCADE the schema performs when a
+ * schedule row goes, which is the only thing that removes a state row other than the wipe.
+ */
+class InMemoryScheduleStateRepository : ScheduleStateRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, ScheduleState>()
+    override var witness: TransactionWitness? = null
+    private val rig = UpsertRig("schedule state")
+    private val version = MutableStateFlow(0)
+    var failOnUpsert: Int?
+        get() = rig.failOnUpsert
+        set(value) { rig.failOnUpsert = value }
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun upsert(state: ScheduleState) {
+        rig.check()
+        rows[state.scheduleId.value] = state
+        version.value += 1
+    }
+
+    override suspend fun get(scheduleId: ScheduleId): ScheduleState? = rows[scheduleId.value]
+
+    override suspend fun all(): List<ScheduleState> {
+        witness?.observeAll()
+        return rows.values.toList()
+    }
+
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeAll(): Flow<List<ScheduleState>> = version.map {
+        rows.values.sortedWith(compareBy({ it.effectiveDueOn ?: "" }, { it.scheduleId.value }))
+    }
+
+    internal fun cascadeFromSchedules() { rows.clear(); version.value += 1 }
 }
 
 /**

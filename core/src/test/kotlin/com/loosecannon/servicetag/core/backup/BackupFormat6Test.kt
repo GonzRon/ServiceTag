@@ -180,7 +180,7 @@ class BackupFormat6Test {
         )
         val restore = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, storage, uow,
+            events, attachments, storage, uow, rebuildAll = { },
         )
     }
 

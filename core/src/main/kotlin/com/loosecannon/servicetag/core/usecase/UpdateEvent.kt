@@ -19,6 +19,11 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * [ids] is only ever consulted for a measurement or consumable line that has no counterpart in
  * the stored event — an edit that keeps a field keeps that field's id.
+ *
+ * 1.2: the edit rebuilds, inside the same transaction, for [LogEvent]'s reasons and one more —
+ * changing a completion's date or its meter reading changes what the engine derives from it, and
+ * re-pointing one at another schedule changes what *both* derive. Both schedules are the same
+ * Asset's, so the one closure covers them.
  */
 class UpdateEvent(
     private val events: EventRepository,
@@ -27,6 +32,7 @@ class UpdateEvent(
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
+    private val recompute: RecomputeSchedules,
 ) {
     suspend fun run(id: EventId, cmd: EventCommand): AssetEvent = uow.write {
         val existing = events.get(id) ?: throw NoSuchEvent(id)
@@ -38,6 +44,7 @@ class UpdateEvent(
         val profile = resolveOwnedProfile(cmd, definitions, profiles)
         val event = buildEvent(cmd, definitions, profile, existing, ids, clock.nowMillis())
         events.upsert(event)
+        recompute.forAsset(cmd.assetId)
         event
     }
 }

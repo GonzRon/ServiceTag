@@ -1,16 +1,22 @@
 package com.loosecannon.servicetag.data.room
 
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.data.room.dao.MaintenanceGroupDao
 import com.loosecannon.servicetag.data.room.dao.MaintenanceScheduleDao
 import com.loosecannon.servicetag.data.room.dao.OccurrenceClosureDao
+import com.loosecannon.servicetag.data.room.dao.ScheduleStateDao
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 // The adapters for the three **data** ports the export, the import and the merge plan need. They
 // carry the data half only — the queries the engine, the group screens and the occurrence rules
@@ -43,11 +49,39 @@ class RoomScheduleRepository(private val dao: MaintenanceScheduleDao) : Schedule
 
     override suspend fun all(): List<MaintenanceSchedule> = dao.all().map { it.toDomain() }
 
+    override suspend fun forAsset(assetId: AssetId): List<MaintenanceSchedule> =
+        dao.forAsset(assetId.value).map { it.toDomain() }
+
+    override suspend fun forGroup(groupId: GroupId): List<MaintenanceSchedule> =
+        dao.forGroup(groupId.value).map { it.toDomain() }
+
     /**
      * Clears the table. Its CASCADE is what clears `occurrence_closure` as well, which is the only
-     * way a closure row ever leaves — see [RoomClosureRepository].
+     * way a closure row ever leaves — see [RoomClosureRepository] — and `schedule_state` and
+     * `schedule_local_delivery` with it.
      */
     override suspend fun deleteAll() = dao.deleteAll()
+
+    override fun observeAll(): Flow<List<MaintenanceSchedule>> =
+        dao.observeAll().map { rows -> rows.map { it.toDomain() } }
+}
+
+/**
+ * The derived state. One writer, and it writes whole rows: there is no partial update here for the
+ * same reason there is none on the DAO or the port, so the recompute cannot be worked around.
+ */
+class RoomScheduleStateRepository(private val dao: ScheduleStateDao) : ScheduleStateRepository {
+    override suspend fun upsert(state: ScheduleState) = dao.upsert(state.toEntity())
+
+    override suspend fun get(scheduleId: ScheduleId): ScheduleState? =
+        dao.byId(scheduleId.value)?.toDomain()
+
+    override suspend fun all(): List<ScheduleState> = dao.all().map { it.toDomain() }
+
+    override suspend fun deleteAll() = dao.deleteAll()
+
+    override fun observeAll(): Flow<List<ScheduleState>> =
+        dao.observeAll().map { rows -> rows.map { it.toDomain() } }
 }
 
 /**

@@ -22,12 +22,14 @@ import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.usecase.ConsumableInput
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
+import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.ImportReport
 import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
@@ -39,6 +41,7 @@ import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
+import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
@@ -50,6 +53,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
 
 /**
  * Phase 1A's exit proof. Data is created in one database, exported, and imported into a brand-new
@@ -72,7 +76,14 @@ class RestoreProofTest {
         val groups = RoomGroupRepository(db.maintenanceGroupDao())
         val schedules = RoomScheduleRepository(db.maintenanceScheduleDao())
         val closures = RoomClosureRepository(db.occurrenceClosureDao())
+        val scheduleStates = RoomScheduleStateRepository(db.scheduleStateDao())
         val uow = RoomUnitOfWork(db)
+        // The restore's rebuild seam, wired to the real engine over the same database: the proof
+        // is about the canonical rows, and derived state is rebuilt after any import.
+        val recompute = RecomputeSchedules(
+            schedules, scheduleStates, events, closures, groups, assets,
+            Today { LocalDate.parse("2026-02-10") }, Clock { FIXED_NOW },
+        )
         // This proof is about the data archive. The set's artifacts half carries bytes, and
         // bytes are what `BackupViewModelTest` and `ArtifactsCodecTest` prove.
         val export = ExportBackupSet(
@@ -83,6 +94,7 @@ class RestoreProofTest {
         val import = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
             attachments, FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
+            rebuildAll = { recompute.all() },
         )
     }
 

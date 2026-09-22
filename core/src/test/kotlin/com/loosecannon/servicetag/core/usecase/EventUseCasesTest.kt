@@ -24,9 +24,21 @@ class EventUseCasesTest {
     private val clock = Clock { now }
 
     private val apply = ApplyTemplate(defs, profiles, assets, uow, ids, clock)
-    private val logEvent = LogEvent(events, defs, profiles, assets, uow, ids, clock)
-    private val updateEvent = UpdateEvent(events, defs, profiles, uow, ids, clock)
-    private val deleteEvent = DeleteEvent(events, attachments, storage, uow)
+
+    // 1.2: every event write rebuilds the schedules it can affect. This store holds no schedule,
+    // so the rebuild is a sweep over nothing — which is the point: the wiring is real, and the
+    // journal tests stay tests of the journal.
+    private val groups = InMemoryGroupRepository()
+    private val closures = InMemoryClosureRepository()
+    private val states = InMemoryScheduleStateRepository()
+    private val schedules = InMemoryScheduleRepository(closures, states)
+    private val recompute = RecomputeSchedules(
+        schedules, states, events, closures, groups, assets,
+        com.loosecannon.servicetag.core.ports.Today { java.time.LocalDate.parse("2026-02-10") }, clock,
+    )
+    private val logEvent = LogEvent(events, defs, profiles, assets, uow, ids, clock, recompute)
+    private val updateEvent = UpdateEvent(events, defs, profiles, uow, ids, clock, recompute)
+    private val deleteEvent = DeleteEvent(events, attachments, storage, uow, recompute)
 
     private suspend fun asset(id: String, name: String): Asset =
         Asset(id = AssetId(id), name = name, createdAt = now, updatedAt = now).also { assets.upsert(it) }

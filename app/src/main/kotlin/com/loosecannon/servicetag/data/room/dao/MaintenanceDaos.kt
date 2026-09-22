@@ -143,6 +143,11 @@ interface MaintenanceScheduleDao {
     @Query("SELECT * FROM maintenance_schedule WHERE group_id = :groupId ORDER BY title, id")
     suspend fun forGroup(groupId: String): List<ScheduleWithProviders>
 
+    /** Every schedule, for a screen that follows the table rather than asking again. */
+    @Transaction
+    @Query("SELECT * FROM maintenance_schedule ORDER BY title, id")
+    fun observeAll(): Flow<List<ScheduleWithProviders>>
+
     /**
      * Clears the table — and with it, by CASCADE, `schedule_provider`, `occurrence_closure`,
      * `schedule_state` and `schedule_local_delivery`. The provider rows are cleared explicitly for
