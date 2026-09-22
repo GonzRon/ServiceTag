@@ -1,11 +1,13 @@
 package com.loosecannon.servicetag.ui.maintenance
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.loosecannon.servicetag.ui.components.QuietLine
@@ -59,16 +61,29 @@ fun SchedulesSection(
  * · OUT OF SEASON, D12 §10) so `SectionHeader` suits them exactly. This destination's four are
  * ratified in sentence case — "Due work", "Schedules", "Maintenance groups", "Reminders" (§17.1f) —
  * and upper-casing a ratified string is paraphrasing it, which no brief may do.
+ *
+ * [trailing] is the section's own action, drawn at the end of the heading row as `SectionHeader`
+ * already does it — the asset screen's schedules section puts B14's "add a schedule" glyph there.
  */
 @Composable
-fun MaintenanceSectionTitle(title: String, modifier: Modifier = Modifier) {
+fun MaintenanceSectionTitle(
+    title: String,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
+) {
     Column(modifier = modifier.padding(top = 18.dp, bottom = 6.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 16.dp),
-        )
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            trailing?.invoke()
+        }
         HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
     }
 }

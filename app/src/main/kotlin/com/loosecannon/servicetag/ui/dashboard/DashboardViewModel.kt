@@ -75,10 +75,10 @@ data class AttentionGroup(val section: AttentionSection, val items: List<DueItem
  * schedule is `PAUSED`, or whose only round obliges nobody, is still on the landing screen — the
  * dashboard omits those *sections*, never the asset.
  *
- * [dueCount] counts the store and not the view: a filter narrows what is listed, and a total that
- * moved with the filter would not be a total. A group schedule contributes **once** however many
- * members are outstanding (D-15), and `PAUSED`, `INACTIVE_SEASON` and an empty required set
- * contribute nothing (invariants 22, 74).
+ * There is deliberately **no due total** here. "How many are due" is one rule — `DueItem.countsAsDue`
+ * — and nothing on this screen draws a number: §17 ratifies no wording for one, and a field no
+ * surface reads is a second place for the rule to drift to. The surface that wants a count applies
+ * that predicate to the projection itself.
  */
 data class DashboardState(
     val assets: List<DashboardRow> = emptyList(),
@@ -92,7 +92,6 @@ data class DashboardState(
     val needsBackup: Boolean = false,
     val lastBackupAt: Long? = null,
     val filters: DashboardFilters = DashboardFilters(),
-    val dueCount: Int = 0,
     /** The worst reminder-health finding, or null for none. The badge shows at >= WARN (#27). */
     val worstSeverity: Severity? = null,
 )
@@ -291,7 +290,6 @@ class DashboardViewModel(
             filters = chosen.copy(
                 categories = inService.map { it.category }.filter { it.isNotBlank() }.distinct().sorted(),
             ),
-            dueCount = items.count { it.countsAsDue },
             worstSeverity = view.worstSeverity,
         )
     }

@@ -351,8 +351,11 @@ private fun CurrentRow(row: DashboardRow, onClick: () -> Unit) {
             // that *has* a schedule but none the dashboard draws — every one of them paused, or a
             // round that obliges nobody — says neither: "No schedule yet" would be false, and §17
             // has no line for the true thing, so the subtitle is omitted rather than drafted.
-            row.parentName?.let { parent -> QuietLine("Part of $parent") }
-                ?: if (!row.hasSchedule) QuietLine("No schedule yet") else Unit
+            if (row.parentName != null) {
+                QuietLine("Part of ${row.parentName}")
+            } else if (!row.hasSchedule) {
+                QuietLine("No schedule yet")
+            }
         }
         Icon(
             imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,

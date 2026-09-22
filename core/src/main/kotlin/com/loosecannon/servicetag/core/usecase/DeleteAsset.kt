@@ -3,11 +3,32 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+
+/**
+ * The delete was refused because the asset still holds membership windows a recorded group round
+ * was derived from (invariant 8, D-16). [groups] names them, so a caller can say whose history it
+ * is.
+ *
+ * It is a **refusal**, not a validation problem: the command is well formed and the store's state
+ * is what forbids it, which is why it carries no [GroupProblem] and answers 409 on the wire rather
+ * than 422. Without it the membership rows would go silently, by the membership table's cascade
+ * from its asset — and a past occurrence's `required(D)` is derived from exactly those rows, so the
+ * cascade would rewrite a round already recorded as done.
+ */
+class AssetMembershipReferenced(val assetId: AssetId, val groups: List<GroupId>) :
+    IllegalStateException(
+        "asset ${assetId.value} holds membership windows recorded group rounds were derived from: " +
+            groups.map { it.value },
+    )
 
 /**
  * The one destructive asset action, behind the typed confirmation flow. Children-first (spec §5):
@@ -15,6 +36,12 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * a cascade they did not picture. Everything that hangs off the asset itself — its tags, links,
  * definitions, profiles, events and attachment rows — goes with it, by the schema's own cascades;
  * the attachment *bytes* are nothing the schema can cascade, so they are swept here.
+ *
+ * **Membership second** (1.2, invariant 8). Its group membership rows would go by that same
+ * cascade, and a past occurrence's required set is derived from them and from nothing else — so an
+ * asset whose windows are part of the basis of a recorded round is refused for the same reason a
+ * parent with children is: the destruction is larger than the one the person pictured. Archiving or
+ * retiring the asset is the operation that does what they meant, and neither touches a window.
  */
 class DeleteAsset(
     private val assets: AssetRepository,
@@ -22,12 +49,17 @@ class DeleteAsset(
     private val attachments: AttachmentRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
+    private val groups: GroupRepository,
+    private val schedules: ScheduleRepository,
+    private val closures: ClosureRepository,
 ) {
     suspend fun run(id: AssetId) {
         val all = assets.all()
         if (all.none { it.id == id }) throw NoSuchAsset(id)
         val children = AssetTree.children(all, id)
         if (children.isNotEmpty()) throw AssetHasChildren(id, children.map { it.id })
+        val referenced = groupsReferencing(id)
+        if (referenced.isNotEmpty()) throw AssetMembershipReferenced(id, referenced)
 
         // The locators are read *before* the cascade takes the rows with it, inside the same
         // transaction that deletes them: after the commit there is nothing left to ask.
@@ -44,4 +76,31 @@ class DeleteAsset(
         // not a reason to keep an asset the person deleted.
         storage.sweepBytes(doomed)
     }
+
+    /**
+     * The groups holding a recorded round this asset's windows are part of the basis of.
+     *
+     * The question is asked of the **group**, not of this asset's own windows, and deliberately so:
+     * `required(D)` is derived from every window in the group, so removing any one of them changes
+     * the answer for every round that group has recorded. `allWindowsFor` is therefore the right
+     * side to start from — a closed window is as load-bearing as an open one (D-10).
+     *
+     * "Recorded" means one of the two facts §7's `terminations` reads: a member completion carrying
+     * the schedule's id, or a closure row. A group whose schedules have neither has no round to
+     * rewrite, so an asset can still be deleted out of a group nobody has serviced yet.
+     */
+    private suspend fun groupsReferencing(id: AssetId): List<GroupId> =
+        groups.allWindowsFor(id)
+            .filter { group ->
+                val groupSchedules = schedules.forGroup(group.id).map { it.id }.toSet()
+                groupSchedules.isNotEmpty() && (
+                    groupSchedules.any { closures.forSchedule(it).isNotEmpty() } ||
+                        group.members.map { it.assetId }.distinct().any { member ->
+                            events.forAsset(member).any { event ->
+                                event.scheduleId?.let { it in groupSchedules } == true
+                            }
+                        }
+                    )
+            }
+            .map { it.id }
 }

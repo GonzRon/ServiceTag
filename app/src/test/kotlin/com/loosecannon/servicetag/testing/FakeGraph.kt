@@ -74,6 +74,7 @@ import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
 import com.loosecannon.servicetag.prefs.AppPrefs
+import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import com.loosecannon.servicetag.reminders.ReminderSnooze
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
@@ -133,6 +134,16 @@ class FakeGraph(
     )
 
     /**
+     * 1.2 — the one due projection, mirroring `AppGraph`'s field so a view-model test takes the
+     * same collaborator the app does. The snooze seam answers "no snooze", exactly as `AppGraph`
+     * does until B06's table lands.
+     */
+    val dueReadModel: DueReadModel = DueReadModel(
+        schedules, scheduleStates, assets, groups, definitions, recomputeSchedules, todayPort,
+        snoozedUntilOf = { null },
+    )
+
+    /**
      * The store a test drives by hand: `state` is a `var` and the bytes are a map, so a refusal
      * and a successful write are both one line away. `SafAttachmentStorage` itself is proved by
      * `SafAttachmentStorageTest` and on the emulator.
@@ -154,7 +165,8 @@ class FakeGraph(
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
     val retireAsset: RetireAsset =
         RetireAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
-    val deleteAsset: DeleteAsset = DeleteAsset(assets, events, attachments, attachmentStorage, uow)
+    val deleteAsset: DeleteAsset =
+        DeleteAsset(assets, events, attachments, attachmentStorage, uow, groups, schedules, closures)
 
     /** The same identity the app builds, read from the same BuildConfig fields (C9). */
     val tagIdentity: TagIdentity = TagIdentity(
@@ -234,8 +246,9 @@ class FakeGraph(
         ImportBackupMerge(buildBackupMergePlan, applyBackupMergePlan)
 
     /**
-     * 1.2 — the group completion path, so a read-model test can mark members done through the
-     * production use case rather than hand-writing an `occurrence_on`. Mirrors `AppGraph`'s field.
+     * 1.2 — the group completion path, so a read-model or view-model test marks members done
+     * through the production use case rather than hand-writing an `occurrence_on`. Mirrors
+     * `AppGraph`'s field; the schedule and group use cases it sits beside are declared below.
      */
     val completeGroupMembers: CompleteGroupMembers = CompleteGroupMembers(
         schedules, groups, events, closures, definitions, profiles, uow, ids, clock, recomputeSchedules,

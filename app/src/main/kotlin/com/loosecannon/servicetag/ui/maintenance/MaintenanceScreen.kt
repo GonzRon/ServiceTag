@@ -65,6 +65,7 @@ fun MaintenanceScreen(
     graph: AppGraph,
     onOpenSchedule: (String) -> Unit,
     onOpenGroup: (String) -> Unit,
+    onNewGroup: () -> Unit,
     onReminderHealth: () -> Unit,
     onScanTag: () -> Unit,
     onAddAsset: () -> Unit,
@@ -137,17 +138,15 @@ fun MaintenanceScreen(
                 )
             }
 
-            // Omitted entirely on a phone with no groups: a heading over nothing is the bare
-            // heading this file's own rule forbids, and §17.1f has no empty-state line for it.
-            if (state.groups.isNotEmpty()) {
-                MaintenanceSectionTitle(GROUPS_SECTION)
-                state.groups.forEachIndexed { index, group ->
-                    if (index > 0) {
-                        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
-                    }
-                    NavigatingRow(title = group.name, onClick = { onOpenGroup(group.id.value) })
-                }
-            }
+            // B15's group list, in this section. The heading is always drawn now, because the
+            // section always has something in it: with no groups yet the list is just its own
+            // "add" affordance, which is the one place a first group can be made.
+            MaintenanceSectionTitle(GROUPS_SECTION)
+            GroupList(
+                groups = state.groups,
+                onOpenGroup = onOpenGroup,
+                onNewGroup = onNewGroup,
+            )
 
             // The fourth section is one row and needs no heading of its own: the row's name *is*
             // the ratified section label, and a heading above it would say the same word twice.

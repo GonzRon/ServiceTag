@@ -413,7 +413,8 @@ class AppGraph(private val context: Context) {
     // the one destructive asset action: it refuses a parent that still has children.
     val retireAsset: RetireAsset =
         RetireAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
-    val deleteAsset: DeleteAsset = DeleteAsset(assets, events, attachments, attachmentStorage, uow)
+    val deleteAsset: DeleteAsset =
+        DeleteAsset(assets, events, attachments, attachmentStorage, uow, groups, schedules, closures)
 
     // Phase 2A — the maintenance journal.
     val logEvent: LogEvent =

@@ -97,7 +97,6 @@ class MaintenanceViewModelTest {
         )
         assertEquals("PAUSED", statusLabel(state.schedules.single { it.title == "Winter service" }.status))
         assertFalse("and a paused schedule is in no due total", state.schedules.single { it.title == "Winter service" }.countsAsDue)
-        assertEquals(1, state.dueCount)
     }
 
     /**
@@ -117,8 +116,15 @@ class MaintenanceViewModelTest {
         assertEquals(emptyList<String>(), state.dueWork.filter { it.title == "Retired work" }.map { it.title })
     }
 
-    /** Groups are listed, an archived one is not, and the count is the windows that are open. */
-    @Test fun groupsAreListedWhileTheyAreNotArchived() = runTest {
+    /**
+     * Every group is listed, **archived ones included and marked** (master plan decision 39), and
+     * the count is the windows that are open now.
+     *
+     * What archiving takes away is the group's due work, which the projection drops; the group
+     * itself stays findable, because #55 requires an archived group to keep its maintenance history
+     * and history nobody can reach is not kept.
+     */
+    @Test fun everyGroupIsListedAndAnArchivedOneIsMarked() = runTest {
         val heads = (1..3).map { graph.createAsset.run(AssetCommand(name = "Sprinkler $it", category = "Irrigation")) }
         graph.groups.upsert(
             groupOf(
@@ -135,8 +141,10 @@ class MaintenanceViewModelTest {
         backgroundScope.launch { vm.state.collect() }
 
         val state = vm.state.first { it.groups.isNotEmpty() }
-        assertEquals(listOf("North run"), state.groups.map { it.name })
-        assertEquals("the removed window is history, not membership", 2, state.groups.single().memberCount)
+        assertEquals(listOf("North run", "Old run"), state.groups.map { it.name })
+        assertEquals(listOf(false, true), state.groups.map { it.archived })
+        val live = state.groups.single { it.name == "North run" }
+        assertEquals("the removed window is history, not membership", 2, live.memberCount)
     }
 
     /**

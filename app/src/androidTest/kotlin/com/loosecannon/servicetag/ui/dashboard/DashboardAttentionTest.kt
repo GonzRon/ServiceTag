@@ -215,17 +215,18 @@ class DashboardAttentionTest {
      * Grayscale acceptance (#5 AC 2, D12 §5, the D12 acceptance): every state on screen carries a
      * **word** of its own as well as a colour, and the words differ. With the palette removed the
      * wording plus the glyph plus the row's position is what tells the states apart, so nothing here
-     * is distinguished by colour alone. One row reads OVERDUE (the component's overdue check) and two
- * read DUE (the group round, which is due today, and the meter past its threshold — a meter has no
- * overdue degree). `awaitText` is exact-match, so the DUE count does not pick up "OVERDUE".
+     * is distinguished by colour alone. One row reads OVERDUE (the component's overdue check) and
+     * two read DUE (the group round, which is due today, and the meter past its threshold — a meter
+     * has no overdue degree). `awaitText` is exact-match, so the DUE count does not pick up
+     * "OVERDUE".
      */
     @Test fun everyStateOnScreenCarriesItsOwnWord() {
         draw(aStoreWithAttentionWork())
 
         rule.awaitText("OVERDUE")
         rule.awaitText("DUE", count = 2)
-        // The component's row and the group's round are overdue; the meter past its threshold is
-        // DUE, because a meter has no overdue degree.
+        // Exactly one row is OVERDUE — the component's overdue check. The group's round and the
+        // meter past its threshold both read DUE.
         rule.onAllNodesWithText("OVERDUE").assertCountEquals(1)
     }
 

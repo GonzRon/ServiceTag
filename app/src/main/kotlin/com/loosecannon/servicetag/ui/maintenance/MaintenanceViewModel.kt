@@ -20,8 +20,22 @@ import kotlinx.coroutines.flow.update
 /** How long the repository flows stay hot after the last collector leaves (a rotation, typically). */
 private const val SUBSCRIPTION_GRACE_MS = 5_000L
 
-/** One maintenance group as the shell lists it: its name and how many members it currently holds. */
-data class MaintenanceGroupRow(val id: GroupId, val name: String, val memberCount: Int)
+/**
+ * One maintenance group as the shell lists it: its name, how many members it currently holds, and
+ * whether it is archived.
+ *
+ * [archived] is carried rather than filtered on (master plan decision 39). Spec §2.3's "archiving
+ * hides it and its schedules" is applied to the **schedules** and the due work — `DueReadModel`
+ * drops a group target whose group is archived — but the group itself stays listed and visibly
+ * distinguished: #55 requires an archived group to keep its maintenance history, and a group the
+ * owner cannot find is a group whose history is unreachable. 1.2 has no filter UI to hide it behind.
+ */
+data class MaintenanceGroupRow(
+    val id: GroupId,
+    val name: String,
+    val memberCount: Int,
+    val archived: Boolean,
+)
 
 /**
  * What the Maintenance destination draws: its four sections' contents, plus the two facts its
@@ -41,7 +55,6 @@ data class MaintenanceState(
     val dueWork: List<DueItem> = emptyList(),
     val schedules: List<DueItem> = emptyList(),
     val groups: List<MaintenanceGroupRow> = emptyList(),
-    val dueCount: Int = 0,
     val worstSeverity: Severity? = null,
     /** Whether notifications are denied at the OS level, which D-22's one line explains. */
     val notificationsBlocked: Boolean = false,
@@ -93,8 +106,7 @@ class MaintenanceViewModel(
             refreshes,
             noticeDismissed,
         ) { _, groupRows, _, dismissed ->
-            // An archived group keeps its history and leaves the listing (D-16).
-            groupRows.filter { it.archivedAt == null } to dismissed
+            groupRows to dismissed
         }
             .map { (groupRows, dismissed) ->
                 val items = due.items()
@@ -103,17 +115,23 @@ class MaintenanceViewModel(
                         it.section == AttentionSection.ATTENTION || it.section == AttentionSection.UPCOMING
                     },
                     schedules = items,
-                    groups = groupRows.map { group ->
-                        MaintenanceGroupRow(
-                            id = group.id,
-                            name = group.name,
-                            // The windows that are open now. A closed window is history, not
-                            // membership, and nothing here is the occurrence's required set — that
-                            // is per round and the projection derives it.
-                            memberCount = group.members.count { it.removedAt == null },
-                        )
-                    },
-                    dueCount = items.count { it.countsAsDue },
+                    // Every group, archived included and marked as such (decision 39). What
+                    // archiving takes away is the group's *due work*, which the projection above
+                    // already drops; taking the group itself off the list as well would put the
+                    // history D-16 preserves out of reach.
+                    groups = groupRows
+                        .sortedWith(compareBy({ it.name.lowercase() }, { it.id.value }))
+                        .map { group ->
+                            MaintenanceGroupRow(
+                                id = group.id,
+                                name = group.name,
+                                // The windows that are open now. A closed window is history, not
+                                // membership, and nothing here is the occurrence's required set —
+                                // that is per round and the projection derives it.
+                                memberCount = group.members.count { it.removedAt == null },
+                                archived = group.archivedAt != null,
+                            )
+                        },
                     worstSeverity = health.worstSeverity(),
                     notificationsBlocked = !dismissed && !notifications.granted(),
                     loaded = true,

@@ -130,6 +130,9 @@ fun AssetDetailScreen(
     onLogOutcome: (assetId: String, kind: String) -> Unit,
     /** DOCUMENTS sends the person here when there is no attachment folder yet (spec §8.1). */
     onOpenSettings: () -> Unit,
+    /** 1.2 — a schedule row opens the schedule; a group row opens the group (#55's two directions). */
+    onOpenSchedule: (String) -> Unit,
+    onOpenGroup: (String) -> Unit,
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -202,64 +205,70 @@ fun AssetDetailScreen(
             onDelete = model::delete,
             onLogOutcome = { kind -> model.dismissPrompt(); onLogOutcome(assetId, kind) },
         )
+        // The screen's 16dp gutter is applied per block rather than to the whole scroll, because
+        // 1.2's two maintenance sections draw their **own** gutter: they reuse the Maintenance
+        // destination's heading and its due row verbatim, so a group's work reads the same on this
+        // screen as on that one, and a second inset would push them 32dp in.
         Column(
             modifier = Modifier
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(vertical = 8.dp),
         ) {
-            AssetPlate(current)
-            current.parentName?.let { parent ->
-                PartOfLine(parent) { current.parentId?.let(onOpenAsset) }
-            }
-            ReadingsSection(current.readings)
-            Spacer(Modifier.height(10.dp))
-            // No schedules in 2A, so nothing can be due: one quiet line, never a red one (G1 §1.1).
-            // **B15 replaces this line with the schedules section**; what 1.2 adds here is the
-            // create entry beside it, because without one there is no way to make a schedule at all
-            // and the ratified empty state ("Add one from an asset or a maintenance group") sends
-            // the owner to exactly this screen.
-            //
-            // It is a glyph and not a labelled button **because §17 ratifies no wording for it** and
-            // no brief invents one: the accessibility label is the ratified section word, and the
-            // missing label is a finding for the controller rather than a string drafted here.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                QuietLine("No schedule yet", modifier = Modifier.weight(1f))
-                IconButton(onClick = { onAddSchedule(assetId) }) {
-                    Icon(Icons.Outlined.Add, contentDescription = SCHEDULES_SECTION)
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                AssetPlate(current)
+                current.parentName?.let { parent ->
+                    PartOfLine(parent) { current.parentId?.let(onOpenAsset) }
                 }
+                ReadingsSection(current.readings)
+                Spacer(Modifier.height(14.dp))
+                ActionGrid(
+                    actions = detailActions(
+                        assetId = assetId,
+                        profiles = current.profiles,
+                        bare = current.bare,
+                        onLogEvent = onLogEvent,
+                        onEdit = onEdit,
+                        onSetup = onSetup,
+                        onWriteTag = onWriteTag,
+                        onBackup = onBackup,
+                        onSetUp = { pickingTemplate = true },
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                DetailsSection(current)
             }
-            Spacer(Modifier.height(14.dp))
-            ActionGrid(
-                actions = detailActions(
-                    assetId = assetId,
-                    profiles = current.profiles,
-                    bare = current.bare,
-                    onLogEvent = onLogEvent,
-                    onEdit = onEdit,
-                    onSetup = onSetup,
-                    onWriteTag = onWriteTag,
-                    onBackup = onBackup,
-                    onSetUp = { pickingTemplate = true },
-                ),
-                modifier = Modifier.fillMaxWidth(),
+            // 1.2 — what is scheduled on this asset, and who it shares work with (spec §2.6).
+            //
+            // The standalone "No schedule yet" line that used to sit above the actions is now this
+            // section's empty state — the same shipped sentence, under the heading it belongs to —
+            // and B14's create entry, which stood beside that line, is now the section heading's
+            // trailing action, where B14's own note asks B15 to carry it. It stays a glyph labelled
+            // with the ratified section word, because §17 ratifies no wording for it.
+            AssetMaintenanceSections(
+                schedules = current.schedules,
+                groups = current.groups,
+                onOpenSchedule = onOpenSchedule,
+                onOpenGroup = onOpenGroup,
+                onAddSchedule = { onAddSchedule(assetId) },
             )
-            DetailsSection(current)
-            ComponentsSection(
-                components = current.components,
-                onOpenAsset = onOpenAsset,
-                onAddComponent = { onAddComponent(assetId) },
-            )
-            ServiceRecordSection(current.events, current.definitions, onOpenEvent)
-            TagsSection(current.tags, onEditLabel = model::editTagLabel)
-            AttachmentsSection(
-                graph = graph,
-                owner = AttachmentOwner.OfAsset(current.asset.id),
-                snackbars = snackbars,
-                onOpenSettings = onOpenSettings,
-            )
-            NotesSection(current.asset.notes)
-            Spacer(Modifier.height(24.dp))
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                ComponentsSection(
+                    components = current.components,
+                    onOpenAsset = onOpenAsset,
+                    onAddComponent = { onAddComponent(assetId) },
+                )
+                ServiceRecordSection(current.events, current.definitions, onOpenEvent)
+                TagsSection(current.tags, onEditLabel = model::editTagLabel)
+                AttachmentsSection(
+                    graph = graph,
+                    owner = AttachmentOwner.OfAsset(current.asset.id),
+                    snackbars = snackbars,
+                    onOpenSettings = onOpenSettings,
+                )
+                NotesSection(current.asset.notes)
+                Spacer(Modifier.height(24.dp))
+            }
         }
     }
 }

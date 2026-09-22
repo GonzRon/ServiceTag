@@ -27,6 +27,8 @@ import com.loosecannon.servicetag.ui.backup.BackupScreen
 import com.loosecannon.servicetag.ui.dashboard.DashboardScreen
 import com.loosecannon.servicetag.ui.journal.EventDetailScreen
 import com.loosecannon.servicetag.ui.journal.EventEntryScreen
+import com.loosecannon.servicetag.ui.maintenance.GroupDetailScreen
+import com.loosecannon.servicetag.ui.maintenance.GroupEditScreen
 import com.loosecannon.servicetag.ui.maintenance.LogMaintenancePicker
 import com.loosecannon.servicetag.ui.maintenance.MaintenanceScreen
 import com.loosecannon.servicetag.ui.maintenance.ScheduleDetailScreen
@@ -130,6 +132,7 @@ fun ServiceTagRoot(
                         graph = graph,
                         onOpenSchedule = { backStack.add(Route.ScheduleDetail(it)) },
                         onOpenGroup = { backStack.add(Route.GroupDetail(it)) },
+                        onNewGroup = { backStack.add(Route.GroupEdit(null)) },
                         onReminderHealth = { backStack.add(Route.ReminderHealth) },
                         // F4 reuses the shipped routes for two of the three actions.
                         onScanTag = { backStack.add(Route.Scan) },
@@ -189,6 +192,9 @@ fun ServiceTagRoot(
                         },
                         // DOCUMENTS with no attachment folder yet: 4A adds no route of its own.
                         onOpenSettings = { backStack.add(Route.Settings) },
+                        // 1.2's two sections: a schedule opens B14's screen, a group opens B15's.
+                        onOpenSchedule = { backStack.add(Route.ScheduleDetail(it)) },
+                        onOpenGroup = { backStack.add(Route.GroupDetail(it)) },
                     )
                 }
                 entry<Route.AssetEdit> { key ->
@@ -320,14 +326,14 @@ fun ServiceTagRoot(
                         onBack = { backStack.removeLastOrNull() },
                     )
                 }
-                // The keys the Maintenance shell routes onward to. B14 has replaced its two — the
-                // schedule detail and the editor, above — and the remaining four belong to B15
-                // (the group screens), B10 (reminder health) and B09 (the scan sheet); each of
-                // those briefs replaces the placeholder below with its own `entry`.
+                // The two keys the Maintenance shell still routes onward to without a screen.
+                // B14 has replaced its two — the schedule detail and the editor, below — and this
+                // brief the two group keys; what is left belongs to B10 (reminder health) and B09
+                // (the scan sheet), each of which replaces its placeholder with its own `entry`.
                 //
                 // They are registered rather than left out because `entryProvider` is total: an
                 // unregistered key on the back stack is a crash, and the shell is merged before
-                // any of the four. The placeholder does what an unsupported write route does —
+                // either of the two. The placeholder does what an unsupported write route does —
                 // draws nothing and leaves the stack a frame later — so a push is a no-op and not
                 // a blank screen the owner has to back out of.
                 entry<Route.ScheduleDetail> { key ->
@@ -359,8 +365,33 @@ fun ServiceTagRoot(
                         onBack = { backStack.removeLastOrNull() },
                     )
                 }
-                entry<Route.GroupDetail> { key -> PlaceholderPop(key, backStack) }
-                entry<Route.GroupEdit> { key -> PlaceholderPop(key, backStack) }
+                entry<Route.GroupDetail> { key ->
+                    GroupDetailScreen(
+                        graph = graph,
+                        groupId = key.id,
+                        onBack = { backStack.removeLastOrNull() },
+                        onEdit = { backStack.add(Route.GroupEdit(it)) },
+                        // A member row opens the real equipment's own screen: a group is not an
+                        // Asset and has nothing of its own to show about the thing (invariant 4).
+                        onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
+                        // A round's checklist opens the schedule, which is where the round itself
+                        // — its date affordance and its close — lives (B14).
+                        onOpenSchedule = { backStack.add(Route.ScheduleDetail(it)) },
+                    )
+                }
+                entry<Route.GroupEdit> { key ->
+                    GroupEditScreen(
+                        graph = graph,
+                        groupId = key.id,
+                        // A new group opens on its own detail screen and the form leaves the
+                        // stack, exactly as a new asset does; an edit simply goes back.
+                        onDone = { id ->
+                            backStack.removeLastOrNull()
+                            if (key.id == null) backStack.add(Route.GroupDetail(id))
+                        },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
+                }
                 entry<Route.ReminderHealth> { key -> PlaceholderPop(key, backStack) }
                 entry<Route.MaintenanceSheet> { key -> PlaceholderPop(key, backStack) }
             },

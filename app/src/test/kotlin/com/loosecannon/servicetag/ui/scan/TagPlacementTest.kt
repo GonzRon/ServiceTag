@@ -61,6 +61,7 @@ class TagPlacementTest {
     private fun detailModel(id: AssetId) = AssetDetailViewModel(
         graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
+        graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
         graph.applyTemplate, graph.uow, graph.clock, id,
     )

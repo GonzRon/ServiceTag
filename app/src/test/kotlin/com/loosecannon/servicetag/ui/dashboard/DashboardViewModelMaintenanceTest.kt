@@ -232,7 +232,11 @@ class DashboardViewModelMaintenanceTest {
         backgroundScope.launch { vm.state.collect() }
 
         val state = vm.state.first { it.sections.isNotEmpty() }
-        assertEquals("the group's one outstanding round, and nothing else", 1, state.dueCount)
+        assertEquals(
+            "the group's one outstanding round, and nothing else",
+            1,
+            state.sections.flatMap { it.items }.count { it.countsAsDue },
+        )
 
         val group = state.sections.flatMap { it.items }.single { it.scheduleId.value == "s-group" }
         assertEquals(5, group.membersRequired)
@@ -315,7 +319,7 @@ class DashboardViewModelMaintenanceTest {
         // It does have a schedule, so the row must not claim otherwise — the screen omits the
         // shipped "No schedule yet" line for exactly this row.
         assertTrue("the row knows it has a schedule", state.assets.single().hasSchedule)
-        assertEquals(0, state.dueCount)
+        assertTrue(state.sections.flatMap { it.items }.none { it.countsAsDue })
     }
 
     /**
@@ -353,7 +357,7 @@ class DashboardViewModelMaintenanceTest {
         assertEquals(listOf("Sprinkler 1"), state.assets.map { it.asset.name })
         assertFalse(state.assets.single().hasSchedule)
         assertEquals(head.id, state.assets.single().asset.id)
-        assertEquals(0, state.dueCount)
+        assertTrue(state.sections.flatMap { it.items }.none { it.countsAsDue })
     }
 
     /**

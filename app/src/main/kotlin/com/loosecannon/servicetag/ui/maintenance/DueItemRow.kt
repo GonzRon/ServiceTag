@@ -178,8 +178,19 @@ fun progressLine(item: DueItem): String? {
     if (item.requiredSetEmpty) return null
     val required = item.membersRequired ?: return null
     val complete = item.membersComplete ?: return null
-    return "$complete of $required complete"
+    return progressLine(complete, required)
 }
+
+/**
+ * The same ratified form, from the two numbers themselves — what the group detail renders, where
+ * the round comes from `GroupOccurrence` rather than from a projected [DueItem].
+ *
+ * One function, because it is one ratified string: two call sites formatting "<n> of <m> complete"
+ * separately is how a surface comes to paraphrase it. Null for an empty required set here too, for
+ * the reason above: "0 of 0 complete" reads as done.
+ */
+fun progressLine(complete: Int, required: Int): String? =
+    if (required == 0) null else "$complete of $required complete"
 
 /**
  * One schedule, wherever it is listed: the dashboard's attention sections, the Maintenance

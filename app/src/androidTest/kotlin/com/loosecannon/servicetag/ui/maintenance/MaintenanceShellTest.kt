@@ -95,6 +95,7 @@ class MaintenanceShellTest {
                     graph = graph,
                     onOpenSchedule = { record += "schedule:$it" },
                     onOpenGroup = { record += "group:$it" },
+                    onNewGroup = { record += "new-group" },
                     onReminderHealth = { record += "health" },
                     onScanTag = { record += "scan" },
                     onAddAsset = { record += "asset" },
@@ -205,6 +206,7 @@ class MaintenanceShellTest {
                     graph = graph,
                     onOpenSchedule = { record += "schedule:$it" },
                     onOpenGroup = { record += "group:$it" },
+                    onNewGroup = { record += "new-group" },
                     onReminderHealth = { record += "health" },
                     onScanTag = {},
                     onAddAsset = {},
@@ -260,6 +262,7 @@ class MaintenanceShellTest {
                     graph = graph,
                     onOpenSchedule = { record += "schedule:$it" },
                     onOpenGroup = { record += "group:$it" },
+                    onNewGroup = { record += "new-group" },
                     onReminderHealth = { record += "health" },
                     onScanTag = {},
                     onAddAsset = {},
@@ -295,13 +298,14 @@ class MaintenanceTabTest {
 
         // The destination's own title: "Maintenance" now appears twice — the tab and the title —
         // which is what the count asserts. This install is fresh, so what the destination shows is
-        // its ratified empty state and the Reminders row; the group heading is correctly absent,
-        // because a heading over nothing is a heading for nothing, and the seeded-store class
-        // asserts all four sections.
+        // its ratified empty state, the groups section and the Reminders row. The groups heading is
+        // present even with no groups, because B15's list always has one row in it: the affordance
+        // that makes the first group.
         rule.awaitText("Maintenance", count = 2)
         rule.awaitText("No maintenance schedules yet. Add one from an asset or a maintenance group.")
         rule.awaitText("Reminders")
-        rule.onAllNodesWithText("Maintenance groups").assertCountEquals(0)
+        rule.awaitText("Maintenance groups")
+        rule.onAllNodesWithText("Maintenance group").assertCountEquals(1)
 
         // Scan is still not a tab (D12 §16 correction): the third slot is Maintenance, not Scan.
         rule.onAllNodes(hasText("Scan") and hasClickAction()).assertCountEquals(0)

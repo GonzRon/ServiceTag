@@ -13,8 +13,10 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.EventProfile
+import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.Season as SeasonWindow
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
@@ -23,7 +25,10 @@ import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.usecase.ApplyResult
@@ -32,6 +37,7 @@ import com.loosecannon.servicetag.core.usecase.ArchiveAsset
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.AssetCycle
 import com.loosecannon.servicetag.core.usecase.AssetHasChildren
+import com.loosecannon.servicetag.core.usecase.AssetMembershipReferenced
 import com.loosecannon.servicetag.core.usecase.AssetProblem
 import com.loosecannon.servicetag.core.usecase.AssetValidation
 import com.loosecannon.servicetag.core.usecase.CreateAsset
@@ -39,6 +45,8 @@ import com.loosecannon.servicetag.core.usecase.DeleteAsset
 import com.loosecannon.servicetag.core.usecase.RetireAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.maintenance.DueItem
+import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -182,6 +190,13 @@ sealed interface DetailPrompt {
     data class DeleteRefused(val children: List<String>) : DetailPrompt
 }
 
+/**
+ * One group this asset is an **open** member of, as the asset screen lists it (#55's asset -> groups
+ * direction). A closed window is history and is not here: listing one would make a removed asset
+ * look like a current member.
+ */
+data class AssetGroupRow(val id: GroupId, val name: String)
+
 /** Everything the detail screen draws about one asset, or null while it is still unknown. */
 data class AssetDetailState(
     val asset: Asset,
@@ -208,6 +223,14 @@ data class AssetDetailState(
     val outOfSeason: Boolean = false,
     /** The warranty date has passed, so DETAILS says "(expired)" rather than making the user count. */
     val warrantyExpired: Boolean = false,
+    /**
+     * 1.2 — the asset's **own** schedules, from the shared projection (master plan decision 38).
+     * A group-targeted schedule it is a member of is not here: that obligation is counted once, on
+     * the group, and [groups] is how it is reached.
+     */
+    val schedules: List<DueItem> = emptyList(),
+    /** 1.2 — the groups this asset holds an **open** membership window in. */
+    val groups: List<AssetGroupRow> = emptyList(),
 )
 
 /**
@@ -225,6 +248,10 @@ class AssetDetailViewModel(
     private val definitions: DefinitionRepository,
     profiles: ProfileRepository,
     private val events: EventRepository,
+    schedules: ScheduleRepository,
+    states: ScheduleStateRepository,
+    groups: GroupRepository,
+    private val due: DueReadModel,
     private val archiveAsset: ArchiveAsset,
     private val retireAsset: RetireAsset,
     private val deleteAsset: DeleteAsset,
@@ -238,6 +265,7 @@ class AssetDetailViewModel(
     constructor(graph: AppGraph, id: String) : this(
         graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
+        graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
         graph.applyTemplate, graph.uow, graph.clock, AssetId(id),
     )
@@ -256,8 +284,21 @@ class AssetDetailViewModel(
         events.observeForAsset(id),
     ) { defs, profileRows, eventRows -> Journal(defs, profileRows, eventRows) }
 
+    /**
+     * The two maintenance tables and this asset's open memberships, folded into one signal.
+     *
+     * None of the three is what a section *says* — each is the cue to re-derive from the shared
+     * projection (invariant 18). The group flow carries the rows as well, because the groups section
+     * is exactly `GroupRepository.observeForAsset`'s answer and nothing more.
+     */
+    private val maintenance = combine(
+        schedules.observeAll(),
+        states.observeAll(),
+        groups.observeForAsset(id),
+    ) { _, _, groupRows -> groupRows }
+
     val state: StateFlow<AssetDetailState?> =
-        combine(rows, tags.observeForAsset(id), journal) { all, tagRows, j ->
+        combine(rows, tags.observeForAsset(id), journal, maintenance) { all, tagRows, j, groupRows ->
             val row = all.firstOrNull { it.id == id } ?: return@combine null
             val today = clock.nowMillis().asLocalDate(zone)
             val parent = row.parentAssetId?.let { parentId -> all.firstOrNull { it.id == parentId } }
@@ -276,6 +317,13 @@ class AssetDetailViewModel(
                 components = componentsOf(all),
                 outOfSeason = outOfSeasonOn(row, today),
                 warrantyExpired = row.warrantyExpiresOn?.let { expiredOn(it, today) } == true,
+                // Asset-targeted only (decision 38). `forAsset` deliberately answers with the group
+                // schedules too, because the scan sheet wants both; this screen counts a group
+                // obligation once, on the group.
+                schedules = due.forAsset(id).filter { it.target is ScheduleTarget.AssetTarget },
+                groups = groupRows
+                    .sortedWith(compareBy({ it.name.lowercase() }, { it.id.value }))
+                    .map { AssetGroupRow(it.id, it.name) },
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), null)
 
@@ -366,6 +414,11 @@ class AssetDetailViewModel(
                     val names = namesOf(failure.children)
                     _prompt.update { DetailPrompt.DeleteRefused(names) }
                 }
+                // Invariant 8: the asset's membership windows are part of the basis of a recorded
+                // group round, so the delete does not proceed. It says the shipped line and no
+                // more: the string table ratifies no sentence for this refusal, and a brief may not
+                // draft one.
+                is AssetMembershipReferenced -> refuse("Could not delete this asset.")
                 else -> refuse("Could not delete this asset.")
             }
         }
