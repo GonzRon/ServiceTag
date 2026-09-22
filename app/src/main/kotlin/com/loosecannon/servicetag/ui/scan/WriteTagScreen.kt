@@ -14,6 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -66,6 +67,7 @@ fun WriteTagScreen(
     val state by model.state.collectAsStateWithLifecycle()
     val lock by model.lock.collectAsStateWithLifecycle()
     val targetName by model.targetName.collectAsStateWithLifecycle()
+    val placement by model.placement.collectAsStateWithLifecycle()
 
     // The activity owns the one reader-mode session (#37, R1): arriving here from the inspect
     // screen is a change of sink, not a hand-over of NFC, so nothing can land between the two.
@@ -88,6 +90,7 @@ fun WriteTagScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             TargetLine(targetName)
+            PlacementField(value = placement, onValueChange = model::setPlacement)
             WriteStatus(state, targetName, onDone)
             NfcAvailabilityLine(readerMode)
             LockSwitch(
@@ -133,6 +136,24 @@ private fun TargetLine(targetName: String) {
             Text(text = targetName, style = MaterialTheme.typography.titleSmall)
         }
     }
+}
+
+/**
+ * Optional, and it stays optional (#49): an ordinary one-tag asset leaves this blank. Typed here
+ * before the first tap, it is carried into the row [TagWriteController] provisions as the new
+ * row's placement — the same "Tag placement" value the asset detail's tags section later lists
+ * and lets the owner edit in place.
+ */
+@Composable
+private fun PlacementField(value: String, onValueChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text("Tag placement") },
+        singleLine = true,
+        shape = ControlShape,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /** The four states of the write flow, each in the family its meaning asks for (D12 §5, §11). */

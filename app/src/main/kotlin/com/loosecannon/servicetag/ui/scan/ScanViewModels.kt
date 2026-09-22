@@ -273,6 +273,20 @@ class WriteTagViewModel(
     private val _targetName = MutableStateFlow(label ?: unnamed(target))
     val targetName: StateFlow<String> = _targetName.asStateFlow()
 
+    /**
+     * What the owner types for "Tag placement" (#49) before tapping the tag, carried into the row
+     * [TagWriteController] provisions on the first tap. Typing after that tap has no further
+     * effect: the row is provisioned once and reused across retries (invariant 59 — an edit after
+     * binding goes through the asset detail's tags section instead, never through this screen).
+     */
+    private val _placement = MutableStateFlow(label.orEmpty())
+    val placement: StateFlow<String> = _placement.asStateFlow()
+
+    fun setPlacement(value: String) {
+        _placement.value = value
+        controller.setLabel(value)
+    }
+
     init {
         viewModelScope.launch {
             val named = when (target) {
@@ -301,6 +315,13 @@ class WriteTagViewModel(
 /** The tag row the sheet is talking about, as the plate spells identity (G1 §3 correction a). */
 fun TagBinding.identityLine(): String =
     "${id.value.take(8)} · ${payloadFormat.name.lowercase()}"
+
+/**
+ * The "Tag placement" value to show (#49 AC 3, AC 6): blank and whitespace-only both count as
+ * unset, exactly as `ProvisionTag`'s own normalisation treats them, so the scan result and the
+ * asset detail's tags section never render an empty caption for an ordinary one-tag asset.
+ */
+fun TagBinding.placementOrNull(): String? = label?.takeIf { it.isNotBlank() }
 
 /** The same line for a tag that has no row yet. */
 fun identityLine(key: String): String =

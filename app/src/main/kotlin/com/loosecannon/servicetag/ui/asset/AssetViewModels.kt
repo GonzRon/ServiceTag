@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.Season as SeasonWindow
 import com.loosecannon.servicetag.core.model.TagBinding
+import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
@@ -219,7 +220,7 @@ data class AssetDetailState(
  */
 class AssetDetailViewModel(
     private val assets: AssetRepository,
-    tags: TagRepository,
+    private val tags: TagRepository,
     private val definitions: DefinitionRepository,
     profiles: ProfileRepository,
     private val events: EventRepository,
@@ -396,6 +397,23 @@ class AssetDetailViewModel(
                 outcome.getOrNull() is ApplyResult.AlreadySetUp ->
                     _messages.tryEmit("This asset is already set up.")
             }
+        }
+    }
+
+    /**
+     * The tags section's inline "Tag placement" edit (#49 AC 4, invariant 59). This is the label's
+     * *only* write path from the asset detail screen: it reads the row back, changes `label` and
+     * `updated_at`, and writes it straight through [TagRepository.upsert] — never through the
+     * tag-provisioning or tag-binding write paths, so no NFC payload is re-encoded and no binding
+     * field moves. A blank value clears the placement rather than being refused (an ordinary
+     * one-tag asset has no placement to type).
+     */
+    fun editTagLabel(id: TagId, label: String?) {
+        viewModelScope.launch {
+            val row = tags.get(id) ?: return@launch
+            val trimmed = label?.trim()?.takeIf { it.isNotEmpty() }
+            if (trimmed == row.label) return@launch
+            tags.upsert(row.copy(label = trimmed, updatedAt = clock.nowMillis()))
         }
     }
 

@@ -62,12 +62,23 @@ class TagWriteController(
     private val io: TagIo,
     private val codec: NdefCodec,
     private val target: TagTarget,
-    private val label: String?,
+    label: String?,
     private val scope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     constructor(graph: AppGraph, io: TagIo, target: TagTarget, label: String?, scope: CoroutineScope) :
         this(graph.provisionTag, graph.appScope, io, graph.ndefCodec, target, label, scope)
+
+    /**
+     * The "Tag placement" value carried into [ProvisionTag.begin] (#49). It starts at the
+     * constructor's [label] and stays settable until the first tap provisions [pending]: the
+     * screen lets the owner type it before tapping, and [ProvisionTag] itself normalises a blank
+     * value to null, so no normalisation is duplicated here.
+     */
+    @Volatile private var currentLabel: String? = label
+
+    /** Called by the screen as the owner types the placement, before the row is provisioned. */
+    fun setLabel(value: String?) { currentLabel = value }
 
     private val _state = MutableStateFlow<WriteState>(InitialState)
     val state: StateFlow<WriteState> = _state.asStateFlow()
@@ -131,7 +142,7 @@ class TagWriteController(
             WriteRoute.ReadOnly -> { _state.value = WriteState.Error("This tag is read-only (locked). Nothing written."); return false }
             is WriteRoute.Writable -> r
         }
-        val row = pending ?: provisionTag.begin(target, label).also { pending = it }
+        val row = pending ?: provisionTag.begin(target, currentLabel).also { pending = it }
         val intended = codec.encodeV1(row.id)
         when (val v = writable.fit(NdefSize.serialisedSize(intended))) {
             is CapacityVerdict.TooSmall -> {

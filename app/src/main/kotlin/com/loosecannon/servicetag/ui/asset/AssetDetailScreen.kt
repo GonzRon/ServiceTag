@@ -26,6 +26,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -59,6 +60,7 @@ import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.TagBinding
+import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.model.isRetired
@@ -86,6 +88,8 @@ import com.loosecannon.servicetag.ui.journal.stateColors
 import com.loosecannon.servicetag.ui.journal.stateIcon
 import com.loosecannon.servicetag.ui.journal.stateLabel
 import com.loosecannon.servicetag.ui.scan.identityLine
+import com.loosecannon.servicetag.ui.scan.placementOrNull
+import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.Instant
 import java.time.LocalDate
@@ -224,7 +228,7 @@ fun AssetDetailScreen(
                 onAddComponent = { onAddComponent(assetId) },
             )
             ServiceRecordSection(current.events, current.definitions, onOpenEvent)
-            TagsSection(current.tags)
+            TagsSection(current.tags, onEditLabel = model::editTagLabel)
             AttachmentsSection(
                 graph = graph,
                 owner = AttachmentOwner.OfAsset(current.asset.id),
@@ -676,35 +680,92 @@ private fun componentLine(child: ComponentRow): String = listOfNotNull(
     },
 ).joinToString(" · ")
 
+/**
+ * Every bound tag (#49 AC 6) — a lost, retired or freshly written one all get their own row, so
+ * the section never implies the first tag is the only scan point. Tapping a row opens the
+ * "Tag placement" edit; a tag with no placement set shows no caption at all, which is the
+ * honest reading for an ordinary one-tag asset.
+ */
 @Composable
-private fun TagsSection(tags: List<TagBinding>) {
+internal fun TagsSection(tags: List<TagBinding>, onEditLabel: (TagId, String?) -> Unit) {
     SectionHeader(title = "Tags")
     if (tags.isEmpty()) {
         QuietLine("No tag yet · Write tag to add one")
         return
     }
+    var editing by remember { mutableStateOf<TagBinding?>(null) }
     LedgerList(count = tags.size) { index ->
         val tag = tags[index]
         val stamped = tag.writtenAt ?: tag.createdAt
         val (day, month, year) = stamped.asLedgerDate()
-        LedgerEntry(
-            day = day,
-            month = month,
-            year = year,
-            title = if (tag.writtenAt != null) "Tag written" else "Tag bound",
-            detail = tag.identityLine(),
-            badge = if (tag.status != TagStatus.ACTIVE) {
-                {
-                    StatusBadge(
-                        label = tag.status.name.lowercase().replaceFirstChar { it.uppercase() },
-                        colors = ServiceTagTheme.semanticColors.seasonInactive,
-                    )
-                }
-            } else {
-                null
-            },
+        Column(modifier = Modifier.fillMaxWidth().clickable { editing = tag }) {
+            LedgerEntry(
+                day = day,
+                month = month,
+                year = year,
+                title = if (tag.writtenAt != null) "Tag written" else "Tag bound",
+                detail = tag.identityLine(),
+                badge = if (tag.status != TagStatus.ACTIVE) {
+                    {
+                        StatusBadge(
+                            label = tag.status.name.lowercase().replaceFirstChar { it.uppercase() },
+                            colors = ServiceTagTheme.semanticColors.seasonInactive,
+                        )
+                    }
+                } else {
+                    null
+                },
+            )
+            tag.placementOrNull()?.let { placement ->
+                TagPlacementCaption(placement, modifier = Modifier.padding(start = 64.dp, bottom = 8.dp))
+            }
+        }
+    }
+    editing?.let { tag ->
+        TagPlacementDialog(
+            tag = tag,
+            onDismiss = { editing = null },
+            onSave = { value -> onEditLabel(tag.id, value); editing = null },
         )
     }
+}
+
+/** The ratified "Tag placement" caption over the value, indented under the ledger's date column. */
+@Composable
+private fun TagPlacementCaption(value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            text = "Tag placement",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(text = value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+/**
+ * The one place a bound tag's placement is edited (#49 AC 4, invariant 59): this writes only
+ * `label` through [AssetDetailViewModel.editTagLabel] — no NFC payload, no binding field.
+ */
+@Composable
+private fun TagPlacementDialog(tag: TagBinding, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
+    var text by remember(tag.id) { mutableStateOf(tag.label.orEmpty()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Tag placement") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Tag placement") },
+                singleLine = true,
+                shape = ControlShape,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = { TextButton(onClick = { onSave(text) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

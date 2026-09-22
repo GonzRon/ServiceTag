@@ -122,7 +122,10 @@ fun TagResultSheet(
                         FilledAction("Open asset") { onOpenAsset(result.asset.id.value) }
                         TextAction("Cancel", onDismiss)
                     },
-                )
+                ) {
+                    // #49 AC 3: the placement when the owner set one, nothing extra when they did not.
+                    result.tag.placementOrNull()?.let { PlacementLine(it) }
+                }
             } else {
                 // A bound tag needs no decision: the sheet says what it is and the screen moves on.
                 LaunchedEffect(result) { onOpenAsset(result.asset.id.value) }
@@ -292,6 +295,27 @@ internal fun NfcSheet(
             problem?.let { QuietLine(it) }
             actions?.invoke(this)
         }
+    }
+}
+
+/**
+ * The scanned tag's placement, captioned with the ratified "Tag placement" (#49 AC 3) — shown
+ * only from [TagResultSheet]'s deliberate-inspect branch, where the sheet stays up rather than
+ * navigating away on its own, and only when the tag actually carries one.
+ */
+@Composable
+internal fun PlacementLine(value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = "Tag placement",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
