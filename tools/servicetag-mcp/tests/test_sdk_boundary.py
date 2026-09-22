@@ -103,6 +103,52 @@ def test_a_422_survives_the_sdk_boundary_with_code_and_problems(paired) -> None:
     assert "NameRequired" in text
 
 
+# --- #53 task 1: an empty-body refusal reports its status and a real reason, never a fake code ---
+
+
+@pytest.mark.parametrize(
+    "status, expected",
+    [
+        (413, "413 Payload Too Large: the payload is larger than the API accepts"),
+        (405, "405 Method Not Allowed: the API does not take that method on that path"),
+        (400, "400 Bad Request: the request could not be framed"),
+    ],
+)
+def test_an_empty_body_refusal_gets_its_named_wording_through_the_sdk_boundary(
+    paired, status: int, expected: str
+) -> None:
+    paired.reply("GET", "/v1/status", status, b"")
+    with pytest.raises(ToolError) as raised:
+        _call_tool("status", {})
+    assert expected in str(raised.value)
+
+
+def test_an_empty_body_refusal_outside_the_named_three_uses_the_reason_phrase(paired) -> None:
+    paired.reply("GET", "/v1/status", 409, b"")
+    with pytest.raises(ToolError) as raised:
+        _call_tool("status", {})
+    assert "409 Conflict: the phone answered with no body" in str(raised.value)
+
+
+def test_an_empty_body_refusal_with_no_reason_phrase_falls_back_to_the_bare_status(paired) -> None:
+    """599 is not an `http.HTTPStatus` member, which is exactly the case the contract's "else the
+    status alone" branch exists for."""
+    paired.reply("GET", "/v1/status", 599, b"")
+    with pytest.raises(ToolError) as raised:
+        _call_tool("status", {})
+    assert "599 599: the phone answered with no body" in str(raised.value)
+
+
+def test_no_empty_body_refusal_ever_says_unknown(paired) -> None:
+    messages: list[str] = []
+    for status in (400, 405, 413, 409, 599):
+        paired.reply("GET", "/v1/status", status, b"")
+        with pytest.raises(ToolError) as raised:
+            _call_tool("status", {})
+        messages.append(str(raised.value))
+    assert not any("unknown" in message for message in messages)
+
+
 def test_a_connection_refusal_survives_the_sdk_boundary_with_its_own_wording(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

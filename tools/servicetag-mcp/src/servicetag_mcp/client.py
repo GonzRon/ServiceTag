@@ -6,6 +6,7 @@ which is what lets the whole test suite point at a stdlib HTTP server and never 
 
 from __future__ import annotations
 
+import http
 import json
 import subprocess
 from dataclasses import dataclass
@@ -242,14 +243,27 @@ def _safe_json(response: httpx.Response) -> Any | None:
         return None
 
 
+_EMPTY_BODY_DETAIL: dict[int, tuple[str, str]] = {
+    413: ("Payload Too Large", "the payload is larger than the API accepts"),
+    405: ("Method Not Allowed", "the API does not take that method on that path"),
+    400: ("Bad Request", "the request could not be framed"),
+}
+"""Wording for the three empty-body refusals this tool's own checks make reachable by name.
+`413`'s reason phrase is spelled out rather than taken from `http.HTTPStatus` (below) on purpose:
+Python 3.12's stdlib reports RFC 9110's renamed `"Content Too Large"`, and the app's own refusal —
+and every reader of this tool's messages — still calls it `413 Payload Too Large` (R2)."""
+
+
 def _detail(response: httpx.Response) -> tuple[str, str, list[str]]:
     """The error envelope, or something honest when the body is not one.
 
     A few refusals — the app's 413 chief among them — answer with a **zero-byte body by design**
     (`HttpWire.kt`'s cap and framing refusals never echo anything back), so `response.text[:200]`
-    would be `""` and the message would read as `413 unknown: ` — technically true and useless.
-    (R2.) Give an empty body a plain sentence instead, naming the one status this tool's own cap
-    check makes reachable by name and falling back to the status alone otherwise.
+    would be `""` and the old message read as `413 unknown: ` — technically true and useless.
+    (R2.) Give an empty body its real status reason and a plain hint instead, never the invented
+    code `"unknown"`: the three refusals this tool's own checks make reachable by name get their
+    own wording ([_EMPTY_BODY_DETAIL]); any other empty-body status gets `http.HTTPStatus`'s own
+    reason phrase, or the bare status number when that status has none, plus a generic hint.
     """
     try:
         error = response.json()["error"]
@@ -262,6 +276,12 @@ def _detail(response: httpx.Response) -> tuple[str, str, list[str]]:
         text = response.text[:200]
         if text:
             return ("unknown", text, [])
-        if response.status_code == 413:
-            return ("unknown", "the payload is larger than the API accepts", [])
-        return ("unknown", f"the phone answered {response.status_code} with no body", [])
+        named = _EMPTY_BODY_DETAIL.get(response.status_code)
+        if named is not None:
+            code, message = named
+            return (code, message, [])
+        try:
+            reason = http.HTTPStatus(response.status_code).phrase
+        except ValueError:
+            reason = str(response.status_code)
+        return (reason, "the phone answered with no body", [])
