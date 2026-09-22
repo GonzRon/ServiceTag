@@ -100,7 +100,7 @@ One test per hazard class; unit tests over the two view models, plus one connect
 ## Review gate
 
 - Unit: `./gradlew :app:testDebugUnitTest --console=plain` → BUILD SUCCESSFUL, zero failures, zero skips; counts recorded.
-- Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest --tests '…ui.maintenance.GroupScreensTest' --console=plain` → zero failures, zero skips.
+- Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.loosecannon.servicetag.ui.maintenance.GroupScreensTest --console=plain` → zero failures, zero skips.
 - Structural, anchored:
   - `grep -rnE '(SaveGroup|ArchiveGroup|CompleteGroupMembers)' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance` shows the use cases **called**; `grep -rn 'GroupRepository\.upsert\|groups.upsert' app/src/main/kotlin/com/loosecannon/servicetag/ui` → **no match** (no direct write).
   - `grep -rniE '\blocation\b' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/GroupEditScreen.kt app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/GroupDetailScreen.kt` → no match.

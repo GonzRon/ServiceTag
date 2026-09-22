@@ -105,7 +105,7 @@ One test per hazard class; all off-device with a fake `NonceStore` and fake use 
 ## Review gate
 
 - Unit: `./gradlew :core:test :app:testDebugUnitTest --console=plain` → BUILD SUCCESSFUL, zero failures, zero skips; counts recorded.
-- Connected on **`emulator-5554`** with `ANDROID_SERIAL` pinned, never a phone: `./gradlew :app:connectedDebugAndroidTest --tests '…reminders.QuickAction*' --console=plain`.
+- Connected on **`emulator-5554`** with `ANDROID_SERIAL` pinned, never a phone: `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.loosecannon.servicetag.reminders --console=plain`.
 - Structural, anchored:
   - `grep -rn 'startActivity' app/src/main/kotlin/com/loosecannon/servicetag/reminders` → no match.
   - `grep -rn 'PendingIntent\.getActivity\|PendingIntent\.getBroadcast' app/src/main/kotlin/com/loosecannon/servicetag/reminders/QuickActions.kt` → every occurrence on the same line as, or guarded by, `FLAG_IMMUTABLE`; `grep -rn 'PendingIntent\.' app/src/main | grep -v FLAG_IMMUTABLE` → no match.

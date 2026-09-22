@@ -123,7 +123,7 @@ One test per hazard class. **No row waits on a wall clock**: every timing case i
 ## Review gate
 
 - Unit: `./gradlew :app:testDebugUnitTest --console=plain` → BUILD SUCCESSFUL, zero failures, zero skips; counts recorded.
-- Connected, on **`emulator-5554`** only, with `ANDROID_SERIAL` pinned and **never a phone**: the classes that need a real `NotificationManager` and a real WorkManager — at minimum one class proving the two channels exist with their importances after first launch, and one proving the unique periodic work is enqueued exactly once across two launches. `./gradlew :app:connectedDebugAndroidTest --tests '…reminders.*' --console=plain`.
+- Connected, on **`emulator-5554`** only, with `ANDROID_SERIAL` pinned and **never a phone**: the classes that need a real `NotificationManager` and a real WorkManager — at minimum one class proving the two channels exist with their importances after first launch, and one proving the unique periodic work is enqueued exactly once across two launches. `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.loosecannon.servicetag.reminders --console=plain`.
 - Structural, anchored:
   - `grep -rn 'setExact\|setAlarmClock\|setExactAndAllowWhileIdle' app/src/main` → no match.
   - `grep -rn 'setAndAllowWhileIdle\|setWindow' app/src/main` → the single site in `DigestAlarm.kt`.

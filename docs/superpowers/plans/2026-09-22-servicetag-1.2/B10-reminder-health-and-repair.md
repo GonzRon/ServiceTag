@@ -105,7 +105,7 @@ Because maintenance reminders are a reliability mechanism, the app must be able 
 ## Review gate
 
 - Unit: `./gradlew :app:testDebugUnitTest --console=plain` → BUILD SUCCESSFUL, zero failures, zero skips; the review confirms **fourteen** positive/control pairs — seven findings × (one positive, one control) — are present and that no control is a vacuous assertion.
-- Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest --tests '…ui.maintenance.HealthScreenTest' --console=plain`.
+- Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.loosecannon.servicetag.ui.maintenance.HealthScreenTest --console=plain`.
 - Structural, anchored:
   - `grep -rniE '\b(TODOIST_DISCONNECTED|PROJECTION_MISSING|PROJECTION_CONFLICT|PROJECTION_DUE_DRIFT|SYNC_STALE|OUTBOX_FAILING)\b' app/src/main core/src/main` → no match.
   - `grep -rn 'RepairAction.Automatic' app/src/main/kotlin/com/loosecannon/servicetag/reminders/ReminderHealthCheck.kt` → exactly **two** sites: the alarm re-arm and the worker re-enqueue.

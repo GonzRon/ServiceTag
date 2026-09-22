@@ -86,7 +86,7 @@ One test per hazard class.
 ## Review gate
 
 - Unit: `./gradlew :app:testDebugUnitTest --console=plain` → BUILD SUCCESSFUL, zero failures, zero skips; counts recorded.
-- Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest --tests '…ui.asset.AssetTagsSectionTest' --console=plain`.
+- Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.loosecannon.servicetag.ui.asset.AssetTagsSectionTest --console=plain`.
 - Structural, anchored — these are the brief's headline claims and the review must run all four:
   - `git diff --stat master -- core/src/main app/src/main/kotlin/com/loosecannon/servicetag/data app/schemas` → **empty**.
   - `git diff --stat master -- app/src/main/kotlin/com/loosecannon/servicetag/api tools docs/api` → **empty**.

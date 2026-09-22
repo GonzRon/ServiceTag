@@ -118,7 +118,7 @@ One test per hazard class; unit tests over the view model with a seeded read mod
 ## Review gate
 
 - Unit: `./gradlew :app:testDebugUnitTest --console=plain` → BUILD SUCCESSFUL, zero failures, zero skips; counts recorded.
-- Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest --tests '…ui.maintenance.ScanSheetTest' --console=plain` → zero failures, zero skips.
+- Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.loosecannon.servicetag.ui.maintenance.ScanSheetTest --console=plain` → zero failures, zero skips.
 - Structural, anchored:
   - `git diff --stat master -- core/src/main app/src/main/kotlin/com/loosecannon/servicetag/ui/nfc/ReaderMode.kt` → **empty**.
   - `grep -n 'fun Route.readsTags' -A 6 app/src/main/kotlin/com/loosecannon/servicetag/ui/nav/Route.kt` → unchanged; `grep -c 'MaintenanceSheet' app/src/main/kotlin/com/loosecannon/servicetag/ui/nav/Route.kt` counts the route key and no `readsTags` entry.
