@@ -224,6 +224,34 @@ class BackstopWorkerTest {
     }
 
     /**
+     * Finding 14: **a throwing run must never crash the process.**
+     *
+     * The digest fire is handled synchronously on the broadcast thread, so it no longer has
+     * [ReminderDispatch.scope]'s swallowing `CoroutineExceptionHandler` behind it — and an uncaught
+     * exception on a broadcast thread kills the process, at 09:00, on a phone nobody is watching.
+     * The realistic throws are an `AlarmManager` quota refusal and a `WorkManager.getInstance`
+     * initialisation failure; neither is worth a dead process, and the backstop is what recovers
+     * the missed sweep.
+     *
+     * `handleDigestFire()` is `DigestReceiver.onReceive`'s whole body, named so this can drive it:
+     * `onReceive`'s two Android parameters are unused, and building a `Context` to prove a `catch`
+     * would be proving the harness instead.
+     */
+    @Test
+    fun aThrowingDigestFireDoesNotPropagateOutOfTheReceiver() {
+        ReminderRunDispatch.run = object : ReminderRun {
+            override fun onDigestFired() = throw IllegalStateException("the alarm quota is spent")
+            override suspend fun reconcileAll(): ReconcileReport = throw AssertionError("not reached")
+            override suspend fun onBackstop() = throw AssertionError("not reached")
+        }
+        try {
+            handleDigestFire()
+        } finally {
+            ReminderRunDispatch.run = null
+        }
+    }
+
+    /**
      * The two periods and the two unique names, locked against an edit (spec 5.3).
      *
      * These assertions restate the constants' own literals and so cannot catch the failure that

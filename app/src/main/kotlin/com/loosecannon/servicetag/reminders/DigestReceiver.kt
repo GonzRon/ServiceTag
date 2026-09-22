@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.reminders
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 
 /**
  * The digest alarm's own receiver: arm tomorrow's alarm, hand the sweep to a worker, return.
@@ -23,13 +24,35 @@ import android.content.Intent
  *
  * It starts nothing.
  *
+ * **Nothing it does may crash the process** (fix round 2, finding 14). Dropping `goAsync()` and the
+ * coroutine also dropped [ReminderDispatch.scope]'s `CoroutineExceptionHandler`, which existed for
+ * exactly this rule: an uncaught exception on a broadcast thread kills the process, and this is the
+ * 09:00 path on a phone nobody is watching. The realistic throws are an `AlarmManager` quota
+ * refusal and a `WorkManager.getInstance` initialisation failure — both improbable, neither worth a
+ * dead process — so the call is wrapped and never rethrown. The **backstop is what recovers it**: a
+ * fire that could not be handled leaves the 12 h worker to sweep and to re-arm the alarm it finds
+ * missing.
+ *
  * A run that has not been assigned yet is **dropped**, for [ReminderDispatch]'s reason: the
  * assignment is synchronous in `Application.onCreate`, which always completes before any
  * component's `onReceive`, so the drop path is only ever taken by an alarm that arrived before
  * this app had a policy at all — and the backstop re-arms whatever that loses.
  */
 internal class DigestReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
+    override fun onReceive(context: Context, intent: Intent) = handleDigestFire()
+}
+
+/**
+ * The receiver's whole body, named so a JVM unit test can drive it: `onReceive`'s two Android
+ * parameters are unused, and a test that had to build a `Context` to prove a `catch` would be
+ * proving the harness instead.
+ */
+internal fun handleDigestFire() {
+    try {
         ReminderRunDispatch.run?.onDigestFired()
+    } catch (e: Exception) {
+        Log.w(TAG, "the digest fire could not be handled; the backstop will catch it", e)
     }
 }
+
+private const val TAG = "DigestReceiver"

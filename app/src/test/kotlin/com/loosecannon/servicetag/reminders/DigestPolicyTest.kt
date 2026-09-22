@@ -339,6 +339,12 @@ class DigestPolicyTest {
         )
         assertEquals("a dismissed overdue reminder does not come back before three days", 0, swipedAway.posts.size)
         assertEquals("it is still counted: the obligation has not gone away", "1 overdue.", swipedAway.summary?.body)
+        // Finding 15: the counters report what happened. Nothing was posted and nothing is showing,
+        // so `posted + unchanged` is zero — which is the identity the port documents ("what the
+        // provider holds after the call"). `shown.size - unchanged` reported a post that did not
+        // happen.
+        assertEquals(0, swipedAway.report.posted)
+        assertEquals(0, swipedAway.report.unchanged)
 
         // …and a DUE subject is untouched by the rule: it is due for one day and then it is overdue.
         val dueSwipedAway = decide(

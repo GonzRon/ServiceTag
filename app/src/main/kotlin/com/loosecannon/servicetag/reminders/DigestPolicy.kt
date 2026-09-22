@@ -65,6 +65,7 @@ object DigestPolicy {
         var due = 0
         var dueSoon = 0
         var unchanged = 0
+        var posted = 0
 
         inputs.forEach { input ->
             val subject = input.subject
@@ -145,6 +146,14 @@ object DigestPolicy {
                     }
                     if (shouldPost) {
                         posts += post
+                        // `posted` counts what is now being shown **in a form it was not being
+                        // shown in before** — the port's own definition. A three-day re-notify of an
+                        // already-standing tag is handed to the platform but was already showing, so
+                        // it is `unchanged`; a subject the three-day gate suppressed while nothing was
+                        // standing is in neither, because nothing of it is showing. Counting
+                        // `shown.size - unchanged` reported a post for that second case (fix round 2,
+                        // finding 15), which broke the identity `posted + unchanged` = what is held.
+                        if (!standing) posted++
                         rows += (row ?: blankRow(subject.key, nowMillis)).copy(
                             lastNotifiedAt = nowMillis,
                             updatedAt = nowMillis,
@@ -188,7 +197,7 @@ object DigestPolicy {
             cancelSummary = standingSummaryTag != null && (standingSummaryTag != summaryTag || !summaryDelivers),
             rows = rows.distinctBy { it.scheduleId.value },
             report = ReconcileReport(
-                posted = shown.size - unchanged,
+                posted = posted,
                 cleared = cleared,
                 unchanged = unchanged,
                 problems = emptyList(),
