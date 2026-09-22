@@ -80,6 +80,7 @@ fun fieldOf(problem: ScheduleProblem): String = when (problem) {
     ScheduleProblem.MeterRuleOnGroupTarget -> ScheduleField.METER
     ScheduleProblem.MeterIntervalRequired -> ScheduleField.METER_INTERVAL
     ScheduleProblem.MeterIntervalNotPositive -> ScheduleField.METER_INTERVAL
+    ScheduleProblem.NegativeMeterLead -> ScheduleField.METER_LEAD
     is ScheduleProblem.ForeignMeterDefinition -> ScheduleField.METER
     is ScheduleProblem.MeterDefinitionNotAMeter -> ScheduleField.METER
     ScheduleProblem.SeasonFollowsAssetOnGroupTarget -> ScheduleField.SEASON
@@ -447,9 +448,12 @@ class ScheduleEditViewModel(
             meterDefinitionId = meter,
             meterInterval = meterInterval.trim().toDoubleOrNull().takeIf { meter != null },
             anchorMeter = anchorMeter.trim().toDoubleOrNull().takeIf { meter != null },
-            // Non-negative in the editor, though the engine tolerates a negative: a lead below zero
-            // would warn *after* the threshold, which is not a state the form should be able to send.
-            meterLead = meterLead.trim().toDoubleOrNull()?.takeIf { it >= 0.0 }.takeIf { meter != null },
+            // Sent **as typed**, negative or not. Dropping a negative silently saved the schedule
+            // with *no* lead while the field still showed the number the owner entered — a value
+            // quietly turned into a different one. `NegativeMeterLead` refuses it instead, and the
+            // form marks the field (carry-forward (c): non-negative in the editor, now by refusal
+            // rather than by erasure).
+            meterLead = meterLead.trim().toDoubleOrNull().takeIf { meter != null },
             seasonBehavior = if (group != null) SeasonBehavior.IGNORE else seasonBehavior,
             completionMode = if (group != null) CompletionMode.QUICK else completionMode,
             profileId = profileId.takeIf { group == null && completionMode == CompletionMode.FORM },

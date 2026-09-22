@@ -483,6 +483,43 @@ class ScheduleEditViewModelTest {
     }
 
     /**
+     * N12 — a typed **negative meter lead** marks its field instead of being dropped.
+     *
+     * The editor used to erase it: the save went through, the schedule was stored with **no** lead,
+     * and the field still showed the number the owner had typed — a value silently turned into a
+     * different one. Now the command carries what was typed, `NegativeMeterLead` refuses it, and
+     * `METER_LEAD` is marked, which is also what makes that mark reachable at all (the review's S5
+     * noted it was dead). Carry-forward (c) still holds — non-negative in the editor — by refusal
+     * rather than by erasure.
+     */
+    @Test fun aNegativeMeterLeadMarksItsFieldRatherThanBeingDropped() = runTest {
+        val tractor = graph.createAsset.run(AssetCommand(name = "Tractor", category = "Yard"))
+        val hours = meterDefinitionOf("d-hours", tractor.id.value)
+        graph.definitions.upsert(hours)
+
+        val vm = viewModel(targetAssetId = tractor.id.value)
+        vm.state.first { it.loaded }
+        vm.onTitle("Oil change")
+        vm.onMeterDefinition(hours.id)
+        vm.onMeterInterval("100")
+        vm.onMeterLead("-5")
+        vm.save()
+
+        val refused = vm.state.first { !it.saving && it.problems.isNotEmpty() }
+        assertTrue(ScheduleProblem.NegativeMeterLead in refused.problems)
+        assertTrue("the field is marked", ScheduleField.METER_LEAD in refused.marks)
+        assertEquals("and nothing was stored", 0, graph.schedules.all().size)
+        assertEquals("with what was typed still on screen", "-5", refused.meterLead)
+
+        // Correcting it clears that field's mark and saves the lead as entered.
+        vm.onMeterLead("5")
+        assertFalse(ScheduleField.METER_LEAD in vm.state.value.marks)
+        val saved = savedId(vm)
+        vm.save()
+        assertEquals(5.0, graph.schedules.get(saved.await())!!.meterLead)
+    }
+
+    /**
      * Every refusal maps to a control — and the three that map to a control the screen does **not**
      * mark are the three no interaction can provoke.
      *

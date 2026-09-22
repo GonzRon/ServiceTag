@@ -3,11 +3,14 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
+import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.Today
@@ -201,6 +204,51 @@ class ScheduleCommandRulesTest {
         val saved = save.run(null, good)
         assertEquals(listOf("LOCAL"), saved.providers.map { it.provider })
         assertFalse(saved.providers.isEmpty())
+    }
+
+    /**
+     * N12 — a **negative meter lead** is refused, not clamped and not dropped.
+     *
+     * The lead subtracts from the due reading, so below zero it moves the "due soon" warning past
+     * the threshold the schedule is already due at, and that state can never be reached. It was
+     * previously erased by the editor, which saved the schedule with no lead at all while the field
+     * still showed what the owner typed; refusing at the command is what lets every caller — the
+     * editor and B12's API alike — be told which field is wrong.
+     */
+    @Test
+    fun aNegativeMeterLeadIsRefused() = runTest {
+        val tractor = seedAsset("a1")
+        val hours = MeasurementDefinition(
+            id = DefinitionId("d1"), assetId = tractor, key = "hours", label = "Hours", unit = "h",
+            valueType = ValueType.NUMBER, decimals = 0, rangeLow = null, rangeHigh = null,
+            isMeter = true, sortOrder = 0, archivedAt = null, createdAt = 1L, updatedAt = 1L,
+        )
+        defs.upsert(hours)
+        val meterRule = ScheduleCommand(
+            targetAssetId = tractor,
+            targetGroupId = null,
+            title = "Oil change",
+            meterDefinitionId = hours.id,
+            meterInterval = 100.0,
+            anchorMeter = 400.0,
+            providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
+        )
+
+        val problems = assertFailsWith<ScheduleValidation> {
+            save.run(null, meterRule.copy(meterLead = -5.0))
+        }.problems
+        assertTrue(ScheduleProblem.NegativeMeterLead in problems, "a negative lead must be refused: $problems")
+
+        // Not a number is refused the same way the interval's is.
+        assertTrue(
+            ScheduleProblem.NegativeMeterLead in assertFailsWith<ScheduleValidation> {
+                save.run(null, meterRule.copy(meterLead = Double.NaN))
+            }.problems,
+        )
+
+        // Zero and above are leads, and they save as sent — nothing is clamped or erased.
+        assertEquals(0.0, save.run(null, meterRule.copy(meterLead = 0.0)).meterLead)
+        assertEquals(10.0, save.run(null, meterRule.copy(title = "Filter", meterLead = 10.0)).meterLead)
     }
 
     /**

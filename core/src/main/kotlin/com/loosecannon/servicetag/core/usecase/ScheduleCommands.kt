@@ -151,6 +151,17 @@ sealed interface ScheduleProblem {
     data object MeterIntervalNotPositive : ScheduleProblem
 
     /**
+     * A **negative** meter lead, which would warn *after* the threshold rather than before it: the
+     * lead subtracts from the due reading (`current >= due - lead`), so below zero it moves the
+     * warning past the moment the schedule is already due and the "due soon" state can never be
+     * reached. Not a number is refused the same way, as the interval's is.
+     *
+     * Refused rather than clamped, so the value a caller sent is never quietly turned into a
+     * different one — and so an editor can mark the field instead of dropping what was typed.
+     */
+    data object NegativeMeterLead : ScheduleProblem
+
+    /**
      * A postpone was aimed at a schedule with no time rule. There is no occurrence date to move —
      * `computedDueOn` is null for a meter-only schedule — and writing `postponed_due_on` anyway
      * would give the sort key a date the schedule does not have, against invariant 10. Clearing a
@@ -239,6 +250,12 @@ internal fun scheduleProblems(
             interval == null -> problems += ScheduleProblem.MeterIntervalRequired
             !interval.isFinite() || interval <= 0.0 -> problems += ScheduleProblem.MeterIntervalNotPositive
         }
+    }
+    // Checked whatever the rule side: a lead is only *read* beside a meter rule, but a negative one
+    // is never legal and refusing it wherever it arrives is what lets every caller — the editor,
+    // the API — be told which field is wrong rather than having the value silently altered.
+    cmd.meterLead?.let { lead ->
+        if (!lead.isFinite() || lead < 0.0) problems += ScheduleProblem.NegativeMeterLead
     }
 
     if (hasTime) {
