@@ -148,6 +148,27 @@ class MaintenanceViewModelTest {
     }
 
     /**
+     * C5 (controller ruling, 2026-09-22): a phone with no groups is **a list with nothing in it**,
+     * not the absence of a list — the group section is drawn either way, because its create
+     * affordance is the only in-app way to make the first group.
+     *
+     * What the JVM can pin is the state the section is drawn from: `loaded` true with an empty
+     * [MaintenanceState.groups], which is distinguishable from "not read yet" and is therefore a
+     * state the screen can draw a section for. That the section really is on screen with its
+     * affordance is a composition fact and is proved on the device by `MaintenanceTabTest`, since
+     * this module has no JVM Compose runtime.
+     */
+    @Test fun aPhoneWithNoGroupsIsAListWithNothingInItRatherThanNoList() = runTest {
+        val vm = viewModel()
+        assertFalse("nothing has been read yet", vm.state.value.loaded)
+
+        backgroundScope.launch { vm.state.collect() }
+        val loaded = vm.state.first { it.loaded }
+        assertEquals(emptyList<MaintenanceGroupRow>(), loaded.groups)
+        assertTrue("and the phone has nothing scheduled either", loaded.isEmpty)
+    }
+
+    /**
      * The empty state is "no schedules", not "not read yet": `loaded` is what tells them apart, and
      * a line that flashed up before the first read would be the wrong sentence at the wrong moment.
      */

@@ -138,23 +138,24 @@ fun MaintenanceScreen(
                 )
             }
 
-            // B15's group list, in this section. B08's rule stands and is deliberately not
-            // changed here: a section with no rows is **omitted** rather than drawn as a bare
-            // heading, and §17.1f has no empty-state line for this one.
+            // B15's group list, in this section, drawn **unconditionally** (controller ruling on
+            // C5, 2026-09-22). B08's rule was to omit a section with no rows, and this one loses
+            // to reachability: the list's create affordance is the section's last row, so omitting
+            // the section on a phone with no groups would leave no in-app way to make the first
+            // one — while the ratified empty state above it sends the owner to "an asset or **a
+            // maintenance group**". No numbered plan decision protected the omission.
             //
-            // The consequence is recorded rather than worked around: the list's own create
-            // affordance is inside the section, so a phone with **no** groups has no in-app way to
-            // make its first one. Drawing the heading unconditionally would fix that in one line,
-            // and it is a finding for the controller — not a rule this brief may change, since no
-            // numbered plan decision reaches B08's.
-            if (state.groups.isNotEmpty()) {
-                MaintenanceSectionTitle(GROUPS_SECTION)
-                GroupList(
-                    groups = state.groups,
-                    onOpenGroup = onOpenGroup,
-                    onNewGroup = onNewGroup,
-                )
-            }
+            // The section is therefore never rowless — the affordance is always a row — so B08's
+            // "no bare headings" concern does not arise, and no empty-state line is drawn here:
+            // §17.1f's line is about *schedules*, it is already on screen above when there are
+            // none, and a second copy under the groups heading would read as a claim about the
+            // group list. Inventing one is not this brief's to do.
+            MaintenanceSectionTitle(GROUPS_SECTION)
+            GroupList(
+                groups = state.groups,
+                onOpenGroup = onOpenGroup,
+                onNewGroup = onNewGroup,
+            )
 
             // The fourth section is one row and needs no heading of its own: the row's name *is*
             // the ratified section label, and a heading above it would say the same word twice.
