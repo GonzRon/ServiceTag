@@ -143,6 +143,16 @@ data class ProfileConsumableEntity(
     @ColumnInfo(name = "sort_order") val sortOrder: Int,
 )
 
+/**
+ * v6 gives this table the occurrence link: `schedule_id`, `occurrence_on` and `details_pending`.
+ *
+ * The schedule key is **SET NULL**, so archiving a schedule keeps the link and deleting one only
+ * nulls it — a completion is history and outlives its rule. `UNIQUE(schedule_id, occurrence_on,
+ * asset_id)` is what makes occurrence idempotence a database constraint rather than a discipline;
+ * SQLite treats NULLs as distinct, so the index is **inert for every event that is not a
+ * completion**. The shipped `UNIQUE(source, source_ref)` is deliberately *not* overloaded for
+ * occurrence identity — `source_ref` stays free for sync provenance.
+ */
 @Entity(
     tableName = "asset_event",
     foreignKeys = [
@@ -158,6 +168,12 @@ data class ProfileConsumableEntity(
             childColumns = ["profile_id"],
             onDelete = ForeignKey.SET_NULL,
         ),
+        ForeignKey(
+            entity = MaintenanceScheduleEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["schedule_id"],
+            onDelete = ForeignKey.SET_NULL,
+        ),
     ],
     indices = [
         Index(
@@ -166,6 +182,11 @@ data class ProfileConsumableEntity(
         ),
         Index(value = ["source", "source_ref"], unique = true),
         Index("profile_id"),
+        Index(value = ["schedule_id", "occurrence_on", "asset_id"], unique = true),
+        Index(
+            value = ["schedule_id", "occurred_on"],
+            orders = [Index.Order.ASC, Index.Order.DESC],
+        ),
     ],
 )
 data class AssetEventEntity(
@@ -182,6 +203,9 @@ data class AssetEventEntity(
     @ColumnInfo(name = "source_ref") val sourceRef: String?,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "schedule_id") val scheduleId: String? = null,
+    @ColumnInfo(name = "occurrence_on") val occurrenceOn: String? = null,
+    @ColumnInfo(name = "details_pending", defaultValue = "0") val detailsPending: Boolean = false,
 )
 
 @Entity(

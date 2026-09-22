@@ -18,11 +18,14 @@ import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.ports.UuidGenerator
@@ -61,12 +64,16 @@ import com.loosecannon.servicetag.data.room.MIGRATION_1_2
 import com.loosecannon.servicetag.data.room.MIGRATION_2_3
 import com.loosecannon.servicetag.data.room.MIGRATION_3_4
 import com.loosecannon.servicetag.data.room.MIGRATION_4_5
+import com.loosecannon.servicetag.data.room.MIGRATION_5_6
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
+import com.loosecannon.servicetag.data.room.RoomClosureRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
+import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
+import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.prefs.AppPrefs
@@ -85,7 +92,7 @@ class AppGraph(private val context: Context) {
         )
         .setDriver(AndroidSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.IO)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
         .build()
 
     val clock: Clock = Clock { System.currentTimeMillis() }
@@ -99,6 +106,11 @@ class AppGraph(private val context: Context) {
     val profiles: ProfileRepository = RoomProfileRepository(db.profileDao())
     val events: EventRepository = RoomEventRepository(db.eventDao())
     val attachments: AttachmentRepository = RoomAttachmentRepository(db.attachmentDao())
+    // The three v6 data ports the backup and merge paths read and write. The queries the engine and
+    // the group screens need are added to these ports, and to their adapters, together.
+    val groups: GroupRepository = RoomGroupRepository(db.maintenanceGroupDao())
+    val schedules: ScheduleRepository = RoomScheduleRepository(db.maintenanceScheduleDao())
+    val closures: ClosureRepository = RoomClosureRepository(db.occurrenceClosureDao())
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
 
     /**
@@ -151,13 +163,14 @@ class AppGraph(private val context: Context) {
      * beside them. `BackupViewModel.exportSet` writes both files into the folder the owner picks.
      */
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
-        assets, tags, links, definitions, profiles, events, attachments, uow, ids, clock,
-        BuildConfig.VERSION_NAME, SCHEMA_VERSION,
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events,
+        attachments, uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
     )
 
     /** Wipe-and-load import. Replace is the only mode Phase 1A ships (D7 1A). */
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
-        assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events,
+        attachments, attachmentStorage, uow,
     )
 
     /**
@@ -167,10 +180,17 @@ class AppGraph(private val context: Context) {
      * there is no UI for it.
      */
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
-        assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events,
+        attachments, attachmentStorage, uow,
     )
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
-        assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events,
+        attachments, attachmentStorage, uow,
+        // The total post-apply recompute. Nothing writes derived state at this tip, so there is
+        // nothing to recompute yet and the seam is a no-op; the engine that fills it arrives with
+        // the schedule domain, and the apply's contract — once, inside, after every write — is
+        // already asserted against this seam.
+        rebuildAll = { },
     )
     val importBackupMerge: ImportBackupMerge =
         ImportBackupMerge(buildBackupMergePlan, applyBackupMergePlan)
@@ -234,6 +254,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 5
+        const val SCHEMA_VERSION = 6
     }
 }

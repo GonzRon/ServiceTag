@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.backup
 
+import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.journal.derivedSpecValid
 import com.loosecannon.servicetag.core.model.Asset
@@ -31,10 +32,13 @@ import com.loosecannon.servicetag.core.usecase.ImportReport
 import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
+import com.loosecannon.servicetag.data.room.RoomClosureRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
+import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
+import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
@@ -65,16 +69,20 @@ class RestoreProofTest {
         val profiles = RoomProfileRepository(db.profileDao())
         val events = RoomEventRepository(db.eventDao())
         val attachments = RoomAttachmentRepository(db.attachmentDao())
+        val groups = RoomGroupRepository(db.maintenanceGroupDao())
+        val schedules = RoomScheduleRepository(db.maintenanceScheduleDao())
+        val closures = RoomClosureRepository(db.occurrenceClosureDao())
         val uow = RoomUnitOfWork(db)
         // This proof is about the data archive. The set's artifacts half carries bytes, and
         // bytes are what `BackupViewModelTest` and `ArtifactsCodecTest` prove.
         val export = ExportBackupSet(
-            assets, tags, links, definitions, profiles, events, attachments, uow,
+            assets, groups, tags, links, definitions, profiles, schedules, closures, events,
+            attachments, uow,
             IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
         )
         val import = ImportBackupReplace(
-            assets, tags, links, definitions, profiles, events, attachments,
-            FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
+            assets, groups, tags, links, definitions, profiles, schedules, closures, events,
+            attachments, FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
         )
     }
 
@@ -229,7 +237,7 @@ class RestoreProofTest {
             assertEquals(before, after)
             assertEquals(
                 ImportReport(
-                    formatVersion = 5, assets = 2, tags = 3, links = 2,
+                    formatVersion = BackupCodec.FORMAT_VERSION, assets = 2, tags = 3, links = 2,
                     definitions = 0, profiles = 0, events = 0, attachments = 0,
                     lastRestoredBackupSetId = FIXED_SET_ID,
                 ),
@@ -329,7 +337,7 @@ class RestoreProofTest {
             val report = g.import.run(backup)
             assertEquals(
                 ImportReport(
-                    formatVersion = 5, assets = 2, tags = 3, links = 2,
+                    formatVersion = BackupCodec.FORMAT_VERSION, assets = 2, tags = 3, links = 2,
                     definitions = 0, profiles = 0, events = 0, attachments = 0,
                     lastRestoredBackupSetId = FIXED_SET_ID,
                 ),
@@ -403,7 +411,7 @@ class RestoreProofTest {
             val report = g2.import.run(bytes)
             assertEquals(
                 ImportReport(
-                    formatVersion = 5,
+                    formatVersion = BackupCodec.FORMAT_VERSION,
                     assets = 1,
                     tags = 0,
                     links = 0,

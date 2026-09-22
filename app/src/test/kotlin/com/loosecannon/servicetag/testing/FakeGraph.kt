@@ -8,11 +8,14 @@ import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.usecase.AddAttachment
@@ -45,10 +48,13 @@ import com.loosecannon.servicetag.core.usecase.UpdateEvent
 import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
+import com.loosecannon.servicetag.data.room.RoomClosureRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
+import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
+import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
@@ -94,6 +100,9 @@ class FakeGraph(
     val profiles: ProfileRepository = RoomProfileRepository(db.profileDao())
     val events: EventRepository = RoomEventRepository(db.eventDao())
     val attachments: AttachmentRepository = RoomAttachmentRepository(db.attachmentDao())
+    val groups: GroupRepository = RoomGroupRepository(db.maintenanceGroupDao())
+    val schedules: ScheduleRepository = RoomScheduleRepository(db.maintenanceScheduleDao())
+    val closures: ClosureRepository = RoomClosureRepository(db.occurrenceClosureDao())
 
     /**
      * The store a test drives by hand: `state` is a `var` and the bytes are a map, so a refusal
@@ -165,17 +174,25 @@ class FakeGraph(
 
     /** Both halves of a set: `run().data` for the data archive, `run().plan` for the other one. */
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
-        assets, tags, links, definitions, profiles, events, attachments, uow, ids, clock,
-        APP_VERSION, SCHEMA_VERSION,
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events,
+        attachments, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
     )
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
-        assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events,
+        attachments, attachmentStorage, uow,
     )
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
-        assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events,
+        attachments, attachmentStorage, uow,
     )
+
+    /** How many times an apply asked for the total recompute. Mirrors `AppGraph`'s no-op seam. */
+    var rebuilds = 0
+
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
-        assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events,
+        attachments, attachmentStorage, uow,
+        rebuildAll = { rebuilds += 1 },
     )
     val importBackupMerge: ImportBackupMerge =
         ImportBackupMerge(buildBackupMergePlan, applyBackupMergePlan)
@@ -184,7 +201,7 @@ class FakeGraph(
 
     private companion object {
         const val APP_VERSION = "test"
-        const val SCHEMA_VERSION = 5
+        const val SCHEMA_VERSION = 6
     }
 }
 

@@ -61,10 +61,10 @@ class ImportBackupReplace(
             val doomed = attachments.all().map { it.storageLocator }
 
             // delete in the order that clears references before the rows they point at.
-            // `occurrence_closure` has no delete of its own — the row is immutable — so it is
-            // cleared the only way it ever leaves: the CASCADE from `maintenance_schedule`, which
-            // `schedules.deleteAll()` below takes with it, together with `schedule_provider`,
-            // `schedule_state` and `schedule_local_delivery`. Groups follow, taking their members.
+            // The closure table has no delete of its own — the row is immutable — so it is
+            // cleared the only way it ever leaves: the CASCADE from the schedule row, which
+            // `schedules.deleteAll()` below takes with it, along with the provider rows and the two
+            // unexported tables. Groups follow, taking their members.
             attachments.deleteAll()
             events.deleteAll()
             schedules.deleteAll()

@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileField
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.data.room.dao.EventWithParts
 import com.loosecannon.servicetag.data.room.dao.ProfileWithParts
@@ -178,6 +179,9 @@ fun EventWithParts.toDomain(): AssetEvent = AssetEvent(
             sortOrder = it.sortOrder,
         )
     },
+    scheduleId = event.scheduleId?.let(::ScheduleId),
+    occurrenceOn = event.occurrenceOn,
+    detailsPending = event.detailsPending,
 )
 
 fun AssetEvent.toEntity(): AssetEventEntity = AssetEventEntity(
@@ -194,6 +198,9 @@ fun AssetEvent.toEntity(): AssetEventEntity = AssetEventEntity(
     sourceRef = sourceRef,
     createdAt = createdAt,
     updatedAt = updatedAt,
+    scheduleId = scheduleId?.value,
+    occurrenceOn = occurrenceOn,
+    detailsPending = detailsPending,
 )
 
 fun Measurement.toEntity(eventId: EventId): MeasurementEntity = MeasurementEntity(

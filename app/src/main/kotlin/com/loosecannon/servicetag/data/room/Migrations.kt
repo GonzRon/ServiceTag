@@ -234,3 +234,104 @@ val MIGRATION_4_5: Migration = object : Migration(4, 5) {
         )
     }
 }
+
+/**
+ * Schema v5 -> v6: the maintenance tables (spec §3.1). Seven `CREATE TABLE`s with their indices,
+ * and then `asset_event` gains three columns and two indices.
+ *
+ * As everywhere in this file the SQL is copied verbatim from the exported `6.json`, so the
+ * migration and the compiled entities have one source and Room validates the result on open.
+ *
+ * **Why `ALTER TABLE ADD COLUMN` and not a 12-step recreate.** `asset_event` is altered rather than
+ * only added to, so two implementations were available: three `ADD COLUMN`s plus two
+ * `CREATE INDEX`es, or building a `_new_asset_event`, copying every row into it, dropping the old
+ * table and renaming — the shape `MIGRATION_2_3` and `MIGRATION_3_4` had to use. The additive one is
+ * used here because it satisfies both requirements outright:
+ *
+ *  - SQLite **can** add a column carrying a `REFERENCES` clause as long as its default is NULL, and
+ *    `schedule_id` is nullable with no default, so the foreign key is registered on the altered
+ *    table exactly as a fresh install declares it — which is the thing a recreate would have been
+ *    needed for, and is asserted against a fresh v6 database by `MaintenanceMigrationTest`;
+ *  - and it copies no rows at all, so "every pre-existing row is byte-identical" holds by
+ *    construction rather than by a correct column list in an `INSERT ... SELECT`, which is where a
+ *    recreate can silently drop or reorder a value.
+ *
+ * The new tables are created **parents-first**: `maintenance_group` before `maintenance_schedule`,
+ * which references it, and both before `asset_event`'s new `schedule_id`, whose `REFERENCES` clause
+ * names a table that has to exist by then.
+ */
+val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `maintenance_group` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `archived_at` INTEGER, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_maintenance_group_name` ON `maintenance_group` (`name`)",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `maintenance_group_member` (`id` TEXT NOT NULL, `group_id` TEXT NOT NULL, `asset_id` TEXT NOT NULL, `sort_order` INTEGER NOT NULL, `added_at` INTEGER NOT NULL, `removed_at` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`group_id`) REFERENCES `maintenance_group`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_maintenance_group_member_group_id_asset_id_added_at` ON `maintenance_group_member` (`group_id`, `asset_id`, `added_at`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_maintenance_group_member_group_id` ON `maintenance_group_member` (`group_id`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_maintenance_group_member_asset_id` ON `maintenance_group_member` (`asset_id`)",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `maintenance_schedule` (`id` TEXT NOT NULL, `asset_id` TEXT, `group_id` TEXT, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `time_interval` INTEGER, `time_unit` TEXT, `time_basis` TEXT NOT NULL, `anchor_on` TEXT, `lead_days` INTEGER NOT NULL, `meter_definition_id` TEXT, `meter_interval` REAL, `anchor_meter` REAL, `meter_lead` REAL, `season_behavior` TEXT NOT NULL, `season_reentry` TEXT, `season_reentry_offset_days` INTEGER, `completion_mode` TEXT NOT NULL, `profile_id` TEXT, `reminders_enabled` INTEGER NOT NULL, `status` TEXT NOT NULL, `postponed_due_on` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`group_id`) REFERENCES `maintenance_group`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`meter_definition_id`) REFERENCES `measurement_definition`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`profile_id`) REFERENCES `event_profile`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_maintenance_schedule_asset_id_status` ON `maintenance_schedule` (`asset_id`, `status`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_maintenance_schedule_group_id_status` ON `maintenance_schedule` (`group_id`, `status`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_maintenance_schedule_meter_definition_id` ON `maintenance_schedule` (`meter_definition_id`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_maintenance_schedule_profile_id` ON `maintenance_schedule` (`profile_id`)",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `schedule_provider` (`schedule_id` TEXT NOT NULL, `provider` TEXT NOT NULL, `enabled` INTEGER NOT NULL, PRIMARY KEY(`schedule_id`, `provider`), FOREIGN KEY(`schedule_id`) REFERENCES `maintenance_schedule`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `occurrence_closure` (`id` TEXT NOT NULL, `schedule_id` TEXT NOT NULL, `occurrence_on` TEXT NOT NULL, `closed_on` TEXT NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`schedule_id`) REFERENCES `maintenance_schedule`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_occurrence_closure_schedule_id_occurrence_on` ON `occurrence_closure` (`schedule_id`, `occurrence_on`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_occurrence_closure_schedule_id` ON `occurrence_closure` (`schedule_id`)",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `schedule_state` (`schedule_id` TEXT NOT NULL, `last_completed_on` TEXT, `last_completion_event_id` TEXT, `last_completed_meter` REAL, `current_meter` REAL, `computed_due_meter` REAL, `last_termination_effective_on` TEXT, `last_termination_kind` TEXT NOT NULL, `computed_due_on` TEXT, `effective_due_on` TEXT, `season_active` INTEGER NOT NULL, `computed_for_on` TEXT NOT NULL, `computed_at` INTEGER NOT NULL, PRIMARY KEY(`schedule_id`), FOREIGN KEY(`schedule_id`) REFERENCES `maintenance_schedule`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_schedule_state_effective_due_on` ON `schedule_state` (`effective_due_on`)",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `schedule_local_delivery` (`schedule_id` TEXT NOT NULL, `snoozed_until_at` INTEGER, `last_notified_at` INTEGER, `first_entry_seen` INTEGER NOT NULL, `action_nonce` TEXT, `nonce_issued_at` INTEGER, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`schedule_id`), FOREIGN KEY(`schedule_id`) REFERENCES `maintenance_schedule`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+
+        // The altered table. Each column's definition is the one `6.json` spells for it, so the
+        // altered table and a fresh one describe the same column — nullability, default and the
+        // REFERENCES clause included.
+        connection.execSQL(
+            "ALTER TABLE `asset_event` ADD COLUMN `schedule_id` TEXT REFERENCES `maintenance_schedule`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL",
+        )
+        connection.execSQL("ALTER TABLE `asset_event` ADD COLUMN `occurrence_on` TEXT")
+        connection.execSQL(
+            "ALTER TABLE `asset_event` ADD COLUMN `details_pending` INTEGER NOT NULL DEFAULT 0",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_asset_event_schedule_id_occurrence_on_asset_id` ON `asset_event` (`schedule_id`, `occurrence_on`, `asset_id`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_asset_event_schedule_id_occurred_on` ON `asset_event` (`schedule_id` ASC, `occurred_on` DESC)",
+        )
+    }
+}

@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.ui.backup
 
 import com.loosecannon.servicetag.backup.BackupSetNames
 import com.loosecannon.servicetag.core.backup.ArtifactsCodec
+import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupSetIncomplete
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
@@ -289,7 +290,10 @@ class BackupViewModelTest {
             .lines()
             .filterNot { line -> dropped.any { line.trimStart().startsWith("\"$it\"") } }
             .joinToString("\n")
-            .replace(Regex(""""formatVersion"\s*:\s*5"""), "\"formatVersion\": 4")
+            .replace(
+                Regex(""""formatVersion"\s*:\s*${BackupCodec.FORMAT_VERSION}"""),
+                "\"formatVersion\": 4",
+            )
             .replace(Regex(""",(\s*})"""), "$1") // the comma the dropped fields left behind
         val out = ByteArrayOutputStream()
         ZipOutputStream(out).use { zos ->
@@ -576,7 +580,7 @@ class BackupViewModelTest {
         assertEquals(1, report.assets)
         assertEquals(0, report.tags)
         assertEquals(0, report.links)
-        assertEquals(5, report.formatVersion)
+        assertEquals(BackupCodec.FORMAT_VERSION, report.formatVersion)
         assertEquals(listOf(pump.id), graph.assets.all().map(Asset::id))
     }
 

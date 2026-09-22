@@ -14,10 +14,23 @@ import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.GroupMember
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.PayloadFormat
+import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.SeasonBehavior
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.AttachmentStore
 import com.loosecannon.servicetag.core.ports.ByteSource
@@ -86,6 +99,9 @@ class ImportBackupMergeTest {
         var rebuilds = 0
         var writesAtRebuild: List<Int> = emptyList()
 
+        /** Set to make the recompute throw, which is how "inside the transaction" is observed. */
+        var rebuildFails = false
+
         val build = BuildBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, storage, uow,
@@ -103,6 +119,7 @@ class ImportBackupMergeTest {
                         attachments.all().size,
                     )
                 }
+                if (rebuildFails) throw RiggedFailure("rigged recompute failure")
             },
         )
         val merge = ImportBackupMerge(build, apply)
@@ -172,14 +189,60 @@ class ImportBackupMergeTest {
         createdAt = 9L, updatedAt = 10L,
     )
 
-    /** A real format-5 data archive of [f]'s rows, through the production export. */
+    /** A real data archive of [f]'s rows, at the current format, through the production export. */
     private fun exportOf(f: Fakes): ByteArray = runBlocking {
         ExportBackupSet(
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
             f.closures, f.events, f.attachments,
             f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
-            appVersion = "1.1.0", schemaVersion = 5,
+            appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
+    }
+
+    private fun group(id: String, assetId: String) = MaintenanceGroup(
+        id = GroupId(id), name = "Aviary Feeders", description = "", archivedAt = null,
+        createdAt = 10L, updatedAt = 20L,
+        members = listOf(
+            GroupMember(id = "gm-$id", assetId = AssetId(assetId), sortOrder = 0, addedAt = 1_000L, removedAt = null),
+        ),
+    )
+
+    private fun schedule(id: String, groupId: String) = MaintenanceSchedule(
+        id = ScheduleId(id), target = ScheduleTarget.GroupTarget(GroupId(groupId)),
+        title = "Top up feeders", description = "", timeInterval = 1,
+        timeUnit = RecurrenceUnit.WEEK, timeBasis = TimeBasis.FIXED, anchorOn = "2026-04-06",
+        leadDays = 1, meterDefinitionId = null, meterInterval = null, anchorMeter = null,
+        meterLead = null, seasonBehavior = SeasonBehavior.IGNORE, seasonReentry = null,
+        seasonReentryOffsetDays = null, completionMode = CompletionMode.QUICK, profileId = null,
+        remindersEnabled = true, status = ScheduleStatus.ACTIVE, postponedDueOn = null,
+        createdAt = 30L, updatedAt = 40L,
+        providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
+    )
+
+    private fun closure(id: String, scheduleId: String) = OccurrenceClosure(
+        id = id, scheduleId = ScheduleId(scheduleId), occurrenceOn = "2026-05-04",
+        closedOn = "2026-05-06", createdAt = 70L,
+    )
+
+    /** A store that already holds the one attachment [wholeEstate] uses. */
+    private fun storageWithBytes() = FakeAttachmentStorage(
+        InMemoryAttachmentStore().also { it.files["assets/a1/att-1.pdf"] = bytes },
+    )
+
+    /**
+     * An install carrying a row in every table the merge writes that 1.2 added, plus an attachment
+     * whose bytes are really there — so a plan over it reaches the **last** write loop and "after
+     * every write" is a claim with something behind it.
+     */
+    private fun wholeEstate(): Fakes = Fakes(storageWithBytes()).also { f ->
+        runBlocking {
+            f.assets.upsert(asset("a1", "Hot tub"))
+            f.groups.upsert(group("g1", "a1"))
+            f.schedules.upsert(schedule("s1", "g1"))
+            f.closures.insert(closure("oc1", "s1"))
+            f.tags.upsert(tag("t1", "key-1", "a1"))
+            f.attachments.upsert(attachment("att-1", "a1"))
+        }
     }
 
     @Test
@@ -381,7 +444,7 @@ class ImportBackupMergeTest {
      * The fourth store answer, and the one that used to be fatal: a locator whose `open` **throws**.
      * A raced delete or a revoked grant is a missing-bytes answer for that one row — not a failed
      * plan, and not the 500 the API would have to report for an exception it cannot name. The other
-     * six tables merge, `applicable` stays true, and no attachment row is written.
+     * nine tables merge, `applicable` stays true, and no attachment row is written.
      */
     @Test
     fun `an attachment whose bytes cannot be opened is SKIPPED and everything else still merges`() {
@@ -418,7 +481,7 @@ class ImportBackupMergeTest {
      * #44 acceptance 14, the one safety claim that rested entirely on prose: a failure **after** the
      * first row is written rolls the whole thing back. The tag is the fifth table the apply writes,
      * so both assets are already in when it fails — and the destination still ends up exactly as it
-     * started. Falsifiable: move the seven `upsert` loops outside `uow.write` and the two assets
+     * started. Falsifiable: move the ten `upsert` loops outside `uow.write` and the two assets
      * survive.
      */
     @Test
@@ -441,6 +504,50 @@ class ImportBackupMergeTest {
         assertEquals(before, target.everything())
         assertEquals(1, target.uow.rollbacks)
         assertEquals(0, target.uow.commits)
+    }
+
+    /**
+     * The post-apply recompute is **total**, runs **inside** the transaction, and runs **once**.
+     *
+     * Rather than enumerate which schedules an imported event, membership row, closure or meter
+     * reading could touch, the apply recomputes every schedule in the database after the last write
+     * loop. Three facts, each falsifiable: a call per table would make the count more than one; a
+     * call before a loop would make the counts it sees short; and a call outside `uow.write` would
+     * survive a rolled-back apply, which the failing-recompute half proves it does not.
+     */
+    @Test
+    fun `the total recompute runs once, inside the transaction, after every write`() {
+        val archive = exportOf(wholeEstate())
+
+        val target = Fakes(storageWithBytes())
+        val report = runBlocking { target.merge.run(archive) }
+
+        assertTrue(report.applicable, "unexpected conflicts: ${report.conflicts}")
+        assertEquals(1, target.rebuilds)
+        // What was in the database when it was asked, in MergeWrites' field order. Every row the
+        // plan had to write was already written — including the attachment, which goes last.
+        assertEquals(listOf(1, 1, 0, 0, 1, 1, 0, 1, 0, 1), target.writesAtRebuild)
+        assertEquals(1, target.uow.commits)
+
+        // Inside the transaction: a recompute that throws takes the whole apply with it.
+        val rolledBack = Fakes(storageWithBytes())
+        runBlocking { rolledBack.assets.upsert(asset("z9", "Generator")) }
+        val before = rolledBack.everything()
+        rolledBack.rebuildFails = true
+
+        assertFailsWith<RiggedFailure> { runBlocking { rolledBack.merge.run(archive) } }
+
+        assertEquals(1, rolledBack.rebuilds)
+        assertEquals(before, rolledBack.everything())
+        assertEquals(1, rolledBack.uow.rollbacks)
+        assertEquals(0, rolledBack.uow.commits)
+
+        // And a refused apply never reaches it at all: nothing derived is recomputed for a merge
+        // that wrote nothing.
+        val conflicted = Fakes(storageWithBytes())
+        runBlocking { conflicted.assets.upsert(asset("a1", "Spa")) }
+        assertFailsWith<MergeRefused> { runBlocking { conflicted.merge.run(archive) } }
+        assertEquals(0, conflicted.rebuilds)
     }
 
     @Test

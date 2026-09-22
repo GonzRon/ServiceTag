@@ -491,7 +491,7 @@ class ApiRouterTest {
 
         assertEquals(200, response.status)
         val report = reportIn(response)
-        assertEquals(5, report.formatVersion)
+        assertEquals(BackupCodec.FORMAT_VERSION, report.formatVersion)
         assertTrue(report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.assets)
         assertEquals(emptyList<MergeDecisionDto>(), report.conflicts)

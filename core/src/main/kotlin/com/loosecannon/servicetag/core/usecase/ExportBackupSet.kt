@@ -68,8 +68,9 @@ class ExportBackupSet(
                 eventProfiles = profiles.all().map { it.toDto() },
                 assetEvents = events.all().map { it.toDto() },
                 attachments = rows.map { it.toDto() },
-                // `schedule_state` and `schedule_local_delivery` are deliberately not read here:
-                // the first is derived and rebuilt after any import, the second is device-local.
+                // Schema 6's other two tables are deliberately not read here: the first is
+                // derived and is rebuilt after any import, the second is device-local delivery
+                // bookkeeping. Neither has a port on this use case that could reach it.
                 maintenanceGroups = groups.all().map { it.toDto() },
                 maintenanceSchedules = schedules.all().map { it.toDto() },
                 occurrenceClosures = closures.all().map { it.toDto() },

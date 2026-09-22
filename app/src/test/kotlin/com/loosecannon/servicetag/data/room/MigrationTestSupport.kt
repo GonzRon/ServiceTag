@@ -62,7 +62,19 @@ internal fun openMigrated(file: File): AppDatabase = Room
     .databaseBuilder<AppDatabase>(name = file.absolutePath)
     .setDriver(BundledSQLiteDriver())
     .setQueryCoroutineContext(Dispatchers.Default)
-    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+    .build()
+
+/**
+ * Opens [file] as a **fresh** database — no migration runs, because there is nothing on disk to
+ * migrate — so its schema is whatever the compiled entities say. Comparing a migrated file against
+ * one of these is how "the migration produces the same schema as a new install" is asserted without
+ * hand-writing the expected DDL twice.
+ */
+internal fun openFresh(file: File): AppDatabase = Room
+    .databaseBuilder<AppDatabase>(name = file.absolutePath)
+    .setDriver(BundledSQLiteDriver())
+    .setQueryCoroutineContext(Dispatchers.Default)
     .build()
 
 internal fun SQLiteConnection.tableNames(): Set<String> = buildSet {
@@ -83,6 +95,83 @@ internal fun SQLiteConnection.columnNamesOf(table: String): Set<String> = buildS
         s.bindText(1, table)
         while (s.step()) add(s.getText(0))
     }
+}
+
+/**
+ * The columns of [table] in declaration order, each with its type, nullability and default — the
+ * whole of what `PRAGMA table_info` knows except the row number.
+ */
+internal fun SQLiteConnection.columnsOf(table: String): List<String> = buildList {
+    prepare("SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info(?)").use { s ->
+        s.bindText(1, table)
+        while (s.step()) {
+            val default = if (s.isNull(3)) "-" else s.getText(3)
+            add("${s.getText(0)} ${s.getText(1)} notnull=${s.getInt(2)} default=$default pk=${s.getInt(4)}")
+        }
+    }
+}
+
+/** The primary-key columns of [table], in key order. */
+internal fun SQLiteConnection.primaryKeyOf(table: String): List<String> = buildList {
+    val byPosition = sortedMapOf<Int, String>()
+    prepare("SELECT name, pk FROM pragma_table_info(?)").use { s ->
+        s.bindText(1, table)
+        while (s.step()) {
+            val position = s.getInt(1)
+            if (position > 0) byPosition[position] = s.getText(0)
+        }
+    }
+    addAll(byPosition.values)
+}
+
+/** Every foreign key of [table] as `child -> parent(column) ON DELETE action`, sorted. */
+internal fun SQLiteConnection.foreignKeysOf(table: String): List<String> = buildList {
+    prepare("SELECT \"table\", \"from\", \"to\", on_delete FROM pragma_foreign_key_list(?)").use { s ->
+        s.bindText(1, table)
+        while (s.step()) {
+            add("${s.getText(1)} -> ${s.getText(0)}(${s.getText(2)}) ON DELETE ${s.getText(3)}")
+        }
+    }
+}.sorted()
+
+/** Every index on [table] as `name | sql`, sorted — so a hand-written name or order shows up. */
+internal fun SQLiteConnection.indexDefinitionsOn(table: String): List<String> = buildList {
+    prepare("SELECT name, COALESCE(sql,'(implicit)') FROM sqlite_master WHERE type='index' AND tbl_name=?")
+        .use { s ->
+            s.bindText(1, table)
+            while (s.step()) add("${s.getText(0)} | ${s.getText(1)}")
+        }
+}.sorted()
+
+/** Every column of one row of [table], as text, so a seeded row can be compared field for field. */
+internal fun SQLiteConnection.rowOf(table: String, id: String, key: String = "id"): List<String> =
+    buildList {
+        prepare("SELECT * FROM $table WHERE $key = ?").use { s ->
+            s.bindText(1, id)
+            check(s.step()) { "$table has no row with $key = $id" }
+            for (i in 0 until s.getColumnCount()) {
+                add("${s.getColumnName(i)}=${if (s.isNull(i)) "NULL" else s.getText(i)}")
+            }
+        }
+    }
+
+/**
+ * `app/src/main/...`, resolved the way [schemaFile] resolves the exported schemas: Gradle runs JVM
+ * unit tests with the module directory as the working directory, but an IDE run configuration may
+ * use the repository root, so both are tried. This is what lets a structural assertion be made
+ * about the source itself — which is the only way to see a Room annotation, whose retention is
+ * BINARY and therefore invisible to runtime reflection.
+ */
+internal fun mainSourceFile(relative: String): File =
+    listOf(File("src/main/$relative"), File("app/src/main/$relative"))
+        .firstOrNull { it.isFile }
+        ?: error("cannot find src/main/$relative from ${File(".").absolutePath}")
+
+/** Every Kotlin file under `app/src/main`. */
+internal fun mainSourceFiles(): List<File> {
+    val root = listOf(File("src/main"), File("app/src/main")).firstOrNull { it.isDirectory }
+        ?: error("cannot find src/main from ${File(".").absolutePath}")
+    return root.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
 }
 
 private fun JsonObject.sql(key: String, table: String): String =

@@ -753,8 +753,9 @@ internal suspend fun storedBytesOf(
 /**
  * Ten reads. **The caller owns the transaction** — see each use case for which one.
  *
- * `schedule_state` and `schedule_local_delivery` are deliberately not among them: derived state
- * never appears in a plan, and device-local delivery state is never merged.
+ * Schema 6's other two tables are deliberately not among them, and are named nowhere in this
+ * package: derived due state never appears in a plan, and device-local delivery state is never
+ * merged.
  */
 internal suspend fun mergeSnapshotOf(
     assets: AssetRepository,

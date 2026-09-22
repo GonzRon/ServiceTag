@@ -46,9 +46,10 @@ import kotlinx.serialization.json.Json
  * field at its default, respectively. **Restoring one never invents a schedule.** JDK ZIP + JDK
  * SHA-256 + kotlinx-serialization only; no Android types anywhere in here.
  *
- * Two tables are deliberately absent. `schedule_state` is derived — the recompute function rebuilds
- * it after any import — and `schedule_local_delivery` is device-local notification bookkeeping;
- * neither is ever exported and neither is ever merged.
+ * Two of schema 6's tables are deliberately absent from this format, and are named nowhere in this
+ * package: the schedule's **derived** due state, which the recompute function rebuilds after any
+ * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
+ * ever merged.
  */
 object BackupCodec {
     const val FORMAT_VERSION = 6

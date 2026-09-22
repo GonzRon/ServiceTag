@@ -7,19 +7,31 @@ import com.loosecannon.servicetag.data.room.dao.AttachmentDao
 import com.loosecannon.servicetag.data.room.dao.DefinitionDao
 import com.loosecannon.servicetag.data.room.dao.EventDao
 import com.loosecannon.servicetag.data.room.dao.ExternalLinkDao
+import com.loosecannon.servicetag.data.room.dao.MaintenanceGroupDao
+import com.loosecannon.servicetag.data.room.dao.MaintenanceScheduleDao
 import com.loosecannon.servicetag.data.room.dao.NfcTagDao
+import com.loosecannon.servicetag.data.room.dao.OccurrenceClosureDao
 import com.loosecannon.servicetag.data.room.dao.ProfileDao
+import com.loosecannon.servicetag.data.room.dao.ScheduleLocalDeliveryDao
+import com.loosecannon.servicetag.data.room.dao.ScheduleStateDao
 import com.loosecannon.servicetag.data.room.entities.AssetEntity
 import com.loosecannon.servicetag.data.room.entities.AssetEventEntity
 import com.loosecannon.servicetag.data.room.entities.AttachmentEntity
 import com.loosecannon.servicetag.data.room.entities.ConsumableUsageEntity
 import com.loosecannon.servicetag.data.room.entities.EventProfileEntity
 import com.loosecannon.servicetag.data.room.entities.ExternalLinkEntity
+import com.loosecannon.servicetag.data.room.entities.MaintenanceGroupEntity
+import com.loosecannon.servicetag.data.room.entities.MaintenanceGroupMemberEntity
+import com.loosecannon.servicetag.data.room.entities.MaintenanceScheduleEntity
 import com.loosecannon.servicetag.data.room.entities.MeasurementDefinitionEntity
 import com.loosecannon.servicetag.data.room.entities.MeasurementEntity
 import com.loosecannon.servicetag.data.room.entities.NfcTagEntity
+import com.loosecannon.servicetag.data.room.entities.OccurrenceClosureEntity
 import com.loosecannon.servicetag.data.room.entities.ProfileConsumableEntity
 import com.loosecannon.servicetag.data.room.entities.ProfileFieldEntity
+import com.loosecannon.servicetag.data.room.entities.ScheduleLocalDeliveryEntity
+import com.loosecannon.servicetag.data.room.entities.ScheduleProviderEntity
+import com.loosecannon.servicetag.data.room.entities.ScheduleStateEntity
 
 @Database(
     entities = [
@@ -34,8 +46,15 @@ import com.loosecannon.servicetag.data.room.entities.ProfileFieldEntity
         MeasurementEntity::class,
         ConsumableUsageEntity::class,
         AttachmentEntity::class,
+        MaintenanceGroupEntity::class,
+        MaintenanceGroupMemberEntity::class,
+        MaintenanceScheduleEntity::class,
+        ScheduleProviderEntity::class,
+        OccurrenceClosureEntity::class,
+        ScheduleStateEntity::class,
+        ScheduleLocalDeliveryEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -46,4 +65,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
     abstract fun eventDao(): EventDao
     abstract fun attachmentDao(): AttachmentDao
+    abstract fun maintenanceGroupDao(): MaintenanceGroupDao
+    abstract fun maintenanceScheduleDao(): MaintenanceScheduleDao
+    abstract fun occurrenceClosureDao(): OccurrenceClosureDao
+    abstract fun scheduleStateDao(): ScheduleStateDao
+    abstract fun scheduleLocalDeliveryDao(): ScheduleLocalDeliveryDao
 }
