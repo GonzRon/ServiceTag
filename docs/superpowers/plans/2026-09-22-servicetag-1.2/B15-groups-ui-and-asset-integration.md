@@ -107,7 +107,7 @@ One test per hazard class; unit tests over the two view models, plus one connect
   - `grep -rnE '(CreateAsset|parentAssetId|BindTag|ProvisionTag)' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/Group*.kt` → no match.
   - `grep -rn 'removedAt = null\|removed_at = NULL' app/src/main/kotlin/com/loosecannon/servicetag/ui` → no match (invariant 79).
   - `grep -rn 'CloseRound' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/Group*.kt` → no match.
-  - `git diff --stat master -- core/src/main app/src/main/kotlin/com/loosecannon/servicetag/api app/src/main/kotlin/com/loosecannon/servicetag/data app/src/main/kotlin/com/loosecannon/servicetag/ui/asset/AssetEditScreen.kt` → **empty**.
+  - `git diff --stat master -- core/src/main app/src/main/kotlin/com/loosecannon/servicetag/api app/src/main/kotlin/com/loosecannon/servicetag/data app/src/main/kotlin/com/loosecannon/servicetag/ui/asset/AssetEditScreen.kt` → **empty**. **Amended at B15's review (2026-09-22):** carry-forward (d), the invariant-8 refusal, lives in `core/.../usecase/DeleteAsset.kt` — that one file is touched by ruling; run the diff against the lane base.
 
 ## Estimated size
 
