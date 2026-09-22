@@ -124,7 +124,7 @@ The **action label** is already ratified; this is the confirmation sentence, and
 ## Review gate
 
 - Unit: `./gradlew :app:testDebugUnitTest --console=plain` → BUILD SUCCESSFUL, zero failures, zero skips; counts recorded.
-- Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.loosecannon.servicetag.ui.maintenance.ScheduleEditorTest --tests '…ui.maintenance.ScheduleOperationsTest' --console=plain` → zero failures, zero skips.
+- Connected on **`emulator-5554`**: `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.loosecannon.servicetag.ui.maintenance.ScheduleEditorTest,com.loosecannon.servicetag.ui.maintenance.ScheduleOperationsTest --console=plain` → zero failures, zero skips.
 - Structural, anchored:
   - `grep -rn 'NotificationPermission' app/src/main | grep -v 'reminders/NotificationPermission.kt'` → **only** this brief's view model.
   - `grep -rnE '(SaveSchedule|CompleteSchedule|PostponeSchedule|CloseRound|CompleteGroupMembers|ReminderSnooze)' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance` shows the use cases **called**; `grep -rn 'EventRepository\|events.upsert\|ClosureRepository' app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance` → **no match** (no rule re-implemented, no direct write).
