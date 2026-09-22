@@ -376,18 +376,20 @@ class InMemoryGroupRepository : GroupRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, MaintenanceGroup>()
     override var witness: TransactionWitness? = null
     private val rig = UpsertRig("group")
+    private val version = MutableStateFlow(0)
     var failOnUpsert: Int?
         get() = rig.failOnUpsert
         set(value) { rig.failOnUpsert = value }
 
     override fun snapshot(): () -> Unit {
         val copy = LinkedHashMap(rows)
-        return { rows.clear(); rows.putAll(copy) }
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
     }
 
     override suspend fun upsert(group: MaintenanceGroup) {
         rig.check()
         rows[group.id.value] = group
+        version.value += 1
     }
 
     override suspend fun get(id: GroupId): MaintenanceGroup? = rows[id.value]
@@ -397,7 +399,25 @@ class InMemoryGroupRepository : GroupRepository, Rollbackable, Witnessed {
         return rows.values.toList()
     }
 
-    override suspend fun deleteAll() { rows.clear() }
+    /** The open windows only, as `removed_at IS NULL` in the DAO's query does. */
+    override suspend fun forAsset(assetId: AssetId): List<MaintenanceGroup> =
+        rows.values.filter { g -> g.members.any { it.assetId == assetId && it.removedAt == null } }
+
+    /** Every window, open or closed: the question the recompute asks. */
+    override suspend fun allWindowsFor(assetId: AssetId): List<MaintenanceGroup> =
+        rows.values.filter { g -> g.members.any { it.assetId == assetId } }
+
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeAll(): Flow<List<MaintenanceGroup>> = version.map {
+        rows.values.sortedWith(compareBy({ it.name }, { it.id.value }))
+    }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<MaintenanceGroup>> = version.map {
+        rows.values
+            .filter { g -> g.members.any { it.assetId == assetId && it.removedAt == null } }
+            .sortedWith(compareBy({ it.name }, { it.id.value }))
+    }
 }
 
 /**

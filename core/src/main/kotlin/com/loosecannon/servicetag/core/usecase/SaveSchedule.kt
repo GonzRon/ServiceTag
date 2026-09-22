@@ -36,6 +36,11 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *   This is why the other operations leave `updated_at` alone: only an edit moves the floor
  *   (invariant 25).
  *
+ * A group-targeted schedule is refused on a group with **no open membership**. Its first round would
+ * oblige nobody, and no later membership change rescues it: a member added afterwards joins the
+ * round *after* the one already open, and a round that obliges nobody can neither be completed nor
+ * closed, so the schedule would report `NO_DATA` for ever (invariants 74, 77).
+ *
  * One `uow.write`: the row and the recompute commit together or not at all.
  */
 class SaveSchedule(
@@ -54,12 +59,16 @@ class SaveSchedule(
 
         val profileAssetId = cmd.profileId?.let { profiles.get(it)?.assetId }
         val meter = cmd.meterDefinitionId?.let { definitions.get(it) }
-        val problems = scheduleProblems(cmd, profileAssetId, meter)
+        // Resolved before validation, not after, so "this group has no members" is collected with
+        // every other bad-rule problem instead of arriving as a second round trip after the editor
+        // has already fixed the first batch.
+        val group = cmd.targetGroupId?.let { groups.get(it) }
+        val problems = scheduleProblems(cmd, profileAssetId, meter, group?.openMembers()?.size)
         if (problems.isNotEmpty()) throw ScheduleValidation(problems)
 
         when (val target = cmd.target()!!) {
             is ScheduleTarget.AssetTarget -> assets.get(target.assetId) ?: throw NoSuchAsset(target.assetId)
-            is ScheduleTarget.GroupTarget -> groups.get(target.groupId) ?: throw NoSuchGroup(target.groupId)
+            is ScheduleTarget.GroupTarget -> group ?: throw NoSuchGroup(target.groupId)
         }
 
         val now = clock.nowMillis()

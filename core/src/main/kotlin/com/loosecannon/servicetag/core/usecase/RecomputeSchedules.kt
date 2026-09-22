@@ -15,6 +15,8 @@ import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.schedule.GroupOccurrence
+import com.loosecannon.servicetag.core.schedule.GroupOccurrences
 import com.loosecannon.servicetag.core.schedule.ScheduleRecompute
 import com.loosecannon.servicetag.core.schedule.SeasonWindow
 
@@ -31,10 +33,10 @@ import com.loosecannon.servicetag.core.schedule.SeasonWindow
  * It reads the clock exactly once per rebuild, to stamp `computedAt`. The engine itself cannot:
  * `rebuild` is a pure function and a pure function has no clock, which is what makes it idempotent.
  *
- * [groupSchedulesRequiring] is the groups brief's half of the closure. Until it is supplied, an
- * event on an Asset rebuilds that Asset's own schedules — the asset path, which this brief's tests
- * cover — and the group path is a seam with one name rather than an assumption spread over four
- * call sites.
+ * [groupSchedulesRequiring] is the group half of that closure, and it is deliberately a **superset**
+ * of "requires it": see [GroupRepository.allWindowsFor]. Rebuilding a schedule that turns out not to
+ * require the Asset costs one pure recomputation of the same answer, because `rebuild` is
+ * idempotent; missing one leaves a due date derived from history the engine has not read.
  */
 class RecomputeSchedules(
     private val schedules: ScheduleRepository,
@@ -45,7 +47,6 @@ class RecomputeSchedules(
     private val assets: AssetRepository,
     private val today: Today,
     private val clock: Clock,
-    private val groupSchedulesRequiring: suspend (AssetId) -> List<MaintenanceSchedule> = { emptyList() },
 ) {
     /** The Asset's own schedules, plus every group schedule that requires it. */
     suspend fun forAsset(assetId: AssetId) {
@@ -67,6 +68,45 @@ class RecomputeSchedules(
      */
     suspend fun all() {
         schedules.all().forEach { rebuild(it) }
+    }
+
+    /**
+     * Every group schedule that could require [assetId] for some round of its own: the schedules of
+     * every group the Asset has **ever** been a member of.
+     *
+     * Wider than "requires it now", on purpose. A member removed mid-round is still required for the
+     * round already open (D-10), and a member whose window closed long ago is still required for the
+     * rounds it covered — both of which an event on that Asset can still complete. The narrow
+     * question is answered per occurrence, inside the engine, where the round's own open instant is
+     * known; this one only has to be certain it misses nothing.
+     */
+    private suspend fun groupSchedulesRequiring(assetId: AssetId): List<MaintenanceSchedule> =
+        groups.allWindowsFor(assetId).flatMap { schedules.forGroup(it.id) }
+
+    /**
+     * The schedule's **current occurrence**, derived from the same history [stateOf] reads.
+     *
+     * One gathering point, for the same reason the recompute itself is one: the occurrence a use
+     * case validates against and the occurrence the engine terminates must be derived from the same
+     * rows, or a member could be refused for a round the engine thinks it is required for. Null only
+     * for a schedule with no time rule, which a group target can never be.
+     */
+    suspend fun occurrenceOf(schedule: MaintenanceSchedule): GroupOccurrence? {
+        val inputs = inputsFor(schedule)
+        val closureRows = closures.forSchedule(schedule.id)
+        val key = ScheduleRecompute.currentOccurrenceOn(
+            schedule = schedule,
+            events = inputs.events,
+            closures = closureRows,
+            membership = inputs.membership,
+        ) ?: return null
+        return GroupOccurrences.on(
+            schedule = schedule,
+            events = inputs.events,
+            closures = closureRows,
+            membership = inputs.membership,
+            occurrenceOn = key,
+        )
     }
 
     /**

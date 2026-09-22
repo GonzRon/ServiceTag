@@ -396,6 +396,16 @@ object BackupCodec {
                         "${schedule.profileId}, which is not in eventProfiles",
                 )
             }
+            // A meter-only schedule has no calendar occurrence, so there is no date for a
+            // postponement to replace: `computedDueOn` is null for it and `effectiveDueOn` would
+            // become non-null anyway, which is exactly the state invariant 10 forbids. The
+            // postpone operation already refuses it; without this the import is the way in.
+            if (schedule.timeInterval == null && schedule.postponedDueOn != null) {
+                throw BackupCorrupt(
+                    "maintenanceSchedules: schedule ${schedule.id} carries a postponedDueOn " +
+                        "but has no time rule to postpone",
+                )
+            }
         }
 
         uniqueIds("occurrenceClosures", data.occurrenceClosures.map { it.id })

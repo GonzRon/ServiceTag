@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
@@ -107,10 +108,16 @@ class ScheduleOperationsTest {
         return asset.id
     }
 
-    private suspend fun seedGroup(id: String = "g1"): GroupId {
+    private suspend fun seedGroup(id: String = "g1", members: List<String> = emptyList()): GroupId {
         val group = MaintenanceGroup(
             id = GroupId(id), name = "North run", description = "", archivedAt = null,
-            createdAt = 1L, updatedAt = 1L, members = emptyList(),
+            createdAt = 1L, updatedAt = 1L,
+            members = members.mapIndexed { index, assetId ->
+                GroupMember(
+                    id = "$id-m${index + 1}", assetId = AssetId(assetId), sortOrder = index,
+                    addedAt = 1L, removedAt = null,
+                )
+            },
         )
         groups.upsert(group)
         return group.id
@@ -525,6 +532,12 @@ class ScheduleOperationsTest {
             ),
             "a profile on a group target",
         )
+        // `seedGroup` left this group with no members, which is the refusal itself: a first round
+        // that obliges nobody can never terminate, so the schedule is not storable (invariant 74).
+        assertTrue(
+            ScheduleProblem.EmptyGroupTarget in problemsOf(groupCmd),
+            "a group-targeted schedule on an empty group",
+        )
         assertTrue(
             ScheduleProblem.ForeignProfile(foreignProfile) in problemsOf(good.copy(profileId = foreignProfile)),
             "a foreign profile",
@@ -614,14 +627,16 @@ class ScheduleOperationsTest {
     }
 
     /**
-     * A group-targeted completion is refused rather than guessed at: the required set of a group
-     * occurrence is derived from the membership windows, and writing an event against an Asset this
-     * brief cannot prove is a required member is exactly what invariants 28 and 29 forbid.
+     * A group-targeted completion is refused **here**, permanently, and not for want of a
+     * derivation: this operation takes no member list, so obeying it would mean choosing an Asset to
+     * write an event against, which is exactly what invariants 28 and 29 forbid. Completing a group
+     * round names its members and goes through [CompleteGroupMembers]; the route that serves both
+     * kinds of target dispatches on the target, so the two paths cannot be confused for one.
      */
     @Test
-    fun aGroupTargetedCompletionIsRefusedUntilTheGroupsBriefLands() = runTest {
+    fun aGroupTargetedCompletionIsRefusedBecauseItNamesNoMember() = runTest {
         val assetId = seedAsset()
-        val groupId = seedGroup()
+        val groupId = seedGroup(members = listOf(assetId.value))
         val schedule = save.run(
             null,
             quarterlyCommand(assetId).copy(targetAssetId = null, targetGroupId = groupId),

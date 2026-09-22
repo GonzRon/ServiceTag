@@ -2,13 +2,11 @@ package com.loosecannon.servicetag.core.schedule
 
 import com.loosecannon.servicetag.core.journal.EventChronology
 import com.loosecannon.servicetag.core.model.AssetEvent
-import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.ScheduleState
-import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.Season
 import com.loosecannon.servicetag.core.model.SeasonBehavior
 import com.loosecannon.servicetag.core.model.TerminationKind
@@ -85,7 +83,16 @@ object ScheduleRecompute {
             null
         }
 
-        val computedDueOn = computedDueOn(schedule, last)
+        // A group-targeted round with nobody in it is **not actionable**: it reports no due date at
+        // all, which is how [statusOf] comes to answer `NO_DATA` for it (spec §2.4, invariants 74,
+        // 77). Reporting a date and leaving each surface to remember not to offer it is the R1
+        // defect in another costume, and the postponement goes with it for the same reason — a sort
+        // key on a round nobody can act on is exactly what "never counted as due" forbids.
+        // An asset-targeted schedule always requires its own Asset, so this never fires for one.
+        val due = computedDueOn(schedule, last)
+        val actionable = due == null ||
+            OccurrenceBasis.of(schedule, events, closures, membership).required(due).isNotEmpty()
+        val computedDueOn = if (actionable) due else null
         return ScheduleState(
             scheduleId = schedule.id,
             lastCompletedOn = newest?.occurredOn,
@@ -96,7 +103,7 @@ object ScheduleRecompute {
             lastTerminationEffectiveOn = last?.effectiveOn,
             lastTerminationKind = last?.kind ?: TerminationKind.NONE,
             computedDueOn = computedDueOn,
-            effectiveDueOn = schedule.postponedDueOn ?: computedDueOn,
+            effectiveDueOn = if (actionable) schedule.postponedDueOn ?: computedDueOn else null,
             seasonActive = seasonActive(schedule, season, today),
             computedForOn = today.toString(),
             // The caller's stamp. See the class KDoc: a pure function has no clock.
@@ -125,15 +132,15 @@ object ScheduleRecompute {
         closures: List<OccurrenceClosure>,
         membership: List<GroupMember>,
     ): List<Termination> {
-        val required = requiredMembers(schedule, membership)
-        if (required.isEmpty()) return emptyList()
-
-        val byKey = completionsOf(schedule, events).groupBy { occurrenceKeyOf(schedule, it) }
-        val closureByKey = closures.filter { it.scheduleId == schedule.id }.groupBy { it.occurrenceOn }
-
-        return (byKey.keys + closureByKey.keys).sorted().mapNotNull { key ->
-            val done = byKey[key].orEmpty()
-            val closure = closureByKey[key]?.minByOrNull { it.createdAt }
+        val basis = OccurrenceBasis.of(schedule, events, closures, membership)
+        return basis.keys.mapNotNull { key ->
+            // Per occurrence, not per schedule: a group's required set is a function of the round's
+            // own open instant, so one round of a schedule can be empty and unterminable while the
+            // next is a full checklist.
+            val required = basis.required(key)
+            if (required.isEmpty()) return@mapNotNull null
+            val done = basis.completions(key)
+            val closure = basis.closure(key)
             val latestDone = done.maxOfOrNull { it.occurredOn }
             when {
                 latestDone != null && done.map { it.assetId }.toSet().containsAll(required) ->
@@ -145,25 +152,27 @@ object ScheduleRecompute {
         }.sortedWith(compareBy({ it.occurrenceOn }, { it.effectiveOn }))
     }
 
+    /**
+     * The occurrence key the schedule's current round carries — **actionable or not**.
+     *
+     * [rebuild] reports no due date for a round with an empty required set, because a date is a
+     * claim that there is something to do. A use case still needs that round's key to say *why* it
+     * refused, and to stamp the key a completion claims (spec §2.4: `occurrence_on` comes from
+     * `computedDueOn`, never from the postponed date), so the raw answer is exposed here rather than
+     * reconstructed from a state row that deliberately hides it.
+     *
+     * Null only for a schedule with no time rule, which a group target can never be.
+     */
+    fun currentOccurrenceOn(
+        schedule: MaintenanceSchedule,
+        events: List<AssetEvent>,
+        closures: List<OccurrenceClosure>,
+        membership: List<GroupMember>,
+    ): String? = computedDueOn(schedule, terminations(schedule, events, closures, membership).lastOrNull())
+
     /** This schedule's completions — an event is a completion of it exactly when it names it. */
     private fun completionsOf(schedule: MaintenanceSchedule, events: List<AssetEvent>): List<AssetEvent> =
         events.filter { it.scheduleId == schedule.id }
-
-    /**
-     * Who has to do the work for one occurrence.
-     *
-     * An asset-targeted occurrence has one required member: the schedule's own Asset. **A
-     * group-targeted occurrence's required set is derived from the membership windows and the
-     * previous occurrence's terminating rows, and that derivation is the groups brief's** — this
-     * function is the seam it fills. Until then a group occurrence has an empty required set, which
-     * the fold reads as "not a termination" rather than as "complete": the honest answer, and the
-     * one invariant 77 already prescribes for an empty set.
-     */
-    private fun requiredMembers(schedule: MaintenanceSchedule, membership: List<GroupMember>): Set<AssetId> =
-        when (val target = schedule.target) {
-            is ScheduleTarget.AssetTarget -> setOf(target.assetId)
-            is ScheduleTarget.GroupTarget -> emptySet()
-        }
 
     /**
      * The occurrence key a completion satisfied. Normally it is read straight off the row, which is
@@ -177,7 +186,7 @@ object ScheduleRecompute {
      * is not a reason to throw, which would make old data unusable, and not a reason to use today,
      * which would make it wrong.
      */
-    private fun occurrenceKeyOf(schedule: MaintenanceSchedule, completion: AssetEvent): String {
+    internal fun occurrenceKeyOf(schedule: MaintenanceSchedule, completion: AssetEvent): String {
         completion.occurrenceOn?.let { return it }
         val interval = schedule.timeInterval
         val unit = schedule.timeUnit

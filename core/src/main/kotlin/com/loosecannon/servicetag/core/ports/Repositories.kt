@@ -114,7 +114,31 @@ interface GroupRepository {
     suspend fun upsert(group: MaintenanceGroup)
     suspend fun get(id: GroupId): MaintenanceGroup?
     suspend fun all(): List<MaintenanceGroup>
+
+    /**
+     * The groups this Asset is an **open** member of — #55's asset → groups direction, and what the
+     * asset screen shows. One Asset may hold several *closed* windows in one group, so the answer is
+     * distinct groups and never one entry per window.
+     *
+     * There is no lookup by name here, and there is none anywhere: a name is descriptive, never
+     * identity, in the domain or in a merge (invariant 7).
+     */
+    suspend fun forAsset(assetId: AssetId): List<MaintenanceGroup>
+
+    /**
+     * Every group this Asset has *ever* been a member of, open window or closed.
+     *
+     * This is the question the recompute asks, and it is the wider one on purpose: a member removed
+     * mid-round is **still** required for the round already open (D-10), so an event on a former
+     * member can still change a group schedule's derived state. Answering with the open windows only
+     * would silently stop rebuilding exactly the schedules a mid-round removal leaves behind.
+     */
+    suspend fun allWindowsFor(assetId: AssetId): List<MaintenanceGroup>
     suspend fun deleteAll()
+    fun observeAll(): Flow<List<MaintenanceGroup>>
+
+    /** The groups one Asset is an open member of, followed. */
+    fun observeForAsset(assetId: AssetId): Flow<List<MaintenanceGroup>>
 }
 
 /**

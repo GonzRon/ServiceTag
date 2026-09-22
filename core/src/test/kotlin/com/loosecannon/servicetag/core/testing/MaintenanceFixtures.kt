@@ -8,6 +8,8 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.GroupMember
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
@@ -83,6 +85,12 @@ fun scheduleOf(
     providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
 )
 
+/**
+ * [createdAt] is separate from [occurredOn] on purpose: a **backdated** completion is one whose
+ * `occurred_on` lies in the past and whose `created_at` is now, and the occurrence's open instant
+ * reads the second and never the first. A fixture that tied them together could not express the
+ * case invariant 73 exists for.
+ */
 fun completionOf(
     id: String,
     occurredOn: String,
@@ -91,6 +99,7 @@ fun completionOf(
     scheduleId: String = "s1",
     meter: Pair<String, Double>? = null,
     detailsPending: Boolean = false,
+    createdAt: Long = dayMillis(occurredOn),
 ): AssetEvent = AssetEvent(
     id = EventId(id),
     assetId = AssetId(assetId),
@@ -103,8 +112,8 @@ fun completionOf(
     notes = "",
     source = EventSource.SCHEDULE_QUICK_COMPLETE,
     sourceRef = null,
-    createdAt = dayMillis(occurredOn),
-    updatedAt = dayMillis(occurredOn),
+    createdAt = createdAt,
+    updatedAt = createdAt,
     measurements = meter?.let { (definitionId, value) -> listOf(measurementOf(definitionId, value)) }
         .orEmpty(),
     consumables = emptyList(),
@@ -146,6 +155,38 @@ fun measurementOf(definitionId: String, value: Double): Measurement = Measuremen
     valueText = null,
     unit = "h",
     sortOrder = 0,
+)
+
+/**
+ * A group and its membership windows. [members] are `(assetId, addedOn, removedOn)` triples given as
+ * **dates**, because every window boundary in these tests is "the day the owner added or removed
+ * it"; the stored instants are those dates at midnight UTC, the same conversion [dayMillis] makes
+ * everywhere else here.
+ */
+fun groupOf(
+    id: String = "g1",
+    name: String = "North run",
+    description: String = "",
+    archivedAt: Long? = null,
+    createdOn: String = "2026-01-01",
+    updatedOn: String = createdOn,
+    members: List<Triple<String, String, String?>> = emptyList(),
+): MaintenanceGroup = MaintenanceGroup(
+    id = GroupId(id),
+    name = name,
+    description = description,
+    archivedAt = archivedAt,
+    createdAt = dayMillis(createdOn),
+    updatedAt = dayMillis(updatedOn),
+    members = members.mapIndexed { index, (assetId, addedOn, removedOn) ->
+        GroupMember(
+            id = "$id-m${index + 1}",
+            assetId = AssetId(assetId),
+            sortOrder = index,
+            addedAt = dayMillis(addedOn),
+            removedAt = removedOn?.let(::dayMillis),
+        )
+    },
 )
 
 fun closureOf(

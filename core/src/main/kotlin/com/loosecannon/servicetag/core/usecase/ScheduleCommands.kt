@@ -93,6 +93,16 @@ sealed interface ScheduleProblem {
     /** A profile is one Asset's quick action, so a group target carries no `profileId`. */
     data object ProfileOnGroupTarget : ScheduleProblem
 
+    /**
+     * The group has no open membership, so the schedule's very first round would oblige nobody: it
+     * would report `NO_DATA`, could not be completed and could not be closed, and no later
+     * membership change would rescue it — a member added afterwards joins the round *after* the one
+     * already open, and that round can never terminate. Refused at the command, where the editor can
+     * say "add a member first", rather than stored as a schedule the engine cannot evaluate
+     * (spec §2.4, invariants 74, 77).
+     */
+    data object EmptyGroupTarget : ScheduleProblem
+
     /** The profile belongs to a different Asset, or to none. */
     data class ForeignProfile(val profileId: ProfileId) : ScheduleProblem
 
@@ -154,10 +164,12 @@ class ScheduleArchived(val id: ScheduleId) :
     IllegalStateException("schedule ${id.value} is archived")
 
 /**
- * A completion was aimed at a group-targeted schedule. Which member did the work, and whether that
- * member is required for this occurrence, is derived from the membership windows and the previous
- * occurrence's terminating rows — the groups brief's derivation. Refusing here is deliberate: the
- * alternative would be to write an event against an asset this brief cannot prove is a member.
+ * A completion was aimed at a group-targeted schedule through the operation that names no member.
+ * Which member did the work, and whether that member is required for this occurrence, is derived
+ * from the membership windows and the previous occurrence's terminating rows — so a group round is
+ * completed through [CompleteGroupMembers], which takes that member list. Refusing here is
+ * permanent, not provisional: the alternative would be to write an event against an asset this
+ * operation cannot name.
  */
 class GroupCompletionNotSupported(val id: ScheduleId) :
     IllegalStateException("schedule ${id.value} targets a group")
@@ -177,18 +189,20 @@ internal fun parseDate(value: String): LocalDate? {
 }
 
 /**
- * Everything wrong with [cmd], collected. The target's own shape is checked first because three of
+ * Everything wrong with [cmd], collected. The target's own shape is checked first because four of
  * the other rules are *about* a group target, and reporting "a meter rule on a group target" for a
  * command that names no target at all would send an editor chasing the wrong field.
  *
- * [profile] and [meter] are the rows the caller already resolved by id, or null when the id names
- * nothing at all — which is the same answer as "belongs to another Asset" as far as this command is
- * concerned, and is reported as such.
+ * [profileAssetId] and [meter] are the rows the caller already resolved by id, or null when the id
+ * names nothing at all — which is the same answer as "belongs to another Asset" as far as this
+ * command is concerned, and is reported as such. [groupOpenMembers] is how many open membership
+ * windows the named group holds, or null when there is no group or it does not exist.
  */
 internal fun scheduleProblems(
     cmd: ScheduleCommand,
     profileAssetId: AssetId?,
     meter: MeasurementDefinition?,
+    groupOpenMembers: Int? = null,
 ): List<ScheduleProblem> {
     val problems = mutableListOf<ScheduleProblem>()
     val target = cmd.target()
@@ -221,6 +235,9 @@ internal fun scheduleProblems(
         if (cmd.seasonBehavior == SeasonBehavior.FOLLOW_ASSET) {
             problems += ScheduleProblem.SeasonFollowsAssetOnGroupTarget
         }
+        // Null means the caller could not resolve the group at all, which is reported as
+        // `NoSuchGroup` and is not this function's to guess at.
+        if (groupOpenMembers == 0) problems += ScheduleProblem.EmptyGroupTarget
     }
 
     val assetId = (target as? ScheduleTarget.AssetTarget)?.assetId

@@ -41,9 +41,10 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *   `details_pending`: the notification's one-tap action and a bodyless API call both land here,
  *   and demanding the form's required fields would make the quick path impossible.
  *
- * A group-targeted schedule is refused: which member did the work and whether that member is
- * required for this occurrence is the groups brief's derivation, and guessing would mean writing an
- * event against an Asset this brief cannot prove is a member (invariants 28, 29).
+ * A group-targeted schedule is refused, and permanently: this operation takes no member list, so
+ * obeying it would mean picking an Asset to write an event against — exactly what invariants 28 and
+ * 29 forbid. A group round is completed by naming its members, through [CompleteGroupMembers], and
+ * the route that serves both kinds of target dispatches on the target rather than on the body.
  *
  * One `uow.write` covering the event, the conditional clear and the recompute.
  */

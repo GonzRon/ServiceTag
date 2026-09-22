@@ -24,7 +24,15 @@ import kotlinx.coroutines.flow.map
 // adapter together. The DAO operations they call are already declared on the DAOs, so extending a
 // port here is one method, not a schema conversation.
 
-/** Aggregate repository: one `upsert` writes the group row and replaces its membership windows. */
+/**
+ * Aggregate repository: one `upsert` writes the group row and replaces its membership windows.
+ *
+ * Replacing the child rows wholesale is what makes the use case's job expressible at all: it hands
+ * down the complete window list — the rows it kept, the ones it has just stamped `removed_at` on,
+ * the closed ones it left alone and the new ones it inserted — and the ids come from it, so a window
+ * that survived the edit keeps its identity. Nothing here decides anything about a window, and there
+ * is no method on this class a caller could use to clear a `removed_at` even if it wanted one.
+ */
 class RoomGroupRepository(private val dao: MaintenanceGroupDao) : GroupRepository {
     override suspend fun upsert(group: MaintenanceGroup) = dao.upsert(
         group = group.toEntity(),
@@ -35,7 +43,30 @@ class RoomGroupRepository(private val dao: MaintenanceGroupDao) : GroupRepositor
 
     override suspend fun all(): List<MaintenanceGroup> = dao.all().map { it.toDomain() }
 
+    override suspend fun forAsset(assetId: AssetId): List<MaintenanceGroup> =
+        dao.openForAsset(assetId.value).map { it.toDomain() }
+
+    override suspend fun allWindowsFor(assetId: AssetId): List<MaintenanceGroup> =
+        dao.everForAsset(assetId.value).map { it.toDomain() }
+
     override suspend fun deleteAll() = dao.deleteAll()
+
+    override fun observeAll(): Flow<List<MaintenanceGroup>> =
+        dao.observeAll().map { rows -> rows.map { it.toDomain() } }
+
+    /**
+     * Filtered off [MaintenanceGroupDao.observeAll] rather than asked of SQLite.
+     *
+     * The DAO's two asset-scoped queries are `suspend` reads; a Flow of "the groups holding an open
+     * window for this asset" would be a new `@Query` on a table whose DAO belongs to another brief.
+     * The membership rows arrive with each group in the same aggregate, so the predicate here *is*
+     * the predicate that query would carry, over a store of a few dozen rows.
+     */
+    override fun observeForAsset(assetId: AssetId): Flow<List<MaintenanceGroup>> =
+        dao.observeAll().map { rows ->
+            rows.map { it.toDomain() }
+                .filter { group -> group.members.any { it.assetId == assetId && it.removedAt == null } }
+        }
 }
 
 /** Aggregate repository: one `upsert` writes the schedule row and replaces its provider rows. */

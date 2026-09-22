@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.TerminationKind
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.testing.closureOf
 import com.loosecannon.servicetag.core.testing.completionOf
+import com.loosecannon.servicetag.core.testing.groupOf
 import com.loosecannon.servicetag.core.testing.readingOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import java.time.LocalDate
@@ -211,14 +212,15 @@ class ScheduleRecomputeTest {
     }
 
     /**
-     * Group semantics are not in this brief: `rebuild` takes membership as a parameter and the
-     * required-set derivation of a group occurrence is the groups brief's. Until it lands, a
-     * group-targeted occurrence has an empty required set, and an empty required set is never a
-     * termination (invariant 77) — so the fold stays total and answers "still open" rather than
-     * inventing a rule. This test pins that seam so replacing it is a deliberate act.
+     * The group seam, now filled: `rebuild` takes membership as a parameter and the required set of
+     * a group occurrence is derived from it. The same rows that used to answer "not a termination"
+     * because nobody was required now terminate the round when the member who *is* required has
+     * done the work — and the negative half still holds, because membership is what decides it:
+     * hand the same history no windows at all and the round obliges nobody, which is never a
+     * termination (invariant 77).
      */
     @Test
-    fun aGroupTargetedOccurrenceIsNotYetATermination() {
+    fun aGroupTargetedOccurrenceTerminatesOnItsRequiredMembership() {
         val group = scheduleOf(
             assetId = null,
             groupId = "g1",
@@ -228,6 +230,12 @@ class ScheduleRecomputeTest {
             createdOn = "2026-02-10",
         )
         val done = completionOf("e1", occurredOn = "2026-03-20", occurrenceOn = "2026-04-01")
+        val membership = groupOf(members = listOf(Triple("a1", "2026-01-05", null))).members
+
+        assertEquals(
+            listOf(Termination("2026-04-01", "2026-03-20", TerminationKind.COMPLETED)),
+            ScheduleRecompute.terminations(group, listOf(done), emptyList(), membership),
+        )
         assertEquals(
             emptyList(),
             ScheduleRecompute.terminations(group, listOf(done), emptyList(), emptyList()),
