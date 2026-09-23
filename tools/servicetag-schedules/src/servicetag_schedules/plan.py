@@ -18,8 +18,6 @@ from dataclasses import dataclass
 from . import manifest as manifestmod
 from . import phone
 
-Decision = str  # "CREATE" | "IDENTICAL" | "CONFLICT" | "ERROR"
-
 _DECISIONS: tuple[str, ...] = ("CREATE", "IDENTICAL", "CONFLICT", "ERROR")
 
 
@@ -103,10 +101,10 @@ def _resolve_group_members(
 
 
 def _plan_group(
-    group: manifestmod.Group, inventory: phone.Inventory, *, duplicate: bool,
+    group: manifestmod.Group, inventory: phone.Inventory, *, duplicate_reason: str | None,
 ) -> _GroupResolution:
-    if duplicate:
-        entry = PlanEntry("group", group.key, "ERROR", "duplicate manifest key")
+    if duplicate_reason is not None:
+        entry = PlanEntry("group", group.key, "ERROR", duplicate_reason)
         return _GroupResolution(entry, ok=False, existing=None, member_asset_ids=frozenset())
 
     member_ids, errors = _resolve_group_members(inventory, group)
@@ -266,18 +264,34 @@ def plan(manifest: manifestmod.Manifest, inventory: phone.Inventory) -> Plan:
     """Compute a `Plan` for `manifest` against `inventory`. Pure: raises nothing, touches nothing
     but its two arguments."""
     group_key_counts: dict[str, int] = {}
+    group_name_counts: dict[str, int] = {}
     for group in manifest.groups:
         group_key_counts[group.key] = group_key_counts.get(group.key, 0) + 1
+        group_name_counts[group.name] = group_name_counts.get(group.name, 0) + 1
 
     group_results: dict[str, _GroupResolution] = {}
     group_entries: list[PlanEntry] = []
     for group in manifest.groups:
-        result = _plan_group(group, inventory, duplicate=group_key_counts[group.key] > 1)
+        # A duplicate *key* is checked first: it is the more specific problem (this exact manifest
+        # entry is not addressable at all), and a manifest that reuses a key is very likely also
+        # reusing a name on the very same entries, which would otherwise double-report one hazard
+        # under two reasons.
+        if group_key_counts[group.key] > 1:
+            duplicate_reason = "duplicate manifest key"
+        elif group_name_counts[group.name] > 1:
+            # Invariant 3: a group's identity on the phone is its *name*. Two manifest entries
+            # under different keys but the same name would both `CREATE` a same-named group on an
+            # empty phone — a plan this module called clean, and a duplicate `apply` can never take
+            # back (this tool never archives or deletes).
+            duplicate_reason = f"duplicate group name {group.name!r}"
+        else:
+            duplicate_reason = None
+        result = _plan_group(group, inventory, duplicate_reason=duplicate_reason)
         group_entries.append(result.entry)
-        # On a duplicate key, the last entry read wins the lookup a schedule uses — every instance
-        # is ERROR either way (both directly, from `duplicate=True`, and via the propagation below,
-        # were it looked up by an earlier duplicate instead), so which one is kept never changes a
-        # schedule's decision.
+        # On a duplicate key or name, the last entry read wins the lookup a schedule uses — every
+        # instance is ERROR either way (both directly, from `duplicate_reason`, and via the
+        # propagation below, were it looked up by an earlier duplicate instead), so which one is
+        # kept never changes a schedule's decision.
         group_results[group.key] = result
 
     schedule_key_counts: dict[str, int] = {}

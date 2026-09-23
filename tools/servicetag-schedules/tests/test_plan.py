@@ -131,6 +131,27 @@ def test_group_error_on_missing_member_asset() -> None:
     assert entry(result, "group", "g1").decision == "ERROR"
 
 
+def test_asset_resolution_ignores_an_archived_namesake() -> None:
+    """S3: invariant 1's filter is *non-archived, non-retired* -- an archived asset sharing a name
+    with an active one must not make the active one ambiguous. Deleting `not a.archived` from
+    `match_assets` would resolve two matches here and turn this CREATE into ERROR."""
+    active = mk_asset("a1", "Mister")
+    archived_namesake = mk_asset("a2", "Mister", archived=True)
+    manifest = mk_manifest(groups=[mk_group("g1", "Misters", ("Mister",))])
+    result = PL.plan(manifest, P.Inventory(assets=(active, archived_namesake)))
+    assert entry(result, "group", "g1").decision == "CREATE"
+
+
+def test_asset_resolution_ignores_a_retired_namesake() -> None:
+    """S3: the other half of invariant 1's filter. Deleting `not a.retired` from `match_assets`
+    would resolve two matches here and turn this CREATE into ERROR."""
+    active = mk_asset("a1", "Mister")
+    retired_namesake = mk_asset("a2", "Mister", retired=True)
+    manifest = mk_manifest(groups=[mk_group("g1", "Misters", ("Mister",))])
+    result = PL.plan(manifest, P.Inventory(assets=(active, retired_namesake)))
+    assert entry(result, "group", "g1").decision == "CREATE"
+
+
 def test_group_identity_ignores_an_archived_existing_group() -> None:
     """Invariant 3: identity is matched among *non-archived* groups; an archived one of the same
     name is 'absent', so the manifest group still CREATEs."""
@@ -235,6 +256,18 @@ def test_form_profile_ambiguous_is_an_error() -> None:
         schedules=[mk_schedule("s1", "Inspect roof", target_asset="Garden shed", completion_mode="FORM", profile="Roof inspection")]
     )
     result = PL.plan(manifest, P.Inventory(assets=(a,), profiles=(p1, p2)))
+    assert entry(result, "schedule", "s1").decision == "ERROR"
+
+
+def test_form_profile_archived_is_an_error() -> None:
+    """S3: invariant 2's filter is *non-archived*. Deleting `not p.archived` from `match_profiles`
+    would resolve this archived profile and turn this ERROR into CREATE."""
+    a = mk_asset("a1", "Garden shed")
+    archived_profile = mk_profile("p1", "a1", "Roof inspection", archived=True)
+    manifest = mk_manifest(
+        schedules=[mk_schedule("s1", "Inspect roof", target_asset="Garden shed", completion_mode="FORM", profile="Roof inspection")]
+    )
+    result = PL.plan(manifest, P.Inventory(assets=(a,), profiles=(archived_profile,)))
     assert entry(result, "schedule", "s1").decision == "ERROR"
 
 
@@ -361,6 +394,40 @@ def test_duplicate_manifest_group_keys_are_both_error() -> None:
     group_entries = [e for e in result.entries if e.kind == "group"]
     assert len(group_entries) == 2
     assert all(e.decision == "ERROR" for e in group_entries)
+
+
+def test_duplicate_group_names_under_different_keys_are_both_error() -> None:
+    """S1: invariant 3 makes a group's identity its *name*, not its manifest key. Two manifest
+    groups with different keys but one name would otherwise both CREATE on an empty phone -- a
+    plan called clean that writes a duplicate this tool can never take back."""
+    a = mk_asset("a1", "Intake filter")
+    manifest = mk_manifest(
+        groups=[
+            mk_group("a", "Filters", ("Intake filter",)),
+            mk_group("b", "Filters", ("Intake filter",)),
+        ]
+    )
+    result = PL.plan(manifest, P.Inventory(assets=(a,)))
+    assert entry(result, "group", "a").decision == "ERROR"
+    assert entry(result, "group", "b").decision == "ERROR"
+    assert result.clean is False
+
+
+def test_two_group_targeted_schedules_sharing_a_title_on_the_same_group_are_both_error() -> None:
+    """S1 / invariant 4: identity is (target, title); two schedules targeting the *same* manifest
+    group with the same title collide even though their own manifest keys differ."""
+    a = mk_asset("a1", "Mister north")
+    manifest = mk_manifest(
+        groups=[mk_group("g1", "Misters", ("Mister north",))],
+        schedules=[
+            mk_schedule("s1", "Rinse", target_group="g1"),
+            mk_schedule("s2", "Rinse", target_group="g1"),
+        ],
+    )
+    result = PL.plan(manifest, P.Inventory(assets=(a,)))
+    assert entry(result, "schedule", "s1").decision == "ERROR"
+    assert entry(result, "schedule", "s2").decision == "ERROR"
+    assert result.clean is False
 
 
 def test_duplicate_manifest_schedule_keys_are_both_error() -> None:
