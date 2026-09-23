@@ -10,7 +10,7 @@ contract; this brief is the work. **Spec:**
 
 Land every **rule** over B01's shapes, in `:core`, with **no Android type anywhere**: the three-tier
 scheme policy reintroduced as new code (#35's lists verbatim), the share-text parser, the I-9
-scheme-and-authority predicate, the four constants, the scheme→kind inference, and the three use
+scheme-and-authority predicate, the three constants, the scheme→kind inference, and the three use
 cases that are the only way a reference is ever created, amended or removed. Because the refusals
 live here, the share screen, the "Add link" sheet, the API and MCP all inherit them and **no caller
 can smuggle a blocked scheme past them** (I-2). **No Android, no Room, no UI, no route, no MCP
@@ -23,7 +23,7 @@ tool.**
 - `LinkLaunchPolicy.kt` — the three tiers and `LinkDecision`.
 - `ShareTextParser.kt` — `ParsedShare` and `firstUri`.
 - `StreamSourcePolicy.kt` — I-9's predicate, strings only.
-- `ReferenceLimits.kt` — the four constants and the two sanitisers.
+- `ReferenceLimits.kt` — the three constants and the two sanitisers.
 - `ReferenceKinds.kt` — `inferFrom`.
 
 and in `core/src/main/kotlin/com/loosecannon/servicetag/core/usecase/`:
@@ -289,3 +289,5 @@ person reads is chosen by the caller** — B03 for intake, B04 for the sheets, B
 tombstone. Import an Android type into `:core`. Widen `UpdateReferenceCommand`. Take a persistable
 URI permission, open a stream, or reference `AttachmentStore`. Change `app/build.gradle.kts` or any
 document.
+
+**Amended at the B02 review (2026-09-23, controller):** `ReferenceLimits` declares THREE constants (the 64 KiB uri-list read cap belongs to B03, §18.20); a URI with no scheme is `NotALink` → `REFERENCE_URI_INVALID` because I-10 runs before the tier lookup (spec §4.2) — the matrix row that said `SchemeBlocked` was wrong.
