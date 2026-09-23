@@ -26,6 +26,10 @@ import org.junit.runner.RunWith
  * that the list redraws from it, and that the clear glyph puts it all back. Carries the two
  * scenarios `DashboardSearchTest` proved before the box moved, re-targeted at `AssetsScreen`.
  *
+ * **Fix round 1 (controller ruling):** the box's move did not change what the screen lists — a
+ * component is on the list under a blank query exactly as it always was, naming its system; a
+ * search only narrows that same list.
+ *
  * Emulator only — the suite wipes app data.
  */
 @RunWith(AndroidJUnit4::class)
@@ -36,12 +40,11 @@ class AssetsSearchTest {
     @Before fun freshInstall() = clearInstall()
 
     /** A hot tub with a circulation pump under it, and the Assets screen drawn over that install. */
-    private fun aSystemWithOnePart(archiveTheSystem: Boolean = false): AppGraph {
+    private fun aSystemWithOnePart(): AppGraph {
         val graph = app.graph
         runBlocking {
             val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
             graph.createAsset.run(AssetCommand(name = "Circulation pump", parentAssetId = tub.id))
-            if (archiveTheSystem) graph.archiveAsset.run(tub.id)
         }
         rule.setContent {
             ServiceTagTheme {
@@ -51,17 +54,18 @@ class AssetsSearchTest {
         return graph
     }
 
-    @Test fun aComponentIsHiddenUntilItIsSearchedForAndThenNamesItsSystem() {
+    @Test fun aComponentIsListedAndNamesItsSystemAndASearchNarrowsToIt() {
         aSystemWithOnePart()
 
-        // The system is listed; its pump is not. The box itself is named by the ratified
-        // placeholder, which only shows while it is empty.
+        // Both rows are on the list under a blank query; the component already names its system.
+        // The box itself is named by the ratified placeholder, which only shows while it is empty.
         rule.awaitText("Hot tub")
-        rule.onAllNodesWithText("Circulation pump").assertCountEquals(0)
+        rule.awaitText("Circulation pump")
+        rule.awaitText("Part of Hot tub")
         rule.awaitText("Search assets and components")
 
-        // One keystroke away. The hit names its system, and the system itself drops out because it
-        // does not match — which is what proves the list is filtered and not merely extended.
+        // One keystroke away. The hit stays, and the system it does not name drops out — which is
+        // what proves the list is filtered and not merely reordered.
         rule.onNode(hasSetTextAction()).performTextInput("circ")
         rule.awaitText("Circulation pump")
         rule.awaitText("Part of Hot tub")
@@ -69,22 +73,31 @@ class AssetsSearchTest {
 
         rule.onNodeWithContentDescription("Clear search").performClick()
         rule.awaitText("Hot tub")
-        rule.onAllNodesWithText("Circulation pump").assertCountEquals(0)
+        rule.awaitText("Circulation pump")
 
         // A query that matches nothing is the one state the no-match sentence is for.
         rule.onNode(hasSetTextAction()).performTextInput("zzz")
         rule.awaitText("Nothing matches that.")
         rule.onAllNodesWithText("Hot tub").assertCountEquals(0)
+        rule.onAllNodesWithText("Circulation pump").assertCountEquals(0)
     }
 
     /**
      * F1 — an empty list under an empty box, reached the way an owner reaches it on this screen:
-     * archive the system, which leaves its still-active pump hidden by the blank-query rule, so the
-     * chip's own honest "No active assets · N archived" is what shows — never a claim that a search
-     * found nothing when nothing was searched for.
+     * archive the only asset, so the chip's own honest "No active assets · N archived" is what
+     * shows — never a claim that a search found nothing when nothing was searched for.
      */
     @Test fun anEmptyListUnderAnEmptyBoxIsNotToldItsSearchFoundNothing() {
-        aSystemWithOnePart(archiveTheSystem = true)
+        val graph = app.graph
+        runBlocking {
+            val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
+            graph.archiveAsset.run(tub.id)
+        }
+        rule.setContent {
+            ServiceTagTheme {
+                AssetsScreen(graph = graph, onOpenAsset = {}, onNewAsset = {})
+            }
+        }
 
         rule.awaitText("No active assets · 1 archived")
         rule.onAllNodesWithText("Hot tub").assertCountEquals(0)

@@ -926,11 +926,11 @@ class AssetViewModelsTest {
     }
 
     /**
-     * B07 — the search box moved here from the Dashboard (#39): a component stays on the system it
-     * belongs to until a search names it, exactly as the Dashboard's box governed it, and the row
-     * says whose component it is and whether today is outside its window (spec §6, §9).
+     * A row says whose component it is and whether today is outside its window (spec §6, §9).
+     * Restored as it was (B07 fix round 1, controller ruling): the Assets screen never hid
+     * components — B07 only moved the search box here, it did not change what a blank query lists.
      */
-    @Test fun aComponentAppearsOnlyWhenSearchedAndNamesItsSystem() = runTest {
+    @Test fun assetsRowsCarryPartOf() = runTest {
         val generator = graph.createAsset.run("Generator", "Power")
         val battery = graph.createAsset.run("Starter battery", "Battery")
         graph.updateAsset.run(
@@ -947,18 +947,37 @@ class AssetViewModelsTest {
         val vm = AssetsViewModel(graph.assets, graph.clock)
         backgroundScope.launch { vm.state.collect() }
 
-        // Blank query: only the system, no window claim to make for a root asset.
-        val blank = vm.state.first { it.items.isNotEmpty() }
-        assertEquals(listOf("Generator"), blank.items.map { it.asset.name })
-        assertEquals(null, blank.items.single().parentName)
-        assertFalse(blank.items.single().outOfSeason)
-
-        // Named by a search, the component surfaces and says whose part it is and its own window.
-        vm.onQueryChange("battery")
-        val rows = vm.state.first { it.query == "battery" && it.items.isNotEmpty() }
-            .items.associateBy { it.asset.name }
+        val rows = vm.state.first { it.items.size == 2 }.items.associateBy { it.asset.name }
         assertEquals("Generator", rows.getValue("Starter battery").parentName)
         assertTrue(rows.getValue("Starter battery").outOfSeason)
+        // A root asset with no window says neither thing.
+        assertEquals(null, rows.getValue("Generator").parentName)
+        assertFalse(rows.getValue("Generator").outOfSeason)
+    }
+
+    /**
+     * B07 fix round 1 (controller ruling) — the search box's move did not change the list: a
+     * component is on it under a blank query exactly as before, naming its system, and a search
+     * for its name only narrows the same list down to it.
+     */
+    @Test fun aComponentIsListedUnderABlankQueryAndASearchNarrowsToIt() = runTest {
+        val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
+        graph.createAsset.run(AssetCommand(name = "Circulation pump", parentAssetId = tub.id))
+
+        val vm = AssetsViewModel(graph.assets, graph.clock)
+        backgroundScope.launch { vm.state.collect() }
+
+        // Blank query: both rows, the component already naming its system.
+        val blank = vm.state.first { it.items.size == 2 }
+        val byName = blank.items.associateBy { it.asset.name }
+        assertEquals("Hot tub", byName.getValue("Circulation pump").parentName)
+        assertEquals(null, byName.getValue("Hot tub").parentName)
+
+        // A search for the component's own name narrows the same list down to it.
+        vm.onQueryChange("circ")
+        val narrowed = vm.state.first { it.query == "circ" }
+        assertEquals(listOf("Circulation pump"), narrowed.items.map { it.asset.name })
+        assertEquals("Hot tub", narrowed.items.single().parentName)
     }
 
     /** B07 — a blank query lists the assets exactly as the screen always has. */
@@ -1002,14 +1021,14 @@ class AssetViewModelsTest {
         assertEquals(listOf("Circulation pump"), hit.items.map { it.asset.name })
     }
 
-    /** B07 — clearing the box puts the list back, in one call. */
+    /** B07 — clearing the box puts the (unhidden) list back, in one call. */
     @Test fun clearRestoresTheList() = runTest {
         val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
         graph.createAsset.run(AssetCommand(name = "Circulation pump", parentAssetId = tub.id))
 
         val vm = AssetsViewModel(graph.assets, graph.clock)
         backgroundScope.launch { vm.state.collect() }
-        vm.state.first { it.items.isNotEmpty() }
+        vm.state.first { it.items.size == 2 }
 
         vm.onQueryChange("circ")
         assertEquals(
@@ -1018,8 +1037,8 @@ class AssetViewModelsTest {
         )
 
         vm.clearQuery()
-        val cleared = vm.state.first { it.query.isEmpty() && it.items.isNotEmpty() }
-        assertEquals(listOf("Hot tub"), cleared.items.map { it.asset.name })
+        val cleared = vm.state.first { it.query.isEmpty() && it.items.size == 2 }
+        assertEquals(listOf("Circulation pump", "Hot tub"), cleared.items.map { it.asset.name })
     }
 
     /** B07 — "Show archived" and the search box narrow independently, exactly like F2 did. */
