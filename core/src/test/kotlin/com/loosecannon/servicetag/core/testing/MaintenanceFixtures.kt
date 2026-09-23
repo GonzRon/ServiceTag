@@ -32,7 +32,15 @@ import java.time.ZoneOffset
  * move the floor wants to say which day, not which millisecond.
  */
 
-/** Midnight UTC of [date] — the inverse of the conversion the pin's floor uses. */
+/**
+ * Midnight **UTC** of [date].
+ *
+ * It is the reason every `rebuild` in this suite is handed `ZoneOffset.UTC` explicitly: UTC is the
+ * zone in which these instants carry the date they are written as, so it is the zone in which a
+ * test's `createdOn` and `updatedOn` mean what they say. The engine reads the pin's floor in
+ * whatever zone its caller supplies — the owner's, in the app — so a suite that left it unsaid
+ * would be asserting against whatever zone the machine happens to be in.
+ */
 fun dayMillis(date: String): Long =
     LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
 

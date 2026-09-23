@@ -176,9 +176,10 @@ class ScheduleRecomputeTest {
     }
 
     /**
-     * `rebuild` is a pure, idempotent function of (config, events, closures, membership, `T`)
-     * (invariants 15, 16), asserted as properties **over the function**: no repository, no clock,
-     * no device. Applying it again to the same inputs gives the same state, the input lists are
+     * `rebuild` is a pure, idempotent function of (config, events, closures, membership, `T`, the
+     * zone `T` is on) (invariants 15, 16), asserted as properties **over the function**: no
+     * repository, no clock, no device — the zone is the newest member of that tuple and an
+     * argument for exactly this reason. Applying it again to the same inputs gives the same state, the input lists are
      * left exactly as they were, and the order the events arrive in does not matter.
      */
     @Test

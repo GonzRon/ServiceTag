@@ -159,11 +159,17 @@ object GroupOccurrences {
     /**
      * An instant's calendar date.
      *
-     * Converted at **UTC**, exactly as the D-27 pin's floor is and for the same reason: a
-     * device-local conversion would make a derived occurrence depend on an ambient zone, so two
-     * phones holding identical rows could disagree about a round's open date and therefore about the
-     * range a `closedOn` may lie in — the one divergence spec §2.9 exists to prevent. The cost is
-     * that a round opened within a few hours of local midnight can report the neighbouring day.
+     * Converted at a **fixed** offset, UTC, because an occurrence key is a value two devices must
+     * agree on with no zone in common: a device-local conversion would make a derived occurrence
+     * depend on an ambient zone, so two phones holding identical rows could disagree about a
+     * round's open date and therefore about the range a `closedOn` may lie in — the one divergence
+     * spec §2.9 exists to prevent. The cost is that a round opened within a few hours of UTC
+     * midnight can report the neighbouring day.
+     *
+     * It no longer matches the D-27 pin's floor, which reads the **owner's** zone (controller
+     * ruling, 2026-09-22), and it should not: the two answer different questions. The floor is
+     * about a day the owner lived through; this is about a key that has to survive being compared
+     * between phones.
      */
     fun dateOf(instant: Long): LocalDate =
         Instant.ofEpochMilli(instant).atZone(ZoneOffset.UTC).toLocalDate()

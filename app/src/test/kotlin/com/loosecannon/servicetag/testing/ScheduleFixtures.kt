@@ -34,7 +34,14 @@ import java.time.ZoneOffset
  * `schedule_state` row the engine would not have written.
  */
 
-/** Midnight UTC of [date]: the conversion the D-27 pin's floor and a membership window both use. */
+/**
+ * Midnight **UTC** of [date] — the conversion a membership window and an occurrence key both use.
+ *
+ * It is also why `FakeGraph` hands its `RecomputeSchedules` `ZoneOffset.UTC`: UTC is the zone in
+ * which these instants carry the date they are written as, and the pin's floor is read in whatever
+ * zone the caller supplies — the owner's, in the app — so a suite that left it unsaid would be
+ * asserting against whatever zone the machine happens to be in.
+ */
 fun dayMillis(date: String): Long =
     LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
 

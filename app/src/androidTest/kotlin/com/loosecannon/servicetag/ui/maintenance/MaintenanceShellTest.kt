@@ -80,7 +80,7 @@ class MaintenanceShellTest {
             // same "a genuinely older row" device `DashboardAttentionTest` uses for its overdue
             // row, and it holds whatever the pin later decides about the current day.
             graph.schedules.upsert(
-                graph.schedules.get(due.id)!!.copy(updatedAt = yesterdayAtUtc()),
+                graph.schedules.get(due.id)!!.copy(updatedAt = floorBeforeToday()),
             )
             graph.recomputeSchedules.forSchedule(due.id)
             // A paused schedule: the shell lists it under Schedules and Due work omits it, which
@@ -292,11 +292,15 @@ class MaintenanceShellTest {
 
     private companion object {
         /**
-         * A pin floor that is a whole day behind local today **in UTC**, which is the zone the pin
-         * reads. Built from the date and not from an offset on the instant, so it is a day behind
-         * whatever the local zone is.
+         * An instant whose calendar date is before local today in **every** zone: yesterday's date
+         * at UTC midnight, which reads back as yesterday or the day before it whatever zone reads
+         * it. Built from the date rather than by subtracting a day from an instant, which is what
+         * makes that true without knowing the offset.
+         *
+         * "Before today" is the whole requirement, and deliberately no more than that: the pin
+         * reads its floor in the owner's zone, so this says nothing about which zone that is.
          */
-        fun yesterdayAtUtc(): Long = java.time.LocalDate.now()
+        fun floorBeforeToday(): Long = java.time.LocalDate.now()
             .minusDays(1)
             .atStartOfDay(java.time.ZoneOffset.UTC)
             .toInstant()
