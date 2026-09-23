@@ -1059,4 +1059,63 @@ class AssetViewModelsTest {
         val both = vm.state.first { it.showArchived && it.query == "mower" && it.items.size == 2 }
         assertEquals(listOf("Zebra mower", "Mower"), both.items.map { it.asset.name })
     }
+
+    /**
+     * Q2 (B07 fix round 2, controller ruling) — `Asset.matches` moved with `AssetSearch.kt` and its
+     * trim rule moved with it, but nothing exercised leading/trailing whitespace once
+     * `theQueryIsTrimmedButKeptVerbatim` was dropped with the rest of the Dashboard's query cases.
+     * Pins both halves: a padded query still finds its hit, and a query of pure whitespace trims to
+     * empty and matches everything, the same as a blank one.
+     */
+    @Test fun aPaddedQueryIsTrimmedAndWhitespaceOnlyMatchesEverything() = runTest {
+        graph.createAsset.run(AssetCommand(name = "Circulation pump", category = "Water"))
+        graph.createAsset.run("Mower", "Yard")
+
+        val vm = AssetsViewModel(graph.assets, graph.clock)
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.items.size == 2 }
+
+        vm.onQueryChange(" circ ")
+        val padded = vm.state.first { it.query == " circ " }
+        assertEquals(listOf("Circulation pump"), padded.items.map { it.asset.name })
+
+        vm.onQueryChange("   ")
+        val whitespaceOnly = vm.state.first { it.query == "   " }
+        assertEquals(2, whitespaceOnly.items.size)
+    }
+
+    /**
+     * Q3 (B07 fix round 2, controller ruling) — F3: the search box's own `StateFlow` answers
+     * synchronously, with no collector and no scheduler turn, the same property
+     * `DashboardViewModel.query` proved before this brief moved it here.
+     */
+    @Test fun theBoxSeesItsOwnKeystrokeWithoutWaitingForTheList() = runTest {
+        val vm = AssetsViewModel(graph.assets, graph.clock)
+
+        assertEquals("", vm.query.value)
+        vm.onQueryChange("circ")
+        assertEquals("circ", vm.query.value)
+        vm.clearQuery()
+        assertEquals("", vm.query.value)
+    }
+
+    /**
+     * Q3 (B07 fix round 2, controller ruling) — F5: the query is an independent arm of the
+     * `combine`, so a row arriving recomputes the list against the same query rather than the
+     * keystroke triggering a re-query of its own.
+     */
+    @Test fun aRowArrivingDoesNotDisturbTheQuery() = runTest {
+        graph.createAsset.run(AssetCommand(name = "Circulation pump", category = "Water"))
+
+        val vm = AssetsViewModel(graph.assets, graph.clock)
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.items.isNotEmpty() }
+
+        vm.onQueryChange("pump")
+        vm.state.first { it.query == "pump" }
+
+        graph.createAsset.run("Pool pump", "Water")
+        val after = vm.state.first { it.items.size == 2 }
+        assertEquals("pump", after.query)
+    }
 }

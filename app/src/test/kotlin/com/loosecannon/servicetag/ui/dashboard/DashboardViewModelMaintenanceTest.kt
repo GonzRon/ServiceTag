@@ -343,4 +343,31 @@ class DashboardViewModelMaintenanceTest {
         advanceUntilIdle()
         assertTrue("a refresh reads the store again", healthCalls > afterFirstRead)
     }
+
+    /**
+     * Q1 (B07 fix round 2, controller ruling). B07 simplified two `DashboardScreen` guards down to
+     * `state.hiddenComponents > 0` and `state.filters.isActive`, dropping their query half — and
+     * with `DashboardSearchTest` renamed away, nothing rendered them anymore. This pins what they
+     * now encode at the state that feeds them: the list is the systems, a component stays on the
+     * one it belongs to and is only counted, and an unrelated asset's due row is exactly what the
+     * projection ranked — nothing about its name or category narrows it away now that the query is
+     * gone.
+     */
+    @Test fun theListHidesComponentsAndTheDueRowsAreNotNarrowed() = runTest {
+        val tub = asset("Hot tub", category = "Water")
+        asset("Circulation pump", category = "Water", parent = tub.id)
+        val mower = asset("Mower", category = "Yard")
+        seed(scheduleOf("s-mower", assetId = mower.id.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.sections.isNotEmpty() }
+        // The list is the systems: the pump stays on Hot tub, counted rather than listed.
+        assertEquals(listOf("Hot tub"), state.assets.map { it.asset.name })
+        assertEquals(1, state.hiddenComponents)
+        // The due row is exactly what the projection ranked — an asset with a different name and
+        // category does not narrow it away.
+        assertEquals(listOf("Blade sharpen"), state.sections.flatMap { it.items }.map { it.title })
+    }
 }
