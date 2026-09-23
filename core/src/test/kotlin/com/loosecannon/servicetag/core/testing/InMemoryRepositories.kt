@@ -564,6 +564,52 @@ class InMemoryClosureRepository : ClosureRepository, Rollbackable, Witnessed {
  * Snapshots every store before running [block] and restores them all if it throws,
  * so rollback is observable in tests without a real database.
  */
+class FakeUnitOfWork(private vararg val stores: Rollbackable) : UnitOfWork {
+    private val witness = TransactionWitness()
+
+    init {
+        stores.filterIsInstance<Witnessed>().forEach { it.witness = witness }
+    }
+
+    var commits = 0
+        private set
+    var rollbacks = 0
+        private set
+
+    /** How many read transactions have been opened. */
+    var reads = 0
+        private set
+
+    /** Table reads the covered stores served outside any transaction. */
+    val readsOutsideSnapshot: Int get() = witness.readsOutsideSnapshot
+
+    override suspend fun <T> write(block: suspend () -> T): T {
+        val restores = stores.map { it.snapshot() }
+        witness.inWrite = true
+        return try {
+            val result = block()
+            commits += 1
+            result
+        } catch (t: Throwable) {
+            restores.forEach { it() }
+            rollbacks += 1
+            throw t
+        } finally {
+            witness.inWrite = false
+        }
+    }
+
+    override suspend fun <T> read(block: suspend () -> T): T {
+        reads += 1
+        witness.inRead = true
+        return try {
+            block()
+        } finally {
+            witness.inRead = false
+        }
+    }
+}
+
 /**
  * Open so a test can subclass it to rig a check on upsert order, the way
  * [InMemoryDefinitionRepository] is. The unique index is modelled here because the planner's
@@ -613,51 +659,5 @@ open class InMemoryReferenceRepository : ReferenceRepository, Rollbackable, Witn
         rows.values
             .filter { it.assetId == assetId }
             .sortedWith(compareBy({ it.displayName.lowercase() }, { it.id.value }))
-    }
-}
-
-class FakeUnitOfWork(private vararg val stores: Rollbackable) : UnitOfWork {
-    private val witness = TransactionWitness()
-
-    init {
-        stores.filterIsInstance<Witnessed>().forEach { it.witness = witness }
-    }
-
-    var commits = 0
-        private set
-    var rollbacks = 0
-        private set
-
-    /** How many read transactions have been opened. */
-    var reads = 0
-        private set
-
-    /** Table reads the covered stores served outside any transaction. */
-    val readsOutsideSnapshot: Int get() = witness.readsOutsideSnapshot
-
-    override suspend fun <T> write(block: suspend () -> T): T {
-        val restores = stores.map { it.snapshot() }
-        witness.inWrite = true
-        return try {
-            val result = block()
-            commits += 1
-            result
-        } catch (t: Throwable) {
-            restores.forEach { it() }
-            rollbacks += 1
-            throw t
-        } finally {
-            witness.inWrite = false
-        }
-    }
-
-    override suspend fun <T> read(block: suspend () -> T): T {
-        reads += 1
-        witness.inRead = true
-        return try {
-            block()
-        } finally {
-            witness.inRead = false
-        }
     }
 }

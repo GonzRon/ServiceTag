@@ -81,7 +81,7 @@ class BackupUseCasesTest {
         val storage = FakeAttachmentStorage()
         val uow = FakeUnitOfWork(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments,
+            events, attachments, references,
         )
     }
 
