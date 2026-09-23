@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
@@ -81,6 +82,7 @@ import com.loosecannon.servicetag.data.room.MIGRATION_2_3
 import com.loosecannon.servicetag.data.room.MIGRATION_3_4
 import com.loosecannon.servicetag.data.room.MIGRATION_4_5
 import com.loosecannon.servicetag.data.room.MIGRATION_5_6
+import com.loosecannon.servicetag.data.room.MIGRATION_6_7
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomClosureRepository
@@ -89,6 +91,7 @@ import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
+import com.loosecannon.servicetag.data.room.RoomReferenceRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
@@ -149,7 +152,10 @@ class AppGraph(private val context: Context) {
         )
         .setDriver(AndroidSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.IO)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+        .addMigrations(
+            MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+            MIGRATION_6_7,
+        )
         .build()
 
     val clock: Clock = Clock { System.currentTimeMillis() }
@@ -168,6 +174,9 @@ class AppGraph(private val context: Context) {
     val groups: GroupRepository = RoomGroupRepository(db.maintenanceGroupDao())
     val schedules: ScheduleRepository = RoomScheduleRepository(db.maintenanceScheduleDao())
     val closures: ClosureRepository = RoomClosureRepository(db.occurrenceClosureDao())
+
+    /** 1.3's one new data port: the URIs on an asset. Its rules live in the use cases. */
+    val references: ReferenceRepository = RoomReferenceRepository(db.assetReferenceDao())
 
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
@@ -599,6 +608,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 6
+        const val SCHEMA_VERSION = 7
     }
 }

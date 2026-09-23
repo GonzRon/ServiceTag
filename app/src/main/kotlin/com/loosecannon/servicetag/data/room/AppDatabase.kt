@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.data.room
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
 import com.loosecannon.servicetag.data.room.dao.AssetDao
+import com.loosecannon.servicetag.data.room.dao.AssetReferenceDao
 import com.loosecannon.servicetag.data.room.dao.AttachmentDao
 import com.loosecannon.servicetag.data.room.dao.DefinitionDao
 import com.loosecannon.servicetag.data.room.dao.EventDao
@@ -16,6 +17,7 @@ import com.loosecannon.servicetag.data.room.dao.ScheduleLocalDeliveryDao
 import com.loosecannon.servicetag.data.room.dao.ScheduleStateDao
 import com.loosecannon.servicetag.data.room.entities.AssetEntity
 import com.loosecannon.servicetag.data.room.entities.AssetEventEntity
+import com.loosecannon.servicetag.data.room.entities.AssetReferenceEntity
 import com.loosecannon.servicetag.data.room.entities.AttachmentEntity
 import com.loosecannon.servicetag.data.room.entities.ConsumableUsageEntity
 import com.loosecannon.servicetag.data.room.entities.EventProfileEntity
@@ -53,8 +55,9 @@ import com.loosecannon.servicetag.data.room.entities.ScheduleStateEntity
         OccurrenceClosureEntity::class,
         ScheduleStateEntity::class,
         ScheduleLocalDeliveryEntity::class,
+        AssetReferenceEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -70,4 +73,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun occurrenceClosureDao(): OccurrenceClosureDao
     abstract fun scheduleStateDao(): ScheduleStateDao
     abstract fun scheduleLocalDeliveryDao(): ScheduleLocalDeliveryDao
+    abstract fun assetReferenceDao(): AssetReferenceDao
 }

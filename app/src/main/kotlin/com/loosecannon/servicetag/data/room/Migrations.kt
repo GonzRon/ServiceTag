@@ -335,3 +335,42 @@ val MIGRATION_5_6: Migration = object : Migration(5, 6) {
         )
     }
 }
+
+/**
+ * Schema v6 -> v7: the `asset_reference` table (spec §3.2). Nothing existing changes, so this is a
+ * plain `CREATE TABLE` plus its two indexes — no recreate, no copy, no rewrite, and no `ALTER`.
+ * Every row that was on disk before the migration is untouched by construction, which is the same
+ * reason [MIGRATION_4_5] is shaped this way and is why no `INSERT ... SELECT` appears here to get
+ * a column list wrong.
+ *
+ * The 2.6 tombstones are not touched either: `external_link` keeps its table, its rows and its
+ * indexes, and this migration neither reads nor renames it. `asset_reference` is a **new** table.
+ *
+ * Two indexes and not one: `UNIQUE(asset_id, uri)` carries the rule that one asset holds a URI
+ * once, and the plain `asset_id` index is a left prefix of it and so redundant to the query
+ * planner. It is declared anyway because the entity declares it, and a Room entity whose `indices`
+ * disagree with the exported schema will not open.
+ *
+ * As everywhere in this file the SQL is copied verbatim from the exported `7.json`, so the
+ * migration and the compiled entity have one source and Room validates the result on open.
+ */
+val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `asset_reference` (`id` TEXT NOT NULL, " +
+                "`asset_id` TEXT NOT NULL, `kind` TEXT NOT NULL, `uri` TEXT NOT NULL, " +
+                "`display_name` TEXT NOT NULL, `description` TEXT NOT NULL, " +
+                "`scheme` TEXT NOT NULL, `created_at` INTEGER NOT NULL, " +
+                "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
+                "FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_asset_reference_asset_id_uri` " +
+                "ON `asset_reference` (`asset_id`, `uri`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_asset_reference_asset_id` " +
+                "ON `asset_reference` (`asset_id`)",
+        )
+    }
+}
