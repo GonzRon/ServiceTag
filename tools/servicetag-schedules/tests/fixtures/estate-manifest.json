@@ -1,0 +1,43 @@
+{
+  "manifestVersion": 1,
+  "asOf": "2026-09-23",
+  "groups": [
+    {
+      "key": "greenhouse-misters",
+      "name": "Greenhouse misting nozzles",
+      "description": "Every mister head across the greenhouse",
+      "members": [
+        {"asset": "Greenhouse mister north"},
+        {"asset": "Greenhouse mister south"}
+      ]
+    }
+  ],
+  "schedules": [
+    {
+      "key": "shed-roof-inspection",
+      "title": "Inspect the shed roof",
+      "target": {"asset": "Garden shed"},
+      "description": "Walk the roofline and check the flashing",
+      "time": {"interval": 6, "unit": "MONTH", "basis": "FIXED", "anchorOn": "2026-10-01"},
+      "leadDays": 7,
+      "completionMode": "FORM",
+      "profile": "Roof inspection",
+      "seasonBehavior": "IGNORE",
+      "remindersEnabled": true,
+      "tags": ["seasonal-example"],
+      "source": {"todoistId": "999001", "cadence": "twice a year"}
+    },
+    {
+      "key": "misters-rinse",
+      "title": "Rinse the mister nozzles",
+      "target": {"group": "greenhouse-misters"},
+      "time": {"interval": 30, "unit": "DAY", "basis": "FIXED", "anchorOn": "2026-09-25"},
+      "leadDays": 3,
+      "completionMode": "QUICK",
+      "seasonBehavior": "IGNORE",
+      "remindersEnabled": false,
+      "tags": [],
+      "source": {"todoistId": null, "cadence": "monthly"}
+    }
+  ]
+}
