@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.asset
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -68,6 +69,7 @@ import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.links.LinkLauncher
 import com.loosecannon.servicetag.ui.attachments.AttachmentsSection
 import com.loosecannon.servicetag.ui.components.ActionGrid
 import com.loosecannon.servicetag.ui.components.ActionSpec
@@ -91,6 +93,7 @@ import com.loosecannon.servicetag.ui.journal.quickActionLabel
 import com.loosecannon.servicetag.ui.journal.stateColors
 import com.loosecannon.servicetag.ui.journal.stateIcon
 import com.loosecannon.servicetag.ui.journal.stateLabel
+import com.loosecannon.servicetag.ui.references.ReferencesSection
 import com.loosecannon.servicetag.ui.scan.identityLine
 import com.loosecannon.servicetag.ui.scan.placementOrNull
 import com.loosecannon.servicetag.ui.theme.ControlShape
@@ -264,6 +267,15 @@ fun AssetDetailScreen(
                     owner = AttachmentOwner.OfAsset(current.asset.id),
                     snackbars = snackbars,
                     onOpenSettings = onOpenSettings,
+                )
+                // 1.3.0 — pointers, below the bytes they are not (D-10). `LinkLauncher` is the one
+                // place `ACTION_VIEW` is fired, so the section hands it a URI and reads the answer.
+                val activity = LocalActivity.current
+                ReferencesSection(
+                    assetId = current.asset.id,
+                    graph = graph,
+                    snackbars = snackbars,
+                    onOpen = { uri -> activity?.let { LinkLauncher.open(it, uri) } == true },
                 )
                 NotesSection(current.asset.notes)
                 Spacer(Modifier.height(24.dp))

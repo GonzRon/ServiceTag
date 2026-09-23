@@ -20,6 +20,7 @@ import com.loosecannon.servicetag.core.usecase.ReferenceResult
 import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateReferenceCommand
+import com.loosecannon.servicetag.reminders.sourceFile
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlin.properties.Delegates
 import kotlinx.coroutines.Dispatchers
@@ -324,5 +325,26 @@ class ReferencesSectionViewModelTest {
         val row = vm.state.first { it.rows.isNotEmpty() }.rows.single()
         assertEquals("Deck manual", row.displayName)
         assertTrue(row.launchable)
+    }
+
+    /**
+     * D-10's ordering, read off the screen's own source: pointers go **below** the bytes they are
+     * not, and above the notes. Nothing else in `AssetDetailScreen` can say where a section sits,
+     * and standing the whole screen up on a device to find out would prove the same one fact at a
+     * hundred times the cost.
+     */
+    @Test fun theReferencesSectionIsDrawnBelowDocumentsAndAboveNotes() {
+        val screen = sourceFile("kotlin/com/loosecannon/servicetag/ui/asset/AssetDetailScreen.kt")
+            .readText()
+
+        val documents = screen.indexOf("AttachmentsSection(\n")
+        val references = screen.indexOf("ReferencesSection(\n")
+        val notes = screen.indexOf("NotesSection(current.asset.notes)")
+
+        assertTrue("AttachmentsSection is called", documents > 0)
+        assertTrue("ReferencesSection is called", references > 0)
+        assertTrue("NotesSection is called", notes > 0)
+        assertTrue("References must come after Documents", documents < references)
+        assertTrue("References must come before Notes", references < notes)
     }
 }
