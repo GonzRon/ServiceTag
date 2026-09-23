@@ -15,7 +15,8 @@ projection that never becomes the source of truth.
 
 ## What it does today
 
-A single-screen Compose app — Dashboard and Assets along the bottom, everything else one push deep —
+A single-screen Compose app — Dashboard, Assets and Maintenance along the bottom, everything else
+one push deep —
 around the one-tap flow that is still the spine: tap a tag anywhere and the phone opens the right
 place. Read / inspect tag, for the rare deliberate look, lives under Settings, and it keeps NFC for
 as long as you are on it: what a tag turns out to be is shown on the screen you are already on, so a
@@ -28,8 +29,8 @@ NFC back — the ambient tap still opens a bound tag straight away.
   another asset is listed on that asset and not again here. A search box above the list filters as
   you type — over the name, the category, the make, the model, the serial and the location — and a
   component that matches comes back with the system it is part of named under it. The sections for
-  what needs attention and what is coming up are drawn from schedules, which are Phase 3, so today
-  the dashboard draws the current assets and the backup nudge.
+  what needs attention and what is coming up are drawn from maintenance schedules, and a filter
+  above them narrows the list by category and by maintenance status.
 - **Assets** — a list you can filter to include archived ones, an asset screen built around the
   identity plate (category, name, description and tags), a create/edit form, and archive
   rather than delete.
@@ -86,6 +87,16 @@ NFC back — the ambient tap still opens a bound tag straight away.
   only when the plan has no conflicts, because a row that is already here is never overwritten and
   nothing is ever deleted. `tools/servicetag-mcp/` is the workstation side, an MCP server with one
   tool per operation, and `docs/api/v1.md` is the contract.
+- **Maintenance schedules, maintenance groups and local reminders** — a Maintenance destination
+  holding due work, the schedules themselves, maintenance groups and the health of the reminders.
+  A schedule repeats on a date rule, on a meter rule, or on whichever comes first, and it can be
+  attached to one asset or to a group of assets that are serviced together, where a round is a
+  checklist of members and can be closed when the rest will not be done. Reminders are delivered
+  by this phone alone — a daily digest at an hour you choose, with Done, Snooze and Open on the
+  notification — and nothing leaves the device. A tag tap while something is due offers the
+  completion there on the sheet, and each tag can carry a label saying where on the thing it is
+  stuck. The design contract is
+  [`docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md`](docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md).
 - **Settings** — appearance (system / light / dark), the palette's name, the attachment folder and
   the provider behind it, Read / inspect tag, Developer API, the build's version and a link to the
   project.
@@ -97,7 +108,8 @@ Sharing a note or a web link to an NFC tag is not part of ServiceTag. That utili
 no Links screen, no share target, no way to point a tag at a link, and no outbound-link allowlist.
 
 Old data is kept, not discarded. A backup written by any earlier version still carries its
-`externalLinks` rows and restores them unchanged — the format is untouched at 5 — but nothing in
+`externalLinks` rows and restores them unchanged — the format moved to 6 for schedules and groups,
+and left those rows alone — but nothing in
 ServiceTag creates, shows or opens one. A tag written by an older version to point at a link reads
 as a tag from before the split and does nothing else.
 

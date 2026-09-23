@@ -225,6 +225,25 @@ the ports or tables prevents enabling both later for a critical schedule (ruling
 | Digest policy (MVP) | One summary notification per digest run listing DUE/OVERDUE (+ DUE_SOON on first entry); per-item notifications only for DUE/OVERDUE not snoozed; overdue re-notify every 3 days by default | keeps noise low; fatigue controls (#11) are NEXT |
 | Usage-only schedules | Evaluated when a meter reading is saved (immediate notification if it crosses DUE), not by the clock | no date to alarm on |
 
+> **What of this table shipped, and where it was superseded. Amended at implementation
+> (2026-09-22, ServiceTag 1.2 / B13).** Every row above **ships in 1.2** as written, with two
+> corrections:
+>
+> - **Channels: `supplies` and `sync_problems` are not created** (ruling D-20 = B, 1.2 spec §5.5,
+>   invariant 53). Exactly two channels exist — `maintenance_due` at DEFAULT importance and
+>   `maintenance_overdue` at HIGH — because a channel a user can see in system settings for a
+>   feature that does not exist is noise. Supplies and sync belong to later phases and will bring
+>   their own channels with them.
+> - **Quick actions carry a carve-out.** A `QUICK` schedule that also carries a **meter rule**
+>   cannot be completed without its reading, so its "Done" routes into the canonical completion
+>   flow as an **activity** `PendingIntent`, exactly as a `FORM` schedule's does, and the
+>   notification never fabricates a reading. A **group-targeted** schedule's notification offers
+>   **"Open"** only. Each action also carries a random per-notification nonce (D-21).
+>
+> Also shipped beyond this table: the digest hour is a user preference defaulting to 09:00 local,
+> and neither `SCHEDULE_EXACT_ALARM` nor `USE_EXACT_ALARM` appears in the merged manifest, which
+> is asserted rather than assumed.
+
 ### 7.3 Reminder health (`reminders/health`)
 
 `ReminderHealthCheck.run()` returns findings, each with severity, explanation, and an optional
@@ -243,6 +262,32 @@ repair action:
 
 Health runs on app launch, after every sync, in the backstop worker, and on the Health screen.
 A red badge on Home appears when any finding has severity ≥ WARN.
+
+> **Which findings shipped, and which did not. Amended at implementation (2026-09-22, ServiceTag
+> 1.2 / B13).** The **seven local findings ship in 1.2** — `NOTIFICATIONS_BLOCKED`,
+> `DIGEST_ALARM_MISSING`, `BACKSTOP_WORK_MISSING`, `APP_RESTRICTED`, `REMINDERS_GLOBALLY_OFF`,
+> `SCHEDULE_NO_PROVIDER` and `NO_DATA` — each with the ratified sentence and repair label of the
+> 1.2 master plan §17.1a, and each with a positive test and a negative control (invariant 51).
+> The **six Todoist findings remain Phase 5**: `TODOIST_DISCONNECTED`, `PROJECTION_MISSING`,
+> `PROJECTION_CONFLICT`, `PROJECTION_DUE_DRIFT`, `SYNC_STALE` and `OUTBOX_FAILING`. They have no
+> detection in 1.2 because the tables they read — `integration_account`, `reminder_projection`,
+> `provider_op` — do not exist yet.
+>
+> Three qualifications on the rows that did ship:
+>
+> - Repair is **only** what is unambiguous and idempotent: re-arming the alarm and re-enqueuing
+>   the worker are the *only* automatic repairs. **No conflict is ever auto-repaired** (invariant
+>   50), so this table's "due drift is corrected automatically" describes Phase 5 and nothing in
+>   1.2.
+> - `NO_DATA` is keyed on the **missing meter baseline**, never on the status word. A group round
+>   whose required set is empty reports the same `NO_DATA` status and gets **no finding, no meter
+>   sentence and no repair**: it is not actionable at all (invariants 74, 77).
+> - Both store-backed findings carry two lifecycle bounds: an archived schedule and a schedule on
+>   a retired asset or an archived group raise nothing, because the app has already withdrawn
+>   that obligation from delivery.
+>
+> "After every sync" is Phase 5. In 1.2 the check runs from the backstop worker and from the
+> Maintenance and Health surfaces; the ≥ WARN badge ships, on the dashboard and on Maintenance.
 
 ## 8. Todoist adapter boundary (Phase 5)
 

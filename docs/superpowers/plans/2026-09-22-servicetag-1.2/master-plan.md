@@ -577,7 +577,9 @@ Spec §5. The shipped manifest declares only `NFC` and `INTERNET`, one launcher 
 | **"Snooze 1 day"** | broadcast | `snoozed_until_at` in the device-local table only; **no date, no event**. The dashboard still shows OVERDUE, badged "Snoozed until <date>" (invariant 20) |
 | **"Open"** | `PendingIntent.getActivity` | nothing; `servicetag://schedule/<uuid>` only |
 
-A group-targeted schedule's notification offers **"Open"** only: "Done" on a group cannot honestly mean all members, so it opens the checklist (D-7).
+A group-targeted schedule's notification offers **"Open"** only: "Done" on a group cannot honestly mean all members, so it opens the checklist (spec §2.4's group completion semantics, invariants 28-30; D-8 for the explicit way out of an unfinished round).
+
+> **Citation corrected at implementation (2026-09-22, B13).** This clause was cited as **D-7** here, in spec §5.8 and in B07's brief. **D-7 is the no-backlog ruling** — a partially complete group occurrence stays the one current, overdue occurrence — and it says nothing about which notification actions appear. What carries the clause is spec §2.4's group completion model (a round is satisfied member by member; completing one member never writes an event on another) together with **D-8**, which makes "Close this round" the explicit and only way to end an unfinished round. Corrected in all three places; nothing about the behaviour changes.
 
 ### 12.2 Health findings shipped in 1.2
 
@@ -817,7 +819,7 @@ Every user-visible string 1.2 introduces, and **every one of them is now RATIFIE
 | "Complete selected" | RATIFIED | B09, B15 |
 | "Complete all" | RATIFIED | B15, B09 |
 | "Close this round" (the action label) | RATIFIED | B14 |
-| "Open asset" | RATIFIED | B09 |
+| "Open asset" | RATIFIED | B15, B09 |
 | "Not now" | RATIFIED | B09 |
 | "Review maintenance" | RATIFIED | B09 |
 | "Snooze" | RATIFIED | B09, B14 |
@@ -840,10 +842,20 @@ Every user-visible string 1.2 introduces, and **every one of them is now RATIFIE
 | the **digest summary notification** title and body, and the per-item notification's title and body forms | **RATIFIED** (owner, 2026-09-22; §17.1e) — the digest body ratified **with one amendment**, see §17.1e | B06 |
 | the Maintenance destination's **four section labels** and its empty-state line | **RATIFIED** (owner, 2026-09-22; §17.1f) | B08 |
 | the dashboard's **filter labels** "Category", "Maintenance status", "All categories", "All statuses" (F2) | **RATIFIED** (owner, 2026-09-22; §1.2) | B08 |
-| the meter line **"Due at \<n\> \<unit\>, now \<n\>."** on a dashboard row (F3) | **RATIFIED** (owner, 2026-09-22; §1.2) | B08 |
+| the meter line **"Due at \<n\> \<unit\>, now \<n\>."** on a dashboard row (F3) | **RATIFIED** (owner, 2026-09-22; §1.2) | B08, B09 (the scan sheet draws the same line) |
 | the Maintenance destination's **quick actions** "Scan tag", "Add asset", "Log maintenance" (F4) | **RATIFIED** (owner, 2026-09-22; §1.2) | B08, routing into B14's `CompletionFlow` |
 
 **Any user-visible string a brief needs that this table does not list is a finding for the controller before that brief executes; no brief invents one.** Thirteen of the fifteen briefs say so in their own Strings section; the four whose class was drafted PROPOSED and is now ratified (B05, B06, B08, B14) say it of everything beyond the class they were given.
+
+> **Attribution corrected at implementation (2026-09-22, B13), against what the fifteen merged briefs actually drew.** The strings and the ratifications are unchanged; only the "used by" column and these notes are.
+>
+> - **"Open asset"** is drawn by **B15 and B09**, not B09 alone — the group screens reach an asset by the same ratified label the scan sheet uses.
+> - **"Maintenance group"** stays B15's, and so is its **placement**: B15 owns where that label appears, and no other brief may place it.
+> - **F3's meter line "Due at \<n\> \<unit\>, now \<n\>."** is drawn on the **scan sheet** as well as the dashboard row, so it belongs to **B09** with B08.
+> - **§17.1e's "why now" per-item forms** — "Due \<date\>.", "Overdue since \<date\>." and the meter-threshold body — are **also drawn on the scan sheet** (B09), not only in B06's notifications. One ratified form, two surfaces.
+> - **§17.1c's completion-mode options "One tap" and "The full form"** are ratified as editor options (B14) and are also read on **B09's surface**, where the mode decides whether the sheet completes in place or opens the form.
+>
+> None of this adds a string. It records which brief draws each one, which is what a release review checks a diff against.
 
 
 ### 17.1 The forty-four strings the owner ratified at the gate

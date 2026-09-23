@@ -592,6 +592,24 @@ they are all local writes; the only asynchronous part is draining the outbox.
   v5 (Phase 5: projections, outbox, integration_account), v6 (Phase 6: supplies, with
   `consumable_usage.supply_id` and `profile_consumable.supply_id` added then). Auto-migrations are
   acceptable for pure table additions; hand-written for anything else.
+
+> **Superseded by what shipped. Amended at implementation (2026-09-22, ServiceTag 1.2 / B13); the
+> bullet above is kept for the record and is no longer the plan.** The versions did not land in
+> that order, because the phases did not. As shipped:
+>
+> | version | shipped in | tables |
+> |---|---|---|
+> | v1 | 1.0.0 | `asset`, `nfc_tag`, `external_link` |
+> | v2 | 1.0.0 | journal, `measurement_definition`, `event_profile` and their children |
+> | v3 | 1.0.0 | no new table: `measurement_definition` recreated for the derived-definition columns |
+> | v4 | 1.0.0 | no new table: `asset` recreated for the parent-asset and season columns |
+> | v5 | 1.0.0 | **`attachment`** |
+> | v6 | **1.2.0** | `maintenance_group`, `maintenance_group_member`, `maintenance_schedule`, `schedule_provider`, `occurrence_closure`, `schedule_state`, `schedule_local_delivery`, and the three new `asset_event` columns |
+>
+> So **attachments shipped at v5, not v4, and schedules land at v6, not v3** (1.2 spec §3.1).
+> Supplies, reminder projections and the provider outbox hold no version number yet: they are
+> Phase 5 and later, and will take v7 upward. Reading the stale plan is what almost put 1.2's
+> schedules at v3, on top of tables that already exist.
 - The section above is written against Room's annotation model, which Room 3.0 shares with 2.8
   (`@Entity`, `@ForeignKey`, `@Index`, `@Transaction`, schema export). Room 3.0 is the starting
   line (D3 §5); nothing in this schema depends on a Room 2-only API.

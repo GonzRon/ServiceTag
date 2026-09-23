@@ -239,6 +239,22 @@ for a round the owner explicitly closed — never for an ordinary one.
    (D4 §15 lines 588-589 rely on the same property). This is what makes #55 AC 7 and #50 AC 12
    provable rather than hoped for.
 
+   > **Added at implementation (2026-09-22, ServiceTag 1.2 / B13): the meter-only case, which item
+   > 2 above does not cover.** A **meter-only** schedule — a meter rule and no time rule — has no
+   > calendar occurrence to be stamped from: `computedDueOn` is null, so its completion is written
+   > with `occurrence_on` **null**. Two consequences, both deliberate:
+   >
+   > - **The idempotence index does not apply to it.** SQLite treats NULLs as distinct, so two
+   >   completions of the same meter-only schedule are two rows, not a conflict. That is correct:
+   >   there is no occurrence for the second one to duplicate, and the rule advances from the
+   >   reading each completion carries.
+   > - **`prevDue` has nothing to read**, and nothing to reconstruct either. It is not the
+   >   approximate FIXED fallback §2.2 describes: a meter-only schedule has no series at all, and
+   >   its next due meter is `lastCompletedMeter + meterInterval`.
+   >
+   > A null `occurrence_on` on a **dated** schedule's completion is a different thing — a pre-1.2
+   > row, or one re-pointed by hand — and §2.2's approximate fallback is for that case only.
+
 **Asset-targeted occurrence.** One required asset: the schedule's own. Complete → insert event →
 `rebuild` → clear the postponement if it is set.
 
@@ -898,6 +914,15 @@ today; B6's brief declares it.
 quick-action receiver. **None is exported**, every one is addressed with an explicit intent, and every
 `PendingIntent` is `FLAG_IMMUTABLE` (#24 AC 5).
 
+> **Amended at implementation (2026-09-22, ServiceTag 1.2 / B13): the enumeration above is
+> incomplete — the manifest declares six receivers, not five.** The one it omits is **the digest
+> alarm's own receiver**, which §5.2 already implies ("re-armed by its own receiver after
+> firing"): an `AlarmManager` broadcast has to reach a **manifest-declared** component, because
+> the alarm outlives the process that armed it and a runtime-registered receiver cannot be woken.
+> So the set is the four clock-and-boot receivers, the digest receiver, and the quick-action
+> receiver — **six**, every one non-exported, every one addressed explicitly, with
+> `FLAG_IMMUTABLE` throughout. The master plan's structural grep already expects 6.
+
 **5.5 Notification channels.** D-20 = **B**: exactly two are created, `maintenance_due` at DEFAULT
 importance and `maintenance_overdue` at HIGH. No `supplies` and no `sync_problems` channel is created
 in 1.2 — a channel a user can see in system settings for a feature that does not exist is noise. #24
@@ -915,6 +940,21 @@ announced only on first entry; overdue re-notification every 3 days. `last_notif
 evaluated **when a reading is saved**, with an immediate notification if it crosses DUE, because there
 is no date to alarm on (#21 AC 6).
 
+> **"One summary notification per run listing DUE and OVERDUE" is superseded by the ratified
+> wording. Amended at implementation (2026-09-22, ServiceTag 1.2 / B13); the sentence above is
+> kept for the record.** The owner ratified the digest body with one amendment at the gate (master
+> plan §17.1e), and it names **three** classes, not two:
+>
+> - title: **"\<n\> maintenance items need attention"**
+> - body: **"\<n\> overdue, \<n\> due, \<n\> due soon."**, and a **zero-count clause may be
+>   omitted** — a run with nothing due soon reads "2 overdue, 1 due."
+>
+> Because the body names three classes, **the title's count must equal the items the body
+> represents, first-entry DUE_SOON included**: two overdue, one due and one first-entry DUE_SOON
+> gives the title "4 maintenance items need attention". The rest of the policy is unchanged — a
+> DUE_SOON item still earns a place **only on its first entry**, and it still gets no per-item
+> notification. See §6.1 for how this reconciles with invariant 45.
+
 **5.8 Quick actions (#11) and what each writes.**
 
 | Action | Mechanism | Writes |
@@ -927,7 +967,24 @@ is no date to alarm on (#21 AC 6).
 Every action carries a **random per-notification nonce**, persisted in `schedule_local_delivery` and
 checked by the receiver, so a forged broadcast cannot complete a schedule (#11 AC 4) and a real action
 survives process death (D-21). A group-targeted schedule's notification offers **"Open"** only:
-"Done" on a group cannot honestly mean all members, so it opens the checklist (D-7).
+"Done" on a group cannot honestly mean all members, so it opens the checklist (§2.4's group
+completion semantics, invariants 28-30; D-8 for the explicit way out of an unfinished round).
+
+> **Amended at implementation (2026-09-22, ServiceTag 1.2 / B13): two corrections to §5.8.**
+>
+> 1. **The group-notification clause was mis-cited as D-7.** D-7 is the **no-backlog** ruling — a
+>    partially complete group occurrence stays the one current, overdue occurrence — and it says
+>    nothing about which notification actions appear. What carries the clause is §2.4's group
+>    completion model (a round is satisfied member by member; completing one member never writes
+>    an event on another, invariants 28-30) together with **D-8**, which makes "Close this round"
+>    the explicit and only way to end an unfinished round. The citation is corrected above, and
+>    the same correction applies to master plan §12.1 and to B07's brief, which both inherited it.
+> 2. **The `"Done"`, `QUICK` row needs the meter carve-out** that master plan §12.1 carries. A
+>    `QUICK` schedule that also carries a **meter rule** cannot be completed without its reading
+>    (#11, D5 §3), so its "Done" does **not** broadcast: it routes into the canonical completion
+>    flow as an **activity** `PendingIntent`, exactly as a `FORM` schedule's does, and the
+>    notification never fabricates a reading. Invariant 55 is untouched — the carve-out moves work
+>    *out* of the receiver, not into it.
 
 `DeepLinkRoute` (`core/…/core/links/DeepLinkRoute.kt:18-27`) gains `servicetag://schedule/<uuid>`
 (D-17) with the same canonical-UUID shape check and the same navigation-only guarantee, plus the
@@ -1007,7 +1064,7 @@ naming several facts is one test asserting them together.
 
 **Recurrence and state.**
 9. At most one current occurrence exists per schedule.
-10. `effectiveDueOn` is null only when the schedule has no time rule.
+10. `effectiveDueOn` is null only when the schedule has no time rule. **— amended at implementation 2026-09-22, see §6.1.**
 11. For FIXED, every `computedDueOn` lies on the series `anchorOn + k·interval`.
 12. For COMPLETION, `computedDueOn == lastTerminationEffectiveOn + interval` whenever a termination exists.
 13. A very late termination produces exactly one next occurrence — **never a backlog** (D-7).
@@ -1048,7 +1105,7 @@ naming several facts is one test asserting them together.
 
 **Reminders.**
 44. The reminder projection — the posted notifications and the armed alarm — is derivable from schedule state alone and can be rebuilt from nothing.
-45. `reconcile` run twice with the same subject list has no second effect.
+45. `reconcile` run twice with the same subject list has no second effect. **— amended at implementation 2026-09-22, see §6.1.**
 46. A subject's `contentHash` suppresses a no-op update.
 47. A seasonally inactive or paused schedule arrives as `PARKED(reentryOn)` — never absent, never overdue.
 48. `:core` compiles with no Android and no provider dependency; no port type names a provider object.
@@ -1087,9 +1144,55 @@ naming several facts is one test asserting them together.
 
 **Added in revision 4.**
 77. An occurrence whose required set is empty is never a termination and can never be closed.
-78. `occurrence_closure.closed_on` is never in the future and never earlier than its occurrence's open date.
+78. `occurrence_closure.closed_on` is never in the future and never earlier than its occurrence's open date. **— amended at implementation 2026-09-22, see §6.1.**
 79. `removed_at` is never cleared, and `added_at` is never edited, by any use case, route or tool; a re-added asset gets a new membership row.
 80. At most one membership row per `(group, asset)` has `removed_at IS NULL`.
+
+### 6.1 Amendments made at implementation (2026-09-22, ServiceTag 1.2 / B13)
+
+Three invariants above are **superseded by the amended forms below**, recorded rather than
+rewritten so the original wording and the reason for the change both stay readable. The amended
+form is what the code enforces and what the tests assert.
+
+**Invariant 10 — amended.** As written: "`effectiveDueOn` is null only when the schedule has no
+time rule." As amended:
+
+> `effectiveDueOn` is null only when there is **no time rule** **or** the current occurrence's
+> **required set is empty**.
+
+The second clause was missing. A group-targeted round whose required set is empty is not
+actionable — it is neither offered for completion nor counted as due, and it can never be closed
+(invariants 74, 77) — so `rebuild` writes `effectiveDueOn = null` for it rather than a sort key
+for work nobody owes. The original wording would have made that a violation.
+
+**Invariant 45 — amended, reconciled with first-entry DUE SOON.** As written: "`reconcile` run
+twice with the same subject list has no second effect." As amended:
+
+> `reconcile` run twice with the same subject list and the **same delivery bookkeeping** has no
+> second effect: a subject already showing in exactly this form is not re-posted.
+
+The qualification is needed because §5.7's DUE_SOON policy is deliberately stateful. A first-entry
+DUE_SOON item is announced **once**, and announcing it writes `first_entry_seen`; the second run
+therefore legitimately produces a *smaller* digest than the first. That is not a second effect on
+the delivered projection — which is what the invariant is about — it is the bookkeeping the policy
+is built on. The idempotence claim holds **for a given bookkeeping state**. The same reading covers
+the overdue three-day re-notification, whose interval is also state, and it is what makes master
+plan §17.1e's rule — the digest title counts first-entry DUE_SOON items alongside DUE and OVERDUE
+— consistent with this invariant instead of in tension with it.
+
+**Invariant 78 — amended with the clamped floor.** As written: "`occurrence_closure.closed_on` is
+never in the future and never earlier than its occurrence's open date." As amended:
+
+> `occurrence_closure.closed_on` is never in the future and never earlier than
+> **`min(the occurrence's open date, today)`**. The `CloseRound` default is today, and the
+> accepted range is that clamped floor through today, inclusive.
+
+The floor has to be clamped. The occurrence's open **instant** is converted at UTC, to keep
+`rebuild` a pure function of its arguments, while `today` is device-local; in a negative UTC offset
+the two can differ by a day on the round's opening evening. An unclamped floor would leave the
+accepted range **empty** on that evening, refusing the default and every value a caller could offer
+instead. The clamp weakens the stored bound in no ordinary case, because the open date is at or
+before today in every other one.
 
 ---
 

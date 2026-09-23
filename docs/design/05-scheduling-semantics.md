@@ -67,6 +67,16 @@ nextDue = smallest seriesDate(k) such that seriesDate(k) > max(D, C)
   otherwise the first series date `>= T` (a newly created schedule anchored in the past is not
   immediately overdue).
 
+> **Superseded by ruling D-27. Amended at implementation (2026-09-22, ServiceTag 1.2 / B13); the
+> bullet above is kept for the record and is no longer the rule.** A never-terminated FIXED
+> schedule is **pinned from immutable configuration**: `computed_due_on = smallest seriesDate(k)
+> >= max(anchor_on, the row's own floor)`, where the floor is the row's `updated_at` date — its
+> creation date until an explicit recurrence edit moves it to the edit date. The two rules agree
+> at the moment of creation and diverge afterwards: "the first series date `>= T`" **re-floats on
+> Today**, which makes a real obligation quietly disappear every interval, and it contradicts
+> invariants 23 (status is monotone in `T`) and 25. The same pin comes back after the sole
+> completion is deleted. Shipped in `core/.../core/schedule/ScheduleRecompute.kt`.
+
 ### 2.2 COMPLETION basis ("every N units after I actually did it")
 
 ```
@@ -76,6 +86,21 @@ computed_due_on = (last_completed_on ?: anchor_on).plus(interval, unit)      // 
 More precisely: with no completion, `computed_due_on = anchor_on` (the user states when it is
 first due). With a completion, `computed_due_on = C.plus(interval)`. Early and late completions
 both move the whole series; this is Todoist's `every!`.
+
+> **Amended at implementation (2026-09-22, ServiceTag 1.2 / B13): the flat `E + interval` above
+> is superseded by a bounded form.** The series restarts **at** the termination's effective date
+> `E` and takes the **first restart date strictly after the occurrence it satisfied** — the
+> smallest `E + k·interval`, `k >= 1`, that is strictly after `max(D, E)`, where `D` is the
+> occurrence's own due date. Without the `> D` bound, a termination dated a whole interval or
+> more **before** its own round lands the next occurrence back on the round it just ended; that
+> round can never be completed again (the unique index) and closing it is refused, so the
+> schedule reports the same date for ever, in breach of invariant 9. Any past date is a legal
+> `occurredOn` or `closedOn` (D-25), so the case is reachable from the app and the API. The bound
+> changes nothing else: whenever `E + interval` is already after `D` — always, for a termination
+> on or after its due date, and for any early completion inside one interval — it *is* the
+> answer, and it is still computed from `E` with a multiplier, so no clamp can drift. With no
+> termination at all, COMPLETION is due **at** the anchor, unchanged. Shipped in
+> `core/.../core/schedule/ScheduleRecompute.kt`.
 
 ### 2.3 Calendar arithmetic rules (tested)
 
@@ -117,6 +142,14 @@ the series for FIXED) and `computed_due_meter` from the meter reading on the com
 
 ## 5. Recompute from history (the only write path into `schedule_state`)
 
+> **Amended at implementation (2026-09-22, ServiceTag 1.2 / B13).** The shipped signature is
+> `rebuild(schedule, events, closures, membership, today, season)` — six parameters
+> (`core/.../core/schedule/ScheduleRecompute.kt`). `closures` carries the 1.2 spec §2.9's round-closure facts,
+> `membership` the group rows an occurrence's required set is derived from, and `season` the
+> optional window the asset supplies, passed in rather than read so `rebuild` stays a pure
+> function of its arguments. The sketch below keeps the two-argument shape it was written with;
+> read it as the time-and-meter core of the six-parameter function.
+
 ```
 rebuild(schedule, events(asset), T):
   completions = events where schedule_id == schedule.id, ordered by occurred_on, created_at
@@ -131,6 +164,24 @@ rebuild(schedule, events(asset), T):
   season_active, next_season_start_on
   computed_for_on = T
 ```
+
+> **Superseded by the 1.2 spec's §2.2 and invariant 70. Amended at implementation (2026-09-22, ServiceTag
+> 1.2 / B13); the paragraph below is kept for the record and is no longer the rule.**
+>
+> For FIXED, `prevDue` — the occurrence a termination satisfied — is **read, not reconstructed**:
+> it is the terminating row's `occurrence_on`, the column 1.2 adds to `asset_event` for exactly
+> this purpose. The reconstruction below returns the **wrong** occurrence for an **early**
+> completion. Counter-example, from §10.1 below: anchor Jan 1, quarterly, occurrence
+> due Apr 1, completed Mar 20 — the reconstruction gives `prevDue = Jan 1` and so `nextDue = Apr
+> 1`, where §10.1 requires **Jul 1**.
+>
+> The reconstruction survives as a **fallback only**, for a completion row that carries no
+> `occurrence_on` — a pre-1.2 row, or one re-pointed at a schedule by hand: the largest series
+> date `<= occurred_on`, or the anchor if the completion predates the series. That fallback is
+> **approximate, in exactly one way**: an early completion is attributed to the occurrence before
+> the one it actually satisfied, so the schedule advances one occurrence less far than it should.
+> A NULL `occurrence_on` is not a reason to throw, which would make old data unusable, and not a
+> reason to use today, which would be wrong.
 
 For FIXED, `prevDue` (the occurrence the last completion satisfied) is reconstructed as the
 largest series date `<= last_completed_on`, or the anchor if none, so the rebuild is a pure
@@ -293,6 +344,14 @@ Series: Jan 1, Apr 1, Jul 1, Oct 1, 2027-01-01 …
 | Instead completed Jul 15 (very late) | next = first > max(Apr 1, Jul 15) = **Oct 1**; the July occurrence is skipped, no backlog |
 | Delete the Jul 15 event | rebuild: last completion none → due = first series date ≥ T; if T = Aug 1 → **Oct 1** |
 
+> **The last row is superseded by ruling D-27. Amended at implementation (2026-09-22, ServiceTag
+> 1.2 / B13); it is kept for the record and is no longer the answer.** With no termination left,
+> the schedule is pinned from immutable configuration, not recomputed against Today: due =
+> smallest series date `>= max(anchor_on, the row's floor)` = `max(Jan 1, Feb 10)` → **Apr 1**,
+> whatever `T` is. That is what makes deleting the latest completion move the due date
+> *observably back* (invariant 24) and what keeps the pin stable (invariant 25). "First series
+> date ≥ T" would have the obligation walk forward on its own every quarter.
+
 ### 10.2 COMPLETION UPS load test every 90 days
 
 `anchor_on = 2026-06-08` (last performed, entered at creation).
@@ -305,6 +364,15 @@ Series: Jan 1, Apr 1, Jul 1, Oct 1, 2027-01-01 …
 | Postponed to Sep 20 on Sep 7, then completed Sep 25 | postponed cleared; due **Dec 24** (Sep 25 + 90), the postponement did not shift the rule |
 | Snoozed 3 days on Sep 7 | still OVERDUE; no notification until Sep 10 09:00 local; due Sep 6 unchanged |
 
+> **The "Created" row is superseded by the 1.2 spec's §2.1. Amended at implementation
+> (2026-09-22, ServiceTag 1.2 / B13); both rows are kept for the record.** With **no**
+> termination, a COMPLETION-basis schedule is due **at** the anchor: `anchor_on = 2026-06-08`, so
+> due is **Jun 8**, not Sep 6 — the anchor is where the owner states the work is first due, not
+> one interval before it. The snooze row's "due Sep 6 unchanged" follows the same correction and
+> reads **Jun 8 unchanged**. The four completion rows are unaffected: with a termination the
+> series restarts at `E` and takes the first restart date strictly after the occurrence it
+> satisfied (§2.2's amendment), which for each of them is the `E + 90` this table already gives.
+
 ### 10.3 Mower oil change: every 50 h OR 12 months, whichever first
 
 Meter definition `engine_hours`, `meter_lead = 5`, basis COMPLETION.
@@ -316,6 +384,14 @@ Meter definition `engine_hours`, `meter_lead = 5`, basis COMPLETION.
 | Reading 171 h logged Aug 15 | meter DUE → **DUE** ("171 / 170 h") |
 | Completed Aug 20 with 172 h, 2.0 qt oil, filter | due_on 2027-08-20; due_meter **222**; both sides advanced from one event |
 | Alternative: no readings, T = 2027-04-11 | time OVERDUE → **OVERDUE** regardless of meter |
+
+> **The "Created" row's time side is superseded by the 1.2 spec's §2.1. Amended at implementation
+> (2026-09-22, ServiceTag 1.2 / B13); the row is kept for the record.** The basis here is
+> COMPLETION, so with no termination the time side is due **at** the anchor — `2026-04-10`, the
+> date the owner entered as "last changed" — not `2027-04-10`. The meter side is unchanged:
+> `computed_due_meter` is `anchor_meter + meter_interval` = **170**, and the meter side is what
+> this example is about. The `2027` dates in the rows below it are correct, because each follows
+> a completion.
 
 ### 10.4 Winter hot tub: test water every! 3 days, window Oct 15 → Apr 15
 
@@ -345,6 +421,18 @@ UPS load test every 90 days → edited to every 60 days on Sep 20 with last comp
 `rebuild` → due **Nov 12**. Postponement (if any) cleared. FIXED quarterly → edited to monthly
 with a new anchor Oct 1: due = first series date ≥ T.
 
+> **The last sentence is superseded by ruling D-27 and the edit-date floor (1.2 spec §2.1, T3).
+> Amended at implementation (2026-09-22, ServiceTag 1.2 / B13); it is kept for the record and is
+> no longer the rule.** After a recurrence edit on a schedule with **no** terminations, the
+> occurrence is pinned from the edited configuration with the **edit date** as the floor: due =
+> smallest series date `>= max(anchor_on, edited_on)`, where `edited_on` is the row's `updated_at`
+> date at the edit. It is a pin, not a recomputation against Today: it never re-floats, and only
+> another explicit edit moves the floor. Without the floor, re-anchoring an old, never-terminated
+> schedule would pin it immediately overdue; with the floor stated as `T` instead, the obligation
+> would drift forward for ever. Invariants 23 and 25 hold under the corrected rule. A recurrence
+> edit also **abandons** an open, partially complete occurrence (D-9): the member completions
+> already recorded stay as truthful history and the edited rule opens the new current occurrence.
+
 ### 10.6 Pause / archive / season deactivation, side by side
 
 | | Due date | Notifications | Dashboard | Todoist |
@@ -354,6 +442,25 @@ with a new anchor Oct 1: due = first series date ≥ T.
 | INACTIVE_SEASON | computed but not surfaced | none | grey "inactive until Oct 15" | PARKED (re-dated to re-entry; seasonal schedules are always `MANAGED_OCCURRENCE`) |
 | PAUSED | none | none | grey "paused" | PARKED (managed: undated; native recurring: due cleared, recurrence string kept; restored on resume) |
 | ARCHIVED | none | none | hidden | WITHDRAWN (task deleted) |
+
+> **Added at implementation (2026-09-22, ServiceTag 1.2 / B13): ruling D-16's two known limits.**
+> A maintenance group's round derives its **required set** from each membership window
+> `[added_at, removed_at)` *and* from the member Asset's own lifecycle. The Asset carries a
+> retirement **date** but no lifecycle **instant**, so:
+>
+> - **ARCHIVED excludes a member from every round, past rounds included.** There is nothing to
+>   compare a round's open instant against, so the bound can only be "archived now". A round
+>   completed before the member was archived therefore reports a smaller required set when it is
+>   recomputed than it obliged at the time. Recorded completions are untouched; only the derived
+>   set narrows. This is a documented departure from invariant 33's letter, taken in preference to
+>   inventing an instant the schema does not hold.
+> - **A retirement backdated later may change an already-opened round.** `retired_on` is a date a
+>   user may correct after the fact; a correction that lands on or before a round's open date
+>   removes the member from that round's required set. That is treated as a deliberate correction
+>   of history rather than a bug.
+>
+> The fix for both is a `lifecycle_changed_at` instant on Asset, which is a schema, backup-format
+> and merge change and is **deferred to 1.3**. Until then these are the stated limits.
 
 ## 11. From due dates to reminder instants (the only place zones enter)
 

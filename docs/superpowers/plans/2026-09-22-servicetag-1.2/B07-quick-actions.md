@@ -1,7 +1,7 @@
 # B07 — #11 notification quick actions
 
 **Read first:** the master plan's §1, §12.1 (the four actions and what each writes), §11 (the deep link) and §13.
-**Spec:** `docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md` §5.8; rulings D-7, D-21; issue snapshot `issue-11.md`.
+**Spec:** `docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md` §5.8, §2.4; rulings D-8, D-21; issue snapshot `issue-11.md`. **Citation corrected at implementation (2026-09-22, B13): D-7 is the no-backlog ruling and never carried the group-notification clause — §2.4's group completion semantics and D-8 do.**
 
 ## Purpose
 
@@ -41,7 +41,7 @@ class QuickActions(/* nonce store, completion mode lookup, route builders */) {
 data class QuickAction(val label: String, val intent: PendingIntent)
 ```
 
-**Which actions appear, as contract** (§5.8, D-7):
+**Which actions appear, as contract** (§5.8, §2.4, D-8 — *not* D-7, corrected 2026-09-22):
 
 | schedule | actions |
 |---|---|
@@ -85,7 +85,7 @@ One test per hazard class; all off-device with a fake `NonceStore` and fake use 
 | a trampoline | a structural assertion plus a behavioural one: `QuickActionReceiver` never calls `startActivity` and never constructs an activity `Intent`; the two activity-backed actions use `PendingIntent.getActivity` (invariant 55) | Android 12+ silently drops the launch, so the action appears to do nothing |
 | an exported receiver | `QuickActionReceiver` is declared `android:exported="false"` and is addressed with an **explicit** intent naming its component (invariant 54) | an implicit intent to a non-exported receiver simply fails, and an exported one is the forgery door |
 | a mutable `PendingIntent` | every `PendingIntent` this brief builds carries `FLAG_IMMUTABLE` (invariant 54) | a mutable one lets another app rewrite the schedule id the action acts on |
-| **a group notification completing everyone** | a group-targeted schedule's notification offers **"Open"** and **only** "Open"; no "Done" and no "Snooze 1 day" action is attached (D-7) | a "Done" on a group either completes nothing (confusing) or completes every member (false history) |
+| **a group notification completing everyone** | a group-targeted schedule's notification offers **"Open"** and **only** "Open"; no "Done" and no "Snooze 1 day" action is attached (§2.4, invariants 28-30; D-8) | a "Done" on a group either completes nothing (confusing) or completes every member (false history) |
 | the deep link mutating | `servicetag://schedule/<uuid>` **navigates** to the schedule detail and writes nothing — no completion, no snooze, no postpone, no closure (invariant 57) | a link handler that "helpfully" completes turns a URL into a mutation, breaking #19's contract |
 | a malformed deep link | a non-canonical uuid, extra path segments, a missing segment and a foreign scheme each parse to `Malformed` or `null` exactly as the two shipped hosts do, reusing `single()`'s regex | a second, looser shape check lets a malformed id reach a repository lookup |
 | a group deep link appearing | a structural assertion: no `servicetag://group` host exists in `DeepLinkRoute` or in the manifest (D-17) | adding one now is a surface with no 1.2 consumer and a permanent contract |
