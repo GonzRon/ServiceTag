@@ -12,8 +12,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Clear
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -24,7 +22,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -34,8 +31,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -85,10 +80,6 @@ fun DashboardScreen(
 ) {
     val model: DashboardViewModel = viewModel(key = "dashboard") { DashboardViewModel(graph, health) }
     val state by model.state.collectAsStateWithLifecycle()
-    // The box draws itself from the view model's own query holder, not from `state.query` (F3): the
-    // latter is a `combine`/`stateIn` round trip and a text field has to see its own keystroke back
-    // in the same frame. `state.query` still decides what the list and the two lines below say.
-    val query by model.query.collectAsStateWithLifecycle()
 
     // An export that happened on the backup screen is a preference, and nothing observes those:
     // coming back here is the moment to ask again whether the nudge is still true.
@@ -119,9 +110,7 @@ fun DashboardScreen(
             )
         },
     ) { padding ->
-        // The nudge and the box stay put; only the rows scroll. A search field inside a lazy list
-        // is disposed the moment it scrolls out of view, which drops focus and the keyboard
-        // mid-word — and a filter you have to scroll back to find is not a quick one.
+        // The nudge stays put; only the rows scroll.
         Column(modifier = Modifier.padding(padding)) {
             if (state.needsBackup) {
                 BackupNudge(onExport = onBackup, modifier = Modifier.padding(16.dp))
@@ -129,12 +118,6 @@ fun DashboardScreen(
             if (!state.anyInService) {
                 FirstRun(onNewAsset = onNewAsset, onScan = onScan)
             } else {
-                SearchBox(
-                    query = query,
-                    onQueryChange = model::onQueryChange,
-                    onClear = model::clearQuery,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
                 DashboardFilterRow(
                     filters = state.filters,
                     onCategory = model::onCategoryChange,
@@ -143,7 +126,7 @@ fun DashboardScreen(
                 )
                 // Said once, and only while there is something it explains: a list that is short
                 // because the parts are on their systems should say where they went.
-                if (state.query.isBlank() && state.hiddenComponents > 0) {
+                if (state.hiddenComponents > 0) {
                     QuietLine(
                         text = "Components are listed on the asset they belong to. Search to find one.",
                         modifier = Modifier.padding(horizontal = 16.dp),
@@ -155,12 +138,9 @@ fun DashboardScreen(
                         onOpenAsset = onOpenAsset,
                         onOpenSchedule = onOpenSchedule,
                     )
-                } else if (state.query.isNotBlank() || state.filters.isActive) {
-                    // Only ever an answer to something asked for (F1). An empty list under an empty
-                    // box with no filter set is reachable — retire a parent and its component stays
-                    // in service — and there the line above has already said where the parts are;
-                    // telling the owner their search found nothing when they searched for nothing
-                    // is how they conclude their assets are gone.
+                } else if (state.filters.isActive) {
+                    // Only ever an answer to something asked for (F1). An empty list under an active
+                    // filter is reachable, and there is nothing else on screen to explain it away.
                     QuietLine(text = "Nothing matches that.", modifier = Modifier.padding(16.dp))
                 }
             }
@@ -227,42 +207,6 @@ private fun RowRule() {
 }
 
 /**
- * The quick filter (#39). An `OutlinedTextField`, not a Material 3 `SearchBar`: a `SearchBar`
- * expands over the screen and owns a results surface of its own, and what this needs is one line
- * that narrows the list already underneath it. The clear action appears only once there is
- * something to clear, so a first look is not two glyphs and a hint.
- */
-@Composable
-private fun SearchBox(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onClear: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChange,
-        singleLine = true,
-        shape = ControlShape,
-        placeholder = { Text("Search assets and components") },
-        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-        trailingIcon = {
-            if (query.isNotEmpty()) {
-                IconButton(onClick = onClear) {
-                    Icon(Icons.Outlined.Clear, contentDescription = "Clear search")
-                }
-            }
-        },
-        // Once text is entered the placeholder is gone and the field has no accessible name, and
-        // every other field in the app gets one from `FormField`'s label (F10). A `label` here would
-        // be a new string, so the ratified placeholder is reused rather than a fifth sentence added.
-        modifier = modifier
-            .fillMaxWidth()
-            .semantics { contentDescription = "Search assets and components" },
-    )
-}
-
-/**
  * The one card this screen is allowed (D12 §7, G1 §1.2): the nudge is not another row of the list,
  * it is a separate fact about the install, and a card is how a separate fact reads. It says what is
  * missing and what that costs before it offers the button.
@@ -320,7 +264,7 @@ private fun FirstRun(onNewAsset: () -> Unit, onScan: () -> Unit) {
  * schedule has no state to carry, and one that looked OK by colour would be claiming something it
  * does not know.
  *
- * A component — which is only ever here because a search asked for it (#39) — says whose component
+ * A component — which is only ever here because §11.1 promoted its due work — says whose component
  * it is in place of the schedule line. An asset that *has* a schedule is not here at all: its
  * schedule's row is in one of the sections above, at its own attention rank.
  */

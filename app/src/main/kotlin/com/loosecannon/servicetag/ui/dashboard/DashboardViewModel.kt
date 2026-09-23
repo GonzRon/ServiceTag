@@ -3,7 +3,6 @@ package com.loosecannon.servicetag.ui.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.Asset
-import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.isRetired
@@ -22,7 +21,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -32,9 +30,9 @@ import kotlinx.coroutines.flow.update
 private const val SUBSCRIPTION_GRACE_MS = 5_000L
 
 /**
- * One row of the dashboard list: the asset, and — for a component a search has surfaced — the name
- * of the asset it is part of. A component row on its own would be a name with no home, and the
- * whole point of letting the search reach components is that the hit can be understood.
+ * One row of the dashboard list: the asset, and — for a promoted component — the name of the asset
+ * it is part of. A component row on its own would be a name with no home, and the whole point of
+ * promoting a part's due work is that the hit can be understood.
  *
  * [hasSchedule] is why the shipped "No schedule yet" line can stay honest. An asset reaches this
  * list either because nothing is scheduled on it, or because everything that is has a status the
@@ -58,13 +56,12 @@ data class AttentionGroup(val section: AttentionSection, val items: List<DueItem
 /**
  * What the dashboard draws. [needsBackup] is deliberately not `lastBackupAt == null` at the call
  * site: the screen should never have to work out what the absence of an instant means. [assets] is
- * likewise already filtered — by lifecycle, by [query], and by whether a row is a component of
- * something else — so no rule about what belongs in the list lives on the screen.
+ * likewise already filtered — by lifecycle and by whether a row is a component of something else —
+ * so no rule about what belongs in the list lives on the screen.
  *
- * [anyInService] and [hiddenComponents] exist because an empty list has three different meanings.
- * Nothing in service at all is a first run and gets the empty state; nothing *matching* is a search
- * that found nothing; and a list that is short because the components are on their own systems is
- * neither, and says so once.
+ * [anyInService] and [hiddenComponents] exist because an empty list has two different meanings.
+ * Nothing in service at all is a first run and gets the empty state; and a list that is short
+ * because the components are on their own systems is neither, and says so once.
  *
  * **1.2 adds [sections]**: the attention sections of D12 §10 — ATTENTION · UPCOMING · CURRENT ·
  * OUT OF SEASON, in that order, empty ones omitted — drawn from the shared due projection, so the
@@ -83,11 +80,9 @@ data class AttentionGroup(val section: AttentionSection, val items: List<DueItem
 data class DashboardState(
     val assets: List<DashboardRow> = emptyList(),
     val sections: List<AttentionGroup> = emptyList(),
-    /** What the search box holds, verbatim. Blank means "the systems, and not their parts". */
-    val query: String = "",
-    /** Whether anything is in service at all, before [query] is applied. */
+    /** Whether anything is in service at all. */
     val anyInService: Boolean = false,
-    /** How many in-service components there are, whatever the query; read only while it is blank. */
+    /** How many in-service components there are — the ones kept on the systems they belong to. */
     val hiddenComponents: Int = 0,
     val needsBackup: Boolean = false,
     val lastBackupAt: Long? = null,
@@ -97,41 +92,17 @@ data class DashboardState(
 )
 
 /**
- * The fields a search reaches, and why these six (#39): the name; the category the Assets list
- * already shows as its own subtitle, so someone who typed "pump" there expects it to work here;
- * and the four an owner reads off the machine itself when they cannot remember what they called it
- * — make, model, serial, and where the thing is. `description`, `notes`, `vendor` and the warranty
- * prose are deliberately out: they are paragraphs, and a row that shows a name and its parent
- * could not explain a hit buried in one.
- */
-private val SEARCHED_FIELDS: List<(Asset) -> String> = listOf(
-    Asset::name,
-    Asset::category,
-    Asset::manufacturer,
-    Asset::model,
-    Asset::serialNumber,
-    Asset::location,
-)
-
-/** Case-insensitive substring over [SEARCHED_FIELDS]. A blank query matches everything. */
-internal fun Asset.matches(query: String): Boolean {
-    val needle = query.trim()
-    if (needle.isEmpty()) return true
-    return SEARCHED_FIELDS.any { field -> field(this).contains(needle, ignoreCase = true) }
-}
-
-/**
- * The landing screen's state: the assets that are in service, what needs attention, what the search
- * box holds, and whether a backup has ever been taken. Different kinds of fact, so they arrive
- * different ways — the rows and the schedule tables from live repository flows, the query and the
- * filters from the screen, the backup instant from preferences, which nothing observes.
+ * The landing screen's state: the assets that are in service, what needs attention, F2's filters,
+ * and whether a backup has ever been taken. Different kinds of fact, so they arrive different ways
+ * — the rows and the schedule tables from live repository flows, the filters from the screen, the
+ * backup instant from preferences, which nothing observes.
  *
  * **The store's half and the screen's half are two flows on purpose** (master plan decision 32).
  * Reading the store — the ranked projection, the health summary and the backup instant — is work:
  * four `all()` reads, an occurrence derivation per group schedule, and in B10's hands a platform
  * probe that touches the standby bucket. That happens when the tables move or the screen asks for a
- * [refresh], and **never on a keystroke**. The query and the filters only ever *narrow* an
- * already-ranked list, so they combine with it rather than re-deriving it.
+ * [refresh], and **never on a filter change**. The filters only ever *narrow* an already-ranked
+ * list, so they combine with it rather than re-deriving it.
  *
  * [refresh] is what closes the preference gap. The screen calls it when it comes back into
  * composition, so an export that happened while the user was on the backup screen puts the nudge out
@@ -168,18 +139,7 @@ class DashboardViewModel(
     )
 
     private val refreshes = MutableStateFlow(0)
-    private val queries = MutableStateFlow("")
     private val filterChoices = MutableStateFlow(DashboardFilters())
-
-    /**
-     * What the search box draws itself from, synchronously (F3). [DashboardState.query] carries the
-     * same string, but it arrives through `combine` and `stateIn` — an internal channel and a
-     * sharing coroutine — so it is not guaranteed to be back before the next keystroke, which is
-     * how characters get dropped and the cursor jumps to the end mid-word. Every other hoisted
-     * field in this app reads its own `asStateFlow()` for exactly that reason; the filtering still
-     * happens off [DashboardState.query] and nothing about the list's rules moves here.
-     */
-    val query: StateFlow<String> = queries.asStateFlow()
 
     /**
      * Everything that has to be read to answer "what is in the store". Emits on a table change or a
@@ -215,21 +175,19 @@ class DashboardViewModel(
             }
 
     val state: StateFlow<DashboardState> =
-        combine(store, queries, filterChoices) { view, query, chosen -> build(view, query, chosen) }
+        combine(store, filterChoices) { view, chosen -> build(view, chosen) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), DashboardState())
 
     /**
-     * The screen's half: lifecycle, then the search, then the blank-query rule with §11.1's
-     * promotion exception, then F2 — over a list the projection has already ranked. Pure, and no
-     * repository or platform read in it.
+     * The screen's half: lifecycle, then §11.1's promotion exception, then F2 — over a list the
+     * projection has already ranked. Pure, and no repository or platform read in it.
      */
-    private fun build(view: StoreView, query: String, chosen: DashboardFilters): DashboardState {
+    private fun build(view: StoreView, chosen: DashboardFilters): DashboardState {
         val active = view.rows.filter { it.status == AssetStatus.ACTIVE }
         val inService = active.filterNot { it.isRetired }
         // Parent names come from every row, not just the in-service ones: a component of a
         // retired machine is itself in service and still has to say whose component it is.
         val byId = view.rows.associateBy { it.id }
-        val matching = inService.filter { it.matches(query) }
 
         val items = view.items
         // §11.1's promotion rule, and decision 29's reading of "actionable": a status in ATTENTION
@@ -237,12 +195,11 @@ class DashboardViewModel(
         // empty-required-set form has no section, so it is not in this set (invariant 74).
         val promoted = items.filter { it.isPromotable }.mapNotNull { it.targetAssetId }.toSet()
 
-        // F2 is applied here — after the lifecycle and the search, over rows the projection has
-        // already ranked. A filter narrows what is listed and never re-derives an order.
+        // F2 is applied here — after the lifecycle, over rows the projection has already ranked.
+        // A filter narrows what is listed and never re-derives an order.
         val listedDue = items
             .filter { it.section != null }
-            .filter { it.admittedBy(query, byId) }
-            .filter { query.isNotBlank() || !it.isComponent || it.isPromotable }
+            .filter { !it.isComponent || it.isPromotable }
             .filter { chosen.admits(it) }
 
         // The asset appears exactly once (controller ruling, fix round 1). The exclusion is the set
@@ -254,17 +211,12 @@ class DashboardViewModel(
         // decides whether "No schedule yet" would be a lie.
         val anySchedule = items.mapNotNull { it.targetAssetId }.toSet()
 
-        // The list is the systems. A blank query keeps the parts on the systems they belong to
-        // (#39); typing brings them back, because that is the one place a hidden part is asked
-        // for by name. §11.1 adds the one exception: a component carrying actionable due work is
-        // promoted rather than hidden, so a part's overdue maintenance is never invisible
-        // (invariant 75, #5 AC 1) — and it is promoted to its *attention rank*, which is why the
-        // row it produces is the schedule row in `sections` and not a second asset row here.
-        val shown = if (query.isBlank()) {
-            matching.filter { it.parentAssetId == null || it.id.value in promoted }
-        } else {
-            matching
-        }
+        // The list is the systems: the parts stay on the systems they belong to (#39). §11.1 adds
+        // the one exception: a component carrying actionable due work is promoted rather than
+        // hidden, so a part's overdue maintenance is never invisible (invariant 75, #5 AC 1) — and
+        // it is promoted to its *attention rank*, which is why the row it produces is the schedule
+        // row in `sections` and not a second asset row here.
+        val shown = inService.filter { it.parentAssetId == null || it.id.value in promoted }
         val assetRows = shown
             .filterNot { it.id.value in drawn }
             .filter { chosen.admitsAsset(it) }
@@ -283,7 +235,6 @@ class DashboardViewModel(
                     .takeIf { it.isNotEmpty() }
                     ?.let { AttentionGroup(section, it) }
             },
-            query = query,
             anyInService = inService.isNotEmpty(),
             hiddenComponents = inService.count { it.parentAssetId != null },
             // An empty install has nothing to lose, and a nudge over an empty dashboard is
@@ -305,15 +256,6 @@ class DashboardViewModel(
      * Health screen", never per emission.
      */
     fun refresh() = refreshes.update { it + 1 }
-
-    /**
-     * What the search box holds. Filtering is a pass over rows the store flow already produced, so
-     * a keystroke runs no query, reads no preference and needs no debounce.
-     */
-    fun onQueryChange(value: String) { queries.value = value }
-
-    /** The clear action. Separate from `onQueryChange("")` so the screen states its intent. */
-    fun clearQuery() { queries.value = "" }
 
     /** F2: null is "All categories" — the absence of a filter, not a sentinel option. */
     fun onCategoryChange(category: String?) {
@@ -338,18 +280,6 @@ private val DueItem.targetAssetId: String?
  */
 private val DueItem.isPromotable: Boolean
     get() = section == AttentionSection.ATTENTION || section == AttentionSection.UPCOMING
-
-/**
- * Whether a typed query admits this due row. The Asset side is the shipped six-field predicate,
- * unchanged; a group row has no Asset and only a name of its own, so that is what it is matched on.
- */
-private fun DueItem.admittedBy(query: String, byId: Map<AssetId, Asset>): Boolean {
-    if (query.isBlank()) return true
-    return when (val t = target) {
-        is ScheduleTarget.AssetTarget -> byId[t.assetId]?.matches(query) == true
-        is ScheduleTarget.GroupTarget -> assetName.contains(query.trim(), ignoreCase = true)
-    }
-}
 
 /** F2 over a due row: both controls narrow, neither reorders. */
 private fun DashboardFilters.admits(item: DueItem): Boolean =
