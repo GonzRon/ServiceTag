@@ -6,6 +6,12 @@ pairing code, a serial or an asset id, only counts, decisions, manifest keys and
 `servicetag_mcp.server` is imported lazily, after `--serial` (if given) is written into the
 environment: that module builds its `Device` at import time from the environment, so importing it
 before the override would pin the wrong device for the rest of this process.
+
+Every phone-side failure — a wrong or expired pairing code (the single most likely operator
+mistake, since the code is new every time the Developer API screen reopens), or any MCP `is_error`
+reached while planning or applying — is caught in `_run_plan`/`_run_apply`, printed as one line
+(carrying the manifest entry's key where `phone.PhoneError`/`apply.ApplyError` name one) and exits
+**2**. Neither run function lets one of those propagate out as a traceback.
 """
 
 from __future__ import annotations
@@ -14,7 +20,8 @@ import argparse
 import asyncio
 import os
 import sys
-from typing import Any
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
 
 from . import apply as applymod
 from . import manifest as manifestmod
@@ -22,6 +29,10 @@ from . import phone
 from . import plan as planmod
 
 SERIAL_ENV = "SERVICETAG_ADB_SERIAL"
+
+# Every exception this CLI treats as "the phone (or a write on its behalf) refused" rather than a
+# bug: printed as one line and exit 2, never a traceback.
+_PHONE_SIDE_ERRORS = (phone.PhoneError, applymod.ApplyError, applymod.ApplyRefused)
 
 
 def _print_plan(result: planmod.Plan) -> None:
@@ -39,16 +50,19 @@ def _load_manifest(path: str) -> manifestmod.Manifest | None:
         return None
 
 
-async def _paired_client(code: str) -> Any:
-    """An entered async context manager: `mcp.Client(servicetag_mcp.server.mcp)`, already paired.
-    Imported here (not at module scope) so `--serial` can be written into the environment first."""
+@asynccontextmanager
+async def _paired_client(code: str) -> AsyncIterator[phone.ToolClient]:
+    """`mcp.Client(servicetag_mcp.server.mcp)`, entered and paired. A context manager on purpose:
+    a failed `pair` call (a wrong or expired code) still closes the underlying client instead of
+    leaking it, because the failure happens *inside* the `async with` rather than between entering
+    it and handing it back. Imported here (not at module scope) so `--serial` can be written into
+    the environment first."""
     from mcp import Client
     from servicetag_mcp import server as mcp_server
 
-    client_cm = Client(mcp_server.mcp)
-    client = await client_cm.__aenter__()
-    await phone.call_tool(client, "pair", {"code": code})
-    return client_cm, client
+    async with Client(mcp_server.mcp) as client:
+        await phone.call_tool(client, "pair", {"code": code})
+        yield client
 
 
 async def _run_plan(args: argparse.Namespace) -> int:
@@ -58,11 +72,12 @@ async def _run_plan(args: argparse.Namespace) -> int:
     if args.serial:
         os.environ[SERIAL_ENV] = args.serial
 
-    client_cm, client = await _paired_client(args.code)
     try:
-        inventory = await phone.snapshot(client)
-    finally:
-        await client_cm.__aexit__(None, None, None)
+        async with _paired_client(args.code) as client:
+            inventory = await phone.snapshot(client)
+    except _PHONE_SIDE_ERRORS as e:
+        print(str(e), file=sys.stderr)
+        return 2
 
     result = planmod.plan(manifest, inventory)
     _print_plan(result)
@@ -76,17 +91,18 @@ async def _run_apply(args: argparse.Namespace) -> int:
     if args.serial:
         os.environ[SERIAL_ENV] = args.serial
 
-    client_cm, client = await _paired_client(args.code)
     try:
-        inventory = await phone.snapshot(client)
-        result = planmod.plan(manifest, inventory)
-        _print_plan(result)
-        if not result.clean:
-            print("refusing to apply: the plan has CONFLICT/ERROR entries", file=sys.stderr)
-            return 1
-        outcome = await applymod.apply(manifest, result, client)
-    finally:
-        await client_cm.__aexit__(None, None, None)
+        async with _paired_client(args.code) as client:
+            inventory = await phone.snapshot(client)
+            result = planmod.plan(manifest, inventory)
+            _print_plan(result)
+            if not result.clean:
+                print("refusing to apply: the plan has CONFLICT/ERROR entries", file=sys.stderr)
+                return 1
+            outcome = await applymod.apply(manifest, result, client)
+    except _PHONE_SIDE_ERRORS as e:
+        print(str(e), file=sys.stderr)
+        return 2
 
     print(f"created: groups={outcome.groups_created} schedules={outcome.schedules_created}")
     _print_plan(outcome.reapply_plan)
