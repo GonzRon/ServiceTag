@@ -1530,7 +1530,13 @@ def close_round(schedule_id: str, closed_on: str | None) -> dict[str, Any]:
 
     1.2.1: it also refuses a round that has not yet reached its own due-soon window
     (`effectiveDueOn - leadDays`), writing nothing — the guard against an immediate retry landing on
-    the fresh round the first close just opened.
+    the fresh round the first close just opened. `effectiveDueOn` already includes a postponement
+    (`postponedDueOn` when set), so a round postponed into the future is not closeable until its
+    postponed window opens; clear the postponement first. **Known limit:** the guard only defends
+    the retry while `leadDays` is less than the schedule's recurrence interval — with a lead at or
+    beyond the interval the retry succeeds and writes a second closure, so re-read
+    `list_closures`/`GET …/closures` before retrying a call you believe was lost rather than sending
+    it again.
 
     Offered on **group-targeted** schedules only, and only on a round that obliges somebody: a round
     with no required members is not a round, and closing one is refused rather than recorded.
