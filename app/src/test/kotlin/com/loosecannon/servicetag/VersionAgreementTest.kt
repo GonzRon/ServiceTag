@@ -185,6 +185,11 @@ class VersionAgreementTest {
             Regex("""^\|\s*1\.3\.0\s*\|\s*15\s*\|.*schema \*\*7\*\*.*format \*\*7\*\*""", RegexOption.MULTILINE)
                 .containsMatchIn(text),
         )
+        assertFalse(
+            "the row's unit-gate counts are measured at the release tip, so no placeholder ships",
+            Regex("""^\|\s*1\.3\.0\s*\|\s*15\s*\|.*PLACEHOLDER""", RegexOption.MULTILINE)
+                .containsMatchIn(text),
+        )
     }
 
     /**
