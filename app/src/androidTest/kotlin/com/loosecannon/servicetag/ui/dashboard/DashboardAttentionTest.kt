@@ -65,9 +65,9 @@ class DashboardAttentionTest {
      * group of three sprinklers with one member done.
      *
      * The overdue and meter schedules are written straight to the repository and then rebuilt by
-     * the real engine, because the D-27 pin floors a new schedule's first occurrence at its own
-     * `created_at` (invariant 23) — a schedule created now can be due today but never yesterday, so
-     * an OVERDUE row on a fresh store needs a row whose `created_at` is genuinely older. The group
+     * the real engine, because of D-27's floor: created now, due today at the earliest, never
+     * yesterday — so an OVERDUE row on a fresh store needs a row whose `created_at` is genuinely
+     * older. The group
      * schedule goes through `saveSchedule`, because its membership windows are stamped now and its
      * round has to open on an instant those windows cover.
      */

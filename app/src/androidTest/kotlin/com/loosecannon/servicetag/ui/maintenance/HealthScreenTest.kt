@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.MainActivity
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
+import com.loosecannon.servicetag.ui.clearInstall
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -46,6 +47,8 @@ private const val ALARM_FINDING =
 class HealthScreenTest {
 
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
+
+    @Before fun freshInstall() = clearInstall()
 
     /** The alarm gone is the finding's whole condition, with reminders left switched on. */
     @Before fun cancelTheAlarm() {
