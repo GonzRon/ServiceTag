@@ -106,13 +106,35 @@ def test_add_reference_sends_the_four_fields_and_never_a_kind(paired) -> None:
     }
 
 
-def test_add_reference_omits_a_description_it_was_not_given(paired) -> None:
+def test_add_reference_omits_a_description_it_was_not_given_and_still_succeeds(paired) -> None:
     """A create has no existing row for an omission to overwrite, so an omitted field is correctly
-    the API's own default — an empty description."""
-    server_module.add_reference(
+    the API's own default — an empty description.
+
+    The reply is asserted too, not just the body: this three-field body is the one this tool sends
+    on every call that names no description, and `ReferenceRoutesTest`'s
+    `aCreateWithNoDescriptionAtAllIs201AndTheRowCarriesAnEmptyOne` is the other half of the same
+    proof, on the phone's side of the wire.
+    """
+    created = {
+        "reference": {
+            "id": "r1",
+            "assetId": "a1",
+            "kind": "WEB_URL",
+            "uri": "https://example.invalid/mower",
+            "displayName": "Mower manual",
+            "description": "",
+            "scheme": "https",
+            "createdAt": 1,
+            "updatedAt": 1,
+        }
+    }
+    paired.reply("POST", "/v1/references", 201, created)
+
+    answer = server_module.add_reference(
         asset_id="a1", uri="https://example.invalid/mower", display_name="Mower manual"
     )
     assert "description" not in body_of(paired.last())
+    assert answer == created
 
 
 def test_update_reference_sends_only_the_fields_it_was_given(paired) -> None:

@@ -156,6 +156,30 @@ class ReferenceRoutesTest {
     }
 
     /**
+     * Hazard: the create's `description` default is dropped, or the decoder is ever tightened to
+     * require every declared field — and **this is exactly the body the MCP tool sends**, since
+     * `add_reference` omits the key entirely when no description is given. Every other create in
+     * this file names the field, so without this case the JVM suite and the pytest suite could
+     * both stay green while `add_reference` 400s on every call against a real phone.
+     *
+     * The row comes back with an **empty** description, not a null one: `description` is a
+     * non-null column with an empty default, which is why the MCP tool clears it by value.
+     */
+    @Test fun aCreateWithNoDescriptionAtAllIs201AndTheRowCarriesAnEmptyOne() {
+        val asset = createAsset()
+        val created = call(
+            "POST",
+            "/v1/references",
+            """{"assetId":"$asset","uri":"https://example.invalid/mower","displayName":"Mower manual"}""",
+        )
+        assertEquals(created.text(), 201, created.status)
+        assertEquals("", referenceIn(created).description)
+        // The key is on the wire and not merely on the Kotlin type: `encodeDefaults = true` means
+        // a client never has to tell an absent field from an empty one.
+        assertTrue(created.text(), """"description":""""" in created.text())
+    }
+
+    /**
      * Hazard: `kind` is accepted and then ignored. It is **derived from the scheme** and read-only
      * on the way out (master plan §18.18), so a command carrying one is a 400 naming it on both
      * verbs — a field the server took and discarded would read as settable and never take effect,
