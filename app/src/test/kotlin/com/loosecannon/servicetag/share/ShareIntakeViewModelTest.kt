@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_DESCRIPTION_CHARS
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_NAME_CHARS
+import com.loosecannon.servicetag.core.references.StreamSourcePolicy
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddReference
@@ -467,24 +468,47 @@ class ShareIntakeViewModelTest {
 
     /**
      * The read now happens inside `viewModelScope`, where a throw has nowhere to go: unguarded it
-     * would leave the blank loading screen with no Close on it. A provider is a stranger's process
-     * and throws whatever it likes across the binder, so the plain `RuntimeException` case is the
-     * one that matters here; the documented I/O failures land the same way. Nothing is staged.
+     * would leave the blank loading screen with no Close on it. Both halves are here.
+     *
+     * The first two are what a read can still legitimately fail with on its way out — they are the
+     * arms `readGuarded` keeps. The third is the provider actually dying: an
+     * `IllegalArgumentException` from the resolver, thrown at the provider-facing call it stands
+     * for, which the reader's own guard around `stream.facts()` turns into `Refused(UNREADABLE)`.
+     * The state machine draws the same ratified sentence for all three, and nothing is staged.
      */
-    @Test fun aProviderThatThrowsOnTheWayInIsAReadFailureWithAWayOut() = runTest(scheduler) {
+    @Test fun aReadThatCannotFinishIsAReadFailureWithAWayOut() = runTest(scheduler) {
         mower()
 
-        listOf(
-            IllegalArgumentException("Unknown URL content://nowhere/x"),
-            IllegalStateException("the provider died"),
+        val byTheGuardInTheViewModel = listOf(
             java.io.IOException("no bytes"),
             SecurityException("the grant is gone"),
-        ).forEach { failure ->
-            val vm = modelThatCannotRead(failure)
+        ).map { failure -> failure.toString() to modelThatCannotRead(failure) }
 
-            assertEquals(failure.toString(), "Could not read what was shared", vm.state.value.deadEnd)
-            assertFalse(failure.toString(), vm.state.value.loading)
-            assertFalse(failure.toString(), vm.state.value.saveEnabled)
+        // Not thrown from above the reader: thrown *by the provider*, at the one call that asks it
+        // anything, exactly as `ContentResolver.query` throws for a URI it cannot resolve.
+        val byTheGuardInTheReader = "the provider threw from query" to model(
+            decideShare(
+                declaredType = "application/pdf",
+                stream = object : SharedStream {
+                    override val scheme = "content"
+                    override val authority = "com.android.providers.downloads.documents"
+                    override fun facts(): StreamFacts =
+                        throw IllegalArgumentException("Unknown URL content://nowhere/x")
+                    override fun readAtMost(limit: Int): ByteArray =
+                        throw IllegalArgumentException("Unknown URL content://nowhere/x")
+                },
+                text = null,
+                subject = null,
+                title = null,
+                streamPolicy = StreamSourcePolicy(setOf("com.loosecannon.servicetag")),
+                linkPolicy = LinkLaunchPolicy(),
+            ),
+        )
+
+        (byTheGuardInTheViewModel + byTheGuardInTheReader).forEach { (what, vm) ->
+            assertEquals(what, "Could not read what was shared", vm.state.value.deadEnd)
+            assertFalse(what, vm.state.value.loading)
+            assertFalse(what, vm.state.value.saveEnabled)
         }
 
         assertEquals(0, references())

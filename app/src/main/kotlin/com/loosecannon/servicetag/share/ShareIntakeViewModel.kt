@@ -166,12 +166,22 @@ internal class ShareIntakeViewModel(
             // it would leave the blank loading screen with no Close on it. The same discipline the
             // save paths use: cancellation travels, the documented failure types land as the
             // ratified read-failure dead end, and nothing is staged on the way.
+            //
+            // **The stranger's process is guarded where it is called, not here.** Every
+            // provider-facing call inside `readShare` already answers `Refused(UNREADABLE)` on its
+            // own — the extras read, `stream.facts()`, the bounded `readAtMost` and the UTF-8
+            // decode each carry their own guard, `byteSourceFor` only builds a lambda, and reading
+            // a `Uri`'s scheme and authority does no IPC. So one `try` is enough here, and it
+            // catches what a read can still legitimately fail with on its way out of that net; a
+            // `RuntimeException` could only come from this app's own pure code, and swallowing it
+            // would dress a `:core` defect as a ratified refusal — the trade the save paths
+            // already declined.
             val loaded = try {
                 withContext(io) {
-                    val found = readGuarded()
+                    val found = readShare()
                     share = found
                     loadedState(
-                        content = found?.content ?: ShareContent.Refused(IntakeRefusal.UNREADABLE),
+                        content = found.content,
                         choices = assets.all()
                             .map { AssetChoice(it.id.value, it.name) }
                             .sortedBy { it.name.lowercase() },
@@ -187,25 +197,6 @@ internal class ShareIntakeViewModel(
             }
             _state.update { current -> if (current.cancelled) current else loaded }
         }
-    }
-
-    /**
-     * The read, and **only** the read, also swallows a `RuntimeException`: the provider on the
-     * other side of a share is a stranger's process, `ContentResolver` documents an
-     * `IllegalArgumentException` for a URI it cannot resolve, and whatever a provider throws across
-     * the binder arrives here as one. Our own collaborators are deliberately not in this net — a
-     * failure from the asset table or the store is this app's bug and still propagates.
-     */
-    private suspend fun readGuarded(): SharedShare? = try {
-        readShare()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (_: IOException) {
-        null
-    } catch (_: SecurityException) {
-        null
-    } catch (_: RuntimeException) {
-        null
     }
 
     /** Nothing could be read and nothing was staged: one ratified sentence, and a way out. */
