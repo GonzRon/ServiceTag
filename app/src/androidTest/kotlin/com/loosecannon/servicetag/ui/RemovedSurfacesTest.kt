@@ -25,11 +25,20 @@ class RemovedSurfacesTest {
         context.packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
             .count { it.activityInfo.packageName == context.packageName }
 
-    @Test fun nothingInThisPackageAcceptsSharedText() {
+    /**
+     * 1.3.0 reverses exactly one of 2.6's removals: #43 brings a share target back, so this case
+     * now says how many answer and which kind. **One** activity in this package answers
+     * `ACTION_SEND` — the intake screen — while a multi-item send stays unanswered, which is the
+     * half of the 2.6 fact that has not changed and is what R4 drives by intent on the emulator.
+     */
+    @Test fun exactlyOneActivityHereTakesASharedItemAndNoneTakesSeveral() {
         val send = Intent(Intent.ACTION_SEND)
             .setType("text/plain")
             .putExtra(Intent.EXTRA_TEXT, "https://example.invalid/x")
-        assertEquals(0, handlersHere(send))
+        assertEquals(1, handlersHere(send))
+
+        val several = Intent(Intent.ACTION_SEND_MULTIPLE).setType("text/plain")
+        assertEquals(0, handlersHere(several))
     }
 
     @Test fun theLinkHostIsUnregisteredAndTheAssetHostStillIsNot() {
