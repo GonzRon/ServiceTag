@@ -139,7 +139,7 @@ internal data class MergeReportResponse(
     val applicable: Boolean,
     // Write order, which is also `MergeTable`'s own order and the conflict sort key: a group's
     // members reference assets, a schedule references an asset or a group, a closure references a
-    // schedule. Ten tables since format 6, not seven.
+    // schedule. Eleven tables since format 7, not seven.
     val assets: MergeTallyDto,
     val groups: MergeTallyDto,
     val definitions: MergeTallyDto,
@@ -150,6 +150,7 @@ internal data class MergeReportResponse(
     val tags: MergeTallyDto,
     val events: MergeTallyDto,
     val attachments: MergeTallyDto,
+    val references: MergeTallyDto,
     /** Deterministic: table order, then id. Empty when [applicable]. */
     val conflicts: List<MergeDecisionDto>,
     val duplicateCandidates: List<DuplicateCandidateDto>,
@@ -177,6 +178,7 @@ internal fun MergeReport.toResponse() = MergeReportResponse(
     tags = tags.dto(),
     events = events.dto(),
     attachments = attachments.dto(),
+    references = references.dto(),
     conflicts = conflicts.map { it.dto() },
     duplicateCandidates = duplicateCandidates.map { it.dto() },
 )

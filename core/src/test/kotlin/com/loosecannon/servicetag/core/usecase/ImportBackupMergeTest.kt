@@ -106,11 +106,11 @@ class ImportBackupMergeTest {
 
         val build = BuildBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, storage, uow,
+            events, attachments, references, storage, uow,
         )
         val apply = ApplyBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, storage, uow,
+            events, attachments, references, storage, uow,
             rebuildAll = {
                 rebuilds += 1
                 writesAtRebuild = runBlocking {

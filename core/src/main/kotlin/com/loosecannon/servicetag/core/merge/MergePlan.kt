@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.core.merge
 import com.loosecannon.servicetag.core.backup.Backup
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
@@ -15,7 +16,7 @@ import com.loosecannon.servicetag.core.ports.StoredBytes
 import java.security.MessageDigest
 
 /**
- * The ten canonical tables, **in the order a merge must write them**: every reference a row makes
+ * The eleven canonical tables, **in the order a merge must write them**: every reference a row makes
  * points at a table declared before it (assets first, attachment rows last, when every owner is
  * in). The ordinal is also the first key conflicts are sorted by, which is what makes a report
  * deterministic.
@@ -25,9 +26,13 @@ import java.security.MessageDigest
  * meter definition and a profile, so `SCHEDULES` follows all four; a closure references only a
  * schedule, so `CLOSURES` follows it; an event may reference a schedule, and `EVENTS` already sat
  * late enough to keep its place.
+ *
+ * 1.3's [REFERENCES] sits **last**, and any position after [ASSETS] would have been correct: a
+ * reference points only at an asset, so last is the smaller diff and never the weaker order.
  */
 enum class MergeTable {
-    ASSETS, GROUPS, DEFINITIONS, PROFILES, SCHEDULES, CLOSURES, LINKS, TAGS, EVENTS, ATTACHMENTS
+    ASSETS, GROUPS, DEFINITIONS, PROFILES, SCHEDULES, CLOSURES, LINKS, TAGS, EVENTS, ATTACHMENTS,
+    REFERENCES,
 }
 
 /**
@@ -37,8 +42,12 @@ enum class MergeTable {
  * no-op, or differs, and is a conflict for the owner to resolve. So the only write a 1.1.0 merge
  * can make is an insert, and no pre-existing row can be modified by one.
  *
- * `SKIPPED` is the plan declining to write a row it could otherwise have written — in 1.1.0, an
- * attachment row whose bytes are not on this phone, or one on a phone with no attachment folder.
+ * `SKIPPED` is the plan declining to write a row it could otherwise have written. There are two
+ * cases. An **attachment** row whose bytes are not on this phone, or one on a phone with no
+ * attachment folder (1.1.0). And a **reference** row whose `(asset_id, uri)` is already held here
+ * by a row under a different id that differs from it (1.3.0, D-18 C): with no `UPDATE` verdict the
+ * incoming name and description could never be adopted, so a conflict there could only refuse the
+ * whole archive, and a skip leaves the local row exactly as it was.
  */
 enum class MergeVerdict { INSERT, IDENTICAL, CONFLICT, SKIPPED }
 
@@ -171,6 +180,41 @@ enum class MergeReason {
      * event that is not a completion.
      */
     SCHEDULE_OCCURRENCE_TAKEN,
+
+    /** Two rows of one archive claim one `asset_reference(asset_id, uri)`, which is unique. */
+    REFERENCE_DUPLICATED_IN_ARCHIVE,
+
+    /**
+     * A local reference under a different row id already **is** this reference, field for field. It
+     * rides on an `IDENTICAL`, exactly as [CLOSURE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW] does, because
+     * matching on the row id alone would make this an `INSERT` that the unique index then refuses
+     * at apply time.
+     *
+     * "Field for field" includes `createdAt` and `updatedAt`, which two phones that each typed the
+     * link themselves agree about never. So **this arm is reachable in practice only from a copied
+     * or replayed archive** — a reviewer must not read it as the live two-phone case. The live
+     * two-phone case is [REFERENCE_HELD_BY_A_LOCAL_ROW].
+     */
+    REFERENCE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW,
+
+    /**
+     * A local reference under a different row id holds this `(asset_id, uri)` and differs — a
+     * different name or description, or simply different timestamps. It rides on a **`SKIPPED`**,
+     * and that is deliberate (D-18 C, spec §5).
+     *
+     * There is no `UPDATE` verdict anywhere in this planner, so the incoming `display_name` and
+     * `description` could never be adopted under any rule. A `CONFLICT` here could therefore not
+     * produce a better merged state than a skip: it could only refuse the **entire** archive, and
+     * there is no conflict UI to resolve it with. `applicable` is `conflicts.isEmpty()`, so a skip
+     * cannot block an apply, and the local row is left exactly as it was.
+     *
+     * This is the codebase's first *declining* second identity, and the departure is on the merits:
+     * [PAYLOAD_HELD_BY_A_DIVERGED_LOCAL_TAG] guards an NFC payload and [CLOSURE_DIVERGED] an
+     * immutable closed round, each of which a human must arbitrate, whereas two descriptions of one
+     * URL are not a disagreement about anything. Two costs, accepted: the skip is visible only as a
+     * count, and the same-id/different-content arm still blocks as [CONTENT_DIFFERS].
+     */
+    REFERENCE_HELD_BY_A_LOCAL_ROW,
 }
 
 /** A review hint (#44: "review hints only, never automatic identity"). It never blocks an apply. */
@@ -221,6 +265,7 @@ data class MergeWrites(
     val tags: List<TagBinding> = emptyList(),
     val events: List<AssetEvent> = emptyList(),
     val attachments: List<Attachment> = emptyList(),
+    val references: List<AssetReference> = emptyList(),
 )
 
 /**
@@ -245,6 +290,7 @@ data class MergeSnapshot(
     val closures: List<OccurrenceClosure> = emptyList(),
     val events: List<AssetEvent> = emptyList(),
     val attachments: List<Attachment> = emptyList(),
+    val references: List<AssetReference> = emptyList(),
     val storedBytes: Map<String, StoredBytes> = emptyMap(),
     val attachmentStoreConfigured: Boolean,
 )
@@ -254,7 +300,8 @@ data class MergeSnapshot(
  *
  * [applicable] is the only thing a client has to read to know whether an apply will do anything:
  * it is true exactly when [conflicts] is empty. [duplicateCandidates] never makes it false, and
- * neither does a `SKIPPED` attachment row.
+ * neither does a `SKIPPED` row — an attachment whose bytes are absent, or a reference whose
+ * `(asset_id, uri)` a diverged local row already holds (D-18 C).
  */
 data class MergeReport(
     val formatVersion: Int,
@@ -270,6 +317,7 @@ data class MergeReport(
     val tags: MergeTally,
     val events: MergeTally,
     val attachments: MergeTally,
+    val references: MergeTally,
     /** Deterministic: table order, then id. */
     val conflicts: List<MergeDecision>,
     val duplicateCandidates: List<DuplicateCandidate>,
@@ -336,6 +384,7 @@ class MergePlan internal constructor(
         tags = tally(MergeTable.TAGS),
         events = tally(MergeTable.EVENTS),
         attachments = tally(MergeTable.ATTACHMENTS),
+        references = tally(MergeTable.REFERENCES),
         conflicts = conflicts,
         duplicateCandidates = duplicateCandidates,
     )

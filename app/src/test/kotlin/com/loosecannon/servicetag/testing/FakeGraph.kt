@@ -236,7 +236,7 @@ class FakeGraph(
     )
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, attachmentStorage, uow,
+        attachments, references, attachmentStorage, uow,
     )
 
     /** How many times an apply asked for the total recompute. Mirrors `AppGraph`'s no-op seam. */
@@ -244,7 +244,7 @@ class FakeGraph(
 
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, attachmentStorage, uow,
+        attachments, references, attachmentStorage, uow,
         rebuildAll = { rebuilds += 1 },
     )
     val importBackupMerge: ImportBackupMerge =

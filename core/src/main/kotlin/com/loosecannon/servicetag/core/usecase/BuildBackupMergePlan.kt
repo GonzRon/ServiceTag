@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
@@ -24,11 +25,11 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * Four steps and no more: decode — which refuses a corrupt or future-format file before anything
  * else happens — ask whether there is an attachment folder at all, hash and size whatever that
- * folder holds for the locators the archive names, and read the ten canonical tables in one
- * `uow.read` so the planner sees a single consistent point in time rather than ten. The decision
+ * folder holds for the locators the archive names, and read the eleven canonical tables in one
+ * `uow.read` so the planner sees a single consistent point in time rather than eleven. The decision
  * itself is `mergePlanOf`, a pure function.
  *
- * The same twelve collaborators, in the same order, as [ImportBackupReplace] — because the two are
+ * The same thirteen collaborators, in the same order, as [ImportBackupReplace] — because the two are
  * the two halves of the same question, and a reader comparing them should have nothing to subtract.
  */
 class BuildBackupMergePlan(
@@ -42,6 +43,7 @@ class BuildBackupMergePlan(
     private val closures: ClosureRepository,
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
+    private val references: ReferenceRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
 ) {
@@ -57,7 +59,7 @@ class BuildBackupMergePlan(
         val snapshot = uow.read {
             mergeSnapshotOf(
                 assets, groups, tags, links, definitions, profiles, schedules, closures,
-                events, attachments, stored, configured,
+                events, attachments, references, stored, configured,
             )
         }
         return mergePlanOf(backup, snapshot)

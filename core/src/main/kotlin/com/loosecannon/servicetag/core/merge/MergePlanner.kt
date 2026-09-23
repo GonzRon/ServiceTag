@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.backup.toDomain
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.DefinitionKind
@@ -28,6 +29,7 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.ports.TagRepository
@@ -47,9 +49,12 @@ import java.security.MessageDigest
  *    with any difference → `CONFLICT` / `CONTENT_DIFFERS`.
  * 2. **Its second identity**, where the table has one, and *independently of the row id* — #44's
  *    second identity rule. A local tag holding the same `(payloadFormat, payloadKey)` is the same
- *    logical tag, and a local closure holding the same `(scheduleId, occurrenceOn)` is the same
- *    closed round: equivalent field for field → `IDENTICAL`, bound elsewhere or diverged →
- *    `CONFLICT`. Nothing is coalesced and nothing is remapped; that is #44's later slice.
+ *    logical tag, a local closure holding the same `(scheduleId, occurrenceOn)` is the same closed
+ *    round, and a local reference holding the same `(assetId, uri)` is the same link: equivalent
+ *    field for field → `IDENTICAL`; bound elsewhere or diverged → `CONFLICT`, **except for a
+ *    reference, which is `SKIPPED` instead** (D-18 C — see
+ *    [MergeReason.REFERENCE_HELD_BY_A_LOCAL_ROW] for why a conflict there could only refuse the
+ *    whole archive). Nothing is coalesced and nothing is remapped; that is #44's later slice.
  * 3. **Every uniqueness constraint the schema has** — the unique indices *and* the aggregate
  *    child-row primary keys — each checked against the destination and against the archive's own
  *    accepted rows, because a constraint does not care which side a duplicate came from. Three of
@@ -103,6 +108,10 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
     val localProfiles = snapshot.profiles.associateBy { it.id.value }
     val localEvents = snapshot.events.associateBy { it.id.value }
     val localAttachments = snapshot.attachments.associateBy { it.id.value }
+    val localReferences = snapshot.references.associateBy { it.id.value }
+    // The reference's **second identity**, id-independent exactly as the closure's pair map is.
+    val localReferencesByPair = snapshot.references
+        .associateBy { it.assetId.value to it.uri }
 
     // The claim maps unify the two halves of every uniqueness check: each starts with what this
     // install holds and gains what this plan accepts, so a duplicate inside the archive is caught by
@@ -150,6 +159,10 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
     // its row id, and an occurrence key is shared across devices by construction.
     val claimedClosurePairs = snapshot.closures
         .associateTo(mutableMapOf()) { (it.scheduleId.value to it.occurrenceOn) to it.id }
+    // Reachable from the destination for the same reason the closure pair is: a reference's second
+    // identity is independent of its row id, and two phones reach the same URL by construction.
+    val claimedReferencePairs = snapshot.references
+        .associateTo(mutableMapOf()) { (it.assetId.value to it.uri) to it.id.value }
     val claimedOccurrences = snapshot.events
         .filter { it.scheduleId != null && it.occurrenceOn != null }
         .associateTo(mutableMapOf()) {
@@ -595,6 +608,54 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
         }
     }
 
+    // --- references (1.3, D-18 C) -----------------------------------------------------------
+    // Last in write order: a reference's only foreign key is `asset_id`, so any position after
+    // ASSETS would do and last is the smaller diff. The arm order is the closure pass's, with one
+    // difference that is the whole of D-18 C: the **diverged** second identity is a `SKIPPED` and
+    // never a `CONFLICT`, because there is no UPDATE verdict for the incoming name and description
+    // to be adopted by, so refusing the archive could not produce a better merged state.
+    //
+    // A SKIPPED row claims no pair and writes nothing, which is why `claimedReferencePairs` is
+    // only ever written in the INSERT arm.
+    val referenceWrites = mutableListOf<AssetReference>()
+    for (dto in data.assetReferences) {
+        val id = dto.id
+        val pair = dto.assetId to dto.uri
+        val local = localReferences[id]
+        val samePair = localReferencesByPair[pair]
+        val pairHolder = claimedReferencePairs[pair]
+        decisions += when {
+            local != null && dto == local.toDto() ->
+                MergeDecision(MergeTable.REFERENCES, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.REFERENCES, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            // A local row under a different id already *is* this reference, field for field.
+            samePair != null && dto.copy(id = samePair.id.value) == samePair.toDto() ->
+                MergeDecision(
+                    MergeTable.REFERENCES, id, MergeVerdict.IDENTICAL,
+                    MergeReason.REFERENCE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW, samePair.id.value,
+                )
+            samePair != null ->
+                MergeDecision(
+                    MergeTable.REFERENCES, id, MergeVerdict.SKIPPED,
+                    MergeReason.REFERENCE_HELD_BY_A_LOCAL_ROW, samePair.id.value,
+                )
+            // No local row holds the pair, so any holder left is another row of this archive.
+            pairHolder != null ->
+                MergeDecision(
+                    MergeTable.REFERENCES, id, MergeVerdict.CONFLICT,
+                    MergeReason.REFERENCE_DUPLICATED_IN_ARCHIVE, pairHolder,
+                )
+            !assetAvailable(dto.assetId) ->
+                MergeDecision(MergeTable.REFERENCES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.assetId)
+            else -> {
+                referenceWrites += dto.toDomain()
+                claimedReferencePairs[pair] = id
+                MergeDecision(MergeTable.REFERENCES, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
     // --- review hints, which change nothing (#44 identity 3) --------------------------------
     val localBySignature = snapshot.assets
         .filter { it.manufacturer.isNotBlank() && it.model.isNotBlank() && it.serialNumber.isNotBlank() }
@@ -628,6 +689,7 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
                 tags = tagWrites,
                 events = eventWrites,
                 attachments = attachmentWrites,
+                references = referenceWrites,
             )
         },
         duplicateCandidates = candidates,
@@ -751,7 +813,7 @@ internal suspend fun storedBytesOf(
 }
 
 /**
- * Ten reads. **The caller owns the transaction** — see each use case for which one.
+ * Eleven reads. **The caller owns the transaction** — see each use case for which one.
  *
  * Schema 6's other two tables are deliberately not among them, and are named nowhere in this
  * package: derived due state never appears in a plan, and device-local delivery state is never
@@ -768,6 +830,7 @@ internal suspend fun mergeSnapshotOf(
     closures: ClosureRepository,
     events: EventRepository,
     attachments: AttachmentRepository,
+    references: ReferenceRepository,
     storedBytes: Map<String, StoredBytes>,
     attachmentStoreConfigured: Boolean,
 ): MergeSnapshot = MergeSnapshot(
@@ -781,6 +844,7 @@ internal suspend fun mergeSnapshotOf(
     closures = closures.all(),
     events = events.all(),
     attachments = attachments.all(),
+    references = references.all(),
     storedBytes = storedBytes,
     attachmentStoreConfigured = attachmentStoreConfigured,
 )

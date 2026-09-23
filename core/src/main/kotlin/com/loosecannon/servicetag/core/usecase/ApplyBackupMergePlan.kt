@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
@@ -73,6 +74,7 @@ class ApplyBackupMergePlan(
     private val closures: ClosureRepository,
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
+    private val references: ReferenceRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -95,7 +97,7 @@ class ApplyBackupMergePlan(
                 plan.backup,
                 mergeSnapshotOf(
                     assets, groups, tags, links, definitions, profiles, schedules, closures,
-                    events, attachments, stored, configured,
+                    events, attachments, references, stored, configured,
                 ),
             )
             // Order matters — see the class KDoc.
@@ -113,6 +115,7 @@ class ApplyBackupMergePlan(
             fresh.writes.tags.forEach { tags.upsert(it) }
             fresh.writes.events.forEach { events.upsert(it) }
             fresh.writes.attachments.forEach { attachments.upsert(it) }
+            fresh.writes.references.forEach { references.upsert(it) }
 
             // After every write, inside the same transaction, once.
             rebuildAll()
