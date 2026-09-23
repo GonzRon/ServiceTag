@@ -71,9 +71,9 @@ class StatusVocabularyTest {
      * It is a line **beside** the status badge, so the status word this row draws is still OVERDUE:
      * a snooze suppresses delivery and moves no obligation (invariant 20, D-13).
      *
-     * The zone is a fixed negative offset, `Etc/GMT+5` (no DST): the point is only that the badge
-     * reads the device's zone rather than UTC, and this test crosses no DST transition, so a
-     * neutral non-zero offset makes that true without borrowing a real place's calendar.
+     * The zone is `Etc/GMT+5`, but it is incidental here: `now` and `until` are both built and read
+     * back in the same `zone`, so this test passes under any zone, UTC included — it is not the
+     * hazard this test covers. `Etc/GMT+5` is used only so this file names no real place's zone.
      */
     @Test fun aSnoozedRowCarriesTheRatifiedBadgeAndKeepsItsStatusWord() {
         val zone = ZoneId.of("Etc/GMT+5")

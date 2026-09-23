@@ -18,10 +18,10 @@ import org.junit.Test
  * of asserting them is that this brief reads them off `ZonedDateTime.of` rather than reinventing
  * them with a `LocalDateTime.toInstant()` that throws or silently shifts an hour.
  *
- * The zone is `America/Toronto`, not a US one: Canada has followed the same Eastern DST calendar
- * as the US since 2007, so the 2026-03-08 and 2026-11-01 transition dates and the −05:00/−04:00
- * offsets below are unchanged — this test needs a negative offset whose gap and overlap actually
- * fall on those two 2026 dates, and a non-US zone proves the arithmetic isn't tied to US law.
+ * The zone is `America/Toronto`: a negative-offset zone that runs on the same Eastern DST rules
+ * as the owner's, but is not the owner's own zone. Canada has followed those Eastern rules since
+ * 2007, which is why every 2026-03-08 / 2026-11-01 transition date and −05:00/−04:00 offset below
+ * is unchanged from before — this fixture's instants stay identical, fixture and zone id apart.
  */
 class DigestAlarmTest {
 

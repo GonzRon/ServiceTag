@@ -186,7 +186,7 @@ class ScheduleDetailViewModelTest {
      * **And it is a literal day from the tap, in a zone that is not UTC.** The instant is written
      * through B06's `ReminderSnooze` and read by `DigestPolicy` against a **wall clock**
      * (`snoozedUntilAt > nowMillis`), so a calendar-derived instant is a different quantity in
-     * every zone. The hour chosen here is the sharpest case the owner's own zone offers: at 20:00
+     * every zone. The hour chosen here is the sharpest case a device in UTC−4 offers: at 20:00
      * local on a April evening in UTC−4, midnight UTC of *tomorrow's local date* is **the tap
      * instant itself**, so the previous arithmetic wrote a snooze that had already expired when it
      * was written and suppressed nothing at all. The expected value is computed from the clock and
