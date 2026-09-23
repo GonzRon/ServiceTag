@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.AssetId
@@ -199,6 +200,14 @@ class DashboardAttentionTest {
         // (D12 §10 `:706-707`).
         rule.onAllNodesWithText("UPCOMING").assertCountEquals(0)
         rule.onAllNodesWithText("OUT OF SEASON").assertCountEquals(0)
+    }
+
+    /** B07 — the search box left the Dashboard for the Assets screen; the field is gone from here. */
+    @Test fun theSearchFieldIsGoneFromTheDashboard() {
+        draw(aStoreWithAttentionWork())
+
+        rule.awaitText("ATTENTION")
+        rule.onNodeWithContentDescription("Search assets and components").assertDoesNotExist()
     }
 
     /**

@@ -1,4 +1,4 @@
-package com.loosecannon.servicetag.ui.dashboard
+package com.loosecannon.servicetag.ui.asset
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasSetTextAction
@@ -21,37 +21,31 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * 2.7 (#39) — the dashboard lists systems, and the box is how a part of one is reached from here.
+ * B07 (owner instruction, 2026-09-23) — the quick filter left the Dashboard for the Assets screen.
  * The JVM cases pin every rule; what only a device can show is that the field takes a keystroke,
- * that the list redraws from it, and that the clear glyph puts it all back.
+ * that the list redraws from it, and that the clear glyph puts it all back. Carries the two
+ * scenarios `DashboardSearchTest` proved before the box moved, re-targeted at `AssetsScreen`.
  *
  * Emulator only — the suite wipes app data.
  */
 @RunWith(AndroidJUnit4::class)
-class DashboardSearchTest {
+class AssetsSearchTest {
 
     @get:Rule val rule = createComposeRule()
 
     @Before fun freshInstall() = clearInstall()
 
-    /** A hot tub with a circulation pump under it, and the dashboard drawn over that install. */
-    private fun aSystemWithOnePart(retireTheSystem: Boolean = false): AppGraph {
+    /** A hot tub with a circulation pump under it, and the Assets screen drawn over that install. */
+    private fun aSystemWithOnePart(archiveTheSystem: Boolean = false): AppGraph {
         val graph = app.graph
         runBlocking {
             val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
             graph.createAsset.run(AssetCommand(name = "Circulation pump", parentAssetId = tub.id))
-            if (retireTheSystem) graph.retireAsset.retire(tub.id, "2026-04-02")
+            if (archiveTheSystem) graph.archiveAsset.run(tub.id)
         }
         rule.setContent {
             ServiceTagTheme {
-                DashboardScreen(
-                    graph = graph,
-                    onOpenAsset = {},
-                    onNewAsset = {},
-                    onBackup = {},
-                    onSettings = {},
-                    onScan = {},
-                )
+                AssetsScreen(graph = graph, onOpenAsset = {}, onNewAsset = {})
             }
         }
         return graph
@@ -60,11 +54,10 @@ class DashboardSearchTest {
     @Test fun aComponentIsHiddenUntilItIsSearchedForAndThenNamesItsSystem() {
         aSystemWithOnePart()
 
-        // The system is listed; its pump is not, and the screen says where it is instead. The box
-        // itself is named by the ratified placeholder, which only shows while it is empty.
+        // The system is listed; its pump is not. The box itself is named by the ratified
+        // placeholder, which only shows while it is empty.
         rule.awaitText("Hot tub")
         rule.onAllNodesWithText("Circulation pump").assertCountEquals(0)
-        rule.awaitText("Components are listed on the asset they belong to. Search to find one.")
         rule.awaitText("Search assets and components")
 
         // One keystroke away. The hit names its system, and the system itself drops out because it
@@ -78,22 +71,22 @@ class DashboardSearchTest {
         rule.awaitText("Hot tub")
         rule.onAllNodesWithText("Circulation pump").assertCountEquals(0)
 
-        // A query that matches nothing is the one state the fourth sentence is for.
+        // A query that matches nothing is the one state the no-match sentence is for.
         rule.onNode(hasSetTextAction()).performTextInput("zzz")
         rule.awaitText("Nothing matches that.")
         rule.onAllNodesWithText("Hot tub").assertCountEquals(0)
     }
 
     /**
-     * F1 — an empty list under an empty box, reached the way an owner reaches it: retire the system
-     * and its pump stays in service, because retiring a parent does not touch its children. The
-     * hint already says where the parts are, so the screen must not also claim a search found
-     * nothing when nothing was searched for.
+     * F1 — an empty list under an empty box, reached the way an owner reaches it on this screen:
+     * archive the system, which leaves its still-active pump hidden by the blank-query rule, so the
+     * chip's own honest "No active assets · N archived" is what shows — never a claim that a search
+     * found nothing when nothing was searched for.
      */
     @Test fun anEmptyListUnderAnEmptyBoxIsNotToldItsSearchFoundNothing() {
-        aSystemWithOnePart(retireTheSystem = true)
+        aSystemWithOnePart(archiveTheSystem = true)
 
-        rule.awaitText("Components are listed on the asset they belong to. Search to find one.")
+        rule.awaitText("No active assets · 1 archived")
         rule.onAllNodesWithText("Hot tub").assertCountEquals(0)
         rule.onAllNodesWithText("Nothing matches that.").assertCountEquals(0)
 
