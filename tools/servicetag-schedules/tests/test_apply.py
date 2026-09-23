@@ -71,6 +71,37 @@ def test_apply_refuses_and_writes_nothing_when_the_plan_is_not_clean(fake_client
     assert fake_client.calls == []
 
 
+# ---- S2: a write-path is_error names the entry key, not just the tool -----------------------------
+
+
+def test_apply_names_the_group_entry_when_create_group_is_refused(fake_client) -> None:
+    fake_client.add_asset(name="Mister north")
+    manifest = mk_manifest(groups=[mk_group("g1", "Misters", ("Mister north",))])
+    result = _run(_plan_against(manifest, fake_client))
+    fake_client.fail_next("create_group", "422 GROUP_NAME_REQUIRED: blank")
+
+    with pytest.raises(P.PhoneError) as exc:
+        _run(A.apply(manifest, result, fake_client))
+
+    message = str(exc.value)
+    assert message.startswith("group 'g1':")
+    assert "create_group" in message
+
+
+def test_apply_names_the_schedule_entry_when_create_schedule_is_refused(fake_client) -> None:
+    fake_client.add_asset(name="Garden shed")
+    manifest = mk_manifest(schedules=[mk_schedule("s1", "Inspect roof", target_asset="Garden shed")])
+    result = _run(_plan_against(manifest, fake_client))
+    fake_client.fail_next("create_schedule", "422 SCHEDULE_INVALID: bad row")
+
+    with pytest.raises(P.PhoneError) as exc:
+        _run(A.apply(manifest, result, fake_client))
+
+    message = str(exc.value)
+    assert message.startswith("schedule 's1':")
+    assert "create_schedule" in message
+
+
 # ---- ordering and id-flow --------------------------------------------------------------------------
 
 
@@ -181,16 +212,53 @@ def test_a_second_apply_against_the_post_apply_state_writes_nothing(fake_client)
     assert outcome.schedules_created == 0
 
 
-# ---- a stale plan --------------------------------------------------------------------------------
+# ---- S4: apply recomputes the plan from the fresh snapshot, never replays a stale one --------------
 
 
-def test_apply_raises_apply_error_when_a_create_entry_cannot_be_resolved(fake_client) -> None:
-    """The plan calling an entry CREATE against a phone state that no longer holds what it
-    resolved against (a race between plan and apply) is not swallowed as a silent no-op."""
-    manifest = mk_manifest(schedules=[mk_schedule("s1", "Ghost", target_asset="Ghost asset")])
-    stale_plan = PL.Plan(entries=(PL.PlanEntry("schedule", "s1", "CREATE", "no existing schedule matches"),))
-    with pytest.raises(A.ApplyError):
+def test_apply_treats_a_row_created_between_plan_and_apply_as_identical_not_a_duplicate(fake_client) -> None:
+    """The controller's S4 scenario: the plan says CREATE; before apply runs, something else (the
+    owner, or another run of this tool) creates that exact row on the phone. Apply must recompute
+    against what is there *now* and see IDENTICAL, not write a second, indistinguishable copy this
+    tool can never take back."""
+    shed_id = fake_client.add_asset(name="Garden shed")
+    manifest = mk_manifest(schedules=[mk_schedule("s1", "Inspect roof", target_asset="Garden shed")])
+    stale_plan = _run(_plan_against(manifest, fake_client))
+    assert stale_plan.summary()["CREATE"] == 1
+
+    # The row appears on the phone -- matching the manifest's rule exactly -- after the plan above
+    # was computed but before apply is called.
+    fake_client.add_schedule(
+        title="Inspect roof", target_asset_id=shed_id, time_interval=30, time_unit="DAY",
+        time_basis="FIXED", anchor_on="2026-01-01", lead_days=0, completion_mode="QUICK",
+        season_behavior="IGNORE",
+    )
+
+    outcome = _run(A.apply(manifest, stale_plan, fake_client))
+
+    assert outcome.schedules_created == 0
+    assert len(fake_client.schedules) == 1  # no duplicate row
+    tool_names = [name for name, _ in fake_client.calls]
+    assert "create_schedule" not in tool_names
+    assert outcome.reapply_plan.summary() == {"CREATE": 0, "IDENTICAL": 1, "CONFLICT": 0, "ERROR": 0}
+
+
+def test_apply_refuses_when_the_phone_drifted_into_a_dirty_state_since_the_plan(fake_client) -> None:
+    """A narrower S4 case: the fresh snapshot itself is no longer clean (here, a second asset with
+    the same name showed up between plan and apply, making the target ambiguous). Apply must refuse
+    rather than write against whichever match happens to resolve."""
+    fake_client.add_asset(name="Pump")
+    manifest = mk_manifest(schedules=[mk_schedule("s1", "Service", target_asset="Pump")])
+    stale_plan = _run(_plan_against(manifest, fake_client))
+    assert stale_plan.clean
+
+    fake_client.add_asset(name="Pump")  # a second "Pump" appears before apply runs
+
+    with pytest.raises(A.ApplyRefused):
         _run(A.apply(manifest, stale_plan, fake_client))
+
+    tool_names = [name for name, _ in fake_client.calls]
+    assert "create_group" not in tool_names
+    assert "create_schedule" not in tool_names
 
 
 # ---- the committed synthetic fixture, end to end ------------------------------------------------------
@@ -217,3 +285,12 @@ def test_the_estate_fixture_plans_applies_and_reapplies_clean(fake_client) -> No
     second_outcome = _run(A.apply(manifest, second_plan, fake_client))
     assert second_outcome.groups_created == 0
     assert second_outcome.schedules_created == 0
+
+    # Q2: apply -- across planning, applying and re-planning, twice over -- only ever calls the
+    # read tools plus create_group/create_schedule. Never update_*, archive_*, delete_* -- the
+    # "never edits, archives or deletes an existing row" constraint, pinned as a test rather than
+    # left to inspection.
+    allowed_tools = {"list_assets", "list_profiles", "list_groups", "list_schedules", "create_group", "create_schedule"}
+    tool_names = {name for name, _ in fake_client.calls}
+    assert tool_names <= allowed_tools
+    assert not any(name.startswith(("update_", "archive_", "delete_")) for name in tool_names)

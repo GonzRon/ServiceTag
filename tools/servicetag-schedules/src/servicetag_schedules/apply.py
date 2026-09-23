@@ -1,17 +1,26 @@
-"""Apply a clean `Plan`: create groups, then schedules, through the phone's automation API, then
-re-plan and hand back the result (invariant 7 — refuse on any `CONFLICT`/`ERROR`, groups before
-schedules, re-plan at the end).
+"""Apply a plan: create groups, then schedules, through the phone's automation API, then re-plan
+and hand back the result (invariant 7 — refuse on any `CONFLICT`/`ERROR`, groups before schedules,
+re-plan at the end).
 
-`apply` re-snapshots the phone (`phone.snapshot`) right before writing, rather than trusting ids
-implied by the `Plan` it was handed — a person may have reviewed that plan for a while before
-calling apply, and this is the one place a stale id would otherwise reach the wire. It reuses
-`plan.py`'s own resolution helpers (`resolve_asset`, `match_profiles`, `match_groups`) against that
-fresh snapshot, so an id this module writes with is always the one on the phone right now.
+`apply` re-snapshots the phone (`phone.snapshot`) right before writing, and **recomputes the plan
+from that fresh snapshot** — it never replays the decisions of the `Plan` it was handed. A person
+may have reviewed that plan for a while before calling apply, or a second run of this tool (or the
+owner, by hand) may have written the very row this manifest was about to `CREATE`; re-planning
+against what is on the phone *right now* is what turns that into `IDENTICAL` (nothing written)
+instead of a second, indistinguishable row this tool can never take back (it never edits, archives
+or deletes). The `plan_result` argument is therefore only ever used for its `.clean` gate, applied
+twice: once immediately (refuse before any I/O if the plan the caller is holding is already dirty),
+and again against the fresh plan (refuse if the phone drifted into a dirty state between then and
+now). It reuses `plan.py`'s own resolution helpers (`resolve_asset`, `match_profiles`,
+`match_groups`) against that same fresh snapshot, so an id this module writes with is always the one
+on the phone right now.
 
 A group this apply itself just created is targeted by its own fresh id (`created_group_ids`); a
 group that already existed is re-resolved by name, the identical rule `plan.py` used to call it
 `IDENTICAL`/`CONFLICT` in the first place. `anchor_on` travels from the manifest to the wire without
-ever being read as a date — invariant 8.
+ever being read as a date — invariant 8. Every write call passes `entry=` through to
+`phone.call_tool`, so an `is_error` from the phone surfaces naming the manifest entry it was for,
+not just the tool.
 """
 
 from __future__ import annotations
@@ -24,14 +33,17 @@ from . import plan as planmod
 
 
 class ApplyRefused(RuntimeError):
-    """The given `Plan` was not clean (`Plan.clean` is `False`); nothing was written."""
+    """The plan — the one given, or the one recomputed from a fresh snapshot right before writing
+    — was not clean (`Plan.clean` is `False`). Nothing was written."""
 
 
 class ApplyError(RuntimeError):
-    """A manifest entry the plan called `CREATE` could not be resolved against the fresh snapshot
-    this apply took — the phone changed under the plan between when it was computed and when this
-    ran. Names the entry's kind and key. Not transactional: writes already made by this call are
-    not undone."""
+    """A manifest entry the fresh plan called `CREATE` could not be resolved while building the
+    write for it. Since the fresh plan and every write below it resolve names against the exact
+    same `Inventory`, this is a defensive guard rather than a reachable drift in ordinary use — the
+    place that would actually diverge from `plan.plan`'s own resolution is a bug in this module, and
+    this is what turns that bug into a clear message naming the entry instead of a wrong write or an
+    opaque crash. Not transactional: writes already made by this call are not undone."""
 
 
 @dataclass(frozen=True)
@@ -45,10 +57,17 @@ async def apply(
     manifest: manifestmod.Manifest, plan_result: planmod.Plan, client: phone.ToolClient,
 ) -> ApplyResult:
     if not plan_result.clean:
-        raise ApplyRefused("the plan has CONFLICT/ERROR entries; nothing was written")
+        raise ApplyRefused("the given plan has CONFLICT/ERROR entries; nothing was written")
 
     inventory = await phone.snapshot(client)
-    decisions = {(e.kind, e.key): e.decision for e in plan_result.entries}
+    fresh_plan = planmod.plan(manifest, inventory)
+    if not fresh_plan.clean:
+        raise ApplyRefused(
+            "the phone changed since the plan was computed; the fresh plan has CONFLICT/ERROR "
+            "entries; nothing was written"
+        )
+    decisions = {(e.kind, e.key): e.decision for e in fresh_plan.entries}
+    group_entries_by_key = {group.key: group for group in manifest.groups}
 
     created_group_ids: dict[str, str] = {}
     groups_created = 0
@@ -64,6 +83,7 @@ async def apply(
         payload = await phone.call_tool(
             client, "create_group",
             {"name": group.name, "description": group.description, "members": members},
+            entry=f"group {group.key!r}",
         )
         created_group_ids[group.key] = payload["group"]["id"]
         groups_created += 1
@@ -103,7 +123,9 @@ async def apply(
             if group_key in created_group_ids:
                 args["target_group_id"] = created_group_ids[group_key]
             else:
-                group_entry = next(g for g in manifest.groups if g.key == group_key)
+                group_entry = group_entries_by_key.get(group_key)
+                if group_entry is None:
+                    raise ApplyError(f"schedule {schedule.key!r}: unknown manifest group key {group_key!r}")
                 matches = planmod.match_groups(inventory, group_entry.name)
                 if len(matches) != 1:
                     raise ApplyError(
@@ -112,7 +134,7 @@ async def apply(
                     )
                 args["target_group_id"] = matches[0].id
 
-        await phone.call_tool(client, "create_schedule", args)
+        await phone.call_tool(client, "create_schedule", args, entry=f"schedule {schedule.key!r}")
         schedules_created += 1
 
     reapply_inventory = await phone.snapshot(client)
