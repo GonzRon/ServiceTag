@@ -117,8 +117,8 @@ fun ReferencesSection(
 /**
  * The drawn half: a [SectionHeader] carrying the count, a row per reference, and the section's own
  * "Add link". The open decision lives here rather than in the wrapper so that both of its refusals
- * are readable from a semantics tree — a `Toast` is not, which is why the missing-handler line is
- * a snackbar on this surface even though `LinkLauncher` still toasts for its Settings caller.
+ * are readable from a semantics tree, which the pop-up notice `LinkLauncher` shows its Settings
+ * caller is not — so on this surface the missing-handler line is a snackbar, and testable.
  */
 @Composable
 internal fun ReferencesList(
