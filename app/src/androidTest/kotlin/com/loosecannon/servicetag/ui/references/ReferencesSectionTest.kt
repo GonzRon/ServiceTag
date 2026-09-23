@@ -7,6 +7,8 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
@@ -85,6 +87,18 @@ class ReferencesSectionTest {
         }
         rule.waitForIdle()
     }
+
+    /**
+     * Every string the composition draws, as a set. A node that merges its descendants carries
+     * their text as well as its own, so the union over every node with a text property is the
+     * whole of what is on screen — which is what an "and no other" claim has to be asserted
+     * against, rather than against the strings the test already expects to find.
+     */
+    private fun everyStringDrawn(): Set<String> =
+        rule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text))
+            .fetchSemanticsNodes()
+            .flatMap { node -> node.config[SemanticsProperties.Text].map { it.text } }
+            .toSet()
 
     /** The overflow for the row at [index]; the section's rows are the only ones drawn here. */
     private fun openMenu(index: Int = 0) {
@@ -258,7 +272,12 @@ class ReferencesSectionTest {
         assertEquals(1, dismisses)
     }
 
-    /** The five ratified strings, and no sixth: the sheet title is the action's own wording. */
+    /**
+     * The five ratified strings, and **no sixth**: the sheet title is the action's own wording,
+     * and §1.9 makes "a string §10 does not list is a finding for the controller" the contract
+     * this case holds. So the whole text inventory is asserted as an exact set — a supporting
+     * line, a helper text or a placeholder added later turns this red rather than passing.
+     */
     @Test fun theAddLinkSheetShipsItsFiveRatifiedStringsAndNoOther() {
         var saved: Triple<String, String, String>? = null
         rule.setContent {
@@ -271,11 +290,11 @@ class ReferencesSectionTest {
         }
         rule.waitForIdle()
 
+        assertEquals(
+            setOf("Add link", "Link", "Name", "Description", "Save", "Cancel"),
+            everyStringDrawn(),
+        )
         rule.onAllNodesWithText("Add link").assertCountEquals(1)
-        rule.onNodeWithText("Link").assertIsDisplayed()
-        rule.onNodeWithText("Name").assertIsDisplayed()
-        rule.onNodeWithText("Description").assertIsDisplayed()
-        rule.onNodeWithText("Cancel").assertIsDisplayed()
         rule.onAllNodes(hasSetTextAction()).assertCountEquals(3)
 
         rule.onNodeWithText("Save").performClick()

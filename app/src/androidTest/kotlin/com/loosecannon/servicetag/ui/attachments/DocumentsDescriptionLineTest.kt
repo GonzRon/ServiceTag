@@ -1,6 +1,5 @@
 package com.loosecannon.servicetag.ui.attachments
 
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasTextExactly
@@ -113,24 +112,33 @@ class DocumentsDescriptionLineTest {
      * genuinely one line rather than against a number this test made up.
      */
     @Test fun aTwoThousandCharacterDescriptionRendersOnOneLine() {
-        val long = "Bearing race replaced " + "x".repeat(MAX_DESCRIPTION - "Bearing race replaced ".length)
+        val long = "Bearing race replaced " + "x".repeat(LONG_ENOUGH_TO_WRAP - "Bearing race replaced ".length)
         draw(
             row("a", "Deck manual.pdf", "Short note"),
             row("b", "Pump manual.pdf", long),
         )
 
-        val short = rule.onNodeWithText("Short note").getUnclippedBoundsInRoot().height
-        val wrapped = rule.onNodeWithText("Bearing race replaced ", substring = true)
+        // The unmerged tree, so each lookup lands on the description `Text` itself: a row is
+        // clickable and therefore merges, and its height has a 56 dp thumbnail floor under it
+        // that could hide a line or two of wrapping.
+        val short = rule.onNodeWithText("Short note", useUnmergedTree = true)
+            .getUnclippedBoundsInRoot().height
+        val wrapped = rule.onNodeWithText("Bearing race replaced ", substring = true, useUnmergedTree = true)
             .getUnclippedBoundsInRoot().height
 
-        assertEquals(MAX_DESCRIPTION, long.length)
+        assertEquals(LONG_ENOUGH_TO_WRAP, long.length)
         assertEquals("the description must not wrap the row", short, wrapped)
     }
 
     private companion object {
         val READY = StoreState.Ready("Attachments", "com.example.provider")
 
-        /** `MAX_REFERENCE_DESCRIPTION_CHARS`, restated here so this file needs no `:core` rule. */
-        const val MAX_DESCRIPTION = 2_000
+        /**
+         * A description long enough that a wrapping line would be unmistakable — dozens of rows
+         * deep. It is **not** a cap: `AddAttachment` trims `notes` and never truncates it, so an
+         * attachment description has no maximum length at all, which is the other half of why the
+         * line has to be held to one.
+         */
+        const val LONG_ENOUGH_TO_WRAP = 2_000
     }
 }
