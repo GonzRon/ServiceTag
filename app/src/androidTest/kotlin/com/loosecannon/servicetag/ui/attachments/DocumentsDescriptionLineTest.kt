@@ -107,9 +107,9 @@ class DocumentsDescriptionLineTest {
     }
 
     /**
-     * The cap is 2,000 characters and the row is compact, so the line is held to one and
-     * ellipsised. Two rows in one composition, so the comparison is against a line that is
-     * genuinely one line rather than against a number this test made up.
+     * The row is compact and an attachment description has no maximum length at all, so the line
+     * is held to one and ellipsised. Two rows in one composition, so the comparison is against a
+     * line that is genuinely one line rather than against a number this test made up.
      */
     @Test fun aTwoThousandCharacterDescriptionRendersOnOneLine() {
         val long = "Bearing race replaced " + "x".repeat(LONG_ENOUGH_TO_WRAP - "Bearing race replaced ".length)
