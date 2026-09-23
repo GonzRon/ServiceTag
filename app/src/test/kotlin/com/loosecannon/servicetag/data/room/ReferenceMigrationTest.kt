@@ -1,18 +1,7 @@
-package com.loosecannon.servicetag.data
+package com.loosecannon.servicetag.data.room
 
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
-import com.loosecannon.servicetag.data.room.JOURNAL_TABLES
-import com.loosecannon.servicetag.data.room.columnsOf
-import com.loosecannon.servicetag.data.room.createSchemaVersion
-import com.loosecannon.servicetag.data.room.foreignKeysOf
-import com.loosecannon.servicetag.data.room.indexDefinitionsOn
-import com.loosecannon.servicetag.data.room.openFresh
-import com.loosecannon.servicetag.data.room.openMigrated
-import com.loosecannon.servicetag.data.room.primaryKeyOf
-import com.loosecannon.servicetag.data.room.rowOf
-import com.loosecannon.servicetag.data.room.tableNames
-import com.loosecannon.servicetag.data.room.withConnection
 import java.io.File
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -20,7 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * [com.loosecannon.servicetag.data.room.MIGRATION_6_7]: one new table, `asset_reference`, and
+ * [MIGRATION_6_7]: one new table, `asset_reference`, and
  * nothing else. It is a plain `CREATE TABLE` plus two `CREATE INDEX`es — no recreate and no copy —
  * so "every pre-existing row is untouched" holds by construction; this class is what proves the
  * construction is the one that shipped.
@@ -88,7 +77,16 @@ class ReferenceMigrationTest {
                 withConnection(fresh) { f ->
                     assertTrue(
                         "asset_reference must exist, found ${m.tableNames()}",
-                        "asset_reference" in m.tableNames(),
+                        REFERENCE in m.tableNames(),
+                    )
+                    // [UNTOUCHED] claims to be *every* v6 table, and this is what makes the claim
+                    // checkable rather than a comment: it is the migrated file's own table list
+                    // with the one table this migration adds — and Room's bookkeeping — taken out.
+                    // A v7 table added later without a line in the loop below fails here first.
+                    assertEquals(
+                        "UNTOUCHED must name every table the migration found",
+                        m.tableNames() - REFERENCE - ROOM_INTERNAL,
+                        UNTOUCHED,
                     )
                     assertEquals("asset_reference columns", f.columnsOf(REFERENCE), m.columnsOf(REFERENCE))
                     assertEquals("asset_reference primary key", f.primaryKeyOf(REFERENCE), m.primaryKeyOf(REFERENCE))
@@ -225,7 +223,13 @@ class ReferenceMigrationTest {
             "attachment" to "att1",
         )
 
-        /** Every v6 table, which this migration must leave exactly as it found it. */
+        /** Room's own bookkeeping, which is not a table of the schema. */
+        val ROOM_INTERNAL = setOf("room_master_table", "android_metadata", "sqlite_sequence")
+
+        /**
+         * Every v6 table, which this migration must leave exactly as it found it — asserted to be
+         * exactly that, above, rather than trusted to be kept up to date by hand.
+         */
         val UNTOUCHED = JOURNAL_TABLES + setOf(
             "asset",
             "nfc_tag",

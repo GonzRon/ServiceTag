@@ -1,10 +1,8 @@
-package com.loosecannon.servicetag.data
+package com.loosecannon.servicetag.data.room
 
 import androidx.sqlite.SQLiteException
 import com.loosecannon.servicetag.data.room.entities.AssetEntity
 import com.loosecannon.servicetag.data.room.entities.AssetReferenceEntity
-import com.loosecannon.servicetag.data.room.inMemoryDb
-import com.loosecannon.servicetag.data.room.mainSourceFile
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
