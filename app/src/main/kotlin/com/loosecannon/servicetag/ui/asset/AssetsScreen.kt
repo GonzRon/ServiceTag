@@ -89,10 +89,12 @@ fun AssetsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
             if (state.items.isEmpty()) {
-                if (state.query.isNotBlank() && !state.showArchived && state.archivedMatchCount > 0) {
+                if (state.showArchivedOnlyHint) {
                     // Owner ruling §18.23 (B07 fix round 4): a match exists, it is just behind the
                     // chip — a different fact from "nothing matches that", and the ratified hint
-                    // says so instead of leaving the owner to conclude the asset is gone.
+                    // says so instead of leaving the owner to conclude the asset is gone. The
+                    // boolean is the view model's to decide (fix round 5, Q4) and already implies
+                    // this branch's `items.isEmpty()`.
                     QuietLine(
                         text = "Matching assets are archived. Turn on Show archived to see them.",
                         modifier = Modifier.padding(16.dp),

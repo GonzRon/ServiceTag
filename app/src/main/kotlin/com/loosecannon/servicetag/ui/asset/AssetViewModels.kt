@@ -93,12 +93,13 @@ data class AssetsState(
     /** What the search box holds, verbatim. Blank leaves the list exactly as it was before B07. */
     val query: String = "",
     /**
-     * How many of the rows the chip is hiding also match [query] (owner ruling §18.23, B07 fix
-     * round 4) — always `0` for a blank query, since a blank query asks nothing to distinguish.
-     * Read only while [items] is empty and [showArchived] is off: it is what tells the screen the
-     * difference between "nothing matches at all" and "a match exists, one chip-tap away".
+     * The archived-only hint's exact condition (owner ruling §18.23; the view model's to decide,
+     * not the screen's — B07 fix round 5, controller ruling Q4): a non-blank [query], [showArchived]
+     * off, no active row matching, and at least one archived row that does. Self-sufficient — it
+     * already implies [items] is empty, so the screen needs no `items.isEmpty()` check of its own
+     * to show the hint correctly.
      */
-    val archivedMatchCount: Int = 0,
+    val showArchivedOnlyHint: Boolean = false,
 )
 
 /**
@@ -157,14 +158,13 @@ class AssetsViewModel(assets: AssetRepository, private val clock: Clock) : ViewM
                 showArchived = archived,
                 archivedCount = rows.count { it.status != AssetStatus.ACTIVE },
                 query = query,
-                // A blank query never distinguishes an archived-only match — nothing was asked —
-                // and once the chip is on, an archived match is already in `matching` above, not
-                // held back, so there is nothing left to count separately.
-                archivedMatchCount = if (query.isBlank() || archived) {
-                    0
-                } else {
-                    rows.count { it.status != AssetStatus.ACTIVE && it.matches(query) }
-                },
+                // Checked directly against `rows`, not against `matching`/`items`: a formula that
+                // only ever counted archived matches would say `true` even when an active row also
+                // matched (Q4), so this asks both halves itself rather than trusting the screen's
+                // `items.isEmpty()` to have ruled the active half out already.
+                showArchivedOnlyHint = query.isNotBlank() && !archived &&
+                    rows.none { it.status == AssetStatus.ACTIVE && it.matches(query) } &&
+                    rows.any { it.status != AssetStatus.ACTIVE && it.matches(query) },
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), AssetsState())
 
