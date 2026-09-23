@@ -57,6 +57,9 @@ EXPECTED_TOOLS = (
     "close_round",
     "list_closures",
     "list_due",
+    "list_references",
+    "add_reference",
+    "update_reference",
 )
 
 
@@ -66,7 +69,7 @@ def body_of(recorded) -> dict:
 
 def test_every_tool_the_design_names_is_registered() -> None:
     assert server_module.TOOL_NAMES == EXPECTED_TOOLS
-    assert len(EXPECTED_TOOLS) == 38
+    assert len(EXPECTED_TOOLS) == 41
     for name in EXPECTED_TOOLS:
         assert callable(getattr(server_module, name)), f"{name} is missing"
 

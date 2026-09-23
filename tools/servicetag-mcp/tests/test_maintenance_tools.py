@@ -38,8 +38,8 @@ MAINTENANCE_TOOLS = (
 )
 """Master plan §10's seventeen, named exactly as it names them. `list_schedules` covers all three
 schedule listings — every schedule, one asset's, one group's — because §10 names one tool and the
-three are one question asked of three scopes. The registered total is 21 + 17 = **38**, which
-`test_argument_guard.py` pins."""
+three are one question asked of three scopes. The registered total was 21 + 17 = **38** at 1.2 and
+is **41** since 1.3's three reference tools, which `test_argument_guard.py` pins."""
 
 
 def body_of(recorded) -> dict:
