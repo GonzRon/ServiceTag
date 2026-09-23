@@ -290,6 +290,41 @@ class VersionAgreementTest {
         )
     }
 
+    /**
+     * D9's Attachments row claimed two controls this app has never had: sniffing the type on
+     * import, and a configurable size cap. Spec §4.3 retires both. A stated control that does not
+     * exist is worse than an absent one, so the claims go and the row says instead why trusting
+     * the declared type is defensible and what the share path checks before it opens a stream.
+     *
+     * Anchored on the row, not on the file: an amendment note somewhere else in the document
+     * would satisfy a bare `contains` while the row still read the old way.
+     */
+    @Test fun theSecurityDocumentNoLongerClaimsMimeSniffing() {
+        val text = repoFile("docs/design/09-security-privacy.md").readText()
+        assertFalse(
+            "the retired sniffing claim must be gone, not merely annotated",
+            text.contains("MIME sniffed on import"),
+        )
+        assertFalse(
+            "the retired configurable-cap claim must be gone too",
+            text.contains("size cap configurable"),
+        )
+        assertTrue(
+            "the Attachments row must carry the dated amendment",
+            Regex(
+                """^\| \*\*Attachments\*\* \|.*\*\*Amended 2026-09-23 \(ServiceTag 1\.3\.0, spec §4\.3\)""",
+                RegexOption.MULTILINE,
+            ).containsMatchIn(text),
+        )
+        assertTrue(
+            "the same row must record I-9's check on a shared stream",
+            Regex(
+                """^\| \*\*Attachments\*\* \|.*must not name one of ServiceTag's own authorities""",
+                RegexOption.MULTILINE,
+            ).containsMatchIn(text),
+        )
+    }
+
     private companion object {
         const val TOKEN = "ABCD2345"
 
