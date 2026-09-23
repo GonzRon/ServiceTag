@@ -14,6 +14,9 @@ class ReferenceLimitsTest {
         assertEquals("", ReferenceText.sanitiseName("   "))
         assertEquals("", ReferenceText.sanitiseName("\u0000"))
         assertEquals("", ReferenceText.sanitiseName("\n\t\u0000\u0007 "))
+        // Kotlin's Char.isWhitespace also asks isSpaceChar, so a non-breaking space is a blank
+        // here even though java.lang.Character.isWhitespace says otherwise.
+        assertEquals("", ReferenceText.sanitiseName("\u00A0"))
         assertEquals("", ReferenceText.sanitiseName(""))
     }
 

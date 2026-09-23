@@ -31,7 +31,7 @@ class RecordingReferenceRepository : InMemoryReferenceRepository() {
  * **entered at all**, which is what "a refusal writes nothing" has to mean: a use case that opens a
  * transaction and then decides against writing has already taken the lock.
  */
-class RecordingUnitOfWork(private vararg val stores: Rollbackable) : UnitOfWork {
+class RecordingUnitOfWork(vararg stores: Rollbackable) : UnitOfWork {
     private val inner = FakeUnitOfWork(*stores)
 
     var writesEntered = 0

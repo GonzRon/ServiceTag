@@ -43,7 +43,7 @@ class LinkLaunchPolicyTest {
     }
 
     @Test
-    fun everyHardBlockedSchemeIsBlockedAtLaunchAsWellAsAtSave() {
+    fun everyHardBlockedSchemeIsBlockedAtLaunch() {
         for ((scheme, uri) in blocked) {
             assertEquals(LinkDecision.Blocked, policy.classify(uri), "$scheme should be blocked")
         }
