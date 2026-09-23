@@ -192,10 +192,14 @@ class ScheduleDetailViewModelTest {
      * was written and suppressed nothing at all. The expected value is computed from the clock and
      * not from the date — the old assertion restated the expression under test and so could not
      * fail — and `DigestPolicy` itself is asked whether it suppresses.
+     *
+     * The zone is a fixed `Etc/GMT+4` (UTC−4, no DST): the sharpest-case arithmetic above needs
+     * exactly that offset, not a real place's daylight rule, so a fixed offset keeps the "midnight
+     * UTC" claim true by construction rather than by which April day happens to fall in EDT.
      */
     @Test fun snoozeIsExactlyOneDayFromTheTapAndSuppressesTheDigest() = runTest {
         // A device in a negative UTC offset whose clock says 20:00 local on the day of the tap.
-        val zone = ZoneId.of("America/New_York")
+        val zone = ZoneId.of("Etc/GMT+4")
         val tapped = ZonedDateTime.of(LocalDate.parse("2026-04-15"), LocalTime.of(20, 0), zone)
         graph.now = tapped.toInstant().toEpochMilli()
 

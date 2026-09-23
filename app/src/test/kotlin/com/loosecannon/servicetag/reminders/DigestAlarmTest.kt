@@ -17,10 +17,15 @@ import org.junit.Test
  * observed as deliveries — the D-6 resolution rules are a property of `java.time`, and the point
  * of asserting them is that this brief reads them off `ZonedDateTime.of` rather than reinventing
  * them with a `LocalDateTime.toInstant()` that throws or silently shifts an hour.
+ *
+ * The zone is `America/Toronto`, not a US one: Canada has followed the same Eastern DST calendar
+ * as the US since 2007, so the 2026-03-08 and 2026-11-01 transition dates and the −05:00/−04:00
+ * offsets below are unchanged — this test needs a negative offset whose gap and overlap actually
+ * fall on those two 2026 dates, and a non-US zone proves the arithmetic isn't tied to US law.
  */
 class DigestAlarmTest {
 
-    private val newYork: ZoneId = ZoneId.of("America/New_York")
+    private val eastern: ZoneId = ZoneId.of("America/Toronto")
 
     private fun instantOf(local: String, zone: ZoneId): Long =
         ZonedDateTime.parse("$local[${zone.id}]").toInstant().toEpochMilli()
@@ -28,27 +33,27 @@ class DigestAlarmTest {
     @Test
     fun theNextDigestIsTodayWhileTheHourIsStillAheadAndTomorrowOnceItHasPassed() {
         val today = LocalDate.parse("2026-06-15")
-        val nine = instantOf("2026-06-15T09:00:00-04:00", newYork)
+        val nine = instantOf("2026-06-15T09:00:00-04:00", eastern)
 
         assertEquals(
             nine,
-            nextDigestAt(nowMillis = nine - 60_000L, today = today, hour = 9, zone = newYork),
+            nextDigestAt(nowMillis = nine - 60_000L, today = today, hour = 9, zone = eastern),
         )
         assertEquals(
             "at the hour exactly the next one is tomorrow's: an alarm armed for now would fire twice",
-            instantOf("2026-06-16T09:00:00-04:00", newYork),
-            nextDigestAt(nowMillis = nine, today = today, hour = 9, zone = newYork),
+            instantOf("2026-06-16T09:00:00-04:00", eastern),
+            nextDigestAt(nowMillis = nine, today = today, hour = 9, zone = eastern),
         )
         assertEquals(
-            instantOf("2026-06-16T09:00:00-04:00", newYork),
-            nextDigestAt(nowMillis = nine + 60_000L, today = today, hour = 9, zone = newYork),
+            instantOf("2026-06-16T09:00:00-04:00", eastern),
+            nextDigestAt(nowMillis = nine + 60_000L, today = today, hour = 9, zone = eastern),
         )
     }
 
     /**
      * Both DST edge days in one row (the matrix's one-test-per-hazard rule).
      *
-     * 2026-03-08 in New York has no 02:00 at all — the clock jumps 02:00 to 03:00 — and `java.time`
+     * 2026-03-08 in `America/Toronto` has no 02:00 at all — the clock jumps 02:00 to 03:00 — and `java.time`
      * resolves a gap **forward**, so a 02:00 digest lands at 03:00 EDT. 2026-11-01 has two 01:00s,
      * and `java.time` resolves an overlap to the **earlier** offset, so a 01:00 digest lands at
      * 01:00 EDT (-04:00) and not the second, EST one. Both are asserted as instants; the delivery
@@ -58,23 +63,23 @@ class DigestAlarmTest {
     @Test
     fun theDigestInstantResolvesAGapForwardAndAnOverlapToTheEarlierOffset() {
         val springForward = nextDigestAt(
-            nowMillis = instantOf("2026-03-08T00:30:00-05:00", newYork),
+            nowMillis = instantOf("2026-03-08T00:30:00-05:00", eastern),
             today = LocalDate.parse("2026-03-08"),
             hour = 2,
-            zone = newYork,
+            zone = eastern,
         )
-        assertEquals(instantOf("2026-03-08T03:00:00-04:00", newYork), springForward)
+        assertEquals(instantOf("2026-03-08T03:00:00-04:00", eastern), springForward)
 
         val fallBack = nextDigestAt(
-            nowMillis = instantOf("2026-11-01T00:30:00-04:00", newYork),
+            nowMillis = instantOf("2026-11-01T00:30:00-04:00", eastern),
             today = LocalDate.parse("2026-11-01"),
             hour = 1,
-            zone = newYork,
+            zone = eastern,
         )
-        assertEquals(instantOf("2026-11-01T01:00:00-04:00", newYork), fallBack)
+        assertEquals(instantOf("2026-11-01T01:00:00-04:00", eastern), fallBack)
         assertTrue(
             "the earlier offset is the earlier instant; the later one is an hour further on",
-            fallBack < instantOf("2026-11-01T01:00:00-05:00", newYork),
+            fallBack < instantOf("2026-11-01T01:00:00-05:00", eastern),
         )
     }
 

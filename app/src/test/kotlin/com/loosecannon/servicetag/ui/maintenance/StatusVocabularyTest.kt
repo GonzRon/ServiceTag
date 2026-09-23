@@ -70,9 +70,13 @@ class StatusVocabularyTest {
      *
      * It is a line **beside** the status badge, so the status word this row draws is still OVERDUE:
      * a snooze suppresses delivery and moves no obligation (invariant 20, D-13).
+     *
+     * The zone is a fixed negative offset, `Etc/GMT+5` (no DST): the point is only that the badge
+     * reads the device's zone rather than UTC, and this test crosses no DST transition, so a
+     * neutral non-zero offset makes that true without borrowing a real place's calendar.
      */
     @Test fun aSnoozedRowCarriesTheRatifiedBadgeAndKeepsItsStatusWord() {
-        val zone = ZoneId.of("America/New_York")
+        val zone = ZoneId.of("Etc/GMT+5")
         val now = LocalDate.parse("2026-06-15").atTime(9, 5).atZone(zone).toInstant().toEpochMilli()
         val until = LocalDate.parse("2026-06-16").atTime(9, 5).atZone(zone).toInstant().toEpochMilli()
 

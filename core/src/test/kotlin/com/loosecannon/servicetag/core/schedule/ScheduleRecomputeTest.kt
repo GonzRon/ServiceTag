@@ -99,9 +99,9 @@ class ScheduleRecomputeTest {
     /**
      * The floor is read in the **owner's** calendar, not UTC's (controller ruling, 2026-09-22).
      *
-     * One instant, two zones. A schedule stamped 21:00 on September 22 in `America/New_York` and
-     * anchored on that same September 22 is due **that day**: the owner said "start today", and a
-     * schedule may be due on the owner's own day. Read at UTC the same
+     * One instant, two zones. A schedule stamped 21:00 on September 22 in a fixed UTC−05:00 zone
+     * and anchored on that same September 22 is due **that day**: the owner said "start today", and
+     * a schedule may be due on the owner's own day. Read at UTC the same
      * instant is already the 23rd, so the floor lands past the anchor and the first occurrence is
      * pushed a whole interval out — three months of silence on work the owner asked for now. That
      * was the shipped answer for the last four hours of every day in every zone west of UTC, and
@@ -109,13 +109,15 @@ class ScheduleRecomputeTest {
      *
      * `zone` is still an argument, so the purity invariant 16 protects is untouched: this test
      * gets two different answers out of `rebuild` by handing it two different zones, never by
-     * moving a device.
+     * moving a device. The owner's zone is `Etc/GMT+5` (UTC−05:00, no DST) rather than a real
+     * place's: no transition is exercised here, only the negative offset the 21:00-to-midnight-UTC
+     * crossing needs, so a fixed offset keeps the hazard (owner's day vs. UTC's) and nothing else.
      */
     @Test
     fun theFloorIsTheOwnersDateAndNotUtcs() {
         val evening = LocalDate.parse("2026-09-22")
             .atTime(21, 0)
-            .atZone(ZoneId.of("America/New_York"))
+            .atZone(ZoneId.of("Etc/GMT+5"))
             .toInstant()
             .toEpochMilli()
         val saved = scheduleOf(
@@ -130,7 +132,7 @@ class ScheduleRecomputeTest {
             saved, emptyList(), emptyList(), emptyList(), on("2026-09-22"), zone,
         )
 
-        val owners = dueIn(ZoneId.of("America/New_York"))
+        val owners = dueIn(ZoneId.of("Etc/GMT+5"))
         assertEquals("2026-09-22", owners.computedDueOn)
         assertEquals(DueStatus.DUE, statusOf(saved, owners, on("2026-09-22")))
 
