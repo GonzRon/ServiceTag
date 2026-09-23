@@ -127,7 +127,15 @@ class DocumentsDescriptionLineTest {
             .getUnclippedBoundsInRoot().height
 
         assertEquals(LONG_ENOUGH_TO_WRAP, long.length)
-        assertEquals("the description must not wrap the row", short, wrapped)
+        // Half a dp of tolerance, because measuring the two `Text` nodes themselves exposes the
+        // sub-pixel jitter the merged row's 56 dp floor used to swallow. A second line would add
+        // a whole line height, so the assertion still bites on everything it is here to catch.
+        assertEquals(
+            "the description must not wrap the row",
+            short.value.toDouble(),
+            wrapped.value.toDouble(),
+            0.5,
+        )
     }
 
     private companion object {
