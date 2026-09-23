@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.GroupMemberDto
 import com.loosecannon.servicetag.core.backup.MaintenanceGroupDto
 import com.loosecannon.servicetag.core.backup.MaintenanceScheduleDto
+import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.json.JsonObject
@@ -51,7 +52,7 @@ class MaintenanceCommandShapeTest {
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
             maintenanceHandlersFor(graph),
             appVersion = "1.2.0",
-            schemaVersion = 6,
+            schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
         TOKEN,
     )

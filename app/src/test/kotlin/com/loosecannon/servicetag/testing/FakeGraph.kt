@@ -75,6 +75,7 @@ import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
+import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.prefs.KeyValueStore
@@ -298,7 +299,13 @@ class FakeGraph(
 
     private companion object {
         const val APP_VERSION = "test"
-        const val SCHEMA_VERSION = 6
+
+        /**
+         * **The production constant, not a copy of its current value.** A fake that stamped its own
+         * number into every archive it exports would go on claiming the old schema after a bump,
+         * and the archives these tests round-trip would describe a database that no longer exists.
+         */
+        const val SCHEMA_VERSION = AppGraph.SCHEMA_VERSION
     }
 }
 
