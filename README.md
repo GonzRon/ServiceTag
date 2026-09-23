@@ -16,13 +16,12 @@ projection that never becomes the source of truth.
 ## What it does today
 
 A single-screen Compose app — Dashboard, Assets and Maintenance along the bottom, everything else
-one push deep —
-around the one-tap flow that is still the spine: tap a tag anywhere and the phone opens the right
-place. Read / inspect tag, for the rare deliberate look, lives under Settings, and it keeps NFC for
-as long as you are on it: what a tag turns out to be is shown on the screen you are already on, so a
-tag left against the phone is not handed back to the system mid-look. An inspect inspects: a tag
-already bound to an asset is named there, with an Open asset action, and opening it is what hands
-NFC back — the ambient tap still opens a bound tag straight away.
+one push deep — around the one-tap flow that is still the spine: tap a tag anywhere and the phone
+opens the right place. Read / inspect tag, for the rare deliberate look, lives under Settings, and
+it keeps NFC for as long as you are on it: what a tag turns out to be is shown on the screen you are
+already on, so a tag left against the phone is not handed back to the system mid-look. An inspect
+inspects: a tag already bound to an asset is named there, with an Open asset action, and opening it
+is what hands NFC back — the ambient tap still opens a bound tag straight away.
 
 - **Dashboard** — the assets in service, and, until the first export succeeds, a card that says
   there is no backup yet and offers to take one. The list is the systems themselves: a component of
