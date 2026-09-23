@@ -1,7 +1,7 @@
 # B06 — #21 the local reminder provider
 
 **Read first:** the master plan's §1, §8 (the port and delivery state), §12 (the Android delivery platform), §12.3 (**S4 gates nothing and this brief is not gated**) and §13.
-**Spec:** `docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md` §2.5, §5.2, §5.3, §5.6, §5.7, §5.9; rulings D-5, D-6, D-13, D-21, D-22; issue snapshot `issue-21.md`.
+**Spec:** `docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md` §2.5, §5.2, §5.3, §5.6, §5.7, §5.9, §2.4; rulings D-5, D-6, D-13, D-21, D-22, D-8; issue snapshot `issue-21.md`. **Citation corrected at implementation (2026-09-22, B13): the group-"Open"-only clause was cited as D-7 below; D-7 is the no-backlog ruling and never carried it — §2.4's group completion semantics (invariants 28-30) and D-8 do.**
 
 ## Purpose
 
@@ -72,7 +72,7 @@ class NonceStore {                                 // B07 checks and consumes; t
 | withdrawal | a `Withdrawn` subject clears its notification and its delivery row's nonce |
 | snooze | suppresses **this provider's** notifications only; it never touches a due date and creates no event (invariant 20) |
 | meter-only | evaluated **when a reading is saved**, with an immediate notification if it crosses DUE, because there is no date to alarm on (#21 AC 6) |
-| group | a group-targeted schedule's notification offers **"Open"** only (D-7); its body carries the progress |
+| group | a group-targeted schedule's notification offers **"Open"** only (§2.4's group completion semantics, invariants 28-30; D-8 for the explicit way out of an unfinished round); its body carries the progress |
 | denied permission | the alarm, the backstop, the recompute and the preferences all keep working; nothing is posted, and the denial is a **finding**, not a disabled path (D-22, invariant 61) |
 
 **The alarm, as contract** (§5.2, D-6): one `setAndAllowWhileIdle(RTC_WAKEUP)` — or `setWindow` with a 30-minute window — at the owner's hour, **re-armed by its own receiver after firing**. The instant is `ZonedDateTime.of(T_next, reminderTime, deviceZone).toInstant()`; a non-existent spring-forward local time resolves **forward** per `java.time`, an ambiguous fall-back time to the **earlier** offset. On a zone or DST change day the digest may fire twice or not at all, and **the backstop is what guarantees it eventually fires** — this is a stated consequence, not a defect to engineer around.
@@ -104,7 +104,7 @@ One test per hazard class. **No row waits on a wall clock**: every timing case i
 | **the projection is not rebuildable** | with every notification cancelled and the alarm cancelled and the delivery table cleared, one `reconcile` restores the posted set and the armed alarm from schedule state alone (invariant 44) | a provider that keeps its desired state anywhere but the schedules cannot recover from a cleared app |
 | DST edge days | one test covering both: a digest hour that does not exist on a spring-forward day resolves **forward**; an ambiguous hour on a fall-back day resolves to the **earlier** offset; and the computed instant is asserted, not the delivery (D-6, D5 §11) | naive `LocalDateTime.toInstant()` throws or silently shifts an hour, and the digest lands at the wrong time twice a year |
 | a meter reading not noticed | saving a reading that crosses the meter threshold notifies **immediately**, without waiting for the next digest run (#21 AC 6) | a date-only trigger never fires for a meter-only schedule, which has no date |
-| a group notification claiming completion | a group-targeted schedule's notification offers **"Open"** only — no "Done" (D-7) | "Done" on a group either completes nothing or falsely completes everyone |
+| a group notification claiming completion | a group-targeted schedule's notification offers **"Open"** only — no "Done" (§2.4, invariants 28-30; D-8) | "Done" on a group either completes nothing or falsely completes everyone |
 | delivery state leaking into a backup | a structural assertion: no `schedule_local_delivery` column appears in any DTO, in `BackupData`, or in a `MergeTable` member; an export of a phone with snoozes and nonces carries **none** of it (invariants 64, 65) | exporting the snooze makes a re-import `CONTENT_DIFFERS` and moves a device-local preference across phones |
 | denied permission disabling things | with the permission denied, one test asserts the alarm is still armed, the backstop still enqueued, the preferences still writable, the recompute still running, and **exactly one** finding produced (invariant 61, D-22) | a guard that skips arming when notifications are off means granting the permission later leaves the machinery dead |
 | **the notification signalling by colour alone** | one row for the notification's own visual acceptance (#11's and #21's Visual design sections, D12 §5): a posted notification carries the **ratified status word** — **DUE**, **OVERDUE** — plus its icon, drawn from the **semantic tokens** and never an improvised colour, and the DUE/OVERDUE distinction **survives with colour removed** | a notification that carries only a colour or an unlabelled icon is unreadable in grayscale and for a colour-blind owner, and it is the one surface where B08's in-app grayscale proof does not reach |

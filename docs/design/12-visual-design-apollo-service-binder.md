@@ -1238,6 +1238,19 @@ by every later feature lane.
   > reminder health. **The Scan tab does not come back**: tag reading stays ambient, and the scan
   > screen is still only a pushed destination. The scan *completion sheet* 1.2 adds is a sheet
   > over the ambient read, not a destination.
+  >
+  > **Two pre-rename claims in the bullet above are superseded, and corrected here rather than
+  > rewritten in place.** This section predates the product split, and it still names the app and
+  > the scheme it carried then:
+  >
+  > - it says "Android's NDEF dispatch opens **noteNFC**" — the dispatch opens **ServiceTag**;
+  > - it says "`notenfc://` deep links land inside this structure" — the scheme is
+  >   **`servicetag://`** (`servicetag://asset`, `servicetag://tag` and, added in 1.2 by D-17,
+  >   `servicetag://schedule/<uuid>`).
+  >
+  > The two sentences are left standing above so this is a correction and not a silent rewrite.
+  > **The rest of this document's pre-rename naming is a separate pass**, not this brief's: it is
+  > reported as a finding for the controller, and nothing here renames the document wholesale.
 - **Edge-to-edge** (target 36+): the canvas colour runs under the status and navigation bars in
   both themes; app bars and bottom sheets pad by the system insets; no separate status-bar colour.
 - **No FAB** on dashboard or asset detail (§7).

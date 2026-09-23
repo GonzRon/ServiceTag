@@ -108,9 +108,8 @@ no Links screen, no share target, no way to point a tag at a link, and no outbou
 
 Old data is kept, not discarded. A backup written by any earlier version still carries its
 `externalLinks` rows and restores them unchanged — the format moved to 6 for schedules and groups,
-and left those rows alone — but nothing in
-ServiceTag creates, shows or opens one. A tag written by an older version to point at a link reads
-as a tag from before the split and does nothing else.
+and left those rows alone — but nothing in ServiceTag creates, shows or opens one. A tag written by
+an older version to point at a link reads as a tag from before the split and does nothing else.
 
 ### The automation API is loopback-only and lives as long as its screen
 

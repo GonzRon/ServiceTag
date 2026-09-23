@@ -286,8 +286,9 @@ A red badge on Home appears when any finding has severity ≥ WARN.
 >   a retired asset or an archived group raise nothing, because the app has already withdrawn
 >   that obligation from delivery.
 >
-> "After every sync" is Phase 5. In 1.2 the check runs from the backstop worker and from the
-> Maintenance and Health surfaces; the ≥ WARN badge ships, on the dashboard and on Maintenance.
+> "After every sync" is Phase 5. In 1.2 the check runs at **app launch**
+> (`app/.../ServiceTagApp.kt` calls `reminderHealth.refresh()`), from the backstop worker and from
+> the Maintenance and Health surfaces; the ≥ WARN badge ships, on the dashboard and on Maintenance.
 
 ## 8. Todoist adapter boundary (Phase 5)
 

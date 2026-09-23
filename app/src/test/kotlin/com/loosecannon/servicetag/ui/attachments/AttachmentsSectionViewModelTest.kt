@@ -334,7 +334,10 @@ class AttachmentsSectionViewModelTest {
         // the rename's state change is **not** a barrier for the `Unchanged` one, and reading
         // a list afterwards dropped whichever had not landed yet. Awaiting exactly two — both
         // subscribed before either call, `saved` having no replay — is the barrier that says
-        // both have been the whole way through the path, whatever order they took.
+        // both have been the whole way through the path, whatever order they took. **How this
+        // fails:** if only one signal ever lands, `await()` never returns, so the RED shape is a
+        // `runTest` timeout and not an assertion message — the same shape, for the same reason,
+        // as the cold-launch badge case in `HealthViewModelTest`.
         val closed = async(Dispatchers.Main) { vm.saved.take(2).toList() }
 
         vm.save(row.id, UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes))
