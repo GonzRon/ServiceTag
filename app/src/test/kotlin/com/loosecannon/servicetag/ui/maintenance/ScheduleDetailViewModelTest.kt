@@ -137,6 +137,34 @@ class ScheduleDetailViewModelTest {
         return Triple(group.id, schedule.id, assets)
     }
 
+    /** As [aGroupRound], but with an explicit anchor and lead — for the 1.2.1 window tests. */
+    private suspend fun aGroupRoundDueOn(
+        anchorOn: String,
+        leadDays: Int,
+        members: Int = 2,
+    ): Triple<GroupId, ScheduleId, List<AssetId>> {
+        val assets = (1..members).map {
+            graph.createAsset.run(AssetCommand(name = "Sprinkler $it", category = "Irrigation")).id
+        }
+        val group = graph.saveGroup.run(
+            null,
+            GroupCommand(name = "North run", members = assets.map { GroupMemberInput(assetId = it) }),
+        )
+        val schedule = graph.saveSchedule.run(
+            null,
+            ScheduleCommand(
+                targetAssetId = null,
+                targetGroupId = group.id,
+                title = "Head check",
+                timeInterval = 3,
+                timeUnit = RecurrenceUnit.MONTH,
+                anchorOn = anchorOn,
+                leadDays = leadDays,
+            ),
+        )
+        return Triple(group.id, schedule.id, assets)
+    }
+
     /** Answers the flow's affordance as soon as it opens, with the date given. */
     private suspend fun answer(occurredOn: String, meterValue: String? = null) {
         graph.completionFlow.prompt.first { it != null }
@@ -437,6 +465,30 @@ class ScheduleDetailViewModelTest {
         val advanced = vm.state.first { it.currentOccurrenceOn != "2026-04-01" }
         assertEquals("2026-07-01", advanced.currentOccurrenceOn)
         assertEquals("0 of 2 complete", advanced.progress)
+    }
+
+    /**
+     * 1.2.1's fifth question: **the day before** the round's own due-soon window
+     * (`effectiveDueOn - leadDays`), `canClose` is false even though every other condition holds.
+     */
+    @Test fun canCloseIsFalseTheDayBeforeTheWindowOpens() = runTest {
+        // due = anchorOn = "2026-05-01"; leadDays = 10 puts the window's open date at 2026-04-21.
+        val (_, id, _) = aGroupRoundDueOn(anchorOn = "2026-05-01", leadDays = 10)
+        graph.today = LocalDate.parse("2026-04-20")
+
+        val state = viewModel(id).state.first { it.loaded }
+        assertEquals("2026-05-01", state.effectiveDueOn)
+        assertFalse("the window has not opened yet", state.canClose)
+    }
+
+    /** The other edge of the same gate: **on** the boundary day, `canClose` is true. */
+    @Test fun canCloseIsTrueOnTheBoundaryDayOfTheWindow() = runTest {
+        val (_, id, _) = aGroupRoundDueOn(anchorOn = "2026-05-01", leadDays = 10)
+        graph.today = LocalDate.parse("2026-04-21")
+
+        val state = viewModel(id).state.first { it.loaded }
+        assertEquals("2026-05-01", state.effectiveDueOn)
+        assertTrue("the window opens today", state.canClose)
     }
 
     /**

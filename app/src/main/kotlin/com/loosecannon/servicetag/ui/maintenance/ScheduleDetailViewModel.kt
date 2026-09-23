@@ -126,6 +126,8 @@ data class ScheduleDetailState(
     val status: DueStatus? = null,
     val requiredSetEmpty: Boolean = false,
     val effectiveDueOn: String? = null,
+    /** The schedule's own lead, in days. 1.2.1: `canClose`'s fifth question reads it too. */
+    val leadDays: Int = 0,
     val postponedDueOn: String? = null,
     val paused: Boolean = false,
     val archived: Boolean = false,
@@ -182,17 +184,21 @@ data class ScheduleDetailState(
     val canClearPostponement: Boolean get() = !archived && postponedDueOn != null
 
     /**
-     * **"Close this round"** — the whole gate, and the same four questions `CloseRound` asks, so the
-     * action and the use case cannot disagree (spec §1.2, invariants 74, 77):
+     * **"Close this round"** — the whole gate, and the same five questions `CloseRound` asks, so the
+     * action and the use case cannot disagree (spec §1.2, invariants 74, 77; 1.2.1 amendment):
      *
      * - a **group** target: in 1.2 an asset round is one member and completing it is the answer;
      * - a **non-empty** required set: a round that obliges nobody is not a round to close;
      * - **not already complete**: closing a finished round would record that it ended unfinished;
-     * - **not already closed**: the first row stands, and a second attempt is refused underneath.
+     * - **not already closed**: the first row stands, and a second attempt is refused underneath;
+     * - **1.2.1**: the round has reached its own due-soon window — `today` is not before
+     *   `effectiveDueOn - leadDays`. Computed from the same three values the state already holds,
+     *   never a status word, so this and `CloseRound`'s guard cannot drift apart.
      */
     val canClose: Boolean
         get() = isGroup && !archived && !requiredSetEmpty && members.any { !it.complete } &&
-            closures.none { it.occurrenceOn == currentOccurrenceOn }
+            closures.none { it.occurrenceOn == currentOccurrenceOn } &&
+            (effectiveDueOn?.let { !today.isBefore(LocalDate.parse(it).minusDays(leadDays.toLong())) } ?: true)
 
     /** Whichever members of the current round are still outstanding. */
     val outstanding: List<AssetId> get() = members.filterNot { it.complete }.map { it.assetId }
@@ -320,6 +326,7 @@ class ScheduleDetailViewModel(
             status = statusOf(schedule, derived, t),
             requiredSetEmpty = requiredSetEmpty,
             effectiveDueOn = derived.effectiveDueOn,
+            leadDays = schedule.leadDays,
             postponedDueOn = schedule.postponedDueOn,
             paused = schedule.status == ScheduleStatus.PAUSED,
             archived = schedule.status == ScheduleStatus.ARCHIVED,
