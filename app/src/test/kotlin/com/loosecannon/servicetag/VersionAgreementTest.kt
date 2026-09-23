@@ -46,10 +46,10 @@ class VersionAgreementTest {
      * `BuildConfig`, and the tag the release workflow checks the APK against is built from the
      * first of them.
      */
-    @Test fun theReleaseIdentityIs120AndCode13() {
-        assertEquals("1.2.0", BuildConfig.VERSION_NAME)
-        assertEquals(13, BuildConfig.VERSION_CODE)
-        assertEquals("servicetag-v1.2.0", "servicetag-v${BuildConfig.VERSION_NAME}")
+    @Test fun theReleaseIdentityIs121AndCode14() {
+        assertEquals("1.2.1", BuildConfig.VERSION_NAME)
+        assertEquals(14, BuildConfig.VERSION_CODE)
+        assertEquals("servicetag-v1.2.1", "servicetag-v${BuildConfig.VERSION_NAME}")
     }
 
     /**
@@ -120,7 +120,7 @@ class VersionAgreementTest {
         val status = ApiJson.decodeFromString(
             StatusResponse.serializer(), response.body.decodeToString(),
         )
-        assertEquals("1.2.0", status.appVersion)
+        assertEquals("1.2.1", status.appVersion)
         assertEquals(6, status.schemaVersion)
         assertEquals(6, status.backupFormatVersion)
     }
