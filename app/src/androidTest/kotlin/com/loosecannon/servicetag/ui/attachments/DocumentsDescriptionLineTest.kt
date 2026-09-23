@@ -1,0 +1,128 @@
+package com.loosecannon.servicetag.ui.attachments
+
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasTextExactly
+import androidx.compose.ui.unit.height
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/**
+ * D-19, drawn. `DocumentsSection` is a pure function of its state — no `AppGraph`, no Room — so
+ * each case renders it directly with hand-built rows, exactly as `AssetTagsSectionTest` renders
+ * `TagsSection`.
+ *
+ * The description was collected by the picker, stored in `AddAttachmentCommand.notes` and never
+ * shown; these four cases are the ones that can go wrong when a second line is added to a row that
+ * had exactly one: it must not replace the shipped line, must not appear when there is nothing to
+ * say, must not appear over bytes that are gone, and must not wrap.
+ *
+ * Emulator only (`emulator-5554`), never a phone.
+ */
+@RunWith(AndroidJUnit4::class)
+class DocumentsDescriptionLineTest {
+
+    @get:Rule val rule = createComposeRule()
+
+    private fun row(
+        id: String,
+        name: String,
+        notes: String,
+        present: Boolean = true,
+    ) = AttachmentRowState(
+        id = id,
+        displayName = name,
+        kind = AttachmentKind.MANUAL,
+        sizeBytes = 2048L,
+        capturedOn = "2026-09-20",
+        notes = notes,
+        mimeType = "application/pdf",
+        locator = "assets/$id/$name",
+        isImage = false,
+        present = present,
+    )
+
+    private fun draw(vararg rows: AttachmentRowState) {
+        rule.setContent {
+            ServiceTagTheme {
+                DocumentsSection(
+                    state = AttachmentsSectionState(store = READY, rows = rows.toList()),
+                    onOpen = {},
+                    onEdit = {},
+                    onAddFiles = {},
+                    onTakePhoto = {},
+                    onOpenSettings = {},
+                )
+            }
+        }
+        rule.waitForIdle()
+    }
+
+    /** The shipped `kind · size · captured-on` line stays, and the description is added under it. */
+    @Test fun aPresentRowDrawsBothItsShippedQuietLineAndItsDescription() {
+        draw(row("a", "Deck manual.pdf", "Section 4 covers the pump seal"))
+
+        rule.onNodeWithText("Deck manual.pdf").assertIsDisplayed()
+        rule.onNodeWithText("Manual · 2.0 KB · 2026-09-20").assertIsDisplayed()
+        rule.onNodeWithText("Section 4 covers the pump seal").assertIsDisplayed()
+    }
+
+    /**
+     * A row with nothing in `notes` draws no second line at all — not an empty one. An unguarded
+     * `QuietLine(row.notes)` would put a blank text node on every row in the section, which is
+     * what the empty-text count catches.
+     */
+    @Test fun aRowWithNoDescriptionDrawsNoSecondLine() {
+        draw(row("a", "Deck manual.pdf", ""))
+
+        rule.onNodeWithText("Manual · 2.0 KB · 2026-09-20").assertIsDisplayed()
+        rule.onAllNodes(hasTextExactly("")).assertCountEquals(0)
+    }
+
+    /**
+     * The bytes are gone, so the row's whole message is that they are gone: "Not on this device"
+     * and no prose under it, however much of it was stored.
+     */
+    @Test fun aRowWhoseBytesAreMissingSaysSoAndCarriesNoDescription() {
+        draw(row("a", "Deck manual.pdf", "Section 4 covers the pump seal", present = false))
+
+        rule.onNodeWithText("Not on this device").assertIsDisplayed()
+        rule.onAllNodes(hasTextExactly("Section 4 covers the pump seal")).assertCountEquals(0)
+    }
+
+    /**
+     * The cap is 2,000 characters and the row is compact, so the line is held to one and
+     * ellipsised. Two rows in one composition, so the comparison is against a line that is
+     * genuinely one line rather than against a number this test made up.
+     */
+    @Test fun aTwoThousandCharacterDescriptionRendersOnOneLine() {
+        val long = "Bearing race replaced " + "x".repeat(MAX_DESCRIPTION - "Bearing race replaced ".length)
+        draw(
+            row("a", "Deck manual.pdf", "Short note"),
+            row("b", "Pump manual.pdf", long),
+        )
+
+        val short = rule.onNodeWithText("Short note").getUnclippedBoundsInRoot().height
+        val wrapped = rule.onNodeWithText("Bearing race replaced ", substring = true)
+            .getUnclippedBoundsInRoot().height
+
+        assertEquals(MAX_DESCRIPTION, long.length)
+        assertEquals("the description must not wrap the row", short, wrapped)
+    }
+
+    private companion object {
+        val READY = StoreState.Ready("Attachments", "com.example.provider")
+
+        /** `MAX_REFERENCE_DESCRIPTION_CHARS`, restated here so this file needs no `:core` rule. */
+        const val MAX_DESCRIPTION = 2_000
+    }
+}
