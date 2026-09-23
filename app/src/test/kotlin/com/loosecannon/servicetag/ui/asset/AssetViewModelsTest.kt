@@ -1118,4 +1118,84 @@ class AssetViewModelsTest {
         val after = vm.state.first { it.items.size == 2 }
         assertEquals("pump", after.query)
     }
+
+    /**
+     * Owner ruling §18.23 (B07 fix round 4) — the new archived-only hint's exact condition: a
+     * non-blank query, "Show archived" off, no active row matching, at least one archived row
+     * that does. `archivedMatchCount` is what the screen branches on instead of "Nothing matches
+     * that." in exactly this case.
+     */
+    @Test fun archivedMatchCountIsPositiveWhenOnlyAnArchivedRowMatches() = runTest {
+        val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
+        graph.archiveAsset.run(tub.id)
+
+        val vm = AssetsViewModel(graph.assets, graph.clock)
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.archivedCount == 1 }
+
+        vm.onQueryChange("hot")
+        val state = vm.state.first { it.query == "hot" }
+        assertTrue("no active row matches", state.items.isEmpty())
+        assertFalse(state.showArchived)
+        assertEquals(1, state.archivedMatchCount)
+    }
+
+    /** Negative — a blank query never distinguishes an archived-only match; nothing was asked. */
+    @Test fun archivedMatchCountIsZeroUnderABlankQuery() = runTest {
+        val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
+        graph.archiveAsset.run(tub.id)
+
+        val vm = AssetsViewModel(graph.assets, graph.clock)
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.archivedCount == 1 }
+        assertEquals("", state.query)
+        assertEquals(0, state.archivedMatchCount)
+    }
+
+    /** Negative — an active row matching the query is the ordinary case, not the archived-only one. */
+    @Test fun archivedMatchCountIsZeroWhenAnActiveRowMatches() = runTest {
+        graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
+        val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+        graph.archiveAsset.run(mower.id)
+
+        val vm = AssetsViewModel(graph.assets, graph.clock)
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.archivedCount == 1 }
+
+        vm.onQueryChange("hot")
+        val state = vm.state.first { it.query == "hot" }
+        assertEquals(listOf("Hot tub"), state.items.map { it.asset.name })
+        assertEquals(0, state.archivedMatchCount)
+    }
+
+    /** Negative — a query that matches nothing anywhere stays "Nothing matches that.", not the hint. */
+    @Test fun archivedMatchCountIsZeroWhenNothingMatchesAnywhere() = runTest {
+        val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
+        graph.archiveAsset.run(tub.id)
+
+        val vm = AssetsViewModel(graph.assets, graph.clock)
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.archivedCount == 1 }
+
+        vm.onQueryChange("zzz")
+        val state = vm.state.first { it.query == "zzz" }
+        assertTrue(state.items.isEmpty())
+        assertEquals(0, state.archivedMatchCount)
+    }
+
+    /** Negative — once "Show archived" is on, the matching archived row is listed, not held back. */
+    @Test fun theArchivedMatchIsListedOnceShowArchivedIsOn() = runTest {
+        val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
+        graph.archiveAsset.run(tub.id)
+
+        val vm = AssetsViewModel(graph.assets, graph.clock)
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.archivedCount == 1 }
+
+        vm.toggleArchived()
+        vm.onQueryChange("hot")
+        val state = vm.state.first { it.showArchived && it.query == "hot" }
+        assertEquals(listOf("Hot tub"), state.items.map { it.asset.name })
+    }
 }

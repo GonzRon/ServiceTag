@@ -5,6 +5,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -106,5 +107,33 @@ class AssetsSearchTest {
         // And the sentence is still there for the query that earns it.
         rule.onNode(hasSetTextAction()).performTextInput("zzz")
         rule.awaitText("Nothing matches that.")
+    }
+
+    /**
+     * Owner ruling §18.23 (B07 fix round 4) — a query that matches only an archived row, with the
+     * chip off, gets the archived-only hint instead of "Nothing matches that."; turning the chip
+     * on then lists the match, same as any other query.
+     */
+    @Test fun anArchivedOnlyMatchShowsTheHintAndTheChipListsIt() {
+        val graph = app.graph
+        runBlocking {
+            val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
+            graph.archiveAsset.run(tub.id)
+        }
+        rule.setContent {
+            ServiceTagTheme {
+                AssetsScreen(graph = graph, onOpenAsset = {}, onNewAsset = {})
+            }
+        }
+
+        rule.onNode(hasSetTextAction()).performTextInput("hot")
+        rule.awaitText("Matching assets are archived. Turn on Show archived to see them.")
+        rule.onAllNodesWithText("Hot tub").assertCountEquals(0)
+        rule.onAllNodesWithText("Nothing matches that.").assertCountEquals(0)
+
+        rule.onNodeWithText("Show archived").performClick()
+        rule.awaitText("Hot tub")
+        rule.onAllNodesWithText("Matching assets are archived. Turn on Show archived to see them.")
+            .assertCountEquals(0)
     }
 }
