@@ -494,6 +494,23 @@ retry the same day — a caller resending a call it believes was lost, for insta
 land on the round the first close just opened rather than being told the first one already
 succeeded. No occurrence key is added to the call; that is a deliberate omission, not an oversight.
 
+`effectiveDueOn` is `postponedDueOn ?: computedDueOn` — the same field `ScheduleState` has always
+reported — so this reuses the postponement precedence rather than adding a second one. The
+consequence is real and is stated here rather than left implicit: a round postponed past
+`today + lead` is not closeable until its own postponed window opens, even though it obliges
+somebody and is otherwise a normal candidate for closure; the way out is to clear the postponement
+first (§2.9's own "Puts the occurrence back where the rule says it is"), which the guard does not
+touch, since a postponement-clearing call carries no `closedOn` of its own to gate.
+
+**Known limit, not a further rule.** The guard defends the retry only **while `leadDays` is less
+than the schedule's own recurrence interval**. With a lead at or beyond the interval, the round the
+first close opens is already inside its own due-soon window by the time the retry is dispatched —
+`due - lead` for the new round already falls on or before today — so the guard is inert against it
+and the second call succeeds, writing a second, immutable closure. The owner was shown this
+concretely (a weekly schedule with a ten-day lead) and ruled it a known limit of 1.2.1, not a defect
+to patch here: closing the hole would mean an occurrence key on the call, which the owner has
+deliberately deferred past this patch.
+
 **A consequence of invariant 39, stated deliberately.** Once a round is closed, no completion can
 ever be recorded against that `occurrence_on`. Work an owner does after closing a round is logged as
 an ordinary journal event with no `schedule_id`. That is intentional: a closed round is a statement
