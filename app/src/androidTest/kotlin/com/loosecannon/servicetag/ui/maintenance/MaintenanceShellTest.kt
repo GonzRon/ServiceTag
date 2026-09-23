@@ -59,7 +59,7 @@ class MaintenanceShellTest {
         runBlocking {
             val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
             val head = graph.createAsset.run(AssetCommand(name = "Sprinkler 1", category = "Irrigation"))
-            graph.saveSchedule.run(
+            val due = graph.saveSchedule.run(
                 null,
                 ScheduleCommand(
                     targetAssetId = mower.id,
@@ -70,6 +70,18 @@ class MaintenanceShellTest {
                     anchorOn = java.time.LocalDate.now().toString(),
                 ),
             )
+            // The D-27 pin floors the first occurrence at the row's `updated_at` **converted at
+            // UTC** (invariant 16, so `rebuild` stays a pure function), and this anchor puts a
+            // series date on local today — the one case `ScheduleRecompute` names as the cost of
+            // that conversion. A row saved after local 20:00 in a UTC-4 zone therefore floors on
+            // tomorrow and its first occurrence is pushed a whole interval out, which left this
+            // store with nothing in Due work for the last four hours of every day. Stamping the
+            // floor a day back is the same "a genuinely older row" device `DashboardAttentionTest`
+            // already uses for its overdue row, and it makes "due today" true at every hour.
+            graph.schedules.upsert(
+                graph.schedules.get(due.id)!!.copy(updatedAt = yesterdayAtUtc()),
+            )
+            graph.recomputeSchedules.forSchedule(due.id)
             // A paused schedule: the shell lists it under Schedules and Due work omits it, which
             // is the one row that tells the two sections apart.
             val paused = graph.saveSchedule.run(
@@ -275,6 +287,19 @@ class MaintenanceShellTest {
         // Reminders is still reachable: a phone with no schedules can still have blocked ones.
         rule.onNodeWithText("Reminders").performClick()
         rule.runOnIdle { assert(record == listOf("health")) { "unexpected navigation: $record" } }
+    }
+
+    private companion object {
+        /**
+         * A pin floor that is a whole day behind local today **in UTC**, which is the zone the pin
+         * reads. Built from the date and not from an offset on the instant, so it is a day behind
+         * whatever the local zone is.
+         */
+        fun yesterdayAtUtc(): Long = java.time.LocalDate.now()
+            .minusDays(1)
+            .atStartOfDay(java.time.ZoneOffset.UTC)
+            .toInstant()
+            .toEpochMilli()
     }
 }
 
