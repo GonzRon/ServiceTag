@@ -67,13 +67,22 @@ class DocumentsDescriptionLineTest {
         rule.waitForIdle()
     }
 
-    /** The shipped `kind · size · captured-on` line stays, and the description is added under it. */
+    /**
+     * The shipped `kind · size · captured-on` line stays and the description is added under it —
+     * added, never substituted. The row is clickable, so it is **one merged semantics node** and
+     * its text list is the whole of what it draws; asserting the list exactly is what catches a
+     * line that replaced the shipped one rather than joining it.
+     */
     @Test fun aPresentRowDrawsBothItsShippedQuietLineAndItsDescription() {
         draw(row("a", "Deck manual.pdf", "Section 4 covers the pump seal"))
 
-        rule.onNodeWithText("Deck manual.pdf").assertIsDisplayed()
-        rule.onNodeWithText("Manual · 2.0 KB · 2026-09-20").assertIsDisplayed()
-        rule.onNodeWithText("Section 4 covers the pump seal").assertIsDisplayed()
+        rule.onNode(
+            hasTextExactly(
+                "Deck manual.pdf",
+                "Manual · 2.0 KB · 2026-09-20",
+                "Section 4 covers the pump seal",
+            ),
+        ).assertIsDisplayed()
     }
 
     /**
@@ -84,8 +93,8 @@ class DocumentsDescriptionLineTest {
     @Test fun aRowWithNoDescriptionDrawsNoSecondLine() {
         draw(row("a", "Deck manual.pdf", ""))
 
-        rule.onNodeWithText("Manual · 2.0 KB · 2026-09-20").assertIsDisplayed()
-        rule.onAllNodes(hasTextExactly("")).assertCountEquals(0)
+        rule.onNode(hasTextExactly("Deck manual.pdf", "Manual · 2.0 KB · 2026-09-20"))
+            .assertIsDisplayed()
     }
 
     /**
@@ -95,8 +104,7 @@ class DocumentsDescriptionLineTest {
     @Test fun aRowWhoseBytesAreMissingSaysSoAndCarriesNoDescription() {
         draw(row("a", "Deck manual.pdf", "Section 4 covers the pump seal", present = false))
 
-        rule.onNodeWithText("Not on this device").assertIsDisplayed()
-        rule.onAllNodes(hasTextExactly("Section 4 covers the pump seal")).assertCountEquals(0)
+        rule.onNode(hasTextExactly("Deck manual.pdf", "Not on this device")).assertIsDisplayed()
     }
 
     /**

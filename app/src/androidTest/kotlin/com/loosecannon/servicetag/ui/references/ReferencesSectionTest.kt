@@ -130,6 +130,10 @@ class ReferencesSectionTest {
     /**
      * The description is the thing the share path collects and had nowhere to show. A row without
      * one draws no second line at all — not an empty one.
+     *
+     * A row is clickable, so it is **one merged semantics node** and its text list is the whole of
+     * what it draws. That is what makes the second assertion bite: an unguarded description line
+     * would put a third, empty entry in it.
      */
     @Test fun aDescriptionIsDrawnWhenThereIsOneAndNoLineAtAllWhenThereIsNot() {
         draw(
@@ -137,8 +141,9 @@ class ReferencesSectionTest {
             row("b", "Parts list"),
         )
 
-        rule.onNodeWithText("Section 4 covers the pump seal").assertIsDisplayed()
-        rule.onAllNodes(hasTextExactly("")).assertCountEquals(0)
+        rule.onNode(hasTextExactly("Deck manual", "Web link", "Section 4 covers the pump seal"))
+            .assertIsDisplayed()
+        rule.onNode(hasTextExactly("Parts list", "Web link")).assertIsDisplayed()
     }
 
     /**
