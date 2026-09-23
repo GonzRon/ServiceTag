@@ -98,9 +98,11 @@
              by name as an exact set. `taskAffinity=""` keeps it out of MainActivity's singleTask
              stack, so a running shell is neither navigated, recreated nor scrolled, and
              `launchMode="standard"` means each share is its own instance that finishes back to the
-             app that shared. The filter declares ACTION_SEND over exactly the ten types of D-6 —
-             no SEND_MULTIPLE, no VIEW, no PROCESS_TEXT, no BROWSABLE — and no allow-list gate runs
-             after it. The share-sheet entry is the application label, so no android:label here. -->
+             app that shared. The filter declares one action over exactly the ten types of D-6; the
+             multi-item send, the view action, the text-processing action and the browsable
+             category are each a wider door and not one of them is declared, and no allow-list gate
+             runs after the filter. The share-sheet entry is the application label, so there is no
+             android:label here. -->
         <activity
             android:name="com.loosecannon.servicetag.share.ShareIntakeActivity"
             android:exported="true"
