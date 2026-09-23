@@ -229,14 +229,56 @@ def test_form_requires_a_profile() -> None:
     assert entry(result, "schedule", "s1").decision == "ERROR"
 
 
-def test_quick_forbids_a_profile() -> None:
+def test_quick_asset_target_with_a_resolvable_profile_creates() -> None:
+    """Invariant 2, amended 2026-09-23 at the first real plan: a QUICK *asset*-targeted schedule
+    may carry a profile -- `CompleteSchedule` stamps the completion with the profile's event kind
+    and keeps the link either way. Only a group target still forbids one (invariant 5)."""
     a = mk_asset("a1", "Garden shed")
     p = mk_profile("p1", "a1", "Roof inspection")
     manifest = mk_manifest(
         schedules=[mk_schedule("s1", "Inspect roof", target_asset="Garden shed", completion_mode="QUICK", profile="Roof inspection")]
     )
     result = PL.plan(manifest, P.Inventory(assets=(a,), profiles=(p,)))
+    assert entry(result, "schedule", "s1").decision == "CREATE"
+
+
+def test_quick_asset_target_with_no_profile_still_creates() -> None:
+    """A QUICK schedule was always allowed to carry no profile at all; the amendment only lifted
+    the ban on one being present, so this path must be unaffected."""
+    a = mk_asset("a1", "Garden shed")
+    manifest = mk_manifest(
+        schedules=[mk_schedule("s1", "Inspect roof", target_asset="Garden shed", completion_mode="QUICK", profile=None)]
+    )
+    result = PL.plan(manifest, P.Inventory(assets=(a,)))
+    assert entry(result, "schedule", "s1").decision == "CREATE"
+
+
+def test_quick_asset_target_profile_not_found_is_still_an_error() -> None:
+    """The amendment lifts the QUICK/profile ban, not profile resolution itself."""
+    a = mk_asset("a1", "Garden shed")
+    manifest = mk_manifest(
+        schedules=[mk_schedule("s1", "Inspect roof", target_asset="Garden shed", completion_mode="QUICK", profile="Nope")]
+    )
+    result = PL.plan(manifest, P.Inventory(assets=(a,)))
     assert entry(result, "schedule", "s1").decision == "ERROR"
+
+
+def test_quick_asset_target_profile_id_is_part_of_identity() -> None:
+    """Invariant 4: `profileId` is compared for identity exactly as before -- a QUICK schedule that
+    now matches an existing row's profile is IDENTICAL, a QUICK schedule whose profile differs from
+    an existing row's is CONFLICT."""
+    a = mk_asset("a1", "Garden shed")
+    p = mk_profile("p1", "a1", "Roof inspection")
+    same_profile = mk_pschedule("ps1", "Inspect roof", target_asset_id="a1", completion_mode="QUICK", profile_id="p1")
+    manifest = mk_manifest(
+        schedules=[mk_schedule("s1", "Inspect roof", target_asset="Garden shed", completion_mode="QUICK", profile="Roof inspection")]
+    )
+    result = PL.plan(manifest, P.Inventory(assets=(a,), profiles=(p,), schedules=(same_profile,)))
+    assert entry(result, "schedule", "s1").decision == "IDENTICAL"
+
+    different_profile = mk_pschedule("ps2", "Inspect roof", target_asset_id="a1", completion_mode="QUICK", profile_id="p-other")
+    result2 = PL.plan(manifest, P.Inventory(assets=(a,), profiles=(p,), schedules=(different_profile,)))
+    assert entry(result2, "schedule", "s1").decision == "CONFLICT"
 
 
 def test_form_profile_not_found_is_an_error() -> None:

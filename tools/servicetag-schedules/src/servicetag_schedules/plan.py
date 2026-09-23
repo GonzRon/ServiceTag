@@ -172,10 +172,16 @@ def _resolve_schedule_target(
         if err is not None:
             return PlanEntry("schedule", schedule.key, "ERROR", err)
 
+        # Invariant 2 (amended 2026-09-23): FORM requires a profile; QUICK may carry one on an
+        # asset target too -- `CompleteSchedule` stamps the completion with the profile's event
+        # kind and keeps the profile link either way. Only a group target forbids one (invariant 5,
+        # below). Whichever mode, a *given* profile name still has to resolve to exactly one
+        # non-archived profile of this asset.
+        if schedule.completion_mode == "FORM" and schedule.profile is None:
+            return PlanEntry("schedule", schedule.key, "ERROR", "FORM requires a profile")
+
         profile_id: str | None = None
-        if schedule.completion_mode == "FORM":
-            if schedule.profile is None:
-                return PlanEntry("schedule", schedule.key, "ERROR", "FORM requires a profile")
+        if schedule.profile is not None:
             matches = match_profiles(inventory, asset_id, schedule.profile)
             if not matches:
                 return PlanEntry(
@@ -188,8 +194,6 @@ def _resolve_schedule_target(
                     f"{len(matches)} profiles named {schedule.profile!r} on that asset (ambiguous)",
                 )
             profile_id = matches[0].id
-        elif schedule.profile is not None:  # QUICK
-            return PlanEntry("schedule", schedule.key, "ERROR", "QUICK forbids a profile")
 
         existing = tuple(
             row for row in inventory.schedules

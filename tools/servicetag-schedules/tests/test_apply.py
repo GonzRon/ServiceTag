@@ -183,6 +183,29 @@ def test_apply_sends_anchor_on_verbatim(fake_client) -> None:
     assert schedule_row["anchorOn"] == "2026-12-31"
 
 
+def test_apply_sends_the_profile_id_for_a_quick_asset_target_schedule(fake_client) -> None:
+    """Invariant 2, amended 2026-09-23: a QUICK asset-targeted schedule may carry a profile, and
+    its resolved profileId must reach `create_schedule` exactly as a FORM schedule's does."""
+    shed_id = fake_client.add_asset(name="Garden shed")
+    profile_id = fake_client.add_profile(asset_id=shed_id, name="Roof inspection")
+    manifest = mk_manifest(
+        schedules=[
+            mk_schedule(
+                "s1", "Inspect roof", target_asset="Garden shed",
+                completion_mode="QUICK", profile="Roof inspection",
+            )
+        ]
+    )
+    result = _run(_plan_against(manifest, fake_client))
+    assert result.clean
+
+    _run(A.apply(manifest, result, fake_client))
+
+    [schedule_row] = fake_client.schedules
+    assert schedule_row["profileId"] == profile_id
+    assert schedule_row["completionMode"] == "QUICK"
+
+
 # ---- re-plan and idempotence ------------------------------------------------------------------------
 
 
