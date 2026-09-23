@@ -82,14 +82,14 @@ class StageABundleConformanceTest {
         val entries = readZipEntries(resourceBytes())
         val data = Json.parseToJsonElement(String(entries.getValue("data.json"))).jsonObject
 
-        // The root object itself: BackupData defaults seven of its ten tables to emptyList(), so
+        // The root object itself: BackupData defaults eight of its eleven tables to emptyList(), so
         // a *new* table added there tomorrow would never be emitted by the generator and would
         // decode away silently unless the root's own key set is pinned here too. The fixture is a
-        // **format-5** archive and the generator writes format 5, so the three format-6 tables are
-        // subtracted by name — which keeps the guard live: a fourth table added to BackupData
-        // without a thought for the generator still fails here.
+        // **format-5** archive and the generator writes format 5, so the three format-6 tables and
+        // the one format-7 table are subtracted by name — which keeps the guard live: a further
+        // table added to BackupData without a thought for the generator still fails here.
         assertEquals(
-            BackupData.serializer().descriptor.elementNames.toSet() - FORMAT_6_TABLES,
+            BackupData.serializer().descriptor.elementNames.toSet() - FORMAT_6_TABLES - FORMAT_7_TABLES,
             data.keys,
             "data.json root",
         )
@@ -178,5 +178,8 @@ class StageABundleConformanceTest {
         private val FORMAT_6_TABLES =
             setOf("maintenanceGroups", "maintenanceSchedules", "occurrenceClosures")
         private val FORMAT_6_EVENT_FIELDS = setOf("scheduleId", "occurrenceOn", "detailsPending")
+
+        /** What format 7 added, for the same reason [FORMAT_6_TABLES] is named rather than derived. */
+        private val FORMAT_7_TABLES = setOf("assetReferences")
     }
 }

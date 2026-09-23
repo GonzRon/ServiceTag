@@ -35,6 +35,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
+import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
@@ -69,9 +70,11 @@ class ScheduleOperationsTest {
     private val closures = InMemoryClosureRepository()
     private val states = InMemoryScheduleStateRepository()
     private val schedules = InMemoryScheduleRepository(closures, states)
+    private val references = InMemoryReferenceRepository()
     private val storage = FakeAttachmentStorage()
     private val uow = FakeUnitOfWork(
-        assets, tags, links, defs, profiles, events, attachments, groups, closures, schedules, states,
+        assets, tags, links, defs, profiles, events, attachments, groups, closures, schedules,
+        states, references,
     )
 
     private var seq = 0
@@ -740,12 +743,12 @@ class ScheduleOperationsTest {
 
         val bytes = ExportBackupSet(
             assets, groups, tags, links, defs, profiles, schedules, closures, events, attachments,
-            uow, IdGenerator { "set-1" }, clock, appVersion = "1.2.0", schemaVersion = 6,
+            references, uow, IdGenerator { "set-1" }, clock, appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
 
         fun restore(rebuildAll: suspend () -> Unit) = ImportBackupReplace(
             assets, groups, tags, links, defs, profiles, schedules, closures, events, attachments,
-            storage, uow, rebuildAll = rebuildAll,
+            references, storage, uow, rebuildAll = rebuildAll,
         )
 
         // Once, and after the last insert: everything the file carried was already in when it ran.

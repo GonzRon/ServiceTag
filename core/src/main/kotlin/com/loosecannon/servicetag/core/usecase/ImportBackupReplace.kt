@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
@@ -55,6 +56,7 @@ class ImportBackupReplace(
     private val closures: ClosureRepository,
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
+    private val references: ReferenceRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -86,6 +88,8 @@ class ImportBackupReplace(
             definitions.deleteAll()
             tags.deleteAll()
             links.deleteAll()
+            // References point only at assets, so they clear just before them.
+            references.deleteAll()
             assets.deleteAll()
 
             // insert in reference order so foreign keys are satisfied at every step. Assets go
@@ -95,6 +99,9 @@ class ImportBackupReplace(
             // rows after, so a DERIVED definition's source_a_id/source_b_id foreign keys
             // (schema v3) resolve at insert time regardless of the file's own id ordering.
             AssetTree.parentsFirst(data.assets.map { it.toDomain() }).forEach { assets.upsert(it) }
+            // Straight after the assets: `asset_id` is a reference's only foreign key, so this is
+            // the earliest point at which every one of them resolves.
+            data.assetReferences.forEach { references.upsert(it.toDomain()) }
             // Groups before schedules, and both before events: a group's members name assets, a
             // schedule names an asset or a group plus a meter definition and a profile, a closure
             // names a schedule, and an event may name one too. This is `MergeTable`'s order.

@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
+import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
@@ -167,20 +168,21 @@ class BackupFormat6Test {
         val attachments = InMemoryAttachmentRepository()
         val groups = InMemoryGroupRepository()
         val closures = InMemoryClosureRepository()
+        val references = InMemoryReferenceRepository()
         val schedules = InMemoryScheduleRepository(closures)
         val storage = FakeAttachmentStorage()
         val uow = FakeUnitOfWork(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments,
+            events, attachments, references,
         )
         val export = ExportBackupSet(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, uow, IdGenerator { "set-format-6" },
+            events, attachments, references, uow, IdGenerator { "set-format-6" },
             Clock { 1_758_400_000_000L }, appVersion = "1.2.0", schemaVersion = 6,
         )
         val restore = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, storage, uow, rebuildAll = { },
+            events, attachments, references, storage, uow, rebuildAll = { },
         )
     }
 
@@ -262,11 +264,13 @@ class BackupFormat6Test {
         assertEquals(listOf("scheduleId", "occurrenceOn", "detailsPending"), eventFields.takeLast(3))
         assertEquals(18, eventFields.size)
         val tables = BackupData.serializer().descriptor.elementNames.toList()
+        // By position, not `takeLast`: format 7 appends `assetReferences` after these three, and
+        // where format 6's tables sit is the claim this line makes.
         assertEquals(
             listOf("maintenanceGroups", "maintenanceSchedules", "occurrenceClosures"),
-            tables.takeLast(3),
+            tables.subList(7, 10),
         )
-        assertEquals(10, tables.size)
+        assertEquals(11, tables.size)
         // and neither derived nor delivery state is a table of this format
         assertTrue(tables.none { it.startsWith("scheduleState") || it.startsWith("scheduleLocal") })
     }
@@ -336,8 +340,8 @@ class BackupFormat6Test {
         // That is what makes the assertion above a statement about ordering and not about the row.
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(unreadable)) }
 
-        // What a 1.1.x build sees: 6 is greater than the 5 it supported, so its gate fires too.
-        assertEquals(6, BackupCodec.FORMAT_VERSION)
+        // What a 1.1.x build sees: this format is greater than the 5 it supported, so its gate
+        // fires too.
         assertTrue(BackupCodec.FORMAT_VERSION > LAST_1_1_X_FORMAT)
     }
 
@@ -362,10 +366,12 @@ class BackupFormat6Test {
                 "maintenanceGroups" to 1, "groupMembers" to 2,
                 "maintenanceSchedules" to 2, "scheduleProviders" to 3,
                 "occurrenceClosures" to 1,
+                // Format 7's own key, counted here because this class pins the whole map.
+                "assetReferences" to 0,
             ),
             manifest.counts,
         )
-        assertEquals(16, manifest.counts.size)
+        assertEquals(17, manifest.counts.size)
     }
 
     // --- determinism -----------------------------------------------------------------------------

@@ -18,6 +18,7 @@ import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
@@ -49,6 +50,7 @@ class ExportBackupSet(
     private val closures: ClosureRepository,
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
+    private val references: ReferenceRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -74,6 +76,7 @@ class ExportBackupSet(
                 maintenanceGroups = groups.all().map { it.toDto() },
                 maintenanceSchedules = schedules.all().map { it.toDto() },
                 occurrenceClosures = closures.all().map { it.toDto() },
+                assetReferences = references.all().map { it.toDto() },
             ) to rows
         }
         val plan = ArtifactsPlan(

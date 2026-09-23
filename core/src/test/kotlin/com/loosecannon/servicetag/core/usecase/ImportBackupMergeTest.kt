@@ -50,6 +50,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
+import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
@@ -90,9 +91,10 @@ class ImportBackupMergeTest {
         val groups = InMemoryGroupRepository()
         val closures = InMemoryClosureRepository()
         val schedules = InMemoryScheduleRepository(closures)
+        val references = InMemoryReferenceRepository()
         val uow = FakeUnitOfWork(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments,
+            events, attachments, references,
         )
 
         /** How many times the apply asked for a total recompute, and what it had written by then. */
@@ -193,7 +195,7 @@ class ImportBackupMergeTest {
     private fun exportOf(f: Fakes): ByteArray = runBlocking {
         ExportBackupSet(
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
-            f.closures, f.events, f.attachments,
+            f.closures, f.events, f.attachments, f.references,
             f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
             appVersion = "1.2.0", schemaVersion = 6,
         ).run().data

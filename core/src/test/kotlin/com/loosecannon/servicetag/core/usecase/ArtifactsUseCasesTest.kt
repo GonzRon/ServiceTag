@@ -31,6 +31,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
+import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import kotlinx.coroutines.test.runTest
@@ -58,15 +59,17 @@ class ArtifactsUseCasesTest {
     private val groups = InMemoryGroupRepository()
     private val closures = InMemoryClosureRepository()
     private val schedules = InMemoryScheduleRepository(closures)
+    private val references = InMemoryReferenceRepository()
     private val uow = FakeUnitOfWork(
-        assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events,
+        attachments, references,
     )
     private val storage = FakeAttachmentStorage()
     private val store: InMemoryAttachmentStore get() = storage.store
 
     private val export = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, uow,
+        attachments, references, uow,
         IdGenerator { "set-1" }, Clock { 1_726_000_000_000L }, appVersion = "2.4", schemaVersion = 5,
     )
     private val restore = RestoreArtifacts(attachments, storage)

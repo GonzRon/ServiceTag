@@ -222,6 +222,7 @@ class BackupCodecTest {
                 "maintenanceGroups" to 0, "groupMembers" to 0,
                 "maintenanceSchedules" to 0, "scheduleProviders" to 0,
                 "occurrenceClosures" to 0,
+                "assetReferences" to 0,
             ),
             manifest.counts,
         )
@@ -440,6 +441,7 @@ class BackupCodecTest {
                 "maintenanceGroups" to 0, "groupMembers" to 0,
                 "maintenanceSchedules" to 0, "scheduleProviders" to 0,
                 "occurrenceClosures" to 0,
+                "assetReferences" to 0,
             ),
             decoded.manifest.counts,
         )

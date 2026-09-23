@@ -40,6 +40,7 @@ import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
+import com.loosecannon.servicetag.data.room.RoomReferenceRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
@@ -77,6 +78,7 @@ class RestoreProofTest {
         val groups = RoomGroupRepository(db.maintenanceGroupDao())
         val schedules = RoomScheduleRepository(db.maintenanceScheduleDao())
         val closures = RoomClosureRepository(db.occurrenceClosureDao())
+        val references = RoomReferenceRepository(db.assetReferenceDao())
         val scheduleStates = RoomScheduleStateRepository(db.scheduleStateDao())
         val uow = RoomUnitOfWork(db)
         // The restore's rebuild seam, wired to the real engine over the same database: the proof
@@ -89,12 +91,12 @@ class RestoreProofTest {
         // bytes are what `BackupViewModelTest` and `ArtifactsCodecTest` prove.
         val export = ExportBackupSet(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, uow,
+            attachments, references, uow,
             IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
         )
         val import = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
+            attachments, references, FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
             rebuildAll = { recompute.all() },
         )
     }

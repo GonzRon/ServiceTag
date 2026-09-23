@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.core.backup
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
@@ -33,6 +34,8 @@ import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileField
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
@@ -325,6 +328,23 @@ data class AttachmentDto(
     val updatedAt: Long,
 )
 
+/**
+ * Format 7. The `asset_reference` table's nine columns, in column order — **no `provenance`**
+ * (D-21 C), and no byte-bearing field of any kind, because a reference has none (I-3).
+ */
+@Serializable
+data class AssetReferenceDto(
+    val id: String,
+    val assetId: String,
+    val kind: String,
+    val uri: String,
+    val displayName: String,
+    val description: String,
+    val scheme: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
 /** The canonical tables. Everything derived is rebuilt after an import. */
 @Serializable
 data class BackupData(
@@ -341,6 +361,8 @@ data class BackupData(
     val maintenanceSchedules: List<MaintenanceScheduleDto> = emptyList(),
     /** Format 6; their own rows, never nested. Empty on every format ≤5 archive. */
     val occurrenceClosures: List<OccurrenceClosureDto> = emptyList(),
+    /** Format 7; their own rows, never nested. Empty on every format ≤6 archive. */
+    val assetReferences: List<AssetReferenceDto> = emptyList(),
 )
 
 /** A decoded archive: what it claims about itself, and what it holds. */
@@ -839,4 +861,28 @@ fun OccurrenceClosureDto.toDomain(): OccurrenceClosure = OccurrenceClosure(
     occurrenceOn = occurrenceOn,
     closedOn = closedOn,
     createdAt = createdAt,
+)
+
+fun AssetReference.toDto(): AssetReferenceDto = AssetReferenceDto(
+    id = id.value,
+    assetId = assetId.value,
+    kind = kind.name,
+    uri = uri,
+    displayName = displayName,
+    description = description,
+    scheme = scheme,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+fun AssetReferenceDto.toDomain(): AssetReference = AssetReference(
+    id = ReferenceId(id),
+    assetId = AssetId(assetId),
+    kind = enumOrCorrupt<ReferenceKind>(kind, "reference kind", "reference $id"),
+    uri = uri,
+    displayName = displayName,
+    description = description,
+    scheme = scheme,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
 )

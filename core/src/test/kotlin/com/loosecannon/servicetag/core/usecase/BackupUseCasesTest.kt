@@ -46,6 +46,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
+import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
@@ -76,6 +77,7 @@ class BackupUseCasesTest {
         val groups = InMemoryGroupRepository()
         val closures = InMemoryClosureRepository()
         val schedules = InMemoryScheduleRepository(closures)
+        val references = InMemoryReferenceRepository()
         val storage = FakeAttachmentStorage()
         val uow = FakeUnitOfWork(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
@@ -224,7 +226,7 @@ class BackupUseCasesTest {
     private fun exportOf(f: Fakes, now: Long = 1_726_000_000_000L): ByteArray = runBlocking {
         ExportBackupSet(
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
-            f.closures, f.events, f.attachments,
+            f.closures, f.events, f.attachments, f.references,
             f.uow, IdGenerator { "set-1" }, Clock { now }, appVersion = "2.0", schemaVersion = 1,
         ).run().data
     }
@@ -232,7 +234,7 @@ class BackupUseCasesTest {
     private fun importInto(f: Fakes, bytes: ByteArray): ImportReport = runBlocking {
         ImportBackupReplace(
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
-            f.closures, f.events, f.attachments,
+            f.closures, f.events, f.attachments, f.references,
             f.storage, f.uow, rebuildAll = { },
         ).run(bytes)
     }
@@ -412,6 +414,7 @@ class BackupUseCasesTest {
                 "maintenanceGroups" to 0, "groupMembers" to 0,
                 "maintenanceSchedules" to 0, "scheduleProviders" to 0,
                 "occurrenceClosures" to 0,
+                "assetReferences" to 0,
             ),
             decoded.manifest.counts,
         )

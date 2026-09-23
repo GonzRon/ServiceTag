@@ -15,6 +15,7 @@ import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
@@ -67,6 +68,7 @@ import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
+import com.loosecannon.servicetag.data.room.RoomReferenceRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
@@ -123,6 +125,7 @@ class FakeGraph(
     val groups: GroupRepository = RoomGroupRepository(db.maintenanceGroupDao())
     val schedules: ScheduleRepository = RoomScheduleRepository(db.maintenanceScheduleDao())
     val closures: ClosureRepository = RoomClosureRepository(db.occurrenceClosureDao())
+    val references: ReferenceRepository = RoomReferenceRepository(db.assetReferenceDao())
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
 
     /** `T`, injected: a test says which day it is and the engine answers the same way every run. */
@@ -222,11 +225,11 @@ class FakeGraph(
     /** Both halves of a set: `run().data` for the data archive, `run().plan` for the other one. */
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
+        attachments, references, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
     )
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, attachmentStorage, uow,
+        attachments, references, attachmentStorage, uow,
         // The real engine: "once, inside the transaction, after the last insert" is proved against
         // the seam in `:core`, so there is no counter to keep here.
         rebuildAll = { recomputeSchedules.all() },

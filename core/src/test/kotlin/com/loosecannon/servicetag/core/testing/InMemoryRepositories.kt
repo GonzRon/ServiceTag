@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.journal.EventChronology
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
@@ -20,6 +21,7 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
@@ -34,6 +36,7 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
@@ -561,6 +564,58 @@ class InMemoryClosureRepository : ClosureRepository, Rollbackable, Witnessed {
  * Snapshots every store before running [block] and restores them all if it throws,
  * so rollback is observable in tests without a real database.
  */
+/**
+ * Open so a test can subclass it to rig a check on upsert order, the way
+ * [InMemoryDefinitionRepository] is. The unique index is modelled here because the planner's
+ * second-identity rule is only interesting if a duplicate pair would really be refused.
+ */
+open class InMemoryReferenceRepository : ReferenceRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, AssetReference>()
+    override var witness: TransactionWitness? = null
+    private val version = MutableStateFlow(0)
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun upsert(reference: AssetReference) {
+        // The unique index, as a fake: one row per `(asset_id, uri)`.
+        val holder = rows.values.firstOrNull {
+            it.assetId == reference.assetId && it.uri == reference.uri
+        }
+        if (holder != null && holder.id != reference.id) {
+            throw RiggedFailure("asset_reference already holds ${reference.uri} on ${reference.assetId.value}")
+        }
+        rows[reference.id.value] = reference
+        version.value += 1
+    }
+
+    override suspend fun get(id: ReferenceId): AssetReference? = rows[id.value]
+
+    override suspend fun forAsset(assetId: AssetId): List<AssetReference> = rows.values
+        .filter { it.assetId == assetId }
+        .sortedWith(compareBy({ it.displayName.lowercase() }, { it.id.value }))
+
+    override suspend fun findByUri(assetId: AssetId, uri: String): AssetReference? =
+        rows.values.firstOrNull { it.assetId == assetId && it.uri == uri }
+
+    override suspend fun all(): List<AssetReference> {
+        witness?.observeAll()
+        return rows.values.toList()
+    }
+
+    override suspend fun delete(id: ReferenceId) { rows.remove(id.value); version.value += 1 }
+
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<AssetReference>> = version.map {
+        rows.values
+            .filter { it.assetId == assetId }
+            .sortedWith(compareBy({ it.displayName.lowercase() }, { it.id.value }))
+    }
+}
+
 class FakeUnitOfWork(private vararg val stores: Rollbackable) : UnitOfWork {
     private val witness = TransactionWitness()
 

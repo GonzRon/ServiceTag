@@ -22,7 +22,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
 /**
- * Backup format v6: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
+ * Backup format v7: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
  * backup set pairs it with an artifacts archive, and `backupSetId` is what ties the two together.
  *
  * ```
@@ -31,7 +31,7 @@ import kotlinx.serialization.json.Json
  * data.json       { assets: [...], nfcTags: [...], externalLinks: [...],
  *                    measurementDefinitions: [...], eventProfiles: [...], assetEvents: [...],
  *                    attachments: [...], maintenanceGroups: [...], maintenanceSchedules: [...],
- *                    occurrenceClosures: [...] }
+ *                    occurrenceClosures: [...], assetReferences: [...] }
  * ```
  *
  * IDs are written verbatim, lists are sorted by id (children by sortOrder within their parent),
@@ -43,7 +43,7 @@ import kotlinx.serialization.json.Json
  * schedules, no closures, and events with no occurrence link) still decode: the new fields default
  * to ENTERED with no formula/sources, to empty/null asset fields, to an empty attachment list with
  * an empty `backupSetId` and zero artifact tallies, and to three empty lists with every new event
- * field at its default, respectively. **Restoring one never invents a schedule.** JDK ZIP + JDK
+ * field at its default, and to an empty reference list, respectively. **Restoring one never invents a schedule.** JDK ZIP + JDK
  * SHA-256 + kotlinx-serialization only; no Android types anywhere in here.
  *
  * Two of schema 6's tables are deliberately absent from this format, and are named nowhere in this
@@ -52,7 +52,7 @@ import kotlinx.serialization.json.Json
  * ever merged.
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 6
+    const val FORMAT_VERSION = 7
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -113,6 +113,7 @@ object BackupCodec {
                 schedule.copy(providers = schedule.providers.sortedBy { it.provider })
             },
             occurrenceClosures = data.occurrenceClosures.sortedBy { it.id },
+            assetReferences = data.assetReferences.sortedBy { it.id },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
         // The artifact tallies are derived here, in one place, from the rows themselves: a MANAGED
@@ -140,6 +141,7 @@ object BackupCodec {
                 "maintenanceSchedules" to sorted.maintenanceSchedules.size,
                 "scheduleProviders" to sorted.maintenanceSchedules.sumOf { it.providers.size },
                 "occurrenceClosures" to sorted.occurrenceClosures.size,
+                "assetReferences" to sorted.assetReferences.size,
             ),
             dataSha256 = sha256Hex(dataBytes),
             backupSetId = backupSetId,
@@ -204,6 +206,7 @@ object BackupCodec {
         data.maintenanceGroups.forEach { it.toDomain() }
         data.maintenanceSchedules.forEach { it.toDomain() }
         data.occurrenceClosures.forEach { it.toDomain() }
+        data.assetReferences.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
         // replays the insert loops in one transaction: a duplicate id or a reference to a row
@@ -414,6 +417,21 @@ object BackupCodec {
                 throw BackupCorrupt(
                     "occurrenceClosures: closure ${closure.id} points at schedule " +
                         "${closure.scheduleId}, which is not in maintenanceSchedules",
+                )
+            }
+        }
+
+        // --- references (format 7) ----------------------------------------------------------------
+        // The owner check only, exactly as `externalLinks` above: in-archive `(assetId, uri)`
+        // uniqueness is deliberately **not** checked here, because that is what keeps
+        // `REFERENCE_DUPLICATED_IN_ARCHIVE` reachable in the planner, as `CLOSURE_DUPLICATED_IN_ARCHIVE` is.
+
+        uniqueIds("assetReferences", data.assetReferences.map { it.id })
+        data.assetReferences.forEach { reference ->
+            if (reference.assetId !in assetIds) {
+                throw BackupCorrupt(
+                    "assetReferences: reference ${reference.id} points at asset ${reference.assetId}, " +
+                        "which is not in assets",
                 )
             }
         }

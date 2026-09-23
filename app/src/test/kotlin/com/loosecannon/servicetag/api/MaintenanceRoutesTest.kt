@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.api
 
+import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
@@ -990,8 +991,10 @@ class MaintenanceRoutesTest {
     // --- the merge report's three new tables -----------------------------------------------------
 
     /**
-     * `import_merge` reads a **format-6** archive, and the report carries the `groups`, `schedules`
-     * and `closures` tallies beside the seven shipped ones. `applicable` still governs.
+     * `import_merge` reads an archive this build produced, and the report carries the `groups`,
+     * `schedules` and `closures` tallies beside the shipped ones — echoing the archive's own
+     * format rather than a number pinned here, which `VersionAgreementTest` owns. `applicable`
+     * still governs.
      */
     @Test fun theMergeReportCarriesTheThreeNewTallies() {
         val archive = donorArchive()
@@ -1005,7 +1008,7 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(6, report.formatVersion)
+        assertEquals(BackupCodec.FORMAT_VERSION, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)
