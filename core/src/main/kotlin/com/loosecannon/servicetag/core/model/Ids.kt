@@ -26,3 +26,6 @@ value class ScheduleId(val value: String)
 
 @JvmInline
 value class GroupId(val value: String)
+
+@JvmInline
+value class ReferenceId(val value: String)

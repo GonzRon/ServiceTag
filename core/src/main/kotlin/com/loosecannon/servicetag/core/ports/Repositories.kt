@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.core.ports
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentOwner
@@ -18,6 +19,7 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.TagBinding
@@ -255,4 +257,28 @@ interface AttachmentRepository {
     suspend fun deleteAll()
     suspend fun count(): Int
     fun observeForOwner(owner: AttachmentOwner): Flow<List<Attachment>>
+}
+
+/**
+ * 1.3. The `asset_reference` table (spec §3.2), and nothing about the tombstoned `external_link`
+ * beside it — a new table with a new name, id type and shape (I-5).
+ *
+ * [upsert] is the **only** write, and there is no query anywhere that sets `uri` or `asset_id`: a
+ * stored URI is never edited (I-1) and a reference cannot change owner (I-6), so re-parenting is
+ * [delete] plus a fresh add.
+ *
+ * [findByUri] exists so a duplicate refusal is a keyed read against `UNIQUE(asset_id, uri)` (I-7)
+ * and not a scan of [forAsset].
+ */
+interface ReferenceRepository {
+    suspend fun upsert(reference: AssetReference)
+    suspend fun get(id: ReferenceId): AssetReference?
+    /** Ordered by `displayName`, then `id` — the order the section and the API both read. */
+    suspend fun forAsset(assetId: AssetId): List<AssetReference>
+    /** The row holding `(assetId, uri)`, which is unique — the second identity. */
+    suspend fun findByUri(assetId: AssetId, uri: String): AssetReference?
+    suspend fun all(): List<AssetReference>
+    suspend fun delete(id: ReferenceId)
+    suspend fun deleteAll()
+    fun observeForAsset(assetId: AssetId): Flow<List<AssetReference>>
 }
