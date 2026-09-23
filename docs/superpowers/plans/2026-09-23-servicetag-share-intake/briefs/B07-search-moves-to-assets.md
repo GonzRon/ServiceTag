@@ -21,3 +21,5 @@
 **Report:** `.superpowers/sdd/2026-09-23-servicetag-share-intake/B07-report.md` (status, commits, per-hazard test names, unit + connected counts, deviations).
 
 **Amended after B07's first hand-back (controller, 2026-09-23):** the hazards line "components appear only under a non-blank query" was wrong and is withdrawn — the Assets list is unchanged under a blank query; the search only narrows. The ported connected scenario becomes "a component is listed and names its system; searching for it narrows the list to it".
+
+**Owner rulings 2026-09-23 (§18.23):** the Dashboard hint is RATIFIED as "Components are listed on the asset they belong to."; ADD the archived-only hint "Matching assets are archived. Turn on Show archived to see them." on the Assets screen — shown when the query is non-blank, "Show archived" is off, no active row matches and at least one archived row does (it replaces "Nothing matches that." in exactly that case; a blank query, or a query matching nothing at all, is unchanged). Hazards: the hint appears in that case and only that case (JVM on the view model state + one connected case); turning "Show archived" on then lists the archived matches.

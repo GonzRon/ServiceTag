@@ -471,7 +471,7 @@ runbook. `<base>` is the release branch's base commit (§1.15).
 
 ## 17. Ratified strings
 
-**Fifty RATIFIED by the owner, 2026-09-23** — spec §10's 48, plus the Add-link field label **"Link"**
+**Fifty-two RATIFIED by the owner, 2026-09-23 (fifty for #43; two for B07, §18.23)** — spec §10's 48, plus the Add-link field label **"Link"**
 and the launch-time refusal **"ServiceTag will not open that kind of link."**, both ruled on the same
 day and both read as part of §10 (§18.4, §18.14). A brief **quotes them verbatim and may not paraphrase
 one**. Ten are already shipped and reused unchanged, marked *(shipped)*.
@@ -530,4 +530,9 @@ implies an in-app affordance the share screen does not offer.
 ### 18.22 Owner-directed addition: the search box moves from the Dashboard to the Assets screen (B07)
 
 **Owner instruction 2026-09-23.** With the category and maintenance-status dropdowns now serving as the Dashboard's navigation aids, the "Search assets and components" field leaves the Dashboard and lives on the Assets screen, with the same six searched fields and the same component-names-its-system behaviour. Not part of #43's contract; rides in 1.3.0 as `briefs/B07-search-moves-to-assets.md`. Runs in Wave 2 (beside B02's review — B02 is `:core`, B07 is `ui/dashboard` + `ui/asset`; disjoint) and holds `emulator-5554`; it **must merge before Wave 3** because B04 edits `ui/asset/` later. It adds no string: every sentence it shows already ships (the ratified-strings ledger stays at fifty). File map: `ui/dashboard/DashboardScreen.kt`, `ui/dashboard/DashboardViewModel.kt`, new `ui/asset/AssetSearch.kt`, `ui/asset/AssetsScreen.kt`, `ui/asset/AssetViewModels.kt`, their JVM tests, `androidTest/.../ui/dashboard/DashboardSearchTest.kt` (deleted) → `androidTest/.../ui/asset/AssetsSearchTest.kt`, one added case in an existing dashboard connected class.
+
+### 18.23 Owner rulings on B07's two sentences (2026-09-23)
+
+- The Dashboard's component hint is **RATIFIED** as **"Components are listed on the asset they belong to."** — the 2.7 sentence with its tail "Search to find one." removed (the instruction no longer points at anything on that screen). §17 gains this row; it replaces the 2.7 sentence, which the 2.7 ledger entry now marks superseded.
+- The Assets screen gets a new **RATIFIED** hint for the archived-only case: when the query is non-blank, "Show archived" is off, no active row matches and at least one archived row does, the screen shows **"Matching assets are archived. Turn on Show archived to see them."** instead of "Nothing matches that." §17 gains this row (the 1.3 ledger is now fifty-two entries). B07 implements both; no other string changes.
 
