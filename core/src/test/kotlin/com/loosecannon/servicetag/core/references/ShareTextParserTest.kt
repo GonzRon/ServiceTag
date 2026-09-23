@@ -87,6 +87,23 @@ class ShareTextParserTest {
         assertNull(ShareTextParser.firstUri("Deck belt:replaced in spring"))
     }
 
+    /**
+     * The restart rule, made observable. A disqualified candidate's colon is **spent**: the scan
+     * resumes after it rather than one character in, so each colon is examined once and a
+     * colon-dense share cannot go quadratic. The behaviour that pins it is that a word which merely
+     * *ends* in a scheme is not that scheme — rescanning from one character in would take the
+     * `mailto:` out of `xmailto:` and store a URI nobody shared.
+     */
+    @Test
+    fun aWordThatMerelyEndsInASchemeIsNotThatScheme() {
+        assertNull(ShareTextParser.firstUri("xmailto:parts@example-mower.invalid"))
+        assertNull(ShareTextParser.firstUri("Xjoplin:x-callback-url/openNote?id=0f1e2d3c4b5a6978"))
+        assertEquals(
+            "mailto:parts@example-mower.invalid",
+            ShareTextParser.firstUri("order from mailto:parts@example-mower.invalid")?.uri,
+        )
+    }
+
     /** The control for the rule above: an opaque allow-listed scheme and a blocked one still count. */
     @Test
     fun anOpaqueAllowListedSchemeAndAMailtoAreStillFound() {

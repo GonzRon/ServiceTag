@@ -12,11 +12,12 @@ data class ParsedShare(val uri: String, val label: String?)
  * `#` line is **deprioritised rather than skipped**, so a commented-out URI never wins over a real
  * one — the uri-list rule — while `text/plain`, which spec §4.4 scans whole, still gives up the
  * link in a Markdown heading when that is the only URI the share carried.
+ *
+ * **The scan is linear**, because it runs on the intake screen's thread over an `EXTRA_TEXT` a
+ * stranger chose: every colon is examined exactly once, and only the first candidate that could be
+ * a URI has its token read.
  */
 object ShareTextParser {
-
-    /** A scheme, then at least one character that is not whitespace or a quoting delimiter. */
-    private val TOKEN = Regex("[A-Za-z][A-Za-z0-9+.\\-]*:[^\\s<>\"']+")
 
     /** `[label](uri)`, matched against the text *before* a token, so the token is that link's. */
     private val MARKDOWN_OPENER = Regex("\\[([^\\[\\]]*)]\\($")
@@ -29,23 +30,40 @@ object ShareTextParser {
         return firstIn(rest) ?: firstIn(commented)
     }
 
+    /**
+     * A colon at a time, forward, never back. Each colon is **spent** whether or not it turned out
+     * to be a scheme's, which is what keeps a colon-dense share linear — and, behaviourally, is why
+     * a word that merely ends in a scheme is not that scheme: `xmailto:` is not a `mailto:`.
+     */
     private fun firstIn(lines: List<String>): ParsedShare? {
         for (line in lines) {
             var from = 0
             while (from < line.length) {
-                val match = TOKEN.find(line, from) ?: break
-                val uri = trimTrailingPunctuation(match.value)
-                if (isPlausible(uri)) {
-                    val label = MARKDOWN_OPENER.find(line.substring(0, match.range.first))
-                        ?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
-                    return ParsedShare(uri, label)
-                }
-                // Prose, not a URI — so look again from one character in, because the real link is
-                // very often glued to the far side of the colon that fooled us.
-                from = match.range.first + 1
+                val colon = line.indexOf(':', from)
+                if (colon < 0) break
+                from = colon + 1
+                val start = schemeStartBefore(line, colon) ?: continue
+                if (!isPlausible(line, start, colon)) continue
+                val uri = trimTrailingPunctuation(tokenAt(line, start))
+                // `mailto:.` trims back to a scheme with nothing after it, which is not a URI.
+                if (uri.length <= colon - start + 1) continue
+                return ParsedShare(uri, labelBefore(line, start))
             }
         }
         return null
+    }
+
+    /**
+     * Where the scheme in front of [colon] begins, or null when there is none. RFC 3986's
+     * production, read backwards: letters, digits, `+`, `-` and `.`, beginning with a letter —
+     * which is why `android-app` is a scheme and a run starting `9` is not, though the letter
+     * inside it may still begin one.
+     */
+    private fun schemeStartBefore(line: String, colon: Int): Int? {
+        var start = colon
+        while (start > 0 && isSchemeChar(line[start - 1])) start -= 1
+        while (start < colon && !isAsciiLetter(line[start])) start += 1
+        return if (start < colon) start else null
     }
 
     /**
@@ -59,27 +77,48 @@ object ShareTextParser {
      * `belt:` and `Note:` lose to the real link beside them. An unknown-but-hierarchical
      * `zotero://…` still qualifies, so the confirmation tier is not closed off.
      */
-    private fun isPlausible(candidate: String): Boolean {
-        val colon = candidate.indexOf(':')
-        if (colon <= 0) return false
-        val rest = candidate.substring(colon + 1)
-        if (rest.isEmpty()) return false
-        return rest.startsWith("//") || candidate.substring(0, colon).lowercase() in NAMED_SCHEMES
+    private fun isPlausible(line: String, start: Int, colon: Int): Boolean {
+        if (colon + 1 >= line.length || isDelimiter(line[colon + 1])) return false
+        if (line.startsWith("//", colon + 1)) return true
+        return line.substring(start, colon).lowercase() in NAMED_SCHEMES
     }
+
+    /** The whole token from [start]: everything up to a blank or a quoting delimiter. */
+    private fun tokenAt(line: String, start: Int): String {
+        var end = start
+        while (end < line.length && !isDelimiter(line[end])) end += 1
+        return line.substring(start, end)
+    }
+
+    private fun labelBefore(line: String, start: Int): String? =
+        MARKDOWN_OPENER.find(line.substring(0, start))
+            ?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
 
     /**
      * Sentence punctuation is not part of a URI, and neither is the bracket that closed a Markdown
      * link. A closing bracket is kept when the URI opened one itself, because `?a=(1)` is its own.
      */
     private fun trimTrailingPunctuation(token: String): String {
+        var parens = 0
+        var brackets = 0
+        var braces = 0
+        for (ch in token) {
+            when (ch) {
+                '(' -> parens += 1
+                ')' -> parens -= 1
+                '[' -> brackets += 1
+                ']' -> brackets -= 1
+                '{' -> braces += 1
+                '}' -> braces -= 1
+            }
+        }
         var end = token.length
         while (end > 0) {
-            val last = token[end - 1]
-            val drop = when (last) {
+            val drop = when (token[end - 1]) {
                 '.', ',', ';', ':', '!', '?', '’' -> true
-                ')' -> token.count { it == ')' } > token.count { it == '(' }
-                ']' -> token.count { it == ']' } > token.count { it == '[' }
-                '}' -> token.count { it == '}' } > token.count { it == '{' }
+                ')' -> parens < 0
+                ']' -> brackets < 0
+                '}' -> braces < 0
                 else -> false
             }
             if (!drop) break
@@ -87,4 +126,12 @@ object ShareTextParser {
         }
         return token.substring(0, end)
     }
+
+    private fun isAsciiLetter(ch: Char): Boolean = ch in 'a'..'z' || ch in 'A'..'Z'
+
+    private fun isSchemeChar(ch: Char): Boolean =
+        isAsciiLetter(ch) || ch in '0'..'9' || ch == '+' || ch == '-' || ch == '.'
+
+    private fun isDelimiter(ch: Char): Boolean =
+        ch.isWhitespace() || ch == '<' || ch == '>' || ch == '"' || ch == '\''
 }
