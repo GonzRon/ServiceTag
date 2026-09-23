@@ -148,6 +148,12 @@ class OccurrenceNotYetOpen(val id: ScheduleId, val occurrenceOn: String, val ope
  * [CloseRound]'s guard and the detail screen's `canClose` gate, so the two cannot silently drift
  * onto different arithmetic for what is meant to be one rule. Returns a date, never a status word,
  * so callers that must not read `DueStatus` (the plan's own constraint on the UI gate) still can.
+ *
+ * `core.schedule.ScheduleStatus.timeStatus` makes the same cut in its own algebraic form
+ * (`!due.isAfter(today.plusDays(leadDays))`, the complementary side of this one) but is not wired
+ * to this function: it sits outside both 1.2.1 lanes' declared files. The two are still verified to
+ * agree, boundary included; an editor of `timeStatus` should know this function exists before
+ * changing that cut.
  */
 fun occurrenceWindowOpensOn(effectiveDueOn: LocalDate, leadDays: Int): LocalDate =
     effectiveDueOn.minusDays(leadDays.toLong())

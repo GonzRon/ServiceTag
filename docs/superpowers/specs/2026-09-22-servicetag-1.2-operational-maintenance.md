@@ -499,8 +499,8 @@ reported — so this reuses the postponement precedence rather than adding a sec
 consequence is real and is stated here rather than left implicit: a round postponed past
 `today + lead` is not closeable until its own postponed window opens, even though it obliges
 somebody and is otherwise a normal candidate for closure; the way out is to clear the postponement
-first (§2.9's own "Puts the occurrence back where the rule says it is"), which the guard does not
-touch, since a postponement-clearing call carries no `closedOn` of its own to gate.
+first (§2.1's `postponedDueOn`, invariant 19), which the guard does not touch, since a
+postponement-clearing call carries no `closedOn` of its own to gate.
 
 **Known limit, not a further rule.** The guard defends the retry only **while `leadDays` is less
 than the schedule's own recurrence interval**. With a lead at or beyond the interval, the round the
