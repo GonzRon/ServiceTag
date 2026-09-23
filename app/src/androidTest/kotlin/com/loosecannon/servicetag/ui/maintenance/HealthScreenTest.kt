@@ -48,10 +48,15 @@ class HealthScreenTest {
 
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
 
-    @Before fun freshInstall() = clearInstall()
-
-    /** The alarm gone is the finding's whole condition, with reminders left switched on. */
-    @Before fun cancelTheAlarm() {
+    /**
+     * One method, not two: JUnit 4 does not order sibling `@Before`s by source position, and
+     * `clearInstall()` wiping the preference store `cancelTheAlarm()` used to write into (fix
+     * round 1, Q2) would have been silently order-dependent as separate methods. Fresh install
+     * first, then the alarm-gone condition this class actually tests, in the one order that
+     * matters: reminders left switched on, the alarm cancelled.
+     */
+    @Before fun freshInstallWithTheAlarmCancelled() {
+        clearInstall()
         app.graph.prefs.remindersEnabled = true
         app.graph.digestAlarm.cancel()
     }
@@ -70,9 +75,9 @@ class HealthScreenTest {
         rule.awaitText(REMINDERS_SECTION)
         // The row is the **last** thing in a scrolling destination, so on a store carrying due work
         // it sits below the fold — and a node that is in the tree but off screen takes a click that
-        // goes nowhere, which reads exactly like a route that failed to open. This class declares no
-        // store of its own and inherits whatever the class before it left, so how far down the row
-        // is is not something it can know: scroll to it, the way a person would.
+        // goes nowhere, which reads exactly like a route that failed to open. A fresh install still
+        // has no due work of its own, but the layout fact holds regardless of what the store
+        // contains: scroll to it, the way a person would, rather than assume it is on screen.
         rule.onNode(hasText(REMINDERS_SECTION) and hasClickAction()).performScrollTo().performClick()
         rule.awaitText(ALARM_FINDING)
     }

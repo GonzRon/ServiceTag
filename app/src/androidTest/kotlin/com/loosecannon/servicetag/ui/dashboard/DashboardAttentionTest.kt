@@ -67,9 +67,8 @@ class DashboardAttentionTest {
      * The overdue and meter schedules are written straight to the repository and then rebuilt by
      * the real engine, because of D-27's floor: created now, due today at the earliest, never
      * yesterday — so an OVERDUE row on a fresh store needs a row whose `created_at` is genuinely
-     * older. The group
-     * schedule goes through `saveSchedule`, because its membership windows are stamped now and its
-     * round has to open on an instant those windows cover.
+     * older. The group schedule goes through `saveSchedule`, because its membership windows are
+     * stamped now and its round has to open on an instant those windows cover.
      */
     private fun aStoreWithAttentionWork(): AppGraph {
         val graph = app.graph
