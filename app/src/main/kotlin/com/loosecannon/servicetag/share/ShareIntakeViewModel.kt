@@ -303,6 +303,16 @@ internal class ShareIntakeViewModel(
         if (bytes.size == 0L) return refuse(IntakeStrings.EMPTY_FILE)
 
         val result = try {
+            // **A provider need not declare a size at all**, and then there is no zero to test:
+            // the shipped `AddAttachment` measures only *after* it has copied, so an undeclared
+            // empty stream would land as a 0-byte row with a locator. One byte settles it before
+            // the store is asked. Re-opening is safe by construction — a `ByteSource` is a
+            // factory and the share's own calls `openInputStream` on every `open()` — so the copy
+            // below still reads from the start; a probe that cannot read is the same read failure
+            // the copy would have hit, and it lands in the catches below for the same sentence.
+            if (bytes.size == null && withContext(io) { open.open().use { it.read() < 0 } }) {
+                return refuse(IntakeStrings.EMPTY_FILE)
+            }
             addAttachment.run(
                 AttachmentOwner.OfAsset(AssetId(choice.id)),
                 AddAttachmentCommand(

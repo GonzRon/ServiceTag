@@ -272,6 +272,48 @@ class ShareIntakeViewModelTest {
     }
 
     /**
+     * The same rule where the provider declared **no** size, which `OpenableColumns.SIZE` is
+     * allowed to leave out. There is no declared zero to test, so intake asks the stream for one
+     * byte and the EOF is the refusal: `opened` is **1** — the probe and nothing else — and the
+     * store is still never asked.
+     */
+    @Test fun anUndeclaredEmptyFileIsRefusedTheSameWayAndTheStoreIsStillNeverAsked() =
+        runTest(scheduler) {
+            val id = mower()
+            var opened = 0
+            val vm = model(bytes(size = null), source = { opened += 1; "".byteInputStream() })
+
+            vm.choose(id)
+            vm.saveAndSettle()
+
+            assertEquals("That file is empty", vm.state.value.message)
+            assertEquals(1, opened)
+            assertEquals(0, attachments())
+            assertTrue(graph.attachmentStorage.store.files.isEmpty())
+        }
+
+    /**
+     * And the probe must not eat the copy. A `ByteSource` is re-openable by construction — the
+     * share's own one calls `ContentResolver.openInputStream` on every `open()` — so an undeclared
+     * *non*-empty share opens the source exactly **twice**, once to probe and once for the store's
+     * copy, and all three bytes still land at the locator.
+     */
+    @Test fun anUndeclaredNonEmptyFileIsCopiedWholeAndOpensTheSourceTwice() = runTest(scheduler) {
+        val id = mower()
+        var opened = 0
+        val vm = model(bytes(size = null), source = { opened += 1; "pdf".byteInputStream() })
+
+        vm.choose(id)
+        vm.saveAndSettle()
+
+        assertNull(vm.state.value.message)
+        assertEquals(2, opened)
+        val row = graph.attachments.forOwner(AttachmentOwner.OfAsset(assetId)).single()
+        assertEquals(3L, row.sizeBytes)
+        assertEquals("pdf", graph.attachmentStorage.store.files.values.single().decodeToString())
+    }
+
+    /**
      * The intake layer keeps **no** copy of the over-cap rule: the shipped `AddAttachment` refuses
      * a declared over-size before it opens the source, with the same ratified sentence. What this
      * guards is that intake does not pre-open the stream on its way to that refusal — `opened` is
