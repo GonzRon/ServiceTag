@@ -168,8 +168,8 @@ class VersionAgreementTest {
                 .containsMatchIn(text),
         )
         assertTrue(
-            "the supported release history must carry a 1.2.1 / 14 row",
-            Regex("""^\|\s*1\.2\.1\s*\|\s*14\s*\|""", RegexOption.MULTILINE).containsMatchIn(text),
+            "the supported release history must carry a 1.3.0 / 15 row",
+            Regex("""^\|\s*1\.3\.0\s*\|\s*15\s*\|""", RegexOption.MULTILINE).containsMatchIn(text),
         )
         assertTrue(
             "the forward-only clarification must be present verbatim",
@@ -182,7 +182,7 @@ class VersionAgreementTest {
         )
         assertTrue(
             "the row must name the schema and the format it ships",
-            Regex("""^\|\s*1\.2\.1\s*\|\s*14\s*\|.*schema \*\*6\*\*.*format \*\*6\*\*""", RegexOption.MULTILINE)
+            Regex("""^\|\s*1\.3\.0\s*\|\s*15\s*\|.*schema \*\*7\*\*.*format \*\*7\*\*""", RegexOption.MULTILINE)
                 .containsMatchIn(text),
         )
     }
