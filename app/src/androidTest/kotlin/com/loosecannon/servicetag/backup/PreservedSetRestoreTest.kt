@@ -48,7 +48,12 @@ class PreservedSetRestoreTest {
     @Test fun thePreservedSetRestoresAndItsLinkRowsComeBackOutUnchanged() {
         val bytes = archive.readBytes()
         val preserved = BackupCodec.decode(bytes)
-        assertEquals(BackupCodec.FORMAT_VERSION, preserved.manifest.formatVersion)
+        // The pin is the **literal**, because that is the fact about this archive: the owner's
+        // preserved set was written by 2.6 and is format 5, whatever the current writer is on. It
+        // used to be asserted twice, the second time against `BackupCodec.FORMAT_VERSION`, which
+        // only held while the writer happened to be on 5 as well — B01's bump to 6 made the pair
+        // contradictory (controller ruling, 2026-09-22). Reading an *older* format is the whole
+        // point of this proof, so the writer's own version is not something it may assert.
         assertEquals(5, preserved.manifest.formatVersion)
 
         val graph = app.graph
