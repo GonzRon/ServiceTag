@@ -325,6 +325,29 @@ class VersionAgreementTest {
         )
     }
 
+    /**
+     * D4 §15's per-version table, one row further on. v7 is `asset_reference`, and the sentence
+     * under the table that reserved "v7 upward" for supplies and projections is corrected to v8,
+     * dated — reading a stale version plan is what almost put 1.2's schedules on v3.
+     *
+     * The rest of that superseded block is `theDataModelDocumentNamesTheShippedVersions`' and is
+     * left exactly as it is, marker, attachments sentence and v6 row alike.
+     */
+    @Test fun theDataModelDocumentNamesV7() {
+        val text = repoFile("docs/design/04-domain-data-model.md").readText()
+        assertTrue(
+            "the v7 row must name this release and its table",
+            Regex("""^> \| v7 \| \*\*1\.3\.0\*\* \|""", RegexOption.MULTILINE).containsMatchIn(text),
+        )
+        assertTrue(
+            "what is still unnumbered must now be said to take v8 upward, dated",
+            Regex(
+                """^> .*will take \*\*v8 upward\*\* \(amended 2026-09-23, ServiceTag 1\.3\.0""",
+                RegexOption.MULTILINE,
+            ).containsMatchIn(text),
+        )
+    }
+
     private companion object {
         const val TOKEN = "ABCD2345"
 
