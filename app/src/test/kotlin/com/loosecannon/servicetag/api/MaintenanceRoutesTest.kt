@@ -341,6 +341,12 @@ class MaintenanceRoutesTest {
         val refused = call("POST", "/v1/schedules/$schedule/close-round", "{}")
         assertEquals(409, refused.status)
         assertEquals("OCCURRENCE_NOT_YET_OPEN", refused.code())
+        // Both fields are the payload: with no occurrence key on the request, `occurrenceOn` is the
+        // only way a retrying caller can tell "my first call succeeded" from "it was never due".
+        assertTrue(
+            refused.problems().toString(),
+            refused.problems().any { it.contains("occurrenceOn=2026-03-01") && it.contains("opensOn=2026-02-24") },
+        )
         runBlocking { assertEquals(emptyList<OccurrenceClosure>(), graph.closures.all()) }
     }
 

@@ -235,7 +235,11 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     is OccurrenceNotYetOpen -> errorResponse(
         409, "Conflict", "OCCURRENCE_NOT_YET_OPEN",
         "this round has not reached its due-soon window, so there is nothing to abandon yet",
-        listOf("OccurrenceNotYetOpen(opensOn=${e.opensOn})"),
+        // Both fields, deliberately: with no occurrence key on the request (the owner's ruling), this
+        // is the only way a retrying client can tell "my first call succeeded and the schedule
+        // advanced" (occurrenceOn is ahead of what it last saw) apart from "it was simply not due yet"
+        // (occurrenceOn is unchanged).
+        listOf("OccurrenceNotYetOpen(occurrenceOn=${e.occurrenceOn}, opensOn=${e.opensOn})"),
     )
     is ClosedOnOutOfRange -> errorResponse(
         422, "Unprocessable Content", "CLOSED_ON_OUT_OF_RANGE",
