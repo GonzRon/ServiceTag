@@ -125,6 +125,18 @@ class OccurrenceNotCloseable(val id: ScheduleId, val occurrenceOn: String) :
     IllegalStateException("schedule ${id.value}'s occurrence $occurrenceOn requires nobody")
 
 /**
+ * 1.2.1: the round has not yet reached its own due-soon window — `opensOn`, `effectiveDueOn` minus
+ * the schedule's `leadDays`. Closing is allowed from `opensOn` through today, exactly as before;
+ * this refuses only the stretch before it, which exists so an immediate retry the same day cannot
+ * close the fresh round a first close just opened (owner ruling 2026-09-23).
+ */
+class OccurrenceNotYetOpen(val id: ScheduleId, val occurrenceOn: String, val opensOn: String) :
+    IllegalStateException(
+        "schedule ${id.value}'s occurrence $occurrenceOn has not reached its due-soon window " +
+            "($opensOn)",
+    )
+
+/**
  * `closedOn` was outside the occurrence's **open date through today, inclusive**.
  *
  * The bound exists because `closed_on` is the date the recurrence advances from and the row can

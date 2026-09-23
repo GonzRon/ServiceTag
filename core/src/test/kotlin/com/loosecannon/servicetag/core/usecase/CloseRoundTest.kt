@@ -109,6 +109,7 @@ class CloseRoundTest {
         basis: TimeBasis = TimeBasis.FIXED,
         interval: Int = 3,
         anchorOn: String = "2026-01-01",
+        leadDays: Int = 0,
     ): MaintenanceSchedule = saveSchedule.run(
         null,
         ScheduleCommand(
@@ -119,6 +120,7 @@ class CloseRoundTest {
             timeUnit = RecurrenceUnit.MONTH,
             timeBasis = basis,
             anchorOn = anchorOn,
+            leadDays = leadDays,
         ),
     )
 
@@ -342,27 +344,34 @@ class CloseRoundTest {
      * `2026-01-01` — and an unclamped floor would refuse the **default** and every value a caller
      * could offer instead, leaving B14's "When was this done?" affordance an empty range. With the
      * clamp the default is accepted and stored as today, and the refusal names the floor it used.
+     *
+     * `TimeBasis.COMPLETION` here, deliberately: with no termination its due is pinned to the anchor
+     * alone (`computedDueOn`'s COMPLETION branch), never to the D-27 pin's floor, so this round's own
+     * due-soon window opens **today** regardless of the one-day open-instant skew under test — the
+     * two are independent facts, and 1.2.1's guard must not see the second where this test means the
+     * first.
      */
     @Test
     fun theDefaultIsAcceptedWhenTodayIsBehindTheOpenInstantsUtcDate() = runTest {
         val a1 = seedAsset("a1")
         now = dayMillis("2026-01-02")
-        val schedule = seedSchedule(seedGroup(listOf(a1)))
+        val schedule = seedSchedule(seedGroup(listOf(a1)), basis = TimeBasis.COMPLETION)
         today = LocalDate.parse("2026-01-01")
 
         val round = assertNotNull(recompute.occurrenceOf(schedule))
         assertEquals("2026-01-02", round.openOn.toString(), "the open date is ahead of today")
 
-        val closure = closeRound.run(schedule.id)
-        assertEquals("2026-01-01", closure.closedOn, "the default is today, and today is accepted")
-        assertEquals(listOf(closure), closures.all())
-
-        // The next round opens at the same instant, so the clamped floor is what a refusal reports.
+        // The clamped floor is what a refusal reports: an unclamped floor would use the open date
+        // and refuse the default too.
         val refused = assertFailsWith<ClosedOnOutOfRange> {
             closeRound.run(schedule.id, closedOn = "2025-12-31")
         }
         assertEquals("2026-01-01", refused.earliestOn)
         assertEquals("2026-01-01", refused.today)
+        assertEquals(emptyList(), closures.all())
+
+        val closure = closeRound.run(schedule.id)
+        assertEquals("2026-01-01", closure.closedOn, "the default is today, and today is accepted")
         assertEquals(listOf(closure), closures.all())
     }
 
@@ -375,7 +384,10 @@ class CloseRoundTest {
     fun closingClearsAPostponementAndNothingElse() = runTest {
         val a1 = seedAsset("a1")
         val schedule = seedSchedule(seedGroup(listOf(a1)))
-        val postponed = postpone.run(schedule.id, "2026-03-01")
+        // Postponed to a date within the (lead 0) window today already reaches — 1.2.1's guard reads
+        // `effectiveDueOn`, which a postponement overrides, so a postponement into the future is a
+        // question for the guard's own tests, not this one.
+        val postponed = postpone.run(schedule.id, "2026-02-01")
         val writesBefore = scheduleWrites
 
         closeRound.run(schedule.id, closedOn = "2026-02-15")
@@ -414,5 +426,75 @@ class CloseRoundTest {
         assertEquals(TerminationKind.CLOSED, state.lastTerminationKind)
         assertNull(state.lastCompletedOn)
         assertEquals(listOf(closure), closures.all(), "the closure was neither tidied nor amended")
+    }
+
+    /**
+     * 1.2.1's guard: the round is refused **the day before** its own due-soon window
+     * (`effectiveDueOn - leadDays`), and the refusal writes nothing at all.
+     */
+    @Test
+    fun closingTheDayBeforeTheWindowOpensIsRefusedAndWritesNothing() = runTest {
+        val a1 = seedAsset("a1")
+        // due = anchorOn = "2026-03-01" (pinFloor is "now", still 2026-01-01, behind the anchor);
+        // leadDays = 5 puts the window's open date at 2026-02-24.
+        val schedule = seedSchedule(seedGroup(listOf(a1)), anchorOn = "2026-03-01", leadDays = 5)
+        today = LocalDate.parse("2026-02-23")
+
+        val refused = assertFailsWith<OccurrenceNotYetOpen> { closeRound.run(schedule.id) }
+        assertEquals("2026-03-01", refused.occurrenceOn)
+        assertEquals("2026-02-24", refused.opensOn)
+        assertEquals(emptyList(), closures.all(), "the refusal wrote no row")
+    }
+
+    /**
+     * The other edge of the same guard: **on** the boundary day the round is closeable, exactly as
+     * it would be with no lead at all.
+     */
+    @Test
+    fun closingOnTheBoundaryDayOfTheWindowIsAllowed() = runTest {
+        val a1 = seedAsset("a1")
+        val schedule = seedSchedule(seedGroup(listOf(a1)), anchorOn = "2026-03-01", leadDays = 5)
+        today = LocalDate.parse("2026-02-24")
+
+        val closure = closeRound.run(schedule.id)
+        assertEquals("2026-03-01", closure.occurrenceOn)
+        assertEquals("2026-02-24", closure.closedOn)
+        assertEquals(listOf(closure), closures.all())
+    }
+
+    /** Well past due, the guard never fires — closing an overdue round is unchanged. */
+    @Test
+    fun closingAnOverdueRoundIsStillAllowed() = runTest {
+        val a1 = seedAsset("a1")
+        val schedule = seedSchedule(seedGroup(listOf(a1)), anchorOn = "2026-03-01", leadDays = 5)
+        today = LocalDate.parse("2026-04-01")
+
+        val closure = closeRound.run(schedule.id)
+        assertEquals("2026-03-01", closure.occurrenceOn)
+        assertEquals(listOf(closure), closures.all())
+    }
+
+    /**
+     * **The retry the guard exists for.** A close always advances the schedule, so calling
+     * `close-round` a second time the same day lands on the *next* round — one whose own window has
+     * almost never arrived yet. The retry is refused with `OccurrenceNotYetOpen` and the first
+     * closure is the only row that ever exists.
+     */
+    @Test
+    fun retryingCloseRoundTheSameDayIsRefusedAndOnlyOneClosureExists() = runTest {
+        val a1 = seedAsset("a1")
+        val schedule = seedSchedule(seedGroup(listOf(a1)), anchorOn = "2026-03-01", leadDays = 5)
+        today = LocalDate.parse("2026-03-01")
+
+        val first = closeRound.run(schedule.id)
+        assertEquals("2026-03-01", first.occurrenceOn)
+        // The next round is due 2026-06-01 (three months on from the just-closed round); its window
+        // does not open until 2026-05-27, so the same-day retry falls well before it.
+        assertEquals("2026-06-01", assertNotNull(states.get(schedule.id)).computedDueOn)
+
+        val refused = assertFailsWith<OccurrenceNotYetOpen> { closeRound.run(schedule.id) }
+        assertEquals("2026-06-01", refused.occurrenceOn)
+        assertEquals("2026-05-27", refused.opensOn)
+        assertEquals(listOf(first), closures.all(), "the retry wrote nothing; the first row stands")
     }
 }

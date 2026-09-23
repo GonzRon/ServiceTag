@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import java.time.LocalDate
 
 /**
  * D-8's answer to a round that will never be finished: **it ends it without claiming anybody did the
@@ -34,6 +35,11 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *   did not. The engine already treats such a closure as inert (invariant 40); refusing keeps the
  *   exported history honest rather than merely harmless.
  * - a round that obliges **nobody**: there is no round for a closure to be about (invariant 77).
+ * - **1.2.1**: a round that has not yet reached its own due-soon window (`effectiveDueOn -
+ *   leadDays`). This is the guard against an immediate retry closing the round a first close just
+ *   opened: closing always advances the schedule, so a caller that calls again the same day would
+ *   otherwise be handed a fresh, un-due round to close instead of a refusal (owner ruling
+ *   2026-09-23). From that boundary through today, closing is allowed exactly as before.
  *
  * And `closedOn`, which is the date the recurrence advances from: it defaults to today and may lie
  * anywhere from the round's **open date, clamped to today**, through today, inclusive. Anything else
@@ -66,6 +72,18 @@ class CloseRound(
         if (!occurrence.isActionable) throw OccurrenceNotCloseable(id, key)
 
         val todayOn = today.localDate()
+        // 1.2.1: refuse to close before the round's own due-soon window opens. `effectiveDueOn` is
+        // the state `recompute` derives right now, the same value the detail screen's gate reads —
+        // never a status word — so the action and this use case cannot disagree. `leadDays` is on
+        // the schedule itself. Null only when the round is not actionable, which the check above has
+        // already ruled out.
+        val dueOn = recompute.stateOf(schedule).effectiveDueOn?.let(LocalDate::parse)
+        if (dueOn != null) {
+            val opensOn = dueOn.minusDays(schedule.leadDays.toLong())
+            if (todayOn.isBefore(opensOn)) {
+                throw OccurrenceNotYetOpen(id, key, opensOn.toString())
+            }
+        }
         // The floor is the round's open date **clamped to today**. The open instant's date is taken
         // at UTC, for the engine's purity, while today is device-local, so in a negative UTC offset
         // the two can differ by a day on the round's opening evening — and an unclamped floor would
