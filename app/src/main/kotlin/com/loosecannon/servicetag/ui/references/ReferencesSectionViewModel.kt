@@ -139,6 +139,9 @@ class ReferencesSectionViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
+                // A database that would not take the write. §10 ratifies no sentence for it, and
+                // this brief may not invent one, so the sheet stays open holding what was typed
+                // and the list keeps saying what the store says (controller ruling, spec silence).
                 return@launch
             }
             when (outcome) {
@@ -164,6 +167,9 @@ class ReferencesSectionViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
+                // The same ruling as the other two write paths: §10 ratifies no sentence for a
+                // delete the database refused, so nothing is drawn and the row stays listed
+                // because the store still holds it (controller ruling, spec silence).
                 return@launch
             }
             if (outcome is ReferenceResult.Refused) say(outcome.problem)

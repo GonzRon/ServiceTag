@@ -209,7 +209,9 @@ private fun DocumentRow(
             // D-19: the description the byte path has stored since Phase 4A and never drawn. It
             // is genuinely a second line, and it is drawn only when the bytes are here — a row
             // whose whole message is that they are gone must not also carry prose.
-            if (row.present && row.notes.isNotEmpty()) DescriptionLine(row.notes)
+            if (row.present && row.notes.isNotEmpty()) {
+                QuietLine(row.notes, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         IconButton(onClick = { onEdit(row) }) {
             Icon(
@@ -218,25 +220,6 @@ private fun DocumentRow(
             )
         }
     }
-}
-
-/**
- * D-19's second quiet line: [QuietLine]'s own style and colour, held to **one line** and
- * ellipsised, because the description is capped at 2,000 characters and this is a compact row.
- *
- * It is not [QuietLine] itself only because that primitive takes no `maxLines` and no `overflow`,
- * and the `ui/components` package is shared with the share-intake lane — neither lane may
- * widen a shared primitive, so the line is drawn here and the controller holds the finding.
- */
-@Composable
-private fun DescriptionLine(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-    )
 }
 
 /** The thumbnail when there is one, otherwise the kind glyph — dimmed when the bytes are gone. */

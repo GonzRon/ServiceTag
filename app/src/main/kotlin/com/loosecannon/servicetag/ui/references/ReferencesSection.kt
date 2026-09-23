@@ -192,7 +192,9 @@ private fun ReferenceRow(
                 overflow = TextOverflow.Ellipsis,
             )
             QuietLine(row.kind.label())
-            if (row.description.isNotEmpty()) DescriptionLine(row.description)
+            if (row.description.isNotEmpty()) {
+                QuietLine(row.description, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         Box {
             IconButton(onClick = { menu = true }) {
@@ -205,25 +207,6 @@ private fun ReferenceRow(
             }
         }
     }
-}
-
-/**
- * The description line: [QuietLine]'s own style and colour, held to one line and ellipsised,
- * because the description is capped at 2,000 characters and this is a compact row.
- *
- * It is not [QuietLine] itself only because that primitive takes no `maxLines` and no `overflow`,
- * and the `ui/components` package is shared with the share-intake lane — neither lane may
- * widen a shared primitive, so the line is drawn here and the controller holds the finding.
- */
-@Composable
-private fun DescriptionLine(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-    )
 }
 
 /** The three ratified kind words (§10). The enum is never rendered raw. */
