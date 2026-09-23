@@ -406,7 +406,7 @@ shipped conventions: `null` means unchanged, unknown arguments are rejected, and
 real `ToolError` carrying the code. **Neither `add_reference` nor `update_reference` takes a `kind`
 argument**, for the same reason the commands do not: it is derived, not supplied.
 
-Four `docs/api/v1.md` edits: the import-merge rows' "a data archive of format **1–6**" → **1–7**; the
+Five `docs/api/v1.md` edits: the reference routes themselves — the `POST` body's four fields and the `PATCH` body's two, `kind` shown as derived and read-only, and the five codes (`REFERENCE_NAME_REQUIRED` among them) in the code table; the import-merge rows' "a data archive of format **1–6**" → **1–7**; the
 405 row's "eight `/v1/assets/{id}/…` sub-resources" → **nine**, with `/v1/assets/{id}/references`
 answering **404** for a verb it does not take while `/v1/references` and `/v1/references/{id}` are
 **405** path shapes; and the merge-report sentence's "ten tables" → eleven, that same sentence's field
