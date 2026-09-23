@@ -493,6 +493,8 @@ one**. Ten are already shipped and reused unchanged, marked *(shipped)*.
 | remove confirmation | "Remove this reference?" · "The link is removed from this asset. Nothing in the other app is changed." · "Remove" · "Cancel" | B04 |
 | edit sheet | "Edit reference" · "Name" · "Description" · "Save" · "Cancel" | B04 |
 | **add-link sheet** *(RATIFIED 2026-09-23, spec Amendments `spec:579`)* | title **"Add link"** (the action label, reused) · field label **"Link"** · "Name" · "Description" · "Save" · "Cancel" | B04 |
+| Dashboard hint (B07, §18.23) | "Components are listed on the asset they belong to." *(replaces the 2.7 sentence; ratified 2026-09-23)* | B07 |
+| Assets archived-only hint (B07, §18.23) | "Matching assets are archived. Turn on Show archived to see them." *(new; ratified 2026-09-23)* | B07 |
 
 **Two call-outs the owner confirmed explicitly, neither of which may be softened back:** the intake
 title is **"Save to ServiceTag"**, not #43's mock wording "Share to ServiceTag"; and the no-folder
@@ -529,7 +531,7 @@ implies an in-app affordance the share screen does not offer.
 
 ### 18.22 Owner-directed addition: the search box moves from the Dashboard to the Assets screen (B07)
 
-**Owner instruction 2026-09-23.** With the category and maintenance-status dropdowns now serving as the Dashboard's navigation aids, the "Search assets and components" field leaves the Dashboard and lives on the Assets screen, with the same six searched fields and the same component-names-its-system behaviour. Not part of #43's contract; rides in 1.3.0 as `briefs/B07-search-moves-to-assets.md`. Runs in Wave 2 (beside B02's review — B02 is `:core`, B07 is `ui/dashboard` + `ui/asset`; disjoint) and holds `emulator-5554`; it **must merge before Wave 3** because B04 edits `ui/asset/` later. It adds no string: every sentence it shows already ships (the ratified-strings ledger stays at fifty). File map: `ui/dashboard/DashboardScreen.kt`, `ui/dashboard/DashboardViewModel.kt`, new `ui/asset/AssetSearch.kt`, `ui/asset/AssetsScreen.kt`, `ui/asset/AssetViewModels.kt`, their JVM tests, `androidTest/.../ui/dashboard/DashboardSearchTest.kt` (deleted) → `androidTest/.../ui/asset/AssetsSearchTest.kt`, one added case in an existing dashboard connected class.
+**Owner instruction 2026-09-23.** With the category and maintenance-status dropdowns now serving as the Dashboard's navigation aids, the "Search assets and components" field leaves the Dashboard and lives on the Assets screen, with the same six searched fields and the same component-names-its-system behaviour. Not part of #43's contract; rides in 1.3.0 as `briefs/B07-search-moves-to-assets.md`. Runs in Wave 2 (beside B02's review — B02 is `:core`, B07 is `ui/dashboard` + `ui/asset`; disjoint) and holds `emulator-5554`; it **must merge before Wave 3** because B04 edits `ui/asset/` later. It was written to add no string; the owner then ratified two sentences for it (§18.23: the shortened Dashboard hint and the Assets archived-only hint), so the ledger is fifty-two. File map: `ui/dashboard/DashboardScreen.kt`, `ui/dashboard/DashboardViewModel.kt`, new `ui/asset/AssetSearch.kt`, `ui/asset/AssetsScreen.kt`, `ui/asset/AssetViewModels.kt`, their JVM tests, `androidTest/.../ui/dashboard/DashboardSearchTest.kt` (deleted) → `androidTest/.../ui/asset/AssetsSearchTest.kt`, one added case in an existing dashboard connected class.
 
 ### 18.23 Owner rulings on B07's two sentences (2026-09-23)
 
