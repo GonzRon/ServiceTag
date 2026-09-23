@@ -511,6 +511,19 @@ class ReferenceRoutesTest {
             "nine `/v1/assets/{id}/…` sub-resources" in text,
         )
 
+        // The one code the mapper can spell and no route can return. The 1.2 subsection documents
+        // its own two unreachable codes on exactly this footing, so a 1.3 subsection silent about
+        // this one would read as exhaustive of what the *code* produces rather than of what a
+        // *client* receives — and a refactor that dropped the handler's interception would ship a
+        // 409 no document mentions.
+        assertTrue(
+            "docs/api/v1.md must say REFERENCE_UNCHANGED cannot come back over the wire",
+            Regex(
+                """\*\*`REFERENCE_UNCHANGED`\*\*.{0,200}?no\s*\n?\s*route can return it""",
+                RegexOption.DOT_MATCHES_ALL,
+            ).containsMatchIn(text),
+        )
+
         for (row in listOf(
             """^\| `GET` \| `/v1/assets/\{id\}/references` \|""",
             """^\| `POST` \| `/v1/references` \|""",

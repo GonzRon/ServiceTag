@@ -48,10 +48,11 @@ internal data class StatusResponse(
     val schemaVersion: Int,
     val backupFormatVersion: Int,
     /**
-     * One key per table — assets, **groups**, tags, links, definitions, profiles, **schedules**,
-     * **closures**, events, attachments, **references** — listed here in `MergeTable`'s write
-     * order for reading, which is **not** the JSON's key order and is not contract; a client reads
-     * by key.
+     * One key per table — assets, **groups**, definitions, profiles, **schedules**, **closures**,
+     * links, tags, events, attachments, **references** — listed here in `MergeTable`'s write order
+     * for reading, which is **not** the JSON's key order and is not contract; a client reads by
+     * key. (The sentence claimed that order before 1.3 and the list was not in it: `tags` and
+     * `links` sat ahead of `definitions` and `profiles`. Only the prose moved.)
      *
      * Three of those in bold arrived with 1.2's maintenance tables; **references** arrived with
      * 1.3's `asset_reference`, and its key is `assetReferences` — the name the archive's own table
