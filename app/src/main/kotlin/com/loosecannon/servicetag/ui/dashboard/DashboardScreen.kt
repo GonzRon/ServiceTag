@@ -125,10 +125,13 @@ fun DashboardScreen(
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
                 // Said once, and only while there is something it explains: a list that is short
-                // because the parts are on their systems should say where they went.
+                // because the parts are on their systems should say where they went. The second
+                // sentence pointed at the box this brief moved off this screen (B07 fix round 2,
+                // controller ruling S1) and is dropped rather than reworded — a deletion is not a
+                // new string, and the Dashboard has nowhere left to send that "Search".
                 if (state.hiddenComponents > 0) {
                     QuietLine(
-                        text = "Components are listed on the asset they belong to. Search to find one.",
+                        text = "Components are listed on the asset they belong to.",
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                 }
