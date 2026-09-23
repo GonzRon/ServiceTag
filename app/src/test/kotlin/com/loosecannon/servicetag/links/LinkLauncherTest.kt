@@ -30,4 +30,20 @@ class LinkLauncherTest {
         assertFalse("one line", NO_HANDLER_MESSAGE.contains("\n"))
         assertFalse("nothing trails it", NO_HANDLER_MESSAGE.trimEnd().endsWith(":"))
     }
+
+    /**
+     * The References section draws this refusal itself, as a snackbar off `false`, so the launcher
+     * must not toast it over the top — `notify = false` asks for **no** notice and still answers
+     * `false`, which is the answer the section maps. The Settings caller keeps the default, so
+     * that arm is asserted in the same case: one notice, never two and never none.
+     */
+    @Test fun theNoticeIsAskedForOnlyWhenTheCallerIsNotDrawingItItself() {
+        var notices = 0
+
+        assertFalse("still a miss", noHandler(notify = false) { notices += 1 })
+        assertEquals("the caller draws it, so the launcher must not", 0, notices)
+
+        assertFalse("still a miss", noHandler(notify = true) { notices += 1 })
+        assertEquals("the default caller still gets exactly one", 1, notices)
+    }
 }

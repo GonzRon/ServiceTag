@@ -18,19 +18,34 @@ internal const val NO_HANDLER_MESSAGE = "No app can open this link"
 
 /** Fires `ACTION_VIEW` for a URI the caller has already checked; never crashes on a missing handler. */
 object LinkLauncher {
-    fun open(activity: Activity, uri: String): Boolean = try {
+    /**
+     * [notify] is how a caller says it draws the refusal itself. The References section maps the
+     * `false` below to a snackbar carrying [NO_HANDLER_MESSAGE], and a toast over the top of it is
+     * the same sentence twice at once, so that surface passes `false`; the Settings caller has
+     * nowhere of its own to put it and keeps the default.
+     */
+    fun open(activity: Activity, uri: String, notify: Boolean = true): Boolean = try {
         activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
         true
     } catch (e: ActivityNotFoundException) {
-        noHandler(activity)
+        noHandler(notify) { toast(activity) }
     } catch (e: SecurityException) {
         // A handler exists but will not take the call from us (a permission-guarded activity).
-        noHandler(activity)
+        noHandler(notify) { toast(activity) }
     }
 
     /** No URI parameter: there is nothing left to put one in, and §4.4 says there must not be. */
-    private fun noHandler(activity: Activity): Boolean {
+    private fun toast(activity: Activity) =
         Toast.makeText(activity, NO_HANDLER_MESSAGE, Toast.LENGTH_LONG).show()
-        return false
-    }
+}
+
+/**
+ * The whole of a missing handler with no Android type in it: the answer is `false` either way, and
+ * the notice is asked for only when the caller is not drawing one. It sits outside the object so a
+ * JVM test can watch whether the toast was requested — `Activity` and `Toast` are stubs off the
+ * device, so a rule expressed over them could only ever be proved on one.
+ */
+internal fun noHandler(notify: Boolean, notice: () -> Unit): Boolean {
+    if (notify) notice()
+    return false
 }
