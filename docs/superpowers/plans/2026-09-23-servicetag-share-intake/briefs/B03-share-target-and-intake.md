@@ -121,10 +121,13 @@ owner means to keep, not prose to be offered as a note. See master plan §18.15.
 
 1. **If `intent.type` normalises to `text/uri-list`**, the item is **text**, whichever extra carries
    it. `EXTRA_TEXT` is used when present; otherwise the stream is read — after
-   `streamPolicy.accepts` — and its bytes, **capped at `MAX_REFERENCE_URI_CHARS` (2,048; B02's
-   constant, spec §4.3's URI cap) and decoded as UTF-8**, are handed to `ShareTextParser`. A stream
-   that is not decodable, or longer than that cap, is `Refused(UNREADABLE)`. **`text/uri-list` is
-   the only type that takes this arm**, and it never reaches the attachment path.
+   `streamPolicy.accepts` — under **two separate caps** (master §18.20), because a uri-list is a
+   *list* and may legitimately be longer than any one URI in it: **at most 64 KiB is read** and
+   decoded as UTF-8; the **first line that is neither blank nor a `#` comment** is taken; and
+   **`MAX_REFERENCE_URI_CHARS` (2,048; B02's constant) is applied to that extracted URI alone**. A
+   stream longer than 64 KiB, or not decodable as UTF-8, is `Refused(UNREADABLE)`; an extracted URI
+   over 2,048 is `Refused(URI_TOO_LONG)`. **`text/uri-list` is the only type that takes this arm**,
+   and it never reaches the attachment path.
 2. **Otherwise, if `EXTRA_STREAM` is present**, the item is **bytes** — including a **`text/plain`**
    stream, which is a document.
 3. **Otherwise `EXTRA_TEXT`** is parsed as text. This is the arm a `text/plain` share takes when it
@@ -210,7 +213,7 @@ are JVM; the screen cases are `androidTest`.
 | an empty file is accepted | a zero-length stream shows "That file is empty" **from the intake layer** and `AddAttachment` is never called | adding a member to `AttachmentProblem` would change the shipped camera and picker paths and the exhaustive `when` — spec §4.3 puts this refusal here for that reason |
 | an over-cap file is copied first | a declared size over `MAX_ATTACHMENT_BYTES` shows the shipped "That file is larger than 256 MB" **before the copy** | checking only after the copy writes 256 MiB+ into the owner's folder first |
 | a read failure looks like a refusal | a resolver that throws on `openInputStream` shows "Could not read what was shared", **not** the I-9 sentence | one message for two different facts hides a security refusal behind a transient error |
-| **a `text/uri-list` stream is filed as a document** | an intent whose `type` is `text/uri-list` carrying **`EXTRA_STREAM` and no `EXTRA_TEXT`** yields `Link`, not `Bytes`, and nothing is copied into the attachment folder; the same type with `EXTRA_TEXT` present also yields `Link`; and a uri-list stream longer than `MAX_REFERENCE_URI_CHARS`, or not decodable as UTF-8, is `Refused(UNREADABLE)` | an unconditional `EXTRA_STREAM`-first rule copies a URI list in as an attachment, against spec §4.4, and the type is in D-6's ten so a real sharer can produce it |
+| **a `text/uri-list` stream is filed as a document** | an intent whose `type` is `text/uri-list` carrying **`EXTRA_STREAM` and no `EXTRA_TEXT`** yields `Link`, not `Bytes`, and nothing is copied into the attachment folder; the same type with `EXTRA_TEXT` present also yields `Link`; and the two caps hold independently (master §18.20): a **65 KiB** uri-list stream, and one not decodable as UTF-8, are each `Refused(UNREADABLE)`, while a **3 KiB** uri-list whose first non-comment line is a 300-character URI **succeeds**, and one whose first non-comment line is a **2,049**-character URI is `Refused(URI_TOO_LONG)` | an unconditional `EXTRA_STREAM`-first rule copies a URI list in as an attachment, against spec §4.4, and the type is in D-6's ten so a real sharer can produce it |
 | **a shared `.txt` file is turned into a note** | an intent whose `type` is `text/plain` carrying **`EXTRA_STREAM`** yields **`Bytes`**, is copied through `AddAttachment`, and the row's locator ends `.txt` (`MimeTypes.EXTENSIONS` maps `text/plain`); the same type carrying only `EXTRA_TEXT` yields `Link` or `PlainText` as the text arm decides | widening the uri-list arm to `text/plain` decodes the file, finds no URI, and offers "Save as a note" — the document is never stored and the owner loses it silently (master §18.15) |
 | **a failure mid-copy leaves a row or a partial file** | a `ByteSource` that yields some bytes and **then throws** leaves **no attachment row**, nothing at the locator in the fake store, and shows "Could not read what was shared" | the shipped `AddAttachment` only `deleteBestEffort`s on the **over-size** arm (`AddAttachment.kt:62`–`66`), not on a throw from the source, so without this case a half-written file can outlive the failure. Spec §8's Grants row names this hazard and no other brief carries it |
 | **the description is collected and dropped** | on the byte path, Name → `AddAttachmentCommand.displayName` and Description → `AddAttachmentCommand.notes`, asserted on the command the view model hands `AddAttachment` (both fields exist at `AttachmentCommands.kt:22`,`:28`) | a screen that collects a description and never puts it on the command makes #43 AC 9 unreachable on the byte path, and B04's rendering test would pass against a `notes` nothing ever writes |

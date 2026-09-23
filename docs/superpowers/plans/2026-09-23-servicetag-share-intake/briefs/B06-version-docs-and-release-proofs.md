@@ -66,10 +66,10 @@ superseded line in `docs/design/`.
 
 | case | change |
 |---|---|
-| `theReleaseIdentityIs121AndCode14` | renamed to name 1.3.0 and 15; asserts `"1.3.0"`, `15`, and `"servicetag-v1.3.0"` |
-| `theSchemaAndTheFormatAreBothSix` | renamed; asserts `AppGraph.SCHEMA_VERSION == 7`, `BackupCodec.FORMAT_VERSION == 7`, and that the two agree |
-| `theRoomDatabaseCarriesTheSameVersionAsTheGraphConstant` | **no source change** — it reads `SCHEMA_VERSION` and derives the rest, so it starts asserting `version = 7,` and `7.json` on its own. Its passing is the proof that B01's `7.json` was committed |
-| `statusEchoesTheVersionsTheBuildCarries` | asserts `"1.3.0"`, `7`, `7` |
+| `theReleaseIdentityIs121AndCode14` | **this brief's** — renamed to name 1.3.0 and 15; asserts `"1.3.0"`, `15`, and `"servicetag-v1.3.0"`. It has been green on 1.2.1 / 14 through every earlier wave, which is what made those waves' tips green |
+| `theSchemaAndTheFormatAreBothSix` | **B01's, already done** (master §18.16) — renamed and asserting 7/7 since wave 1. This brief does not touch it |
+| `theRoomDatabaseCarriesTheSameVersionAsTheGraphConstant` | **no source change, and it has been green since wave 1** — it reads `SCHEMA_VERSION` and derives the rest, so it started asserting `version = 7,` and `7.json` the moment B01 landed. Its passing then was the proof that `7.json` was committed |
+| `statusEchoesTheVersionsTheBuildCarries` | **shared**: B01 already set the schema and format halves to `7`, `7`; this brief changes only `assertEquals("1.2.1", status.appVersion)` to `"1.3.0"` |
 | `theProductionHandlersAreWiredToTheBuildsOwnConstants` | **unchanged** |
 | `versioningRecordsThisReleaseAndNoLongerReservesItsCode` | renamed; asserts a `1.3.0 \| 15` row exists, that it names `schema **7**` and `format **7**`, that the forward-only clarification is still present verbatim, and — **kept** — that no `1.1.1` reservation row has come back |
 | `theSchedulingDocumentMarksItsSupersededRules`, `theDataModelDocumentNamesTheShippedVersions` | **unchanged**. They are 1.2's and must keep passing |
@@ -113,8 +113,8 @@ prove the **filter** and one to drive the **screen**:
 each with its expected sentence from §10 and its expected row delta:
 
 1. **URL** — `--es android.intent.extra.TEXT 'https://example-mower.invalid/xt1/manual.pdf'` → saved as a `WEB_URL` reference.
-2. **document** — `adb push` a fictional PDF, then a `content://` URI with `--grant-read-uri-permission` → one attachment row, the description on the D-19 line.
-3. **image** — `content://media/external/images/media/<id>` → one attachment row.
+2. **document** — the one step whose harness has bitten release gates before, so it is written out. `adb push` a fictional PDF to **`/sdcard/Download/mower-manual.pdf`**, then share it by its **external-storage documents provider** URI: `adb shell am start -a android.intent.action.SEND -t application/pdf --eu android.intent.extra.STREAM 'content://com.android.externalstorage.documents/document/primary%3ADownload%2Fmower-manual.pdf' --grant-read-uri-permission -n com.loosecannon.servicetag/com.loosecannon.servicetag.share.ShareIntakeActivity` → one attachment row, the description on the D-19 line. **Verify the authority on this emulator image before trusting it** and record what you saw in the evidence: `adb shell pm list packages | grep -i externalstorage` should show `com.android.externalstorage`, and `adb shell content query --uri content://com.android.externalstorage.documents/document/primary%3ADownload%2Fmower-manual.pdf --projection _display_name` should return the file's name. **If that provider is absent or refuses on the API-37 image**, fall back to MediaStore and say so in the runbook: `adb shell content query --uri content://media/external/downloads --projection _id,_display_name` to find the row, then share `content://media/external/downloads/<id>`. Either way the URI that was actually used goes in the evidence, so **a release-gate failure can never be a harness failure nobody can reconstruct**.
+3. **image** — MediaStore, which needs no provider question: `adb shell content query --uri content://media/external/images/media --projection _id` for an id the image the emulator ships with, then the same `am start` with `-t image/jpeg` and `--eu android.intent.extra.STREAM 'content://media/external/images/media/<id>'` → one attachment row.
 4. **note-link** — `'[Mower maintenance](joplin://x-callback-url/openNote?id=0f1e2d3c4b5a6978)'` → the name prefilled "Mower maintenance", saved as a `NOTE_LINK`.
 5. **blocked scheme** — `'javascript:alert(1)'` → "ServiceTag will not save that kind of link.", nothing written.
 6. **unknown scheme** — `'zotero://select/items/0'` → "Save this link?", then saved as `OTHER`.
@@ -177,7 +177,7 @@ production phone is untouched.**
 
 ## Gate
 
-- `./gradlew :app:testDebugUnitTest --console=plain` — green, with `VersionAgreementTest` **fully** green for the first time since wave 1.
+- `./gradlew :app:testDebugUnitTest --console=plain` — green, `VersionAgreementTest` included. **It has been green at every wave's tip**, not only at this one: B01 owned the schema and format assertions and updated them with the schema (master §18.16), and the version and document assertions stayed true on 1.2.1 / 14 until this brief moves them. A wave that hands back a red suite is a defect, never an expected state.
 - `grep -c 'versionName = "1.3.0"' app/build.gradle.kts` → **1**; `grep -c 'versionCode = 15' app/build.gradle.kts` → **1**; `grep -cE '^\|\s*1\.3\.0\s*\|\s*15\s*\|' docs/versioning.md` → **1**; `grep -c 'MIME sniffed on import' docs/design/09-security-privacy.md` → **0**.
 - `grep -cE '^> \| v7 \| \*\*1\.3\.0\*\* \|' docs/design/04-domain-data-model.md` → **1**.
 - `git diff --stat $BASE..HEAD -- core/src/main app/src/main` → **empty**. **`$BASE` is this lane's base commit** (master §1.15) — B06 runs last, so against the release branch's base this diff would carry every source change in the release and the gate would be a false FAIL. This brief changes no behaviour; `app/build.gradle.kts` is outside `app/src`.

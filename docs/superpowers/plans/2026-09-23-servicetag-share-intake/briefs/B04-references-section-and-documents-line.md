@@ -121,11 +121,12 @@ a second quiet line carrying it, `maxLines = 1` with `Ellipsis`. A trailing over
 **"Open"**, **"Edit"**, **"Remove"**. The section's own action is **"Add link"**.
 
 **Open** applies `LinkLaunchPolicy` **again, at launch**: a row whose stored URI now classifies
-`Blocked` is **shown and refused**, never launched — the sentence is the ratified "ServiceTag will
-not save that kind of link.", since it is the same fact. §10 ratifies that string under "Blocked
-scheme" and says nothing about launch, so **master plan §18.14 flags the wording to the owner**;
-ship the ratified string unless the owner rules otherwise, and never paraphrase it. A
-`LinkDecision.Unknown` at launch **takes no second confirmation** (spec §4.2) and is launched.
+`Blocked` is **shown and refused**, never launched. The sentence is the **open**-time one the owner
+ratified on 2026-09-23 — **"ServiceTag will not open that kind of link."** (§17, §18.14) — and **not**
+the save-time "ServiceTag will not save that kind of link.", which this brief uses only where
+something is actually being saved: the "Add link" sheet. Two moments, two sentences, neither
+paraphrased. A `LinkDecision.Unknown` at launch **takes no second confirmation** (spec §4.2) and is
+launched.
 
 **A missing handler** surfaces the ratified **"No app can open this link"** with **no URI in it**,
 through the **`SnackbarHostState` the section already takes** — not a `Toast`. That is a design
@@ -187,7 +188,7 @@ section and row cases are `androidTest`.
 | the count drifts | with three references the header reads "References · 3" | a hardcoded header hides the count the shipped Documents header carries |
 | a kind label is invented | one case per kind: `WEB_URL` → "Web link", `NOTE_LINK` → "Note", `OTHER` → "Other" | a `kind.name` rendered raw shows `WEB_URL` to a person |
 | the description is invisible | a row with a non-empty description draws it as a second quiet line; a row with an empty one draws only the kind label | a row that never renders `description` repeats the share path's own failure |
-| a stored URI that is now illegal is launched | a row whose URI classifies `Blocked` at launch is drawn, and Open shows "ServiceTag will not save that kind of link." **without calling `onOpen`** | a policy applied only at save lets a URI that became illegal be fired at `ACTION_VIEW` |
+| a stored URI that is now illegal is launched | a row whose URI classifies `Blocked` at launch is drawn, and Open shows **"ServiceTag will not open that kind of link."** — the open-time string, **not** the save-time one — **without calling `onOpen`** | a policy applied only at save lets a URI that became illegal be fired at `ACTION_VIEW`; and reusing the save-time sentence here tells the person a *save* was refused when nothing was being saved (§18.14) |
 | an unknown scheme asks twice | a stored `zotero://` row launches on Open with **no** confirmation | a second confirmation at launch contradicts spec §4.2 |
 | a missing handler crashes or leaks the URI | **two assertions, each on a mechanism that can actually be read.** `androidTest`: with a fake `onOpen` returning `false`, the section shows a **snackbar** whose text is exactly "No app can open this link" and which **does not contain the row's URI** — readable from the semantics tree, which a `Toast` is not. JVM: `LinkLauncher`'s refusal constant equals that same string, and carries no format placeholder | the shipped `LinkLauncher` toast names the URI, against §4.4 (§18.8); and a refusal routed through a `Toast` would be unassertable, so the hazard would have a row and no real test |
 | the URI becomes editable | the edit sheet has exactly two fields, "Name" and "Description"; after a save the stored `uri`, `kind`, `scheme` and `created_at` are unchanged (I-1) | a URI field on the sheet makes I-1 unenforceable |
@@ -195,7 +196,7 @@ section and row cases are `androidTest`.
 | remove leaves a row | confirming removes exactly that row and leaves every other reference and every attachment on the asset | a delete keyed on the wrong id removes a sibling |
 | "Add link" writes a different row | a reference added in-app and a reference added by a share, with the same URI, name and description on different assets, are **field-for-field identical** but for `id`, `assetId` and the timestamps — asserted at the view-model layer against the use case's output | a second creation path that sets a field differently is exactly what D-21 C forbids |
 | the confirmation is skipped in-app | "Add link" with `zotero://select/items/0` shows "Save this link?" and writes nothing until Save; then the row exists with `kind = OTHER` | a screen passing `confirmedUnknownScheme = true` unconditionally removes the confirmation |
-| a blocked scheme is added in-app | "Add link" with `javascript:alert(1)` shows "ServiceTag will not save that kind of link." and writes nothing | a UI that only filters at launch stores a URI I-2 forbids |
+| a blocked scheme is added in-app | "Add link" with `javascript:alert(1)` shows the **save**-time "ServiceTag will not save that kind of link." and writes nothing | a UI that only filters at launch stores a URI I-2 forbids |
 | a duplicate is added in-app | "Add link" with a URI already on the asset shows "That link is already on this asset" and writes nothing | mapping `DuplicateUri` to a generic failure hides a recoverable state |
 | a blank name is savable | with the name cleared, Save on the edit sheet shows "Give the reference a name" and writes nothing | an unguarded save writes a row the list cannot label |
 | an archived asset loses its references | a reference on an archived asset still lists and still opens | a lifecycle filter applied to the section hides rows the owner put there |

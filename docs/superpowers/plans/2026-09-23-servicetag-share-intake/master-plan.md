@@ -221,8 +221,8 @@ Owned by **B05**. API version stays **1**, extended additively; `/v1/status` cou
 | method | path | body | success | notes |
 |---|---|---|---|---|
 | `GET` | `/v1/assets/{id}/references` | — | 200 | `{references: [AssetReferenceDto]}`, ordered by `displayName`; the **ninth** `/v1/assets/{id}/…` sub-resource, so a wrong verb is **404** |
-| `POST` | `/v1/references` | `{assetId, kind, uri, displayName, description}` | 201 | `{reference}`; a wrong verb is **405** |
-| `PATCH` | `/v1/references/{id}` | `{displayName?, description?}` | 200 | `{reference}`; `uri`, `assetId` and `kind` are **unknown fields** here (I-1, I-6) |
+| `POST` | `/v1/references` | `{assetId, uri, displayName, description}` | 201 | `{reference}`; a wrong verb is **405**. **No `kind`** — derived from the scheme, read-only on the way out, an unknown field here (§18.18) |
+| `PATCH` | `/v1/references/{id}` | `{displayName?, description?}` | 200 | `{reference}`; `uri`, `assetId` and `kind` are **unknown fields** here (I-1, I-6, §18.18) |
 
 Responses reuse the backup DTO — one schema, not two; requests are declared in `:app` with plain
 `String` fields. **No `DELETE`, and no bytes, ever**: deleting a reference joins "What has no
@@ -236,9 +236,9 @@ subsection: 404 `NO_SUCH_REFERENCE`; 422 `REFERENCE_URI_INVALID`; 422 `REFERENCE
 after trimming — `REFERENCE_URI_INVALID` would be wrong on its face, the URI being valid. MCP
 surfaces it as any other error. MCP gains `list_references`, `add_reference`, `update_reference`
 under the shipped conventions — `None` means unchanged, unknown arguments rejected, every error path
-a real `ToolError` carrying the code — and `TOOL_NAMES` goes **38 → 41**. Four `docs/api/v1.md`
+a real `ToolError` carrying the code — and `TOOL_NAMES` goes **38 → 41**. Five `docs/api/v1.md`
 edits: format **1–6** → **1–7**; "eight `/v1/assets/{id}/…` sub-resources" → **nine**; "ten tables"
-→ **eleven** with `references` last; and the codes subsection. B05 holds the wire shapes and the
+→ **eleven** with `references` last; the codes subsection; and the create body without `kind`. B05 holds the wire shapes and the
 error map.
 
 ---
@@ -307,7 +307,8 @@ Spec §3.3's numbering. Every brief names the ones it holds.
 | `app/src/test/.../api/ApiRouterTest.kt` | — | B05 |
 | `tools/servicetag-mcp/src/servicetag_mcp/server.py`; `tests/test_reference_tools.py` | B05 | B05 |
 | `docs/api/v1.md`; `tools/servicetag-mcp/README.md` | — | B05 |
-| `app/build.gradle.kts`; `docs/versioning.md`; `README.md`; `docs/design/09-security-privacy.md`; `docs/design/04-domain-data-model.md`; `VersionAgreementTest.kt` | — | B06 |
+| `app/build.gradle.kts`; `docs/versioning.md`; `README.md`; `docs/design/09-security-privacy.md`; `docs/design/04-domain-data-model.md` | — | B06 |
+| `app/src/test/.../VersionAgreementTest.kt` | — | **B01** (the schema and format assertions only) and **B06** (the version and release-document assertions) — §18.16 |
 
 | this plan's own `master-plan.md` | — | **B06, conditionally**: only to record, dated, a §16 proof found wrong while running it |
 
@@ -327,7 +328,7 @@ a line in the other lane's file asks the controller rather than edits.
 
 | brief | owns | produces (the names later briefs call) | consumes |
 |---|---|---|---|
-| **B01** `briefs/B01-schema-format-and-merge.md` | the Room table, DAO, mapper, repository, `MIGRATION_6_7`, `7.json`; format 7; the merge entry and the three reasons. **No policy, no use case, no UI, no API** | `ReferenceId`, `ReferenceKind{WEB_URL,NOTE_LINK,OTHER}`, `AssetReference`, `ReferenceRepository` (`upsert`/`get`/`forAsset`/`findByUri`/`all`/`delete`/`deleteAll`/`observeForAsset`), `AssetReferenceDto` (nine fields), `BackupData.assetReferences`, `MergeTable.REFERENCES`, `REFERENCE_DUPLICATED_IN_ARCHIVE`, `REFERENCE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW`, `REFERENCE_HELD_BY_A_LOCAL_ROW`, `MergeWrites/MergeSnapshot/MergeReport.references` | shipped code only |
+| **B01** `briefs/B01-schema-format-and-merge.md` | the Room table, DAO, mapper, repository, `MIGRATION_6_7`, `7.json`; format 7; the merge entry and the three reasons; **`VersionAgreementTest`'s schema and format assertions**. **No policy, no use case, no UI, no API** | `ReferenceId`, `ReferenceKind{WEB_URL,NOTE_LINK,OTHER}`, `AssetReference`, `ReferenceRepository` (`upsert`/`get`/`forAsset`/`findByUri`/`all`/`delete`/`deleteAll`/`observeForAsset`), `AssetReferenceDto` (nine fields), `BackupData.assetReferences`, `MergeTable.REFERENCES`, `REFERENCE_DUPLICATED_IN_ARCHIVE`, `REFERENCE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW`, `REFERENCE_HELD_BY_A_LOCAL_ROW`, `MergeWrites/MergeSnapshot/MergeReport.references` | shipped code only |
 | **B02** `briefs/B02-reference-domain-and-policy.md` | `core/references/` and the three use cases. **No Android** | `LinkLaunchPolicy`, `LinkDecision`, `ShareTextParser`, `ParsedShare`, `StreamSourcePolicy`, `ReferenceLimits` (`MAX_REFERENCE_URI_CHARS`/`_NAME_CHARS`/`_DESCRIPTION_CHARS`), `ReferenceText.sanitiseName`/`sanitiseFilename`, `ReferenceKinds.inferFrom`, `AddReference`, `UpdateReference`, `RemoveReference`, `AddReferenceCommand`, `UpdateReferenceCommand`, `ReferenceResult`, `ReferenceProblem` | B01 |
 | **B03** `briefs/B03-share-target-and-intake.md` | `ShareIntakeActivity`, the intake screen and view model, the stream reader, the manifest entry and `<queries>`, `ManifestContractTest`'s set of three | `SharedItem{Link,Bytes,PlainText,Refused}`, `IntakeRefusal`, `readSharedItem(intent, resolver, streamPolicy, linkPolicy)` | B01, B02 |
 | **B04** `briefs/B04-references-section-and-documents-line.md` | the References section, "Add link", the edit and remove sheets, open-with-system, the D-19 Documents line, `LinkLauncher`'s refusal string | `ReferenceRowState`, `ReferencesSectionState`, `ReferencesSection(assetId, graph, snackbars, onOpen)` | B01, B02 |
@@ -370,7 +371,8 @@ most of every matrix lives.
 ## 14. Wave precondition
 
 No wave opens until the controller confirms: the predecessor merged `--no-ff` into the release
-branch and green; the reviewer's scoped re-review of every fix round closed; the worktree cut from
+branch and **green — the whole `:core` and `:app` unit suite at that tip, with no assertion carried
+red into a later wave** (§18.16); the reviewer's scoped re-review of every fix round closed; the worktree cut from
 the release tip; `ANDROID_SERIAL` free if the wave needs it. **No lane rebases the other's merged
 work away.**
 
@@ -380,7 +382,8 @@ work away.**
 
 Owner-run and owner-gated; the controller stops where the owner's click is required.
 
-1. Every brief merged and independently reviewed; every fix round's scoped re-review closed;
+1. Every brief merged and independently reviewed, **each handing back a green unit suite at its own
+   tip**; every fix round's scoped re-review closed;
    whole-branch **release** review clean — scope, unreviewed mutations, document consistency,
    ratified strings only, hygiene, evidence correspondence, release mechanics.
 2. **Every user-visible string is spec §10's, used verbatim** — including the two the owner ratified
@@ -465,8 +468,10 @@ runbook. `<base>` is the release branch's base commit (§1.15).
 
 ## 17. Ratified strings
 
-All 48 RATIFIED by the owner, 2026-09-23 (spec §10). A brief **quotes them verbatim and may not
-paraphrase one**. Ten are already shipped and reused unchanged, marked *(shipped)*.
+**Fifty RATIFIED by the owner, 2026-09-23** — spec §10's 48, plus the Add-link field label **"Link"**
+and the launch-time refusal **"ServiceTag will not open that kind of link."**, both ruled on the same
+day and both read as part of §10 (§18.4, §18.14). A brief **quotes them verbatim and may not paraphrase
+one**. Ten are already shipped and reused unchanged, marked *(shipped)*.
 
 | group | strings | owner |
 |---|---|---|
@@ -479,7 +484,8 @@ paraphrase one**. Ten are already shipped and reused unchanged, marked *(shipped
 | no attachment folder | "Choose an attachment folder in ServiceTag Settings, then share this again." · "Close" | B03 |
 | Type control | "Photo" · "Label photo" · "Receipt" · "Manual" · "Warranty" · "Document" · "Other" — all *(shipped, `DocumentsSection`)* | B03 |
 | unknown scheme | "Save this link?" · "ServiceTag does not recognise \"\<scheme\>\" links. It will be saved as written and opened with whatever app claims it." · "Save" · "Cancel" | B03, B04 |
-| blocked scheme / not a link | "ServiceTag will not save that kind of link." · "That is not a link." · "Save as a note" · "Cancel" | B03, B04 |
+| blocked scheme at **save** / not a link | "ServiceTag will not save that kind of link." · "That is not a link." · "Save as a note" · "Cancel" | B03, B04 |
+| blocked scheme at **open** *(RATIFIED 2026-09-23)* | **"ServiceTag will not open that kind of link."** — a stored link the policy now refuses, shown and not launched. Distinct from the save-time line, which stays as it is | B04 |
 | asset detail | "References" · "References · \<n\>" · "No references yet" · "Add link" · "Open" · "Edit" · "Remove" · "No app can open this link" · kinds "Web link", "Note", "Other" | B04 |
 | remove confirmation | "Remove this reference?" · "The link is removed from this asset. Nothing in the other app is changed." · "Remove" · "Cancel" | B04 |
 | edit sheet | "Edit reference" · "Name" · "Description" · "Save" · "Cancel" | B04 |
@@ -509,5 +515,10 @@ implies an in-app affordance the share screen does not offer.
 | **18.11** | `Plan decision:` **`kind` on `POST /v1/references` is accepted but advisory.** Spec §6 lists it in the body, so the request shape stays a subset of the response shape; but `kind` is **derived from the scheme** (§3.2), so the handler passes none to `AddReference`. A `kind` that disagrees with the derivation is **not honoured and not a 422**: nothing in the domain can hold the caller's answer, and refusing it would make a harmless field fatal. The handler's KDoc states it |
 | **18.12** | `Plan decision:` **`UnknownSchemeNeedsConfirmation` maps to 422 `REFERENCE_SCHEME_BLOCKED`.** There is nobody on the wire to confirm and the API never sets `confirmedUnknownScheme` (§18.2), so spec §6's "a refusal, never a confirmation, over the API" is satisfied by mapping the unconfirmed case to the same code as a hard block. It is a wire-contract decision, recorded here rather than only in B05 |
 | **18.13** | `Plan decision:` **`ReferenceProblem.Unchanged`, and a no-op update writes nothing.** An `UpdateReference` whose sanitised name and capped description both equal the stored ones returns `Unchanged` and **does not write**, so `updated_at` does not move. That is not a convenience: `IDENTICAL` compares every backup-format field including `updatedAt`, so a write on every call would make a re-imported archive `CONTENT_DIFFERS` on the next merge. B01's re-import matrix row depends on it from the data side, and B02's owns it from the command side. Over the API the result is **200 with the stored row**, not an error |
-| **18.14** | **Open for the owner, blocking nothing — the launch-time refusal's wording.** B04 reuses the ratified **"ServiceTag will not save that kind of link."** when a *stored* URI classifies `Blocked` at launch. §1.9 permits it (it is verbatim from §10) and it is the same fact, but §10 ratifies it under "Blocked scheme" and says nothing about launch, where "will not save" reads oddly because nothing is being saved. **Flagged to the owner beside §17 rather than settled in a brief**; B04 ships the ratified string unless the owner rules otherwise |
+| **18.14** | **RULED 2026-09-23 — the launch-time refusal gets its own sentence.** An earlier revision had B04 reuse the save-time "ServiceTag will not save that kind of link." when a *stored* URI classifies `Blocked` at open time, and flagged the oddity (nothing is being saved) to the owner. The owner ruled: the open-time line is **"ServiceTag will not open that kind of link."**, newly RATIFIED, and the save-time line is unchanged. Two sentences for two moments, both in §17; B04 uses each where it belongs and paraphrases neither |
 | **18.15** | `Plan decision:` **only `text/uri-list` is read as text when it arrives as a stream; a `text/plain` stream is a document.** Spec §4.4 says `text/plain` and `text/uri-list` "are scanned for their first URI token", which is right for the `EXTRA_TEXT` case both types are in D-6's ten for. It does not follow that a **stream** of either is prose: `MimeTypes.EXTENSIONS` maps `text/plain` to `txt` (`core/.../core/model/Attachment.kt:92`) for exactly the case of a `text/plain` attachment needing a locator extension, and spec §4.1's remark that the table "does not carry `text/markdown`, `text/csv` or `application/msword`" only means anything if the other seven of the ten **do** reach `AttachmentLocator.extension`. A shared `.txt` maintenance log decoded as prose would find no URI, be offered as a note and **never be stored** — the owner's document lost silently. So B03's precedence rule names **`text/uri-list` alone**; `text/plain` with a stream is bytes, `text/plain` without one is text. The uri-list read cap is `MAX_REFERENCE_URI_CHARS` (2,048), a stated number and not a slack. **If the owner wants a `text/plain` stream treated as text, that is a ruling, not a brief's** |
+| **18.16** | **Owner ruling, 2026-09-23 — no brief hands back a red suite, and `VersionAgreementTest` is split.** An earlier revision let B01 and B02 leave that test red on its schema and format cases "until B06 lands the version row". **Withdrawn.** **B01 owns `theSchemaAndTheFormatAreBothSix` and the two schema/format assertions inside `statusEchoesTheVersionsTheBuildCarries`**, updating them in the same commit as the schema, so its tip is green with `versionName` still **1.2.1**, `versionCode` still **14** and **no 1.3.0 row** in `docs/versioning.md`. **B06 keeps the version and release-document assertions** — `theReleaseIdentityIs121AndCode14`, the `appVersion` half of `statusEchoes…`, `versioningRecordsThisReleaseAndNoLongerReservesItsCode`, and the three new document cases. `theRoomDatabaseCarriesTheSameVersionAsTheGraphConstant` and `theProductionHandlersAreWiredToTheBuildsOwnConstants` need no edit from either brief. The two are four waves apart, so sharing the file costs nothing; what it buys is that **a red assertion is never an expected state**, and §14's "merged and green" means what it says |
+| **18.17** | **The FINAL spec is being reconciled in place by the controller**, and this plan is written against the reconciled text. Six items: the **two** indexes §3.2 declares (§18.6); **five** reference codes, `REFERENCE_NAME_REQUIRED` included (§7); **no `kind`** on the create or patch command, the DTO carrying the derived kind read-only (§18.18); **structural URI validity** as a `:core` rule (§18.19); the **`text/uri-list` read caps** (§18.20); and the string ledger at **50** — the 48 plus "Link" and the launch-time refusal (§17, §18.14). The rule at the top of this plan still holds everywhere else: **an implementer who finds this plan disagreeing with the spec follows the spec and reports the disagreement** — except on these six, where the plan is ahead of the text and the controller's reconciliation is the authority |
+| **18.18** | **Owner ruling, 2026-09-23 — `kind` is not on the command.** Spec §6's body listed `{assetId, kind, uri, displayName, description}`, and an earlier revision accepted `kind` as advisory-and-ignored. **Withdrawn**: a field the server accepts and then discards reads as settable, never takes effect, and nothing would catch the divergence. `kind` is **derived from the scheme** (spec §3.2), so it is an **unknown field on both the create and the patch**, refused **400** by the strict decoder; `AssetReferenceDto` carries it **read-only on the way out**; and the MCP create and update tools carry no such argument. The response shape stays a superset of the request shape, which is the shipped convention |
+| **18.19** | **Owner ruling, 2026-09-23 — structural URI validity is a `:core` rule, not the parser's.** `ShareTextParser` only ever sees a *share*; **"Add link" and the API both bypass it entirely**, so a URI's shape cannot be guaranteed there and must be checked where every path meets — `AddReference`. The rule: the URI must parse with a scheme, and for a **hierarchical** scheme (`http`, `https`, and any scheme written with `//`) it must carry a **non-empty host**. Otherwise it is refused — `REFERENCE_URI_INVALID` on the wire, the ratified "That is not a link." in app. **No new string**: the arm folds into `ReferenceProblem.NotALink`, which B05 already maps to that code |
+| **18.20** | **Owner ruling, 2026-09-23 — the `text/uri-list` stream has two separate caps.** An earlier revision applied the 2,048-character URI cap to the whole stream. A uri-list is a *list*: it may legitimately be longer than any one URI in it. So **at most 64 KiB of the stream is read**, the first line that is neither blank nor a `#` comment is taken, and **`MAX_REFERENCE_URI_CHARS` (2,048) is applied to that extracted URI alone**. A stream over 64 KiB, or undecodable as UTF-8, is `Refused(UNREADABLE)`; an extracted URI over 2,048 is the over-long-URI refusal |

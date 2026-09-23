@@ -10,7 +10,7 @@
 
 Give the reference domain an automation surface from day one (D-12 A): three routes, one response
 DTO reused from the backup format, five `UPPER_SNAKE` codes, one new `/v1/status` count, three MCP
-tools under the shipped conventions, and the four `docs/api/v1.md` edits that keep the document
+tools under the shipped conventions, and the five `docs/api/v1.md` edits that keep the document
 true. **No `DELETE`, and no bytes, ever.** This brief runs in wave 3 lane B and **never asks for the
 emulator** — every case here is JVM or pytest.
 
@@ -31,7 +31,7 @@ emulator** — every case here is JVM or pytest.
 - `app/.../api/ApiDtos.kt` — the `StatusResponse.counts` KDoc's table list gains `references`. **`MergeReportResponse` is B01's** (master plan §18.3) and is already done by the time this brief runs; if it is not, that is a finding for the controller, not a fix here.
 - `app/.../di/AppGraph.kt` — the reference handlers wired into `ApiHandlers`.
 - `app/src/test/kotlin/.../api/ApiRouterTest.kt` — `theDestructiveUseCasesHaveNoRoute` extended with the reference paths.
-- `docs/api/v1.md` — the four edits, plus a new **"The reference codes (1.3.0)"** subsection.
+- `docs/api/v1.md` — the five edits, plus a new **"The reference codes (1.3.0)"** subsection.
 - `tools/servicetag-mcp/src/servicetag_mcp/server.py` — `TOOL_NAMES` 38 → **41** with a `# 1.3 —` comment in the style of the `# 1.2 —` one, and the three `@mcp.tool()` functions.
 - `tools/servicetag-mcp/README.md` — the tool count and the new tools, if it names either.
 
@@ -66,9 +66,9 @@ are **405** path shapes. That asymmetry is the shipped convention and the `v1.md
 
 ```kotlin
 @Serializable
+/** No `kind`: it is DERIVED from the scheme and read-only on the way out (master §18.18). */
 internal data class CreateReferenceRequest(
     val assetId: String,
-    val kind: String,
     val uri: String,
     val displayName: String,
     val description: String = "",
@@ -82,11 +82,14 @@ internal data class UpdateReferenceRequest(
 )
 ```
 
-`kind` is accepted on create because spec §6 lists it in the body — the request shape is a subset of
-the response shape, as the shipped commands are — but it is **advisory and never authoritative**:
-the handler passes no kind to `AddReference`, which derives it from the scheme (spec §3.2). A `kind`
-that disagrees with the derivation is simply not honoured; it is **not** a 422, because nothing in
-the domain can hold the caller's answer. The handler's KDoc says so in one sentence.
+**`kind` is on neither command** (owner ruling, master §18.18). Spec §6's original body listed it,
+but `kind` is **derived from the scheme** (spec §3.2) and nothing in the domain can hold a caller's
+answer, so requiring a field the server then ignores is a field that can only ever be wrong. It is
+therefore an **unknown field on both `POST /v1/references` and `PATCH /v1/references/{id}`**, refused
+by the strict decoder with a **400** naming it, exactly as `uri` and `assetId` are on the PATCH.
+`AssetReferenceDto` still carries `kind` **on the way out**, read-only, so a client reads the derived
+value and never sets it — the response shape stays a superset of the request shape, which is the
+shipped convention.
 
 `null` on the PATCH means **unchanged**, the shipped convention: the handler reads the stored row,
 overlays the non-null fields, and calls `UpdateReference` with the result.
@@ -129,7 +132,7 @@ rejected by `_StrictMCPServer`, every error path a real `ToolError` carrying the
 @mcp.tool()
 def list_references(asset_id: str) -> dict[str, Any]: ...
 @mcp.tool()
-def add_reference(asset_id: str, uri: str, display_name: str, description: str | None = None) -> dict[str, Any]: ...
+def add_reference(asset_id: str, uri: str, display_name: str, description: str | None = None) -> dict[str, Any]: ...   # no kind: derived
 @mcp.tool()
 def update_reference(reference_id: str, display_name: str | None = None, description: str | None = None) -> dict[str, Any]: ...
 ```
@@ -141,12 +144,13 @@ non-null `TEXT` column with an empty default — the same reason `unit` is sent 
 clearing notes. `_validate_clear_fields` is not called and no `_REFERENCE_CLEARABLE_FIELDS` constant
 is added.
 
-**The four `docs/api/v1.md` edits**, each exact:
+**The five `docs/api/v1.md` edits**, each exact:
 
 1. the import-merge rows' "format **1–6**" → **1–7** at **both** sites — the endpoint table row at `v1.md:143` ("a data archive of format **1–6**") and "The additive merge import" at `:455` ("**format 1–6**"). The two spell the emphasis differently, which is why the gate greps the bare `1–6` and not one asterisk placement;
 2. the 405 row's "The eight `/v1/assets/{id}/…` sub-resources" → **nine**;
 3. the merge-report sentence's "Each of the ten tables" → **eleven**, and that sentence's field list gains `references` in **write-order position** (last, after `attachments`), with a clause naming format 7 in the style of the format-6 clause;
-4. a new **"The reference codes (1.3.0)"** subsection after "The maintenance codes (1.2.0)", carrying **all five** codes — the four of spec §6 **and `REFERENCE_NAME_REQUIRED`** — plus one row recording that **`/v1/references/{id}` takes no `DELETE`**, and one clause noting that an absent `assetId` answers the shipped `no_such_asset` (§18.10).
+4. a new **"The reference codes (1.3.0)"** subsection after "The maintenance codes (1.2.0)", carrying **all five** codes — the four of spec §6 **and `REFERENCE_NAME_REQUIRED`** — plus one row recording that **`/v1/references/{id}` takes no `DELETE`**, and one clause noting that an absent `assetId` answers the shipped `no_such_asset` (§18.10);
+5. the `POST /v1/references` body documented as **`{assetId, uri, displayName, description}`**, with a sentence saying **`kind` is derived from the scheme, returned read-only, and rejected as an unknown field on both commands** (§18.18).
 
 Plus one line in **"What has no endpoint, deliberately"**: deleting a reference, beside attachments
 and closures — "the API adds and amends, the phone removes".
@@ -174,6 +178,7 @@ One test per hazard class. Each must fail without the change it names. Kotlin ca
 | `null` means blank | `PATCH` with `{"description": null}` leaves the stored description; `{"description": ""}` clears it | treating `null` as a value is the bug the shipped `_overlay` convention exists to prevent |
 | **the URI is amendable** | `PATCH` with `uri` is a **400** naming the field, and so are `assetId` and `kind` — one case each (I-1, I-6) | `ignoreUnknownKeys = true`, or a widened request type, makes a rename silently rewrite a link |
 | an unknown field on create | `POST` with `provenance` is a 400 naming it | the same, on the other command |
+| **`kind` is accepted and then ignored** | `POST /v1/references` carrying `kind` is a **400 naming `kind`**, and so is `PATCH` carrying it; a create without it succeeds and the **response** carries the derived kind matching the scheme (`https://…` → `WEB_URL`, `joplin://…` → `NOTE_LINK`) | a field the server accepts and discards reads as settable, never takes effect, and no test would catch the divergence (§18.18) |
 | a reference is deletable | `DELETE /v1/references/{id}` and `DELETE /v1/assets/{id}/references` each answer 405 or 404 as the shape dictates, and `ApiRouterTest.theDestructiveUseCasesHaveNoRoute` covers both | a `DELETE` added for symmetry makes the API able to erase history the phone is meant to own |
 | a verb on the sub-resource | `POST /v1/assets/{id}/references` is **404**, while `GET /v1/references` is **405** | collapsing the two shapes contradicts the shipped convention the `v1.md` edit records |
 | each new code is unreachable | one case per code, **five**: 404 `NO_SUCH_REFERENCE` on an unknown id; 422 `REFERENCE_URI_INVALID` on a 2,049-character URI and on non-URI text; 422 `REFERENCE_SCHEME_BLOCKED` on `javascript:`; 409 `REFERENCE_URI_TAKEN` on a duplicate; **422 `REFERENCE_NAME_REQUIRED` on a `displayName` that is blank after trimming, on both `POST` and `PATCH`** | a code documented and never emitted is a lie in `v1.md`; and a blank name answered as `REFERENCE_URI_INVALID` names the wrong field |

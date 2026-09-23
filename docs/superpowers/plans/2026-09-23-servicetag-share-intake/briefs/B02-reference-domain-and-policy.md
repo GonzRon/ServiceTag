@@ -154,6 +154,7 @@ data class UpdateReferenceCommand(val displayName: String, val description: Stri
 
 sealed interface ReferenceProblem {
     data object BlankName : ReferenceProblem
+    /** Empty, no scheme, or a hierarchical scheme with no host (§18.19). */
     data object NotALink : ReferenceProblem
     data object UriTooLong : ReferenceProblem
     data object SchemeBlocked : ReferenceProblem
@@ -189,7 +190,15 @@ class RemoveReference(references, uow) { suspend fun run(id: ReferenceId): Refer
 **`AddReference.run`, in this order** — the order is the contract, because each step's refusal must
 be reachable:
 
-1. trim the URI; empty, or `policy.schemeOf` returns `null` → `NotALink`;
+1. trim the URI; **and check it is structurally a URI at all** → `NotALink` when it is not. Three
+   conditions, all of them this layer's (master §18.19): it is non-empty; `policy.schemeOf` returns a
+   scheme; and, when the scheme is **hierarchical** — `http`, `https`, or any scheme written with a
+   `//` authority — the **host is non-empty**. So `https://` and `http:///path` are refused, while
+   `joplin:x-callback-url/openNote?id=…` (opaque, no `//`) is not. **Why here and not in the parser:**
+   `ShareTextParser` only ever sees a share, and **"Add link" and the API both bypass it entirely**, so
+   a URI's shape can only be guaranteed at the one place all three paths meet — this use case. On the
+   wire the refusal is `REFERENCE_URI_INVALID`; in app it is the ratified "That is not a link." — **no
+   new string**, because the arm folds into `NotALink`;
 2. length > `MAX_REFERENCE_URI_CHARS` → `UriTooLong`;
 3. `policy.classify` → `Blocked` → `SchemeBlocked` (**I-2**); `Unknown(scheme)` with
    `confirmedUnknownScheme == false` → `UnknownSchemeNeedsConfirmation(scheme)`;
@@ -233,6 +242,7 @@ One test per hazard class. Each must fail without the change it names.
 
 | hazard | behaviour proved | how it fails without the change |
 |---|---|---|
+| **a structurally broken URI is stored** | one case per shape: `https://` with no host, `http:///path`, a bare `notaurl`, and the empty string are each `NotALink` with nothing written; while `joplin:x-callback-url/openNote?id=0f1e2d3c4b5a6978` — opaque, no `//`, no host — is **accepted** | the parser cannot cover this: "Add link" and the API never call it (master §18.19), so without the check a host-less `https://` reaches the row and then fails at `ACTION_VIEW` forever |
 | a bare URL is not recognised | `firstUri("see https://example-mower.invalid/xt1 for parts")` yields that URI and a null label | a parser anchored at the string start returns null |
 | a Markdown link loses its label | `firstUri("[Mower maintenance](joplin://x-callback-url/openNote?id=0f1e2d3c4b5a6978)")` yields the URI **and** "Mower maintenance" | a parser that only scans for a scheme returns the URI with a null label and the name prefill is lost |
 | plain text becomes a URI | `firstUri("just some words")` is null | a fallback that wraps the text as a URI stores prose as a link, against #35 |
@@ -265,7 +275,7 @@ One test per hazard class. Each must fail without the change it names.
 
 - `./gradlew :core:test --console=plain` — green, with the seven new classes present and counted.
 - `./gradlew :app:testDebugUnitTest --console=plain` — green (the only `:app` change is `AppGraph`
-  wiring). `VersionAgreementTest`'s schema/format cases stay red until B06; report, do not fix.
+  wiring). **The whole `:app` unit suite is green at this brief's tip** — B01 already updated `VersionAgreementTest`'s schema and format assertions (master §18.16), so there is nothing here to report as expected-red.
 - `grep -rlE '^import (android|androidx)\.' core/src/main` → no output.
 - `grep -rn 'ExternalLink\|LinkKind\|external_link' core/src/main/kotlin/com/loosecannon/servicetag/core/references core/src/main/kotlin/com/loosecannon/servicetag/core/usecase/AddReference.kt core/src/main/kotlin/com/loosecannon/servicetag/core/usecase/UpdateReference.kt core/src/main/kotlin/com/loosecannon/servicetag/core/usecase/RemoveReference.kt` → no output.
 - Report the `:core` test delta in the report file.
