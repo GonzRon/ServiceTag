@@ -90,46 +90,78 @@ data class AssetsState(
     val showArchived: Boolean = false,
     /** How many rows the chip is hiding, so an empty list can say why it is empty. */
     val archivedCount: Int = 0,
+    /** What the search box holds, verbatim. Blank means "the systems, and not their parts". */
+    val query: String = "",
 )
 
 /**
- * The list. Two decisions live here: whether the archived tail is shown at all — archive is not
+ * The list. Three decisions live here: whether the archived tail is shown at all — archive is not
  * delete (R-9), but a list that keeps showing everything you archived is no better than never
- * archiving — and the order, which is active, then retired, then archived, by name within each
- * group (spec §9). The order is the ViewModel's rather than the query's because "retired" is a
- * date column, not a status, and sorting by it in SQL would say nothing about lifecycle.
+ * archiving — the order, which is active, then retired, then archived, by name within each group
+ * (spec §9) — and, since the owner's 2026-09-23 instruction moved #39's quick filter here from the
+ * Dashboard, what the search box narrows the list to. The order is the ViewModel's rather than the
+ * query's because "retired" is a date column, not a status, and sorting by it in SQL would say
+ * nothing about lifecycle.
  */
 class AssetsViewModel(assets: AssetRepository, private val clock: Clock) : ViewModel() {
 
     constructor(graph: AppGraph) : this(graph.assets, graph.clock)
 
     private val showArchived = MutableStateFlow(false)
+    private val queries = MutableStateFlow("")
+
+    /**
+     * What the search box draws itself from, synchronously (F3): a `combine`/`stateIn` round trip
+     * is not guaranteed to be back before the next keystroke, which is how characters get dropped
+     * and the cursor jumps to the end mid-word. [AssetsState.query] carries the same string once
+     * the list has caught up with it.
+     */
+    val query: StateFlow<String> = queries.asStateFlow()
 
     /** The zone the season window is read in: "out of season" is a fact about the user's today. */
     private val zone: ZoneId = ZoneId.systemDefault()
 
-    val state: StateFlow<AssetsState> = combine(assets.observeAll(), showArchived) { rows, archived ->
-        val today = clock.nowMillis().asLocalDate(zone)
-        val byId = rows.associateBy { it.id }
-        val visible = if (archived) rows else rows.filter { it.status == AssetStatus.ACTIVE }
-        AssetsState(
-            items = visible
-                .sortedWith(compareBy({ lifecycleRank(it) }, { it.name.lowercase() }))
-                .map { row ->
-                    AssetRow(
-                        asset = row,
-                        // The parent by name, from the rows already in hand: no second query, and
-                        // a parent that has gone leaves the subtitle off rather than showing an id.
-                        parentName = row.parentAssetId?.let { byId[it]?.name },
-                        outOfSeason = outOfSeasonOn(row, today),
-                    )
-                },
-            showArchived = archived,
-            archivedCount = rows.count { it.status != AssetStatus.ACTIVE },
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), AssetsState())
+    val state: StateFlow<AssetsState> =
+        combine(assets.observeAll(), showArchived, queries) { rows, archived, query ->
+            val today = clock.nowMillis().asLocalDate(zone)
+            val byId = rows.associateBy { it.id }
+            val visible = if (archived) rows else rows.filter { it.status == AssetStatus.ACTIVE }
+            // The list is the systems: a component stays on the system it belongs to until a
+            // search asks for it by name (#39), exactly as the box did on the Dashboard.
+            val matching = if (query.isBlank()) {
+                visible.filter { it.parentAssetId == null }
+            } else {
+                visible.filter { it.matches(query) }
+            }
+            AssetsState(
+                items = matching
+                    .sortedWith(compareBy({ lifecycleRank(it) }, { it.name.lowercase() }))
+                    .map { row ->
+                        AssetRow(
+                            asset = row,
+                            // The parent by name, from the rows already in hand: no second query,
+                            // and a parent that has gone leaves the subtitle off rather than
+                            // showing an id.
+                            parentName = row.parentAssetId?.let { byId[it]?.name },
+                            outOfSeason = outOfSeasonOn(row, today),
+                        )
+                    },
+                showArchived = archived,
+                archivedCount = rows.count { it.status != AssetStatus.ACTIVE },
+                query = query,
+            )
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), AssetsState())
 
     fun toggleArchived() = showArchived.update { !it }
+
+    /**
+     * What the search box holds. Filtering is a pass over rows the store flow already produced, so
+     * a keystroke runs no query, reads no preference and needs no debounce.
+     */
+    fun onQueryChange(value: String) { queries.value = value }
+
+    /** The clear action. Separate from `onQueryChange("")` so the screen states its intent. */
+    fun clearQuery() { queries.value = "" }
 }
 
 /**

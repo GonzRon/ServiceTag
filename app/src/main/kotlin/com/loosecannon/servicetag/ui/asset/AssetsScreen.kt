@@ -43,6 +43,10 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
  * (archive is not delete — R-9 — but a list that keeps showing what you archived is no better
  * than never archiving). Rows are hairline-separated lines, not cards (D12 §7), and adding an
  * asset is an app-bar action: the one FAB this app allows belongs to the ledger (G1 §3 c).
+ *
+ * The search box (#39) moved here from the Dashboard by the owner's 2026-09-23 instruction: the
+ * Dashboard's category and maintenance-status dropdowns now serve as its navigation aids, and the
+ * quick filter belongs on the screen that lists every asset and component.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,6 +57,10 @@ fun AssetsScreen(
 ) {
     val model: AssetsViewModel = viewModel { AssetsViewModel(graph) }
     val state by model.state.collectAsStateWithLifecycle()
+    // The box draws itself from the view model's own query holder, not from `state.query` (F3):
+    // the latter is a `combine`/`stateIn` round trip and a text field has to see its own keystroke
+    // back in the same frame. `state.query` still decides what the list below says.
+    val query by model.query.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -67,6 +75,12 @@ fun AssetsScreen(
         },
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
+            SearchBox(
+                query = query,
+                onQueryChange = model::onQueryChange,
+                onClear = model::clearQuery,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
             FilterChip(
                 selected = state.showArchived,
                 onClick = model::toggleArchived,
@@ -75,26 +89,33 @@ fun AssetsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
             if (state.items.isEmpty()) {
-                // "Nothing here" and "nothing here because the chip is off" are different facts,
-                // and telling someone the first while the second is true is how they conclude
-                // their assets are gone. The offer to look is part of the sentence.
-                val onlyArchivedLeft = !state.showArchived && state.archivedCount > 0
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    QuietLine(
-                        if (onlyArchivedLeft) {
-                            "No active assets · ${state.archivedCount} archived"
-                        } else {
-                            "No assets yet"
-                        },
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = onNewAsset, shape = ControlShape) { Text("Add asset") }
-                        if (onlyArchivedLeft) {
-                            OutlinedButton(onClick = model::toggleArchived, shape = ControlShape) {
-                                Text("Show archived")
+                if (state.query.isNotBlank()) {
+                    // Only ever an answer to something asked for (F1): a blank query has its own
+                    // honest reasons for an empty list below, and neither of them is "found
+                    // nothing" — nothing was searched for.
+                    QuietLine(text = "Nothing matches that.", modifier = Modifier.padding(16.dp))
+                } else {
+                    // "Nothing here" and "nothing here because the chip is off" are different
+                    // facts, and telling someone the first while the second is true is how they
+                    // conclude their assets are gone. The offer to look is part of the sentence.
+                    val onlyArchivedLeft = !state.showArchived && state.archivedCount > 0
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        QuietLine(
+                            if (onlyArchivedLeft) {
+                                "No active assets · ${state.archivedCount} archived"
+                            } else {
+                                "No assets yet"
+                            },
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = onNewAsset, shape = ControlShape) { Text("Add asset") }
+                            if (onlyArchivedLeft) {
+                                OutlinedButton(onClick = model::toggleArchived, shape = ControlShape) {
+                                    Text("Show archived")
+                                }
                             }
                         }
                     }
