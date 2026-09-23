@@ -6,6 +6,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.core.content.IntentCompat
 import com.loosecannon.servicetag.core.model.MimeTypes
+import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.references.LinkDecision
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_URI_CHARS
@@ -354,6 +355,18 @@ private fun InputStream.readAtMost(limit: Int): ByteArray {
  * of the 512 persisted-grant cap. The grant itself lives until the receiving task finishes, so a
  * recreation mid-intake either still reads it or fails cleanly and writes nothing.
  */
-internal fun ContentResolver.sourceFor(uri: Uri): () -> InputStream = {
+internal fun ContentResolver.byteSourceFor(uri: Uri): ByteSource = ByteSource {
     openInputStream(uri) ?: throw IOException("the provider returned no stream")
+}
+
+/**
+ * The state machine's Android-free view of what arrived. The activity holds a [SharedItem] because
+ * that is where the `Uri` it must open lives; everything past that point is [ShareContent], so no
+ * rule this release adds is expressed over a type a JVM test cannot construct.
+ */
+internal fun SharedItem.asContent(): ShareContent = when (this) {
+    is SharedItem.Link -> ShareContent.Link(uri, suggestedName)
+    is SharedItem.Bytes -> ShareContent.Bytes(suggestedName, mimeType, size)
+    is SharedItem.PlainText -> ShareContent.PlainText(text)
+    is SharedItem.Refused -> ShareContent.Refused(reason)
 }
