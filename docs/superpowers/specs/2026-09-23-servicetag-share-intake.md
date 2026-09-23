@@ -220,7 +220,7 @@ assertion stays exact. The change is to
 "TheTwoShippedActivities". It is **not** made a count of three, because that file's own KDoc records
 that the merged manifest carries library-injected components which "would make an exact-count assertion
 flaky". `everyReceiverIsNonExportedAndThereAreSix` stays at six, and
-`MergedManifestContractTest.theMergedManifestPermissionSetIsExactly` is **unchanged** — `ACTION_SEND`
+`ManifestContractTest.theMergedManifestPermissionSetIsExactly` (in `app/src/test/kotlin/com/loosecannon/servicetag/reminders/ManifestContractTest.kt`, the class that also carries the exported-set assertion) is **unchanged** — `ACTION_SEND`
 intake needs no new permission, which is itself worth asserting.
 
 ### 4.2 Outbound launching
@@ -425,7 +425,7 @@ One test per hazard class. No acceptance procedure waits on a real-world delay.
 | Merge | insert; identical; `REFERENCE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW` on an `IDENTICAL`; **a diverged pair is `SKIPPED / REFERENCE_HELD_BY_A_LOCAL_ROW` and `applicable` stays true**; the same-id/different-content arm is still a blocking `CONFLICT`; `REFERENCE_DUPLICATED_IN_ARCHIVE`; owner-not-available; deterministic order; no partial write |
 | Migration | schema 6 → 7 adds the table and index and changes no existing row |
 | API/MCP | one case per status class over the three rows; each new code by name; unknown-field rejection on both commands, `uri` on the PATCH included; no route deletes a reference; `ApiRouterTest.theDestructiveUseCasesHaveNoRoute` extended to the new paths; `POST /v1/import-merge/plan` with a format-7 archive; the three MCP tools, `null`-means-unchanged and unknown-argument rejection |
-| Manifest | the exported **set** is exactly the three named activities and no other component kind is exported; `everyReceiverIsNonExportedAndThereAreSix` still passes; `MergedManifestContractTest.theMergedManifestPermissionSetIsExactly` unchanged; the share filter declares the ten types, no `ACTION_SEND_MULTIPLE` and no `BROWSABLE` |
+| Manifest | the exported **set** is exactly the three named activities and no other component kind is exported; `everyReceiverIsNonExportedAndThereAreSix` still passes; `ManifestContractTest.theMergedManifestPermissionSetIsExactly` (in `app/src/test/kotlin/com/loosecannon/servicetag/reminders/ManifestContractTest.kt`, the class that also carries the exported-set assertion) unchanged; the share filter declares the ten types, no `ACTION_SEND_MULTIPLE` and no `BROWSABLE` |
 
 ---
 
@@ -511,7 +511,7 @@ the other app is changed." · "Remove" · "Cancel". **Edit sheet** — "Edit ref
 
 The JVM unit gate green with the new suites counted; the connected suite green on the emulator;
 `ManifestContractTest`'s exported **set** passing with the three named activities while
-`MergedManifestContractTest.theMergedManifestPermissionSetIsExactly` is unchanged; a backup exported on
+`ManifestContractTest.theMergedManifestPermissionSetIsExactly` (in `app/src/test/kotlin/com/loosecannon/servicetag/reminders/ManifestContractTest.kt`, the class that also carries the exported-set assertion) is unchanged; a backup exported on
 one install and imported into a second with the references present and the report `applicable`; **a
 two-phone merge in which each side saved the same URL on one asset under different names, proven to
 report a skip and still apply**; a format-7 archive refused by a 1.2.x build through `BackupNewerFormat`;
@@ -539,7 +539,7 @@ MCP tools.
 Untouched: `external_link` and everything around it; `AttachmentProblem` and its exhaustive `when`;
 `AttachmentKind.label()` and `AttachmentKinds.inferFrom`, on which D-4 and §10 both depend;
 `AttachmentStore` and both implementations; the artifacts archive; `MergeVerdict`; every existing
-`MergeTable` member's position; `MergedManifestContractTest`; the six receivers.
+`MergeTable` member's position; `ManifestContractTest`; the six receivers.
 
 Size, against the planning policy's guardrails: a master plan of 500–700 lines and briefs of 150–300
 each for C1–C7 (C4 largest, C2 smallest) — roughly 1,900–2,800 lines across eight documents, each inside
@@ -570,3 +570,10 @@ preserved.
 `docs/versioning.md`'s supported-release table gains a 1.3.0 / 15 row naming the share intake, the
 `asset_reference` table, schema 7, format 7 and the reference API, with `docs/api/v1.md` and this
 specification as its contracts. The seasonal and operational model moves to 1.4.0.
+
+### Amendments at planning (controller, 2026-09-23)
+
+- **Test class name.** §4.1 and §11 cited a `MergedManifestContractTest` class; the merged-manifest permission assertion lives in `ManifestContractTest` (`app/src/test/kotlin/com/loosecannon/servicetag/reminders/ManifestContractTest.kt`), beside the exported-set assertion. Corrected in place; the contract is unchanged.
+- **Index count.** §5 and §12 said "one new index"; §3.2 declares two — `UNIQUE(asset_id, uri)` and `INDEX(asset_id)`. §3.2 is the contract: the migration creates the table and both indexes.
+- **Blank name over the API.** §6 named no code for a reference command whose `displayName` is blank after trimming, although §10 ratifies the two in-app refusals. Ruled: **422 `REFERENCE_NAME_REQUIRED`** ("a reference needs a name"), documented in `docs/api/v1.md` beside the other reference codes; the MCP surfaces it as any other error. API text is not user-visible.
+- **Open string (owner):** the in-app "Add link" sheet (D-21) needs a ratified label for its URI field and a sheet title; proposed **"Link"** for the field and the already-ratified **"Add link"** as the title — a release blocker until ratified (master plan §18.4).
