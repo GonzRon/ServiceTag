@@ -51,6 +51,7 @@ class MaintenanceCommandShapeTest {
             graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
             maintenanceHandlersFor(graph),
+            referenceHandlersFor(graph),
             appVersion = "1.2.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),

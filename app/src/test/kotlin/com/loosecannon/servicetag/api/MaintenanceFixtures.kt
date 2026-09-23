@@ -1,5 +1,8 @@
 package com.loosecannon.servicetag.api
 
+import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.usecase.AddReference
+import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 
@@ -37,3 +40,25 @@ internal fun maintenanceHandlersFor(graph: FakeGraph): MaintenanceHandlers = Mai
     recompute = graph.recomputeSchedules,
     today = graph.todayPort,
 )
+
+/**
+ * The 1.3 reference handlers over a [FakeGraph], here for the reason above: `ApiHandlers` grew one
+ * collaborator in 1.3 too, and eight call sites each gained one line rather than four.
+ *
+ * The two use cases are built here rather than read off the graph because [FakeGraph] exposes the
+ * reference **repository** and not the use cases over it; the production wiring in `AppGraph`
+ * builds exactly these three objects from exactly these members, and `ReferenceHandlers`' own
+ * `constructor(graph)` is what the app uses.
+ */
+internal fun referenceHandlersFor(graph: FakeGraph): ReferenceHandlers {
+    // One instance answering both save and launch, as the production graph does (spec §4.2).
+    val policy = LinkLaunchPolicy()
+    return ReferenceHandlers(
+        references = graph.references,
+        assets = graph.assets,
+        addReference = AddReference(
+            graph.references, graph.assets, policy, graph.uow, graph.ids, graph.clock,
+        ),
+        updateReference = UpdateReference(graph.references, graph.uow, graph.clock),
+    )
+}

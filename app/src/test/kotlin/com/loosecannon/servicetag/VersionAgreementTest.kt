@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.api.ApiRequest
 import com.loosecannon.servicetag.api.ApiRouter
 import com.loosecannon.servicetag.api.StatusResponse
 import com.loosecannon.servicetag.api.maintenanceHandlersFor
+import com.loosecannon.servicetag.api.referenceHandlersFor
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.testing.FakeGraph
@@ -110,6 +111,7 @@ class VersionAgreementTest {
                 graph.archiveProfile,
                 graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
                 maintenanceHandlersFor(graph),
+                referenceHandlersFor(graph),
                 appVersion = BuildConfig.VERSION_NAME,
                 schemaVersion = AppGraph.SCHEMA_VERSION,
             ),
