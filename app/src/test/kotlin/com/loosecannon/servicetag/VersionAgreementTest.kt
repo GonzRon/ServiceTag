@@ -20,7 +20,7 @@ import org.junit.Test
 /**
  * The release's numbers, asserted where they can fail in CI instead of in a review's eyes.
  *
- * 1.2 carries four numbers that have to agree — the `versionName`, the `versionCode`, the Room
+ * 1.3 carries four numbers that have to agree — the `versionName`, the `versionCode`, the Room
  * schema version and the backup format version — and they live in four different files. A schema
  * bumped in one place and not the other makes an import refuse an archive it could read, or accept
  * one it cannot; a `versionName` that disagrees with the tag makes the release workflow refuse to
@@ -47,10 +47,10 @@ class VersionAgreementTest {
      * `BuildConfig`, and the tag the release workflow checks the APK against is built from the
      * first of them.
      */
-    @Test fun theReleaseIdentityIs121AndCode14() {
-        assertEquals("1.2.1", BuildConfig.VERSION_NAME)
-        assertEquals(14, BuildConfig.VERSION_CODE)
-        assertEquals("servicetag-v1.2.1", "servicetag-v${BuildConfig.VERSION_NAME}")
+    @Test fun theReleaseIdentityIs130AndCode15() {
+        assertEquals("1.3.0", BuildConfig.VERSION_NAME)
+        assertEquals(15, BuildConfig.VERSION_CODE)
+        assertEquals("servicetag-v1.3.0", "servicetag-v${BuildConfig.VERSION_NAME}")
     }
 
     /**
@@ -128,7 +128,7 @@ class VersionAgreementTest {
         val status = ApiJson.decodeFromString(
             StatusResponse.serializer(), response.body.decodeToString(),
         )
-        assertEquals("1.2.1", status.appVersion)
+        assertEquals("1.3.0", status.appVersion)
         assertEquals(7, status.schemaVersion)
         assertEquals(7, status.backupFormatVersion)
     }

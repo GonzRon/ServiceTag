@@ -42,13 +42,14 @@ android {
         // `targetSdk` stays 36 on purpose: `targetSdk 37` plus the `DISPATCH_NFC_MESSAGE`
         // permission on the dispatch activity is Phase 7 (spec §5.8), not 1.2.
         targetSdk = 36
-        // 1.2.1 is a PATCH: behavioural hardening only (the close-round window guard and the
-        // explicit zone seam), no schema or format change — schema 6 / format 6 unchanged
-        // (docs/versioning.md). `versionCode` is +1 on every release and is never reset;
-        // it must agree with the tag `servicetag-v1.2.1` or the release workflow refuses to
-        // publish. VersionAgreementTest asserts these two against the schema and format numbers.
-        versionCode = 14
-        versionName = "1.2.1"
+        // 1.3.0 is a MINOR: a new user-facing capability (the share intake and the references
+        // it writes), with a forward-only backup-format bump — schema 7 / format 7, the new app
+        // reading every older archive and an older one refusing a format-7 archive rather than
+        // dropping rows (docs/versioning.md). `versionCode` is +1 on every release and is never
+        // reset; it must agree with the tag `servicetag-v1.3.0` or the release workflow refuses
+        // to publish. VersionAgreementTest asserts these two against the schema and format numbers.
+        versionCode = 15
+        versionName = "1.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         manifestPlaceholders["ndefTagPath"] = "/$tagExternalDomain:$tagTypeName"
