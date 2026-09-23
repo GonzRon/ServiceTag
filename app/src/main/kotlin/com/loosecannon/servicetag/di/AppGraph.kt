@@ -34,8 +34,11 @@ import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.ports.UuidGenerator
+import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.references.StreamSourcePolicy
 import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
 import com.loosecannon.servicetag.core.usecase.AddAttachment
+import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.ApplyTemplate
 import com.loosecannon.servicetag.core.usecase.ApplyBackupMergePlan
 import com.loosecannon.servicetag.core.usecase.ArchiveAsset
@@ -63,6 +66,7 @@ import com.loosecannon.servicetag.core.usecase.PauseSchedule
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
+import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
 import com.loosecannon.servicetag.core.usecase.ReorderProfiles
 import com.loosecannon.servicetag.core.usecase.ResolveTag
@@ -75,6 +79,7 @@ import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.StoreIsEmpty
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
+import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
 import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.MIGRATION_1_2
@@ -344,6 +349,16 @@ class AppGraph(private val context: Context) {
     val updateAttachment: UpdateAttachment = UpdateAttachment(attachments, uow, clock)
     val deleteAttachment: DeleteAttachment = DeleteAttachment(attachments, attachmentStorage, uow)
     val restoreArtifacts: RestoreArtifacts = RestoreArtifacts(attachments, attachmentStorage)
+
+    // 1.3.0 — references. One policy instance answers both save and launch (spec §4.2), and the
+    // stream predicate is told ServiceTag's own authorities rather than guessing at them (I-9).
+    val linkLaunchPolicy: LinkLaunchPolicy = LinkLaunchPolicy()
+    val streamSourcePolicy: StreamSourcePolicy =
+        StreamSourcePolicy(setOf("${BuildConfig.APPLICATION_ID}.files"))
+    val addReference: AddReference =
+        AddReference(references, assets, linkLaunchPolicy, uow, ids, clock)
+    val updateReference: UpdateReference = UpdateReference(references, uow, clock)
+    val removeReference: RemoveReference = RemoveReference(references, uow)
 
     /** A cache file the camera can write into through the FileProvider (spec §9.3). */
     fun cameraCaptureUri(): Uri {
