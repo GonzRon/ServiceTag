@@ -21,6 +21,7 @@ import com.loosecannon.servicetag.core.usecase.CloseRound
 import com.loosecannon.servicetag.core.usecase.PauseSchedule
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
+import com.loosecannon.servicetag.core.usecase.occurrenceWindowOpensOn
 import com.loosecannon.servicetag.di.AppGraph
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -184,6 +185,16 @@ data class ScheduleDetailState(
     val canClearPostponement: Boolean get() = !archived && postponedDueOn != null
 
     /**
+     * The 1.2.1 window question, on its own: has this round reached `effectiveDueOn - leadDays`?
+     * `true` when there is no `effectiveDueOn` to gate on (a round `canClose` would already refuse
+     * for another reason). Built on [occurrenceWindowOpensOn], the same arithmetic `CloseRound`'s
+     * guard uses, so the two cannot silently drift onto different rules.
+     */
+    private val windowOpen: Boolean
+        get() = effectiveDueOn?.let { !today.isBefore(occurrenceWindowOpensOn(LocalDate.parse(it), leadDays)) }
+            ?: true
+
+    /**
      * **"Close this round"** — the whole gate, and the same five questions `CloseRound` asks, so the
      * action and the use case cannot disagree (spec §1.2, invariants 74, 77; 1.2.1 amendment):
      *
@@ -191,14 +202,13 @@ data class ScheduleDetailState(
      * - a **non-empty** required set: a round that obliges nobody is not a round to close;
      * - **not already complete**: closing a finished round would record that it ended unfinished;
      * - **not already closed**: the first row stands, and a second attempt is refused underneath;
-     * - **1.2.1**: the round has reached its own due-soon window — `today` is not before
-     *   `effectiveDueOn - leadDays`. Computed from the same three values the state already holds,
-     *   never a status word, so this and `CloseRound`'s guard cannot drift apart.
+     * - **1.2.1**: [windowOpen] — never a status word, so this and `CloseRound`'s guard cannot drift
+     *   apart. A round postponed past `today + leadDays` reads false here too, since
+     *   `effectiveDueOn` already folds in the postponement; clearing it is the way to re-offer Close.
      */
     val canClose: Boolean
         get() = isGroup && !archived && !requiredSetEmpty && members.any { !it.complete } &&
-            closures.none { it.occurrenceOn == currentOccurrenceOn } &&
-            (effectiveDueOn?.let { !today.isBefore(LocalDate.parse(it).minusDays(leadDays.toLong())) } ?: true)
+            closures.none { it.occurrenceOn == currentOccurrenceOn } && windowOpen
 
     /** Whichever members of the current round are still outstanding. */
     val outstanding: List<AssetId> get() = members.filterNot { it.complete }.map { it.assetId }
