@@ -1528,6 +1528,10 @@ def close_round(schedule_id: str, closed_on: str | None) -> dict[str, Any]:
     today is accepted; a future one, or one before the round opened, is refused — the row is
     permanent and an unbounded date would move the schedule's future for good.
 
+    1.2.1: it also refuses a round that has not yet reached its own due-soon window
+    (`effectiveDueOn - leadDays`), writing nothing — the guard against an immediate retry landing on
+    the fresh round the first close just opened.
+
     Offered on **group-targeted** schedules only, and only on a round that obliges somebody: a round
     with no required members is not a round, and closing one is refused rather than recorded.
     """
