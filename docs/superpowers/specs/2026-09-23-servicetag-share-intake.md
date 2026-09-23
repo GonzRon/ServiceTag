@@ -2,7 +2,7 @@
 
 Status: **FINAL SPECIFICATION**, 2026-09-23. Every decision the drafts posed has been ruled by the
 owner in `owner-rulings-2026-09-23.md`; this revision states the ruled behaviour as **contract**, not
-as options. All 48 user-visible strings are **RATIFIED** (§10). Not a plan and not an implementation:
+as options. All 50 user-visible strings are **RATIFIED** (§10). Not a plan and not an implementation:
 next is the master plan and the per-component briefs.
 
 Scope source: issue **#43**, with the owner's ruling of 2026-09-23 fixing the first release to the
@@ -25,7 +25,7 @@ not prerequisites. No private data; every example is fictional; public-repositor
 | D-20 a document shared before any attachment folder | **A** — one sentence, Save disabled, Close (§2, §7) |
 | D-21 in-app "Add link" and `provenance` | **C** — "Add link" ships; there is **no** `provenance` column (§3.2) |
 
-Strings: all 48 ratified as listed, including the two called out for a deliberate answer — the intake
+Strings: all 50 ratified as listed, including the two called out for a deliberate answer — the intake
 title **"Save to ServiceTag"** (not the mock's "Share to ServiceTag") and the no-attachment-folder line
 **"Choose an attachment folder in ServiceTag Settings, then share this again."**
 
@@ -162,6 +162,15 @@ shown, prefilled with `AttachmentKinds.inferFrom`, because it yields only `PHOTO
 - **I-7** `UNIQUE(asset_id, uri)`. The same URI on two different assets is ordinary and permitted.
 - **I-8** Cancelling intake at any step writes nothing: no row, no bytes, no grant, no journal event
   (#43 AC 6).
+- **I-10** A reference URI must be **structurally valid**, checked in the `:core` domain before any
+  other rule: it must parse, and it must carry a scheme. For a **hierarchical** scheme — `http`,
+  `https`, and any form written with a `//` authority — it must also carry a **non-empty host**. So
+  `https://` alone, `https:///path` and a bare `notaurl` are all refused; an opaque scheme with no
+  authority, such as `joplin:x-callback-url/openNote?id=…`, is fine. Failure is
+  `REFERENCE_URI_INVALID`. This lives in the domain rather than in the share parser because two of the
+  three entry points **never see the parser**: the automation API's `POST /v1/references` and the
+  in-app "Add link" sheet both hand a URI straight to the use case. A rule enforced only where text is
+  parsed out of a share would be absent from exactly the paths a client drives.
 - **I-9** A byte share's stream URI is **`content://` or it is refused**, and its authority is never one
   of ServiceTag's own. `ContentResolver.openInputStream` resolves `file:` with ServiceTag's own uid, and
   `${applicationId}.files` is a non-exported FileProvider only ServiceTag can read, so either would turn
@@ -234,6 +243,9 @@ verbatim:
   `tel`, `sms`, `mailto`, and no scheme at all.
 - **Everything else:** saved after one explicit confirmation, then launched without a second.
 
+Structural validity (I-10) is checked **before** the tier lookup: a URI with no scheme has no tier to
+be judged by, so it is `REFERENCE_URI_INVALID` rather than "everything else".
+
 Both save and launch apply it, so a URI that was legal when saved and is not now is shown and refused,
 never launched. `<queries>` today holds one `VIEW` + `content` + `*/*` entry and gains one `ACTION_VIEW`
 entry per allowed scheme for API 30+ package visibility; `ActivityNotFoundException` is always caught.
@@ -258,6 +270,13 @@ would change the shipped camera and picker paths and the exhaustive `when` in
 `AttachmentsSectionViewModel.say`, so intake owns that refusal and its own string, with the accepted
 consequence that other callers still accept an empty file.
 
+**`text/uri-list` is a stream, so it is bounded before it is parsed.** The reader takes **at most
+64 KiB**, and from that it takes the **first line that is neither blank nor a `#` comment** — the
+format's own comment convention. Only that extracted URI is then subject to the 2,048-character cap,
+which is a rule about a *URI* and not about the file that carried it: a 64 KiB list whose first real
+line is a 60-character URL is ordinary, not over-length. The remaining lines are discarded, because
+this release takes one item per share.
+
 **The declared MIME type is trusted, and "MIME sniffed on import" is retired.**
 `docs/design/09-security-privacy.md` states sniffing as a control; today `AttachmentKinds.inferFrom` and
 `AttachmentLocator.extension` both read the declared type and nothing sniffs. That is defensible now
@@ -277,7 +296,9 @@ above, and the visible refusal strings name no URI, scheme, authority or path ei
 
 ## 5. Schema, backup and merge
 
-**Room schema 6 → 7**: one new table, one new index, a pure addition. No existing column or row changes.
+**Room schema 6 → 7**: the migration creates the `asset_reference` table and **two indexes** —
+`UNIQUE(asset_id, uri)` and `INDEX(asset_id)`, as §3.2 declares. A pure addition: no existing column or
+row changes.
 
 **Backup format 6 → 7.** `BackupCodec.FORMAT_VERSION` 6 → 7. `BackupData` gains one list with an empty
 default — the pattern its seven existing defaulted lists use (three are non-defaulted):
@@ -349,23 +370,41 @@ API version stays **1**, extended additively; `/v1/status` counts gain `assetRef
 | method | path | body | success | notes |
 |---|---|---|---|---|
 | `GET` | `/v1/assets/{id}/references` | — | 200 | `{references: [AssetReferenceDto]}`, by `displayName` |
-| `POST` | `/v1/references` | `{assetId, kind, uri, displayName, description}` | 201 | `{reference}` |
+| `POST` | `/v1/references` | `{assetId, uri, displayName, description}` | 201 | `{reference}` |
 | `PATCH` | `/v1/references/{id}` | `{displayName?, description?}` | 200 | `{reference}`; `uri`, `assetId` and `kind` are **unknown fields** here (I-1, I-6) |
 
-`AssetReferenceDto` is the backup DTO's nine fields, so the request shape is a subset of the response
-shape, as the shipped commands are.
+**No command carries `kind`.** `kind` is derived from the URI's scheme (§3.2) and is returned
+**read-only** in the DTO; a client cannot set it, correct it, or disagree with it. Under the strict
+serializer a `kind` in either body is an unknown field, so it is a **400**, not a silently ignored one —
+the same treatment every other unknown field gets. The `POST` body is therefore four fields and the
+`PATCH` body two.
+
+`AssetReferenceDto` is the backup DTO's nine fields. The request shape is a **subset** of the response
+shape, as the shipped commands are: the two derived fields, `kind` and `scheme`, plus `id`, `createdAt`
+and `updatedAt`, are response-only.
 
 **No `DELETE`, and no bytes, ever.** Deleting a reference joins "What has no endpoint, deliberately"
 beside attachments and closures: the API adds and amends, the phone removes. No endpoint accepts or
 returns a file, so the loopback API still carries no attachment bytes, and there is no share-by-API.
 
-New codes, `UPPER_SNAKE` like 1.2's, in their own "The reference codes (1.3.0)" subsection rather than
-folded into 1.1.0's `lower_snake` list: 404 `NO_SUCH_REFERENCE`; 422 `REFERENCE_URI_INVALID`;
-422 `REFERENCE_SCHEME_BLOCKED` — a refusal, never a confirmation, over the API; 409 `REFERENCE_URI_TAKEN`.
+**Five** new codes, `UPPER_SNAKE` like 1.2's, in their own "The reference codes (1.3.0)" subsection
+rather than folded into 1.1.0's `lower_snake` list:
+
+| status | code | when |
+|---|---|---|
+| 404 | `NO_SUCH_REFERENCE` | no reference with that id |
+| 422 | `REFERENCE_NAME_REQUIRED` | `displayName` is blank after trimming — a reference needs a name |
+| 422 | `REFERENCE_URI_INVALID` | the URI does not parse, has no scheme, or is a hierarchical scheme with an empty host (§3.3 I-10); also an over-long URI |
+| 422 | `REFERENCE_SCHEME_BLOCKED` | a hard-blocked scheme (§4.2) — a refusal over the API, never a confirmation |
+| 409 | `REFERENCE_URI_TAKEN` | `UNIQUE(asset_id, uri)`: that asset already holds this URI |
+
+`REFERENCE_NAME_REQUIRED` is API text and is not user-visible, so it ratifies nothing in §10; the two
+in-app blank-name lines there remain the only wording a person reads.
 
 MCP (`tools/servicetag-mcp/`) gains `list_references`, `add_reference` and `update_reference` under the
 shipped conventions: `null` means unchanged, unknown arguments are rejected, and every error path is a
-real `ToolError` carrying the code.
+real `ToolError` carrying the code. **Neither `add_reference` nor `update_reference` takes a `kind`
+argument**, for the same reason the commands do not: it is derived, not supplied.
 
 Four `docs/api/v1.md` edits: the import-merge rows' "a data archive of format **1–6**" → **1–7**; the
 405 row's "eight `/v1/assets/{id}/…` sub-resources" → **nine**, with `/v1/assets/{id}/references`
@@ -424,7 +463,7 @@ One test per hazard class. No acceptance procedure waits on a real-world delay.
 | Backup | every field round-trips byte-identically; a format-≤6 archive decodes with an empty list; a format-7 archive is refused by the version gate; `uniqueIds` rejects a duplicate id; a row whose `assetId` is absent from the archive is refused; the new `counts` key is correct; the artifacts archive is unchanged; **no `provenance` field appears anywhere in the DTO** |
 | Merge | insert; identical; `REFERENCE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW` on an `IDENTICAL`; **a diverged pair is `SKIPPED / REFERENCE_HELD_BY_A_LOCAL_ROW` and `applicable` stays true**; the same-id/different-content arm is still a blocking `CONFLICT`; `REFERENCE_DUPLICATED_IN_ARCHIVE`; owner-not-available; deterministic order; no partial write |
 | Migration | schema 6 → 7 adds the table and index and changes no existing row |
-| API/MCP | one case per status class over the three rows; each new code by name; unknown-field rejection on both commands, `uri` on the PATCH included; no route deletes a reference; `ApiRouterTest.theDestructiveUseCasesHaveNoRoute` extended to the new paths; `POST /v1/import-merge/plan` with a format-7 archive; the three MCP tools, `null`-means-unchanged and unknown-argument rejection |
+| API/MCP | one case per status class over the three rows; each new code by name; unknown-field rejection on both commands, `uri` on the PATCH and `kind` on both included; no route deletes a reference; `ApiRouterTest.theDestructiveUseCasesHaveNoRoute` extended to the new paths; `POST /v1/import-merge/plan` with a format-7 archive; the three MCP tools, `null`-means-unchanged and unknown-argument rejection |
 | Manifest | the exported **set** is exactly the three named activities and no other component kind is exported; `everyReceiverIsNonExportedAndThereAreSix` still passes; `MergedManifestContractTest.theMergedManifestPermissionSetIsExactly` (a second class in `app/src/test/kotlin/com/loosecannon/servicetag/reminders/ManifestContractTest.kt`, beside `ManifestContractTest`, which carries the exported-set assertion) unchanged; the share filter declares the ten types, no `ACTION_SEND_MULTIPLE` and no `BROWSABLE` |
 
 ---
@@ -447,7 +486,7 @@ the rest were recommended in the drafts and stand unopposed.
 | D-9 | **A** | Remove is a hard delete behind a confirm. An older archive re-inserts it on merge, as with events. |
 | D-10 | **A** | A separate References section. One more header on asset detail. |
 | D-11 | **A** | `REFERENCES` last in `MergeTable`, on dependency grounds. |
-| D-12 | **A** | Three routes, four codes, three MCP tools, four `v1.md` edits. Removal stays a phone-only action. |
+| D-12 | **A** | Three routes, **five** codes, three MCP tools, four `v1.md` edits. No command carries `kind`. Removal stays a phone-only action. |
 | D-13 | **A** | No assets: one sentence and Close. That first share is wasted; the owner re-shares. |
 | D-14 | **A** | #35 AC 3 amended to three names; the assertion stays an exact set. |
 | D-15 | **A** | #35's allow and block lists verbatim, both tiers. An unlisted note app costs one confirmation per reference. |
@@ -462,7 +501,7 @@ the rest were recommended in the drafts and stand unopposed.
 
 ## 10. Ratified strings
 
-**All 48 RATIFIED by the owner, 2026-09-23**, as listed. Ten are already shipped and are reused
+**All 50 RATIFIED by the owner, 2026-09-23**, as listed. Ten are already shipped and are reused
 verbatim, marked *(shipped)*. Both call-outs were confirmed explicitly.
 
 **Share-sheet entry** — `android:label`: **"ServiceTag"** *(shipped, `@string/app_name`)*.
@@ -495,11 +534,19 @@ folder in Settings first", which implies an in-app affordance the share screen d
 **Unknown-scheme confirmation** — "Save this link?" · "ServiceTag does not recognise \"<scheme>\" links.
 It will be saved as written and opened with whatever app claims it." · "Save" · "Cancel".
 
-**Blocked scheme** — "ServiceTag will not save that kind of link." **Not a link** — "That is not a
-link." · "Save as a note" · "Cancel".
+**Blocked scheme** — at save time, "ServiceTag will not save that kind of link."; at **launch** time,
+"ServiceTag will not open that kind of link." Two lines, because the two moments are different: the
+first refuses to store what was just shared, the second refuses to open something already stored whose
+scheme the policy blocks now — a restored archive from another build, or a block list that has grown
+(§4.2). Neither names the URI or the scheme.
+
+**Not a link** — "That is not a link." · "Save as a note" · "Cancel".
 
 **Asset detail** — "References" · "References · <n>" · "No references yet" · "Add link" · "Open" ·
 "Edit" · "Remove" · "No app can open this link" · kinds "Web link", "Note", "Other".
+
+**Add-link sheet (D-21)** — title "Add link" (the section action's wording, reused) · field label
+"Link" · "Name" · "Description" · "Save" · "Cancel".
 
 **Remove confirmation** — "Remove this reference?" · "The link is removed from this asset. Nothing in
 the other app is changed." · "Remove" · "Cancel". **Edit sheet** — "Edit reference" · "Name" ·
@@ -554,8 +601,8 @@ the "normal detailed plan" band, with no production code beyond interface-pinnin
 `versionCode` is independent and monotonic, +1 on every released APK: 1.2.0 shipped code 13, the 1.2.x
 hardening release takes 14, and this release takes **15**. No code is reserved in advance.
 
-**Room schema 7.** One new table and one new index; a pure addition, so the migration creates and
-changes nothing existing.
+**Room schema 7.** One new table and **two indexes** — `UNIQUE(asset_id, uri)` and `INDEX(asset_id)`
+(§3.2, §5); a pure addition, so the migration creates and changes nothing existing.
 
 **Backup format 7, forward-only, and that is why this stays a MINOR.** `docs/versioning.md` states the
 rule directly: "A **forward-only** backup-format bump — where the new app reads every older archive and
@@ -571,9 +618,15 @@ preserved.
 `asset_reference` table, schema 7, format 7 and the reference API, with `docs/api/v1.md` and this
 specification as its contracts. The seasonal and operational model moves to 1.4.0.
 
-### Amendments at planning (controller, 2026-09-23)
+### Reconciled at the plan review (2026-09-23)
+
+The spec outranks the plan, so each of these is now written into the body above rather than carried as
+an amendment. Nothing here changes a ruling.
 
 - **Test class name (corrected at the plan review).** The merged-manifest permission assertion is `MergedManifestContractTest.theMergedManifestPermissionSetIsExactly` — a second class inside `app/src/test/kotlin/com/loosecannon/servicetag/reminders/ManifestContractTest.kt`, the file whose first class `ManifestContractTest` carries the exported-set assertion. A planning-time note wrongly said the class did not exist; the citations stand, with the file path added.
-- **Index count.** §5 and §12 said "one new index"; §3.2 declares two — `UNIQUE(asset_id, uri)` and `INDEX(asset_id)`. §3.2 is the contract: the migration creates the table and both indexes.
-- **Blank name over the API.** §6 named no code for a reference command whose `displayName` is blank after trimming, although §10 ratifies the two in-app refusals. Ruled: **422 `REFERENCE_NAME_REQUIRED`** ("a reference needs a name"), documented in `docs/api/v1.md` beside the other reference codes; the MCP surfaces it as any other error. API text is not user-visible.
-- **Add-link sheet strings (owner, ratified 2026-09-23):** the in-app "Add link" sheet (D-21) has the field label **"Link"** and the sheet title **"Add link"** (reused). Both RATIFIED; §10 is read as including them.
+- **Two indexes, not one.** §5 and §12 now say what §3.2 always declared: the migration creates the table plus `UNIQUE(asset_id, uri)` and `INDEX(asset_id)`.
+- **A fifth reference code.** 422 `REFERENCE_NAME_REQUIRED`, for a `displayName` blank after trimming, joins the code table in §6 and the D-12 row in §9. It is API text, not user-visible, so it ratifies nothing in §10.
+- **No command carries `kind`.** §6: `kind` is derived from the URI scheme and returned read-only in the DTO; under the strict serializer a `kind` in a `POST` or `PATCH` body is an unknown field and therefore a 400. `add_reference` and `update_reference` take no `kind` argument.
+- **Structural URI validity in the domain.** New invariant **I-10** in §3.3, referenced from §4.2: a reference URI must parse and carry a scheme, and a hierarchical scheme must carry a non-empty host, else `REFERENCE_URI_INVALID`. It belongs to the domain because the API and the in-app "Add link" sheet both bypass the share parser.
+- **`text/uri-list` bounds.** §4.3: read at most 64 KiB, take the first line that is neither blank nor a `#` comment, and apply the 2,048-character cap to that extracted URI only.
+- **Two more ratified strings, 50 in all.** §10 gains the Add-link sheet's field label **"Link"** (its title reuses "Add link") and the launch-time refusal **"ServiceTag will not open that kind of link."**, distinct from the unchanged save-time line.
