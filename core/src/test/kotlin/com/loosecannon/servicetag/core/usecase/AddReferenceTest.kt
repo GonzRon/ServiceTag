@@ -95,6 +95,35 @@ class AddReferenceTest {
         assertEquals(opaque, saved(add.run(asset, cmd(opaque))).uri)
     }
 
+    /**
+     * The "it parses at all" arm of I-10, which nothing else reaches: each of these carries a
+     * scheme and a host, so only the whitespace-and-control-character rule can refuse them.
+     *
+     * The raw-space case is the **accepted** consequence the controller ruled on: a URI with an
+     * unencoded space does not parse, so `obsidian://open?vault=My Vault` is refused as "That is
+     * not a link." rather than saved. That is #35's shipped rule restored verbatim, not an
+     * oversight, and a share cannot produce one — its tokens are whitespace-delimited.
+     */
+    @Test
+    fun aUriCarryingRawWhitespaceOrAControlCharacterDoesNotParseAndIsNotALink() = runTest {
+        haveAsset()
+        val unparseable = listOf(
+            "https://example-mower.invalid/deck belt",
+            "https://example-mower.invalid/x\u0000",
+            "https://example-mower.invalid/x\ty",
+            "obsidian://open?vault=My Vault&file=Mower",
+        )
+        for (uri in unparseable) {
+            assertEquals(
+                ReferenceProblem.NotALink,
+                refusal(add.run(asset, cmd(uri))),
+                "$uri does not parse",
+            )
+        }
+        assertEquals(0, references.upserts)
+        assertEquals(0, uow.writesEntered)
+    }
+
     @Test
     fun anOverLongUriIsRefusedAndTheLastLegalLengthIsSaved() = runTest {
         haveAsset()
