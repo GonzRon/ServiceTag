@@ -486,7 +486,7 @@ the rest were recommended in the drafts and stand unopposed.
 | D-9 | **A** | Remove is a hard delete behind a confirm. An older archive re-inserts it on merge, as with events. |
 | D-10 | **A** | A separate References section. One more header on asset detail. |
 | D-11 | **A** | `REFERENCES` last in `MergeTable`, on dependency grounds. |
-| D-12 | **A** | Three routes, **five** codes, three MCP tools, four `v1.md` edits. No command carries `kind`. Removal stays a phone-only action. |
+| D-12 | **A** | Three routes, **five** codes, three MCP tools, five `v1.md` edits. No command carries `kind`. Removal stays a phone-only action. |
 | D-13 | **A** | No assets: one sentence and Close. That first share is wasted; the owner re-shares. |
 | D-14 | **A** | #35 AC 3 amended to three names; the assertion stays an exact set. |
 | D-15 | **A** | #35's allow and block lists verbatim, both tiers. An unlisted note app costs one confirmation per reference. |
