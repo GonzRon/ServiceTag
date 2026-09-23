@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.MainActivity
 import com.loosecannon.servicetag.ui.app
@@ -64,7 +65,12 @@ class HealthScreenTest {
     private fun openHealth() {
         rule.onNode(hasText("Maintenance") and hasClickAction()).performClick()
         rule.awaitText(REMINDERS_SECTION)
-        rule.onNode(hasText(REMINDERS_SECTION) and hasClickAction()).performClick()
+        // The row is the **last** thing in a scrolling destination, so on a store carrying due work
+        // it sits below the fold — and a node that is in the tree but off screen takes a click that
+        // goes nowhere, which reads exactly like a route that failed to open. This class declares no
+        // store of its own and inherits whatever the class before it left, so how far down the row
+        // is is not something it can know: scroll to it, the way a person would.
+        rule.onNode(hasText(REMINDERS_SECTION) and hasClickAction()).performScrollTo().performClick()
         rule.awaitText(ALARM_FINDING)
     }
 

@@ -35,6 +35,7 @@ class EventUseCasesTest {
     private val recompute = RecomputeSchedules(
         schedules, states, events, closures, groups, assets,
         com.loosecannon.servicetag.core.ports.Today { java.time.LocalDate.parse("2026-02-10") }, clock,
+        zone = { java.time.ZoneOffset.UTC },
     )
     private val logEvent = LogEvent(events, defs, profiles, assets, uow, ids, clock, recompute)
     private val updateEvent = UpdateEvent(events, defs, profiles, uow, ids, clock, recompute)

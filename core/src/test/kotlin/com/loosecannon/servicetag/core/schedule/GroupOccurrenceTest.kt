@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.testing.dayMillis
 import com.loosecannon.servicetag.core.testing.groupOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -192,7 +193,7 @@ class GroupOccurrenceTest {
 
         assertEquals(emptyList(), ScheduleRecompute.terminations(schedule, events, closures, membership))
 
-        val state = ScheduleRecompute.rebuild(schedule, events, closures, membership, on("2026-06-01"))
+        val state = ScheduleRecompute.rebuild(schedule, events, closures, membership, on("2026-06-01"), ZoneOffset.UTC)
         assertNull(state.computedDueOn)
         assertNull(state.effectiveDueOn)
         assertEquals(TerminationKind.NONE, state.lastTerminationKind)
@@ -211,7 +212,9 @@ class GroupOccurrenceTest {
         val schedule = quarterly(createdOn = "2026-01-01", postponedDueOn = "2026-02-20")
         val membership = groupOf(members = listOf(Triple("a1", "2025-10-01", "2025-12-01"))).members
 
-        val state = ScheduleRecompute.rebuild(schedule, emptyList(), emptyList(), membership, on("2026-02-20"))
+        val state = ScheduleRecompute.rebuild(
+            schedule, emptyList(), emptyList(), membership, on("2026-02-20"), ZoneOffset.UTC,
+        )
         assertNull(state.effectiveDueOn)
         assertEquals(DueStatus.NO_DATA, statusOf(schedule, state, on("2026-02-20")))
     }
@@ -234,7 +237,9 @@ class GroupOccurrenceTest {
             listOf(Termination("2026-01-01", "2026-02-15", TerminationKind.CLOSED)),
             ScheduleRecompute.terminations(fixed, emptyList(), closures, membership),
         )
-        val fixedState = ScheduleRecompute.rebuild(fixed, emptyList(), closures, membership, on("2026-03-01"))
+        val fixedState = ScheduleRecompute.rebuild(
+            fixed, emptyList(), closures, membership, on("2026-03-01"), ZoneOffset.UTC,
+        )
         assertEquals("2026-04-01", fixedState.computedDueOn)
         assertEquals("2026-02-15", fixedState.lastTerminationEffectiveOn)
         assertEquals(TerminationKind.CLOSED, fixedState.lastTerminationKind)
@@ -243,7 +248,7 @@ class GroupOccurrenceTest {
 
         val completion = quarterly(basis = TimeBasis.COMPLETION)
         val completionState =
-            ScheduleRecompute.rebuild(completion, emptyList(), closures, membership, on("2026-03-01"))
+            ScheduleRecompute.rebuild(completion, emptyList(), closures, membership, on("2026-03-01"), ZoneOffset.UTC)
         assertEquals("2026-05-15", completionState.computedDueOn)
     }
 
@@ -289,7 +294,7 @@ class GroupOccurrenceTest {
             listOf(Termination("2026-01-01", "2026-02-20", TerminationKind.COMPLETED)),
             ScheduleRecompute.terminations(schedule, done, stray, membership),
         )
-        val state = ScheduleRecompute.rebuild(schedule, done, stray, membership, on("2026-03-01"))
+        val state = ScheduleRecompute.rebuild(schedule, done, stray, membership, on("2026-03-01"), ZoneOffset.UTC)
         assertEquals("2026-04-01", state.computedDueOn)
         assertEquals(TerminationKind.COMPLETED, state.lastTerminationKind)
     }
@@ -322,7 +327,7 @@ class GroupOccurrenceTest {
 
         // The edit: a new anchor and a monthly cadence, on which 2026-01-01 is not a series date.
         val edited = quarterly(anchorOn = "2026-02-10", interval = 1, createdOn = "2026-05-01")
-        val state = ScheduleRecompute.rebuild(edited, done, closures, membership, on("2026-05-01"))
+        val state = ScheduleRecompute.rebuild(edited, done, closures, membership, on("2026-05-01"), ZoneOffset.UTC)
         assertEquals(2, ScheduleRecompute.terminations(edited, done, closures, membership).size)
         assertEquals("2026-05-10", state.computedDueOn)
         assertEquals(before, closures)
@@ -342,10 +347,12 @@ class GroupOccurrenceTest {
             completionOf("e1", occurredOn = "2026-04-20", occurrenceOn = "2026-04-01", assetId = "a1"),
         )
 
-        val advanced = ScheduleRecompute.rebuild(schedule, done, closures, membership, on("2026-05-01"))
+        val advanced = ScheduleRecompute.rebuild(schedule, done, closures, membership, on("2026-05-01"), ZoneOffset.UTC)
         assertEquals("2026-07-01", advanced.computedDueOn)
 
-        val reopened = ScheduleRecompute.rebuild(schedule, emptyList(), closures, membership, on("2026-05-01"))
+        val reopened = ScheduleRecompute.rebuild(
+            schedule, emptyList(), closures, membership, on("2026-05-01"), ZoneOffset.UTC,
+        )
         assertEquals("2026-04-01", reopened.computedDueOn)
         assertEquals("2026-02-15", reopened.lastTerminationEffectiveOn)
         assertEquals(TerminationKind.CLOSED, reopened.lastTerminationKind)
@@ -397,12 +404,14 @@ class GroupOccurrenceTest {
         val schedule = quarterly(postponedDueOn = "2026-02-20")
         val membership = groupOf(members = listOf(Triple("a1", "2025-12-01", null))).members
 
-        val state = ScheduleRecompute.rebuild(schedule, emptyList(), emptyList(), membership, on("2026-02-01"))
+        val state = ScheduleRecompute.rebuild(
+            schedule, emptyList(), emptyList(), membership, on("2026-02-01"), ZoneOffset.UTC,
+        )
         assertEquals("2026-01-01", state.computedDueOn)
         assertEquals("2026-02-20", state.effectiveDueOn)
         assertEquals(
             "2026-01-01",
-            ScheduleRecompute.currentOccurrenceOn(schedule, emptyList(), emptyList(), membership),
+            ScheduleRecompute.currentOccurrenceOn(schedule, emptyList(), emptyList(), membership, ZoneOffset.UTC),
         )
     }
 

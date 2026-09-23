@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 import com.loosecannon.servicetag.core.schedule.GroupOccurrences
 import com.loosecannon.servicetag.core.schedule.ScheduleRecompute
 import com.loosecannon.servicetag.core.schedule.SeasonWindow
+import java.time.ZoneId
 
 /**
  * The collaborator that turns "this changed" into "these schedules' derived state was rebuilt", and
@@ -30,8 +31,9 @@ import com.loosecannon.servicetag.core.schedule.SeasonWindow
  * event use case would duplicate it four times and let the four drift; putting it here means each
  * of them asks one question — [forAsset] — and the answer is always the whole closure.
  *
- * It reads the clock exactly once per rebuild, to stamp `computedAt`. The engine itself cannot:
- * `rebuild` is a pure function and a pure function has no clock, which is what makes it idempotent.
+ * It reads the clock exactly once per rebuild, to stamp `computedAt`, and the zone once, for the
+ * pin's floor. The engine itself cannot do either: `rebuild` is a pure function, and a pure function
+ * has no clock and no idea where it is — which is what makes it idempotent.
  *
  * [groupSchedulesRequiring] is the group half of that closure, and it is deliberately a **superset**
  * of "requires it": see [GroupRepository.allWindowsFor]. Rebuilding a schedule that turns out not to
@@ -47,6 +49,17 @@ class RecomputeSchedules(
     private val assets: AssetRepository,
     private val today: Today,
     private val clock: Clock,
+    /**
+     * The owner's zone, read once per rebuild and handed to the engine beside `T`.
+     *
+     * The pin has to read one stored instant as a date, and that date is the owner's rather than
+     * UTC's (controller ruling, 2026-09-22); `ScheduleRecompute.pinFloor` says why. Reading the
+     * device belongs **here**, at the seam that already reads the clock and the [Today] port, which
+     * is exactly what keeps `rebuild` a pure function of its arguments (invariant 16). A lambda
+     * rather than a captured value because the zone can change under a long-lived process, and it
+     * is the idiom the digest alarm and the completion flow already use for the same reason.
+     */
+    private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) {
     /** The Asset's own schedules, plus every group schedule that requires it. */
     suspend fun forAsset(assetId: AssetId) {
@@ -99,6 +112,7 @@ class RecomputeSchedules(
             events = inputs.events,
             closures = closureRows,
             membership = inputs.membership,
+            zone = zone(),
         ) ?: return null
         return GroupOccurrences.on(
             schedule = schedule,
@@ -123,6 +137,7 @@ class RecomputeSchedules(
             closures = closures.forSchedule(schedule.id),
             membership = inputs.membership,
             today = today.localDate(),
+            zone = zone(),
             season = inputs.season,
         )
         // `rebuild` leaves `computedAt` at 0 because it has no clock; this is where it is stamped.

@@ -70,14 +70,15 @@ class MaintenanceShellTest {
                     anchorOn = java.time.LocalDate.now().toString(),
                 ),
             )
-            // The D-27 pin floors the first occurrence at the row's `updated_at` **converted at
-            // UTC** (invariant 16, so `rebuild` stays a pure function), and this anchor puts a
-            // series date on local today — the one case `ScheduleRecompute` names as the cost of
-            // that conversion. A row saved after local 20:00 in a UTC-4 zone therefore floors on
-            // tomorrow and its first occurrence is pushed a whole interval out, which left this
-            // store with nothing in Due work for the last four hours of every day. Stamping the
-            // floor a day back is the same "a genuinely older row" device `DashboardAttentionTest`
-            // already uses for its overdue row, and it makes "due today" true at every hour.
+            // This row has to be **due today** or there is no Due work section to find, and the
+            // anchor alone does not settle that: the D-27 pin floors the first occurrence at the
+            // row's own `updated_at`, so a series date on today survives only while the floor is
+            // today or earlier. `ScheduleRecompute` now reads that floor in the owner's zone rather
+            // than at UTC, which is what makes the anchor above mean today at every hour — but a
+            // fixture that depends on a floor rule it does not state is how this test came to be
+            // green only before local 20:00. Stamping the floor a day back says it outright: the
+            // same "a genuinely older row" device `DashboardAttentionTest` uses for its overdue
+            // row, and it holds whatever the pin later decides about the current day.
             graph.schedules.upsert(
                 graph.schedules.get(due.id)!!.copy(updatedAt = yesterdayAtUtc()),
             )

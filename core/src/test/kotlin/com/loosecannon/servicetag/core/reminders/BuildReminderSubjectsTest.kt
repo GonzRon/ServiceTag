@@ -29,6 +29,7 @@ import com.loosecannon.servicetag.core.testing.readingOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -59,7 +60,7 @@ class BuildReminderSubjectsTest {
     private val clock = Clock { dayMillis("2026-04-15") }
 
     private val recompute =
-        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock)
+        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock) { ZoneOffset.UTC }
     private val build = BuildReminderSubjects(schedules, states, groups, assets, recompute)
 
     private suspend fun seedAsset(

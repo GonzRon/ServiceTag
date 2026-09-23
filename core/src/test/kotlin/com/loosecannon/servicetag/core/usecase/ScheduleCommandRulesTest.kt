@@ -29,6 +29,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.dayMillis
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -70,7 +71,7 @@ class ScheduleCommandRulesTest {
     private val todayPort = Today { today }
 
     private val recompute =
-        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock)
+        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock) { ZoneOffset.UTC }
     private val save =
         SaveSchedule(schedules, assets, groups, defs, profiles, uow, ids, clock, recompute)
     private val completeMembers = CompleteGroupMembers(

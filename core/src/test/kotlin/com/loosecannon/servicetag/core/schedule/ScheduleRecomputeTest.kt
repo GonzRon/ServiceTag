@@ -14,6 +14,8 @@ import com.loosecannon.servicetag.core.testing.groupOf
 import com.loosecannon.servicetag.core.testing.readingOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -51,15 +53,21 @@ class ScheduleRecomputeTest {
     fun theFixedPinIsImmutableAndOnlyAnEditMovesItsFloor() {
         val schedule = quarterly()
 
-        val atCreation = ScheduleRecompute.rebuild(schedule, emptyList(), emptyList(), emptyList(), on("2026-02-10"))
+        val atCreation = ScheduleRecompute.rebuild(
+            schedule, emptyList(), emptyList(), emptyList(), on("2026-02-10"), ZoneOffset.UTC,
+        )
         assertEquals("2026-04-01", atCreation.computedDueOn)
         assertEquals(TerminationKind.NONE, atCreation.lastTerminationKind)
 
         // (2) the pin does not re-float: same inputs, later T, same date — and OVERDUE stays OVERDUE
-        val later = ScheduleRecompute.rebuild(schedule, emptyList(), emptyList(), emptyList(), on("2026-09-01"))
+        val later = ScheduleRecompute.rebuild(
+            schedule, emptyList(), emptyList(), emptyList(), on("2026-09-01"), ZoneOffset.UTC,
+        )
         assertEquals("2026-04-01", later.computedDueOn)
         assertEquals(DueStatus.OVERDUE, statusOf(schedule, later, on("2026-09-01")))
-        val muchLater = ScheduleRecompute.rebuild(schedule, emptyList(), emptyList(), emptyList(), on("2027-01-05"))
+        val muchLater = ScheduleRecompute.rebuild(
+            schedule, emptyList(), emptyList(), emptyList(), on("2027-01-05"), ZoneOffset.UTC,
+        )
         assertEquals("2026-04-01", muchLater.computedDueOn)
         assertEquals(DueStatus.OVERDUE, statusOf(schedule, muchLater, on("2027-01-05")))
 
@@ -67,19 +75,68 @@ class ScheduleRecomputeTest {
         val done = completionOf("e1", occurredOn = "2026-07-15", occurrenceOn = "2026-04-01")
         assertEquals(
             "2026-10-01",
-            ScheduleRecompute.rebuild(schedule, listOf(done), emptyList(), emptyList(), on("2026-08-01")).computedDueOn,
+            ScheduleRecompute.rebuild(
+                schedule, listOf(done), emptyList(), emptyList(), on("2026-08-01"), ZoneOffset.UTC,
+            ).computedDueOn,
         )
         assertEquals(
             "2026-04-01",
-            ScheduleRecompute.rebuild(schedule, emptyList(), emptyList(), emptyList(), on("2026-08-01")).computedDueOn,
+            ScheduleRecompute.rebuild(
+                schedule, emptyList(), emptyList(), emptyList(), on("2026-08-01"), ZoneOffset.UTC,
+            ).computedDueOn,
         )
 
         // (4) a recurrence edit on 2026-06-20 moves the floor to the edit date
         val edited = quarterly(createdOn = "2026-02-10", updatedOn = "2026-06-20")
         assertEquals(
             "2026-07-01",
-            ScheduleRecompute.rebuild(edited, emptyList(), emptyList(), emptyList(), on("2026-06-21")).computedDueOn,
+            ScheduleRecompute.rebuild(
+                edited, emptyList(), emptyList(), emptyList(), on("2026-06-21"), ZoneOffset.UTC,
+            ).computedDueOn,
         )
+    }
+
+    /**
+     * The floor is read in the **owner's** calendar, not UTC's (controller ruling, 2026-09-22).
+     *
+     * One instant, two zones. A schedule stamped 21:00 on September 22 in `America/New_York` and
+     * anchored on that same September 22 is due **that day**: the owner said "start today" and
+     * invariant 23's "a new schedule can be due today" is about their today. Read at UTC the same
+     * instant is already the 23rd, so the floor lands past the anchor and the first occurrence is
+     * pushed a whole interval out — three months of silence on work the owner asked for now. That
+     * was the shipped answer for the last four hours of every day in every zone west of UTC, and
+     * it is what this test pins shut.
+     *
+     * `zone` is still an argument, so the purity invariant 16 protects is untouched: this test
+     * gets two different answers out of `rebuild` by handing it two different zones, never by
+     * moving a device.
+     */
+    @Test
+    fun theFloorIsTheOwnersDateAndNotUtcs() {
+        val evening = LocalDate.parse("2026-09-22")
+            .atTime(21, 0)
+            .atZone(ZoneId.of("America/New_York"))
+            .toInstant()
+            .toEpochMilli()
+        val saved = scheduleOf(
+            timeInterval = 3,
+            timeUnit = RecurrenceUnit.MONTH,
+            timeBasis = TimeBasis.FIXED,
+            anchorOn = "2026-09-22",
+            createdOn = "2026-09-22",
+        ).copy(createdAt = evening, updatedAt = evening)
+
+        fun dueIn(zone: ZoneId) = ScheduleRecompute.rebuild(
+            saved, emptyList(), emptyList(), emptyList(), on("2026-09-22"), zone,
+        )
+
+        val owners = dueIn(ZoneId.of("America/New_York"))
+        assertEquals("2026-09-22", owners.computedDueOn)
+        assertEquals(DueStatus.DUE, statusOf(saved, owners, on("2026-09-22")))
+
+        // the same instant, read in the zone the engine used to assume: a day later, so the anchor
+        // is skipped and the obligation moves a whole quarter
+        assertEquals("2026-12-22", dueIn(ZoneOffset.UTC).computedDueOn)
     }
 
     /**
@@ -94,7 +151,9 @@ class ScheduleRecomputeTest {
     fun aCompletionWithNoOccurrenceKeyFallsBackToTheSeriesAndIsApproximate() {
         val schedule = quarterly()
         val keyless = completionOf("e1", occurredOn = "2026-03-20", occurrenceOn = null)
-        val state = ScheduleRecompute.rebuild(schedule, listOf(keyless), emptyList(), emptyList(), on("2026-03-21"))
+        val state = ScheduleRecompute.rebuild(
+            schedule, listOf(keyless), emptyList(), emptyList(), on("2026-03-21"), ZoneOffset.UTC,
+        )
 
         assertEquals("2026-04-01", state.computedDueOn)
         assertEquals("2026-03-20", state.lastTerminationEffectiveOn)
@@ -102,7 +161,9 @@ class ScheduleRecomputeTest {
         val keyed = completionOf("e1", occurredOn = "2026-03-20", occurrenceOn = "2026-04-01")
         assertNotEquals(
             state.computedDueOn,
-            ScheduleRecompute.rebuild(schedule, listOf(keyed), emptyList(), emptyList(), on("2026-03-21")).computedDueOn,
+            ScheduleRecompute.rebuild(
+                schedule, listOf(keyed), emptyList(), emptyList(), on("2026-03-21"), ZoneOffset.UTC,
+            ).computedDueOn,
         )
 
         // a completion before the anchor has no series date at or before it; the anchor is the key
@@ -130,14 +191,16 @@ class ScheduleRecomputeTest {
         val closures = listOf(closureOf("oc1", occurrenceOn = "2026-07-01", closedOn = "2026-07-20"))
         val before = events.toList() to closures.toList()
 
-        val first = ScheduleRecompute.rebuild(schedule, events, closures, emptyList(), on("2026-08-01"))
-        val second = ScheduleRecompute.rebuild(schedule, events, closures, emptyList(), on("2026-08-01"))
+        val first = ScheduleRecompute.rebuild(schedule, events, closures, emptyList(), on("2026-08-01"), ZoneOffset.UTC)
+        val second = ScheduleRecompute.rebuild(
+            schedule, events, closures, emptyList(), on("2026-08-01"), ZoneOffset.UTC,
+        )
         assertEquals(first, second)
         assertEquals(before.first, events)
         assertEquals(before.second, closures)
 
         val shuffled = ScheduleRecompute.rebuild(
-            schedule, events.asReversed(), closures.asReversed(), emptyList(), on("2026-08-01"),
+            schedule, events.asReversed(), closures.asReversed(), emptyList(), on("2026-08-01"), ZoneOffset.UTC,
         )
         assertEquals(first, shuffled)
 
@@ -157,7 +220,9 @@ class ScheduleRecomputeTest {
             anchorMeter = 120.0,
             meterLead = 5.0,
         )
-        val state = ScheduleRecompute.rebuild(meterOnly, emptyList(), emptyList(), emptyList(), on("2026-06-01"))
+        val state = ScheduleRecompute.rebuild(
+            meterOnly, emptyList(), emptyList(), emptyList(), on("2026-06-01"), ZoneOffset.UTC,
+        )
         assertNull(state.computedDueOn)
         assertNull(state.effectiveDueOn)
         assertEquals(170.0, state.computedDueMeter)
@@ -180,7 +245,9 @@ class ScheduleRecomputeTest {
             readingOf("r1", "2026-05-01", "engine_hours", 200.0),
             readingOf("r2", "2026-06-01", "engine_hours", 150.0),
         )
-        val state = ScheduleRecompute.rebuild(meterOnly, events, emptyList(), emptyList(), on("2026-06-02"))
+        val state = ScheduleRecompute.rebuild(
+            meterOnly, events, emptyList(), emptyList(), on("2026-06-02"), ZoneOffset.UTC,
+        )
         assertEquals(150.0, state.currentMeter)
     }
 
@@ -211,7 +278,9 @@ class ScheduleRecomputeTest {
                 ),
             ) + plain.measurements,
         )
-        val state = ScheduleRecompute.rebuild(meterOnly, listOf(noisy), emptyList(), emptyList(), on("2026-06-02"))
+        val state = ScheduleRecompute.rebuild(
+            meterOnly, listOf(noisy), emptyList(), emptyList(), on("2026-06-02"), ZoneOffset.UTC,
+        )
         assertEquals(180.0, state.currentMeter)
     }
 
@@ -301,7 +370,7 @@ class ScheduleRecomputeTest {
         events: List<AssetEvent>,
         closures: List<OccurrenceClosure>,
     ): String? = ScheduleRecompute
-        .rebuild(schedule, events, closures, emptyList(), on("2026-05-01"))
+        .rebuild(schedule, events, closures, emptyList(), on("2026-05-01"), ZoneOffset.UTC)
         .computedDueOn
 
     /**

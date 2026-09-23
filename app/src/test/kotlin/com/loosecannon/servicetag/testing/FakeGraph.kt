@@ -80,6 +80,7 @@ import com.loosecannon.servicetag.reminders.ReminderSnooze
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
 import com.loosecannon.servicetag.ui.maintenance.ScheduleSnooze
 import java.io.File
+import java.time.ZoneOffset
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -131,6 +132,7 @@ class FakeGraph(
     /** The real recompute over the real tables, so an event write in a test rebuilds for real. */
     val recomputeSchedules: RecomputeSchedules = RecomputeSchedules(
         schedules, scheduleStates, events, closures, groups, assets, todayPort, clock,
+        zone = { ZoneOffset.UTC },
     )
 
     /**

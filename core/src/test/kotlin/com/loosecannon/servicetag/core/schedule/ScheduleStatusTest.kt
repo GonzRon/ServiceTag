@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.testing.readingOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -32,7 +33,9 @@ class ScheduleStatusTest {
         events: List<com.loosecannon.servicetag.core.model.AssetEvent> = emptyList(),
         season: SeasonWindow? = null,
     ): DueStatus {
-        val state = ScheduleRecompute.rebuild(schedule, events, emptyList(), emptyList(), on(today), season)
+        val state = ScheduleRecompute.rebuild(
+            schedule, events, emptyList(), emptyList(), on(today), ZoneOffset.UTC, season,
+        )
         return statusOf(schedule, state, on(today))
     }
 
@@ -109,7 +112,9 @@ class ScheduleStatusTest {
         // consumer that forgot `listedForDue()` shows nothing rather than something wrong.
         val archivedStatus = statusOf(
             archived,
-            ScheduleRecompute.rebuild(archived, emptyList(), emptyList(), emptyList(), on("2026-09-01")),
+            ScheduleRecompute.rebuild(
+                archived, emptyList(), emptyList(), emptyList(), on("2026-09-01"), ZoneOffset.UTC,
+            ),
             on("2026-09-01"),
         )
         assertEquals(DueStatus.PAUSED, archivedStatus)

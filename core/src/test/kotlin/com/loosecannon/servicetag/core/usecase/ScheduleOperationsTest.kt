@@ -41,6 +41,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
 import com.loosecannon.servicetag.core.testing.dayMillis
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -90,7 +91,7 @@ class ScheduleOperationsTest {
     }
 
     private val recompute =
-        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock)
+        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock) { ZoneOffset.UTC }
     private val save =
         SaveSchedule(countedSchedules, assets, groups, defs, profiles, uow, ids, clock, recompute)
     private val complete =

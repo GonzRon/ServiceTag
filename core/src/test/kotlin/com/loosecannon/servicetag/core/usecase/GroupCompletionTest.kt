@@ -29,6 +29,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.dayMillis
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -77,7 +78,7 @@ class GroupCompletionTest {
     }
 
     private val recompute =
-        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock)
+        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock) { ZoneOffset.UTC }
     private val saveGroup = SaveGroup(groups, assets, uow, ids, clock)
     private val saveSchedule =
         SaveSchedule(countedSchedules, assets, groups, defs, profiles, uow, ids, clock, recompute)

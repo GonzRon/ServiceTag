@@ -13,7 +13,7 @@ import com.loosecannon.servicetag.core.model.TerminationKind
 import com.loosecannon.servicetag.core.model.TimeBasis
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneOffset
+import java.time.ZoneId
 
 /** An Asset's season window, as the engine needs it: the two `MM-DD` strings, or nulls for year-round. */
 data class SeasonWindow(val startMmdd: String?, val endMmdd: String?)
@@ -27,11 +27,13 @@ data class Termination(val occurrenceOn: String, val effectiveOn: String, val ki
 
 /**
  * The recompute: the **only** write path into `schedule_state` (invariant 17) and a pure,
- * idempotent function of (configuration, events, closures, membership, `T`) (invariants 15, 16).
+ * idempotent function of (configuration, events, closures, membership, `T`, the zone `T` is on)
+ * (invariants 15, 16).
  *
- * Nothing here reads a clock, a repository or a device. `T` arrives as an argument, the season
- * window arrives as an argument, and `computedAt` is left at 0 for the caller to stamp — a pure
- * function cannot know the time, and a function that did would not be idempotent.
+ * Nothing here reads a clock, a repository or a device. `T` arrives as an argument, the zone
+ * arrives as an argument, the season window arrives as an argument, and `computedAt` is left at 0
+ * for the caller to stamp — a pure function cannot know the time or where it is, and a function
+ * that did would not be idempotent.
  *
  * There is no "advance" operation anywhere in 1.2. Completing a schedule is "insert the completion
  * event, then rebuild"; closing a round is "insert the closure row, then rebuild"; editing the rule,
@@ -53,6 +55,12 @@ object ScheduleRecompute {
      * [season] is a parameter rather than a lookup because the window lives on the Asset and this
      * function takes no repository; it carries a default so a caller with no window to supply — a
      * group target, or an asset with none — says so by saying nothing.
+     *
+     * [zone] is the owner's zone, and it is here for the same reason [today] is: the pin needs to
+     * read one stored instant as a date (see [pinFloor]) and the engine may not ask a device which
+     * zone that is. It carries **no** default — a zone guessed inside a pure function is the drift
+     * invariant 16 forbids, and a caller that does not say which calendar it means cannot be given
+     * one silently.
      */
     fun rebuild(
         schedule: MaintenanceSchedule,
@@ -60,6 +68,7 @@ object ScheduleRecompute {
         closures: List<OccurrenceClosure>,
         membership: List<GroupMember>,
         today: LocalDate,
+        zone: ZoneId,
         season: SeasonWindow? = null,
     ): ScheduleState {
         val completions = completionsOf(schedule, events)
@@ -89,7 +98,7 @@ object ScheduleRecompute {
         // defect in another costume, and the postponement goes with it for the same reason — a sort
         // key on a round nobody can act on is exactly what "never counted as due" forbids.
         // An asset-targeted schedule always requires its own Asset, so this never fires for one.
-        val due = computedDueOn(schedule, last)
+        val due = computedDueOn(schedule, last, zone)
         val actionable = due == null ||
             OccurrenceBasis.of(schedule, events, closures, membership).required(due).isNotEmpty()
         val computedDueOn = if (actionable) due else null
@@ -162,13 +171,18 @@ object ScheduleRecompute {
      * reconstructed from a state row that deliberately hides it.
      *
      * Null only for a schedule with no time rule, which a group target can never be.
+     *
+     * [zone] is [rebuild]'s, and for the same reason: this answers the *same* question `rebuild`
+     * does, so a zone it disagreed about would hand a completion a key no list ever shows.
      */
     fun currentOccurrenceOn(
         schedule: MaintenanceSchedule,
         events: List<AssetEvent>,
         closures: List<OccurrenceClosure>,
         membership: List<GroupMember>,
-    ): String? = computedDueOn(schedule, terminations(schedule, events, closures, membership).lastOrNull())
+        zone: ZoneId,
+    ): String? =
+        computedDueOn(schedule, terminations(schedule, events, closures, membership).lastOrNull(), zone)
 
     /** This schedule's completions — an event is a completion of it exactly when it names it. */
     private fun completionsOf(schedule: MaintenanceSchedule, events: List<AssetEvent>): List<AssetEvent> =
@@ -226,13 +240,18 @@ object ScheduleRecompute {
      * deleted. COMPLETION with no termination is due **at** the anchor: the anchor is where the
      * owner states it is first due.
      */
-    private fun computedDueOn(schedule: MaintenanceSchedule, last: Termination?): String? {
+    private fun computedDueOn(schedule: MaintenanceSchedule, last: Termination?, zone: ZoneId): String? {
         val interval = schedule.timeInterval ?: return null
         val unit = schedule.timeUnit ?: return null
         val anchor = LocalDate.parse(schedule.anchorOn ?: return null)
         return when (schedule.timeBasis) {
             TimeBasis.FIXED -> if (last == null) {
-                RecurrenceMath.firstSeriesDateAtOrAfter(anchor, maxOf(anchor, pinFloor(schedule)), interval, unit)
+                RecurrenceMath.firstSeriesDateAtOrAfter(
+                    anchor,
+                    maxOf(anchor, pinFloor(schedule, zone)),
+                    interval,
+                    unit,
+                )
             } else {
                 val bound = maxOf(LocalDate.parse(last.occurrenceOn), LocalDate.parse(last.effectiveOn))
                 RecurrenceMath.firstSeriesDateAfter(anchor, bound, interval, unit)
@@ -254,14 +273,21 @@ object ScheduleRecompute {
      * to the edit date (invariant 25). The schedule operations are written so that the writes which
      * are *not* rule changes leave `updated_at` alone, which is what keeps that true.
      *
-     * This is the one instant the engine has to see a date for, and it is converted at **UTC** on
-     * purpose: a device-local conversion would make `rebuild` depend on an ambient zone and stop it
-     * being a pure function of its arguments (invariant 16). The cost is that a row stamped within
-     * a few hours of local midnight can floor on the neighbouring day, which can only ever matter
-     * if a series date falls exactly there.
+     * This is the one instant the engine has to see a date for, and it is read in the **owner's**
+     * zone, which arrives as [rebuild]'s `zone` argument (controller ruling, 2026-09-22). D-27 says
+     * "`updated_at`'s date" and the spec names no zone, so the date it means is the one the owner is
+     * living in — the same calendar `today` is on. It used to be converted at UTC, which cost an
+     * owner west of it the last hours of their day: a schedule saved at 21:00 in a UTC-4 zone and
+     * anchored on that day floored on **tomorrow**, so its first occurrence was pushed a whole
+     * interval out and invariant 23's "can be due today" was false for four hours a day.
+     *
+     * Invariant 16 still holds, and for the reason it always did: the zone is an **argument**, not a
+     * device read. `rebuild` remains a pure function of what it is handed, and two devices handed
+     * the same history and the same zone still derive the same row. Supplying it is the caller's
+     * job — `RecomputeSchedules` reads the device once, the way it already reads `today`.
      */
-    private fun pinFloor(schedule: MaintenanceSchedule): LocalDate =
-        Instant.ofEpochMilli(schedule.updatedAt).atZone(ZoneOffset.UTC).toLocalDate()
+    private fun pinFloor(schedule: MaintenanceSchedule, zone: ZoneId): LocalDate =
+        Instant.ofEpochMilli(schedule.updatedAt).atZone(zone).toLocalDate()
 
     /**
      * The newest reading of [definitionId] by [EventChronology] — **the latest, never the maximum**.

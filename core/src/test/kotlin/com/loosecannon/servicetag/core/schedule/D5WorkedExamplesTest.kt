@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.readingOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -49,7 +50,7 @@ class D5WorkedExamplesTest {
         events: List<com.loosecannon.servicetag.core.model.AssetEvent> = emptyList(),
         closures: List<com.loosecannon.servicetag.core.model.OccurrenceClosure> = emptyList(),
         today: String,
-    ) = ScheduleRecompute.rebuild(schedule, events, closures, emptyList(), on(today))
+    ) = ScheduleRecompute.rebuild(schedule, events, closures, emptyList(), on(today), ZoneOffset.UTC)
 
     /**
      * §10.1, the spec's headline correction. The April occurrence is completed on March 20 and the

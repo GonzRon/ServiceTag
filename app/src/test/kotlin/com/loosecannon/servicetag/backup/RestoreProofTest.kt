@@ -54,6 +54,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.ZoneOffset
 
 /**
  * Phase 1A's exit proof. Data is created in one database, exported, and imported into a brand-new
@@ -82,7 +83,7 @@ class RestoreProofTest {
         // is about the canonical rows, and derived state is rebuilt after any import.
         val recompute = RecomputeSchedules(
             schedules, scheduleStates, events, closures, groups, assets,
-            Today { LocalDate.parse("2026-02-10") }, Clock { FIXED_NOW },
+            Today { LocalDate.parse("2026-02-10") }, Clock { FIXED_NOW }, zone = { ZoneOffset.UTC },
         )
         // This proof is about the data archive. The set's artifacts half carries bytes, and
         // bytes are what `BackupViewModelTest` and `ArtifactsCodecTest` prove.

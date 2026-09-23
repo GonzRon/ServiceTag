@@ -137,15 +137,18 @@ class DashboardAttentionTest {
                     anchorOn = today(),
                 ),
             )
-            // The pin floor is the row's `updated_at` **converted at UTC** (D-27, invariant 16),
-            // and this anchor puts a series date on local today — the one case `ScheduleRecompute`
-            // names as the cost of that conversion. Saved after local 20:00 in a UTC-4 zone the
-            // round floored on tomorrow and opened a year out, so it read OK instead of DUE and
-            // this store stopped meaning "due today" for the last four hours of every day. Only
-            // the floor moves: `created_at` has to stay *now*, because the round's open instant is
-            // its `created_at` and the membership windows above were stamped now — an older one
-            // would empty the required set and take the progress line with it. It is stamped
-            // before the completion so the completion lands on today's round.
+            // The round has to be **due today** for this store to mean what its name says, and the
+            // anchor alone does not settle that: the D-27 pin floors the first occurrence at the
+            // row's own `updated_at`. `ScheduleRecompute` now reads that floor in the owner's zone
+            // rather than at UTC, which is what makes the anchor above mean today at every hour —
+            // but a fixture that leans on a floor rule it never states is how this store came to
+            // read OK instead of DUE for the last four hours of every day. Stamping the floor a
+            // day back says it outright.
+            //
+            // Only the floor moves: `created_at` has to stay *now*, because the round's open
+            // instant is its `created_at` and the membership windows above were stamped now — an
+            // older one would empty the required set and take the progress line with it. And it is
+            // stamped before the completion, so the completion lands on today's round.
             graph.schedules.upsert(
                 graph.schedules.get(groupSchedule.id)!!
                     .copy(updatedAt = dayMillis(LocalDate.now().minusDays(1).toString())),

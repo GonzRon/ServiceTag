@@ -25,6 +25,7 @@ import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.dayMillis
 import java.io.File
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -63,7 +64,7 @@ class GroupMembershipTest {
     private val todayPort = Today { today }
 
     private val recompute =
-        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock)
+        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock) { ZoneOffset.UTC }
     private val saveGroup = SaveGroup(groups, assets, uow, ids, clock)
     private val archiveGroup = ArchiveGroup(groups, uow, clock)
     private val saveSchedule =
