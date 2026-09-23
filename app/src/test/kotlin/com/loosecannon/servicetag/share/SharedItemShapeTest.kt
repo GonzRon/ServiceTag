@@ -5,11 +5,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * The two hierarchies are mapped in **one** direction, by `SharedShare.asSharedItem`, and every
- * argument there is named — so a field added to either side is a compile error rather than a value
- * silently dropped. This pins the other half of that: the member sets and the field sets
- * themselves, so a field added to **both** sides and forgotten in the mapping still fails, and so
- * does a fifth member of either sealed interface.
+ * The two hierarchies are mapped in **one** direction, by `SharedShare.asSharedItem`, with every
+ * argument named. Between that call and this class, three of the four ways a field can go missing
+ * are covered: a field added to **one** side alone fails the field-set comparison here; a field
+ * added to **both** sides **without** a default fails to compile at the named-argument call; and a
+ * fifth member of either sealed interface fails the member-set comparison here.
+ *
+ * **The residual, stated rather than implied:** a field added to both sides **with a default value**
+ * compiles, leaves the two field sets matching, and is still dropped by the mapping. Nothing here
+ * catches that one.
  *
  * Read off the compiled classes rather than the source, so it cannot be satisfied by a comment.
  */

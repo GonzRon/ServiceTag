@@ -342,7 +342,7 @@ private fun decodeUtf8(bytes: ByteArray): String? = try {
 
 /**
  * The one Android implementation of [SharedStream]. [scheme] and [authority] are read off the
- * `Uri` itself and touch no provider, so `readSharedItem` can hand this to the predicate before a
+ * `Uri` itself and touch no provider, so [readShare] can hand this to the predicate before a
  * single resolver call has been made.
  */
 private class ResolverStream(

@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.share
 import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -13,6 +14,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -48,8 +50,19 @@ class SharedItemLiftTest {
         staged.clear()
     }
 
-    /** One file, handed over by a provider that is not this app's. */
+    /**
+     * One file, handed over by a provider that is not this app's.
+     *
+     * `MediaStore.Downloads` and `IS_PENDING` are API 29+ while `minSdk` is 26, so the two cases
+     * that stage a file say so out loud. The suite is emulator-only and the emulator is far above
+     * that floor, so nothing is skipped in practice; the assumption is here so a run on an older
+     * image reports the reason instead of an obscure failure.
+     */
     private fun serve(displayName: String, mimeType: String, body: ByteArray): Uri {
+        assumeTrue(
+            "MediaStore.Downloads is API 29+",
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
+        )
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
             put(MediaStore.MediaColumns.MIME_TYPE, mimeType)

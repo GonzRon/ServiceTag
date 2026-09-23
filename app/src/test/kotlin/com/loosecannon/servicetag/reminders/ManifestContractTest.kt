@@ -1,12 +1,12 @@
 package com.loosecannon.servicetag.reminders
 
+import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import org.w3c.dom.Element
 
 /**
