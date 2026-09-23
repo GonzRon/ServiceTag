@@ -55,6 +55,7 @@ class ApiRouterTest {
             graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
             maintenanceHandlersFor(graph),
+            referenceHandlersFor(graph),
             appVersion = "1.1.0",
             schemaVersion = 5,
         ),
@@ -166,6 +167,15 @@ class ApiRouterTest {
             "POST" to "/v1/snooze",
             "DELETE" to "/v1/groups/g1/members/m1",
             "DELETE" to "/v1/due",
+            // 1.3's additions (spec §6). The API adds and amends a reference; the phone removes
+            // one. A `DELETE` added here for symmetry would make an automation client able to
+            // erase history the phone is meant to own, so neither shape takes one — and there is
+            // no byte path either, at any version (I-3).
+            "DELETE" to "/v1/references/r1",
+            "DELETE" to "/v1/references",
+            "DELETE" to "/v1/assets/$id/references",
+            "GET" to "/v1/references/r1/bytes",
+            "POST" to "/v1/references/r1/bytes",
         )) {
             val response = call(method, path, if (method == "GET") "" else "{}")
             assertTrue("$method $path answered ${response.status}", response.status == 404 || response.status == 405)
@@ -440,6 +450,7 @@ class ApiRouterTest {
                 graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
                 graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
                 maintenanceHandlersFor(graph),
+                referenceHandlersFor(graph),
                 appVersion = "1.1.0",
                 schemaVersion = 5,
             ),
