@@ -103,7 +103,7 @@ becomes nullable — the #55 extension #4's comment asked for, and why #55 is sp
 - **COMPLETION**: `nextDue = E.plus(interval)`; with no termination, `anchorOn`.
 - A never-terminated FIXED schedule's occurrence is **pinned from immutable configuration**
   (D-27): `computedDueOn = smallest seriesDate(k) >= max(anchorOn, createdOn)`. It never re-floats on
-  Today, and the same pin applies after the sole completion is deleted.
+  Today, and the same pin applies after the sole completion is deleted. **Amended at the release gate (2026-09-22, controller ruling):** the floor is `updated_at`'s date **in the device zone** (`ScheduleRecompute.rebuild` takes the zone as a pure input; `RecomputeSchedules` supplies the device zone) — reading it at UTC pushed an evening-created schedule's first occurrence a whole interval out for owners west of UTC; the schedule can be due on the owner's own day.
 - **The pin's floor after a recurrence edit** is the **edit date**: on a schedule with no
   terminations, `computedDueOn = smallest seriesDate(k) >= max(anchorOn, editedOn)`, where `editedOn`
   is the schedule's `updated_at` date at the edit. Without this floor, re-anchoring an old,
@@ -1080,6 +1080,7 @@ naming several facts is one test asserting them together.
 23. Status is monotone in `T` between history changes: it never goes from OVERDUE back to OK without a completion, a closure or an edit. A season boundary changes status without a history change and is not a violation, because `INACTIVE_SEASON` is not `OK`.
 24. Deleting the latest completion event moves the due date back, observably, and reopens its round.
 25. A never-terminated FIXED schedule's due date is pinned from immutable configuration and never re-floats on Today; only an explicit recurrence edit moves the pin's floor, to the edit date (D-27).
+    *Amendment (release gate, 2026-09-22) to invariants 16, 23 and 25:* `rebuild` takes the device zone as a pure input — the zone is part of the input tuple, so the function stays deterministic; invariants 23 and 25 hold at that fixed zone.
 26. `seasonReentry` and `seasonReentryOffsetDays` are stored and never read by 1.2's engine (D-4).
 27. A group-targeted schedule is `IGNORE` season only; `FOLLOW_ASSET` on a group target is rejected (D-28).
 

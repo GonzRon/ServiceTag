@@ -297,7 +297,7 @@ sealed interface ScheduleTarget {
 | no backlog | a very late termination skips forward and produces exactly **one** next occurrence | §2.1, D-7, invariant 13 |
 | COMPLETION advance | `nextDue = E.plus(interval)`; with no termination, `anchorOn` | §2.1, invariant 12 |
 | the FIXED pin | a **never-terminated** FIXED schedule's occurrence is pinned from immutable configuration: `computedDueOn = smallest seriesDate(k) >= max(anchorOn, createdOn)`. It never re-floats on Today, and the same pin applies after the sole completion is deleted | D-27, invariants 23, 25 |
-| the pin's floor after an edit | on a schedule with no terminations, the floor becomes the **edit date**: `smallest seriesDate(k) >= max(anchorOn, editedOn)`, where `editedOn` is the row's `updated_at` date at the edit. Without it, re-anchoring an old never-terminated schedule today would pin it immediately overdue. `05-scheduling-semantics.md:346` is **superseded** and is corrected by B13 | §2.1, D-27, T3 |
+| the pin's floor after an edit | on a schedule with no terminations, the floor becomes the **edit date**: `smallest seriesDate(k) >= max(anchorOn, editedOn)`, where `editedOn` is the row's `updated_at` date at the edit. Without it, re-anchoring an old never-terminated schedule today would pin it immediately overdue. `05-scheduling-semantics.md:346` is **superseded** and is corrected by B13 | §2.1, D-27, T3 **Amended at the release gate (2026-09-22, controller ruling):** the floor is `updated_at`'s date **in the device zone** (`ScheduleRecompute.rebuild` takes the zone as a pure input; `RecomputeSchedules` supplies the device zone) — reading it at UTC pushed an evening-created schedule's first occurrence a whole interval out for owners west of UTC; the schedule can be due on the owner's own day. |
 | meter side | `computedDueMeter = lastCompletedMeter + meterInterval`; `currentMeter` is the latest reading of the meter definition across the asset's events; with no completion the baseline is `anchorMeter`; with neither, `NO_DATA` | §2.1, D-3, D5 §3 |
 | combined | both sides present = "whichever first"; due when either side is due; status is the **worst of** the two | §2.1, D5 §4 |
 | calendar arithmetic | `plusMonths`/`plusYears` clamp to the last valid day; a Feb 29 anchor returns to Feb 29 in the next leap year because it is computed from the anchor; weeks and days are plain arithmetic; the engine never sees an instant | D5 §2.3 |
@@ -311,7 +311,7 @@ sealed interface ScheduleTarget {
 
 ### 5.3 `ScheduleState` and `rebuild`
 
-`ScheduleRecompute.rebuild(schedule, events, closures, membership, T)` — **amended at B02's review (2026-09-22):** the real signature carries a sixth, trailing, defaulted parameter `season: SeasonWindow? = null` (the matrix's `Season.inSeason` row needs it; a missing window fails open); callers that know the window pass it is the **only** write path into `schedule_state` (invariant 17). It runs after every event insert/update/delete, every closure insert, every schedule edit, every import, and in the digest and backstop runs. It is **pure** in (config, events, closures, membership, `T`) and **idempotent** (invariants 15, 16 — asserted as properties over the function, not with two devices).
+`ScheduleRecompute.rebuild(schedule, events, closures, membership, T)` — **amended at the release gate (2026-09-22):** the real signature is `rebuild(schedule, events, closures, membership, today, zone, season = null)`; `zone` is a required pure input (the device zone, supplied by `RecomputeSchedules`), read only by the D-27 floor — **amended at B02's review (2026-09-22):** the real signature carries a seventh (after the required `zone`, amended at the release gate), trailing, defaulted parameter `season: SeasonWindow? = null` (the matrix's `Season.inSeason` row needs it; a missing window fails open); callers that know the window pass it is the **only** write path into `schedule_state` (invariant 17). It runs after every event insert/update/delete, every closure insert, every schedule edit, every import, and in the digest and backstop runs. It is **pure** in (config, events, closures, membership, `T`) and **idempotent** (invariants 15, 16 — asserted as properties over the function, not with two devices).
 
 Materialised fields are §2.1's `schedule_state` columns. `lastTerminationEffectiveOn` is the termination's **effective date** `E`, not its occurrence key: the key `D` is not materialised because `rebuild` recomputes it from `occurrence_on`. `lastCompletedOn` keeps its narrower meaning — the latest member *completion* — so "last done" never reports a round nobody did.
 
@@ -616,16 +616,16 @@ Spec §6's eighty, each restated in a few words with the brief whose test matrix
 | 13 | a very late termination produces exactly one next occurrence — never a backlog | B02 |
 | 14 | advancing never rewrites history: no stored event or closure is edited by an advance | B02, B03 |
 | 15 | `rebuild(rebuild(x)) == rebuild(x)` | B02 |
-| 16 | `rebuild` is pure in (config, events, closures, membership, `T`) — a property over the function | B02 |
+| 16 | `rebuild` is pure in (config, events, closures, membership, `T`, the zone `T` is on) — a property over the function | B02 — amended 2026-09-22: `zone` is part of the input tuple |
 | 17 | `rebuild` is the only write path into `schedule_state` | B02, structural grep |
 | 18 | status is never stored in any form | B02, structural grep |
 | 19 | a completion, a closure or a recurrence edit clears the postponement; an edit abandons an open partial occurrence | B02, B03, B14 (UI) |
 | 20 | snooze changes no `*_on` column and creates no event | B06, B07, B14 (UI) |
 | 21 | a postponement moves the current occurrence only; the next comes from the rule | B02, B14 (UI) |
 | 22 | `INACTIVE_SEASON` and `PAUSED` never notify and never count as due | B02, B06, B08 |
-| 23 | status is monotone in `T` between history changes; a season boundary is not a violation | B02 |
+| 23 | status is monotone in `T` between history changes; a season boundary is not a violation | B02 — holds at a fixed zone (the device zone the recompute supplies; amended 2026-09-22) |
 | 24 | deleting the latest completion moves the due date back and reopens its round | B02, B03 |
-| 25 | a never-terminated FIXED due date is pinned from immutable configuration; only an edit moves the floor, to the edit date | B02, B14 (UI) |
+| 25 | a never-terminated FIXED due date is pinned from immutable configuration; only an edit moves the floor, to the edit date | B02, B14 (UI) — holds at a fixed zone (the device zone the recompute supplies; amended 2026-09-22) |
 | 26 | `seasonReentry` and `seasonReentryOffsetDays` are stored and never read | B02, structural grep |
 | 27 | a group target is `IGNORE` season only; `FOLLOW_ASSET` on one is rejected | B02, B14 (UI) |
 | 28 | a group completion never writes an event on a non-member | B03, B09 (UI), B15 (UI) |
