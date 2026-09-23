@@ -35,7 +35,7 @@
 
 Resolution rules (invariants):
 1. An asset reference matches **exactly one** non-archived, non-retired asset by exact name (top-level or component); zero or several → `ERROR` for that entry (and for every entry depending on it).
-2. A profile reference matches exactly one non-archived profile **of that asset** by exact name; `FORM` requires a profile; `QUICK` forbids one.
+2. A profile reference matches exactly one non-archived profile **of that asset** by exact name; `FORM` requires a profile; `QUICK` may carry one on an asset target — the completion event then takes the profile's event kind and keeps the profile link (`CompleteSchedule`), which is why the manifest attaches the operation's profile even where it has no fields. (Amended at the first real plan, 2026-09-23: the original "`QUICK` forbids one" was stricter than the product; only a group target forbids a profile, invariant 5.)
 3. A group entry's identity on the phone is its **name** among non-archived groups: absent → `CREATE`; present with the same open member set → `IDENTICAL`; present with a different member set → `CONFLICT` (the tool never edits memberships).
 4. A schedule entry's identity is **(target, title)** among non-archived schedules: absent → `CREATE`; present with the same rule (`timeInterval`, `timeUnit`, `timeBasis`, `anchorOn`, `leadDays`, `completionMode`, `profileId`, `seasonBehavior`) → `IDENTICAL`; present with any rule difference → `CONFLICT`. `description`, `remindersEnabled`, `providers` are not identity and not compared.
 5. A group-targeted schedule is validated **before** any call: `completionMode` `QUICK`, no profile, `seasonBehavior` `IGNORE`, the group has ≥ 1 member (in the manifest or on the phone); otherwise `ERROR`.
