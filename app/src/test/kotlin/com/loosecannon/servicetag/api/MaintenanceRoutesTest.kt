@@ -1,9 +1,11 @@
 package com.loosecannon.servicetag.api
 
-import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
+import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.usecase.AssetMembershipReferenced
@@ -11,8 +13,10 @@ import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.OccurrenceAlreadyComplete
 import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
+import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.descriptors.elementNames
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -66,7 +70,7 @@ class MaintenanceRoutesTest {
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
             maintenanceHandlersFor(graph),
             appVersion = "1.2.0",
-            schemaVersion = 6,
+            schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
         TOKEN,
     )
@@ -991,10 +995,13 @@ class MaintenanceRoutesTest {
     // --- the merge report's three new tables -----------------------------------------------------
 
     /**
-     * `import_merge` reads an archive this build produced, and the report carries the `groups`,
-     * `schedules` and `closures` tallies beside the shipped ones — echoing the archive's own
-     * format rather than a number pinned here, which `VersionAgreementTest` owns. `applicable`
-     * still governs.
+     * `import_merge` reads a **format-7** archive, and the report carries the `groups`, `schedules`
+     * and `closures` tallies beside the shipped ones, plus 1.3's `references`. `applicable` still
+     * governs.
+     *
+     * The format is a **literal**, deliberately: an assertion against `BackupCodec.FORMAT_VERSION`
+     * would be a round trip through the same constant the archive was stamped with, and would go on
+     * passing whatever that constant became.
      */
     @Test fun theMergeReportCarriesTheThreeNewTallies() {
         val archive = donorArchive()
@@ -1008,11 +1015,12 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(BackupCodec.FORMAT_VERSION, report.formatVersion)
+        assertEquals(7, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.closures)
+        assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.references)
 
         val applied = router().handle(
             ApiRequest(
@@ -1026,12 +1034,53 @@ class MaintenanceRoutesTest {
             assertEquals(1, graph.groups.all().size)
             assertEquals(1, graph.schedules.all().size)
             assertEquals(1, graph.closures.all().size)
+            assertEquals(1, graph.references.all().size)
         }
+    }
+
+    /**
+     * Hazard: the report loses a table on the **wire**. `MergeReportResponse` is a hand-written
+     * 1:1 mirror of `MergeReport` (master plan §18.3), so a tally added to the domain type and not
+     * to the mirror is silently dropped from `/v1/import-merge/plan` and `/v1/import-merge/apply`
+     * rather than failing to compile — and `ignoreUnknownKeys = false` cannot catch it either,
+     * because a field missing from both the DTO and the JSON is nothing for the parser to object to.
+     *
+     * So the serialised field names are pinned as a list, in write order, and the value of the one
+     * this release adds is read off a **live route response** rather than off a constructed DTO.
+     */
+    @Test fun theMergeReportWireMirrorCarriesEveryTallyInWriteOrder() {
+        assertEquals(
+            listOf(
+                "formatVersion", "backupSetId", "applicable",
+                "assets", "groups", "definitions", "profiles", "schedules", "closures",
+                "links", "tags", "events", "attachments", "references",
+                "conflicts", "duplicateCandidates",
+            ),
+            MergeReportResponse.serializer().descriptor.elementNames.toList(),
+        )
+
+        val planned = router().handle(
+            ApiRequest(
+                "POST", IMPORT_MERGE_PLAN_PATH,
+                mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"),
+                donorArchive(),
+            ),
+        )
+        assertEquals(200, planned.status)
+        // The key is really on the wire, not merely on the Kotlin type: read it out of the JSON
+        // before decoding, so a mirror that stopped emitting it fails here.
+        assertTrue(planned.text(), "\"references\"" in planned.text())
+        val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
+        assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.references)
     }
 
     private fun MergeReportResponse.text(): String = conflicts.toString()
 
-    /** A donor phone carrying one group, one group-targeted schedule and one closure. */
+    /**
+     * A donor phone carrying one group, one group-targeted schedule, one closure and one
+     * reference. The reference is there so the `references` tally has a non-zero value to be wrong
+     * about — an empty tally would pass against any table the mirror happened to read.
+     */
     private fun donorArchive(): ByteArray {
         val donor = FakeGraph().apply {
             now = dayMillis("2026-01-01")
@@ -1077,6 +1126,19 @@ class MaintenanceRoutesTest {
                         occurrenceOn = "2026-01-01",
                         closedOn = "2026-01-15",
                         createdAt = dayMillis("2026-01-15"),
+                    ),
+                )
+                donor.references.upsert(
+                    AssetReference(
+                        id = ReferenceId("00000000-0000-4000-8000-900000008888"),
+                        assetId = asset.id,
+                        kind = ReferenceKind.WEB_URL,
+                        uri = "https://example-mower.invalid/donor-manual",
+                        displayName = "Donor manual",
+                        description = "",
+                        scheme = "https",
+                        createdAt = dayMillis("2026-01-01"),
+                        updatedAt = dayMillis("2026-01-01"),
                     ),
                 )
                 donor.exportBackupSet.run().data

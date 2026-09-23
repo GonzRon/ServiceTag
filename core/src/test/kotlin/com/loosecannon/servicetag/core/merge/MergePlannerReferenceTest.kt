@@ -326,26 +326,43 @@ class MergePlannerReferenceTest {
     // --- the report -----------------------------------------------------------------------------
 
     /**
-     * Hazard: the report loses a table. `MergeReport` carries **eleven** tallies, `references` is
-     * the last of them, and it is the one this plan's rows land in.
+     * Hazard: the report loses a table. `MergeReport`'s tallies are read **by name, in
+     * `MergeTable` order**, and compared against `tally(table)` for each member — so a tally
+     * dropped from the type stops compiling, one wired to the wrong table fails on its value, and
+     * one left out of `report()` fails as an empty tally where a populated one belongs.
+     *
+     * The archive is shaped so the eleven expectations are not all the same value: only
+     * `references` and `assets` carry rows, so a report that read `attachments` where it meant
+     * `references` — the drift a positional mirror invites — fails here rather than passing on a
+     * row of zeroes.
      */
     @Test
     fun `the report carries eleven tallies with references last`() {
         val plan = mergePlanOf(
             backupOf(assets = listOf(asset("a1")), references = listOf(reference("r1"))),
-            snapshotOf(assets = listOf(asset("a1"))),
+            snapshotOf(),
         )
         val report = plan.report()
 
-        assertEquals(
-            listOf(
-                report.assets, report.groups, report.definitions, report.profiles,
-                report.schedules, report.closures, report.links, report.tags, report.events,
-                report.attachments, report.references,
-            ).size,
-            MergeTable.entries.size,
+        val byName = listOf(
+            MergeTable.ASSETS to report.assets,
+            MergeTable.GROUPS to report.groups,
+            MergeTable.DEFINITIONS to report.definitions,
+            MergeTable.PROFILES to report.profiles,
+            MergeTable.SCHEDULES to report.schedules,
+            MergeTable.CLOSURES to report.closures,
+            MergeTable.LINKS to report.links,
+            MergeTable.TAGS to report.tags,
+            MergeTable.EVENTS to report.events,
+            MergeTable.ATTACHMENTS to report.attachments,
+            MergeTable.REFERENCES to report.references,
         )
+        assertEquals(MergeTable.entries.toList(), byName.map { it.first })
+        assertEquals(MergeTable.entries.map { plan.tally(it) }, byName.map { it.second })
+
+        // and the two the archive actually populates, so the comparison above is not eleven zeroes
         assertEquals(MergeTally(1, 0, 0, 0), report.references)
+        assertEquals(MergeTally(1, 0, 0, 0), report.assets)
         assertEquals(MergeTally(0, 0, 0, 0), report.attachments)
         assertEquals(MergeTable.REFERENCES, MergeTable.entries.last())
     }
