@@ -13,9 +13,9 @@ data class ParsedShare(val uri: String, val label: String?)
  * one — the uri-list rule — while `text/plain`, which spec §4.4 scans whole, still gives up the
  * link in a Markdown heading when that is the only URI the share carried.
  *
- * **The scan is linear**, because it runs on the intake screen's thread over an `EXTRA_TEXT` a
- * stranger chose: every colon is examined exactly once, and only the first candidate that could be
- * a URI has its token read.
+ * **The scan is linear and bounded**, because it runs on the intake screen's thread over an
+ * `EXTRA_TEXT` a stranger chose: at most [MAX_SHARE_TEXT_CHARS] are read, every colon in them is
+ * examined exactly once, and only the first candidate that could be a URI has its token read.
  */
 object ShareTextParser {
 
@@ -26,8 +26,21 @@ object ShareTextParser {
     private val NAMED_SCHEMES: Set<String> = LinkLaunchPolicy.ALLOWED + LinkLaunchPolicy.BLOCKED
 
     fun firstUri(text: String): ParsedShare? {
-        val (commented, rest) = text.lines().partition { it.trimStart().startsWith("#") }
+        val (commented, rest) = capped(text).lines().partition { it.trimStart().startsWith("#") }
         return firstIn(rest) ?: firstIn(commented)
+    }
+
+    /**
+     * The first [MAX_SHARE_TEXT_CHARS], pulled back to the last blank so the scan never sees half
+     * a token: a URI cut by the cap would otherwise be stored as a shorter URI that goes nowhere,
+     * and `uri` is immutable once written (I-1). A capped region holding no blank at all is one
+     * enormous token, which the caller refuses on length instead.
+     */
+    private fun capped(text: String): String {
+        if (text.length <= MAX_SHARE_TEXT_CHARS) return text
+        val head = text.substring(0, MAX_SHARE_TEXT_CHARS)
+        val lastBlank = head.indexOfLast { it.isWhitespace() }
+        return if (lastBlank >= 0) head.substring(0, lastBlank) else head
     }
 
     /**

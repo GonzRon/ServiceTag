@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.core.references
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * What a share's text yields (spec §4.4). The rule the whole class defends is #35's: **raw text is
@@ -102,6 +103,41 @@ class ShareTextParserTest {
             "mailto:parts@example-mower.invalid",
             ShareTextParser.firstUri("order from mailto:parts@example-mower.invalid")?.uri,
         )
+    }
+
+    /**
+     * A 200,000-character single line, colon-dense, with the link near the end of the region the
+     * cap keeps. Each colon is looked at once and only the first plausible candidate has its token
+     * read, so this is linear; the wall-clock guard is generous on purpose — it is there to fail a
+     * quadratic regression, not to measure anything.
+     */
+    @Test
+    fun aColonDenseLineIsScannedInLinearTime() {
+        val uri = "https://example-mower.invalid/xt1"
+        val text = "a:".repeat(30_000) + uri + " " + "a:".repeat(70_000)
+        assertTrue(text.length > 200_000)
+
+        val startedAt = System.nanoTime()
+        val parsed = ShareTextParser.firstUri(text)
+        val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+
+        assertEquals(uri, parsed?.uri)
+        assertTrue(elapsedMs < 2_000, "the scan took ${elapsedMs}ms — a quadratic scan is a regression")
+    }
+
+    /**
+     * The accepted trade for the cap: text past [MAX_SHARE_TEXT_CHARS] is not scanned, so a URI
+     * that sits beyond it is not found and the share is offered as a note instead. Nothing is
+     * stored wrongly — the intake screen simply does not prefill a link. The scan also never sees
+     * a half-token, because a truncation that lands mid-word is pulled back to the last blank.
+     */
+    @Test
+    fun aUriBeyondTheScannedCapIsNotFound() {
+        val startedAt = System.nanoTime()
+        val beyond = "a".repeat(MAX_SHARE_TEXT_CHARS) + " https://example-mower.invalid/xt1"
+        assertNull(ShareTextParser.firstUri(beyond))
+        val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+        assertTrue(elapsedMs < 2_000, "the scan took ${elapsedMs}ms — a quadratic scan is a regression")
     }
 
     /** The control for the rule above: an opaque allow-listed scheme and a blocked one still count. */

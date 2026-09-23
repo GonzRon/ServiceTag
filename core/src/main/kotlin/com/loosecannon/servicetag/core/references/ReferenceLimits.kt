@@ -12,6 +12,17 @@ const val MAX_REFERENCE_NAME_CHARS = 200
 const val MAX_REFERENCE_DESCRIPTION_CHARS = 2_000
 
 /**
+ * How much shared text `ShareTextParser.firstUri` will read: 64 KiB, the same number as the
+ * `text/uri-list` stream cap (plan §18.20) for the same reason — an `EXTRA_TEXT` is whatever the
+ * sharing app chose to send, and a scan is work done on the intake screen's thread.
+ *
+ * It is **not** that cap: the uri-list one bounds a stream, which `:core` never sees, and stays
+ * B03's. The accepted trade here is that a URI lying beyond this many characters is not found and
+ * the share is offered as a note instead.
+ */
+const val MAX_SHARE_TEXT_CHARS = 65_536
+
+/**
  * Two sanitisers over text nobody here chose: a display name arrives from a sharing app's subject
  * or title extra, and a filename from whatever a provider called a file (spec §4.3).
  */
