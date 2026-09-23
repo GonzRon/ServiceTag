@@ -90,7 +90,7 @@ data class AssetsState(
     val showArchived: Boolean = false,
     /** How many rows the chip is hiding, so an empty list can say why it is empty. */
     val archivedCount: Int = 0,
-    /** What the search box holds, verbatim. Blank means "the systems, and not their parts". */
+    /** What the search box holds, verbatim. Blank leaves the list exactly as it was before B07. */
     val query: String = "",
 )
 
@@ -102,6 +102,11 @@ data class AssetsState(
  * Dashboard, what the search box narrows the list to. The order is the ViewModel's rather than the
  * query's because "retired" is a date column, not a status, and sorting by it in SQL would say
  * nothing about lifecycle.
+ *
+ * **The Assets screen does not adopt the Dashboard's hide-components-until-searched behaviour**
+ * (controller ruling, B07 fix round 1): a blank query leaves the list exactly as it was before this
+ * brief — every asset, components included, each still naming its system — and a non-blank query
+ * only ever narrows that same list. Only the box's *location* moved; what the screen lists did not.
  */
 class AssetsViewModel(assets: AssetRepository, private val clock: Clock) : ViewModel() {
 
@@ -126,13 +131,9 @@ class AssetsViewModel(assets: AssetRepository, private val clock: Clock) : ViewM
             val today = clock.nowMillis().asLocalDate(zone)
             val byId = rows.associateBy { it.id }
             val visible = if (archived) rows else rows.filter { it.status == AssetStatus.ACTIVE }
-            // The list is the systems: a component stays on the system it belongs to until a
-            // search asks for it by name (#39), exactly as the box did on the Dashboard.
-            val matching = if (query.isBlank()) {
-                visible.filter { it.parentAssetId == null }
-            } else {
-                visible.filter { it.matches(query) }
-            }
+            // A blank query leaves the list exactly as it was before B07 (components included);
+            // a non-blank query only ever narrows it (#39's six-field predicate, unchanged).
+            val matching = visible.filter { it.matches(query) }
             AssetsState(
                 items = matching
                     .sortedWith(compareBy({ lifecycleRank(it) }, { it.name.lowercase() }))
