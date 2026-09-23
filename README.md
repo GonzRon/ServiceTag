@@ -96,6 +96,16 @@ is what hands NFC back — the ambient tap still opens a bound tag straight away
   completion there on the sheet, and each tag can carry a label saying where on the thing it is
   stuck. The design contract is
   [`docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md`](docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md).
+- **Share a link, a document, a photo or a note into an asset** — ServiceTag is in Android's share
+  sheet. Send it one item from anywhere — a page from the browser, a PDF or a photo from Files or the
+  gallery, a note link from a notes app — pick the asset it belongs to, give it a name and an optional
+  description, and save. Bytes land as an ordinary attachment in the folder you already chose; a link
+  is saved as a *reference*, which a References section on the asset lists, opens, renames and removes,
+  and which an "Add link" action on that same section can write without any share at all. Nothing is
+  guessed at: text that is not a link is offered as a journal note instead, a scheme ServiceTag does
+  not recognise is saved only after you say so, and a scheme it refuses is neither saved nor opened.
+  The design contract is
+  [`docs/superpowers/specs/2026-09-23-servicetag-share-intake.md`](docs/superpowers/specs/2026-09-23-servicetag-share-intake.md).
 - **Settings** — appearance (system / light / dark), the palette's name, the attachment folder and
   the provider behind it, Read / inspect tag, Developer API, the build's version and a link to the
   project.
@@ -105,6 +115,13 @@ is what hands NFC back — the ambient tap still opens a bound tag straight away
 Sharing a note or a web link to an NFC tag is not part of ServiceTag. That utility lives in
 [NoteTag](https://github.com/GonzRon/NoteTag), and ServiceTag removed it from this app before its 1.0.0 baseline: there is
 no Links screen, no share target, no way to point a tag at a link, and no outbound-link allowlist.
+
+**Amended 2026-09-23 (1.3.0). The paragraph above is kept for the record; two of its four clauses no
+longer hold.** ServiceTag now declares a share target and carries an outbound-scheme allowlist again,
+because a link can be saved *to an asset* — see the share-intake capability above. The two clauses
+that still hold are the ones the split was about: there is no Links screen, and **no way to point a
+tag at a link**. A tag still resolves to an asset and nothing else; NoteTag remains the tag-to-note
+product.
 
 Old data is kept, not discarded. A backup written by any earlier version still carries its
 `externalLinks` rows and restores them unchanged — the format moved to 6 for schedules and groups,

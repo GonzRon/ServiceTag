@@ -267,6 +267,29 @@ class VersionAgreementTest {
         )
     }
 
+    /**
+     * The README's own capability line for this release. A released document that describes the
+     * wrong capability is a support cost, and the README is read by people who cannot check it
+     * against the code. Anchored at the bullet, so a mention of the share intake anywhere else in
+     * the file — the NoteTag section, for instance — can never satisfy it.
+     */
+    @Test fun theReadmeNamesTheShareIntakeAndLinksItsSpec() {
+        val readme = repoFile("README.md").readText()
+        assertTrue(
+            "the README must carry a capability bullet for the share intake",
+            Regex(
+                """^- \*\*Share a link, a document, a photo or a note into an asset\*\* —""",
+                RegexOption.MULTILINE,
+            ).containsMatchIn(readme),
+        )
+        assertTrue(
+            "that bullet must link the committed spec",
+            readme.contains(
+                "](docs/superpowers/specs/2026-09-23-servicetag-share-intake.md)",
+            ),
+        )
+    }
+
     private companion object {
         const val TOKEN = "ABCD2345"
 
