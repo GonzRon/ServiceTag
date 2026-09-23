@@ -53,6 +53,14 @@ no "Add link", no route, no MCP tool, no Documents-row change** — those are B0
   named in the matrix. While in that KDoc, also correct its pre-existing drift "exactly four
   receivers" → **six**, which is what `everyReceiverIsNonExportedAndThereAreSix` (`:57`) has
   asserted since 1.2; the report names it as a drive-by comment fix.
+- `app/src/test/kotlin/com/loosecannon/servicetag/nav/ScheduleDeepLinkTest.kt` and
+  `app/src/test/kotlin/com/loosecannon/servicetag/RemovedSurfacesTest.kt` (§18.24) — two shipped
+  assertions that necessarily move, both **strengthened**: the pinned source-manifest
+  `<intent-filter>` count goes **7 → 8** (the share filter), and the shared-text assertion is
+  re-pinned to **exactly one** activity handling `ACTION_SEND` and **zero** handling
+  `ACTION_SEND_MULTIPLE` (which also gives B06's R4 a standing regression test). Nothing else in
+  either file changes. Wherever those two files actually live, they are the ones holding those
+  two assertions; the report names the paths.
 - `app/.../di/AppGraph.kt` — nothing new is constructed here by this brief unless the activity needs
   a graph accessor B02 did not expose; if it does, it is one `val` and the report says so. **Wave 3
   merge order: B05 merges first, this lane rebases once onto the merged tip and re-runs its whole
@@ -249,7 +257,10 @@ are JVM; the screen cases are `androidTest`.
   of the manifest with a fourth added, and report both results.
 - `grep -c 'com.loosecannon.servicetag.share.ShareIntakeActivity' app/src/main/AndroidManifest.xml`
   → **1**; `grep -c 'android.intent.action.SEND_MULTIPLE' app/src/main/AndroidManifest.xml` → **0**;
-  `grep -c 'android.intent.category.BROWSABLE' app/src/main/AndroidManifest.xml` → **0**; `git diff $BASE..HEAD -- app/src/main/AndroidManifest.xml | grep -c '^+.*uses-permission'` → **0**.
+  `git diff $BASE..HEAD -- app/src/main/AndroidManifest.xml | grep -c '^+.*BROWSABLE'` → **0** (§18.24: the
+  file-wide count is **1** and has been since 1.2 — the shipped `servicetag://` deep-link filter on
+  `MainActivity` carries the category; this lane adds none, and the filter `@Test` asserts it is
+  absent from the share activity's filter); `git diff $BASE..HEAD -- app/src/main/AndroidManifest.xml | grep -c '^+.*uses-permission'` → **0**.
   **`$BASE` is this lane's base commit**, recorded by the controller at dispatch (master §1.15) —
   never the release branch's base, which would make a later wave's gate fail against its
   predecessors' merged work.
