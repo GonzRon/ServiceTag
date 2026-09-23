@@ -58,8 +58,11 @@ class RecomputeSchedules(
      * is exactly what keeps `rebuild` a pure function of its arguments (invariant 16). A lambda
      * rather than a captured value because the zone can change under a long-lived process, and it
      * is the idiom the digest alarm and the completion flow already use for the same reason.
+     *
+     * Required, not defaulted (1.2.1): every construction site names its zone explicitly, so a
+     * caller cannot forget it is choosing device-local time over UTC.
      */
-    private val zone: () -> ZoneId = { ZoneId.systemDefault() },
+    private val zone: () -> ZoneId,
 ) {
     /** The Asset's own schedules, plus every group schedule that requires it. */
     suspend fun forAsset(assetId: AssetId) {

@@ -186,6 +186,7 @@ class AppGraph(private val context: Context) {
      */
     val recomputeSchedules: RecomputeSchedules = RecomputeSchedules(
         schedules, scheduleStates, events, closures, groups, assets, today, clock,
+        zone = { ZoneId.systemDefault() },
     )
 
     /**
