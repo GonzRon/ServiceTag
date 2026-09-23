@@ -177,9 +177,11 @@ class ManifestContractTest {
     }
 
     /**
-     * API-30+ package visibility: without one `<queries>` entry per allowed scheme, `ACTION_VIEW`
-     * silently resolves to nothing and a saved reference reports that no app can open it on a
-     * phone that has the app installed. The shipped wildcard `content` entry stays as it is.
+     * API-30+ package visibility: one `<queries>` entry per allowed scheme. *Starting* an implicit
+     * `ACTION_VIEW` is exempt from the filtering, so "Open" does not depend on these — what they
+     * buy is a truthful `resolveActivity` / `queryIntentActivities` answer for anything that asks
+     * before it fires. The spec asked for the entries; the shipped wildcard `content` entry, which
+     * the shipped "Open with" does query, stays as it is.
      */
     @Test
     fun queriesCarryOneViewEntryPerAllowedScheme() {

@@ -27,8 +27,10 @@
             <data android:scheme="content" android:mimeType="*/*" />
         </intent>
         <!-- 1.3.0: one entry per scheme LinkLaunchPolicy allows, for the same reason (spec §4.2).
-             Without them ACTION_VIEW silently finds no handler on API 30+, and "Open" on a saved
-             reference would say so on a phone that has the app installed. -->
+             Starting an implicit ACTION_VIEW is exempt from API-30+ package-visibility filtering,
+             so "Open" works without these; what they buy is a truthful resolveActivity /
+             queryIntentActivities answer, which is what anything that wants to ask before it
+             fires needs. -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="http" />
