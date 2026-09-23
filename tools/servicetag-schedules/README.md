@@ -70,6 +70,8 @@ Does the same plan-and-print first; if it is not clean, refuses and exits 1 with
 anything. If it is clean, applies it, prints the counts created, then re-plans and prints that too.
 Exits 0 only when the final re-plan is entirely `IDENTICAL`.
 
+**Exit codes, both subcommands:** `0` — the plan is clean (`plan`) or the final re-plan is entirely `IDENTICAL` (`apply`); `1` — the plan holds a `CONFLICT` or `ERROR`, or `apply` refused because the phone changed between the plan and the write (nothing written); `2` — a phone-side failure before or during the run: pairing refused (a stale code — reopen the Developer API screen and pass the new one), the device absent, or a write refused by the phone (the message names the entry key; earlier writes in that run stand, so re-run `plan` to see them as `IDENTICAL`).
+
 `--serial` overrides `SERVICETAG_ADB_SERIAL`, exactly as `servicetag-mcp` reads it — nothing in this
 repository names a device.
 
