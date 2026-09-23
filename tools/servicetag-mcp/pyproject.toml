@@ -1,6 +1,6 @@
 [project]
 name = "servicetag-mcp"
-version = "1.1.1"
+version = "1.2.0"
 description = "A workstation MCP server for ServiceTag's loopback automation API"
 readme = "README.md"
 requires-python = ">=3.12"
