@@ -46,7 +46,7 @@ import kotlinx.serialization.json.Json
  * field at its default, and to an empty reference list, respectively. **Restoring one never invents a schedule.** JDK ZIP + JDK
  * SHA-256 + kotlinx-serialization only; no Android types anywhere in here.
  *
- * Two of schema 6's tables are deliberately absent from this format, and are named nowhere in this
+ * Two of schema 7's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
  * ever merged.

@@ -348,9 +348,11 @@ class BackupFormat6Test {
     // --- the manifest ----------------------------------------------------------------------------
 
     /**
-     * Hazard: counts drift from rows. The manifest carries exactly sixteen keys, and the five new
-     * ones are the row counts of an archive with nested members and providers — so a missing key,
-     * or a `sumOf` over the wrong list, gives the wrong number here.
+     * Hazard: counts drift from rows. The manifest carries exactly seventeen keys, and format 6's
+     * five are the row counts of an archive with nested members and providers — so a missing key,
+     * or a `sumOf` over the wrong list, gives the wrong number here. The seventeenth is format 7's
+     * `assetReferences`, at zero on an archive this class builds and pinned because the map is
+     * asserted whole.
      */
     @Test
     fun `the manifest carries the five new counts and they equal the rows`() {

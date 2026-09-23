@@ -815,7 +815,7 @@ internal suspend fun storedBytesOf(
 /**
  * Eleven reads. **The caller owns the transaction** — see each use case for which one.
  *
- * Schema 6's other two tables are deliberately not among them, and are named nowhere in this
+ * Schema 7's other two tables are deliberately not among them, and are named nowhere in this
  * package: derived due state never appears in a plan, and device-local delivery state is never
  * merged.
  */

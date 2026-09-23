@@ -70,7 +70,7 @@ class ExportBackupSet(
                 eventProfiles = profiles.all().map { it.toDto() },
                 assetEvents = events.all().map { it.toDto() },
                 attachments = rows.map { it.toDto() },
-                // Schema 6's other two tables are deliberately not read here: the first is
+                // Schema 7's other two tables are deliberately not read here: the first is
                 // derived and is rebuilt after any import, the second is device-local delivery
                 // bookkeeping. Neither has a port on this use case that could reach it.
                 maintenanceGroups = groups.all().map { it.toDto() },

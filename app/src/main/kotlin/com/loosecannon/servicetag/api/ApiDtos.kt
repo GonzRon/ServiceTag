@@ -139,7 +139,7 @@ internal data class MergeReportResponse(
     val applicable: Boolean,
     // Write order, which is also `MergeTable`'s own order and the conflict sort key: a group's
     // members reference assets, a schedule references an asset or a group, a closure references a
-    // schedule. Eleven tables since format 7, not seven.
+    // schedule, a reference an asset. Eleven tables since format 7.
     val assets: MergeTallyDto,
     val groups: MergeTallyDto,
     val definitions: MergeTallyDto,
