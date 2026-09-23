@@ -129,12 +129,28 @@ class OccurrenceNotCloseable(val id: ScheduleId, val occurrenceOn: String) :
  * the schedule's `leadDays`. Closing is allowed from `opensOn` through today, exactly as before;
  * this refuses only the stretch before it, which exists so an immediate retry the same day cannot
  * close the fresh round a first close just opened (owner ruling 2026-09-23).
+ *
+ * [occurrenceOn] and [opensOn] can name **different rounds' math** when the schedule is postponed:
+ * `effectiveDueOn` (what `opensOn` is measured from) is `postponedDueOn ?: computedDueOn`, while
+ * [occurrenceOn] is always the round's own key (`computedDueOn`, never the postponed date). Both are
+ * carried on purpose — with no occurrence key on the request, [occurrenceOn] is the only way a
+ * retrying caller can tell "my first call succeeded and the schedule advanced" from "it was simply
+ * not due yet".
  */
 class OccurrenceNotYetOpen(val id: ScheduleId, val occurrenceOn: String, val opensOn: String) :
     IllegalStateException(
         "schedule ${id.value}'s occurrence $occurrenceOn has not reached its due-soon window " +
             "($opensOn)",
     )
+
+/**
+ * The one place the 1.2.1 window boundary is computed: [effectiveDueOn] minus [leadDays]. Shared by
+ * [CloseRound]'s guard and the detail screen's `canClose` gate, so the two cannot silently drift
+ * onto different arithmetic for what is meant to be one rule. Returns a date, never a status word,
+ * so callers that must not read `DueStatus` (the plan's own constraint on the UI gate) still can.
+ */
+fun occurrenceWindowOpensOn(effectiveDueOn: LocalDate, leadDays: Int): LocalDate =
+    effectiveDueOn.minusDays(leadDays.toLong())
 
 /**
  * `closedOn` was outside the occurrence's **open date through today, inclusive**.

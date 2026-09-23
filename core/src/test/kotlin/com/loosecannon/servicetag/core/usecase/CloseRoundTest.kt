@@ -108,6 +108,7 @@ class CloseRoundTest {
         groupId: GroupId,
         basis: TimeBasis = TimeBasis.FIXED,
         interval: Int = 3,
+        unit: RecurrenceUnit = RecurrenceUnit.MONTH,
         anchorOn: String = "2026-01-01",
         leadDays: Int = 0,
     ): MaintenanceSchedule = saveSchedule.run(
@@ -117,7 +118,7 @@ class CloseRoundTest {
             targetGroupId = groupId,
             title = "Top up feeders",
             timeInterval = interval,
-            timeUnit = RecurrenceUnit.MONTH,
+            timeUnit = unit,
             timeBasis = basis,
             anchorOn = anchorOn,
             leadDays = leadDays,
@@ -384,19 +385,46 @@ class CloseRoundTest {
     fun closingClearsAPostponementAndNothingElse() = runTest {
         val a1 = seedAsset("a1")
         val schedule = seedSchedule(seedGroup(listOf(a1)))
-        // Postponed to a date within the (lead 0) window today already reaches — 1.2.1's guard reads
-        // `effectiveDueOn`, which a postponement overrides, so a postponement into the future is a
-        // question for the guard's own tests, not this one.
-        val postponed = postpone.run(schedule.id, "2026-02-01")
+        // Postponed into the future, deliberately: 1.2.1's guard reads `effectiveDueOn`, which a
+        // postponement overrides (`postponedDueOn ?: computedDueOn`), so `today` here sits *inside*
+        // the postponed window (lead 0, so right on the postponed date) rather than at the class
+        // default — this is the witness that closing a postponed round from inside its own window
+        // still clears the postponement and writes nothing else. `closingARoundPostponedBeyond
+        // TheWindowIsRefusedWithThePostponedOpensOn`, below, is the refused half of the same story.
+        val postponed = postpone.run(schedule.id, "2026-03-01")
+        today = LocalDate.parse("2026-03-01")
         val writesBefore = scheduleWrites
 
-        closeRound.run(schedule.id, closedOn = "2026-02-15")
+        closeRound.run(schedule.id, closedOn = "2026-03-01")
 
         val after = assertNotNull(schedules.get(schedule.id))
         assertNull(after.postponedDueOn)
         assertEquals(postponed.updatedAt, after.updatedAt)
         assertEquals(postponed.copy(postponedDueOn = null), after)
         assertEquals(writesBefore + 1, scheduleWrites, "one column write, and only because it was set")
+    }
+
+    /**
+     * S2 (owner-ratification item, flagged for the release-gate review): a round postponed into the
+     * future is gated by its own postponed window — `effectiveDueOn` is `postponedDueOn ?:
+     * computedDueOn` — even though the rule's own `computedDueOn` is long past due. The refusal's
+     * `opensOn` is measured from the *postponed* due, and its `occurrenceOn` stays the round's own
+     * key (`computedDueOn`, unaffected by the postponement): the two can name different dates, which
+     * is why `OccurrenceNotYetOpen` carries both rather than just one.
+     */
+    @Test
+    fun closingARoundPostponedBeyondTheWindowIsRefusedWithThePostponedOpensOn() = runTest {
+        val a1 = seedAsset("a1")
+        val schedule = seedSchedule(seedGroup(listOf(a1)), leadDays = 5)
+        // computedDueOn is the anchor, "2026-01-01" — long past. Postponing to "2026-06-01" moves
+        // `effectiveDueOn` there too; the window (lead 5) opens 2026-05-27.
+        postpone.run(schedule.id, "2026-06-01")
+        today = LocalDate.parse("2026-05-01")
+
+        val refused = assertFailsWith<OccurrenceNotYetOpen> { closeRound.run(schedule.id) }
+        assertEquals("2026-01-01", refused.occurrenceOn, "the round's own key, unmoved by the postponement")
+        assertEquals("2026-05-27", refused.opensOn, "measured from the postponed due, not the rule's own")
+        assertEquals(emptyList(), closures.all())
     }
 
     /**
@@ -462,7 +490,10 @@ class CloseRoundTest {
         assertEquals(listOf(closure), closures.all())
     }
 
-    /** Well past due, the guard never fires — closing an overdue round is unchanged. */
+    /**
+     * Well past due, the guard never fires — closing an overdue round is unchanged, and the
+     * schedule still advances from the closure exactly as it always has.
+     */
     @Test
     fun closingAnOverdueRoundIsStillAllowed() = runTest {
         val a1 = seedAsset("a1")
@@ -472,13 +503,20 @@ class CloseRoundTest {
         val closure = closeRound.run(schedule.id)
         assertEquals("2026-03-01", closure.occurrenceOn)
         assertEquals(listOf(closure), closures.all())
+        assertEquals(
+            "2026-06-01",
+            assertNotNull(states.get(schedule.id)).computedDueOn,
+            "the schedule advanced from the closure, as an overdue close always has",
+        )
     }
 
     /**
      * **The retry the guard exists for.** A close always advances the schedule, so calling
-     * `close-round` a second time the same day lands on the *next* round — one whose own window has
-     * almost never arrived yet. The retry is refused with `OccurrenceNotYetOpen` and the first
-     * closure is the only row that ever exists.
+     * `close-round` a second time the same day lands on the *next* round. Here `leadDays` (5) is
+     * shorter than the interval (3 months), so that next round's own window has not opened yet, and
+     * the retry is refused with `OccurrenceNotYetOpen`; the first closure is the only row that ever
+     * exists. `retryIsNotGuardedWhenTheLeadCoversTheWholeInterval`, below, is the other side of this:
+     * the same retry with a lead that is *not* shorter than the interval.
      */
     @Test
     fun retryingCloseRoundTheSameDayIsRefusedAndOnlyOneClosureExists() = runTest {
@@ -496,5 +534,55 @@ class CloseRoundTest {
         assertEquals("2026-06-01", refused.occurrenceOn)
         assertEquals("2026-05-27", refused.opensOn)
         assertEquals(listOf(first), closures.all(), "the retry wrote nothing; the first row stands")
+    }
+
+    /**
+     * S1 — **known limit, not a further rule** (owner ruling 2026-09-23, after review): the guard
+     * defends the same-day retry only while `leadDays` is less than the schedule's own recurrence
+     * interval. With a lead at or beyond the interval, the round a first close opens is already
+     * inside its own due-soon window by the time the retry is dispatched, so the retry is **not**
+     * refused — it succeeds, and writes a second, immutable closure against a round nobody meant to
+     * abandon. Closing this hole would need an occurrence key on the call, which the owner has
+     * deliberately deferred past this patch; this test pins the limit as a decision on record rather
+     * than something discovered later.
+     */
+    @Test
+    fun retryIsNotGuardedWhenTheLeadCoversTheWholeInterval() = runTest {
+        val a1 = seedAsset("a1")
+        // A weekly schedule with a ten-day lead: the lead outruns the interval it is meant to warn
+        // ahead of.
+        val schedule = seedSchedule(
+            seedGroup(listOf(a1)),
+            interval = 1,
+            unit = RecurrenceUnit.WEEK,
+            anchorOn = "2026-01-01",
+            leadDays = 10,
+        )
+        today = LocalDate.parse("2026-01-01")
+
+        val first = closeRound.run(schedule.id)
+        assertEquals("2026-01-01", first.occurrenceOn)
+        // The next round is due a week later, 2026-01-08; its window (lead 10) opens 2025-12-29 —
+        // before today, not after — so it is already open when the retry is dispatched.
+        assertEquals("2026-01-08", assertNotNull(states.get(schedule.id)).computedDueOn)
+
+        val second = closeRound.run(schedule.id)
+        assertEquals("2026-01-08", second.occurrenceOn)
+        assertEquals(listOf(first, second), closures.all().sortedBy { it.occurrenceOn })
+    }
+
+    /**
+     * S6: the 1.2.1 guard runs before `closedOn` is parsed, so a call that is both before the window
+     * and carries an unparseable date answers `OccurrenceNotYetOpen`, not `BadScheduleDate` — the
+     * impossible operation is refused before its arguments are validated.
+     */
+    @Test
+    fun aMalformedClosedOnBeforeTheWindowStillAnswersOccurrenceNotYetOpen() = runTest {
+        val a1 = seedAsset("a1")
+        val schedule = seedSchedule(seedGroup(listOf(a1)), anchorOn = "2026-03-01", leadDays = 5)
+        today = LocalDate.parse("2026-02-23")
+
+        assertFailsWith<OccurrenceNotYetOpen> { closeRound.run(schedule.id, closedOn = "not a date") }
+        assertEquals(emptyList(), closures.all())
     }
 }

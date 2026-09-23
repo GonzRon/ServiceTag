@@ -25,7 +25,7 @@ import java.time.LocalDate
  * its single column and leaves `updated_at` where it is, because only an edit moves the pin's floor.
  *
  * The row is **immutable**: there is no update and no delete anywhere above it, which is why the
- * four refusals matter more here than they would on an amendable row.
+ * five refusals matter more here than they would on an amendable row.
  *
  * - an asset-targeted schedule: in 1.2 the action is offered on group targets only, where a round
  *   can be partially done and stuck. An asset round is one member; completing it is the answer.
@@ -36,10 +36,21 @@ import java.time.LocalDate
  *   exported history honest rather than merely harmless.
  * - a round that obliges **nobody**: there is no round for a closure to be about (invariant 77).
  * - **1.2.1**: a round that has not yet reached its own due-soon window (`effectiveDueOn -
- *   leadDays`). This is the guard against an immediate retry closing the round a first close just
- *   opened: closing always advances the schedule, so a caller that calls again the same day would
- *   otherwise be handed a fresh, un-due round to close instead of a refusal (owner ruling
- *   2026-09-23). From that boundary through today, closing is allowed exactly as before.
+ *   leadDays`). `effectiveDueOn` is `postponedDueOn ?: computedDueOn`, so a round postponed into the
+ *   future is gated by its postponed window too — clearing the postponement is the way out, and the
+ *   guard does not stand in the way of that call, which carries no `closedOn` of its own. This is
+ *   the guard against an immediate retry closing the round a first close just opened: closing always
+ *   advances the schedule, so a caller that calls again the same day would otherwise be handed a
+ *   fresh, un-due round to close instead of a refusal (owner ruling 2026-09-23). From that boundary
+ *   through today, closing is allowed exactly as before. **Known limit:** the guard only defends
+ *   that retry while `leadDays` is less than the recurrence interval — with a lead at or beyond the
+ *   interval the next round is already inside its own window when the first closes, and the retry
+ *   succeeds, writing a second closure. Closing that hole would need an occurrence key on the call,
+ *   which the owner has deliberately deferred past this patch.
+ *
+ * This refusal runs **before** `closedOn` is parsed, so a call that is both before the window and
+ * carries a malformed date answers `OccurrenceNotYetOpen` rather than [BadScheduleDate] —
+ * the impossible operation is refused before its arguments are validated.
  *
  * And `closedOn`, which is the date the recurrence advances from: it defaults to today and may lie
  * anywhere from the round's **open date, clamped to today**, through today, inclusive. Anything else
@@ -74,15 +85,16 @@ class CloseRound(
         val todayOn = today.localDate()
         // 1.2.1: refuse to close before the round's own due-soon window opens. `effectiveDueOn` is
         // the state `recompute` derives right now, the same value the detail screen's gate reads —
-        // never a status word — so the action and this use case cannot disagree. `leadDays` is on
-        // the schedule itself. Null only when the round is not actionable, which the check above has
-        // already ruled out.
-        val dueOn = recompute.stateOf(schedule).effectiveDueOn?.let(LocalDate::parse)
-        if (dueOn != null) {
-            val opensOn = dueOn.minusDays(schedule.leadDays.toLong())
-            if (todayOn.isBefore(opensOn)) {
-                throw OccurrenceNotYetOpen(id, key, opensOn.toString())
-            }
+        // never a status word — so the action and this use case cannot disagree. `effectiveDueOn` is
+        // null only when the round is not actionable, which the check above has already ruled out;
+        // `requireNotNull` so a future engine change that makes it nullable for an actionable round
+        // fails a test loudly rather than silently disabling this guard.
+        val dueOn = requireNotNull(recompute.stateOf(schedule).effectiveDueOn) {
+            "schedule ${id.value}'s occurrence $key is actionable but reports no effectiveDueOn"
+        }.let(LocalDate::parse)
+        val opensOn = occurrenceWindowOpensOn(dueOn, schedule.leadDays)
+        if (todayOn.isBefore(opensOn)) {
+            throw OccurrenceNotYetOpen(id, key, opensOn.toString())
         }
         // The floor is the round's open date **clamped to today**. The open instant's date is taken
         // at UTC, for the engine's purity, while today is device-local, so in a negative UTC offset
