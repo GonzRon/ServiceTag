@@ -45,14 +45,22 @@ class FakeClient:
         self.schedules: list[dict[str, Any]] = []
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self._ids = itertools.count(1)
+        self._fail_next: dict[str, str] = {}
 
     def _new_id(self, prefix: str) -> str:
         return f"{prefix}-{next(self._ids)}"
+
+    def fail_next(self, name: str, message: str) -> None:
+        """The next call to tool `name` answers `is_error` with `message` instead of running its
+        handler -- for pinning what a phone-side refusal on a write looks like to a caller."""
+        self._fail_next[name] = message
 
     # ---- the mcp.Client shape ---------------------------------------------------------------
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> _Result:
         self.calls.append((name, dict(arguments)))
+        if name in self._fail_next:
+            return _err(self._fail_next.pop(name))
         handler = getattr(self, f"_tool_{name}", None)
         if handler is None:
             return _err(f"FakeClient has no handler for {name!r}")

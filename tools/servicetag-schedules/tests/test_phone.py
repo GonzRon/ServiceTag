@@ -69,3 +69,19 @@ def test_snapshot_marks_archived_schedules(fake_client) -> None:
 def test_call_tool_raises_phone_error_on_is_error(fake_client) -> None:
     with pytest.raises(phone.PhoneError, match="list_profiles"):
         _run(phone.call_tool(fake_client, "list_profiles", {}))  # missing required asset_id
+
+
+def test_call_tool_error_leads_with_the_entry_when_given(fake_client) -> None:
+    """S2: a write made on a manifest entry's behalf names that entry, not just the tool."""
+    fake_client.fail_next("create_schedule", "422 SCHEDULE_INVALID: bad row")
+    with pytest.raises(phone.PhoneError) as exc:
+        _run(phone.call_tool(fake_client, "create_schedule", {"title": "x"}, entry="schedule 's31'"))
+    message = str(exc.value)
+    assert message.startswith("schedule 's31':")
+    assert "create_schedule" in message
+    assert "SCHEDULE_INVALID" in message
+
+
+def test_call_tool_error_without_an_entry_still_names_only_the_tool(fake_client) -> None:
+    with pytest.raises(phone.PhoneError, match=r"^list_profiles:"):
+        _run(phone.call_tool(fake_client, "list_profiles", {}))

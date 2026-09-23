@@ -5,7 +5,10 @@ client the 1.2.0 release proofs use.
 `call_tool` is the one seam every wire call goes through, here and in `apply.py`: it unwraps a
 `CallToolResult` the way the release proofs' own `payload`/`is_err` helpers do (a client library
 detail, not a phone concern), and turns an `is_error` result into `PhoneError` naming the tool —
-never swallowed.
+never swallowed. On a write `apply.py` makes on a manifest entry's behalf, it passes `entry` (the
+entry's kind and key, e.g. `"schedule 's31'"`) so the raised message leads with *which manifest
+entry* the phone refused, not just which tool — the brief's "every MCP error surfaces naming the
+entry key".
 """
 
 from __future__ import annotations
@@ -24,7 +27,9 @@ class ToolClient(Protocol):
 
 class PhoneError(RuntimeError):
     """An MCP tool call answered `is_error` — the phone's own message, prefixed with the tool
-    name, so a caller never has to guess which call failed."""
+    name and, when the call was made on a manifest entry's behalf, that entry's kind and key
+    (`call_tool`'s `entry` argument), so a caller never has to guess which call, or which entry,
+    failed."""
 
 
 def _is_error(result: Any) -> bool:
@@ -46,11 +51,16 @@ def _payload(result: Any) -> Any:
         return txt
 
 
-async def call_tool(client: ToolClient, name: str, arguments: dict[str, Any]) -> Any:
-    """Call one MCP tool and return its payload, or raise `PhoneError` naming `name`."""
+async def call_tool(
+    client: ToolClient, name: str, arguments: dict[str, Any], *, entry: str | None = None,
+) -> Any:
+    """Call one MCP tool and return its payload, or raise `PhoneError` naming `name` — and, when
+    `entry` is given (a manifest entry's kind and key, e.g. `"group 'g1'"`), leading with it, so a
+    write made on that entry's behalf never surfaces as an anonymous tool failure."""
     result = await client.call_tool(name, arguments)
     if _is_error(result):
-        raise PhoneError(f"{name}: {_text(result)}")
+        message = f"{name}: {_text(result)}"
+        raise PhoneError(f"{entry}: {message}" if entry else message)
     return _payload(result)
 
 
