@@ -311,6 +311,7 @@ Spec §3.3's numbering. Every brief names the ones it holds.
 | `app/src/test/.../VersionAgreementTest.kt` | — | **B01** (the schema and format assertions only) and **B06** (the version and release-document assertions) — §18.16 |
 | the shipped tests whose pinned numbers move with schema 7 / format 7 / the eleventh table: `core/src/test/.../backup/{BackupFormat6Test,BackupCodecTest,StageABundleConformanceTest}.kt`, `core/src/test/.../usecase/BackupUseCasesTest.kt`, `core/src/test/.../merge/MergePlannerMaintenanceTest.kt`, `app/src/test/.../api/MaintenanceRoutesTest.kt` | — | **B01**, under §18.21's rule |
 | `app/src/test/.../testing/FakeGraph.kt` | — | **B01** (its private `SCHEMA_VERSION`, §18.21) |
+| `app/src/test/kotlin/com/loosecannon/servicetag/api/MaintenanceCommandShapeTest.kt` | B01 | its `schemaVersion = 6` injection now reads `AppGraph.SCHEMA_VERSION` (added to the map at the B01 merge; disclosed by the implementer, accepted by the review). |
 
 | this plan's own `master-plan.md` | — | **B06, conditionally**: only to record, dated, a §16 proof found wrong while running it |
 
