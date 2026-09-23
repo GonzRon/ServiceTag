@@ -107,6 +107,10 @@ TOOL_NAMES: tuple[str, ...] = (
     "close_round",
     "list_closures",
     "list_due",
+    # 1.3 — the reference surface (master plan §7). Three, taking the total to 41.
+    "list_references",
+    "add_reference",
+    "update_reference",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -1568,6 +1572,102 @@ def list_due() -> dict[str, Any]:
     appear.
     """
     return _call("GET", "/v1/due")
+
+
+_REFERENCE_FIELDS: tuple[str, ...] = (
+    "id",
+    "assetId",
+    "kind",
+    "uri",
+    "displayName",
+    "description",
+    "scheme",
+    "createdAt",
+    "updatedAt",
+)
+"""The nine fields a reference row carries, checked on the way in by [list_references] so a version
+skew or a misconfigured `SERVICETAG_API_BASE_URL` is a message and never a `KeyError` traceback."""
+
+
+@mcp.tool()
+def list_references(asset_id: str) -> dict[str, Any]:
+    """Every reference on one asset, ordered by display name.
+
+    A **reference** is a URI on an asset — a manual on the web, a note in Joplin — with no bytes of
+    its own. Each row carries `kind` (`WEB_URL`, `NOTE_LINK` or `OTHER`) and `scheme`, both
+    **derived from the URI** and read-only, and the `description` if it has one. Attachments are
+    the byte-bearing rows and this server has no tool for them at all.
+    """
+    answer = _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/references")
+    rows = _list_field(answer, "references", of="that asset's references")
+    for index in range(len(rows)):
+        row = _entry(rows, index, of="that asset's references")
+        for key in _REFERENCE_FIELDS:
+            _field(row, key, of=f"that asset's references[{index}]")
+    return answer
+
+
+@mcp.tool()
+def add_reference(
+    asset_id: str,
+    uri: str,
+    display_name: str,
+    description: str | None = None,
+) -> dict[str, Any]:
+    """Save a URI on an asset. `display_name` is required and may not be blank.
+
+    **There is no `kind` argument**: it is derived from the URI's scheme by the app and returned
+    read-only, so a caller can neither set it nor disagree with it. The URI is stored exactly as it
+    is given — query and fragment survive byte for byte — and it can never be edited afterwards;
+    pointing a reference somewhere else is removing it on the phone and adding a new one.
+
+    Refusals worth knowing before the call: a URI with no scheme, or a `http`/`https`-style URI with
+    no host, is `REFERENCE_URI_INVALID`, and so is one over 2,048 characters. A dangerous or
+    device-local scheme — `javascript`, `file`, `content`, `intent`, `android-app`, `tel`, `sms`,
+    `mailto` — is `REFERENCE_SCHEME_BLOCKED`, **and so is a scheme the app does not recognise**: in
+    the app an unfamiliar scheme is saved once the person confirms it by name, and there is nobody
+    on this wire to ask. The same URI twice on one asset is `REFERENCE_URI_TAKEN`; the same URI on
+    two different assets is ordinary.
+    """
+    return _call(
+        "POST",
+        "/v1/references",
+        json_body=_body(
+            assetId=asset_id,
+            uri=uri,
+            displayName=display_name,
+            description=description,
+        ),
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def update_reference(
+    reference_id: str,
+    display_name: str | None = None,
+    description: str | None = None,
+) -> dict[str, Any]:
+    """Rename a reference or change its description. Those two fields, and nothing else.
+
+    An **omitted** argument and one sent explicitly as **`null`** both leave the current value
+    alone, the shipped convention; a supplied value replaces it.
+
+    **There is no `clear_fields` here**, and that is not an omission. `display_name` cannot be
+    cleared at all — the app refuses a blank name with `REFERENCE_NAME_REQUIRED` — and
+    `description` is cleared **by value**, `description=""`, because it is a plain text column with
+    an empty default, the same reason `unit` is sent as `""` in `save_definition`.
+
+    The `uri`, the owning asset and the derived `kind` are **not** amendable and are not arguments:
+    naming one is refused before the call. An amend that changes nothing is accepted and writes
+    nothing, so the row comes back with its `updatedAt` where it was.
+    """
+    return _call(
+        "PATCH",
+        f"/v1/references/{_path_id(reference_id, field='reference_id')}",
+        json_body=_body(displayName=display_name, description=description),
+        content_type="application/json",
+    )
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

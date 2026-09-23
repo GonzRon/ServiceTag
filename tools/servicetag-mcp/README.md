@@ -13,8 +13,8 @@ codes and the limits; this file is about running the thing.
   on. The serial comes from `SERVICETAG_ADB_SERIAL`; nothing in this repository names a device.
 - ServiceTag 1.1.0 or later on the phone, with **Settings > Utilities > Developer API** open. The
   listener exists only while that screen is open, and the pairing code is new every time it opens.
-  The seventeen maintenance tools need **1.2.0 or later**; on an older build their routes are not
-  there and every call answers 404.
+  The seventeen maintenance tools need **1.2.0 or later** and the three reference tools need
+  **1.3.0 or later**; on an older build their routes are not there and every call answers 404.
 
 ## Using it
 
@@ -57,7 +57,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Thirty-eight: `pair` plus one per API operation.
+Forty-one: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -69,6 +69,11 @@ Thirty-eight: `pair` plus one per API operation.
 `create_group`, `update_group`, `archive_group`, `list_schedules`, `get_schedule`,
 `create_schedule`, `update_schedule`, `pause_schedule`, `archive_schedule`, `postpone_schedule`,
 `complete_schedule`, `close_round`, `list_closures`, `list_due`.
+
+**References (needs ServiceTag 1.3.0)** — `list_references`, `add_reference`, `update_reference`.
+A reference is a URI on an asset — a manual on the web, a note in Joplin — with no bytes of its
+own. `kind` is derived from the URI's scheme and returned read-only, so neither write tool takes
+one; nothing **deletes** a reference, because the API adds and amends and the phone removes.
 
 An unknown argument to any tool is rejected before the tool body runs — never silently ignored —
 so a mistyped field name can't be read as absent and quietly change what the call does.
