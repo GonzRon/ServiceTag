@@ -57,3 +57,31 @@ the gates cannot, not to re-certify every correction, so from 2026-09-23:
 
 The spec and plan keep one independent review each and at most one consolidated re-review. For a
 feature the size of #43 the expected total is ten to fifteen judgment passes, not twenty-plus.
+
+## Testing hierarchy (owner ruling, 2026-09-23)
+
+Black-box UI driving through `uiautomator` and `adb` is **not a routine release layer**. The
+pyramid, top to bottom by count:
+
+1. **JVM tests** — most behaviour: parsing, URI policy, recurrence, merge, validation, backup,
+   domain rules, error mapping. Seconds.
+2. **Instrumented Compose tests** — UI behaviour through `performClick`, `performTextInput` and
+   semantics assertions: fields, Save enabling, dialogs and refusal sentences, add/edit/remove,
+   cancel writes nothing, rows render. These are the fast ones.
+3. **Android-framework contract tests, no navigation** — the manifest resolves `ACTION_SEND` and
+   not `SEND_MULTIPLE`, the exact exported set, permissions, MIME filters, package visibility,
+   schema and migration contracts.
+4. **External-boundary smoke proofs — two or three per feature, at most.** They exist only to
+   prove that Android delivered an intent or grant from **another UID** to the exported activity:
+   an external text `ACTION_SEND` reaches the intake; an external `content://` stream with a
+   genuine temporary read grant reaches the byte-share form; optionally one bad grant is refused.
+   They choose no asset, type nothing, press nothing, count nothing. From 1.4 they come from a
+   **test-only sender module** (`:share-test-sender`: its own package and UID, a `FileProvider`
+   with fictional fixtures, three commands: `send_text`, `send_file`, `send_bad_grant`) — never
+   from `adb shell` posing as a sharer, DocumentsUI, Gboard or MediaStore accidents.
+5. **One signed-APK upgrade/install smoke test** on the development phone.
+
+**Hard rule:** a black-box UI test must name the Android/OS/process boundary it demonstrates that
+no JVM, instrumentation, Compose-semantics, API or structural test can. If it cannot name that
+boundary, it is not added. Ten semantic variations of one boundary are one boundary test plus ten
+in-process tests. See ServiceTag issue #62.
