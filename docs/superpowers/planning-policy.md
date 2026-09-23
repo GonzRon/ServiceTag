@@ -38,3 +38,22 @@ One **master plan** (about 20–40 pages) owning architecture, contracts, orderi
 ## Unchanged
 
 Everything else in the process stands: owner ratification of every user-visible string before execution, the security and hygiene minimums, one implementer and one independent reviewer per task with scoped re-reviews of fixes, the whole-branch review, the release-level proofs, the operator's manual release gate. Grep expectations in proofs are written as anchored patterns from the start, so a comment that names a grep can never match it.
+
+## Review budget (owner ruling, 2026-09-23)
+
+The automated gates (lane gate, merge gate, CI, release gate) are unchanged and run as often as
+needed; they are cheap, deterministic and objective. Independent model reviews exist to find what
+the gates cannot, not to re-certify every correction, so from 2026-09-23:
+
+- **one task review per brief**;
+- if it finds substantive issues, the fixes are **batched** and the brief gets **at most one**
+  scoped re-review;
+- mechanical fixes — comments, already-ratified wording, renames, test tidies, paths, formatting,
+  simple assertions — of roughly fifty lines or fewer close by **controller inspection plus the
+  automated gates**, with no reviewer dispatch;
+- **no re-review is required merely because a fix round occurred**;
+- **one whole-branch release review** at the final integrated tip, with at most one scoped
+  follow-up and only for a substantive release issue.
+
+The spec and plan keep one independent review each and at most one consolidated re-review. For a
+feature the size of #43 the expected total is ten to fifteen judgment passes, not twenty-plus.
