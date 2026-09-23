@@ -279,7 +279,7 @@ object ScheduleRecompute {
      * living in — the same calendar `today` is on. It used to be converted at UTC, which cost an
      * owner west of it the last hours of their day: a schedule saved at 21:00 in a UTC-4 zone and
      * anchored on that day floored on **tomorrow**, so its first occurrence was pushed a whole
-     * interval out and invariant 23's "can be due today" was false for four hours a day.
+     * interval out — so for four hours a day the schedule could not be due on the owner's own day.
      *
      * Invariant 16 still holds, and for the reason it always did: the zone is an **argument**, not a
      * device read. `rebuild` remains a pure function of what it is handed, and two devices handed

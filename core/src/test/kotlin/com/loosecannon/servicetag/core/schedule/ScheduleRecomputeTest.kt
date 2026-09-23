@@ -100,8 +100,8 @@ class ScheduleRecomputeTest {
      * The floor is read in the **owner's** calendar, not UTC's (controller ruling, 2026-09-22).
      *
      * One instant, two zones. A schedule stamped 21:00 on September 22 in `America/New_York` and
-     * anchored on that same September 22 is due **that day**: the owner said "start today" and
-     * invariant 23's "a new schedule can be due today" is about their today. Read at UTC the same
+     * anchored on that same September 22 is due **that day**: the owner said "start today", and a
+     * schedule may be due on the owner's own day. Read at UTC the same
      * instant is already the 23rd, so the floor lands past the anchor and the first occurrence is
      * pushed a whole interval out — three months of silence on work the owner asked for now. That
      * was the shipped answer for the last four hours of every day in every zone west of UTC, and
