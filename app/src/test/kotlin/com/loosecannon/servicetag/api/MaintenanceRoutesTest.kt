@@ -321,6 +321,29 @@ class MaintenanceRoutesTest {
         )
     }
 
+    /**
+     * 1.2.1: `OCCURRENCE_NOT_YET_OPEN` — the round has not reached its own due-soon window
+     * (`effectiveDueOn - leadDays`) yet, and the refusal writes nothing.
+     */
+    @Test fun closingARoundBeforeItsDueSoonWindowIs409OccurrenceNotYetOpen() {
+        val a1 = createAsset("Pump A")
+        val group = createGroup("North run", a1)
+        // due = anchorOn = "2026-03-01" (TODAY is 2026-02-10, well behind it); leadDays = 5 puts the
+        // window's open date at 2026-02-24, still ahead of TODAY.
+        val response = call(
+            "POST", "/v1/schedules",
+            """{"title":"Winterise","targetGroupId":"$group","timeInterval":1,
+               "timeUnit":"MONTH","timeBasis":"FIXED","anchorOn":"2026-03-01","leadDays":5}""",
+        )
+        assertEquals(response.text(), 201, response.status)
+        val schedule = scheduleIn(response).id
+
+        val refused = call("POST", "/v1/schedules/$schedule/close-round", "{}")
+        assertEquals(409, refused.status)
+        assertEquals("OCCURRENCE_NOT_YET_OPEN", refused.code())
+        runBlocking { assertEquals(emptyList<OccurrenceClosure>(), graph.closures.all()) }
+    }
+
     /** `OCCURRENCE_NOT_CLOSEABLE`: a round that obliges nobody is not a round (invariant 77). */
     @Test fun closingARoundThatObligesNobodyIs409OccurrenceNotCloseable() {
         val a1 = createAsset("Pump A")

@@ -35,6 +35,7 @@ import com.loosecannon.servicetag.core.usecase.OccurrenceAlreadyComplete
 import com.loosecannon.servicetag.core.usecase.OccurrenceClosed
 import com.loosecannon.servicetag.core.usecase.OccurrenceNotActionable
 import com.loosecannon.servicetag.core.usecase.OccurrenceNotCloseable
+import com.loosecannon.servicetag.core.usecase.OccurrenceNotYetOpen
 import com.loosecannon.servicetag.core.usecase.ProfileValidation
 import com.loosecannon.servicetag.core.usecase.ScheduleArchived
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
@@ -230,6 +231,11 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     )
     is OccurrenceNotCloseable -> errorResponse(
         409, "Conflict", "OCCURRENCE_NOT_CLOSEABLE", "a round that obliges nobody cannot be closed",
+    )
+    is OccurrenceNotYetOpen -> errorResponse(
+        409, "Conflict", "OCCURRENCE_NOT_YET_OPEN",
+        "this round has not reached its due-soon window, so there is nothing to abandon yet",
+        listOf("OccurrenceNotYetOpen(opensOn=${e.opensOn})"),
     )
     is ClosedOnOutOfRange -> errorResponse(
         422, "Unprocessable Content", "CLOSED_ON_OUT_OF_RANGE",
