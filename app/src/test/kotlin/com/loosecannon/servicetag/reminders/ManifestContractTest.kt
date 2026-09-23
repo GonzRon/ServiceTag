@@ -10,8 +10,8 @@ import org.w3c.dom.Element
 
 /**
  * Structural proofs read straight off `app/src/main/AndroidManifest.xml` — no connected run
- * needed (master plan §12, spec §5.1/§5.4). This brief's own counts (exactly four receivers,
- * exactly the two shipped exported activities) are asserted against the **source** manifest, the
+ * needed (master plan §12, spec §5.1/§5.4). The counts asserted here (exactly six receivers,
+ * exactly the three named exported activities) are read off the **source** manifest, the
  * same file the review gate's own greps name: the *merged* manifest this repository's Gradle
  * setup does produce for `testDebugUnitTest` also carries library-injected components — a
  * `ProfileInstallReceiver` and a synthetic `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`, confirmed
@@ -79,10 +79,19 @@ class ManifestContractTest {
         )
     }
 
-    /** Invariant 54: the exported component set is exactly the two shipped activities — nothing new. */
+    /**
+     * Invariant 54, and D-14 for 1.3.0: the exported component set is exactly three activities,
+     * **by name**. It stays an exact set and is never made a count of three — the merged manifest
+     * carries library-injected components, as this class's KDoc records, which would make an
+     * exact-count assertion flaky.
+     *
+     * **`<activity-alias>` is read alongside `<activity>`**, because an exported alias is a fourth
+     * exported component by any definition and the shipped assertion did not see one. None exists
+     * today and 1.3.0 builds none; the point of the check is that a fourth would fail it.
+     */
     @Test
-    fun theExportedComponentSetIsExactlyTheTwoShippedActivities() {
-        val exportedActivities = manifest.elements("activity")
+    fun theExportedComponentSetIsExactlyTheThreeNamedActivities() {
+        val exportedActivities = (manifest.elements("activity") + manifest.elements("activity-alias"))
             .filter { it.androidAttr("exported") == "true" }
             .map { it.androidAttr("name") }
             .toSet()
@@ -90,6 +99,7 @@ class ManifestContractTest {
             setOf(
                 "com.loosecannon.servicetag.MainActivity",
                 "com.loosecannon.servicetag.nfc.NfcDispatchActivity",
+                "com.loosecannon.servicetag.share.ShareIntakeActivity",
             ),
             exportedActivities,
         )
@@ -99,6 +109,112 @@ class ManifestContractTest {
             .filter { it.androidAttr("exported") == "true" }
         assertTrue(otherExported.isEmpty())
     }
+
+    /**
+     * D-6 and spec §4.1: the share target's declaration, attribute for attribute and type for
+     * type. A type added or dropped by hand changes what the system share sheet offers with
+     * nothing else noticing, and the four never-declared entries are each a wider door than
+     * `ACTION_SEND` — `BROWSABLE` most of all, which would put this activity on the open web.
+     *
+     * `android:taskAffinity=""` is read raw: an empty attribute is present and empty, which is the
+     * whole point of it, and the `androidAttr` helper reports an empty value as absent.
+     */
+    @Test
+    fun theShareTargetDeclaresActionSendOverExactlyTheTenTypes() {
+        val share = manifest.elements("activity")
+            .single { it.androidAttr("name") == "com.loosecannon.servicetag.share.ShareIntakeActivity" }
+
+        assertEquals("true", share.androidAttr("exported"))
+        assertEquals("standard", share.androidAttr("launchMode"))
+        assertEquals("true", share.androidAttr("excludeFromRecents"))
+        assertTrue(
+            "taskAffinity must be declared and empty",
+            share.hasAttribute("android:taskAffinity") &&
+                share.getAttribute("android:taskAffinity").isEmpty(),
+        )
+
+        val filters = share.getElementsByTagName("intent-filter")
+        assertEquals(1, filters.length)
+        val filter = filters.item(0) as Element
+
+        assertEquals(
+            listOf("android.intent.action.SEND"),
+            filter.childNames("action"),
+        )
+        assertEquals(
+            listOf("android.intent.category.DEFAULT"),
+            filter.childNames("category"),
+        )
+        assertEquals(
+            listOf(
+                "text/plain",
+                "text/uri-list",
+                "image/*",
+                "application/pdf",
+                "text/markdown",
+                "text/csv",
+                "application/msword",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "application/zip",
+            ),
+            filter.childAttrs("data", "mimeType"),
+        )
+
+        val everyAction = manifest.elements("action").map { it.androidAttr("name") }
+        listOf(
+            "android.intent.action.SEND_MULTIPLE",
+            "android.intent.action.PROCESS_TEXT",
+        ).forEach { action ->
+            assertTrue("$action must never be declared", action !in everyAction)
+        }
+        assertTrue(
+            "the share target must declare neither ACTION_VIEW nor BROWSABLE",
+            "android.intent.action.VIEW" !in filter.childNames("action") &&
+                "android.intent.category.BROWSABLE" !in filter.childNames("category"),
+        )
+    }
+
+    /**
+     * API-30+ package visibility: without one `<queries>` entry per allowed scheme, `ACTION_VIEW`
+     * silently resolves to nothing and a saved reference reports that no app can open it on a
+     * phone that has the app installed. The shipped wildcard `content` entry stays as it is.
+     */
+    @Test
+    fun queriesCarryOneViewEntryPerAllowedScheme() {
+        val queries = manifest.elements("queries").single()
+        val intents = queries.getElementsByTagName("intent")
+        val schemes = (0 until intents.length).map { at ->
+            val intent = intents.item(at) as Element
+            assertEquals(
+                listOf("android.intent.action.VIEW"),
+                intent.childNames("action"),
+            )
+            intent.childAttrs("data", "scheme").single()
+        }
+
+        assertEquals(
+            listOf("content", "http", "https", "joplin", "obsidian", "logseq"),
+            schemes,
+        )
+        assertEquals(
+            "the shipped attachment entry keeps its wildcard mime type",
+            listOf("*/*"),
+            (intents.item(0) as Element).childAttrs("data", "mimeType"),
+        )
+    }
+
+    /** Member extensions, not file-scoped: the helpers below this class are left as they are. */
+    private fun Element.childElements(tag: String): List<Element> {
+        val nodes = getElementsByTagName(tag)
+        return (0 until nodes.length).map { nodes.item(it) as Element }
+    }
+
+    private fun Element.childNames(tag: String): List<String?> =
+        childElements(tag).map { it.androidAttr("name") }
+
+    private fun Element.childAttrs(tag: String, attribute: String): List<String?> =
+        childElements(tag).map { it.androidAttr(attribute) }
 
     /**
      * #24 AC 1: requesting at launch is the default reflex this brief forbids. B14's editor is

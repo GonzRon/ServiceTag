@@ -102,8 +102,11 @@ class ScheduleDeepLinkTest {
             manifest.lowercase().lines().count { """android:host="group"""" in it },
         )
         assertEquals(
+            // 1.3.0 adds the eighth: the share target's own ACTION_SEND filter (#43). The number
+            // moves, the assertion does not weaken — a second `servicetag://` VIEW filter would
+            // still fail this, and the three lines below say the hosts are all on the one filter.
             "added to the shipped VIEW filter, not to a second one",
-            7,
+            8,
             manifest.lines().count { "<intent-filter>" in it },
         )
         assertEquals(
