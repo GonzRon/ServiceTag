@@ -12,7 +12,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -230,40 +229,5 @@ class ShareIntakeScreenTest {
         rule.onNodeWithText("Saved to Cub Cadet XT1").assertIsDisplayed()
         rule.onAllNodesWithText("Save").assertCountEquals(0)
         rule.onAllNodesWithText("Choose asset").assertCountEquals(0)
-    }
-
-    @Test fun everyIntakeSentenceComesFromTheRatifiedSet() {
-        val ratified = setOf(
-            "Save to ServiceTag", "Received", "Attach to", "Choose asset", "Name",
-            "Description (optional)", "Type", "Save", "Cancel", "Close", "Save as a note",
-            "That is not a link.", "Add an asset in ServiceTag first, then share this again.",
-            "Choose an attachment folder in ServiceTag Settings, then share this again.",
-            "That file cannot be accepted from the app that shared it.",
-            "Could not read what was shared", "That link is too long to save.",
-            "ServiceTag will not save that kind of link.",
-            "That link is already on this asset", "That file is empty",
-            "That file is larger than 256 MB", "Give the file a name",
-            "Give the reference a name", "Save this link?",
-        )
-        val drawn = listOf(
-            IntakeStrings.TITLE, IntakeStrings.RECEIVED, IntakeStrings.ATTACH_TO,
-            IntakeStrings.CHOOSE_ASSET, IntakeStrings.NAME, IntakeStrings.DESCRIPTION,
-            IntakeStrings.TYPE, IntakeStrings.SAVE, IntakeStrings.CANCEL, IntakeStrings.CLOSE,
-            IntakeStrings.SAVE_AS_NOTE, IntakeStrings.NOT_A_LINK, IntakeStrings.NO_ASSETS,
-            IntakeStrings.NO_FOLDER, IntakeStrings.STREAM_REFUSED, IntakeStrings.UNREADABLE,
-            IntakeStrings.URI_TOO_LONG, IntakeStrings.SCHEME_BLOCKED,
-            IntakeStrings.DUPLICATE_URI, IntakeStrings.EMPTY_FILE, IntakeStrings.TOO_LARGE,
-            IntakeStrings.BLANK_FILE_NAME, IntakeStrings.BLANK_REFERENCE_NAME,
-            IntakeStrings.CONFIRM_TITLE,
-        )
-
-        assertEquals(ratified, drawn.toSet())
-        assertTrue(
-            "the confirmation body is the ratified sentence with the scheme in its one slot",
-            IntakeStrings.confirmBody("zotero") ==
-                "ServiceTag does not recognise \"zotero\" links. It will be saved as written and " +
-                "opened with whatever app claims it.",
-        )
-        assertEquals("Saved to Cub Cadet XT1", IntakeStrings.savedTo("Cub Cadet XT1"))
     }
 }

@@ -58,6 +58,10 @@ internal fun ShareIntakeScreen(
         Text(text = IntakeStrings.TITLE, style = MaterialTheme.typography.headlineSmall)
 
         when {
+            // The intent is read off the main thread, so for one frame there is nothing to draw
+            // but the title — and nothing actionable, which is the point: no chooser, no Save.
+            state.loading -> Unit
+
             state.saved != null -> QuietLine(state.saved)
 
             // No assets, a refused stream, a blocked scheme, an over-long URI, an unreadable

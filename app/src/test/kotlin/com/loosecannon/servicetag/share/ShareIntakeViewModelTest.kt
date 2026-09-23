@@ -11,7 +11,10 @@ import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.references.MAX_REFERENCE_DESCRIPTION_CHARS
+import com.loosecannon.servicetag.core.references.MAX_REFERENCE_NAME_CHARS
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.testing.FakeGraph
@@ -62,7 +65,7 @@ class ShareIntakeViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private suspend fun TestScope.mower(): String {
+    private suspend fun mower(): String {
         val asset = graph.createAsset.run(AssetCommand(name = "Cub Cadet XT1"))
         assetId = asset.id
         return asset.id.value
@@ -72,27 +75,32 @@ class ShareIntakeViewModelTest {
         AddReference(graph.references, graph.assets, LinkLaunchPolicy(), graph.uow, graph.ids, graph.clock)
     }
 
+    /** A unique key per model, so two models in one case do not share an instance. */
+    private var models = 0
+
     private fun model(
         content: ShareContent,
         source: ByteSource? = null,
+        addAttachment: AddAttachment = graph.addAttachment,
     ): ShareIntakeViewModel {
         val factory = viewModelFactory {
             initializer {
                 ShareIntakeViewModel(
-                    content = content,
-                    source = source,
+                    // The activity hands over a suspending read; here it is already decided.
+                    readShare = { SharedShare(content, streamUri = null, bytes = source) },
                     assets = graph.assets,
                     storage = graph.attachmentStorage,
                     addReference = addReference,
-                    addAttachment = graph.addAttachment,
+                    addAttachment = addAttachment,
                     logEvent = graph.logEvent,
                     today = { "2026-09-23" },
                     zoneId = { "UTC" },
+                    io = StandardTestDispatcher(scheduler),
                 )
             }
         }
         val vm = ViewModelProvider.create(store, factory)[
-            "${content.hashCode()}-${store.keys().size}",
+            "model-${models++}",
             ShareIntakeViewModel::class,
         ]
         // The asset list is read on Room's own dispatcher, so the state is only settled once the
@@ -126,27 +134,27 @@ class ShareIntakeViewModelTest {
         size: Long? = 3L,
     ) = ShareContent.Bytes(name, mime, size)
 
-    private val MANUAL = "https://example-mower.invalid/xt1/manual.pdf"
+    private val manualUrl = "https://example-mower.invalid/xt1/manual.pdf"
 
     // --- the link path ------------------------------------------------------------------------
 
     @Test fun aLinkSavesAndSaysWhichAssetItWentTo() = runTest(scheduler) {
         val id = mower()
-        val vm = model(link(MANUAL))
+        val vm = model(link(manualUrl))
 
         vm.choose(id)
         vm.saveAndSettle()
 
         assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
         assertEquals(1, references())
-        assertEquals(MANUAL, graph.references.forAsset(assetId).single().uri)
+        assertEquals(manualUrl, graph.references.forAsset(assetId).single().uri)
     }
 
     @Test fun aDuplicateLinkSaysSoAndWritesNothingMore() = runTest(scheduler) {
         val id = mower()
-        model(link(MANUAL)).also { it.choose(id); it.saveAndSettle() }
+        model(link(manualUrl)).also { it.choose(id); it.saveAndSettle() }
 
-        val second = model(link(MANUAL, name = "Again"))
+        val second = model(link(manualUrl, name = "Again"))
         second.choose(id)
         second.saveAndSettle()
 
@@ -237,7 +245,13 @@ class ShareIntakeViewModelTest {
         assertTrue(graph.attachmentStorage.store.files.isEmpty())
     }
 
-    @Test fun anOverCapFileIsRefusedBeforeTheCopy() = runTest(scheduler) {
+    /**
+     * The intake layer keeps **no** copy of the over-cap rule: the shipped `AddAttachment` refuses
+     * a declared over-size before it opens the source, with the same ratified sentence. What this
+     * guards is that intake does not pre-open the stream on its way to that refusal — `opened` is
+     * the source's own counter and stays at zero.
+     */
+    @Test fun anOverCapFileReachesTheShippedRefusalWithoutTheSourceBeingOpened() = runTest(scheduler) {
         val id = mower()
         var opened = 0
         val vm = model(
@@ -306,13 +320,13 @@ class ShareIntakeViewModelTest {
 
         assertEquals(AttachmentKind.PHOTO, model(bytes(mime = "image/jpeg")).state.value.kind)
         assertEquals(AttachmentKind.DOCUMENT, model(bytes()).state.value.kind)
-        assertEquals(IntakePath.LINK, model(link(MANUAL)).state.value.path)
+        assertEquals(IntakePath.LINK, model(link(manualUrl)).state.value.path)
     }
 
     // --- the two storage-shaped dead ends ------------------------------------------------------
 
     @Test fun withNoAssetsNothingIsOfferedToSaveInto() = runTest(scheduler) {
-        val vm = model(link(MANUAL))
+        val vm = model(link(manualUrl))
 
         assertEquals(
             "Add an asset in ServiceTag first, then share this again.",
@@ -338,7 +352,7 @@ class ShareIntakeViewModelTest {
         assertEquals(0, attachments())
         assertTrue(graph.attachmentStorage.store.files.isEmpty())
 
-        val uriShare = model(link(MANUAL))
+        val uriShare = model(link(manualUrl))
         uriShare.choose(id)
 
         assertFalse(uriShare.state.value.noFolder)
@@ -354,7 +368,7 @@ class ShareIntakeViewModelTest {
 
     @Test fun saveIsDisabledUntilAnAssetIsChosenAndTheNameIsNotBlank() = runTest(scheduler) {
         val id = mower()
-        val vm = model(link(MANUAL))
+        val vm = model(link(manualUrl))
 
         assertFalse("no asset chosen yet", vm.state.value.saveEnabled)
 
@@ -397,11 +411,11 @@ class ShareIntakeViewModelTest {
     @Test fun cancelAtEveryStepWritesNothing() = runTest(scheduler) {
         val id = mower()
 
-        model(link(MANUAL)).cancel()
+        model(link(manualUrl)).cancel()
 
-        model(link(MANUAL)).also { it.choose(id); it.cancel() }
+        model(link(manualUrl)).also { it.choose(id); it.cancel() }
 
-        model(link(MANUAL)).also { it.choose(id); it.name("Typed a name"); it.cancel() }
+        model(link(manualUrl)).also { it.choose(id); it.name("Typed a name"); it.cancel() }
 
         model(link("zotero://select/items/0")).also {
             it.choose(id)
@@ -421,6 +435,164 @@ class ShareIntakeViewModelTest {
         assertEquals(0, attachments())
         assertEquals(0, events())
         assertTrue(graph.attachmentStorage.store.files.isEmpty())
+    }
+
+
+    // --- the read itself: one answer, whatever the process did before it -----------------------
+
+    /**
+     * The intent read does provider IPC and may pull up to 64 KiB of stream, so it may not happen
+     * while the model is being built — it belongs on the IO context, with the screen drawing
+     * nothing actionable until it lands. Nothing is read until the scheduler runs it.
+     */
+    @Test fun theIntentIsNotReadWhileTheModelIsBeingBuilt() = runTest(scheduler) {
+        mower()
+        var reads = 0
+        val factory = viewModelFactory {
+            initializer {
+                ShareIntakeViewModel(
+                    readShare = {
+                        reads += 1
+                        SharedShare(link(manualUrl), streamUri = null, bytes = null)
+                    },
+                    assets = graph.assets,
+                    storage = graph.attachmentStorage,
+                    addReference = addReference,
+                    addAttachment = graph.addAttachment,
+                    logEvent = graph.logEvent,
+                    today = { "2026-09-23" },
+                    zoneId = { "UTC" },
+                    io = StandardTestDispatcher(scheduler),
+                )
+            }
+        }
+        val vm = ViewModelProvider.create(store, factory)[
+            "model-${models++}",
+            ShareIntakeViewModel::class,
+        ]
+
+        assertEquals("nothing may be read on the way to the first frame", 0, reads)
+        assertTrue(vm.state.value.loading)
+        assertFalse(vm.state.value.saveEnabled)
+
+        scheduler.advanceUntilIdle()
+
+        assertEquals(1, reads)
+        assertFalse(vm.state.value.loading)
+    }
+
+    /**
+     * Brief matrix, "cold and warm starts differ": the state is a pure function of what arrived,
+     * the asset list and the store's state, so two reads of the same share are equal field for
+     * field. A default that came from a field one process had set and another had not would show
+     * up here.
+     */
+    @Test fun theSameShareProducesTheSameStateFieldForField() = runTest(scheduler) {
+        mower()
+
+        val cold = model(bytes()).state.value
+        val warm = model(bytes()).state.value
+
+        assertEquals(cold, warm)
+        assertFalse(cold.loading)
+    }
+
+    /**
+     * Brief matrix, "a process recreation loses the grant": the source is opened lazily, at save
+     * time, so a grant that died with the sharing task surfaces as a `SecurityException` there.
+     * It is a read failure — not the I-9 refusal, which is about a URI that was never acceptable —
+     * and it leaves no row, no file and no partial file.
+     */
+    @Test fun aLostGrantAtSaveTimeIsAReadFailureAndLeavesNothing() = runTest(scheduler) {
+        val id = mower()
+        val vm = model(bytes(size = null), source = { throw SecurityException("the grant is gone") })
+
+        vm.choose(id)
+        vm.saveAndSettle()
+
+        assertEquals("Could not read what was shared", vm.state.value.message)
+        assertNull(vm.state.value.deadEnd)
+        assertEquals(0, attachments())
+        assertTrue(graph.attachmentStorage.store.files.isEmpty())
+    }
+
+    // --- the two fields stop where spec §10 says they stop ---------------------------------------
+
+    @Test fun theNameFieldStopsAtItsCap() = runTest(scheduler) {
+        mower()
+        val vm = model(link(manualUrl))
+
+        vm.name("a".repeat(MAX_REFERENCE_NAME_CHARS + 50))
+
+        assertEquals(MAX_REFERENCE_NAME_CHARS, vm.state.value.name.length)
+    }
+
+    @Test fun theDescriptionFieldStopsAtItsCap() = runTest(scheduler) {
+        mower()
+        val vm = model(link(manualUrl))
+
+        vm.describe("b".repeat(MAX_REFERENCE_DESCRIPTION_CHARS + 500))
+
+        assertEquals(MAX_REFERENCE_DESCRIPTION_CHARS, vm.state.value.description.length)
+    }
+
+    /**
+     * The other half of the `.txt` row: `MimeTypes.EXTENSIONS` maps `text/plain`, so a shared text
+     * file is stored as one and the locator says so. The shared name deliberately carries **no**
+     * extension of its own — `AttachmentLocator` prefers the name's when there is one, and this
+     * case is about the declared type reaching the locator.
+     */
+    @Test fun aSharedTextFileIsStoredWithATxtLocator() = runTest(scheduler) {
+        val id = mower()
+        val vm = model(
+            bytes(name = "service log", mime = "text/plain", size = 3L),
+            source = { "log".byteInputStream() },
+        )
+
+        vm.choose(id)
+        vm.saveAndSettle()
+
+        val row = graph.attachments.forOwner(AttachmentOwner.OfAsset(assetId)).single()
+        assertTrue(row.storageLocator, row.storageLocator.endsWith(".txt"))
+        assertTrue(graph.attachmentStorage.store.files.keys.single().endsWith(".txt"))
+    }
+
+    /**
+     * Spec §10, as a set. Moved off the emulator: it renders nothing and compares strings, so the
+     * device run has no more to say about it than the JVM does.
+     */
+    @Test fun everyIntakeSentenceIsOneSpecTenRatifies() {
+        val ratified = setOf(
+            "Save to ServiceTag", "Received", "Attach to", "Choose asset", "Name",
+            "Description (optional)", "Type", "Save", "Cancel", "Close", "Save as a note",
+            "That is not a link.", "Add an asset in ServiceTag first, then share this again.",
+            "Choose an attachment folder in ServiceTag Settings, then share this again.",
+            "That file cannot be accepted from the app that shared it.",
+            "Could not read what was shared", "That link is too long to save.",
+            "ServiceTag will not save that kind of link.",
+            "That link is already on this asset", "That file is empty",
+            "That file is larger than 256 MB", "Give the file a name",
+            "Give the reference a name", "Save this link?",
+        )
+        val drawn = listOf(
+            IntakeStrings.TITLE, IntakeStrings.RECEIVED, IntakeStrings.ATTACH_TO,
+            IntakeStrings.CHOOSE_ASSET, IntakeStrings.NAME, IntakeStrings.DESCRIPTION,
+            IntakeStrings.TYPE, IntakeStrings.SAVE, IntakeStrings.CANCEL, IntakeStrings.CLOSE,
+            IntakeStrings.SAVE_AS_NOTE, IntakeStrings.NOT_A_LINK, IntakeStrings.NO_ASSETS,
+            IntakeStrings.NO_FOLDER, IntakeStrings.STREAM_REFUSED, IntakeStrings.UNREADABLE,
+            IntakeStrings.URI_TOO_LONG, IntakeStrings.SCHEME_BLOCKED,
+            IntakeStrings.DUPLICATE_URI, IntakeStrings.EMPTY_FILE, IntakeStrings.TOO_LARGE,
+            IntakeStrings.BLANK_FILE_NAME, IntakeStrings.BLANK_REFERENCE_NAME,
+            IntakeStrings.CONFIRM_TITLE,
+        )
+
+        assertEquals(ratified, drawn.toSet())
+        assertEquals(
+            "ServiceTag does not recognise \"zotero\" links. It will be saved as written and " +
+                "opened with whatever app claims it.",
+            IntakeStrings.confirmBody("zotero"),
+        )
+        assertEquals("Saved to Cub Cadet XT1", IntakeStrings.savedTo("Cub Cadet XT1"))
     }
 
     /** Some bytes, then a failure: the shape the store has to survive without leaving a file. */

@@ -8,11 +8,11 @@ import com.loosecannon.servicetag.core.model.AttachmentKinds
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.EventKind
-import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
-import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.references.MAX_REFERENCE_DESCRIPTION_CHARS
+import com.loosecannon.servicetag.core.references.MAX_REFERENCE_NAME_CHARS
 import com.loosecannon.servicetag.core.references.ReferenceText
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
@@ -21,14 +21,19 @@ import com.loosecannon.servicetag.core.usecase.AddReferenceCommand
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.LogEvent
+import com.loosecannon.servicetag.core.usecase.NoSuchAsset
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
 import com.loosecannon.servicetag.core.usecase.ReferenceResult
+import java.io.IOException
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * **Every user-visible word the intake screen draws, in one place and verbatim from spec §10.**
@@ -125,15 +130,16 @@ internal data class ShareIntakeState(
  * writes in this class are inside [save], behind [ShareIntakeState.saveEnabled], and nothing is
  * committed on dispose.
  *
- * It takes [ShareContent] rather than [SharedItem] so the whole machine is Android-free and can be
- * driven on the JVM; the activity pairs the accepted stream's `Uri` back with it as [source].
+ * **The intent is read here, not in `onCreate`**: [readShare] does provider IPC and may pull up to
+ * 64 KiB of stream, so it runs on [io] and the screen draws nothing actionable until the state
+ * lands. Everything past that point is [ShareContent], which takes no Android type, so the whole
+ * machine can be driven on the JVM.
  *
  * **I-3 holds by construction**: a `LINK` never reaches `AddAttachment` and a `BYTES` never reaches
  * `AddReference`, because the path is decided once, by the reader, and each arm calls one use case.
  */
 internal class ShareIntakeViewModel(
-    private val content: ShareContent,
-    private val source: ByteSource?,
+    private val readShare: suspend () -> SharedShare,
     private val assets: AssetRepository,
     private val storage: AttachmentStorage,
     private val addReference: AddReference,
@@ -141,30 +147,48 @@ internal class ShareIntakeViewModel(
     private val logEvent: LogEvent,
     private val today: () -> String,
     private val zoneId: () -> String,
+    private val io: CoroutineContext = Dispatchers.IO,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(initialState())
+    private val _state = MutableStateFlow(ShareIntakeState())
     val state: StateFlow<ShareIntakeState> = _state.asStateFlow()
+
+    /** Set once, by the one read below. Nothing reads it before [ShareIntakeState.loading] clears. */
+    private var share: SharedShare? = null
 
     init {
         viewModelScope.launch {
-            val choices = assets.all()
-                .map { AssetChoice(it.id.value, it.name) }
-                .sortedBy { it.name.lowercase() }
-            _state.update { current ->
-                current.copy(
-                    loading = false,
-                    assets = choices,
-                    deadEnd = current.deadEnd ?: IntakeStrings.NO_ASSETS.takeIf { choices.isEmpty() },
+            // One hop: the provider IPC, the stream read, the asset list and the store's state are
+            // all off the main thread, and the screen commits to nothing until they land together.
+            val read = withContext(io) {
+                val found = readShare()
+                Triple(
+                    found,
+                    assets.all().map { AssetChoice(it.id.value, it.name) }.sortedBy { it.name.lowercase() },
+                    storage.state(),
                 )
             }
+            share = read.first
+            val loaded = loadedState(read.first.content, read.second, read.third)
+            _state.update { current -> if (current.cancelled) current else loaded }
         }
     }
 
     fun choose(assetId: String) = _state.update { it.copy(chosen = assetId, message = null) }
-    fun name(value: String) = _state.update { it.copy(name = value, message = null) }
-    fun describe(value: String) = _state.update { it.copy(description = value) }
-    fun kind(value: AttachmentKind) = _state.update { it.copy(kind = value) }
+
+    /**
+     * **The field stops at its cap** rather than refusing after the fact, which is what spec §10
+     * ratifies in place of a sentence. The shipped attachment edit sheet caps neither of its
+     * fields, so both paths use `:core`'s two reference constants and therefore agree.
+     */
+    fun name(value: String) =
+        _state.update { it.copy(name = value.take(MAX_REFERENCE_NAME_CHARS), message = null) }
+
+    fun describe(value: String) = _state.update {
+        it.copy(description = value.take(MAX_REFERENCE_DESCRIPTION_CHARS), message = null)
+    }
+
+    fun kind(value: AttachmentKind) = _state.update { it.copy(kind = value, message = null) }
 
     /** Cancel, back and Close are the same fact: nothing was written and nothing will be. */
     fun cancel() = _state.update { it.copy(confirming = null, cancelled = true) }
@@ -204,7 +228,8 @@ internal class ShareIntakeViewModel(
         choice: AssetChoice,
         confirmedUnknownScheme: Boolean,
     ) {
-        val uri = (content as? ShareContent.Link)?.uri ?: return refuse(IntakeStrings.UNREADABLE)
+        val uri = (share?.content as? ShareContent.Link)?.uri
+            ?: return refuse(IntakeStrings.UNREADABLE)
         val result = addReference.run(
             AssetId(choice.id),
             AddReferenceCommand(
@@ -235,17 +260,17 @@ internal class ShareIntakeViewModel(
     }
 
     /**
-     * The two intake-layer refusals come **before** the copy: over the cap, because checking only
-     * afterwards writes 256 MiB into the owner's folder first; and empty, because
-     * `AttachmentProblem`'s list is closed and a new member would change the shipped camera and
-     * picker paths (spec §4.3).
+     * **The empty file is refused here and the over-cap one is not.** `AttachmentProblem`'s list is
+     * closed — a new member would change the shipped camera and picker paths and the exhaustive
+     * `when` in `AttachmentsSectionViewModel.say` — so spec §4.3 puts the zero-length refusal in
+     * this layer and its sentence with it. The declared over-size is already refused by the shipped
+     * `AddAttachment` **before** it opens the source, with the same ratified sentence, so a second
+     * copy of that rule here would be two places to keep in step for no behaviour at all.
      */
     private suspend fun saveBytes(current: ShareIntakeState, choice: AssetChoice) {
+        val content = share?.content
         val bytes = (content as? ShareContent.Bytes) ?: return refuse(IntakeStrings.UNREADABLE)
-        val open = source ?: return refuse(IntakeStrings.UNREADABLE)
-        if (bytes.size != null && bytes.size > MAX_ATTACHMENT_BYTES) {
-            return refuse(IntakeStrings.TOO_LARGE)
-        }
+        val open = share?.bytes ?: return refuse(IntakeStrings.UNREADABLE)
         if (bytes.size == 0L) return refuse(IntakeStrings.EMPTY_FILE)
 
         val result = try {
@@ -262,9 +287,14 @@ internal class ShareIntakeViewModel(
             )
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Throwable) {
-            // A source that dies mid-copy: the store removes what it half-wrote and no row was
-            // ever built, so this is a read failure and not a security refusal.
+        } catch (_: IOException) {
+            // A source that dies mid-copy, or a store that cannot write: the store removes what it
+            // half-wrote and no row was ever built, so this is a read failure and nothing else.
+            // `StoreIoException` is an `IOException`, so the store's own failures land here too.
+            return refuse(IntakeStrings.UNREADABLE)
+        } catch (_: SecurityException) {
+            // The grant is gone — a recreation long after the sharing task finished. Same fact to
+            // the person, and still nothing written.
             return refuse(IntakeStrings.UNREADABLE)
         }
         when (result) {
@@ -281,7 +311,7 @@ internal class ShareIntakeViewModel(
 
     /** #43 AC 5 and D-5: prose becomes a journal note through the shipped `EventKind.NOTE`. */
     private suspend fun saveNote(current: ShareIntakeState, choice: AssetChoice) {
-        val prose = (content as? ShareContent.PlainText)?.text.orEmpty()
+        val prose = (share?.content as? ShareContent.PlainText)?.text.orEmpty()
         try {
             logEvent.run(
                 EventCommand(
@@ -301,10 +331,14 @@ internal class ShareIntakeViewModel(
             )
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Throwable) {
-            // The name is non-blank, the date is this app's own and the field map is empty, so the
-            // only thing left that can refuse this write is the owner having gone.
+        } catch (_: NoSuchAsset) {
+            // The one fact the no-assets sentence names: the chosen asset was deleted between the
+            // chooser listing it and Save. Nothing else is told to go and create an asset.
             return ownerGone()
+        } catch (_: IOException) {
+            return refuse(IntakeStrings.UNREADABLE)
+        } catch (_: SecurityException) {
+            return refuse(IntakeStrings.UNREADABLE)
         }
         succeed(choice)
     }
@@ -321,32 +355,48 @@ internal class ShareIntakeViewModel(
         it.copy(saving = false, deadEnd = IntakeStrings.NO_ASSETS)
     }
 
-    private fun initialState(): ShareIntakeState = when (content) {
-        is ShareContent.Link -> ShareIntakeState(
-            path = IntakePath.LINK,
-            received = content.uri,
-            name = content.suggestedName.orEmpty(),
-        )
-        is ShareContent.Bytes -> ShareIntakeState(
-            path = IntakePath.BYTES,
-            received = content.suggestedName,
-            name = content.suggestedName,
-            kind = AttachmentKinds.inferFrom(content.mimeType, fromCamera = false),
-            storeReady = storage.state() is StoreState.Ready,
-        )
-        is ShareContent.PlainText -> ShareIntakeState(
-            path = IntakePath.NOTE,
-            received = content.text,
-            name = ReferenceText.sanitiseName(content.text),
-            message = IntakeStrings.NOT_A_LINK,
-        )
-        is ShareContent.Refused -> ShareIntakeState(
-            deadEnd = when (content.reason) {
-                IntakeRefusal.STREAM_NOT_ACCEPTED -> IntakeStrings.STREAM_REFUSED
-                IntakeRefusal.UNREADABLE -> IntakeStrings.UNREADABLE
-                IntakeRefusal.URI_TOO_LONG -> IntakeStrings.URI_TOO_LONG
-                IntakeRefusal.SCHEME_BLOCKED -> IntakeStrings.SCHEME_BLOCKED
-            },
+    /**
+     * The one state the read produces, so a cold start and a warm one cannot differ: it is a pure
+     * function of what arrived, the asset list and the store's state, with nothing read from a
+     * field that a second process might have set differently.
+     */
+    private fun loadedState(
+        content: ShareContent,
+        choices: List<AssetChoice>,
+        store: StoreState,
+    ): ShareIntakeState {
+        val base = when (content) {
+            is ShareContent.Link -> ShareIntakeState(
+                path = IntakePath.LINK,
+                received = content.uri,
+                name = content.suggestedName.orEmpty().take(MAX_REFERENCE_NAME_CHARS),
+            )
+            is ShareContent.Bytes -> ShareIntakeState(
+                path = IntakePath.BYTES,
+                received = content.suggestedName,
+                name = content.suggestedName.take(MAX_REFERENCE_NAME_CHARS),
+                kind = AttachmentKinds.inferFrom(content.mimeType, fromCamera = false),
+                storeReady = store is StoreState.Ready,
+            )
+            is ShareContent.PlainText -> ShareIntakeState(
+                path = IntakePath.NOTE,
+                received = content.text,
+                name = ReferenceText.sanitiseName(content.text).take(MAX_REFERENCE_NAME_CHARS),
+                message = IntakeStrings.NOT_A_LINK,
+            )
+            is ShareContent.Refused -> ShareIntakeState(
+                deadEnd = when (content.reason) {
+                    IntakeRefusal.STREAM_NOT_ACCEPTED -> IntakeStrings.STREAM_REFUSED
+                    IntakeRefusal.UNREADABLE -> IntakeStrings.UNREADABLE
+                    IntakeRefusal.URI_TOO_LONG -> IntakeStrings.URI_TOO_LONG
+                    IntakeRefusal.SCHEME_BLOCKED -> IntakeStrings.SCHEME_BLOCKED
+                },
+            )
+        }
+        return base.copy(
+            loading = false,
+            assets = choices,
+            deadEnd = base.deadEnd ?: IntakeStrings.NO_ASSETS.takeIf { choices.isEmpty() },
         )
     }
 }

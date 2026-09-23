@@ -34,16 +34,18 @@ class ShareIntakeActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Read once, here, and never again: `onNewIntent` cannot reach a `standard` activity, and
-        // a recreation re-reads the same intent under a grant that lives until the task finishes.
-        val shared = readSharedItem(
-            intent = intent,
-            resolver = contentResolver,
-            streamPolicy = graph.streamSourcePolicy,
-            linkPolicy = graph.linkLaunchPolicy,
-        )
-        val content = shared.asContent()
-        val source = (shared as? SharedItem.Bytes)?.let { contentResolver.byteSourceFor(it.uri) }
+        // Read once, by the view model, on an IO context: the byte arm is two binder round trips
+        // to a provider that may be remote and the uri-list arm pulls up to 64 KiB, none of which
+        // belongs on the way to the first frame. `onNewIntent` cannot reach a `standard` activity,
+        // and a recreation re-reads the same intent under a grant that lives until the task ends.
+        val read: suspend () -> SharedShare = {
+            readShare(
+                intent = intent,
+                resolver = contentResolver,
+                streamPolicy = graph.streamSourcePolicy,
+                linkPolicy = graph.linkLaunchPolicy,
+            )
+        }
 
         setContent {
             val dark = when (graph.prefs.appearanceMode) {
@@ -54,8 +56,7 @@ class ShareIntakeActivity : ComponentActivity() {
             ServiceTagTheme(darkTheme = dark) {
                 val model = viewModel(key = "share-intake") {
                     ShareIntakeViewModel(
-                        content = content,
-                        source = source,
+                        readShare = read,
                         assets = graph.assets,
                         storage = graph.attachmentStorage,
                         addReference = graph.addReference,

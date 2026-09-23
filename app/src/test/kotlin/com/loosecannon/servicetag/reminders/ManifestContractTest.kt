@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import org.w3c.dom.Element
 
 /**
@@ -193,8 +194,10 @@ class ManifestContractTest {
             intent.childAttrs("data", "scheme").single()
         }
 
+        // Read off the policy, not a second copy of it: the manifest follows `LinkLaunchPolicy`,
+        // so a scheme added to the allow list and not to `<queries>` fails here.
         assertEquals(
-            listOf("content", "http", "https", "joplin", "obsidian", "logseq"),
+            listOf("content") + LinkLaunchPolicy.ALLOWED,
             schemes,
         )
         assertEquals(

@@ -161,6 +161,19 @@ class SharedItemReaderTest {
         assertEquals(ShareContent.PlainText("Replaced the drive belt today"), item)
     }
 
+    /** Neither a stream nor any text: there is nothing to offer as a note, and saying so is a
+     * better answer than an empty "Received" line under "That is not a link." */
+    @Test fun aShareCarryingNothingAtAllIsAReadFailureAndNotProse() {
+        assertEquals(
+            ShareContent.Refused(IntakeRefusal.UNREADABLE),
+            decide(declaredType = "text/plain"),
+        )
+        assertEquals(
+            ShareContent.Refused(IntakeRefusal.UNREADABLE),
+            decide(declaredType = "text/plain", text = "   "),
+        )
+    }
+
     @Test fun aBlockedSchemeIsRefusedBeforeTheScreenOffersAnything() {
         val item = decide(declaredType = "text/plain", text = "javascript:alert(1)")
 
@@ -306,7 +319,10 @@ class SharedItemReaderTest {
     @Test fun everyParcelableExtraReadIsTypedToUri() {
         var sites = 0
         shareSources().forEach { file ->
-            val source = file.readText()
+            // KDoc in this package quotes the call by name, and a comment is not a call site: a
+            // floor that a sentence could satisfy would prove nothing at all.
+            val source = file.readText().lines().filterNot { it.trimStart().startsWith("*") }
+                .joinToString("\n")
             var from = 0
             while (true) {
                 val at = source.indexOf(CALL, from)
@@ -320,7 +336,26 @@ class SharedItemReaderTest {
                 )
             }
         }
-        assertTrue("the share package must read EXTRA_STREAM at all", sites >= 1)
+        assertEquals("exactly one real call site reads EXTRA_STREAM", 1, sites)
+    }
+
+    /**
+     * Spec §4.1: the activity reads **only** `EXTRA_STREAM`, `EXTRA_TEXT`, `EXTRA_SUBJECT` and
+     * `EXTRA_TITLE`, all as data, and every other extra is ignored. It holds by construction
+     * today; this is what keeps it true when someone reaches for a fifth.
+     */
+    @Test fun onlyTheFourNamedExtrasAreEverRead() {
+        val allowed = setOf("EXTRA_STREAM", "EXTRA_TEXT", "EXTRA_SUBJECT", "EXTRA_TITLE")
+        val named = mutableSetOf<String>()
+        shareSources().forEach { file ->
+            val source = file.readText().lines().filterNot { it.trimStart().startsWith("*") }
+                .joinToString("\n")
+            Regex("Intent\\.(EXTRA_[A-Z_]+)").findAll(source).forEach { named += it.groupValues[1] }
+            Regex("get[A-Za-z]*Extra\\(\\s*\"([^\"]+)\"").findAll(source).forEach { raw ->
+                throw AssertionError("${file.name} reads an extra by literal name: ${raw.value}")
+            }
+        }
+        assertEquals(allowed, named)
     }
 
     /**

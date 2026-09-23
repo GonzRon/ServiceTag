@@ -47,6 +47,20 @@ sealed interface SharedItem {
 enum class IntakeRefusal { STREAM_NOT_ACCEPTED, UNREADABLE, URI_TOO_LONG, SCHEME_BLOCKED }
 
 /**
+ * The Android lift's whole result: what the share turned out to be, the `Uri` the stream arrived
+ * on (for [SharedItem]'s declared shape) and the one byte source a share ever builds.
+ *
+ * One value, so nothing round-trips: [readShare] builds this once and both the declared
+ * [SharedItem] and the state machine's input are read straight off it. A JVM test can construct
+ * one with `streamUri = null`, which is every case that does not need a real `Uri`.
+ */
+internal data class SharedShare(
+    val content: ShareContent,
+    val streamUri: Uri?,
+    val bytes: ByteSource?,
+)
+
+/**
  * The exported activity's one reader. **Only `EXTRA_STREAM`, `EXTRA_TEXT`, `EXTRA_SUBJECT` and
  * `EXTRA_TITLE` are read, all as data; every other extra is ignored** (spec §4.1).
  *
@@ -57,14 +71,18 @@ enum class IntakeRefusal { STREAM_NOT_ACCEPTED, UNREADABLE, URI_TOO_LONG, SCHEME
  * unparcelling is "could not read what was shared", not a crash on the way up — the same
  * treatment the launcher activity already gives its own extras.
  *
+ * **This blocks**: on the byte arm it is two binder round trips to a provider that may be remote,
+ * and on the uri-list arm up to 64 KiB of stream. It is called from the view model on an IO
+ * context and never from `onCreate`, so a cloud-backed provider cannot hold the first frame.
+ *
  * Every rule below this line is in [decideShare], which takes no Android type at all.
  */
-fun readSharedItem(
+internal fun readShare(
     intent: Intent,
     resolver: ContentResolver,
     streamPolicy: StreamSourcePolicy,
     linkPolicy: LinkLaunchPolicy,
-): SharedItem {
+): SharedShare {
     val streamUri: Uri?
     val declaredType: String?
     val text: String?
@@ -76,8 +94,8 @@ fun readSharedItem(
         text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
         subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)
         title = intent.getCharSequenceExtra(Intent.EXTRA_TITLE)?.toString()
-    } catch (e: Exception) {
-        return SharedItem.Refused(IntakeRefusal.UNREADABLE)
+    } catch (_: Exception) {
+        return SharedShare(ShareContent.Refused(IntakeRefusal.UNREADABLE), null, null)
     }
 
     val content = decideShare(
@@ -89,18 +107,41 @@ fun readSharedItem(
         streamPolicy = streamPolicy,
         linkPolicy = linkPolicy,
     )
-    return when (content) {
-        is ShareContent.Link -> SharedItem.Link(content.uri, content.suggestedName)
-        is ShareContent.Bytes -> SharedItem.Bytes(
-            // Non-null by construction: the bytes arm is only reached with a stream in hand.
-            uri = checkNotNull(streamUri),
-            suggestedName = content.suggestedName,
-            mimeType = content.mimeType,
-            size = content.size,
-        )
-        is ShareContent.PlainText -> SharedItem.PlainText(content.text)
-        is ShareContent.Refused -> SharedItem.Refused(content.reason)
-    }
+    // The source is built only for an accepted byte share, so a refused or textual share has
+    // nothing that could open a stream even by accident.
+    val bytes = streamUri
+        ?.takeIf { content is ShareContent.Bytes }
+        ?.let { resolver.byteSourceFor(it) }
+    return SharedShare(content, streamUri, bytes)
+}
+
+/**
+ * The declared boundary shape (brief B03, *Interfaces*), which no later brief may duplicate. It is
+ * **one mapping, in one direction, with named arguments**, so a field added to either hierarchy is
+ * a compile error here rather than a value silently dropped; `SharedItemShapeTest` pins the two
+ * field sets against each other as well.
+ */
+fun readSharedItem(
+    intent: Intent,
+    resolver: ContentResolver,
+    streamPolicy: StreamSourcePolicy,
+    linkPolicy: LinkLaunchPolicy,
+): SharedItem = readShare(intent, resolver, streamPolicy, linkPolicy).asSharedItem()
+
+internal fun SharedShare.asSharedItem(): SharedItem = when (content) {
+    is ShareContent.Link -> SharedItem.Link(
+        uri = content.uri,
+        suggestedName = content.suggestedName,
+    )
+    is ShareContent.Bytes -> SharedItem.Bytes(
+        // Non-null by construction: the bytes arm is only reached with a stream in hand.
+        uri = checkNotNull(streamUri),
+        suggestedName = content.suggestedName,
+        mimeType = content.mimeType,
+        size = content.size,
+    )
+    is ShareContent.PlainText -> SharedItem.PlainText(text = content.text)
+    is ShareContent.Refused -> SharedItem.Refused(reason = content.reason)
 }
 
 /**
@@ -177,7 +218,10 @@ internal fun decideShare(
     if (stream != null) {
         return byteStream(stream, declaredType, subject, title, streamPolicy)
     }
-    return textContent(carried.orEmpty(), subject, title, linkPolicy)
+    // No stream and no text at all: there is nothing to offer as a note, and a blank "Received"
+    // line under "That is not a link." is a worse answer than the read failure it actually is.
+    if (carried == null) return ShareContent.Refused(IntakeRefusal.UNREADABLE)
+    return textContent(carried, subject, title, linkPolicy)
 }
 
 /**
@@ -198,7 +242,7 @@ private fun byteStream(
     }
     val facts = try {
         stream.facts()
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         return ShareContent.Refused(IntakeRefusal.UNREADABLE)
     }
     return ShareContent.Bytes(
@@ -234,7 +278,7 @@ private fun uriListStream(
     }
     val bytes = try {
         stream.readAtMost(MAX_URI_LIST_BYTES + 1)
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         return ShareContent.Refused(IntakeRefusal.UNREADABLE)
     }
     if (bytes.size > MAX_URI_LIST_BYTES) return ShareContent.Refused(IntakeRefusal.UNREADABLE)
@@ -292,7 +336,7 @@ private fun decodeUtf8(bytes: ByteArray): String? = try {
         .onUnmappableCharacter(CodingErrorAction.REPORT)
         .decode(ByteBuffer.wrap(bytes))
         .toString()
-} catch (e: CharacterCodingException) {
+} catch (_: CharacterCodingException) {
     null
 }
 
@@ -357,16 +401,4 @@ private fun InputStream.readAtMost(limit: Int): ByteArray {
  */
 internal fun ContentResolver.byteSourceFor(uri: Uri): ByteSource = ByteSource {
     openInputStream(uri) ?: throw IOException("the provider returned no stream")
-}
-
-/**
- * The state machine's Android-free view of what arrived. The activity holds a [SharedItem] because
- * that is where the `Uri` it must open lives; everything past that point is [ShareContent], so no
- * rule this release adds is expressed over a type a JVM test cannot construct.
- */
-internal fun SharedItem.asContent(): ShareContent = when (this) {
-    is SharedItem.Link -> ShareContent.Link(uri, suggestedName)
-    is SharedItem.Bytes -> ShareContent.Bytes(suggestedName, mimeType, size)
-    is SharedItem.PlainText -> ShareContent.PlainText(text)
-    is SharedItem.Refused -> ShareContent.Refused(reason)
 }
