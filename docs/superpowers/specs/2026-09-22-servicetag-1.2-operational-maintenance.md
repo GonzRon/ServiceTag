@@ -485,6 +485,15 @@ schedule's future. It therefore mirrors D-25, which the owner already ruled for 
 > principle is that the API must not be unable to produce data the app can, nor able to produce data
 > it cannot.
 
+**1.2.1 amendment (owner ruling 2026-09-23).** The range above is unchanged; a fifth refusal is
+added ahead of it. `close-round` also refuses to write before the current round's own due-soon
+window: with `due = effectiveDueOn` and `lead = leadDays`, a call dated before `due - lead` throws
+409 `OCCURRENCE_NOT_YET_OPEN` and writes nothing. From `due - lead` through today, closing is allowed
+exactly as before. The guard exists because closing always advances the schedule, so an immediate
+retry the same day — a caller resending a call it believes was lost, for instance — would otherwise
+land on the round the first close just opened rather than being told the first one already
+succeeded. No occurrence key is added to the call; that is a deliberate omission, not an oversight.
+
 **A consequence of invariant 39, stated deliberately.** Once a round is closed, no completion can
 ever be recorded against that `occurrence_on`. Work an owner does after closing a round is logged as
 an ordinary journal event with no `schedule_id`. That is intentional: a closed round is a statement
