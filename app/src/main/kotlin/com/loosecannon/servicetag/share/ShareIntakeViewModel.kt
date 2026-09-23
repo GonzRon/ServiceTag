@@ -160,19 +160,57 @@ internal class ShareIntakeViewModel(
         viewModelScope.launch {
             // One hop: the provider IPC, the stream read, the asset list and the store's state are
             // all off the main thread, and the screen commits to nothing until they land together.
-            val read = withContext(io) {
-                val found = readShare()
-                Triple(
-                    found,
-                    assets.all().map { AssetChoice(it.id.value, it.name) }.sortedBy { it.name.lowercase() },
-                    storage.state(),
-                )
+            //
+            // **Guarded, because a failure here has nowhere else to go.** Before the read moved off
+            // `onCreate` a throw at least ended the activity; from inside `viewModelScope.launch`
+            // it would leave the blank loading screen with no Close on it. The same discipline the
+            // save paths use: cancellation travels, the documented failure types land as the
+            // ratified read-failure dead end, and nothing is staged on the way.
+            val loaded = try {
+                withContext(io) {
+                    val found = readGuarded()
+                    share = found
+                    loadedState(
+                        content = found?.content ?: ShareContent.Refused(IntakeRefusal.UNREADABLE),
+                        choices = assets.all()
+                            .map { AssetChoice(it.id.value, it.name) }
+                            .sortedBy { it.name.lowercase() },
+                        store = storage.state(),
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: IOException) {
+                unreadable()
+            } catch (_: SecurityException) {
+                unreadable()
             }
-            share = read.first
-            val loaded = loadedState(read.first.content, read.second, read.third)
             _state.update { current -> if (current.cancelled) current else loaded }
         }
     }
+
+    /**
+     * The read, and **only** the read, also swallows a `RuntimeException`: the provider on the
+     * other side of a share is a stranger's process, `ContentResolver` documents an
+     * `IllegalArgumentException` for a URI it cannot resolve, and whatever a provider throws across
+     * the binder arrives here as one. Our own collaborators are deliberately not in this net — a
+     * failure from the asset table or the store is this app's bug and still propagates.
+     */
+    private suspend fun readGuarded(): SharedShare? = try {
+        readShare()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: IOException) {
+        null
+    } catch (_: SecurityException) {
+        null
+    } catch (_: RuntimeException) {
+        null
+    }
+
+    /** Nothing could be read and nothing was staged: one ratified sentence, and a way out. */
+    private fun unreadable() =
+        ShareIntakeState(loading = false, deadEnd = IntakeStrings.UNREADABLE)
 
     fun choose(assetId: String) = _state.update { it.copy(chosen = assetId, message = null) }
 

@@ -109,6 +109,31 @@ class ShareIntakeViewModelTest {
         return vm
     }
 
+    /** A model whose read fails the way a stranger's provider fails: on the way in. */
+    private fun modelThatCannotRead(failure: Throwable): ShareIntakeViewModel {
+        val factory = viewModelFactory {
+            initializer {
+                ShareIntakeViewModel(
+                    readShare = { throw failure },
+                    assets = graph.assets,
+                    storage = graph.attachmentStorage,
+                    addReference = addReference,
+                    addAttachment = graph.addAttachment,
+                    logEvent = graph.logEvent,
+                    today = { "2026-09-23" },
+                    zoneId = { "UTC" },
+                    io = StandardTestDispatcher(scheduler),
+                )
+            }
+        }
+        val vm = ViewModelProvider.create(store, factory)[
+            "model-${models++}",
+            ShareIntakeViewModel::class,
+        ]
+        scheduler.advanceUntilIdle()
+        return vm
+    }
+
     /** Save, then let the write and its answer land, exactly as the screen's collector would. */
     private fun ShareIntakeViewModel.saveAndSettle() {
         save()
@@ -439,6 +464,34 @@ class ShareIntakeViewModelTest {
 
 
     // --- the read itself: one answer, whatever the process did before it -----------------------
+
+    /**
+     * The read now happens inside `viewModelScope`, where a throw has nowhere to go: unguarded it
+     * would leave the blank loading screen with no Close on it. A provider is a stranger's process
+     * and throws whatever it likes across the binder, so the plain `RuntimeException` case is the
+     * one that matters here; the documented I/O failures land the same way. Nothing is staged.
+     */
+    @Test fun aProviderThatThrowsOnTheWayInIsAReadFailureWithAWayOut() = runTest(scheduler) {
+        mower()
+
+        listOf(
+            IllegalArgumentException("Unknown URL content://nowhere/x"),
+            IllegalStateException("the provider died"),
+            java.io.IOException("no bytes"),
+            SecurityException("the grant is gone"),
+        ).forEach { failure ->
+            val vm = modelThatCannotRead(failure)
+
+            assertEquals(failure.toString(), "Could not read what was shared", vm.state.value.deadEnd)
+            assertFalse(failure.toString(), vm.state.value.loading)
+            assertFalse(failure.toString(), vm.state.value.saveEnabled)
+        }
+
+        assertEquals(0, references())
+        assertEquals(0, attachments())
+        assertEquals(0, events())
+        assertTrue(graph.attachmentStorage.store.files.isEmpty())
+    }
 
     /**
      * The intent read does provider IPC and may pull up to 64 KiB of stream, so it may not happen
