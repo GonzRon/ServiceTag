@@ -1208,3 +1208,16 @@ No `servicetag-v2.8` tag or release existed (cancelled unpublished on 2026-09-18
 **Known limits and owner flags.** The D-27 floor now uses the device zone (reversible by ruling). `close_round` is not idempotent by spec — a retried close skips the newly opened round, immutably; tightening options are recorded for 1.2.1. `ZoneId.of("America/New_York")` names the negative-offset zone in four JVM test files. `lifecycleChangedAt` is deferred to 1.3. Post-1.2 tidies: `HealthScreenTest` inherits its neighbour's store; a mis-cited invariant in `DashboardAttentionTest`; the device zone declared explicitly at the `RecomputeSchedules`/`AppGraph` seam.
 
 **ServiceTag 1.2.0 published: one maintenance subsystem — engine, groups, reminders, Maintenance tab, scan sheet, health, API/MCP — on schema 6 / format 6, with the signing identity unchanged.**
+
+## Stage B — the deferred maintenance cadences loaded onto the development phone, 2026-09-23
+
+**What shipped.** `tools/servicetag-schedules` (master `ac6fc3e`; CI job `schedules`, 92 tests): a workstation tool that reads a private schedule manifest, resolves every asset, profile and group reference against the phone through the MCP client, computes a plan (`CREATE` · `IDENTICAL` · `CONFLICT` · `ERROR`) and applies only a clean plan — groups before schedules, never editing, archiving or deleting an existing row — then re-plans and asserts everything `IDENTICAL`. Plan and brief: `docs/superpowers/plans/2026-09-23-servicetag-stage-b/`. Reviewed on its real diff (two blocking findings fixed and re-reviewed; a third round relaxed one invariant the first real plan proved stricter than the product: a QUICK schedule on an asset may carry a profile, only a group target forbids one).
+
+| proof | how | result |
+|---|---|---|
+| 1 unit tests | `uv run --frozen pytest`, locally and in CI (run 35874098527) | 92 passed; the mutation-checked tests for the eight resolution invariants |
+| 2 synthetic manifest on `emulator-5554` | clean install, three fictional assets, one group + three schedules | plan `CREATE` 4 → apply → re-plan `IDENTICAL` 4; a mutated copy (one anchor changed) → `CONFLICT` 1 and `apply` exits 1 writing nothing |
+| 3 the real manifest on the development phone | the owner's classified Todoist cadences (private manifest; plan outputs kept in the owner's folder) | plan `CREATE` 47 → apply created 4 groups + 43 schedules → re-plan `IDENTICAL` 47; a first attempt had refused 23 entries on the over-strict invariant and wrote nothing |
+
+**The estate afterwards.** 43 live schedules (39 asset-targeted, 4 group-targeted; 37 `FIXED`, 6 `COMPLETION`; 13 `FORM`), 4 live groups, season behaviour `IGNORE` on every row (the seasonal and pre-season cases are tagged as the design examples for #14 and #60); the due list shows 43 items, 3 `DUE SOON` and 40 `OK`. Eleven items stayed out with reasons recorded in the owner's classification; one is the concrete fixture for #61. The production phone was not touched.
+
