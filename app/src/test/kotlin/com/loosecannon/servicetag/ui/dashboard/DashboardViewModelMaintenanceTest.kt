@@ -40,8 +40,8 @@ import org.junit.Test
 /**
  * What 1.2 adds to the dashboard: the attention sections in their fixed order, the promotion that
  * keeps a part's due work visible, F2's two filters, the due total and the health badge. #39's own
- * behaviour — the six searched fields, the "parts live on their systems" line and the backup nudge
- * — stays in `DashboardViewModelTest`, unchanged.
+ * behaviour — the "parts live on their systems" line and the backup nudge — stays in
+ * `DashboardViewModelTest`; its search box moved to the Assets screen in B07.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class DashboardViewModelMaintenanceTest {
@@ -108,10 +108,10 @@ class DashboardViewModelMaintenanceTest {
 
     /**
      * Matrix row "a part's due work hidden" (invariant 75, #5 AC 1). A component's **OVERDUE**
-     * schedule is listed with a blank query, at its attention rank, naming its parent — and a
-     * component whose schedule is merely `OK` is still governed by the blank-query rule and is not.
+     * schedule is listed, at its attention rank, naming its parent — and a component whose schedule
+     * is merely `OK` is still governed by the systems-only rule and is not.
      */
-    @Test fun aComponentsDueWorkIsVisibleWithABlankQueryAndItsQuietWorkIsNot() = runTest {
+    @Test fun aComponentsDueWorkIsVisibleAndItsQuietWorkIsNot() = runTest {
         val tub = asset("Hot tub", category = "Water")
         val pump = asset("Circulation pump", category = "Water", parent = tub.id)
         val heater = asset("Heater element", category = "Water", parent = tub.id)
@@ -185,25 +185,6 @@ class DashboardViewModelMaintenanceTest {
         assertEquals(ranksBefore, restored.sections.flatMap { it.items }.associate { it.scheduleId.value to it.rank })
     }
 
-    /** F2 is applied **after** the search, so the two narrow together rather than fighting. */
-    @Test fun theFilterIsAppliedAfterTheSearch() = runTest {
-        val mower = asset("Mower", category = "Yard")
-        val tub = asset("Hot tub", category = "Water")
-        seed(scheduleOf("s-mower", assetId = mower.id.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
-        seed(scheduleOf("s-tub", assetId = tub.id.value, title = "Filter clean", anchorOn = "2026-01-01", leadDays = 0))
-
-        val vm = viewModel()
-        backgroundScope.launch { vm.state.collect() }
-        vm.state.first { it.sections.isNotEmpty() }
-
-        vm.onQueryChange("tub")
-        vm.onCategoryChange("Yard")
-        val narrowed = vm.state.first { it.query == "tub" && it.filters.category == "Yard" }
-        // The search keeps the tub's row and the category filter then rejects it: nothing is left,
-        // which is the only honest answer to "the Yard row named tub".
-        assertEquals(emptyList<String>(), narrowed.sections.flatMap { it.items }.map { it.title })
-    }
-
     /**
      * Matrix rows "a group row fanning out or double-counting", "an empty group counted" and "a
      * paused or out-of-season schedule in a due total" — the counting half, on the surface that
@@ -266,37 +247,6 @@ class DashboardViewModelMaintenanceTest {
             assertEquals(severity, state.worstSeverity)
             assertEquals("badge for $severity", shows, state.worstSeverity.showsBadge())
         }
-    }
-
-    /**
-     * Matrix row "the search regressing", with schedules in play: typing still reaches the six
-     * fields, and it reaches the schedule rows through the same predicate rather than a second one.
-     */
-    @Test fun theSearchStillReachesTheSixFieldsOnceSchedulesExist() = runTest {
-        val mower = graph.createAsset.run(
-            AssetCommand(name = "Mower", category = "Yard", model = "SP2610X15", location = "Shed"),
-        )
-        val tub = asset("Hot tub", category = "Water")
-        seed(scheduleOf("s-mower", assetId = mower.id.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
-        seed(scheduleOf("s-tub", assetId = tub.id.value, title = "Filter clean", anchorOn = "2026-01-01", leadDays = 0))
-
-        val vm = viewModel()
-        backgroundScope.launch { vm.state.collect() }
-        vm.state.first { it.sections.isNotEmpty() }
-
-        for (typed in listOf("mower", "YARD", "sp2610", "shed")) {
-            vm.onQueryChange(typed)
-            val hit = vm.state.first { it.query == typed }
-            assertEquals(
-                "typing \"$typed\" should reach the mower's schedule",
-                listOf("Blade sharpen"),
-                hit.sections.flatMap { it.items }.map { it.title },
-            )
-        }
-
-        // And not on the prose fields, which are deliberately out of the set.
-        vm.onQueryChange("impeller")
-        assertEquals(emptyList<String>(), vm.state.first { it.query == "impeller" }.sections.flatMap { it.items })
     }
 
     /**
@@ -363,10 +313,10 @@ class DashboardViewModelMaintenanceTest {
     /**
      * Decision 32, at the seam this brief owns: the store's half — the projection and the health
      * summary — is read when the tables or a [DashboardViewModel.refresh] move, and **not** on a
-     * keystroke. The real check reads the standby bucket, so a per-emission call would probe the
-     * platform on every character typed.
+     * filter change. The real check reads the standby bucket, so a per-emission call would probe
+     * the platform on every choice made.
      */
-    @Test fun aKeystrokeReadsNeitherTheProjectionNorTheHealthSummary() = runTest {
+    @Test fun aFilterChangeReadsNeitherTheProjectionNorTheHealthSummary() = runTest {
         val mower = asset("Mower")
         seed(scheduleOf("s-overdue", assetId = mower.id.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
 
@@ -381,14 +331,10 @@ class DashboardViewModelMaintenanceTest {
         vm.state.first { it.sections.isNotEmpty() }
         val afterFirstRead = healthCalls
 
-        // Four keystrokes and a filter change: the list narrows, and the store is not read again.
-        for (typed in listOf("b", "bl", "bla", "blade")) {
-            vm.onQueryChange(typed)
-            vm.state.first { it.query == typed }
-        }
+        // A filter change: the list narrows, and the store is not read again.
         vm.onCategoryChange("Yard")
         vm.state.first { it.filters.category == "Yard" }
-        assertEquals("a keystroke must not probe the platform", afterFirstRead, healthCalls)
+        assertEquals("a filter change must not probe the platform", afterFirstRead, healthCalls)
 
         // A refresh is the screen coming back into composition, and that does read again. The
         // wait is on the scheduler and not on an emission: the re-read produces an equal
