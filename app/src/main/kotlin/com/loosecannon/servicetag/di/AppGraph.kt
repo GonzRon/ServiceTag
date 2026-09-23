@@ -352,9 +352,12 @@ class AppGraph(private val context: Context) {
 
     // 1.3.0 — references. One policy instance answers both save and launch (spec §4.2), and the
     // stream predicate is told ServiceTag's own authorities rather than guessing at them (I-9).
+    // The application id covers every authority the merged manifest publishes under it — the
+    // FileProvider this app declares and the ones libraries inject, androidx.startup's among them.
     val linkLaunchPolicy: LinkLaunchPolicy = LinkLaunchPolicy()
-    val streamSourcePolicy: StreamSourcePolicy =
-        StreamSourcePolicy(setOf("${BuildConfig.APPLICATION_ID}.files"))
+    val streamSourcePolicy: StreamSourcePolicy = StreamSourcePolicy(
+        setOf(BuildConfig.APPLICATION_ID, "${BuildConfig.APPLICATION_ID}.files"),
+    )
     val addReference: AddReference =
         AddReference(references, assets, linkLaunchPolicy, uow, ids, clock)
     val updateReference: UpdateReference = UpdateReference(references, uow, clock)

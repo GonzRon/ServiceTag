@@ -10,8 +10,14 @@ package com.loosecannon.servicetag.core.references
  *
  * Android-free by construction — it takes the scheme and the authority, never a `Uri` — so `:app`
  * can ask it **before** it constructs the `ByteSource` and a refused URI is never opened at all.
- * [ownAuthorities] is configuration rather than a constant because the authority is built from the
- * build's own application id.
+ * [ownAuthorities] is configuration rather than a constant because the authorities are built from
+ * the build's own application id.
+ *
+ * **Each entry is matched as a namespace, not a string.** The merged manifest publishes more than
+ * the one provider this app declares — androidx.startup injects `InitializationProvider` under
+ * `<applicationId>.androidx-startup`, and the next library to want one will inject another — so the
+ * graph passes the application id and everything under it is ours. The trailing dot is part of the
+ * rule: an unrelated authority that merely begins with the same letters is not one of ours.
  */
 class StreamSourcePolicy(ownAuthorities: Set<String>) {
 
@@ -20,12 +26,12 @@ class StreamSourcePolicy(ownAuthorities: Set<String>) {
         .filter { it.isNotEmpty() }
         .toSet()
 
-    /** True only for a `content` scheme whose authority is present and is not one of ours. */
+    /** True only for a `content` scheme whose authority is present and is under none of ours. */
     fun accepts(scheme: String?, authority: String?): Boolean {
         if (scheme?.trim()?.lowercase() != CONTENT) return false
         val host = authority?.trim()?.lowercase()
         if (host.isNullOrEmpty()) return false
-        return host !in own
+        return own.none { host == it || host.startsWith("$it.") }
     }
 
     private companion object {
