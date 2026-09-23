@@ -17,7 +17,7 @@
 - Private data never enters this repository: fixtures are synthetic (fictional assets, fictional cadences); the real manifest lives in the owner's folder and is passed by path.
 - Commits: identity GonzRon, single casual subject, no attribution, no `/home` paths, no owner names.
 - `libs/nfc-tag-core` gitlink stays `7e0377a`; nothing under `app/`, `core/` or `libs/` changes.
-- The tool prints counts, decisions and manifest keys — never a pairing code, a serial or an asset id.
+- The tool prints counts, decisions, manifest keys, the names the manifest itself carries, and reasons — never a pairing code, a serial or an id.
 - Exactly one brief: **B01** `B01-schedules-loader.md`. Owner (controller) work, not a brief: the classification FINAL and the manifest.
 
 ## Manifest contract (v1)
