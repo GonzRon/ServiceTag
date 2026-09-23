@@ -41,11 +41,12 @@ import com.loosecannon.servicetag.di.AppGraph
  * `ImportBackupMerge` call. There is deliberately no method for a wipe, a replace-import, an
  * export, an NFC write, an NFC bind or an attachment's bytes.
  *
- * **1.2's endpoints are [MaintenanceHandlers]', not this class's**, and they hold the same rule:
- * every write there is one use case call too. This class keeps the shipped surface plus the three
- * counts [status] gained, which it asks that collaborator for.
+ * **1.2's endpoints are [MaintenanceHandlers]', not this class's, and 1.3's three reference
+ * endpoints are [ReferenceHandlers]'**; both hold the same rule: every write there is one use case
+ * call too. This class keeps the shipped surface plus the four counts [status] gained, which it
+ * asks those two collaborators for.
  *
- * **Twenty collaborators plus two values, named one by one, with a `constructor(graph)` beside
+ * **Twenty-one collaborators plus two values, named one by one, with a `constructor(graph)` beside
  * them.** That is this app's pattern, stated at `AssetViewModels.kt:59`–`61`: *"Each takes the `AppGraph` members it
  * actually uses — the secondary constructor is what the Compose entry calls, the primary one is
  * what a test builds on a Room-backed fake graph."* It is the reason `ApiRouterTest` can drive the
@@ -97,6 +98,12 @@ internal class ApiHandlers(
      * why this class needs no schedule, group or closure repository of its own.
      */
     internal val maintenance: MaintenanceHandlers,
+    /**
+     * 1.3's three reference endpoints, on the same terms as [maintenance] above: one collaborator
+     * rather than four members, reached from the router as `handlers.references.*`, and asked for
+     * the `assetReferences` count so this class needs no reference repository of its own.
+     */
+    internal val references: ReferenceHandlers,
     private val appVersion: String,
     private val schemaVersion: Int,
 ) {
@@ -107,6 +114,7 @@ internal class ApiHandlers(
         graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
         graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
         MaintenanceHandlers(graph),
+        ReferenceHandlers(graph),
         BuildConfig.VERSION_NAME, AppGraph.SCHEMA_VERSION,
     )
 
@@ -127,6 +135,8 @@ internal class ApiHandlers(
                 "profiles" to profiles.all().size,
                 "events" to events.all().size,
                 "attachments" to attachments.count(),
+                // Format 7's own table, under the name the archive spells it with.
+                "assetReferences" to references.count(),
             ) + maintenance.counts(),
         ),
     )

@@ -54,7 +54,7 @@ internal class ApiRouter(
     }
 
     /**
-     * The whole surface. Thirty-three path shapes over forty method-and-path rows; anything else is a 404, and a known shape with the
+     * The whole surface. Thirty-six path shapes over forty-three method-and-path rows; anything else is a 404, and a known shape with the
      * wrong verb is a 405. Written as an explicit `when` over the path's segments rather than a
      * table of regexes, so the set of things this listener answers can be read in one screen and
      * grepped in one line. Note that bare `/v1/import-merge` is **not** a route: the plan and the
@@ -65,6 +65,10 @@ internal class ApiRouter(
      * destructive came with them:** no verb removes a schedule, a group, a membership or a closure,
      * no verb amends a closure, and there is no snooze endpoint, so each of those is a 404 or a 405
      * because nothing below routes to it (invariants 43, 76).
+     *
+     * 1.3 added three, and the same holds: a reference is listed, created and amended, and
+     * **nothing deletes one** — the API adds and amends, the phone removes (spec §6). No row here
+     * accepts or returns a file either, at any version, so there is no share-by-API (I-3).
      */
     private suspend fun route(request: ApiRequest): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -103,6 +107,10 @@ internal class ApiRouter(
                 // 1.2 — #55's asset → groups direction, and this asset's own schedules.
                 "groups" to "GET" -> handlers.maintenance.listAssetGroups(rest[1])
                 "schedules" to "GET" -> handlers.maintenance.listAssetSchedules(rest[1])
+                // 1.3 — the ninth of these sub-resources, so a verb it does not take falls to the
+                // `else` below and answers 404, not 405. That asymmetry with `/v1/references` is
+                // the shipped convention and `docs/api/v1.md`'s 405 row records it.
+                "references" to "GET" -> handlers.references.listForAsset(rest[1])
                 else -> throw ApiFailure.notFound(request.path)
             }
 
@@ -172,6 +180,14 @@ internal class ApiRouter(
 
             rest == listOf("tags") ->
                 if (method == "GET") handlers.listTagBindings() else notAllowed(request)
+
+            // 1.3 — two path shapes, both 405 for a verb they do not take. There is no `DELETE`
+            // on either, and `/v1/references/{id}/anything` is not a shape at all.
+            rest == listOf("references") ->
+                if (method == "POST") handlers.references.create(request) else notAllowed(request)
+
+            rest.size == 2 && rest[0] == "references" ->
+                if (method == "PATCH") handlers.references.update(rest[1], request) else notAllowed(request)
 
             rest == listOf("import-merge", "plan") ->
                 if (method == "POST") handlers.importMergePlan(request) else notAllowed(request)

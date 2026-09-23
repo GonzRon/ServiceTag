@@ -37,6 +37,7 @@ import com.loosecannon.servicetag.core.usecase.OccurrenceNotActionable
 import com.loosecannon.servicetag.core.usecase.OccurrenceNotCloseable
 import com.loosecannon.servicetag.core.usecase.OccurrenceNotYetOpen
 import com.loosecannon.servicetag.core.usecase.ProfileValidation
+import com.loosecannon.servicetag.core.usecase.ReferenceProblem
 import com.loosecannon.servicetag.core.usecase.ScheduleArchived
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
 import com.loosecannon.servicetag.core.usecase.ScheduleValidation
@@ -75,6 +76,19 @@ internal data class ApiErrorDetail(
     val message: String,
     val problems: List<String> = emptyList(),
 )
+
+/**
+ * A [ReferenceProblem] on its way to a status code.
+ *
+ * `ReferenceResult` is a **value** and not an exception — every one of its refusals is something a
+ * caller draws or maps — so [ReferenceHandlers] wraps the ones it cannot answer itself in this,
+ * and **this file stays the only place a `ReferenceProblem` becomes a status**. The message is the
+ * problem's class name and never its data: `UnknownSchemeNeedsConfirmation` carries the scheme it
+ * refused, and no refusal on this wire may name a scheme, a URI, an authority or a path (spec
+ * §4.4). It never reaches a response either way — [mapDomainFailure] writes its own sentence.
+ */
+internal class ReferenceRefused(val problem: ReferenceProblem) :
+    Exception(problem::class.simpleName)
 
 /** A refusal a handler or the router raises deliberately, carrying the status it means. */
 internal class ApiFailure(
@@ -324,9 +338,86 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
         409, "Conflict", "merge_plan_stale",
         "this phone changed since the plan was built; nothing was written",
     )
+    // --- 1.3, the reference domain (master plan §7) -----------------------------------------
+    //
+    // Nine arms over one exhaustive `when`, so a member added to `ReferenceProblem` later is a
+    // **compile error here** rather than a refusal carrying a code nobody documented. The code is
+    // [referenceProblemCode]'s, which is exhaustive for the same reason; only the status and the
+    // sentence are chosen here.
+    //
+    // `problems` is deliberately empty on every one of them, unlike the validation rows above:
+    // `UnknownSchemeNeedsConfirmation` carries the scheme it refused, and no refusal on this wire
+    // may name a scheme, a URI, an authority or a path (spec §4.4). The sentences below name a
+    // field or a rule and never a value.
+    is ReferenceRefused -> when (val problem = e.problem) {
+        ReferenceProblem.NoSuchReference ->
+            referenceError(404, "Not Found", problem, "no such reference")
+        // §18.10: an absent owner is the fact the shipped 1.1.0 code already names, so it answers
+        // that code rather than a second UPPER_SNAKE twin for one condition.
+        ReferenceProblem.OwnerMissing ->
+            referenceError(404, "Not Found", problem, "no such asset")
+        ReferenceProblem.NotALink ->
+            referenceError(422, "Unprocessable Content", problem, "that is not a link")
+        ReferenceProblem.UriTooLong ->
+            referenceError(422, "Unprocessable Content", problem, "that link is too long")
+        ReferenceProblem.BlankName ->
+            referenceError(422, "Unprocessable Content", problem, "a reference needs a name")
+        ReferenceProblem.SchemeBlocked ->
+            referenceError(422, "Unprocessable Content", problem, "that kind of link is not saved")
+        // §18.12: there is nobody on the wire to confirm and the API never sets
+        // `confirmedUnknownScheme` (§18.2), so an unfamiliar scheme is refused exactly as a
+        // hard-blocked one is — spec §6's "a refusal, never a confirmation, over the API".
+        is ReferenceProblem.UnknownSchemeNeedsConfirmation ->
+            referenceError(422, "Unprocessable Content", problem, "that kind of link is not saved")
+        ReferenceProblem.DuplicateUri ->
+            referenceError(409, "Conflict", problem, "this asset already holds that link")
+        // Defence in depth, and the only arm here that no route reaches: a no-op amend is a **200
+        // carrying the stored row** (§18.13), answered in `ReferenceHandlers.update` before
+        // anything is wrapped. If it ever arrives here it still must not be a 500, and
+        // `REFERENCE_UNCHANGED` is therefore in no `docs/api/v1.md` table: the document lists the
+        // five codes a client can actually receive.
+        ReferenceProblem.Unchanged ->
+            referenceError(409, "Conflict", problem, "this reference already says that")
+    }
     else -> errorResponse(
         500, "Internal Server Error", "internal", e.javaClass.simpleName,
     )
+}
+
+private fun referenceError(
+    status: Int,
+    reason: String,
+    problem: ReferenceProblem,
+    message: String,
+): ApiResponse = errorResponse(status, reason, referenceProblemCode(problem), message)
+
+/**
+ * One stable wire code per [ReferenceProblem], in 1.2's `UPPER_SNAKE` style — with one deliberate
+ * exception, `OwnerMissing`, which answers 1.1.0's shipped `no_such_asset` because that is the
+ * same fact under a name clients already branch on (master plan §18.10).
+ *
+ * Exhaustive by construction — a `when` over a sealed interface with no `else` — so a problem
+ * member added later is a compile error here rather than a reference refused with a code nobody
+ * documented. `internal` rather than private, unlike [scheduleProblemCode]: `Unchanged` is
+ * unreachable over the wire by design, so the only way to prove every member is mapped is to call
+ * this directly, and `ReferenceRoutesTest` does.
+ *
+ * Two problems share `REFERENCE_URI_INVALID` and two share `REFERENCE_SCHEME_BLOCKED`. Both
+ * pairings are the contract's (spec §6): a URI that does not parse and one that is too long are
+ * one thing to fix, and an unfamiliar scheme over the wire is a refusal and not a question.
+ */
+internal fun referenceProblemCode(problem: ReferenceProblem): String = when (problem) {
+    ReferenceProblem.NoSuchReference -> "NO_SUCH_REFERENCE"
+    ReferenceProblem.OwnerMissing -> "no_such_asset"
+    ReferenceProblem.BlankName -> "REFERENCE_NAME_REQUIRED"
+    ReferenceProblem.NotALink -> "REFERENCE_URI_INVALID"
+    ReferenceProblem.UriTooLong -> "REFERENCE_URI_INVALID"
+    ReferenceProblem.SchemeBlocked -> "REFERENCE_SCHEME_BLOCKED"
+    is ReferenceProblem.UnknownSchemeNeedsConfirmation -> "REFERENCE_SCHEME_BLOCKED"
+    ReferenceProblem.DuplicateUri -> "REFERENCE_URI_TAKEN"
+    // Never emitted: the handler answers 200 with the stored row. It exists so the `when` stays
+    // exhaustive, which is the whole point of this function.
+    ReferenceProblem.Unchanged -> "REFERENCE_UNCHANGED"
 }
 
 /**
