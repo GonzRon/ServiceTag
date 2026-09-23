@@ -89,7 +89,15 @@ fun AssetsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
             if (state.items.isEmpty()) {
-                if (state.query.isNotBlank()) {
+                if (state.query.isNotBlank() && !state.showArchived && state.archivedMatchCount > 0) {
+                    // Owner ruling §18.23 (B07 fix round 4): a match exists, it is just behind the
+                    // chip — a different fact from "nothing matches that", and the ratified hint
+                    // says so instead of leaving the owner to conclude the asset is gone.
+                    QuietLine(
+                        text = "Matching assets are archived. Turn on Show archived to see them.",
+                        modifier = Modifier.padding(16.dp),
+                    )
+                } else if (state.query.isNotBlank()) {
                     // Only ever an answer to something asked for (F1): a blank query has its own
                     // honest reasons for an empty list below, and neither of them is "found
                     // nothing" — nothing was searched for.

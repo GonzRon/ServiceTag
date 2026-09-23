@@ -92,6 +92,13 @@ data class AssetsState(
     val archivedCount: Int = 0,
     /** What the search box holds, verbatim. Blank leaves the list exactly as it was before B07. */
     val query: String = "",
+    /**
+     * How many of the rows the chip is hiding also match [query] (owner ruling §18.23, B07 fix
+     * round 4) — always `0` for a blank query, since a blank query asks nothing to distinguish.
+     * Read only while [items] is empty and [showArchived] is off: it is what tells the screen the
+     * difference between "nothing matches at all" and "a match exists, one chip-tap away".
+     */
+    val archivedMatchCount: Int = 0,
 )
 
 /**
@@ -150,6 +157,14 @@ class AssetsViewModel(assets: AssetRepository, private val clock: Clock) : ViewM
                 showArchived = archived,
                 archivedCount = rows.count { it.status != AssetStatus.ACTIVE },
                 query = query,
+                // A blank query never distinguishes an archived-only match — nothing was asked —
+                // and once the chip is on, an archived match is already in `matching` above, not
+                // held back, so there is nothing left to count separately.
+                archivedMatchCount = if (query.isBlank() || archived) {
+                    0
+                } else {
+                    rows.count { it.status != AssetStatus.ACTIVE && it.matches(query) }
+                },
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), AssetsState())
 
