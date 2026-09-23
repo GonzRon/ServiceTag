@@ -32,6 +32,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -327,18 +329,21 @@ class AttachmentsSectionViewModelTest {
 
         val said = mutableListOf<String>()
         backgroundScope.launch(Dispatchers.Main) { vm.messages.collect { said += it } }
-        val closed = mutableListOf<String>()
-        backgroundScope.launch(Dispatchers.Main) { vm.saved.collect { closed += it } }
+        // Both `saved` signals are awaited, not counted after the fact. The two saves run
+        // through Room's own executor, so which of them finishes first is not ours to order:
+        // the rename's state change is **not** a barrier for the `Unchanged` one, and reading
+        // a list afterwards dropped whichever had not landed yet. Awaiting exactly two — both
+        // subscribed before either call, `saved` having no replay — is the barrier that says
+        // both have been the whole way through the path, whatever order they took.
+        val closed = async(Dispatchers.Main) { vm.saved.take(2).toList() }
 
         vm.save(row.id, UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes))
-        // A real save behind it is the barrier: once its rename lands, the `Unchanged` one has
-        // been through the whole path and said nothing.
         vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes))
 
+        // Silent, but not stuck: nothing to write still closes the sheet.
+        assertEquals(listOf(row.id, row.id), closed.await())
         vm.state.first { it.rows.singleOrNull()?.displayName == "Renamed.pdf" }
         assertEquals(emptyList<String>(), said)
-        // Silent, but not stuck: nothing to write still closes the sheet.
-        assertEquals(listOf(row.id, row.id), closed)
     }
 
     @Test fun deletingRemovesTheRowAndTheBytes() = runTest {

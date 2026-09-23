@@ -125,8 +125,15 @@ data class ScheduleEditState(
      * The one provider this release has (decision 8). It is **not settable from the screen**: §17.1c
      * ratifies the row's label and no option word, so there is nothing for a second choice to be
      * called, and with one member the single-choice row of #4 is a choice of one. Kept as state
-     * rather than hardcoded at the command, so #25's multi-provider UI is additive and a stored row
-     * naming a provider this build does not know is preserved rather than silently rewritten.
+     * rather than hardcoded at the command, so #25's multi-provider UI is additive: the seam is
+     * here, not at the command.
+     *
+     * **What a stored row naming an unknown provider does, precisely:** the loader maps it to
+     * `LOCAL` (`?: ProviderId.LOCAL` below), so saving rewrites it. That is unreachable in 1.2 —
+     * `ProviderId` has exactly one member, and nothing writes another name — and it is the one
+     * line #25 has to revisit when a second provider exists, because a phone running an older
+     * build must not silently re-point a schedule at itself. It is recorded here rather than
+     * guarded now: a guard for a value that cannot exist is a branch no test can reach.
      */
     val provider: ProviderId? = ProviderId.LOCAL,
     /** The asset's meter definitions, offered only for an asset target (D-12). */

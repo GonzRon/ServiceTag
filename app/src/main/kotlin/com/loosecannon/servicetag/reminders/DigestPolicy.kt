@@ -360,9 +360,18 @@ data class SummaryPost(val tag: String, val title: String, val body: String)
 /**
  * What one run should do, as a value: the provider executes it and writes nothing else.
  *
- * [shown] is every subject that should have a standing per-item notification afterwards, and
- * [posts] is the subset that has to be handed to the platform on this run — the difference is a
- * subject already showing in exactly this form, which is the whole of invariant 45.
+ * [shown] is every subject that should have a standing per-item notification afterwards — the
+ * keep-set [cancelTags] is derived from — and [posts] is the subset that has to be handed to the
+ * platform on this run. The difference between the two has **two** cases, not one:
+ *
+ *  - a subject **already showing in exactly this form**, which is the whole of invariant 45, and
+ *    which is what [ReconcileReport.unchanged] counts;
+ *  - an OVERDUE subject the **three-day gate suppressed while nothing of it was standing**,
+ *    because the owner swiped the last one away. It is kept — the obligation has not gone — but
+ *    it is in neither count, because nothing of it is showing.
+ *
+ * Keeping the second case out of `unchanged` is what preserves the identity
+ * `posted + unchanged` = what is held.
  */
 data class DigestDecision(
     val posts: List<ItemPost>,

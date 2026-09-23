@@ -318,11 +318,6 @@ class ReminderHealthCheck(
     }
 
     /**
-     * Which of the affected schedules the repair opens: the lowest id, so the same set always opens
-     * the same one. Nothing in the spec or the plan ranks them, and an order that depended on the
-     * repository's row order would send the owner somewhere different on every run.
-     */
-    /**
      * The target-in-service bound, applied once per run rather than once per schedule: both reads
      * happen here, and the predicate itself is the domain's single [targetInService] — never
      * re-derived, because two copies of one lifecycle bound is the drift decision 27 forbids and
@@ -335,6 +330,11 @@ class ReminderHealthCheck(
         return rows.filter { it.targetInService({ id -> assetsById[id.value] }, { id -> groupsById[id.value] }) }
     }
 
+    /**
+     * Which of the affected schedules the repair opens: the lowest id, so the same set always opens
+     * the same one. Nothing in the spec or the plan ranks them, and an order that depended on the
+     * repository's row order would send the owner somewhere different on every run.
+     */
     private fun targeted(action: String, rows: List<MaintenanceSchedule>): String =
         "$action${ReminderRepair.TARGET_SEPARATOR}${rows.minOf { it.id.value }}"
 }

@@ -19,13 +19,13 @@ import com.loosecannon.servicetag.reminders.GrantablePermission
 import com.loosecannon.servicetag.reminders.LocalReminderProvider
 import com.loosecannon.servicetag.reminders.MutablePlatformState
 import com.loosecannon.servicetag.reminders.NonceStore
+import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.reminders.QuickActionShapeSource
 import com.loosecannon.servicetag.reminders.QuickActions
 import com.loosecannon.servicetag.reminders.RecordingBackstop
 import com.loosecannon.servicetag.reminders.RecordingDigestAlarm
 import com.loosecannon.servicetag.reminders.ReminderHealthCheck
 import com.loosecannon.servicetag.reminders.ReminderRepair
-import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.reminders.assetOf
 import com.loosecannon.servicetag.testing.FakeGraph
@@ -341,6 +341,12 @@ class HealthViewModelTest {
      * The first assertion is the failure this test exists to catch: nothing has been checked yet, so
      * the badge is honestly dark. The second is the fix: the refresh alone — no store write, no
      * `refresh()` on the shell — lights it.
+     *
+     * **How this one fails, so a slow CI is not mistaken for it.** Without the change signal the
+     * second `first { … }` never returns, so the RED shape is a **`runTest` timeout**, not an
+     * assertion message. That is inherent to proving that a flow re-emits: there is nothing to
+     * assert against until the emission arrives. A timeout here means the badge never lit; it does
+     * not mean the machine was busy.
      */
     @Test
     fun aCheckThatLandsAfterTheFirstEmissionStillLightsTheBadge() = runTest {

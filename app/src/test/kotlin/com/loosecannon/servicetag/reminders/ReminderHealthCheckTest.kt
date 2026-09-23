@@ -540,21 +540,27 @@ class ReminderHealthCheckTest {
      *
      * Non-vacuous twice over: each finding is shown first with its target in service, and the only
      * thing that changes is the target's lifecycle.
+     *
+     * **Which finding sits on which target matters.** `SCHEDULE_NO_PROVIDER` is proved on the
+     * **group** target and `NO_DATA` on the **asset** target, because a group-targeted schedule
+     * carries no meter rule (invariant 2) and so can never reach `NO_DATA`'s
+     * missing-baseline condition. Pairing them the other way round would prove one of the two
+     * bounds with a row the domain forbids.
      */
     @Test
     fun aScheduleOnAnOutOfServiceTargetIsSilent() = runTest {
         add(
-            scheduleOf(id = "s1", assetId = "a1").copy(providers = emptyList()),
-            derivedState("s1"),
+            scheduleOf(id = "g1", groupId = "grp1").copy(providers = emptyList()),
+            derivedState("g1"),
         )
         add(
             scheduleOf(
-                id = "g1",
-                groupId = "grp1",
+                id = "s1",
+                assetId = "a1",
                 meterDefinitionId = "d1",
                 meterInterval = 100.0,
             ),
-            derivedState("g1"),
+            derivedState("s1"),
         )
         assertEquals(
             "in service, both findings stand",
@@ -562,8 +568,8 @@ class ReminderHealthCheckTest {
             codes(),
         )
 
-        assets.upsert(assetOf("a1", retiredOn = "2026-09-01"))
         groups.upsert(groupOf("grp1", archivedAt = dayMillis("2026-09-01")))
+        assets.upsert(assetOf("a1", retiredOn = "2026-09-01"))
 
         assertEquals("out of service, neither does", emptyList<String>(), codes())
     }
