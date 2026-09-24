@@ -1,8 +1,8 @@
-# ServiceTag 1.4 — seasons, service policy, operational condition and derived health: DESIGN SPEC (rev2.1)
+# ServiceTag 1.4 — seasons, service policy, operational condition and derived health: DESIGN SPEC (rev2.2)
 
-## 0. Status, ruled state, open items
+## 0. Status and the owner's record
 
-**Status: revision 2.1, 2026-09-24. Owner-ruled architecture; strings not yet ratified.**
+**Status: revision 2.2, 2026-09-24 — RATIFIED FOR PLANNING.** The owner approved the architecture, ratified strings S1–S142 as written, and ruled every gate item. Nothing in this document is open for the owner: the single proposed string, S143, is optional, and S103 is shown without it.
 
 The programme covers three issues:
 - **#14:** operating seasons, with calendar and manual activation.
@@ -10,19 +10,16 @@ The programme covers three issues:
 - **#61:** operational condition and derived health.
 
 **Inputs.**
-- The owner's rulings: `.superpowers/sdd/2026-09-24-servicetag-62-test-architecture/owner-rulings-2026-09-24.md`.
+- The owner's rulings, including "Gate rulings on spec rev2.1": `.superpowers/sdd/2026-09-24-servicetag-62-test-architecture/owner-rulings-2026-09-24.md`.
 - The independent review and its consolidated re-review: `…/spec-review-rev1.md`.
-- The controller's rulings on both, applied here without further review.
-
-**Sources.**
-- Evidence: the archaeology, `docs/superpowers/specs/2026-09-24-servicetag-1.4-archaeology.md` ("arch.").
+- The archaeology: `docs/superpowers/specs/2026-09-24-servicetag-1.4-archaeology.md` ("arch.").
 - "Spec 1.2" means `docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md`.
 
-No #14/#60/#61 code is written before the strings are ratified and the plan exists. Every example is fictional.
+Next step: the 1.4.0 master plan and briefs (versionCode 16, schema 8, format 8, including #64 and the app + MCP + schedules-loader compatibility work). Every example is fictional.
 
-**Ruled state (2026-09-24).**
+**The owner's rulings (2026-09-24).** Q-rows answer rev1's questions; O-rows are the gate rulings on rev2.1.
 
-| Q | Ruling | Where |
+| # | Ruling | Where |
 |---|---|---|
 | Q-1 | No household values: break dates, margins and thresholds are owner configuration; 14/45/120 and 2/7/14 are confirm-to-use templates | §4.2, §6.3 |
 | Q-2 | Meter-driven health is out; the seam is kept | §6.2 |
@@ -30,24 +27,32 @@ No #14/#60/#61 code is written before the strings are ratified and the plan exis
 | Q-4 | The season start is the objective and the break a constraint; the pre-season window is used first (RB-1 rule) | §4.3 |
 | Q-5 | Independent health rows; critical contributors are always visible | §6.5, §10.2 |
 | Q-6 | A manual START is never a deadline; the hot tub is IN_SERVICE | §3.1, §4.3 |
-| Q-7 | D12 colour families as in §10.6 | §10.6 |
+| Q-7 | D12 colour families | §10.6 |
 | Q-8 | No reserved #47 column | §6.1 |
 | Q-9 | Stay on `/v1` and 1.4.0; old fields are compatibility inputs; writes an old body cannot represent are refused loudly | §9.3 |
+| O-1 | S1–S142 ratified as written | §10.7 |
+| O-2 | Families confirmed: cool blue nominal, warning/amber with a distinct DEGRADED token, error for DOWN/critical; colour only reinforces; literal token values are design-token choices under the existing contrast requirements | §10.6 |
+| O-3 | On YEAR_ROUND with a break, the break start is PRE_SERVICE's knowable boundary; RS-4 is 409, and the break refusal has the same shape | §3.2, §4.3, §4.4, inv. 99 |
+| O-4 | Only when no allowed pre-season day remains is work pulled to the last suitable allowed point before the break, possibly in the previous season; any remaining window wins | §4.3, inv. 98 |
+| O-5 | AT_START moves a raw date only when it is earlier than `seasonStart + offset`; a future manual START is never a PRE_SERVICE deadline, and a recorded START is the real cycle start | §3.1, §4.3 |
+| O-6 | Snooze delays the reminder and never improves health; Postpone reassesses this occurrence's canonical actionable due date and may restart maintenance-overdue health; no postponement journal in 1.4 | §7.1, §9.1, §10.1, inv. 131 |
+| O-7 | Meter-only schedules: phase-only IN_SERVICE and quiet, no date effect, no PRE_SERVICE, no non-zero offset, a crossed threshold stays genuinely DUE | §4.1, inv. 95 |
+| O-8 | CRITICAL health alone never opens the scan sheet; it rides along; DOWN/DEGRADED on the asset or a component may open it | §10.1, inv. 123 |
 
 Of the archaeology's 29 §I recommendations:
 - 27 are **RATIFIED (I-n, 2026-09-24)** where they are used.
 - I-13 is ratified in principle, with its pull rule revised by Q-4.
 - I-23 is replaced by Q-9.
 
-**Open for the owner.**
-1. **Strings:** ratify the 142 strings in §10.7.
-2. **D12 tokens:** the contrast-checked token values in the design brief (§10.6).
-3. **YEAR_ROUND with a break:** confirm that PRE_SERVICE on such an asset uses the break start as its boundary, the knowable boundary Q-6 accepts for a MANUAL asset. The boundary kind can't change silently: RS-4's refusal applies (§3.2, §4.3).
-4. **A break that fills the whole gap before a season:** confirm that pre-service work is then pulled to before the break, possibly into the previous season. This differs from RB-1's partial case, where a pre-season window survives (§4.3).
-5. **AT_START wording:** acknowledge. Re-entry moves a date only when it is earlier than `s + offset`, not "outside the season" as #14 reads literally (§4.3).
-6. **Postponement:** acknowledge for 1.4. A postponement restarts the maintenance-overdue health clock and leaves no record of earlier lateness, because `PostponeSchedule` writes no event (§7.1).
-7. **Meter-only schedules:** acknowledge. They keep dormancy and break-quiet, both date-free, but can't be PRE_SERVICE or carry a re-entry offset (§4.1). The 7→8 migration converts on-device schedules by the same table. Nothing that worked in 1.2 is lost, because a stored 1.2 re-entry value was never read.
-8. **Scan routing:** confirm that a CRITICAL health line alone does not open the scan sheet (§10.1).
+**Owner rulings at the gate (closed record, 2026-09-24).**
+1. Strings S1–S142 — RATIFIED as written (O-1).
+2. D12 colour families — APPROVED (O-2).
+3. YEAR_ROUND with a break, and RS-4 as 409 — CONFIRMED (O-3).
+4. A break that fills the whole pre-season gap — CONFIRMED as the no-window-left case only (O-4).
+5. AT_START interpretation — ACKNOWLEDGED, with the manual-season distinction (O-5).
+6. Postponement and health — ACKNOWLEDGED, with the snooze/postpone distinction (O-6).
+7. Meter-only phase-only design — ACKNOWLEDGED (O-7).
+8. Scan routing for health — CONFIRMED (O-8).
 
 **Decision register.** This one table maps decisions to rulings; the inline markers show where each applies.
 
@@ -56,11 +61,11 @@ Of the archaeology's 29 §I recommendations:
 | D-1 | Seven concepts, never collapsed; the interaction matrix is normative | architecture | 2 |
 | D-2 | `season_mode` YEAR_ROUND / CALENDAR / MANUAL | I-1 | 3.1 |
 | D-3 | Manual activation is an immutable row, never a journal event | I-2 | 3.3 |
-| D-4 | Season, break and health policy each have their own command; the asset command keeps 1.3's shape; a PRE_SERVICE boundary never changes kind silently | Q-9, S-6, RS-4 | 3.2, 4.4, 6.5 |
+| D-4 | Season, break and health policy each have their own command; the asset command keeps 1.3's shape; a PRE_SERVICE boundary never changes kind silently | Q-9, S-6, RS-4, O-3 | 3.2, 4.4, 6.5 |
 | D-5 | A switch to MANUAL states the phase; a repeated START/END is 409 | I-3, I-4 | 3.3–3.4 |
 | D-6 | One `ServicePolicy` enum replaces `season_behavior` + `season_reentry` | I-5, I-6 | 4.1 |
 | D-7 | One signed offset; the owner enters the pre-service margin | I-10, Q-1 | 4.2 |
-| D-8 | Pre-service point: the latest allowed day by the margin in the pre-season window, else the window's first day, else before the break; opened-before guard | I-13 principle, Q-3, Q-4, Q-6, RB-1 | 4.3 |
+| D-8 | Pre-service point: the latest allowed day by the margin in the pre-season window, else the window's first day, else before the break; opened-before guard | I-13 principle, Q-3, Q-4, Q-6, RB-1, O-4, O-5 | 4.3 |
 | D-9 | Asset-level break; CONTINUOUS ignores it; already-late work stays late and quiet | I-7, I-9, I-14 | 4.4 |
 | D-10 | DEFERRED, decided after the worst-of fold on the time side | I-8, B-1 | 4.5 |
 | D-11 | Group targets stay CONTINUOUS | I-11 | 4.6 |
@@ -71,14 +76,14 @@ Of the archaeology's 29 §I recommendations:
 | D-16 | Baselines are canonical events; soft baseline-profile link | I-20, S-12 | 6.4 |
 | D-17 | Aggregation stored, default WORST; critical contributors and DOWN/DEGRADED components always visible | I-17, Q-5, B-3 | 6.5 |
 | D-18 | Health computed at read time; never stored, exported or defaulted | I-25, Q-1 | 6.7 |
-| D-19 | Health clock: H.1c+H.1b medium, H.1a otherwise; H.2a principle; H.3 per policy, H.3c always | I-12, I-13, I-14 | 7 |
-| D-20 | The policy moves time-side dates only; meter-only schedules are phase-only | Q-2, B-1, RS-2 | 4.1 |
+| D-19 | Health clock: H.1c+H.1b medium, H.1a otherwise; H.2a principle; H.3 per policy, H.3c always | I-12, I-13, I-14, O-6 | 7 |
+| D-20 | The policy moves time-side dates only; meter-only schedules are phase-only | Q-2, B-1, RS-2, O-7 | 4.1 |
 | D-21 | Recreate `maintenance_schedule` and the derived `schedule_state` | I-24 | 8.1 |
 | D-22 | Merge tables 12–14; identity by row id; one declining second identity | architecture | 8.4 |
 | D-23 | `/v1` compatible; legacy inputs through one mapping, in the API and as deprecated MCP arguments | Q-9 (replaces I-23), RS-1 | 9.3 |
-| D-24 | One scan predicate; health lines are passengers | I-26, B-3 | 10.1 |
+| D-24 | One scan predicate; health lines are passengers | I-26, B-3, O-8 | 10.1 |
 | D-25 | DOWN first, DEGRADED after due work; independent health rows; components promoted | I-27, Q-5, S-3 | 10.2 |
-| D-26 | D12 families; fresh words; reminder-health code renamed | I-15, I-18, I-19, Q-7 | 10.5–10.6 |
+| D-26 | D12 families; fresh words; reminder-health code renamed | I-15, I-18, I-19, Q-7, O-2 | 10.5–10.6 |
 | D-27 | 1.4.0 / versionCode 16, MINOR | Q-9 | 15 |
 | D-28 | `rule_changed_at` pins the recurrence (fixes #64) | B-2 | 4.3, 8.1 |
 | D-29 | Spec 1.2 D-4's "`T`-independent sort key" is retired | S-2 | 4.7 |
@@ -155,7 +160,7 @@ The rules above everything else (arch. §G; #61 AC 14):
 - CALENDAR: `inSeason(window, d)`.
 - MANUAL: the action of the latest activation row with `occurred_on ≤ d`. START means IN_SEASON from that day inclusive; END means OUT_OF_SEASON from that day inclusive.
 
-**Cycle start at `d`.** This is the first day of the season span containing `d`. On a CALENDAR asset that is out of season, it is the next start. A MANUAL asset that is out of season has none, because the next START is never predicted (Q-6).
+**Cycle start at `d`.** This is the first day of the season span containing `d`. On a CALENDAR asset that is out of season, it is the next start. A MANUAL asset that is out of season has none, because the next START is never predicted (Q-6). A future manual START is therefore never a PRE_SERVICE deadline; once a START is recorded, it is the real cycle start from which IN_SERVICE_AT_START becomes actionable (O-5).
 
 ### 3.2 Changing the season (D-4)
 
@@ -170,7 +175,7 @@ The rules above everything else (arch. §G; #61 AC 14):
 - CALENDAR without a valid window: 422 `SEASON_WINDOW_REQUIRED`.
 - A window with any other mode: 422 `SEASON_WINDOW_FORBIDDEN`.
 - `manualPhase` on anything but a switch into MANUAL (MANUAL → MANUAL included): 422 `MANUAL_PHASE_FORBIDDEN`.
-- A change to the **kind or presence of the boundary** a PRE_SERVICE schedule uses (§4.3), until that schedule's policy is changed: 409 `SEASON_MODE_STRANDS_POLICY` (S55), naming the schedules. This covers CALENDAR → YEAR_ROUND or MANUAL, and a break-only boundary → CALENDAR. It follows from #60 AC 5, "changing one never silently redefines the other" (RS-4). The same applies to a legacy pair. Changing a CALENDAR window keeps the boundary kind and is allowed.
+- A change to the **kind or presence of the boundary** a PRE_SERVICE schedule uses (§4.3), until that schedule's policy is changed: 409 `SEASON_MODE_STRANDS_POLICY` (S55), naming the schedules. This covers CALENDAR → YEAR_ROUND or MANUAL, and a break-only boundary → CALENDAR. It follows from #60 AC 5, "changing one never silently redefines the other" (RS-4; 409 approved, O-3). The same applies to a legacy pair. Changing a CALENDAR window keeps the boundary kind and is allowed.
 
 Leaving MANUAL keeps the activation rows as unread history.
 
@@ -218,12 +223,13 @@ A switch into MANUAL must state `manualPhase` (IN_SEASON or OUT_OF_SEASON); with
 
 **Time side only (D-20; B-1, RS-2).** The policy moves only the time side's date.
 
-A **meter-only schedule** keeps IN_SERVICE_* as **phase-only**:
-- DORMANT reads INACTIVE_SEASON while the asset is out of season.
-- `quiet` holds its notifications in a break.
-- Neither has any date effect.
-
-This is parity with 1.2 (`ScheduleCommands.kt:282-284`). PRE_SERVICE, or a non-zero AT_START offset, on a meter-only schedule is 422 `SEASON_POLICY_NEEDS_A_TIME_RULE`: each would move a date the schedule does not have.
+A **meter-only schedule** is **phase-only** (O-7; 1.2 parity, `ScheduleCommands.kt:282-284`):
+- it may use IN_SERVICE_* for dormancy: INACTIVE_SEASON while the asset is out of season;
+- it may be `quiet` during the maintenance break;
+- neither moves a date, because there is no time-side due date;
+- PRE_SERVICE is prohibited;
+- a non-zero re-entry offset is prohibited (both 422 `SEASON_POLICY_NEEDS_A_TIME_RULE`);
+- a crossed threshold is still genuinely DUE; dormancy and quiet affect only surfacing and delivery, never the meter fact.
 
 **Legacy mapping.** One table serves the 7→8 migration, the format ≤7 decoder, the API's deprecated inputs and the MCP's deprecated arguments (§9.3). One test proves all four agree.
 
@@ -257,7 +263,7 @@ Anything else is 422 `POLICY_OFFSET_INVALID`. The UI's field bounds make that un
 
 The **boundary** `s` for `R`:
 - On a CALENDAR asset: the start of the season containing `R`, or else the next start after `R`.
-- With no calendar season but a break: the start of the break containing `R`, or else the next one. This is the knowable boundary Q-6 names.
+- With no calendar season but a break (YEAR_ROUND, or MANUAL): the start of the break containing `R`, or else the next one. This is the knowable boundary Q-6 names, confirmed for YEAR_ROUND by O-3.
 - A manual START is never a boundary.
 
 A day is **allowed** when it is outside the break. The **pre-season window** `W` is the maximal run of allowed days ending on `s − 1`; it is empty when `s − 1` is inside the break.
@@ -267,7 +273,7 @@ A day is **allowed** when it is outside the break. The **pre-season window** `W`
 - Otherwise the pre-service point is:
   1. the **latest** day in `W` on or before `s − margin`, when one exists;
   2. otherwise the **first** day of `W`, i.e. the first allowed day after the break, which lies before `s`;
-  3. only when `W` is empty (the break reaches `s`), the last allowed day before that break.
+  3. only when `W` is empty (the break reaches `s`, leaving no allowed pre-season day), the last suitable allowed day before that break, even in the previous season. Any remaining window wins (O-4).
 - A raw due inside the season follows the same rule.
 
 ```
@@ -297,40 +303,25 @@ policyDue(p, R: LocalDate?, O, ctx, T): Pair<LocalDate?, Reason> {
 }
 ```
 
-**Postponement (S-1).** When `postponedDueOn` = `P`:
-- CONTINUOUS gives `P`.
-- IN_SERVICE runs its branch on `P` in place of `R`.
-- PRE_SERVICE gives `P`, moved to the first allowed day after the break when `P` lies inside it, and never earlier.
+**Postponement (S-1, O-6).** With `postponedDueOn` = `P`, CONTINUOUS gives `P`; IN_SERVICE runs its branch on `P`; PRE_SERVICE gives `P`, moved past the break when inside it, never earlier. A postponement into dormancy or a break is re-entered or deferred like a raw due, never OVERDUE on the first in-season day (arch. Finding A-1).
 
-A postponement into dormancy or a break is therefore re-entered or deferred like a raw due, and never reads OVERDUE on the first in-season day (arch. Finding A-1).
+**The opened-before guard (Q-3).** Nothing becomes actionable earlier than `R` unless the occurrence opened before that point (`O < point`); otherwise a monthly PRE_SERVICE schedule would read OVERDUE all season. With the snowblower (deadline 1 Nov): completed 5 Nov, `R` 5 Dec → **1 Mar** (AFTER_BREAK); `R` 20 Nov opened 20 Oct → **1 Nov** (BEFORE_SEASON); opened 2 Nov → **20 Nov** kept.
 
-**The opened-before guard (Q-3).** A date is made actionable earlier than `R` only when the occurrence opened before that point (`O < point`). Without the guard, a monthly PRE_SERVICE schedule completed in season would pull every later occurrence before the season and read OVERDUE all season. With the snowblower's configuration (deadline 1 Nov):
-- Completed 5 Nov, `R` 5 Dec (in the break): **1 Mar** (AFTER_BREAK).
-- `R` 20 Nov, opened 20 Oct: pulled to **1 Nov** (BEFORE_SEASON).
-- `R` 20 Nov, opened 2 Nov: **20 Nov**, kept.
-
-**AT_START moves a date only when it is earlier than `s + offset`.** Read literally, D5 §6 and #14 would drag a raw due that falls after the cycle's end back to its start (open item 5).
+**AT_START moves a raw date only when it is earlier than `seasonStart + offset`** (O-5). A later raw due is never dragged back to the season start, as a literal reading of D5 §6 and #14 would do. On a MANUAL asset `seasonStart` is the recorded START (§3.1).
 
 **No inference.** The rule reads mode, window, break, margin and history. It never reads category, template or name (Q-4).
 
 **Totality.** With no boundary (YEAR_ROUND or MANUAL without a break), PRE_SERVICE behaves as CONTINUOUS, with reason POLICY_INAPPLICABLE and warning S77. Commands refuse to create or reach that state (§3.2, §4.4; 409 `PRE_SERVICE_NEEDS_DATES`), so only a merge can.
 
-**Rule fields (D-28, B-2; issue #64).** 1.3's `SaveSchedule` stamped `updated_at` on every save (`SaveSchedule.kt:133`), and the pin floor read it. Schema 8 adds `rule_changed_at`:
-- It is written only when `ruleChanged(before, after)` is true, and the pin floor and `O` read it.
-- `service_policy` and `policy_offset_days` are not rule fields: they clear no postponement and abandon no round.
-- A policy-, title-, lead- or health-link-only edit moves nothing.
+**Rule fields (D-28, B-2; issue #64).** 1.3's `SaveSchedule` stamped `updated_at` on every save (`SaveSchedule.kt:133`), and the pin floor read it. Schema 8 adds `rule_changed_at`, written only when `ruleChanged` is true and read by the pin floor and `O`. `service_policy` and `policy_offset_days` are not rule fields, so a policy-, title-, lead- or health-link-only edit moves nothing and clears no postponement.
 
-**What `rebuild` materialises.** It takes the season context (mode, window, break, activation rows) as a pure input and produces:
-- `actionable_due_on`;
-- `policy_reason`;
-- `policy_phase`: DORMANT when an IN_SERVICE schedule's asset is OUT_OF_SEASON at `T`, otherwise ACTIVE;
-- `quiet` ⇔ `service_policy ≠ CONTINUOUS` and `T` is inside the asset's break. While quiet, neither side delivers a notification.
+**What `rebuild` materialises**, from the season context as a pure input: `actionable_due_on`; `policy_reason`; `policy_phase` (DORMANT when an IN_SERVICE schedule's asset is OUT_OF_SEASON at `T`, else ACTIVE); and `quiet` ⇔ `service_policy ≠ CONTINUOUS` and `T` inside the asset's break, during which neither side delivers a notification.
 
 ### 4.4 The maintenance break — RATIFIED (I-7, I-9, I-14, 2026-09-24)
 
 The break is stored in `asset.blackout_start_mmdd` / `blackout_end_mmdd`: both set or both null, wrapping, never the whole year (422 `BLACKOUT_COVERS_THE_YEAR`).
 
-It changes only through `POST /v1/assets/{id}/maintenance-break`, never together with the season (#60 AC 5; S-6). That command refuses, with 409 `BREAK_STRANDS_POLICY` (S64), any change that would remove or re-kind a boundary a PRE_SERVICE schedule relies on.
+It changes only through `POST /v1/assets/{id}/maintenance-break`, never together with the season (#60 AC 5; S-6). That command refuses, with 409 `BREAK_STRANDS_POLICY` (S64), any change that would remove or re-kind a boundary a PRE_SERVICE schedule relies on — the same shape as RS-4 (O-3).
 
 It applies to IN_SERVICE and PRE_SERVICE; CONTINUOUS startup and shutdown tasks ignore it (D5 §6). Its effects, all derived in §4.3:
 - **Defer later (H.3a):** IN_SERVICE work, and PRE_SERVICE work whose point lies after the break.
@@ -390,11 +381,7 @@ asset_condition                  -- immutable fact
   created_at INTEGER NOT NULL        INDEX(asset_id, occurred_on)
 ```
 
-There are three values and no fourth: "pending maintenance" is a reason. No UNKNOWN is stored; an asset with no row reads **Condition not recorded**.
-- **Current** is the latest row by `(occurred_on, occurred_time with nulls first, created_at, id)`.
-- **Since** is the earliest row of the latest run of equal values.
-- No column stores the current condition (arch. §D.1).
-- A correction is a new row. Backdated rows sort into place. Lifecycle only bounds where they surface.
+Three values and no fourth: "pending maintenance" is a reason. No UNKNOWN is stored; an asset with no row reads **Condition not recorded**. **Current** is the latest row by `(occurred_on, occurred_time with nulls first, created_at, id)`; **since** is the earliest row of the latest run of equal values. No column stores the current condition (arch. §D.1). A correction is a new row; backdated rows sort into place; lifecycle only bounds surfacing.
 
 ### 5.2 Reason — RATIFIED (I-21, 2026-09-24)
 
@@ -480,17 +467,11 @@ Arithmetic is exact rational, then rounded up with a ceiling. So WARNING starts 
 
 ### 6.4 Baselines are events — RATIFIED (I-20, 2026-09-24)
 
-**AGE:**
-- The baseline is the latest REPLACEMENT event on the asset, logged with the named quick action when one is set.
-- With none, the subject reads NOT TRACKED.
-- A new REPLACEMENT resets the value and erases nothing (#61 AC 12). Deleting it restores the previous value.
-- `baseline_profile_id` is a soft link (S-12). Deleting the quick action, which is always allowed (`DeleteProfile.kt`), leaves the subject NOT TRACKED (S101), never widened to any REPLACEMENT.
+**AGE:** the latest REPLACEMENT event on the asset, logged with the named quick action when one is set; with none, NOT TRACKED. A new REPLACEMENT resets the value and erases nothing (#61 AC 12); deleting it restores the previous value. `baseline_profile_id` is a soft link (S-12): deleting the quick action (always allowed, `DeleteProfile.kt`) leaves NOT TRACKED (S101), never a widened filter.
 
 **MAINTENANCE_OVERDUE:** the linked schedule's terminations, read through the engine; a completion returns `x` to 0 (#61 AC 18). A closure claims no work and cannot reach a subject, because closures are group-only.
 
-There is no baseline table.
-
-**The C.2 hazard.** A "load test and battery replacement" schedule with a REPLACEMENT profile would reset battery age on a load test. The fixture splits it into an INSPECTION load-test profile and a REPLACEMENT "Battery replaced" profile, named as the baseline. The Stage-B note recommends the same split.
+There is no baseline table. **The C.2 hazard:** a combined "load test and battery replacement" REPLACEMENT profile would reset battery age on a load test, so the fixture (and the Stage-B note) splits it into an INSPECTION load test and a REPLACEMENT "Battery replaced" baseline.
 
 ### 6.5 Aggregation — RATIFIED (I-17, 2026-09-24); Q-5
 
@@ -543,8 +524,8 @@ For a MAINTENANCE_OVERDUE subject, a day `d` is **counted** when all of these ho
 | PRE_SERVICE | counts from the pre-service point; season start resets nothing | H.2a principle |
 | date moved out of a break | break days not counted | H.3a |
 | already late when the break opens | break days counted | H.3c |
-| postponement | the clock restarts from the postponed actionable date; earlier lateness is not retained (open item 6) | S-1 |
-| snooze | never counts | H |
+| postponement | a canonical reassessment of this occurrence's actionable date: the clock restarts from it and earlier lateness is not retained; no postponement journal in 1.4 | O-6 |
+| snooze | delays the reminder only; never changes health | O-6 |
 
 ### 7.2 Hot tub across END and START (MANUAL; H.1c + H.1b)
 
@@ -603,7 +584,7 @@ Here `s` = 15 Nov 2026, and `W` runs from 1 Mar to 14 Nov. The latest day in `W`
 **Variants.**
 - A mower break of 12-01 → 04-05 leaves `W` = 6–14 Apr. No day in `W` is on or before 1 Apr, so the point is `W`'s first day: **6 Apr 2027**. The item is DEFERRED from 29 Dec and DUE on 6 Apr.
 - A raw due inside the season, say 20 Apr 2027, is pulled to **1 Apr** when `O` < 1 Apr.
-- Only a break that fills the whole gap up to 14 Apr pulls the work to before it (open item 4).
+- Only a break that fills the whole gap up to 14 Apr pulls the work to before it (O-4).
 - An IN_SERVICE_AT_START mower shows OUT OF SEASON until 15 Apr and is DUE on 15 Apr (#60 AC 3).
 
 ### 7.4 A break (YEAR_ROUND generator, IN_SERVICE; H.3a, H.3c)
@@ -672,24 +653,15 @@ The three tables follow `REFERENCES` (`MergePlan.kt:28-36`).
 | 13 | `CONDITIONS` | row id | `CONTENT_DIFFERS`, `OWNER_NOT_AVAILABLE` (asset) |
 | 14 | `HEALTH_SUBJECTS` | row id, plus non-archived `schedule_id` | `CONTENT_DIFFERS`, `OWNER_NOT_AVAILABLE` (asset, schedule); **`HEALTH_SUBJECT_SCHEDULE_HELD_BY_A_LOCAL_ROW`** (SKIPPED); **`HEALTH_SUBJECT_SCHEDULE_DUPLICATED_IN_ARCHIVE`** |
 
-**Facts** (tables 12–13) are immutable:
-- A re-import is IDENTICAL, and two phones' rows become two inserts.
-- The latest-row machine absorbs duplicates.
-- Soft links are never owners.
-
-**Configuration.** START, END and condition writes never touch the asset row. A divergence in mode, break or health policy is CONTENT_DIFFERS.
-
-**The subject's second identity** declines (SKIPPED), for the reason 1.3's D-18 gives.
-
-There is still no UPDATE verdict, one conflict writes nothing, and every schedule is rebuilt after apply.
-
-**#44** must remap `asset_id` in all three new tables.
+Facts (12–13) are immutable: a re-import is IDENTICAL, two phones' rows are two inserts, and soft links are never owners. START, END and condition writes never touch the asset row; a divergence in mode, break or health policy is CONTENT_DIFFERS. The subject's second identity declines (SKIPPED), as 1.3's D-18. There is still no UPDATE verdict, one conflict writes nothing, and every schedule is rebuilt after apply. #44 must remap `asset_id` in all three tables.
 
 ---
 
 ## 9. API and MCP
 
 ### 9.1 Routes (API version stays 1)
+
+**Postpone and snooze (O-6, inv. 131).** The shipped `POST /v1/schedules/{id}/postpone` moves this occurrence's canonical due date; under 1.4 the result passes through the policy (§4.3) and **may restart maintenance-overdue health** from the new actionable date. That is intended, not a defect, and `docs/api/v1.md` says so. Snooze is device-local, has no endpoint, delays only the reminder, and never changes health.
 
 | method | path | body | success |
 |---|---|---|---|
@@ -814,8 +786,11 @@ The aggregate never decides visibility (B-3).
 
 **One predicate** routes and fills the sheet: `scanSheetContent(items, condition, components, subjects)` (`MaintenanceSheetViewModel.kt:114-166`).
 - The sheet opens for any D-18a item, a DOWN or DEGRADED asset, or a DOWN or DEGRADED component.
-- Health lines are **passengers**, like DUE SOON: they never open the sheet alone (open item 8).
+- Health lines are **passengers**, like DUE SOON: a CRITICAL contributor alone never opens the sheet, and rides along when another reason opens it. Calculated health has no routing power in 1.4 (O-8).
+- DOWN or DEGRADED on the asset or a component may open it, because condition is an at-the-unit concern (O-8).
 - Otherwise the scan opens asset detail, which shows the same lines.
+
+**Snooze and Postpone** keep their 1.2 meanings on the sheet and on schedule detail (O-6). Snooze delays the reminder and never improves health. Postpone moves the canonical due date and may restart maintenance-overdue health; while an occurrence is postponed and not yet late against the new date, its driver line is S143 (proposed), else S103.
 
 The scan writes nothing (spec 1.2 inv. 57). "Change condition" offers the three options, "What is wrong? (optional)" and "When did this change?" (today by default, past dates allowed). Cancel writes nothing.
 
@@ -876,9 +851,9 @@ The identity plate and every component row gain a condition badge (`AssetDetailS
 
 Rows carry their why-line (S85–S91). "Reminders" stays reminder health. RATIFIED (I-19, 2026-09-24): `HealthScreen`, `HealthFinding` and `Severity` become `ReminderHealth*`.
 
-### 10.6 Accessibility — RATIFIED (I-15, I-18, 2026-09-24); Q-7
+### 10.6 Accessibility — RATIFIED (I-15, I-18, 2026-09-24); Q-7, O-2
 
-Every state carries position, word, icon and colour. Colour only reinforces the others, and nominal is cool blue (D12 §5, §14).
+The three semantic families are approved (O-2): normal/operational/nominal in the D12 cool-blue family; degraded/warning in the warning/amber family, with DEGRADED on its own token distinguishable from Due and Due soon; down/critical in the error family. Colour is reinforcement only: word, icon or shape, and placement each distinguish the state on their own (D12 §5, §14).
 
 | State | Word | Icon (proposed) | Family | Position |
 |---|---|---|---|---|
@@ -891,11 +866,11 @@ Every state carries position, word, icon and colour. Colour only reinforces the 
 | Deferred | DEFERRED | `hourglass_top` | season-inactive grey | Deferred section |
 | In season | IN SEASON | `event_available` | cool blue | plate, season section |
 
-Token values are contrast-checked in the design brief (open item 2).
+Literal token values are design-token choices under the existing contrast requirements, not new product-state meanings (O-2).
 
-### 10.7 Strings ledger (142, all **to ratify**)
+### 10.7 Strings ledger (S1–S142 RATIFIED, 2026-09-24)
 
-`<…>` marks a substitution, and "(re)" marks a shipped word re-ratified in a new role. Shipped words reused unchanged (Name, Cancel, Not now, Maintenance, Open asset) are not listed.
+**Every row S1–S142 is RATIFIED as written (O-1, 2026-09-24).** S143 is the one proposal, arising from O-6, and is marked to ratify; without it the UI shows S103. `<…>` marks a substitution, and "(re)" marks a shipped word re-ratified in a new role. Shipped words reused unchanged (Name, Cancel, Not now, Maintenance, Open asset) are not listed.
 
 | # | Surface | String |
 |---|---|---|
@@ -1041,8 +1016,9 @@ Token values are contrast-checked in the design brief (open item 2).
 | S140 | link-guard dialog | This schedule drives the health subject <name>. Archive that subject as well? |
 | S141 | link-guard confirm | Archive both |
 | S142 | driver line | Not tracked: the linked schedule has no date rule or belongs to another asset. |
+| S143 | driver line (PROPOSED, to ratify) | <schedule> was postponed to <date> |
 
-There are 142 rows: 138 new, plus 4 re-ratified (S29, S32, S33, S37). S123, S124, S128, S132 and S136 each ratify one set of words. The owner's notes are applied:
+The 142 ratified rows are 138 new plus 4 re-ratified (S29, S32, S33, S37); S123, S124, S128, S132 and S136 each ratify one set of words. The owner's notes are applied:
 - Nothing implies all maintenance stops (S38, S43, S45, S62, S80).
 - S43 says "becomes active again".
 - Nothing claims work "is done".
@@ -1088,11 +1064,11 @@ D5 §6's "nothing stored at season end" and "MANUAL_STARTUP deferred" are retire
 94. Out-of-season time creates no occurrence or backlog; re-entry leaves exactly one occurrence.
 
 **Policy.**
-95. The policy moves time-side dates only: a meter-only schedule's IN_SERVICE policy is phase-only, and PRE_SERVICE or a non-zero offset on it is refused; a meter threshold is never moved, deferred or re-entered, and only DORMANT or `quiet` withholds its notification.
+95. The policy moves time-side dates only. A meter-only schedule may be dormant (IN_SERVICE) and quiet in the break, neither of which moves a date; PRE_SERVICE and a non-zero re-entry offset on it are refused; a crossed threshold is genuinely DUE, and dormancy or quiet affects only its surfacing and delivery.
 96. CONTINUOUS: `actionableDueOn == postponedDueOn ?: computedDueOn` whatever the season or break.
 97. AT_START moves a date to `s + offset` only when it is earlier; RESUME_CLAMPED yields `max(date, s)`; neither drags a later date back.
-98. PRE_SERVICE keeps a raw due that is allowed and on or before `s − margin`; otherwise its point is the latest day of the pre-season window on or before `s − margin`, else that window's first day, else the last allowed day before a break that reaches `s`; a point later than `R` applies unconditionally; a point earlier than `R` applies only when `O` is before it, and otherwise `R` is kept if allowed or moved to the first allowed day after the break; no rule reads a category, template or name.
-99. A manual START is never a boundary; PRE_SERVICE is refused where no boundary exists; no season-mode or break change removes or re-kinds a boundary a PRE_SERVICE schedule uses.
+98. PRE_SERVICE keeps a raw due that is allowed and on or before `s − margin`; otherwise its point is the latest day of the pre-season window on or before `s − margin`, else that window's first day, else, only when no allowed pre-season day remains, the last suitable allowed day before that break, even in the previous season; a point later than `R` applies unconditionally; a point earlier than `R` applies only when `O` is before it, and otherwise `R` is kept if allowed or moved to the first allowed day after the break; no rule reads a category, template or name.
+99. A future manual START is never a boundary, and a recorded START is the real cycle start; on YEAR_ROUND the break start is PRE_SERVICE's boundary; PRE_SERVICE is refused where no boundary exists; no season-mode or break change removes or re-kinds a boundary a PRE_SERVICE schedule uses (409 `SEASON_MODE_STRANDS_POLICY` / `BREAK_STRANDS_POLICY`).
 100. Season start never completes, resets or hides pre-service work.
 101. A postponed date is re-entered and moved out of a break like a raw due, never moved earlier, and never OVERDUE on the first in-season day.
 102. `quiet` ⇔ `service_policy ≠ CONTINUOUS` and `T` in the break; work already late when the break opens is not moved, keeps its status and is quiet.
@@ -1113,7 +1089,7 @@ D5 §6's "nothing stored at season end" and "MANUAL_STARTUP deferred" are retire
 113. An AGE baseline is the latest qualifying REPLACEMENT; a deleted baseline profile leaves NOT TRACKED, never a widened filter.
 114. A MEDIUM subject on an IN_SERVICE schedule is NOT TRACKED while dormant and counts from the latest cycle start; others freeze and carry.
 115. Pre-service lateness counts from the pre-service point and is never reset by season start; break days count for already-late work and not for deferred work.
-116. A postponement restarts the MAINTENANCE_OVERDUE clock from the postponed actionable date; a snooze never touches it.
+116. Counted days are measured against the actionable date as postponed (§7.1; semantics in 131).
 117. `score` is non-increasing; WARNING starts exactly at `t2`, CRITICAL exactly at `t3`.
 118. An untracked subject is excluded from aggregation and shown as NOT TRACKED, never as 100.
 119. Every CRITICAL contributor and every DOWN or DEGRADED in-service component is shown on every surface that shows health; a DOWN asset's health is never shown without its condition.
@@ -1122,7 +1098,7 @@ D5 §6's "nothing stored at season end" and "MANUAL_STARTUP deferred" are retire
 
 **Surfaces.**
 122. A DOWN or DEGRADED in-service asset or component reaches ATTENTION with no schedule behind it, and names its parent.
-123. The scan sheet opens only by `scanSheetContent`'s answer; health lines never open it alone.
+123. The scan sheet opens only by `scanSheetContent`'s answer: a D-18a item, or DOWN/DEGRADED on the asset or a component; calculated health never opens it alone.
 
 **Data and contract.**
 124. A format ≤7 archive decodes through §4.1, with empty new lists and `ruleChangedAt = updatedAt`; a legacy field in format 8 is corrupt.
@@ -1132,6 +1108,7 @@ D5 §6's "nothing stored at season end" and "MANUAL_STARTUP deferred" are retire
 128. Legacy inputs, in the API and as MCP arguments, are translated only by §4.1 and never change 1.4-only state: such a write is 422 `LEGACY_WRITE_CANNOT_REPRESENT` and writes nothing; a mixed body is 422.
 129. No 1.4 table, column or route names an installed component or assembly; nothing reads stock.
 130. No schedule edit removes the time rule, changes the target asset or archives a schedule that a non-archived subject depends on unless the request unlinks it, which archives the subject in the same transaction.
+131. Snooze delays only the reminder and never changes health; Postpone is a canonical reassessment of this occurrence's actionable due date and may restart maintenance-overdue health from it, with earlier lateness not retained; 1.4 keeps no postponement journal.
 
 ---
 
@@ -1151,7 +1128,7 @@ There are no `uiautomator`/`adb` journeys, and no test waits on a real delay: ev
 | 90, 91, 93 | JVM | `ManualSeasonTest`, `SeasonEventOfferTest` |
 | 94 | JVM property | no backlog across dormancy |
 | 95, 103 | JVM | `MeterSidePolicyTest`: meter-only IN_SERVICE is phase-only (INACTIVE_SEASON, quiet, no date); PRE_SERVICE and non-zero offset refused; a combined held time side with a crossed meter reads DUE |
-| 97, 98, 100 | JVM | `ServicePolicyEvaluatorTest`, with literal values: snowblower 1 Nov; mower 5 Nov kept; mower 12 Jan → 1 Apr 2027; break to 04-05 → 6 Apr 2027; in-season 20 Apr → 1 Apr; whole-gap break → the day before it; guard: done 5 Nov → 1 Mar, opened 20 Oct → 1 Nov, opened 2 Nov → 20 Nov; **#14 AC 4:** CALENDAR 10-15 → 04-15, every 3 days, done 13 Apr: INACTIVE_SEASON on 1 Jul, DUE on 15 Oct |
+| 97, 98, 100 | JVM | `ServicePolicyEvaluatorTest`, with literal values: snowblower 1 Nov; mower 5 Nov kept; mower 12 Jan → 1 Apr 2027; break to 04-05 → 6 Apr 2027; in-season 20 Apr → 1 Apr; whole-gap break → the day before it; the §4.3 guard values; **#14 AC 4:** CALENDAR 10-15 → 04-15, every 3 days, done 13 Apr: INACTIVE_SEASON on 1 Jul, DUE on 15 Oct |
 | 101 | JVM | `PostponementPolicyTest` |
 | 102 | JVM | `BreakTest` |
 | 104 | structural | anchored grep: `reminders/` never calls `Season.inSeason` or reads `MM-DD` or break columns |
@@ -1167,27 +1144,17 @@ There are no `uiautomator`/`adb` journeys, and no test waits on a real delay: ev
 | 128 | JVM + pytest | `LegacyFormTest`; MCP deprecated arguments translate and refuse identically; golden shapes; the loader re-plans IDENTICAL against a 1.4 row |
 | 129 | structural | anchored grep: no assembly/installed-component names, no stock reads |
 | 130 | JVM | `ScheduleHealthLinkGuardTest`: removing the time rule, retargeting or archiving is refused; the flag archives the subject atomically; a merged dangling link reads NOT TRACKED (S142) |
+| 131 | JVM | `PostponeSnoozeHealthTest`: snoozing a CRITICAL item leaves its health unchanged; postponing restarts it from the postponed actionable date; no event is written |
 
 ### 12.2 Compose instrumented
 
-These run in-process:
-- the scan layouts and lines, with confirm and cancel;
-- asset detail per mode;
-- editors: S35, the hidden question, empty offsets, template confirmation, the link-guard dialog;
-- dashboard order and chips;
-- grayscale: no two states share a (word, icon) pair.
+In-process: the scan layouts, lines, confirm and cancel; asset detail per mode; the editors (S35, the hidden question, empty offsets, template confirmation, the link-guard dialog); dashboard order and chips; grayscale (no two states share a word and icon).
 
 ### 12.3 Boundary and release
 
 There is no new external-boundary test: 1.4 adds no UID, intent or grant boundary.
 
-`docs/release-proofs.md` R7 installs 1.4.0 over 1.3.0 in place and additionally checks:
-- equal counts;
-- CALENDAR if and only if both `MM-DD` were set;
-- no break;
-- the §4.1 mapping;
-- empty new lists;
-- that the pre-upgrade format-7 export merge-plans IDENTICAL.
+`docs/release-proofs.md` R7 installs 1.4.0 over 1.3.0 in place and also checks equal counts, CALENDAR if and only if both `MM-DD` were set, no break, the §4.1 mapping, empty new lists, and that the pre-upgrade format-7 export merge-plans IDENTICAL.
 
 ### 12.4 The five fixtures (fictional; every value entered)
 
@@ -1233,28 +1200,7 @@ There is no new external-boundary test: 1.4 adds no UID, intent or grant boundar
 
 ## 14. Dispositions
 
-**arch. §I.** The dispositions are the inline RATIFIED markers and the decision register:
-- I-1–I-12, I-14–I-22 and I-24–I-29 are ratified.
-- I-13's principle is ratified, and its pull rule is revised by Q-4 and RB-1.
-- I-23 is replaced by Q-9.
-
-**Review findings.** Rev2 closed 31 of the 32 rev1 findings; the re-review confirms this.
-
-The rev2.1 fixes:
-- **RB-1:** the pre-season window is bounded by `s`, not the margin.
-- **RS-1:** deprecated MCP arguments; the loader ships in lockstep.
-- **RS-2:** meter-only schedules are phase-only.
-- **RS-3:** `SCHEDULE_DRIVES_HEALTH_SUBJECT` and the unlink flag.
-- **RS-4:** boundary-kind changes are refused.
-- **RN-1–RN-10:** the cross-references, inv. 95's wording, legacy normalisation, the nullable `seasonBehavior`, the AT_START default, inv. 99's test, the literal guard values, the tie-break, S27 and S62, and inv. 98's fallback.
-
-**Departures kept:**
-- **S-1:** no journal record of a postponement exists, because `PostponeSchedule` writes none.
-- **S-12:** a soft link rather than a 409.
-- **N-5:** a bound and a warning rather than a refusal.
-- **N-13:** moot.
-- **N-15:** the F1 label.
-- **RS-4's code:** the controller asked for a named 422, but it is 409 `SEASON_MODE_STRANDS_POLICY` under the tie-break RN-8 asked to write down. The remedy is changing the dependent schedules, which are other rows.
+arch. §I is recorded in §0 and by the inline markers. Of the review's findings, rev2 closed 31 of 32 and rev2.1 closed the rest (RB-1, RS-1–RS-4, RN-1–RN-10). Departures kept, each accepted by the re-review or ruled by the owner: S-1 (no postponement journal, O-6), S-12 (a soft link, not a 409), N-5 (a bound and a warning, not a refusal), N-13 (moot), N-15 (the F1 label), and RS-4 as 409 (O-3).
 
 ---
 
@@ -1277,29 +1223,10 @@ The rev2.1 fixes:
 
 ---
 
-## Appendix A. For the plan (non-normative lists)
+## Appendix A. For the plan (non-normative)
 
-**MCP call sites:**
-- `update_schedule` / `update_asset` field enumeration (`server.py:1359-1395`).
-- `create_asset`, `create_component` (`:475-524`) and `update_asset` keep the season pair as a documented CALENDAR/YEAR_ROUND input.
-- `_ASSET_NULLABLE_CLEARABLE` (`:359-361`) keeps it.
-- `_SCHEDULE_NULLABLE_CLEARABLE` gains `policy_offset_days` and keeps the deprecated triple.
-- The schedule docstring's status list (`:1168`) gains DEFERRED.
+**MCP:** `update_schedule`/`update_asset` enumeration (`server.py:1359-1395`); `create_asset`, `create_component` (`:475-524`) and `update_asset` keep the season pair; `_ASSET_NULLABLE_CLEARABLE` (`:359-361`) keeps it; `_SCHEDULE_NULLABLE_CLEARABLE` gains `policy_offset_days` and keeps the deprecated triple; the status docstring (`:1168`) gains DEFERRED.
 
-**Loader call sites:**
-- `apply.py:95-105` writes `season_behavior` through the deprecated argument.
-- `phone.py:54-60, 107, 167` reads the row and gains `servicePolicy`.
-- `plan.py:151-158, 227-230` compares through §4.1.
-- `manifest.py:28, 37, 278` is unchanged.
+**Loader:** `apply.py:95-105` writes `season_behavior` through the deprecated argument; `phone.py:54-60, 107, 167` gains `servicePolicy`; `plan.py:151-158, 227-230` compares through §4.1; `manifest.py` is unchanged.
 
-**Documents the docs brief edits:**
-- D5 §6 and §10.4: the AT_START reading, manual activation, the retired statements.
-- D12 §5.
-- `docs/api/v1.md`:
-  - routes and codes, and the tie-break;
-  - the "Deprecated inputs" section, including RESUME_CLAMPED omission and the nullable `seasonBehavior`;
-  - `actionableDueOn` and DEFERRED;
-  - "What has no endpoint";
-  - the sub-resource and table counts.
-- The MCP README.
-- `docs/versioning.md`.
+**Docs:** D5 §6 and §10.4 (AT_START, manual activation, retired statements); D12 §5; `docs/api/v1.md` (routes, codes, the tie-break, "Deprecated inputs" with the RESUME_CLAMPED omission and nullable `seasonBehavior`, `actionableDueOn`, DEFERRED, the postpone/snooze health note of §9.1, "What has no endpoint", counts); the MCP README; `docs/versioning.md`.
