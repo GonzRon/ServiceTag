@@ -337,7 +337,7 @@ class AssetSettingsFormTest {
         vm.onSeasonStart("05-01")
 
         val half = vm.state.value
-        assertFalse(half.canSave)
+        assertFalse("one date holds Save", half.canSave)
         assertEquals("both are marked required", "$SEASON_STARTS *" to "$SEASON_ENDS *", half.seasonStartInput.drawnLabel to half.seasonEndInput.drawnLabel)
         assertNull(half.seasonStartInput.problem)
         assertNull(half.seasonEndInput.problem)
@@ -363,7 +363,7 @@ class AssetSettingsFormTest {
         vm.onBreakStart("12-01")
 
         val half = vm.state.value
-        assertFalse(half.canSave)
+        assertFalse("a half-filled break holds Save", half.canSave)
         assertEquals("$BREAK_STARTS *" to "$BREAK_ENDS *", half.breakStartInput.drawnLabel to half.breakEndInput.drawnLabel)
         assertNull(half.breakStartInput.problem)
         assertNull(half.breakEndInput.problem)
