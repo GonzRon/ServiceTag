@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
@@ -28,6 +29,7 @@ import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.dayMillis
 import com.loosecannon.servicetag.core.testing.groupOf
 import com.loosecannon.servicetag.core.testing.readingOf
+import com.loosecannon.servicetag.core.testing.SeasonFixtures
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import java.time.LocalDate
@@ -219,6 +221,176 @@ class BuildReminderSubjectsTest {
         assertEquals(SubjectState.Parked(LocalDate.parse("2026-05-01")), season.state)
         assertNull(season.dueOn)
         assertEquals("OUT OF SEASON", season.body)
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // hazard: reminders re-deriving a season (spec §4.7, inv. 104). Every parked date comes from
+    // the engine's own output — the actionable date, or the recompute's `quietUntil` — and none
+    // from an `MM-DD` read here.
+    // ------------------------------------------------------------------------------------------
+
+    private val activations = InMemorySeasonActivationRepository()
+    private val seasonalRecompute =
+        RecomputeSchedules(schedules, states, events, closures, groups, assets, activations, todayPort, clock) { ZoneOffset.UTC }
+    private val seasonalBuild = BuildReminderSubjects(schedules, states, groups, assets, seasonalRecompute)
+
+    private suspend fun seasonalSubjects(): List<ReminderSubject> {
+        seasonalRecompute.all()
+        return seasonalBuild.forProvider(ProviderId.LOCAL, today)
+    }
+
+    /**
+     * Spec §4.7's six rows on one day, 10 Dec 2026, inside the winter break:
+     *
+     * - ARCHIVED → Withdrawn; PAUSED → Parked(null);
+     * - DORMANT → Parked(A): an AT_START schedule with a ten-day offset on the mower's calendar comes
+     *   back on 25 Apr 2027 — the season's start **plus the offset**, which no `MM-DD` read gives —
+     *   and the hot tub, MANUAL and ended, is parked with no date at all;
+     * - DEFERRED → Parked(A): a mower item due 20 Dec, inside the break, is held until 1 Apr 2027;
+     * - quiet with a notifying status → Parked(the first day after the break): the snowblower,
+     *   OVERDUE since 1 Nov, until 1 Mar 2027;
+     * - otherwise Active: a CONTINUOUS item, and a quiet item whose status (OK) would not notify.
+     */
+    @Test
+    fun theSubjectStateFollowsTheEngine() = runTest {
+        today = LocalDate.parse("2026-12-10")
+        assets.upsert(SeasonFixtures.mowerAsset())
+        assets.upsert(SeasonFixtures.snowblowerAsset())
+        assets.upsert(SeasonFixtures.hotTubAsset())
+        seedAsset("plain")
+        // START 3 Jan, END 16 Apr: ended, and never started again by 10 Dec in this history.
+        SeasonFixtures.hotTubActivationsUpTo("2026-07-01").forEach { activations.insert(it) }
+
+        val monthlyOnMower = scheduleOf(
+            id = "s-archived", assetId = "mow", timeInterval = 1, timeUnit = RecurrenceUnit.MONTH, anchorOn = "2026-06-01",
+            createdOn = "2026-05-01",
+        )
+        schedules.upsert(monthlyOnMower.copy(status = ScheduleStatus.ARCHIVED))
+        schedules.upsert(monthlyOnMower.copy(id = ScheduleId("s-paused"), status = ScheduleStatus.PAUSED))
+        schedules.upsert(
+            monthlyOnMower.copy(
+                id = ScheduleId("s-dormant"), servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 10,
+            ),
+        )
+        schedules.upsert(SeasonFixtures.hotTubSchedule())
+        events.upsert(SeasonFixtures.hotTubCompletedOnApril11())
+        schedules.upsert(SeasonFixtures.mowerSchedule(id = "s-deferred", anchorOn = "2025-12-20", createdOn = "2025-11-01"))
+        events.upsert(completionOf("e-def", occurredOn = "2026-03-05", occurrenceOn = "2025-12-20", assetId = "mow", scheduleId = "s-deferred"))
+        schedules.upsert(SeasonFixtures.snowblowerSchedule())
+        events.upsert(SeasonFixtures.snowblowerLastDone())
+        schedules.upsert(SeasonFixtures.mowerSchedule(id = "s-quiet-ok"))
+        events.upsert(SeasonFixtures.mowerJanuaryDone(scheduleId = "s-quiet-ok"))
+        schedules.upsert(
+            scheduleOf(id = "s-active", assetId = "plain", timeInterval = 1, timeUnit = RecurrenceUnit.MONTH, anchorOn = "2026-12-01", createdOn = "2026-11-01"),
+        )
+
+        val subjects = seasonalSubjects()
+        fun state(id: String) = subjectFor(subjects, id).state
+
+        assertEquals(SubjectState.Withdrawn, state("s-archived"))
+        assertEquals(SubjectState.Parked(null), state("s-paused"))
+        assertEquals(SubjectState.Parked(LocalDate.parse("2027-04-25")), state("s-dormant"))
+        assertEquals("OUT OF SEASON", subjectFor(subjects, "s-dormant").body)
+        assertEquals(SubjectState.Parked(null), state("s-tub"), "MANUAL: the next START is never predicted")
+        assertEquals(SubjectState.Parked(LocalDate.parse("2027-04-01")), state("s-deferred"))
+        assertEquals("DEFERRED", subjectFor(subjects, "s-deferred").body)
+        assertEquals(SubjectState.Parked(LocalDate.parse("2027-03-01")), state("s-snow"))
+        assertEquals("OVERDUE", subjectFor(subjects, "s-snow").body, "quiet parks the reminder, never the status")
+        assertEquals(SubjectState.Active, state("s-quiet-ok"), "quiet, but OK has nothing to deliver")
+        assertEquals(SubjectState.Active, state("s-active"))
+        subjects.filter { it.state is SubjectState.Parked }.forEach { assertNull(it.dueOn, "a parked subject has no due date") }
+    }
+
+    /**
+     * A stale row is derived, and a missing one too — never skipped (master plan §8.6). Rows written
+     * on 15 Apr are read on 16 Apr, the day the season ended, with no rebuild in between: the subject
+     * reports OUT OF SEASON, not yesterday's OVERDUE; and a schedule that has no row at all is still
+     * handed to the provider. Nothing is written by the build.
+     */
+    @Test
+    fun aStaleStateRowIsDerivedNotSkipped() = runTest {
+        seedAsset("a1", seasonStartMmdd = "10-15", seasonEndMmdd = "04-15")
+        val seasonal = scheduleOf(
+            id = "s-stale", assetId = "a1", timeInterval = 1, timeUnit = RecurrenceUnit.MONTH, anchorOn = "2026-04-01",
+            servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0, createdOn = "2026-03-01",
+        )
+        schedules.upsert(seasonal)
+        rebuild()
+        assertEquals("OVERDUE", localSubjects().single().body)
+        val stored = states.rows.toMap()
+
+        today = LocalDate.parse("2026-04-16")
+        schedules.upsert(seasonal.copy(id = ScheduleId("s-missing")))
+        val subjects = localSubjects()
+        assertEquals(listOf("s-missing", "s-stale"), subjects.map { (it.key as SubjectKey.Schedule).scheduleId.value })
+        assertEquals("OUT OF SEASON", subjectFor(subjects, "s-stale").body)
+        assertEquals(SubjectState.Parked(LocalDate.parse("2026-10-15")), subjectFor(subjects, "s-stale").state)
+        assertEquals(subjectFor(subjects, "s-stale").state, subjectFor(subjects, "s-missing").state)
+        assertEquals(stored, states.rows.toMap(), "the build wrote nothing")
+    }
+
+    /**
+     * `RuleFacts.seasonal` is `servicePolicy ≠ CONTINUOUS`, false for every CONTINUOUS row, so a
+     * CONTINUOUS subject hashes exactly as it did before 1.4 — and exactly the same on an asset with
+     * a season and a break as on one with neither, because CONTINUOUS ignores both.
+     */
+    @Test
+    fun continuousRowsKeepTheirContentHash() = runTest {
+        today = LocalDate.parse("2026-12-10")
+        assets.upsert(SeasonFixtures.snowblowerAsset())
+        seedAsset("plain")
+        val onSeasonal = scheduleOf(
+            id = "s-seasonal", assetId = "snow", title = "Belt check", timeInterval = 1, timeUnit = RecurrenceUnit.MONTH,
+            anchorOn = "2026-12-01", createdOn = "2026-11-01",
+        )
+        schedules.upsert(onSeasonal)
+        schedules.upsert(onSeasonal.copy(id = ScheduleId("s-plain"), target = ScheduleTarget.AssetTarget(AssetId("plain"))))
+
+        val subjects = seasonalSubjects()
+        val expected = ContentHash.of(
+            "Belt check", "OVERDUE", LocalDate.parse("2026-12-01"), 14, SubjectState.Active,
+            RuleFacts(TimeBasis.FIXED, 1, RecurrenceUnit.MONTH, hasMeter = false, seasonal = false),
+        )
+        assertEquals(expected, subjectFor(subjects, "s-seasonal").contentHash)
+        assertEquals(expected, subjectFor(subjects, "s-plain").contentHash)
+    }
+
+    /**
+     * Spec §4.7's quiet row with F4's snowblower on 10 Dec: OVERDUE since 1 Nov, quiet in the break,
+     * so it is parked until the first day after the break, 1 Mar 2027 — a date the recompute
+     * evaluates on request, not one this builder works out from the break.
+     */
+    @Test
+    fun aQuietNotifyingRowParksUntilTheFirstDayAfterTheBreak() = runTest {
+        today = LocalDate.parse("2026-12-10")
+        assets.upsert(SeasonFixtures.snowblowerAsset())
+        schedules.upsert(SeasonFixtures.snowblowerSchedule())
+        events.upsert(SeasonFixtures.snowblowerLastDone())
+
+        val subject = seasonalSubjects().single()
+        assertEquals(SubjectState.Parked(LocalDate.parse("2027-03-01")), subject.state)
+        assertEquals("OVERDUE", subject.body)
+        assertNull(subject.dueOn)
+        assertEquals(LocalDate.parse("2027-03-01"), seasonalRecompute.quietUntil(SeasonFixtures.snowblowerSchedule()))
+    }
+
+    /**
+     * The park date is part of the hash (`ContentHash` renders a parked state with its date), so it
+     * has to be the same on every day of one break: two builds, on 10 Dec and on 20 Jan, hash alike,
+     * and the provider is not told of a change that is not one.
+     */
+    @Test
+    fun theQuietParkDateKeepsTheContentHashStable() = runTest {
+        assets.upsert(SeasonFixtures.snowblowerAsset())
+        schedules.upsert(SeasonFixtures.snowblowerSchedule())
+        events.upsert(SeasonFixtures.snowblowerLastDone())
+
+        today = LocalDate.parse("2026-12-10")
+        val december = seasonalSubjects().single()
+        today = LocalDate.parse("2027-01-20")
+        val january = seasonalSubjects().single()
+        assertEquals(december.state, january.state)
+        assertEquals(december.contentHash, january.contentHash)
     }
 
     // ------------------------------------------------------------------------------------------

@@ -6,9 +6,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The three facts about the engine that are properties of the **whole source tree** rather than of
- * any one function, read off the source because no runtime assertion can see them: one writer into
- * derived state, no stored status anywhere, and no read site for the two deferred columns.
+ * The facts about the engine that are properties of the **whole source tree** rather than of any
+ * one function, read off the source because no runtime assertion can see them: one writer into
+ * derived state, no stored status anywhere, no clock in the engine, and no season, break or policy
+ * evaluated anywhere in the reminder code.
  *
  * Each of them is the shape of a plausible, well-meant change — "let me fix up that state row
  * here", "let me cache the status for the dashboard", "let me implement season re-entry while I am
@@ -79,6 +80,35 @@ class ScheduleStructuralTest {
                 .filter { "nowMillis()" in it.readText() }
                 .map { it.name },
         )
+    }
+
+    /**
+     * Invariant 104 (replacing the retired 26 with 84): no reminder code evaluates a season, a break
+     * or a policy. The reminder builder maps the engine's output — the policy phase, the actionable
+     * date, the recompute's `quietUntil` — and the delivery side reads statuses; neither may call the
+     * calendar predicate, build a season context, run the policy engine or read an `MM-DD` column.
+     * The patterns are built from pieces so that this file, which names them, is not itself a match.
+     */
+    @Test
+    fun noReminderCodeEvaluatesASeasonBreakOrPolicy() {
+        val forbidden = Regex(
+            listOf(
+                "Season" + "\\.inSeason",
+                "Season" + "Context",
+                "ServicePolicy" + "Engine",
+                "blackout(Start|End)" + "Mmdd",
+                "season(Start|End)" + "Mmdd",
+            ).joinToString("|", prefix = "(", postfix = ")"),
+        )
+        val reminderCode = kotlinFilesUnder("core/src/main/kotlin/com/loosecannon/servicetag/core/reminders") +
+            kotlinFilesUnder("app/src/main/kotlin/com/loosecannon/servicetag/reminders")
+        assertTrue(reminderCode.size > 5, "the reminder code should not be this small")
+        val offenders = reminderCode.flatMap { file ->
+            file.readLines().mapIndexedNotNull { index, line ->
+                if (forbidden.containsMatchIn(line)) "${file.name}:${index + 1}: ${line.trim()}" else null
+            }
+        }
+        assertEquals(emptyList(), offenders)
     }
 
     /** `:core` stays Android-free: the engine is a JVM library, provable by its imports. */
