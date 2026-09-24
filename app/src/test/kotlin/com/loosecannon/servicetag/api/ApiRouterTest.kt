@@ -177,6 +177,27 @@ class ApiRouterTest {
             "DELETE" to "/v1/assets/$id/references",
             "GET" to "/v1/references/r1/bytes",
             "POST" to "/v1/references/r1/bytes",
+            // 1.4's additions (spec §9.2, invariant 127). A condition and an activation are
+            // immutable facts — appended, read, never amended or removed; a health subject is
+            // archived, never removed; and health is computed at read time, so nothing writes it.
+            "DELETE" to "/v1/assets/$id/conditions",
+            "PATCH" to "/v1/assets/$id/conditions",
+            "DELETE" to "/v1/assets/$id/conditions/c1",
+            "PATCH" to "/v1/assets/$id/conditions/c1",
+            "DELETE" to "/v1/assets/$id/season",
+            "PATCH" to "/v1/assets/$id/season",
+            "DELETE" to "/v1/assets/$id/season/a1",
+            "PATCH" to "/v1/assets/$id/season/a1",
+            "DELETE" to "/v1/assets/$id/season/activations/a1",
+            "DELETE" to "/v1/health-subjects/h1",
+            "DELETE" to "/v1/health-subjects",
+            "DELETE" to "/v1/assets/$id/health-subjects",
+            "POST" to "/v1/assets/$id/health",
+            "PATCH" to "/v1/assets/$id/health",
+            "DELETE" to "/v1/assets/$id/health",
+            "POST" to "/v1/health",
+            "DELETE" to "/v1/attention",
+            "PATCH" to "/v1/attention",
         )) {
             val response = call(method, path, if (method == "GET") "" else "{}")
             assertTrue("$method $path answered ${response.status}", response.status == 404 || response.status == 405)
