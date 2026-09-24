@@ -512,6 +512,9 @@ private fun copySchedulesThroughTheLegacyMapping(connection: SQLiteConnection) {
         "`rule_changed_at`) VALUES (${KEPT_SCHEDULE_COLUMNS.joinToString(", ") { "?" }}, ?, ?, ?)"
     val select = "SELECT $kept, `season_behavior`, `season_reentry`, `season_reentry_offset_days` " +
         "FROM `maintenance_schedule`"
+    val base = KEPT_SCHEDULE_COLUMNS.size
+    val timeInterval = KEPT_SCHEDULE_COLUMNS.indexOfFirst { it.first == "time_interval" }
+    val updatedAt = KEPT_SCHEDULE_COLUMNS.indexOfFirst { it.first == "updated_at" }
     connection.prepare(select).use { read ->
         connection.prepare(insert).use { write ->
             while (read.step()) {
@@ -525,9 +528,6 @@ private fun copySchedulesThroughTheLegacyMapping(connection: SQLiteConnection) {
                         else -> write.bindDouble(at, read.getDouble(i))
                     }
                 }
-                val base = KEPT_SCHEDULE_COLUMNS.size
-                val timeInterval = KEPT_SCHEDULE_COLUMNS.indexOfFirst { it.first == "time_interval" }
-                val updatedAt = KEPT_SCHEDULE_COLUMNS.indexOfFirst { it.first == "updated_at" }
                 val policy = LegacySeasonMapping.toPolicy(
                     behavior = SeasonBehavior.valueOf(read.getText(base)),
                     reentry = if (read.isNull(base + 1)) null else read.getText(base + 1),
