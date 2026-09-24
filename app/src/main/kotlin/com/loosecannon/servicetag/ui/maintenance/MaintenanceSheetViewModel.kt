@@ -147,9 +147,9 @@ val DueItem.actionableOnScanSheet: Boolean
         (status == DueStatus.DUE || status == DueStatus.OVERDUE || isRepairableNoData)
 
 /**
- * D-18a applied to one Asset's projection **with no condition in play**: which of its rows the
- * sheet offers, in the attention order [DueReadModel] already put them in (master plan §11.1 —
- * never a second ordering rule).
+ * D-18a applied to one in-service Asset's projection **with no condition in play**: which of its
+ * rows the sheet offers, in the attention order [DueReadModel] already put them in (master plan
+ * §11.1 — never a second ordering rule).
  *
  * It is [scanSheetContent]'s maintenance list and nothing else, so it cannot drift from the one
  * predicate: `DUE_SOON` joins **only** when the sheet is already open, and **never alone** (D5 §7A
@@ -163,7 +163,7 @@ val DueItem.actionableOnScanSheet: Boolean
  * ask it.
  */
 internal fun scanSheetItems(items: List<DueItem>): List<DueItem> =
-    scanSheetContent(items, condition = null, components = emptyList(), health = null).maintenance
+    scanSheetContent(items, condition = null, components = emptyList(), health = null, inService = true).maintenance
 
 /**
  * What the scan sheet offers **this** Asset: the projection, narrowed to the rounds that actually

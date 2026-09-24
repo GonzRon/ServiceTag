@@ -52,6 +52,7 @@ class ScanSheetContentTest {
             condition = view(OperationalCondition.OPERATIONAL),
             components = emptyList(),
             health = health(critical = listOf(battery), aggregate = SubjectValue.Scored(15, HealthBand.CRITICAL, null)),
+            inService = true,
         )
 
         assertFalse("calculated health has no routing power in 1.4", content.opens)
@@ -66,6 +67,7 @@ class ScanSheetContentTest {
             condition = view(OperationalCondition.DOWN),
             components = emptyList(),
             health = null,
+            inService = true,
         )
 
         assertTrue("a DOWN asset opens the sheet with nothing due", content.opens)
@@ -80,6 +82,7 @@ class ScanSheetContentTest {
             condition = view(OperationalCondition.OPERATIONAL),
             components = listOf(pack),
             health = null,
+            inService = true,
         )
 
         assertTrue("a DEGRADED component opens the sheet", content.opens)
@@ -93,6 +96,7 @@ class ScanSheetContentTest {
             condition = null,
             components = emptyList(),
             health = null,
+            inService = true,
         )
 
         assertTrue("an OVERDUE item opens the sheet", content.opens)
@@ -107,6 +111,7 @@ class ScanSheetContentTest {
             condition = view(OperationalCondition.OPERATIONAL),
             components = emptyList(),
             health = health(critical = listOf(battery), aggregate = SubjectValue.Scored(15, HealthBand.CRITICAL, null)),
+            inService = true,
         )
 
         assertTrue("a DUE item opens the sheet", content.opens)
@@ -159,6 +164,7 @@ class ScanSheetContentTest {
             condition = null,
             components = emptyList(),
             health = health(critical = listOf(battery), aggregate = SubjectValue.Scored(73, HealthBand.NOMINAL, null)),
+            inService = true,
         )
 
         assertEquals(listOf(battery), content.critical)
@@ -171,12 +177,13 @@ class ScanSheetContentTest {
             condition = view(OperationalCondition.DOWN),
             components = emptyList(),
             health = health(critical = emptyList(), aggregate = SubjectValue.Scored(score, band, null)),
+            inService = true,
         ).aggregate
 
         assertNull(shown(HealthBand.NOMINAL, 90))
         assertEquals(SubjectValue.Scored(50, HealthBand.WARNING, null), shown(HealthBand.WARNING, 50))
         assertEquals(SubjectValue.Scored(10, HealthBand.CRITICAL, null), shown(HealthBand.CRITICAL, 10))
-        assertNull("NOT TRACKED shows no aggregate", scanSheetContent(emptyList(), view(OperationalCondition.DOWN), emptyList(), health(emptyList(), null)).aggregate)
+        assertNull("NOT TRACKED shows no aggregate", scanSheetContent(emptyList(), view(OperationalCondition.DOWN), emptyList(), health(emptyList(), null), inService = true).aggregate)
     }
 
     /**
@@ -199,6 +206,7 @@ class ScanSheetContentTest {
                 fallback = false,
                 critical = listOf(battery),
             ),
+            inService = true,
         )
 
         assertEquals(listOf(battery, nominal), content.subjects)
@@ -209,11 +217,11 @@ class ScanSheetContentTest {
     @Test fun dueSoonRidesAlongWhenConditionOpensTheSheet() {
         val items = listOf(item("s-soon", DueStatus.DUE_SOON), item("s-ok", DueStatus.OK))
 
-        val degraded = scanSheetContent(items, view(OperationalCondition.DEGRADED), emptyList(), null)
+        val degraded = scanSheetContent(items, view(OperationalCondition.DEGRADED), emptyList(), null, inService = true)
         assertTrue("DEGRADED opens the sheet", degraded.opens)
         assertEquals(listOf("s-soon"), degraded.maintenance.map { it.scheduleId.value })
 
-        val operational = scanSheetContent(items, view(OperationalCondition.OPERATIONAL), emptyList(), null)
+        val operational = scanSheetContent(items, view(OperationalCondition.OPERATIONAL), emptyList(), null, inService = true)
         assertFalse("DUE SOON never opens the sheet alone", operational.opens)
         assertEquals(emptyList<DueItem>(), operational.maintenance)
     }
@@ -225,6 +233,7 @@ class ScanSheetContentTest {
             condition = view(OperationalCondition.DOWN),
             components = emptyList(),
             health = null,
+            inService = true,
         )
 
         assertTrue("DOWN opens the sheet with nothing due", content.opens)

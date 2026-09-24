@@ -52,15 +52,15 @@ data class ScanSheetContent(
  * [inService] is the scanned asset's own lifecycle. An archived or retired asset **never** opens the
  * sheet and is never offered "Mark operational", whatever its condition or its schedules say: the
  * scan goes to asset detail, which shows the same lines (the controller's ruling on B07's review,
- * M1). It defaults to true only so the pinned four-argument form still reads a live asset;
- * [scanSheetContentFor], the one production caller, always passes the asset's own answer.
+ * M1). It is **required**, with no default, so no caller can skip that clause: [scanSheetContentFor]
+ * passes the asset's own answer from its health view.
  */
 fun scanSheetContent(
     items: List<DueItem>,
     condition: ConditionView?,
     components: List<ComponentCondition>,
     health: AssetHealthResult?,
-    inService: Boolean = true,
+    inService: Boolean,
 ): ScanSheetContent {
     val unitNeedsAttention = inService && condition?.condition?.needsAttention == true
     val opens = inService && (
