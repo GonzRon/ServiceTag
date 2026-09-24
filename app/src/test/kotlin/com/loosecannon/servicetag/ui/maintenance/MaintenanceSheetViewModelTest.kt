@@ -27,7 +27,6 @@ import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.routeForDeepLink
 import com.loosecannon.servicetag.routeForQuickCompletion
 import com.loosecannon.servicetag.testing.FakeGraph
-import com.loosecannon.servicetag.testing.calendar
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.meterDefinitionOf
@@ -140,7 +139,7 @@ class MaintenanceSheetViewModelTest {
             seasonStartMmdd = seasonStartMmdd,
             seasonEndMmdd = seasonEndMmdd,
         ),
-    ).let { if (seasonStartMmdd != null) graph.calendar(it) else it }.id
+    ).id
 
     private fun roundMembership() = ScanRoundMembership { scheduleId ->
         graph.schedules.get(scheduleId)?.let { graph.recomputeSchedules.occurrenceOf(it) }
