@@ -272,16 +272,28 @@ class BackupFormat8Test {
 
     // --- determinism -----------------------------------------------------------------------------
 
-    /** Hazard: non-deterministic bytes. Every new list, reversed, encodes to the identical archive. */
+    /**
+     * Hazard: non-deterministic bytes. Every new list, handed over **out of id order**, encodes to
+     * the identical archive as the same rows in id order. Each out-of-order list is asserted to be
+     * out of order first, so no half of this can pass on a list that was already sorted.
+     */
     @Test
     fun shuffledListsEncodeToIdenticalBytes() {
-        val ordered = fixture()
-        val shuffled = ordered.copy(
-            seasonActivations = ordered.seasonActivations.reversed(),
-            assetConditions = ordered.assetConditions.reversed(),
-            healthSubjects = (ordered.healthSubjects + subjectOf("h0", assetId = "a2").toDto()).reversed(),
+        val h0 = subjectOf("h0", assetId = "a2").toDto()
+        val sorted = fixture().let { it.copy(healthSubjects = listOf(h0) + it.healthSubjects) }
+        val shuffled = sorted.copy(
+            seasonActivations = sorted.seasonActivations.reversed(),
+            assetConditions = sorted.assetConditions.reversed(),
+            healthSubjects = sorted.healthSubjects.reversed(),
         )
-        val sorted = ordered.copy(healthSubjects = listOf(subjectOf("h0", assetId = "a2").toDto()) + ordered.healthSubjects)
+        for ((sortedIds, shuffledIds) in listOf(
+            sorted.seasonActivations.map { it.id } to shuffled.seasonActivations.map { it.id },
+            sorted.assetConditions.map { it.id } to shuffled.assetConditions.map { it.id },
+            sorted.healthSubjects.map { it.id } to shuffled.healthSubjects.map { it.id },
+        )) {
+            assertEquals(sortedIds.sorted(), sortedIds)
+            assertTrue(shuffledIds != shuffledIds.sorted(), "$shuffledIds is already in id order")
+        }
         assertContentEquals(archiveOf(sorted), archiveOf(shuffled))
     }
 
@@ -298,6 +310,30 @@ class BackupFormat8Test {
         )) {
             val refusal = assertFailsWith<BackupCorrupt> { BackupCodec.decode(archiveOf(broken)) }
             assertTrue("a-gone" in refusal.message.orEmpty(), refusal.message)
+        }
+    }
+
+    /**
+     * Ids are unique within each new table, as within every shipped one: a duplicate is refused,
+     * naming its table, before any import begins — never first as a primary-key abort inside the
+     * replace transaction.
+     */
+    @Test
+    fun aDuplicateIdInANewTableIsCorrupt() {
+        val base = fixture()
+        for ((table, broken) in listOf(
+            "seasonActivations" to base.copy(
+                seasonActivations = base.seasonActivations + activationOf("act-1", assetId = "a1").toDto(),
+            ),
+            "assetConditions" to base.copy(
+                assetConditions = base.assetConditions + conditionOf("c-1", assetId = "a2", reason = "again").toDto(),
+            ),
+            "healthSubjects" to base.copy(
+                healthSubjects = base.healthSubjects + subjectOf("h1", assetId = "a2").toDto(),
+            ),
+        )) {
+            val refusal = assertFailsWith<BackupCorrupt>(table) { BackupCodec.decode(archiveOf(broken)) }
+            assertTrue(refusal.message.orEmpty().startsWith("$table: duplicate id"), refusal.message)
         }
     }
 

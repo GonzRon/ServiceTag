@@ -266,6 +266,40 @@ class MergePlannerSeasonHealthTest {
         assertEquals(MergeTally(0, 0, 0, 1), merged.report().healthSubjects)
     }
 
+    /**
+     * The subject's own id (inv. 66: an import modifies no local row). A local subject re-imported
+     * unchanged is IDENTICAL and writes nothing; the same id with other content — a new weight, or
+     * the row archived since — is `CONTENT_DIFFERS`, never an INSERT that the apply's upsert would
+     * turn into a silent UPDATE. The subject is the one new table written by upsert, so this is the
+     * arm that stands between a re-import and an overwrite.
+     */
+    @Test
+    fun aSubjectReimportIsIdenticalAndADivergedSubjectConflicts() {
+        val local = subjectOf("h1", scheduleId = "s1")
+        val base = snapshot(assets = listOf(a1), schedules = listOf(s1), subjects = listOf(local))
+
+        val same = plan(data(schedules = listOf(s1), subjects = listOf(local)), base)
+        assertEquals(
+            MergeDecision(MergeTable.HEALTH_SUBJECTS, "h1", MergeVerdict.IDENTICAL),
+            same.decision(MergeTable.HEALTH_SUBJECTS, "h1"),
+        )
+        assertTrue(same.applicable)
+        assertEquals(emptyList(), same.writes.healthSubjects)
+
+        for ((label, diverged) in listOf(
+            "weight" to local.copy(weight = 7),
+            "archived" to local.copy(archivedAt = 900L),
+        )) {
+            val merged = plan(data(schedules = listOf(s1), subjects = listOf(diverged)), base)
+            assertEquals(
+                MergeDecision(MergeTable.HEALTH_SUBJECTS, "h1", MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, "h1"),
+                merged.decision(MergeTable.HEALTH_SUBJECTS, "h1"),
+                label,
+            )
+            assertEquals(MergeWrites(), merged.writes, label)
+        }
+    }
+
     /** Two non-archived subjects of one archive on one schedule: the second is a CONFLICT. */
     @Test
     fun twoArchiveSubjectsForOneScheduleConflict() {
