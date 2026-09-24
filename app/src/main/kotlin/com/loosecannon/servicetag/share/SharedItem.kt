@@ -164,8 +164,10 @@ internal sealed interface ShareContent {
  */
 internal sealed interface FactsAnswer {
     /**
-     * The query returned no cursor at all, and did not throw: there is no such provider, or package
-     * visibility hides it from this app because that package has never granted it anything.
+     * The query returned no cursor at all, and did not throw: there is no such provider, package
+     * visibility hides it from this app because that package has never granted it anything, the
+     * provider's own `query` answered null, or the provider died mid-call. All four are refused,
+     * including a provider that would still have served the bytes (I-11's accepted consequence).
      */
     data object NoCursor : FactsAnswer
 
