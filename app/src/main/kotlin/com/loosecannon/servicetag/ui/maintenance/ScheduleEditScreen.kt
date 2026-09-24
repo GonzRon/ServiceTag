@@ -196,6 +196,9 @@ internal fun policyOptionHelper(option: PolicyOption): String = when (option) {
  *
  * A refused save **marks** the control it is about and says nothing: §17 ratifies no wording for a
  * schedule refusal and no brief invents one, so the form points at the field and the owner fixes it.
+ * Two refusals are the exceptions, because 1.4 ratified words for them: the health link guard asks
+ * S140–S141 (or shows S137) in [LinkGuardDialog], and the `PreServiceNeedsDates` race shows S77 above
+ * the question.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -482,7 +485,7 @@ private fun PolicyQuestion(state: ScheduleEditState, model: ScheduleEditViewMode
                             value = state.daysBefore,
                             onValueChange = model::onDaysBefore,
                             label = DAYS_BEFORE_IT_STARTS,
-                            numeric = true,
+                            digitsOnly = true,
                             hint = if (state.marginMissing) ENTER_THE_NUMBER_OF_DAYS else null,
                             problem = ScheduleField.POLICY_OFFSET in state.marks,
                         )
@@ -515,7 +518,7 @@ private fun StartCounting(state: ScheduleEditState, model: ScheduleEditViewModel
             value = state.daysAfter,
             onValueChange = model::onDaysAfter,
             label = DAYS_AFTER_IT_STARTS,
-            numeric = true,
+            digitsOnly = true,
             problem = ScheduleField.POLICY_OFFSET in state.marks,
         )
         if (state.offsetPassesSeasonEnd) QuietLine(AFTER_THE_SEASON_ENDS)
@@ -569,6 +572,8 @@ internal fun MaintenanceField(
     minLines: Int = 1,
     mono: Boolean = false,
     numeric: Boolean = false,
+    /** A whole-number field: the number keyboard, with no decimal point to offer (master dec. 46). */
+    digitsOnly: Boolean = false,
     readOnly: Boolean = false,
     imeAction: ImeAction = ImeAction.Default,
     trailingIcon: (@Composable () -> Unit)? = null,
@@ -591,7 +596,11 @@ internal fun MaintenanceField(
             MaterialTheme.typography.bodyLarge
         },
         keyboardOptions = KeyboardOptions(
-            keyboardType = if (numeric) KeyboardType.Decimal else KeyboardType.Text,
+            keyboardType = when {
+                digitsOnly -> KeyboardType.Number
+                numeric -> KeyboardType.Decimal
+                else -> KeyboardType.Text
+            },
             imeAction = imeAction,
         ),
         shape = ControlShape,

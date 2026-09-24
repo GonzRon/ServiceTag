@@ -53,7 +53,10 @@ import kotlinx.coroutines.launch
  * refused save marks the control the refusal is actually about, in the shipped editors' idiom.
  *
  * **They are field names, never sentences.** §17 ratifies no wording for a refused schedule save,
- * and no brief invents one, so the form marks the field and says nothing — see [fieldOf].
+ * and no brief invents one, so the form marks the field and says nothing — see [fieldOf]. Two
+ * refusals are the exceptions, because 1.4 ratified words for them: the health link guard's
+ * `ScheduleDrivesHealthSubject` and `HealthSubjectIsPrimary` draw S140–S141 and S137, and the
+ * `PreServiceNeedsDates` race draws S77. Neither of them is a field mark.
  */
 object ScheduleField {
     const val TITLE = "title"
@@ -151,7 +154,7 @@ sealed interface LinkGuardPrompt {
  * **Plan decision (B08):** on a MANUAL asset with a break, S69 is drawn first, so every row reads
  * earliest to latest and "Whenever it is due" is always last.
  */
-fun policyOptionsFor(season: SeasonInputs?, hasTimeRule: Boolean): List<PolicyOption> {
+internal fun policyOptionsFor(season: SeasonInputs?, hasTimeRule: Boolean): List<PolicyOption> {
     if (season == null) return emptyList()
     val hasBreak = SeasonContext.of(season).boundaryKind == BoundaryKind.BREAK
     return when (season.mode) {
@@ -178,7 +181,7 @@ fun policyOptionsFor(season: SeasonInputs?, hasTimeRule: Boolean): List<PolicyOp
 }
 
 /** One answer to the question, with the text of whichever day field it carries. */
-data class PolicyChoice(
+internal data class PolicyChoice(
     val option: PolicyOption,
     val startCountingFrom: StartCountingFrom = StartCountingFrom.SEASON_START,
     val daysBefore: String = "",
@@ -191,7 +194,7 @@ data class PolicyChoice(
  * RESUME_CLAMPED is S67 · S75, CONTINUOUS is S68. AT_START is S70 only at offset 0, because S70 has no
  * field to show another offset in.
  */
-fun storedChoice(policy: ServicePolicy, offsetDays: Int?, options: List<PolicyOption>): PolicyChoice? =
+internal fun storedChoice(policy: ServicePolicy, offsetDays: Int?, options: List<PolicyOption>): PolicyChoice? =
     when (policy) {
         ServicePolicy.CONTINUOUS -> PolicyChoice(PolicyOption.WHENEVER_DUE)
         ServicePolicy.PRE_SERVICE ->
@@ -209,7 +212,7 @@ fun storedChoice(policy: ServicePolicy, offsetDays: Int?, options: List<PolicyOp
     }
 
 /** S71's and S72's bounds: 1–365 before, 0–365 after (spec §4.2). */
-const val MAX_POLICY_DAYS = 365
+internal const val MAX_POLICY_DAYS = 365
 
 /**
  * S71's and S72's input filter (master dec. 46, the ruling on I10): digits only, at most three of them,
@@ -217,7 +220,7 @@ const val MAX_POLICY_DAYS = 365
  * field keeps what it had — so no out-of-range value is ever turned into a different one and no
  * refusal needs a sentence.
  */
-fun acceptsPolicyDays(value: String): Boolean =
+internal fun acceptsPolicyDays(value: String): Boolean =
     value.isEmpty() || (value.length <= 3 && value.all { it in '0'..'9' } && value.toInt() <= MAX_POLICY_DAYS)
 
 /**
