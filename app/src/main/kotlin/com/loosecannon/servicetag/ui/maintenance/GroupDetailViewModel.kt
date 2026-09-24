@@ -232,7 +232,8 @@ class GroupDetailViewModel(
         // The round, from the one gathering point every use case validates against. Never
         // `group.members`: that is today's membership, and a past round's obligation is not.
         val occurrence = recompute.occurrenceOf(schedule)
-        val state = states.get(schedule.id) ?: recompute.stateOf(schedule)
+        // The one read accessor (master plan §8.6): never a stored row from another day.
+        val state = recompute.readState(schedule)
         val requiredSetEmpty = occurrence != null && occurrence.required.isEmpty()
         return GroupScheduleRow(
             scheduleId = schedule.id,

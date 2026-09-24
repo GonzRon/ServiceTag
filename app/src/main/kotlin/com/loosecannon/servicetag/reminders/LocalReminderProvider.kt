@@ -95,8 +95,10 @@ class ScheduleDeliveryFacts(
         val threshold = state.computedDueMeter ?: return null
         val current = state.currentMeter ?: return null
         if (current < threshold) return null
-        // The time side already came due, so the date is the better sentence.
-        val dueOn = state.effectiveDueOn?.let(LocalDate::parse)
+        // The time side already came due, so the date is the better sentence. "Came due" is the
+        // **actionable** date's, the one the status word is measured against (1.4), so a row the
+        // policy pulled before its season names its date, as its OVERDUE says it should.
+        val dueOn = state.actionableDueOn?.let(LocalDate::parse)
         if (dueOn != null && !dueOn.isAfter(on)) return null
         val definition = definitions.get(definitionId)
         return MeterReading(
