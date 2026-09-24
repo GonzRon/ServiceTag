@@ -13,7 +13,6 @@ import com.loosecannon.servicetag.core.testing.groupOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -49,6 +48,26 @@ class SchedulePolicyValidationTest {
             refusal.problems
         }
 
+    private val policyCodes = setOf(
+        ScheduleProblem.SeasonFollowsAssetOnGroupTarget,
+        ScheduleProblem.SeasonPolicyNeedsATimeRule,
+        ScheduleProblem.PolicyOffsetInvalid,
+    )
+
+    /**
+     * [cmd]'s problems are [expected], and the shared validator a restore asks gives the command's
+     * policy problems in the command's own order (parity: one rule set, one order).
+     */
+    private suspend fun SeasonCommandHarness.assertPolicy(expected: List<ScheduleProblem>, cmd: ScheduleCommand, label: String) {
+        val problems = problemsOf(cmd)
+        assertEquals(expected, problems, label)
+        assertEquals(
+            problems.filter { it in policyCodes },
+            policyProblems(cmd.servicePolicy, cmd.policyOffsetDays, cmd.timeInterval != null, cmd.targetGroupId != null),
+            "parity: $label",
+        )
+    }
+
     /** Spec §4.2: AT_START 0–365, PRE_SERVICE −365…−1 and present, every other policy none. All 422. */
     @Test
     fun offsetRangesPerPolicy() = runTest {
@@ -73,7 +92,7 @@ class SchedulePolicyValidationTest {
             (ServicePolicy.CONTINUOUS to 0) to bad,
         )) {
             val (policy, offset) = case
-            assertEquals(expected, h.problemsOf(command(policy, offset)), "$policy / $offset")
+            h.assertPolicy(expected, command(policy, offset), "$policy / $offset")
         }
         assertEquals(emptyMap(), h.schedules.rows.toMap(), "a refusal writes nothing")
 
@@ -82,8 +101,6 @@ class SchedulePolicyValidationTest {
             listOf(ScheduleProblem.NegativeLeadDays, ScheduleProblem.PolicyOffsetInvalid),
             h.problemsOf(command(ServicePolicy.PRE_SERVICE, 14).copy(leadDays = -1)),
         )
-        // The one validator a restore reuses gives the same answer as the command.
-        assertEquals(bad, policyProblems(ServicePolicy.PRE_SERVICE, null, hasTimeRule = true, groupTarget = false))
     }
 
     /**
@@ -106,16 +123,20 @@ class SchedulePolicyValidationTest {
             meterDefinitionId = DefinitionId("hours"), meterInterval = 50.0,
         )
         val needsTime = listOf(ScheduleProblem.SeasonPolicyNeedsATimeRule)
+        val bad = listOf(ScheduleProblem.PolicyOffsetInvalid)
 
-        assertEquals(needsTime, h.problemsOf(meterOnly(ServicePolicy.PRE_SERVICE, -14)))
-        assertEquals(needsTime, h.problemsOf(meterOnly(ServicePolicy.PRE_SERVICE, null)), "ahead of the offset problem")
-        assertEquals(needsTime, h.problemsOf(meterOnly(ServicePolicy.IN_SERVICE_AT_START, 5)))
-        assertEquals(needsTime, h.problemsOf(meterOnly(ServicePolicy.IN_SERVICE_AT_START, 400)), "ahead of the offset problem")
+        h.assertPolicy(needsTime, meterOnly(ServicePolicy.PRE_SERVICE, -14), "PRE_SERVICE")
+        h.assertPolicy(needsTime, meterOnly(ServicePolicy.PRE_SERVICE, null), "PRE_SERVICE with none: ahead of the offset problem")
+        h.assertPolicy(needsTime, meterOnly(ServicePolicy.IN_SERVICE_AT_START, 5), "AT_START 5")
+        h.assertPolicy(needsTime, meterOnly(ServicePolicy.IN_SERVICE_AT_START, 400), "AT_START 400: ahead of the offset problem")
+        // RESUME_CLAMPED has no offset at all, so a time rule would not cure one: the offset is the problem.
+        h.assertPolicy(bad, meterOnly(ServicePolicy.IN_SERVICE_RESUME_CLAMPED, 5), "RESUME_CLAMPED 5")
+        h.assertPolicy(bad, meterOnly(ServicePolicy.IN_SERVICE_RESUME_CLAMPED, 0), "RESUME_CLAMPED 0")
         assertEquals(emptyMap(), h.schedules.rows.toMap())
 
-        assertEquals(emptyList(), h.problemsOf(meterOnly(ServicePolicy.IN_SERVICE_AT_START, 0)), "dormancy with offset 0")
-        assertEquals(emptyList(), h.problemsOf(meterOnly(ServicePolicy.IN_SERVICE_RESUME_CLAMPED, null)))
-        assertEquals(emptyList(), h.problemsOf(meterOnly(ServicePolicy.CONTINUOUS, null)))
+        h.assertPolicy(emptyList(), meterOnly(ServicePolicy.IN_SERVICE_AT_START, 0), "dormancy with offset 0")
+        h.assertPolicy(emptyList(), meterOnly(ServicePolicy.IN_SERVICE_RESUME_CLAMPED, null), "RESUME_CLAMPED")
+        h.assertPolicy(emptyList(), meterOnly(ServicePolicy.CONTINUOUS, null), "CONTINUOUS")
     }
 
     /** Inv. 106: a season and a break live on one asset; a group target is CONTINUOUS only. */
@@ -125,17 +146,27 @@ class SchedulePolicyValidationTest {
         h.asset()
         h.groups.upsert(groupOf("g1", members = listOf(Triple("a1", "2026-01-01", null))))
 
+        // The group problem is the whole answer, whatever the offset: CONTINUOUS is the remedy, and it makes
+        // the offset question moot, so a group body never gets the offset's code.
         for ((policy, offset) in listOf(
             ServicePolicy.IN_SERVICE_AT_START to 0,
             ServicePolicy.IN_SERVICE_RESUME_CLAMPED to null,
             ServicePolicy.PRE_SERVICE to -14,
+            ServicePolicy.PRE_SERVICE to null,
+            ServicePolicy.IN_SERVICE_RESUME_CLAMPED to 5,
         )) {
-            val refusal = assertFailsWith<ScheduleValidation> {
-                h.saveSchedule.run(null, command(policy, offset, assetId = null, groupId = "g1"))
-            }
-            assertTrue(ScheduleProblem.SeasonFollowsAssetOnGroupTarget in refusal.problems, "$policy on a group")
+            h.assertPolicy(
+                listOf(ScheduleProblem.SeasonFollowsAssetOnGroupTarget),
+                command(policy, offset, assetId = null, groupId = "g1"),
+                "$policy / $offset on a group",
+            )
         }
         assertEquals(emptyMap(), h.schedules.rows.toMap())
+        h.assertPolicy(
+            listOf(ScheduleProblem.PolicyOffsetInvalid),
+            command(ServicePolicy.CONTINUOUS, 0, assetId = null, groupId = "g1"),
+            "CONTINUOUS with an offset on a group",
+        )
 
         val saved = h.saveSchedule.run(null, command(ServicePolicy.CONTINUOUS, null, assetId = null, groupId = "g1"))
         assertEquals(ServicePolicy.CONTINUOUS, saved.servicePolicy)
@@ -155,6 +186,14 @@ class SchedulePolicyValidationTest {
             assertEquals(AssetId(id), refusal.assetId)
         }
         assertEquals(emptyMap(), h.schedules.rows.toMap(), "nothing written")
+
+        // The body's 422 comes before the asset's 409: a PRE_SERVICE body with no offset is fixed first.
+        assertEquals(
+            listOf(ScheduleProblem.PolicyOffsetInvalid),
+            assertFailsWith<ScheduleValidation> {
+                h.saveSchedule.run(null, command(ServicePolicy.PRE_SERVICE, null, assetId = "a1"))
+            }.problems,
+        )
 
         // An edit of a merged boundary-less PRE_SERVICE row is refused the same way.
         val merged = h.schedule("s-merged")

@@ -288,21 +288,20 @@ internal fun scheduleProblems(
             problems += ScheduleProblem.UnknownProvider(row.provider)
         }
     }
-    // The group-target half of the policy's rules is reported with the other group-target problems
-    // below, in its shipped place; this is the offset half. Together they are [policyProblems].
-    offsetProblem(cmd.servicePolicy, cmd.policyOffsetDays, hasTime)?.let { problems += it }
-
-    if (target is ScheduleTarget.GroupTarget) {
+    val groupTarget = target is ScheduleTarget.GroupTarget
+    if (groupTarget) {
         if (hasMeter) problems += ScheduleProblem.MeterRuleOnGroupTarget
         if (cmd.profileId != null) problems += ScheduleProblem.ProfileOnGroupTarget
         if (cmd.completionMode == CompletionMode.FORM) {
             problems += ScheduleProblem.FormCompletionOnGroupTarget
         }
-        groupTargetPolicyProblem(cmd.servicePolicy, groupTarget = true)?.let { problems += it }
-        // Null means the caller could not resolve the group at all, which is reported as
-        // `NoSuchGroup` and is not this function's to guess at.
-        if (groupOpenMembers == 0) problems += ScheduleProblem.EmptyGroupTarget
     }
+    // The policy's problems, through the one validator a restore asks too, so both report the same
+    // problems in the same order; on a group target they sit where the group-target refusal always has.
+    problems += policyProblems(cmd.servicePolicy, cmd.policyOffsetDays, hasTime, groupTarget)
+    // Null means the caller could not resolve the group at all, which is reported as `NoSuchGroup` and
+    // is not this function's to guess at.
+    if (groupTarget && groupOpenMembers == 0) problems += ScheduleProblem.EmptyGroupTarget
 
     val assetId = (target as? ScheduleTarget.AssetTarget)?.assetId
     cmd.profileId?.let { id ->
@@ -320,9 +319,12 @@ internal fun scheduleProblems(
 
 /**
  * The service policy's own problems (spec §4.1, §4.2, §4.6; master plan §7.2): the **one** rule set for
- * a policy wherever it arrives. [scheduleProblems] collects the same two halves with its other problems,
- * each in its own place, and a restore that refuses what a command would refuse asks this function.
- * [hasTimeRule] is whether the schedule carries a time side; [groupTarget] whether it is aimed at a group.
+ * a policy wherever it arrives. [scheduleProblems] collects exactly these, in this order, with its other
+ * problems, and a restore that refuses what a command would refuse asks this function. [hasTimeRule] is
+ * whether the schedule carries a time side; [groupTarget] whether it is aimed at a group.
+ *
+ * At most one problem, the first that applies: a non-CONTINUOUS policy on a group target (inv. 106) —
+ * whose remedy, CONTINUOUS, makes the offset moot — then the offset's ([offsetProblem]).
  */
 internal fun policyProblems(
     policy: ServicePolicy,
@@ -330,13 +332,12 @@ internal fun policyProblems(
     hasTimeRule: Boolean,
     groupTarget: Boolean,
 ): List<ScheduleProblem> = listOfNotNull(
-    groupTargetPolicyProblem(policy, groupTarget),
-    offsetProblem(policy, offsetDays, hasTimeRule),
+    if (groupTarget && policy != ServicePolicy.CONTINUOUS) {
+        ScheduleProblem.SeasonFollowsAssetOnGroupTarget
+    } else {
+        offsetProblem(policy, offsetDays, hasTimeRule)
+    },
 )
-
-/** A non-CONTINUOUS policy on a group target (inv. 106). */
-private fun groupTargetPolicyProblem(policy: ServicePolicy, groupTarget: Boolean): ScheduleProblem? =
-    ScheduleProblem.SeasonFollowsAssetOnGroupTarget.takeIf { groupTarget && policy != ServicePolicy.CONTINUOUS }
 
 /** The offset a PRE_SERVICE schedule counts back by: 1 to 365 days before the boundary. */
 private val PRE_SERVICE_OFFSETS = -365..-1
@@ -346,18 +347,19 @@ private val AT_START_OFFSETS = 0..365
 
 /**
  * The offset's problem, if any (spec §4.1, §4.2; O-7). Without a time rule there is no date for the
- * policy to move, so PRE_SERVICE, or an IN_SERVICE offset other than 0, is
+ * policy to move, so PRE_SERVICE, or an AT_START re-entry offset other than 0, is
  * [ScheduleProblem.SeasonPolicyNeedsATimeRule] — reported **instead of** an out-of-range offset, since
  * the remedy is the rule rather than the number. Otherwise AT_START takes 0–365, PRE_SERVICE −365…−1
  * and must have one, and CONTINUOUS and RESUME_CLAMPED take none: anything else is
- * [ScheduleProblem.PolicyOffsetInvalid].
+ * [ScheduleProblem.PolicyOffsetInvalid]. RESUME_CLAMPED has no offset at all, so a time rule would not
+ * cure one: on a meter-only schedule its offset is simply invalid.
  */
 private fun offsetProblem(policy: ServicePolicy, offsetDays: Int?, hasTimeRule: Boolean): ScheduleProblem? {
     if (!hasTimeRule) {
         val movesADate = when (policy) {
             ServicePolicy.PRE_SERVICE -> true
-            ServicePolicy.IN_SERVICE_AT_START, ServicePolicy.IN_SERVICE_RESUME_CLAMPED -> offsetDays != null && offsetDays != 0
-            ServicePolicy.CONTINUOUS -> false
+            ServicePolicy.IN_SERVICE_AT_START -> offsetDays != null && offsetDays != 0
+            ServicePolicy.IN_SERVICE_RESUME_CLAMPED, ServicePolicy.CONTINUOUS -> false
         }
         if (movesADate) return ScheduleProblem.SeasonPolicyNeedsATimeRule
     }

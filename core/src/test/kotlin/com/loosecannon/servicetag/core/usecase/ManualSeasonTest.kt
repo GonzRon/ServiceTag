@@ -90,6 +90,11 @@ class ManualSeasonTest {
 
         assertFailsWith<SeasonNotManual> { h.recordSeasonActivation.run(a1, ActivationCommand(SeasonAction.START)) }
         assertFailsWith<SeasonNotManual> { h.recordSeasonActivation.run(AssetId("c1"), ActivationCommand(SeasonAction.END)) }
+        // The body's 422 comes before the asset's 409 (spec §9.2's tie-break): a future date is fixed first.
+        assertEquals(
+            listOf(SeasonProblem.SeasonDateOutOfRange),
+            h.dateRefused(ActivationCommand(SeasonAction.START, occurredOn = "2026-06-11")),
+        )
         assertEquals(listOf("act-1"), h.rows().map { it.id })
         assertEquals(emptyList(), h.rows("c1"))
     }
