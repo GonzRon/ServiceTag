@@ -21,6 +21,7 @@ Land the 1.4 data contract and nothing else of 1.4's behaviour: the domain shape
 - `app/.../data/room/SeasonHealthMappers.kt`, `app/.../data/room/SeasonHealthRepositories.kt`.
 - `app/schemas/com.loosecannon.servicetag.data.room.AppDatabase/8.json` (generated, committed).
 - `docs/api/legacy-season-mapping.json` — the golden cases (master §4).
+- **The golden format-7 archive** (master dec. 49; controller ruling on I2 + I11): `core/src/test/resources/golden/format-7-legacy-seasons.zip` and, beside it, `format-7-legacy-seasons.expected.json` — the expected `servicePolicy` / `policyOffsetDays` of each schedule id and `seasonMode` of each asset, **written by hand from spec §4.1's table**, not produced by the mapping code. The archive holds only fictional data: a CALENDAR asset and a YEAR_ROUND asset; IGNORE schedules and FOLLOW_ASSET schedules with a null, an `AT_START`, a `RESUME_CLAMPED` and an `MM-DD` (`04-01`) re-entry; offsets 5, 400 and null; one meter-only FOLLOW_ASSET schedule. It is encoded **once**, in this wave, while `FORMAT_VERSION` is still 7, by a one-off JVM helper that builds the format-7 `MaintenanceScheduleDto`s directly (so raw legacy values such as an `MM-DD` re-entry and an out-of-range offset survive — `toLegacy` could not produce them) and calls `BackupCodec.encode`; the helper is **deleted in the same brief**, and the archive is never regenerated. B03 reads it.
 - Tests: `core/src/test/kotlin/com/loosecannon/servicetag/core/model/LegacySeasonMappingTest.kt`; `core/src/test/.../core/usecase/SaveScheduleRuleFieldTest.kt`; `app/src/test/kotlin/com/loosecannon/servicetag/data/room/Migration7To8Test.kt`; `app/src/test/.../data/room/SeasonHealthDaoConstraintTest.kt`.
 
 **Modify**
@@ -36,7 +37,7 @@ Land the 1.4 data contract and nothing else of 1.4's behaviour: the domain shape
 - `core/.../core/backup/BackupFormat.kt` — compile-through only (format 7 unchanged on the wire).
 - `core/.../core/usecase/ExportBackupSet.kt`, `ImportBackupReplace.kt`, `BuildBackupMergePlan.kt`, `ApplyBackupMergePlan.kt` — constructors gain the three repositories, held unused for B03 (master §3.7).
 - `app/.../data/room/entities/AssetEntity.kt`, `entities/MaintenanceEntities.kt`, `AppDatabase.kt` (version 8, three entities, three DAO accessors), `Migrations.kt` (`MIGRATION_7_8`), `Mappers.kt`, `MaintenanceMappers.kt`.
-- `app/.../di/AppGraph.kt` — `SCHEMA_VERSION = 8`; `MIGRATION_7_8` in `addMigrations`; three repository fields; the widened constructors of `RecomputeSchedules` and the four backup use cases.
+- `app/.../di/AppGraph.kt` — `SCHEMA_VERSION = 8`; `MIGRATION_7_8` in `addMigrations`; three repository fields named **`seasonActivations`, `conditions`, `healthSubjects`** (B10 and B14 read them by these names), mirrored in `FakeGraph` (master §1); the widened constructors of `RecomputeSchedules` and the four backup use cases.
 - `app/.../api/MaintenanceDtos.kt` — compile-through only.
 - `app/.../ui/maintenance/ScheduleEditViewModel.kt`, `ScheduleEditScreen.kt` — compile-through only.
 - Test sources that construct a `MaintenanceSchedule`, `ScheduleState`, `Asset` or a schedule entity, or name a removed field — mechanical edits only: `core/src/test/.../testing/{MaintenanceFixtures,InMemoryRepositories}.kt`, `app/src/test/.../testing/{ScheduleFixtures,FakeGraph}.kt`, `app/src/test/.../api/MaintenanceFixtures.kt`, and the tests listed under "Behaviour preserved". `ScheduleStructuralTest.theDeferredReentryColumnsAreStoredAndNeverRead` is **deleted** (spec §11 retires inv. 26; B02 adds inv. 104's check). `VersionAgreementTest.theSchemaAndTheFormatAreBothSeven` becomes "schema 8, format 7" (B03 moves the format half).
@@ -94,7 +95,7 @@ Order: the five asset `ADD COLUMN`s and the CALENDAR update; the `maintenance_sc
 
 ## Invariants this brief must hold
 
-**87** (the #64 fix), **88** (migration half), **89**, **107**, **108**, **109** (schema half: no FK on any `event_id`, `baseline_profile_id` or `health_primary_subject_id`), **111** (no health column or table exists), **125** (migration half: row for row, no `updated_at` moves), **127** (the DAO half: no update or delete path for a fact). It must not make **15, 16, 17, 18** unholdable, and it **retires 26** (spec §11).
+**Accountable** (master §14): **87** (the #64 fix), **89**, **109** (no FK on any `event_id`, `baseline_profile_id` or `health_primary_subject_id`), **129** (no table or column this brief adds names an installed component or assembly, and nothing reads stock). **Halves:** **88** (migration), **107** and **108** (the DAO and the three-value enum), **111** (no health column or table), **125** (migration: row for row, no `updated_at` moves; the golden archive), **127** (DAO: no update or delete path for a fact). It must not make **15, 16, 17, 18** unholdable, and it **retires 26** (spec §11).
 
 ## Test matrix
 
@@ -114,15 +115,17 @@ Order: the five asset `ADD COLUMN`s and the CALENDAR update; the `maintenance_sc
 | UNKNOWN reappears | `SeasonHealthDaoConstraintTest` · `conditionHasExactlyThreeValues` | add a member |
 | **#64** | `SaveScheduleRuleFieldTest` · `aNonRuleEditMovesNothing` — never-terminated FIXED, anchor 10 Jan, created 1 Jan; title, policy and lead edits on 1 Mar leave `computedDueOn` 10 Jan, `ruleChangedAt` and a postponement unchanged (**RED on today's tree**) | stamp `ruleChangedAt` on every save |
 | #64, the other side | `SaveScheduleRuleFieldTest` · `aRuleEditFloorsOnTheEditDateAndClearsThePostponement` and `aCreateStampsRuleChangedAtWithCreatedAt` | drop `anchorOn` from `ruleChanged` |
+| a 1.3 client's create breaks | `MaintenanceRoutesTest` · `aLegacyFollowAssetCreateReadsBackANormalisedTriple` — a legacy body with `seasonBehavior: FOLLOW_ASSET` and no re-entry creates the schedule, and `GET` reads `FOLLOW_ASSET` / `AT_START` / 0; sending that triple back is a no-op PATCH (Q-9) | map FOLLOW_ASSET to CONTINUOUS in the interim request mapping |
+| the golden archive drifts | `LegacySeasonMappingTest` · `theGoldenFormat7ArchiveDecodesAsItsExpectedFile` — the committed archive decodes (still format 7 here) to the policies and modes `…expected.json` names | edit one expected value |
 
-**Behaviour preserved (shape-only rows, master §15.3).** The shipped `ScheduleStatusTest`, `ScheduleRecomputeTest`, `D5WorkedExamplesTest`, `ScheduleOperationsTest`, `BuildReminderSubjectsTest`, `BackupFormat6Test`, `BackupFormat7Test`, `MergePlannerMaintenanceTest`, `ImportBackupMergeTest`, `DueReadModelTest`, `MaintenanceRoutesTest`, `MaintenanceCommandShapeTest`, `ScheduleEditViewModelTest`, `ReminderHealthCheckTest` and the connected classes below stay green with **only** field renames and fixture updates; the ledger lists every edited test and why, and the review diff-reads each. A 1.3 client's FOLLOW_ASSET create and read round-trip (`MaintenanceRoutesTest`) is unchanged.
+**Behaviour preserved (shape-only rows, master §15.3).** The shipped `ScheduleStatusTest`, `ScheduleRecomputeTest`, `D5WorkedExamplesTest`, `ScheduleOperationsTest`, `BuildReminderSubjectsTest`, `BackupFormat6Test`, `BackupFormat7Test`, `MergePlannerMaintenanceTest`, `ImportBackupMergeTest`, `DueReadModelTest`, `MaintenanceRoutesTest`, `MaintenanceCommandShapeTest`, `ScheduleEditViewModelTest`, `ReminderHealthCheckTest` and the connected classes below stay green with **only** field renames and fixture updates; the ledger lists every edited test and why, and the review diff-reads each. A 1.3 client's FOLLOW_ASSET create is proved by the new row below, not assumed: no shipped `MaintenanceRoutesTest` case names a season field.
 
 ## Gate
 
 - `./gradlew :core:test :app:testDebugUnitTest --console=plain` → zero failures, zero skips; counts recorded.
 - `./gradlew :app:compileDebugAndroidTestKotlin --console=plain` → success.
 - Connected, one class per invocation (`ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=<fqcn>`): `com.loosecannon.servicetag.ui.maintenance.ScheduleEditorTest`, `…ui.maintenance.ScheduleOperationsTest`, `…ui.maintenance.ScanSheetTest`, `…ui.maintenance.MaintenanceShellTest`, `…ui.dashboard.DashboardAttentionTest`, `…reminders.QuickActionDeviceProofTest`, `…ui.AssetModelDeviceProofTest`.
-- Anchored: `grep -c 'version = 8' app/src/main/kotlin/com/loosecannon/servicetag/data/room/AppDatabase.kt` → 1; `grep -c 'SCHEMA_VERSION = 8' app/src/main/kotlin/com/loosecannon/servicetag/di/AppGraph.kt` → 1; `grep -c 'FORMAT_VERSION = 7' core/src/main/kotlin/com/loosecannon/servicetag/core/backup/BackupCodec.kt` → 1; `grep -rnE '\bseason(Behavior|Reentry|ReentryOffsetDays)\b' core/src/main/kotlin/com/loosecannon/servicetag/core/schedule` → no output; `test -f app/schemas/com.loosecannon.servicetag.data.room.AppDatabase/8.json`; `git diff --stat <base> -- app/schemas/com.loosecannon.servicetag.data.room.AppDatabase/7.json docs/api/v1.md tools libs` → empty.
+- Anchored: `grep -cE '^[[:space:]]*version = 8,$' app/src/main/kotlin/com/loosecannon/servicetag/data/room/AppDatabase.kt` → 1; `grep -cE '^[[:space:]]*const val SCHEMA_VERSION = 8$' app/src/main/kotlin/com/loosecannon/servicetag/di/AppGraph.kt` → 1; `grep -cE '^[[:space:]]*const val FORMAT_VERSION = 7$' core/src/main/kotlin/com/loosecannon/servicetag/core/backup/BackupCodec.kt` → 1; inv. 129: `git diff <base> -- app/src/main core/src/main | grep -niE '^\+.*\b(assembly|assemblies|installed_?component|stock)\b'` → no output; `test -f core/src/test/resources/golden/format-7-legacy-seasons.zip`, and no helper that writes it remains (`grep -rln 'format-7-legacy-seasons' core/src/test/kotlin` lists only reading tests); `grep -rnE '\bseason(Behavior|Reentry|ReentryOffsetDays)\b' core/src/main/kotlin/com/loosecannon/servicetag/core/schedule` → no output; `test -f app/schemas/com.loosecannon.servicetag.data.room.AppDatabase/8.json`; `git diff --stat <base> -- app/schemas/com.loosecannon.servicetag.data.room.AppDatabase/7.json docs/api/v1.md tools libs` → empty.
 
 ## Strings
 
@@ -136,6 +139,7 @@ Order: the five asset `ADD COLUMN`s and the CALENDAR update; the `maintenance_sc
 - give a fact DAO an update or delete, give a fact entity `updated_at`, or declare an FK on a soft link;
 - touch `ExternalLink*`, the `externalLinks` array, or `app/schemas/.../{1..7}.json`;
 - add a string, a screen, a route or a use case.
+- keep the helper that wrote the golden archive, write the expected file with the mapping code, or put a real household record in the archive.
 
 ## Size
 

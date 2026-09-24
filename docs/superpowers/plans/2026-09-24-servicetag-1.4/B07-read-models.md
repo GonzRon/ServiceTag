@@ -22,10 +22,10 @@ One projection per question, so the dashboard, the Maintenance tab, the scan she
 - `app/.../ui/maintenance/DueReadModel.kt` — `DueItem` gains `actionableDueOn: LocalDate?`, `policyReason: PolicyReason`, `policyPhase: PolicyPhase`, `quiet: Boolean`, `seasonMode: SeasonMode?` (the target asset's; null for a group), `dormantUntil: LocalDate?` (for a DORMANT row on a CALENDAR asset, `SeasonContext.cycleStartAt(today)`; else null) and `health: SubjectBandFact?`; `AttentionSection` gains `DEFERRED` between `CURRENT` and `OUT_OF_SEASON`; `sectionOf(DEFERRED)` → `DEFERRED`; states read through `RecomputeSchedules.readState` (no stored row used unless `computedForOn == today`); `ATTENTION_ORDER` sorts on `actionableDueOn` (nulls last), then title, then id.
 - `app/.../ui/maintenance/DueItemRow.kt` — `sectionLabel(DEFERRED)` = S93, and nothing else in this file.
 - `app/.../ui/maintenance/MaintenanceSheetViewModel.kt` — the admission set and `ScanSheetOffer` go through `scanSheetContent`; the sheet's drawing is B12's.
-- `app/.../di/AppGraph.kt` — `attentionReadModel`, `assetHealthReadModel`; `dueReadModel` and `scanSheetOffer` re-wired. `app/src/test/.../testing/FakeGraph.kt` likewise.
+- `app/.../di/AppGraph.kt` — `attentionReadModel`, `assetHealthReadModel`; `dueReadModel` and `scanSheetOffer` re-wired; **`scheduleStateReader` re-wired to `readState`** (`AppGraph.kt:230`: `{ id -> schedules.get(id)?.let { recomputeSchedules.readState(it) } }`), so `ScheduleDeliveryFacts` and `ReminderHealthCheck` read fresh state too (master §8.6, dec. 47). `app/src/test/.../testing/FakeGraph.kt` — the same two fields and three re-wirings, mirrored (master §1).
 - `app/src/test/.../ui/maintenance/DueReadModelTest.kt`, `StatusVocabularyTest.kt` (five section labels) — extended.
 
-**Untouched:** `ui/maintenance/ScheduleEdit*`, `ScheduleDetail*`, `WhyLines.kt` (B08's, same wave); `MaintenanceSheet.kt` (the composable; B12); every `ui/dashboard/**`, `ui/asset/**`, `api/**` file; `core/**` main sources (a read model needing a `:core` change asks the controller).
+**Untouched:** `ui/maintenance/ScheduleEdit*` and `ScheduleDetail*` (B08's, same wave); `WhyLines.kt` (B13's, wave 8 — it does not exist yet); `MaintenanceSheet.kt` (the composable; B12); every `ui/dashboard/**`, `ui/asset/**`, `api/**` file; `core/**` main sources (a read model needing a `:core` change asks the controller).
 
 ## Interfaces
 
@@ -55,7 +55,7 @@ fun scanSheetContent(items: List<DueItem>, condition: ConditionView?,
 
 ### The rules
 
-1. **Reads never write** (inv. 105): every model here reads states through `readState` and never calls a use case, a recompute or an upsert.
+1. **Reads never write** (inv. 105): every model here reads states through `readState` and never calls a use case, a recompute or an upsert. The delivery seam `scheduleStateReader` joins them in this brief (the one wave that owns `AppGraph` after `readState` exists).
 2. **`AttentionReadModel`** covers **in-service** assets and components (status ACTIVE, not retired — the component's own lifecycle). Per asset: current DOWN → one `CONDITION` item; current DEGRADED → one `CONDITION` item; each **AGE** subject scoring CRITICAL → a `HEALTH` item in ATTENTION, WARNING → a `HEALTH` item in UPCOMING (master §20.21: a MAINTENANCE_OVERDUE subject rides its schedule row as `DueItem.health` instead). `rank` is dense over DOWN, DEGRADED, CRITICAL, WARNING; within each group by asset name (case-insensitive), then asset id, then subject `sortOrder` and id. Every field present, null when absent. A component names its parent (inv. 122).
 3. **`AssetHealthReadModel`** builds the engine's inputs — the asset, its subjects, each linked schedule with `policyInputsOf(schedule, readState(schedule), zone)`, the asset's `SeasonContext` (activation rows only for MANUAL), its events, `profileExists` from its profiles — and adds the current condition and every DOWN or DEGRADED in-service component **at any depth**. It is the one source for `/v1/assets/{id}/health`, the scan sheet and asset detail (inv. 119).
 4. **`scanSheetContent`** (spec §10.1, O-8): `opens` ⇔ `scanSheetItemsFor(...)` offers an item, **or** the asset is DOWN or DEGRADED, **or** a component is. Health never opens it alone. When it opens, `maintenance` lists D-18a's actionable items plus DUE SOON rows as passengers; **Plan decision:** a DUE SOON row rides along whenever the sheet is open for any reason, condition included (spec §10.1: health lines are passengers "like DUE SOON … when another reason opens it"). `critical` lists every CRITICAL subject; `aggregate` appears only when WARNING or CRITICAL; `offersMarkOperational` for DOWN or DEGRADED. `ScanSheetOffer.has(assetId)` is exactly `.opens` (inv. 123).
@@ -64,13 +64,14 @@ fun scanSheetContent(items: List<DueItem>, condition: ConditionView?,
 
 ## Invariants this brief must hold
 
-**82** (nothing here writes health), **103** (DEFERRED is not due, in its own section), **105** (`:app` half), **119**, **122**, **123**, **131** (the snooze half: a snooze leaves the health view unchanged), and the restated **23** (a stale row is derived fresh).
+**Accountable** (master §14): **105** (`ReadPathsWriteNothingTest`), **119**, **122**, **123**. **Halves:** **82** (nothing here writes health), **103** (DEFERRED is not due, in its own section), **131** (a snooze leaves the health view unchanged), and the restated **23** (a stale row is derived fresh).
 
 ## Test matrix
 
 | hazard | test (class · case) | RED mutation |
 |---|---|---|
 | a read path writes | `ReadPathsWriteNothingTest` · `everyReadModelWritesNothing` — `DueReadModel.items/forAsset`, `AttentionReadModel.items`, `AssetHealthReadModel.forAsset`, `ScanSheetOffer.has` against recording repositories with a **stale** state row: zero writes anywhere | call `recompute.forSchedule` on a stale row |
+| the delivery seam reads a stale row (M12) | `ReadPathsWriteNothingTest` · `theDeliverySeamReadsFreshStateAndWritesNothing` (the graph's `scheduleStateReader` over a row computed yesterday across a season boundary returns today's phase; zero writes) | keep `{ scheduleStates.get(it) }` |
 | a stale row is shown | `DueReadModelPolicyTest` · `aStaleStateRowIsDerivedForToday` (a row computed yesterday across a season boundary reads today's status) | use any stored row |
 | order ignores the policy | `DueReadModelPolicyTest` · `theOrderFollowsTheActionableDate` (a mower pulled to 1 Apr sorts before a CONTINUOUS row due 10 Apr) | sort on `effectiveDueOn` |
 | DEFERRED misplaced | `DueReadModelPolicyTest` · `deferredRowsHaveTheirOwnSectionAndCountForNothing` | leave DEFERRED in CURRENT |

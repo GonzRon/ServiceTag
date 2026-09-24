@@ -22,7 +22,7 @@ Make the engine answer the 1.4 question — *when is this work actionable* — i
 
 - `core/.../core/schedule/ScheduleRecompute.kt` — `rebuild` builds a `SeasonContext` from `season` and fills the four policy fields from `evaluate(at = today)`; `O` per master §8.1; a public `policyInputsOf(schedule, state, zone)`. Replace B01's interim substitution.
 - `core/.../core/schedule/ScheduleStatus.kt` — `DueStatus.DEFERRED` appended last (`countsAsDue` and `notifies` false); `statusOf` per master §8.4, the time side measured against `actionableDueOn`.
-- `core/.../core/usecase/RecomputeSchedules.kt` — `readState(schedule)`; `stateOf` unchanged in contract.
+- `core/.../core/usecase/RecomputeSchedules.kt` — `readState(schedule)` and `quietUntil(schedule)`; `stateOf` unchanged in contract.
 - `core/.../core/reminders/BuildReminderSubjects.kt` — master §8.5's mapping; reads state through `readState` (a missing or stale row is derived, never skipped); the `MM-DD` re-entry derivation (`:138-143`, `:224-231`) deleted; `RuleFacts.seasonal = servicePolicy ≠ CONTINUOUS`; `statusTerm(DEFERRED)` → S92.
 - `app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/DueItemRow.kt` — the three exhaustive `when`s over `DueStatus`: `statusLabel(DEFERRED)` = S92, `statusColors(DEFERRED)` = `seasonInactive` (spec §10.6: season-inactive grey), a new `StatusGlyph.HOURGLASS`.
 - `app/.../ui/components/ServiceTagIcons.kt` — `HourglassTop`.
@@ -39,6 +39,7 @@ Make the engine answer the 1.4 question — *when is this work actionable* — i
 - `SeasonContext.of(inputs)`, `boundaryKindOf(mode, hasBreak)` — for B04 (strands, `SeasonView`), B05 (the clock), B07, B14.
 - `ServicePolicyEngine.evaluate(inputs, season, at)` and `ScheduleRecompute.policyInputsOf(schedule, state, zone)` — for B05's per-day evaluation. **`evaluate` is pure and total** and is the only place the policy is applied.
 - `RecomputeSchedules.readState(schedule)` — for B07, B09 and every read path (master §8.6).
+- `PolicyOutcome.quietUntil: LocalDate?` — `season.firstAllowedAfter(at)` when `quiet`, else null — and `RecomputeSchedules.quietUntil(schedule): LocalDate?`, which evaluates the policy in memory for today and returns it (master §8.5, dec. 50). It is **never a column**; the reminder builder asks this accessor rather than `SeasonContext` or a break column, so inv. 104's grep stays empty.
 - `DueStatus.DEFERRED`.
 
 **The rule, restated only where it is easy to get wrong** (spec §4.3 is normative):
@@ -46,13 +47,13 @@ Make the engine answer the 1.4 question — *when is this work actionable* — i
 1. **Which date** — the policy applies to `P ?: R`. PRE_SERVICE computes its boundary from **`R`**; a postponed `P` is then moved past the break when inside it and **never earlier** (inv. 101).
 2. **IN_SERVICE reads `cycleStartAt(at)`**, not the cycle of `R`: AT_START gives `s + offset` only when the date is earlier; RESUME_CLAMPED `max(date, s)`; a null `s` on YEAR_ROUND keeps the date; a null `s` on MANUAL gives `actionableOn = null`, `AWAITING_START`. Then a date inside the break moves to `firstAllowedAfter` with `AFTER_BREAK`; otherwise the reason is `SEASON_START` when the date moved, else `NONE`.
 3. **PRE_SERVICE** — boundary `s` (CALENDAR: the season containing `R` or the next start after it; otherwise the break containing `R` or the next one; never a manual START); `dl = s + offset`; keep an allowed `R ≤ dl`; else `point` = the latest day of `W` on or before `dl`, else `W`'s first day, else (empty `W`) the day before the break; a `point > R` applies with `AFTER_BREAK`; a `point < R` applies only when `O < point`, reason `BEFORE_SEASON` when the point is in `W` and the boundary is a season, else `BEFORE_BREAK`; otherwise keep `R` if allowed or move it to the first allowed day after the break (`AFTER_BREAK`). No boundary → `P ?: R`, `POLICY_INAPPLICABLE`.
-4. **`phase`** is DORMANT exactly for IN_SERVICE_* on an OUT_OF_SEASON day; PRE_SERVICE and CONTINUOUS are always ACTIVE. **`quiet`** ⇔ policy ≠ CONTINUOUS ∧ `inBreak(at)`.
+4. **`phase`** is DORMANT exactly for IN_SERVICE_* on an OUT_OF_SEASON day; PRE_SERVICE and CONTINUOUS are always ACTIVE. **`quiet`** ⇔ policy ≠ CONTINUOUS ∧ `inBreak(at)`, and then **`quietUntil`** is the first allowed day after that break (spec §4.7's "quiet, with a notifying status → `Parked(the first day after the break)`").
 5. **A meter-only schedule** (`rawDueOn == null`) gets `actionableOn = null` with phase and quiet still computed; its meter side is never moved or deferred (O-7).
 6. **Held and DEFERRED:** held ⇔ `AFTER_BREAK` ∧ `T ≥ (P ?: R) − leadDays` ∧ `T < A`; the fold counts a held time side as OK; fold OK ∧ held → DEFERRED.
 
 ## Invariants this brief must hold
 
-**84, 85, 86** (engine half: nothing here writes), **90, 94, 95** (engine half), **96, 97, 98, 99** (engine half), **100, 101, 102, 103, 104, 105** (`:core` half), and the restated **10, 16, 17, 22, 23, 47**. It **replaces** the retired inv. 26 with 104's structural check and 84's property.
+**Accountable** (master §14): **84, 85, 90, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104** and the restated **10, 16, 17, 22, 23, 47**. **Halves:** **86** (engine: nothing here writes), **105** (`:core`: `readState`). It **replaces** the retired inv. 26 with 104's structural check and 84's property.
 
 ## Test matrix
 
@@ -79,8 +80,10 @@ Every date is an injected `T`. Literal values are spec §7 and §12.1's.
 | the pin and `O` | `ScheduleRecomputeTest` · `openedIsTheLastTerminationElseTheRuleChangeDate` | read `updatedAt` |
 | purity (inv. 16) | `ScheduleRecomputeTest` · `rebuildIsPureAndIdempotentWithSeasonInputs` | read a clock inside `evaluate` |
 | reads write | `ReadStateTest` · `aFreshRowIsReturned`, `aStaleOrMissingRowIsDerivedAndNothingIsWritten` (a recording state repository sees zero upserts) | upsert the derived row |
-| monotonicity (inv. 23) | `ScheduleStatusTest` · `aBoundaryMayChangeStatusWithNoHistoryChange` | — (amended assertion) |
+| monotonicity (inv. 23) | `ScheduleStatusTest` · `aBoundaryMayChangeStatusWithNoHistoryChange` (a stored row from before a season boundary, read the day after, reports the new phase) | read the stored stale `policyPhase` instead of deriving it |
 | reminders re-derive a season | `BuildReminderSubjectsTest` · `theSubjectStateFollowsTheEngine` (spec §4.7's six rows), `aStaleStateRowIsDerivedNotSkipped`, `continuousRowsKeepTheirContentHash` | keep the `MM-DD` re-entry |
+| the quiet park date has no source | `BuildReminderSubjectsTest` · `aQuietNotifyingRowParksUntilTheFirstDayAfterTheBreak` (the F4 snowblower on 10 Dec parks until 1 Mar) and `theQuietParkDateKeepsTheContentHashStable` (two builds on two days inside one break hash the same) | park with `null` |
+| `quietUntil` wrong | `BreakTest` · `quietUntilIsTheFirstAllowedDayAfterTheBreakAndNullOtherwise` (a wrapping break; CONTINUOUS never quiet) | return the break's last day |
 | inv. 104 | `ScheduleStructuralTest` · `noReminderCodeEvaluatesASeasonBreakOrPolicy` — no file under `core/.../core/reminders` or `app/.../reminders` references `Season.inSeason`, `SeasonContext`, `ServicePolicyEngine`, `seasonStartMmdd`, `seasonEndMmdd`, `blackoutStartMmdd` or `blackoutEndMmdd` | call `Season.inSeason` from the builder |
 | the status word and glyph | `StatusVocabularyTest` · `everyStatusHasItsOwnRatifiedWord` and `everyStatusHasItsOwnGlyph` (DEFERRED included) | reuse the PAUSE glyph |
 
@@ -102,7 +105,8 @@ Every date is an injected `T`. Literal values are spec §7 and §12.1's.
 - treat a manual START as a boundary or predict one;
 - move, defer or mask a crossed meter threshold;
 - let any reminder class evaluate a season, break or policy;
-- add the Deferred dashboard section (B07) or a why-line (B08);
+- add the Deferred dashboard section (B07) or a why-line (B13);
+- store `quietUntil` in any column or let the reminder builder compute it from the break;
 - edit `AppGraph.kt` or any shared fake.
 
 ## Size

@@ -6,13 +6,15 @@
 
 ## Goal
 
-Make the archive carry 1.4: backup **format 8** with three new lists, the new asset and schedule fields and the three new count keys; every format 1–7 archive still readable, through **one** legacy mapping, with a pre-upgrade format-7 export merging IDENTICAL after the upgrade; and the additive merge extended by three tables in dependency position — the two immutable fact tables that only ever insert, and the configuration table whose second identity declines rather than conflicts. No engine, no use case outside the four import/export ones, no API.
+Make the archive carry 1.4: backup **format 8** with three new lists, the new asset and schedule fields and the three new count keys; every format 1–7 archive still readable, through **one** legacy mapping, with a pre-upgrade format-7 archive merging IDENTICAL after the upgrade — proved on **B01's committed golden format-7 archive**, in JVM and in one connected contract class; and the additive merge extended by three tables in dependency position — the two immutable fact tables that only ever insert, and the configuration table whose second identity declines rather than conflicts. And because the format-8 schedule DTO is also the `/v1` schedule row, this brief introduces **`ScheduleRowResponse`** — the format-8 row plus the derived compatibility triple — in the same change, so the API never serves a schedule without the triple (controller ruling on I4). No engine, no use case outside the four import/export ones, and no other API change.
 
 ## Files
 
 **Create**
 
 - `core/src/main/kotlin/com/loosecannon/servicetag/core/backup/LegacyArchive.kt` — the format ≤7 tree upgrade (master §5).
+- `app/src/main/kotlin/com/loosecannon/servicetag/api/ScheduleRowResponse.kt` — the flat response row: every `MaintenanceScheduleDto` field plus `seasonBehavior: String?`, `seasonReentry: String?`, `seasonReentryOffsetDays: Int?` from `LegacySeasonMapping.toLegacy` (all null for PRE_SERVICE), and its builder from a schedule.
+- `app/src/androidTest/kotlin/com/loosecannon/servicetag/backup/Format7RestoreContractTest.kt` — the connected contract class of master §17.8: in-process `importBackupReplace` and `exportBackupSet` over the golden archive, no navigation, listed in R2.
 - Tests: `core/src/test/kotlin/com/loosecannon/servicetag/core/backup/BackupFormat8Test.kt`, `…/backup/LegacyArchiveUpgradeTest.kt`, `…/merge/MergePlannerSeasonHealthTest.kt`, `…/usecase/Format7ImportIdentityTest.kt`; `core/src/test/.../testing/Format8Fixtures.kt` (new builders; B01's `MaintenanceFixtures.kt` is not edited).
 
 **Modify**
@@ -23,9 +25,15 @@ Make the archive carry 1.4: backup **format 8** with three new lists, the new as
 - `core/.../core/merge/MergePlanner.kt` — the three passes, in write order, in the shipped five-step shape.
 - `core/.../core/usecase/ExportBackupSet.kt`, `ImportBackupReplace.kt`, `BuildBackupMergePlan.kt`, `ApplyBackupMergePlan.kt` — use the three repositories B01 already put in their constructors: export reads them inside the read transaction; replace inserts them after assets and schedules (the wipe needs nothing new — `assets.deleteAll()` and `schedules.deleteAll()` cascade them); plan snapshots them; apply writes them after `REFERENCES`, before the shipped `rebuildAll`.
 - `app/src/test/kotlin/com/loosecannon/servicetag/VersionAgreementTest.kt` — the format half: 8.
+- `app/.../api/MaintenanceDtos.kt`, `MaintenanceHandlers.kt` — **the response side only**: every response that carries a schedule (`ScheduleResponse`, `ScheduleListResponse`, `ScheduleDetailResponse`, `ScheduleAndStateResponse`, `CompletionResponse`, `CloseRoundResponse`) carries a `ScheduleRowResponse`. The command request is B09's (wave 6).
+- `app/src/test/.../api/MaintenanceRoutesTest.kt` — `aScheduleResponseCarriesTheDerivedTriple`.
+- `app/src/test/.../api/MaintenanceCommandShapeTest.kt` — `theScheduleCommandIsTheScheduleRowMinusIdentityBookkeepingAndThePostponement` now reads the `ScheduleRowResponse` keys, subtracts `ruleChangedAt` (response-only) with the shipped identity keys, and — **until B09 adds them to the command** — `servicePolicy` and `policyOffsetDays`; B09 removes that last subtraction.
+- `core/src/test/.../backup/StageABundleConformanceTest.kt` — subtract a named `FORMAT_8_TABLES` (`seasonActivations`, `assetConditions`, `healthSubjects`) beside `FORMAT_6_TABLES`/`FORMAT_7_TABLES` (`:92`), and compare each bundle asset's keys against the **format ≤7 asset key set** (the five new asset fields named and subtracted) rather than `AssetDto`'s element names (`:98`, `:156`); the "a new table without a thought for the generator still fails" guard stays live. The bundle tool itself stays byte-identical.
+- `core/src/test/.../backup/BackupFormat6Test.kt` — its `MaintenanceScheduleDto` element pin (`:236-257`) moves to `BackupFormat8Test.theDtoFieldSetsAreTheMasterPlansLists`; the format-6 test keeps only what format 6 still means (a format-6 archive decodes), retired by name in the ledger.
+- `app/build.gradle.kts` — one line: `androidTest` assets gain `../core/src/test/resources/golden`, so the connected class reads B01's archive without a second copy (master dec. 49).
 - Existing codec and merge tests that build a `BackupData`, `MergeSnapshot` or `MergeWrites` positionally, or assert an encoded format number — mechanical edits only.
 
-**Untouched:** `AppGraph.kt` (B01 wired the constructors), every `core/schedule/**` and `core/reminders/**` file (B02's, same wave), `InMemoryRepositories.kt`, `MaintenanceFixtures.kt`, `app/**` main sources, `tools/`, `libs/`, `docs/`. **The tombstones** — `ExternalLinkDto`, the `externalLinks` array, `ExternalLink.toDto/toDomain`, `MergeTable.LINKS` — **byte-for-byte**.
+**Untouched:** `AppGraph.kt` (B01 wired the constructors), every `core/schedule/**` and `core/reminders/**` file (B02's, same wave), `InMemoryRepositories.kt`, `MaintenanceFixtures.kt`, every `app/**` main source except the three `api/` files named above (no route, command, handler logic or document changes here), `tools/`, `libs/`, `docs/`, and the golden archive itself (read, never rewritten). **The tombstones** — `ExternalLinkDto`, the `externalLinks` array, `ExternalLink.toDto/toDomain`, `MergeTable.LINKS` — **byte-for-byte**.
 
 ## Interfaces
 
@@ -34,6 +42,7 @@ Make the archive carry 1.4: backup **format 8** with three new lists, the new as
 **Produces:**
 
 - The wire names every later brief uses (master §5): `SeasonActivationDto`, `AssetConditionDto`, `HealthSubjectDto`, the widened `AssetDto` and `MaintenanceScheduleDto`, `BackupData.seasonActivations/assetConditions/healthSubjects`, count keys `seasonActivations`, `assetConditions`, `healthSubjects`. **B09's API rows are these DTOs** (plus the schedule's derived triple, master §11.3).
+- `ScheduleRowResponse` — for B09, which documents it and builds the command side against it.
 - `MergeTable.SEASON_ACTIVATIONS`, `CONDITIONS`, `HEALTH_SUBJECTS`; `MergeReason.HEALTH_SUBJECT_SCHEDULE_HELD_BY_A_LOCAL_ROW` (on a `SKIPPED`) and `HEALTH_SUBJECT_SCHEDULE_DUPLICATED_IN_ARCHIVE` (on a `CONFLICT`); `MergeReport`'s three tallies — for B09's report mirror.
 
 ### The decode, version by version
@@ -58,7 +67,7 @@ object LegacyArchive {                 // core/.../core/backup/LegacyArchive.kt
 
 ## Invariants this brief must hold
 
-**62, 63, 64** extended to format 8 and to health; **88** (decoder half); **109** (merge half); **111** (nothing derived in the format); **120** (merge half: the second identity); **124**; **125** (decoder half: agrees with the migration's mapping, moves no `updatedAt`, a pre-upgrade format-7 export merges IDENTICAL); **126** (merge half). It must not weaken the shipped merge invariants **66, 67, 69, 71**.
+**Accountable** (master §14): **62, 63, 64** extended to format 8 and to health; **124**; **125** (agrees with the migration's mapping, moves no `updatedAt`, and B01's golden format-7 archive merges IDENTICAL); **126** (facts merge only as INSERT, IDENTICAL or CONTENT_DIFFERS). **Halves:** **88** (decoder), **109** (merge: soft links never owners), **111** (nothing derived in the format), **120** (merge: the second identity). It must not weaken the shipped merge invariants **66, 67, 69, 71**.
 
 ## Test matrix
 
@@ -67,7 +76,7 @@ object LegacyArchive {                 // core/.../core/backup/LegacyArchive.kt
 | a new field dropped in transit | `BackupFormat8Test` · `everyNewFieldSurvivesARoundTrip` (non-default values in every field of the three DTOs, the asset's five and the schedule's three) | omit `occurredTime` from the condition mapper |
 | DTO field-set drift | `BackupFormat8Test` · `theDtoFieldSetsAreTheMasterPlansLists` (serializer descriptors against master §5) | rename `tzId` |
 | **an old archive stops working** | `LegacyArchiveUpgradeTest` · `everyGoldenCaseDecodesToItsPolicy` (each case of `docs/api/legacy-season-mapping.json` as a format-7 schedule) and `aFormat7AssetIsCalendarExactlyWhenBothMonthDaysAreSet` and `ruleChangedAtIsUpdatedAtAndTheNewListsAreEmpty` | seed `ruleChangedAt` from `createdAt` |
-| formats 1–6 regress | the shipped `BackupCodecTest`, `BackupFormat6Test`, `BackupFormat7Test`, `StageABundleConformanceTest` stay green, the last **unchanged** | — (shape-only) |
+| formats 1–6 regress | the shipped `BackupCodecTest` and `BackupFormat7Test` stay green; `StageABundleConformanceTest` and `BackupFormat6Test` are edited **exactly** as the Files section names — shape-only rows (master §15.3), with `StageABundleConformanceTest`'s guard proved still live by adding an unnamed table in a scratch run and seeing it fail | — (shape-only, named in master §15.3) |
 | a legacy key accepted in format 8 | `BackupFormat8Test` · `aLegacySeasonFieldInFormat8IsCorrupt` and `aMissingNewFieldInFormat8IsCorrupt` | give the DTO `ignoreUnknownKeys` |
 | a newer archive half-read | `BackupFormat8Test` · `formatNineIsRefusedBeforeAnyRow` and, holding the constant at 7 in the expectation, `aSevenBuildRefusesFormatEight` (inv. 63) | move the version check after the decode |
 | counts drift | `BackupFormat8Test` · `countsCarryTheThreeNewKeysEqualToTheRows` | count `healthSubjects` from conditions |
@@ -82,15 +91,17 @@ object LegacyArchive {                 // core/.../core/backup/LegacyArchive.kt
 | configuration diverges | `MergePlannerSeasonHealthTest` · `aModeBreakOrHealthPolicyDifferenceIsContentDiffersOnAssets` | skip the new asset fields in the comparison |
 | a partial merge | `MergePlannerSeasonHealthTest` · `oneConflictWritesNothing` (every write list empty) | keep the fact inserts |
 | the apply | `MergePlannerSeasonHealthTest` · `applyWritesTheThreeTablesInOrderThenRebuildsOnce` | rebuild per table |
-| **the upgrade identity** | `Format7ImportIdentityTest` · `aPreUpgradeFormat7ExportMergesIdentical` — a 1.3-shaped store (CALENDAR and YEAR_ROUND assets, IGNORE and FOLLOW_ASSET schedules) exported as format 7, the same store as 1.4 rows mapped by §4.1 with `ruleChangedAt = updatedAt`, then planned: every table IDENTICAL (inv. 125) | map `RESUME_CLAMPED` to AT_START in the upgrade only |
+| **the upgrade identity** | `Format7ImportIdentityTest` · `theGoldenFormat7ArchiveMergesIdentical` — B01's committed archive decoded and planned against a store built from its own rows with the policies, offsets and modes `format-7-legacy-seasons.expected.json` names and `ruleChangedAt = updatedAt`: every table IDENTICAL (inv. 125; the controller's ruling on I2 — this JVM test is the sole proof of that clause) | map `RESUME_CLAMPED` to AT_START in the upgrade only |
 | replace restores 1.4 | `Format7ImportIdentityTest` · `aReplaceRestoreOfFormat8KeepsFactsAndSubjects` | skip the subject insert loop |
+| the release proof has no mechanism | `Format7RestoreContractTest` (connected) · `restoringTheGoldenArchiveKeepsCountsAndMapsEveryRow` (equal counts, CALENDAR iff both `MM-DD`, no break, §4.1 on every schedule, `ruleChangedAt = updatedAt`, empty new lists) and `reExportIsFormat8AndPlansIdentical` (master §17.8) | skip the `MM-DD` re-entry case in the upgrade |
+| the API loses the triple | `MaintenanceRoutesTest` · `aScheduleResponseCarriesTheDerivedTriple` (AT_START reads `FOLLOW_ASSET` / `AT_START` / offset; CONTINUOUS reads `IGNORE` / null / null; every schedule-bearing response uses the row) | serve the bare format-8 DTO |
 
 ## Gate
 
 - `./gradlew :core:test :app:testDebugUnitTest --console=plain` → zero failures, zero skips; counts recorded.
+- `./gradlew :app:compileDebugAndroidTestKotlin --console=plain`; connected, one class: `ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.loosecannon.servicetag.backup.Format7RestoreContractTest`.
 - `cd tools/servicetag-bundle && uv run --frozen pytest` → green, and `git diff --stat <base> -- tools/servicetag-bundle` → empty.
-- Anchored: `grep -c 'FORMAT_VERSION = 8' core/src/main/kotlin/com/loosecannon/servicetag/core/backup/BackupCodec.kt` → 1; `grep -c '^enum class MergeTable' core/src/main/kotlin/com/loosecannon/servicetag/core/merge/MergePlan.kt` → 1; `grep -c 'eleven canonical tables' core/src/main/kotlin/com/loosecannon/servicetag/core/merge/MergePlan.kt` → 0; `grep -cE '^[[:space:]]*UPDATE[,[:space:]]*$' core/src/main/kotlin/com/loosecannon/servicetag/core/merge/MergePlan.kt` → 0; `grep -rnE '\bseason(Behavior|Reentry)' core/src/main/kotlin/com/loosecannon/servicetag/core/backup/BackupFormat.kt` → no output (the legacy keys live only in `LegacyArchive.kt`); `git diff --stat <base> -- core/src/main/kotlin/com/loosecannon/servicetag/core/model/ExternalLink.kt app/src/main core/src/main/kotlin/com/loosecannon/servicetag/core/schedule` → empty.
-- No connected run.
+- Anchored: `grep -cE '^[[:space:]]*const val FORMAT_VERSION = 8$' core/src/main/kotlin/com/loosecannon/servicetag/core/backup/BackupCodec.kt` → 1; `grep -c '^enum class MergeTable' core/src/main/kotlin/com/loosecannon/servicetag/core/merge/MergePlan.kt` → 1; `grep -c 'eleven canonical tables' core/src/main/kotlin/com/loosecannon/servicetag/core/merge/MergePlan.kt` → 0; `grep -cE '^[[:space:]]*UPDATE[,[:space:]]*$' core/src/main/kotlin/com/loosecannon/servicetag/core/merge/MergePlan.kt` → 0; `grep -rnE '\bseason(Behavior|Reentry)' core/src/main/kotlin/com/loosecannon/servicetag/core/backup/BackupFormat.kt` → no output (the legacy keys live only in `LegacyArchive.kt`); `git diff --stat <base> -- core/src/main/kotlin/com/loosecannon/servicetag/core/model/ExternalLink.kt core/src/main/kotlin/com/loosecannon/servicetag/core/schedule app/src/main/kotlin/com/loosecannon/servicetag/ui app/src/main/kotlin/com/loosecannon/servicetag/data app/src/main/kotlin/com/loosecannon/servicetag/di core/src/test/resources/golden` → empty.
 
 ## Strings
 
@@ -98,7 +109,9 @@ object LegacyArchive {                 // core/.../core/backup/LegacyArchive.kt
 
 ## Must NOT
 
-- encode a legacy season field, or read one anywhere but `LegacyArchive`;
+- encode a legacy season field in an archive, or read one in the codec anywhere but `LegacyArchive` (the API's derived triple comes only from `LegacySeasonMapping.toLegacy`);
+- change the `/v1` command side, a route, a code or `docs/api/v1.md` (B09's);
+- rewrite, regenerate or copy the golden archive, or let `StageABundleConformanceTest`'s new-table guard go dead;
 - give any new DTO field a default;
 - validate a soft link, or make one a merge owner;
 - add an `UPDATE` verdict, or write anything when a conflict exists;

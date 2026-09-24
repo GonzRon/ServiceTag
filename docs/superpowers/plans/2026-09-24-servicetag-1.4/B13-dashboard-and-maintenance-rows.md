@@ -12,7 +12,7 @@ Make the landing screen answer "what needs me" across all three kinds of fact wi
 
 **Create**
 
-- `app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/WhyLines.kt` — `whyLine(item: DueItem, format): String?` (S85–S91).
+- `app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/WhyLines.kt` — `whyLine(item: DueItem, format: (LocalDate) -> String): String?` (S85–S91).
 - Tests: `app/src/test/kotlin/com/loosecannon/servicetag/ui/maintenance/WhyLinesTest.kt`, `app/src/test/.../ui/dashboard/DashboardFiltersTest.kt`.
 
 **Modify**
@@ -20,9 +20,9 @@ Make the landing screen answer "what needs me" across all three kinds of fact wi
 - `app/.../ui/dashboard/DashboardViewModel.kt` — reads `AttentionReadModel.items()` beside `DueReadModel.items()` and assembles the sections (below); `DashboardState` gains the asset-level rows and the condition chips; an asset drawn as any row in a section is not repeated in the plain asset list (the shipped "an asset appears exactly once", extended).
 - `app/.../ui/dashboard/DashboardScreen.kt` — the condition row (`ConditionBadge`, the reason or S23, the parent named), the health row (S110 with `HealthBadge`), the Deferred section.
 - `app/.../ui/dashboard/DashboardFilters.kt` — `DEFERRED` in `FILTERABLE_STATUSES`; `DashboardFilters.conditions: Set<ConditionChip>`; the chip row.
-- `app/.../ui/maintenance/DueItemRow.kt` — the why-line under a row; the health passenger (S110) when `DueItem.health` is set.
+- `app/.../ui/maintenance/DueItemRow.kt` — the why-line under a row; the health passenger (S110) when `DueItem.health` is set. **The public signature of `DueItemRow` is unchanged** — both additions are read from `DueItem` — so its other call sites (`AssetMaintenanceSections.kt:70`, B14's in this wave; `CompletionFlow.kt:372`; `DashboardScreen.kt:188`; `SchedulesSection.kt:43`) need no edit.
 - `app/.../ui/maintenance/MaintenanceScreen.kt`, `MaintenanceViewModel.kt` — rows carry their why-line; "Reminders" stays reminder health.
-- `app/.../di/AppGraph.kt`, `app/src/test/.../testing/FakeGraph.kt` — only if the dashboard needs a field B07 did not add (B14 edits neither).
+- `app/.../di/AppGraph.kt` — only if the dashboard needs a field B07 did not add, and then **mirrored in `app/src/test/.../testing/FakeGraph.kt` in this brief** (master §1; B14 edits neither).
 - Tests: `app/src/test/.../ui/dashboard/DashboardViewModelMaintenanceTest.kt`, `DashboardViewModelTest.kt`, `app/src/androidTest/.../ui/dashboard/DashboardAttentionTest.kt`, `app/src/androidTest/.../ui/maintenance/MaintenanceShellTest.kt` — extended.
 
 **Untouched:** every `ui/asset/**` file (B14's, same wave); `ui/condition/**`, `ui/health/**` (B12's, reused); the read models (B07); `core/**`; `api/**`; `ScheduleDetail*` and `ScheduleEdit*` (B08).
@@ -31,7 +31,7 @@ Make the landing screen answer "what needs me" across all three kinds of fact wi
 
 **Consumes:** `DueReadModel`, `DueItem` (with `actionableDueOn`, `policyReason`, `policyPhase`, `quiet`, `seasonMode`, `dormantUntil`, `health`), `AttentionSection` (with `DEFERRED`), `AttentionReadModel`, `AttentionItem` (B07); `ConditionBadge`, `HealthBadge`, `conditionWord`, `dashboardHealthRow`, the S8/S10/S12 constants (B12); `statusLabel` (S92, B02); `sectionLabel` (S93, B07).
 
-**Produces:** `whyLine(...)` — nothing else another brief calls.
+**Produces:** `whyLine(item: DueItem, format: (LocalDate) -> String): String?` — nothing else another brief calls.
 
 ### The sections (spec §10.2)
 
@@ -61,7 +61,7 @@ Each row opens what it names: a condition or health row opens asset detail (B14 
 
 - The shipped **"Maintenance status"** picker gains DEFERRED, drawn with its status word S92 like the seven shipped options (master §20.26).
 - A row of four **condition chips** — **S8 Operational, S10 Degraded, S12 Down, S26 Not recorded** — multi-select; none selected means no condition filter, so no "All …" option (and no new string) is needed.
-- A **schedule row** passes when it matches the picker (if set) **and** its target asset's condition matches a selected chip (if any). A **group row** has no condition and passes only when no chip is selected. An **asset-level row** passes only when **no status** is selected and it matches the chips (if any) — so when only a status is selected, asset rows are hidden. Category and search apply to both kinds. **Filters narrow; they never re-rank** (the shipped rule).
+- A **schedule row** passes when it matches the picker (if set) **and** its target asset's condition matches a selected chip (if any). A **group row** has no condition and passes only when no chip is selected. An **asset-level row** passes when **no status is selected or at least one condition chip is**, and it matches the chips (if any) — so asset rows hide only when **only** a status is selected (spec §10.2's "when only status chips are active"; the controller's ruling on M14). Category and search apply to both kinds. **Filters narrow; they never re-rank** (the shipped rule).
 
 ### The why-line (master §13.3; spec §10.5)
 
@@ -81,7 +81,7 @@ One line per schedule row, the first that applies: **DORMANT** — S89 "Out of s
 | duplicates | `DashboardViewModelMaintenanceTest` · `anAssetDrawnAsARowIsNotRepeatedInTheAssetList` | forget the attention rows in the exclusion |
 | overdue health doubled | `DashboardViewModelMaintenanceTest` · `overdueHealthRidesItsScheduleRow` | also draw it as an independent row |
 | out-of-service rows | `DashboardViewModelMaintenanceTest` · `retiredAndArchivedUnitsDoNotAppear` | drop the bound |
-| the filters | `DashboardFiltersTest` · `deferredIsAStatusOption`, `statusOnlyHidesAssetRows`, `conditionChipsSelectScheduleRowsByTheirAssetsCondition`, `groupRowsPassOnlyWithoutChips`, `categoryAndSearchApplyToBothKinds`, `filtersNeverReRank` | let a status filter keep asset rows |
+| the filters | `DashboardFiltersTest` · `deferredIsAStatusOption`, `statusOnlyHidesAssetRows`, `aStatusPlusAMatchingChipLetsTheAssetRowPass` (M14), `conditionChipsSelectScheduleRowsByTheirAssetsCondition`, `groupRowsPassOnlyWithoutChips`, `categoryAndSearchApplyToBothKinds`, `filtersNeverReRank` | hide asset rows whenever a status is selected |
 | the why-line | `WhyLinesTest` · one case per line S85–S91 with its date, `precedenceDormantDeferredQuietReason`, `policyInapplicableDrawsNothing` | show S91 over S85 |
 | the screens | `DashboardAttentionTest` (connected) · `sectionOrderWithConditionAndHealthRows`, `theDeferredSection`, `conditionChips`; `MaintenanceShellTest` (connected) · `rowsCarryTheirWhyLine` | omit the Deferred header |
 
@@ -117,7 +117,8 @@ One line per schedule row, the first that applies: **DORMANT** — S89 "Out of s
 ## Review focus
 
 - The assembly concatenates the projections' own orders and re-sorts nothing.
-- The filter truth table matches master §13.2 exactly, including the group-row and asset-row cases.
+- The filter truth table matches master §13.2 exactly, including the group-row case and the asset-row case with a status **and** a chip.
+- `DueItemRow`'s public signature is unchanged; B14's call site in the same wave compiles untouched.
 - No new string: the chip row has no label and no "All" option.
 
 ## Size

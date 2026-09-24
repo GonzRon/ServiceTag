@@ -17,10 +17,12 @@ Give condition and health their one presentation, and put it where the owner sta
 - `app/.../ui/condition/ChangeConditionSheet.kt`, `ChangeConditionViewModel.kt` — S5, S8–S16, S25 and Cancel.
 - `app/.../ui/condition/MarkOperationalDialog.kt` — S17, S18, S7 and Cancel.
 - `app/.../ui/condition/Offers.kt` — the operational offer (S17 title, S19 body, S7, S20) and the season offer (S51 / S52 title, S53 body, S40 / S41, the shipped "Not now").
-- `app/.../ui/health/HealthWords.kt` — S95–S98, the driver lines S99–S106, S142, S143, the aggregate S108, the critical line S109, the dashboard row S110.
+- `app/.../ui/health/HealthWords.kt` — S95–S98, the driver lines S99–S106, S142, S143, the aggregate S108, the critical line S109, the dashboard row S110; the two quantity-bearing lines through `HealthPlurals` (below).
+- `app/.../ui/health/AndroidHealthPlurals.kt` — `class AndroidHealthPlurals(resources: Resources) : HealthPlurals`, the production glue: `getQuantityString` over the two plural ids of `plurals.xml`, with the quantity passed as the selector.
+- `app/src/main/res/values/plurals.xml` — **the plurals resource** (controller ruling, dec. 29): `health_age_days` for S99's `<age>` (`one` "1 day", `other` "%d days") and `health_days_overdue` for S102 (`one` "%1$s is 1 day overdue", `other` the ratified S102 text). The `other` forms are the ratified text verbatim; S104 is singular-safe and stays a plain string.
 - `app/.../ui/health/HealthBadge.kt` — band word + score + bar icon; the NOT TRACKED form.
 - `app/src/main/res/drawable/` — `ic_task_alt.xml`, `ic_trending_down.xml`, `ic_block.xml`, `ic_radio_button_unchecked.xml`, `ic_signal_cellular_alt.xml`, `ic_signal_cellular_alt_2_bar.xml`, `ic_signal_cellular_alt_1_bar.xml`, `ic_signal_cellular_nodata.xml`, `ic_event_available.xml` (spec §10.6's proposed icons).
-- Tests: `app/src/test/kotlin/com/loosecannon/servicetag/ui/condition/ConditionWordsTest.kt`, `…/ui/condition/ChangeConditionViewModelTest.kt`, `…/ui/condition/OffersTest.kt`, `…/ui/health/HealthWordsTest.kt`, `…/ui/PresentationGrayscaleTest.kt`; `app/src/androidTest/kotlin/com/loosecannon/servicetag/ui/condition/ChangeConditionSheetTest.kt`.
+- Tests: `app/src/test/kotlin/com/loosecannon/servicetag/ui/condition/ConditionWordsTest.kt`, `…/ui/condition/ChangeConditionViewModelTest.kt`, `…/ui/condition/OffersTest.kt`, `…/ui/health/HealthWordsTest.kt`, `…/ui/PresentationGrayscaleTest.kt`; `app/src/androidTest/kotlin/com/loosecannon/servicetag/ui/condition/ChangeConditionSheetTest.kt`; `app/src/androidTest/.../ui/health/HealthPluralsContractTest.kt` (a framework contract test with no navigation: it drives **`AndroidHealthPlurals`** over `InstrumentationRegistry.getInstrumentation().targetContext.resources` — the app's resources, not the test APK's — calling both methods with n = 1 and n = 5).
 
 **Modify**
 
@@ -29,19 +31,20 @@ Give condition and health their one presentation, and put it where the owner sta
 - `app/.../ui/maintenance/MaintenanceSheet.kt`, `MaintenanceSheetViewModel.kt` — the seven blocks; the two actions.
 - `app/.../ui/maintenance/CompletionFlow.kt` — after a completion, the operational offer per completed DOWN or DEGRADED asset, one at a time (master §9).
 - `app/.../ui/journal/EventEntryViewModel.kt`, `EventEntryScreen.kt` — after a saved `MAINTENANCE` or `REPLACEMENT` event, the operational offer; after a saved `SEASON_START` / `SEASON_END` event, the season offer.
-- `app/.../di/AppGraph.kt`, `app/src/test/.../testing/FakeGraph.kt` — only if `CompletionFlow`'s constructor needs `ConditionRepository`, `RecordCondition` or the offer functions.
+- `app/.../di/AppGraph.kt` — only where `CompletionFlow`'s construction needs the `conditions` repository or the graph's `acceptOperationalOffer` (B06) / `acceptSeasonOffer` (B04) fields; every such edit is **mirrored in `app/src/test/.../testing/FakeGraph.kt` in this brief** (master §1). An `AndroidHealthPlurals` over `plurals.xml` is built where the screens need it, not stored in the graph.
 - `app/src/test/.../ui/theme/ContrastTest.kt`, `app/src/test/.../ui/maintenance/MaintenanceSheetViewModelTest.kt`, `app/src/androidTest/.../ui/maintenance/ScanSheetTest.kt` — extended.
 
 **Untouched:** `tools/**` (B11's, same wave); `ui/dashboard/**`, `ui/asset/**` (B13, B14); `DueReadModel.kt`, `ScanSheetContent.kt`, `AttentionReadModel.kt`, `AssetHealthReadModel.kt` (B07; consumed, not changed); `core/**`; `api/**`.
 
 ## Interfaces
 
-**Consumes:** `scanSheetContent`, `ScanSheetContent`, `ConditionView`, `ComponentCondition`, `AssetHealthReadModel`, `SubjectBandFact` (B07); `DriverLine`, `SubjectHealth`, `HealthBand` (B05); `RecordCondition`, `ConditionCommand`, `operationalOfferFor`, `acceptOperationalOffer` (B06); `seasonOfferFor`, `acceptSeasonOffer` (B04).
+**Consumes:** `scanSheetContent`, `ScanSheetContent`, `ConditionView`, `ComponentCondition`, `AssetHealthReadModel`, `SubjectBandFact` (B07); `DriverLine`, `SubjectHealth`, `HealthBand` (B05); `RecordCondition`, `ConditionCommand`, `operationalOfferFor`, `AcceptOperationalOffer` (B06); `seasonOfferFor`, `AcceptSeasonOffer` (B04).
 
 **Produces** (B13 and B14 reuse these and define none of their own):
 
-- `conditionWord(OperationalCondition?)`, `conditionHelper(...)`, `sinceLine(date)`, `componentLine(ComponentCondition)`; `ConditionBadge(view: ConditionView?)`.
-- `bandWord(HealthBand?)`, `driverLineText(DriverLine, format)`, `aggregateLine(score, contributors)`, `criticalLine(subject)`, `dashboardHealthRow(fact)`; `HealthBadge(...)`.
+- `conditionWord(condition: OperationalCondition?): String`, `conditionHelper(condition: OperationalCondition): String` (S9 / S11 / S13), `sinceLine(since: LocalDate, format: (LocalDate) -> String): String`, `componentLine(component: ComponentCondition): String`; `@Composable ConditionBadge(view: ConditionView?, modifier: Modifier = Modifier)`.
+- `bandWord(band: HealthBand?): String` (null = S98), `driverLineText(line: DriverLine, plurals: HealthPlurals, format: (LocalDate) -> String): String?` (null for no line), `aggregateLine(score: Int, contributors: List<SubjectHealth>): String`, `criticalLine(subject: SubjectHealth): String`, `dashboardHealthRow(fact: SubjectBandFact): String`; `@Composable HealthBadge(band: HealthBand?, score: Int?, modifier: Modifier = Modifier)` (null band = NOT TRACKED).
+- `interface HealthPlurals { fun ageDays(n: Long): String; fun daysOverdue(title: String, n: Long): String }` — `AndroidHealthPlurals(resources: Resources)` is the Android implementation over `plurals.xml` (B14 builds one from its screen's resources); JVM tests pass a fake, because `:app` JVM tests have no Robolectric and no dependency is added.
 - `ChangeConditionSheet(assetId, onDone)` and `MarkOperationalDialog(assetId, current, onDone)` — B14 opens the same composables from asset detail.
 - The S40 and S41 constants (B14 uses them for Start/End season).
 - The eight tokens and nine icons.
@@ -65,13 +68,13 @@ Snooze and Postpone keep their 1.2 behaviour on the sheet. The sheet opens only 
 
 ### The offers (spec §3.3, §5.4; inv. 81, 93)
 
-- **Operational:** when `operationalOfferFor` holds after a completion (for each completed member asset, one at a time) or after a saved `MAINTENANCE` / `REPLACEMENT` event: **S17** title, **S19** body (event title, asset name), **S7** accepts through `acceptOperationalOffer`, **S20 "Not yet"** writes nothing.
-- **Season:** when `seasonOfferFor` answers after a saved `SEASON_START` / `SEASON_END` event: **S51** or **S52** title, **S53** body (event title), **S40** or **S41** accepts through `acceptSeasonOffer`, "Not now" writes nothing.
+- **Operational:** when `operationalOfferFor` holds after a completion (for each completed member asset, one at a time) or after a saved `MAINTENANCE` / `REPLACEMENT` event: **S17** title, **S19** body (event title, asset name), **S7** accepts through `AcceptOperationalOffer`, **S20 "Not yet"** writes nothing.
+- **Season:** when `seasonOfferFor` answers after a saved `SEASON_START` / `SEASON_END` event: **S51** or **S52** title, **S53** body (event title), **S40** or **S41** accepts through `AcceptSeasonOffer`, "Not now" writes nothing.
 - An API write never offers (there is nobody to ask).
 
 ### Words and substitutions
 
-`<date>` uses the shipped display shape (`d MMM uuuu`, as the snooze line). **Plan decision:** S99's `<age>` renders as `<n> days`, reusing the unit word the ratified S102 and S123 already carry, and every `<n>` substitutes the number alone with no pluralisation logic (master §20.29). S108 lists the non-archived contributors in `sortOrder`; S109 names one subject.
+`<date>` uses the shipped display shape (`d MMM uuuu`, as the snooze line). **Ruled (dec. 29, changed):** S99's `<age>` and S102's `<n>` go through the plurals resource — `other` is the ratified text, `one` drops the unit's "s" ("1 day", "… is 1 day overdue"). These `one` forms are ratified inflections, not new strings (master §17.2). S104 needs no plural. S108 lists the non-archived contributors in `sortOrder`; S109 names one subject.
 
 ## Invariants this brief must hold
 
@@ -84,6 +87,7 @@ Snooze and Postpone keep their 1.2 behaviour on the sheet. The sheet opens only 
 | a state indistinguishable without colour | `PresentationGrayscaleTest` · `noTwoStatesShareAWordAndAnIcon` (OPERATIONAL, DEGRADED, DOWN, not recorded, NOMINAL, WARNING, CRITICAL, NOT TRACKED, DEFERRED, IN SEASON) | give DEGRADED the warning icon |
 | DEGRADED looks like Due | `PresentationGrayscaleTest` · `degradedHasItsOwnTokenDistinctFromDueAndDueSoon` (light and dark) | alias `conditionDegraded` to `dueSoon` |
 | unreadable tokens | `ContrastTest` · the eight new pairs meet the shipped threshold | lighten `conditionDown`'s foreground |
+| "1 days overdue" ships (dec. 29) | `HealthWordsTest` · `oneAndOtherGoThroughThePlurals` (a fake `HealthPlurals` sees `n = 1` and `n = 5` for S99 and S102) and `HealthPluralsContractTest` (connected) · `androidHealthPluralsSaysOneDayAndNDays` (`AndroidHealthPlurals` over the target context's resources; `ageDays` and `daysOverdue` at n = 1 and n = 5) | `AndroidHealthPlurals` returns the `other` form for every n |
 | words drift | `ConditionWordsTest` · `everyWordIsItsRatifiedString` (S1–S4, S8–S13, S22, S23, S27 with an empty reason); `HealthWordsTest` · `bandsDriverLinesAndSummaries` (S95–S106, S108–S110, S142, S143 — Postponed while not late, Up to date otherwise; the archived link draws no line) | render NOT TRACKED as "100" |
 | Change condition writes wrong | `ChangeConditionViewModelTest` · `nothingIsPreselectedAndSaveWritesOnce`, `aFutureDateShowsS25AndWritesNothing`, `cancelWritesNothing`, `thePastIsAllowed` | preselect OPERATIONAL |
 | the offers apply themselves | `OffersTest` · `anOperationalOfferAfterACompletionOnADownAsset`, `oneOfferPerDownMemberInTurn`, `aMaintenanceOrReplacementEventOffersAnInspectionDoesNot`, `notYetWritesNothing`, `theSeasonOfferOnlyOnAManualAssetInTheOppositePhase`, `notNowWritesNothing` | write on the predicate |
@@ -99,13 +103,13 @@ Snooze and Postpone keep their 1.2 behaviour on the sheet. The sheet opens only 
 - **An aggregate that is NOT TRACKED** is not drawn on the sheet (only WARNING or CRITICAL are).
 - **A group round completed for three DOWN members** offers three times in turn; declining one does not cancel the others.
 - **A completion from a notification quick action** offers nothing: there is no screen to ask on (the same rule as an API write).
-- **A season event dated before the latest activation** is clamped to that date by `acceptSeasonOffer`; the dialog shows no date of its own.
+- **A season event dated before the latest activation** is clamped to that date by `AcceptSeasonOffer`; the dialog shows no date of its own.
 - **The Change condition date** defaults to today in the device zone; `occurredTime` is left null and `tzId` is the device zone.
 
 ## Gate
 
 - `./gradlew :app:testDebugUnitTest --console=plain` → zero failures, zero skips; counts recorded.
-- `./gradlew :app:compileDebugAndroidTestKotlin --console=plain`; connected, one class each: `com.loosecannon.servicetag.ui.maintenance.ScanSheetTest`, `com.loosecannon.servicetag.ui.condition.ChangeConditionSheetTest`. The JVM `CompletionFlowTest` and `EventEntryViewModelTest` stay green with the offer cases added.
+- `./gradlew :app:compileDebugAndroidTestKotlin --console=plain`; connected, one class each: `com.loosecannon.servicetag.ui.maintenance.ScanSheetTest`, `com.loosecannon.servicetag.ui.condition.ChangeConditionSheetTest`, `com.loosecannon.servicetag.ui.health.HealthPluralsContractTest`. The JVM `CompletionFlowTest` and `EventEntryViewModelTest` stay green with the offer cases added.
 - The review reads every added string literal against spec §10.7 (no grep can prove a sentence is ratified). Anchored: `grep -rnE 'Color\(0x' app/src/main/kotlin/com/loosecannon/servicetag/ui/condition app/src/main/kotlin/com/loosecannon/servicetag/ui/health` → no output (colours only through tokens); `git diff --stat <base> -- core/src/main app/src/main/kotlin/com/loosecannon/servicetag/api app/src/main/kotlin/com/loosecannon/servicetag/ui/dashboard app/src/main/kotlin/com/loosecannon/servicetag/ui/asset tools` → empty.
 
 ## Strings
@@ -122,7 +126,7 @@ Snooze and Postpone keep their 1.2 behaviour on the sheet. The sheet opens only 
 
 ## Review focus
 
-- Every added literal is an S-number's exact text; the reviewer reads each against spec §10.7.
+- Every added literal is an S-number's exact text; the reviewer reads each against spec §10.7. The two `one` forms in `plurals.xml` are the only accepted inflections (dec. 29, master §17.2) and must differ from their `other` forms only by the unit's "s".
 - Colour never carries a state alone: the grayscale test is the check, and the DEGRADED token is compared by value against Due and Due soon in both themes.
 - No write path exists from the sheet except Save condition, the Mark operational confirm, an accepted offer and the shipped completion.
 

@@ -21,7 +21,7 @@ Give every asset one page where its three independent facts are read and acted o
 
 ## Interfaces
 
-**Consumes:** `AssetHealthReadModel.forAsset`, `AssetHealthView`, `ConditionView`, `ComponentCondition` (B07); `GetAssetSeason`, `SeasonView`, `RecordSeasonActivation`, `ActivationCommand`, `SeasonAlreadyStarted`, `SeasonAlreadyEnded`, `SeasonValidation` (B04); `ConditionHistory` (B06); `SeasonContext` (B02); `ConditionBadge`, `HealthBadge`, `ChangeConditionSheet`, `MarkOperationalDialog`, `conditionWord`, `componentLine`, `bandWord`, `driverLineText`, `aggregateLine`, `criticalLine`, the S40/S41 constants (B12); S29, S32, S33, S58, S60, S61 (B10's constants); `Route.HealthSubjectEdit` is **not** needed here.
+**Consumes:** `AssetHealthReadModel.forAsset`, `AssetHealthView`, `ConditionView`, `ComponentCondition` (B07); `GetAssetSeason`, `SeasonView`, `RecordSeasonActivation`, `ActivationCommand`, `SeasonAlreadyStarted`, `SeasonAlreadyEnded`, `SeasonValidation` (B04); `ConditionHistory` (B06); `SeasonContext` (B02); `ConditionBadge`, `HealthBadge`, `ChangeConditionSheet`, `MarkOperationalDialog`, `conditionWord`, `componentLine`, `bandWord`, `driverLineText`, `HealthPlurals` and `AndroidHealthPlurals(resources: Resources)`, built from the screen's resources (the singular forms of S99 and S102, dec. 29), `aggregateLine`, `criticalLine`, the S40/S41 constants (B12); S29, S32, S33, S58, S60, S61 (B10's constants); `Route.HealthSubjectEdit` is **not** needed here.
 
 **Produces:** nothing another brief calls.
 
@@ -76,7 +76,7 @@ The view model reads these once per load and on the repository flows the shipped
 
 - `./gradlew :app:testDebugUnitTest --console=plain` → zero failures, zero skips; counts recorded.
 - `./gradlew :app:compileDebugAndroidTestKotlin --console=plain`; connected, one class each (after B13 releases the device): `com.loosecannon.servicetag.ui.asset.AssetDetailConditionHealthSeasonTest`, `com.loosecannon.servicetag.ui.AssetModelDeviceProofTest`, `com.loosecannon.servicetag.ui.asset.AssetTagsSectionTest` (still green).
-- Anchored: `grep -rnE '\bSeason\.inSeason\(' app/src/main/kotlin/com/loosecannon/servicetag/ui/asset` → no output (the phase comes from `SeasonContext`); `git diff --stat <base> -- core/src/main app/src/main/kotlin/com/loosecannon/servicetag/api app/src/main/kotlin/com/loosecannon/servicetag/di app/src/main/kotlin/com/loosecannon/servicetag/ui/dashboard app/src/main/kotlin/com/loosecannon/servicetag/ui/nav` → empty.
+- Anchored: `grep -rnE '\.inSeason\(' app/src/main/kotlin/com/loosecannon/servicetag/ui/asset` → no output (the phase comes from `SeasonContext`; the pattern also catches the shipped `SeasonWindow.inSeason(` alias call at `AssetViewModels.kt:199`, M6); `git diff --stat <base> -- core/src/main app/src/main/kotlin/com/loosecannon/servicetag/api app/src/main/kotlin/com/loosecannon/servicetag/di app/src/main/kotlin/com/loosecannon/servicetag/ui/dashboard app/src/main/kotlin/com/loosecannon/servicetag/ui/nav` → empty.
 
 ## Strings
 
@@ -94,7 +94,7 @@ The view model reads these once per load and on the repository flows the shipped
 
 - Section order is Condition, Health, Season, and inside Health the criticals and components come before the aggregate.
 - No control edits or deletes a history row; Start and End write only through the dialog.
-- The list's out-of-season mark no longer calls `Season.inSeason` directly.
+- The list's out-of-season mark no longer calls `inSeason` directly, under either name (`Season` or its `SeasonWindow` alias).
 
 ## Size
 

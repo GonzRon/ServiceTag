@@ -12,7 +12,7 @@ Put 1.4 behind the loopback API **at version 1, compatibly**. Fourteen new metho
 
 **Create**
 
-- `app/src/main/kotlin/com/loosecannon/servicetag/api/SeasonHealthDtos.kt` — the request shapes (`SeasonModeRequest`, `BreakRequest`, `ActivationRequest`, `ConditionRequest`, `HealthPolicyRequest`, `HealthSubjectCreateRequest`, `HealthSubjectUpdateRequest`), the responses (`SeasonResponse`, `ConditionsResponse`, `HealthResponse` and its nested shapes, `SubjectListResponse`, `SubjectResponse`, `AttentionResponse`), and `ScheduleRowResponse`.
+- `app/src/main/kotlin/com/loosecannon/servicetag/api/SeasonHealthDtos.kt` — the request shapes (`SeasonModeRequest`, `BreakRequest`, `ActivationRequest`, `ConditionRequest`, `HealthPolicyRequest`, `HealthSubjectCreateRequest`, `HealthSubjectUpdateRequest`), the responses (`SeasonResponse`, `ConditionsResponse`, `HealthResponse` and its nested shapes, `SubjectListResponse`, `SubjectResponse`, `AttentionResponse`). `ScheduleRowResponse` is **B03's** (wave 2) and is consumed here, not created.
 - `app/.../api/SeasonHealthHandlers.kt` — `SeasonHealthHandlers(graph)`, reached as `handlers.seasonHealth.*`.
 - `app/.../api/ScheduleForms.kt` — the key-presence classifier and the legacy translation (rules below).
 - `docs/api/command-shapes.json` — master §11.6's content.
@@ -22,18 +22,18 @@ Put 1.4 behind the loopback API **at version 1, compatibly**. Fourteen new metho
 
 - `app/.../api/ApiRouter.kt` — the new path shapes in the explicit `when`; the class KDoc's route arithmetic.
 - `app/.../api/ApiHandlers.kt` — `seasonHealth` collaborator; `/v1/status` counts `seasonActivations`, `assetConditions`, `healthSubjects`; the asset PATCH surfaces B04's legacy-pair refusals.
-- `app/.../api/MaintenanceDtos.kt` — `ScheduleCommandRequest` gains `servicePolicy`, `policyOffsetDays`; B01's interim translation replaced by `ScheduleForms`; `ScheduleStateDto` gains `actionableDueOn`, `policyReason`, `policyPhase`, `quiet`; `DueItemDto` gains `actionableDueOn`, `policyReason`, `quiet`; schedule responses use `ScheduleRowResponse`.
+- `app/.../api/MaintenanceDtos.kt` — `ScheduleCommandRequest` gains `servicePolicy`, `policyOffsetDays`; B01's interim translation replaced by `ScheduleForms`; `ScheduleStateDto` gains `actionableDueOn`, `policyReason`, `policyPhase`, `quiet`; `DueItemDto` gains `actionableDueOn`, `policyReason`, `quiet`. The response side (`ScheduleRowResponse` in every schedule-bearing response) already landed with B03.
 - `app/.../api/MaintenanceHandlers.kt` — create and PATCH through `ScheduleForms`; the `unlinkHealthSubject` flag on PATCH and archive; `GET /v1/schedules/{id}` state through `readState`.
-- `app/.../api/ApiJson.kt` — `ApiErrorDetail.field: String? = null`; every new refusal mapped to its code (master §11.5) and `field` (master §11.3).
+- `app/.../api/ApiJson.kt` — `ApiErrorDetail.field: String? = null`; every new refusal mapped to its code (master §11.5) and `field` (master §11.3, `HEALTH_SUBJECT_NAME_REQUIRED` → `name` included); that code's message states the 1–60 limit, so an over-long name is not read as a missing one (ruled, dec. 33); an archived schedule's `FOREIGN_SCHEDULE` message says archived (dec. 45).
 - `app/.../api/ApiDtos.kt` — the merge report mirror's three tallies.
 - `docs/api/v1.md` — see "The document".
-- `app/src/test/.../api/ApiRouterTest.kt` (`theDestructiveUseCasesHaveNoRoute`), `MaintenanceRoutesTest.kt`, `MaintenanceCommandShapeTest.kt` — extended.
+- `app/src/test/.../api/ApiRouterTest.kt` (`theDestructiveUseCasesHaveNoRoute`), `MaintenanceRoutesTest.kt` — extended; `MaintenanceCommandShapeTest.kt` — **B03's temporary subtraction of `servicePolicy` and `policyOffsetDays` is removed**, because the command now carries both.
 
 **Untouched:** `core/**` main sources (every rule is a use case's, called); `ui/**`; `data/**`; `di/AppGraph.kt` (the handlers read graph fields through their `(graph)` constructors); `tools/**` (B11); `libs/`.
 
 ## Interfaces
 
-**Consumes:** the use cases of B04 (`SetSeasonMode`, `SetMaintenanceBreak`, `RecordSeasonActivation`, `GetAssetSeason`, `UpdateAsset`'s pair refusals, `SaveSchedule` policy refusals), B06 (`RecordCondition`, `ConditionHistory`, `SaveHealthSubject`, `ArchiveHealthSubject`, `SetHealthPolicy`, the guarded `SaveSchedule`/`ArchiveSchedule`), B07 (`DueReadModel`, `AttentionReadModel`, `AssetHealthReadModel`, `readState`), B03 (the DTOs, format 8, the merge tallies), B01 (`LegacySeasonMapping`, the golden file).
+**Consumes:** the use cases of B04 (`SetSeasonMode`, `SetMaintenanceBreak`, `RecordSeasonActivation`, `GetAssetSeason`, `UpdateAsset`'s pair refusals, `SaveSchedule` policy refusals), B06 (`RecordCondition`, `ConditionHistory`, `SaveHealthSubject`, `ArchiveHealthSubject`, `SetHealthPolicy`, the guarded `SaveSchedule`/`ArchiveSchedule`), B07 (`DueReadModel`, `AttentionReadModel`, `AssetHealthReadModel`, `readState`), B03 (the DTOs, format 8, the merge tallies, **`ScheduleRowResponse`**), B01 (`LegacySeasonMapping`, the golden file). The `FakeGraph` mirrors of every use case above are the producing briefs' (master §1); this brief adds none.
 
 **Produces:** the wire contract of master §11 and `docs/api/command-shapes.json`. Consumers: B11, the owner's MCP client, the release proofs.
 
@@ -56,7 +56,7 @@ Put 1.4 behind the loopback API **at version 1, compatibly**. Fourteen new metho
 1. **Classify from the raw JSON object before the typed decode:** a `servicePolicy` or `policyOffsetDays` key (an explicit `null` counts) → 1.4 form; none → legacy form; a legacy key (`seasonBehavior`, `seasonReentry`, `seasonReentryOffsetDays`) **and** a 1.4 key → 422 `LEGACY_AND_CURRENT_FIELDS_MIXED`, nothing written.
 2. **1.4 form:** `servicePolicy` omitted → CONTINUOUS; `policyOffsetDays` omitted **or null** → 0 when the policy is IN_SERVICE_AT_START (spec §4.2: "0 by default"; **Plan decision:** a cleared value takes the default, as v1's full replace clears to it), else null; the use case refuses the rest (PRE_SERVICE with no offset is `POLICY_OFFSET_INVALID`).
 3. **Legacy form:** 1.3's defaults (`seasonBehavior` omitted → IGNORE), then `LegacySeasonMapping.toPolicy(..., hasTimeRule = timeInterval != null)` — the **only** translation. A PATCH whose stored schedule is PRE_SERVICE → 422 `LEGACY_WRITE_CANNOT_REPRESENT`, nothing written; any other legacy body translates (a create clobbers nothing). The one documented change: a legacy body omitting `seasonReentry` on a RESUME_CLAMPED schedule becomes AT_START.
-4. **Responses** carry `ScheduleRowResponse` — the format-8 row plus `seasonBehavior` (nullable), `seasonReentry`, `seasonReentryOffsetDays` from `LegacySeasonMapping.toLegacy` (master §11.3; all null for PRE_SERVICE). `ruleChangedAt` is response-only.
+4. **Responses** carry B03's `ScheduleRowResponse` — the format-8 row plus `seasonBehavior` (nullable), `seasonReentry`, `seasonReentryOffsetDays` from `LegacySeasonMapping.toLegacy` (master §11.3; all null for PRE_SERVICE). `ruleChangedAt` is response-only.
 
 ### Codes (master §11.5; the 422/409 tie-break)
 
@@ -70,14 +70,14 @@ The new rows and shapes; the codes table for 1.4 with the tie-break stated once;
 
 ## Invariants this brief must hold
 
-**81** (only `POST …/conditions` writes a condition), **89**, **105** (API half), **106** (both forms), **119** (the health response lists criticals and components), **125** (the agreement test), **127**, **128**, **130** (the flag on the wire).
+**81** (half: only `POST …/conditions` writes a condition), **89** (half), **105** (API half), **106** (half: both forms), **119** (half: the health response lists criticals and components), **125** (half: the agreement test), **127** (accountable), **128** (accountable), **129** (half: no route this brief adds names an installed component or assembly), **130** (half: the flag on the wire).
 
 ## Test matrix
 
 | hazard | test (class · case) | RED mutation |
 |---|---|---|
 | status classes | `SeasonHealthRoutesTest` · `oneOfEach` (200, 201, 404, 405, 409, 422 over the new surface) | answer 200 on a create |
-| **every named refusal** | `SeasonHealthRoutesTest` · one case per code above, asserting status **and** code (strands cases also name the schedules; `field` set per master §11.3) | map `BREAK_STRANDS_POLICY` to 422 |
+| **every named refusal** | `SeasonHealthRoutesTest` · one case per code above, asserting status **and** code (strands cases also name the schedules; `field` set per master §11.3; the `HEALTH_SUBJECT_NAME_REQUIRED` case asserts `field == "name"` and a message stating the 1–60 limit, for a blank and a 61-character name — dec. 33; the archived-schedule `FOREIGN_SCHEDULE` case's message says archived — dec. 45) | map `BREAK_STRANDS_POLICY` to 422 |
 | 404 / 405 / 415 | `SeasonHealthRoutesTest` · `wrongVerbsAndTypesOverTheNewPaths` (one parameterised case) | route `DELETE` on a sub-resource |
 | unknown fields | `SeasonHealthRoutesTest` · `everyNewCommandRejectsAnUnknownFieldByName`, `aSubjectPatchNamingAssetIdIs400` | `ignoreUnknownKeys` |
 | **the presence rule** | `LegacyFormTest` · `aPolicyKeyOrExplicitNullMakesThe14Form`, `neitherIsTheLegacyFormWith1_3Defaults`, `aMixedBodyIs422AndWritesNothing` | classify after the typed decode |
@@ -100,7 +100,7 @@ The new rows and shapes; the codes table for 1.4 with the tie-break stated once;
 ## Gate
 
 - `./gradlew :core:test :app:testDebugUnitTest --console=plain` → zero failures, zero skips; counts recorded.
-- Anchored: `grep -c '1–8' docs/api/v1.md` → ≥ 2; `grep -cE '(format \*\*1–7\*\*|\*\*format 1–7\*\*)' docs/api/v1.md` → 0 (the two shipped spellings of the import range); `grep -ci 'the eleven tables' docs/api/v1.md` → 0; `grep -cE '"DELETE"' app/src/main/kotlin/com/loosecannon/servicetag/api/ApiRouter.kt` → 1 (the shipped event delete, and nothing new); `git diff --stat <base> -- core/src/main app/src/main/kotlin/com/loosecannon/servicetag/ui app/src/main/kotlin/com/loosecannon/servicetag/data app/src/main/kotlin/com/loosecannon/servicetag/di tools libs` → empty.
+- Anchored: inv. 129: `git diff <base> -- app/src/main/kotlin/com/loosecannon/servicetag/api | grep -niE '^\+.*\b(assembly|assemblies|installed_?component|stock)\b'` → no output; `grep -c '1–8' docs/api/v1.md` → ≥ 2; `grep -cE '(format \*\*1–7\*\*|\*\*format 1–7\*\*)' docs/api/v1.md` → 0 (the two shipped spellings of the import range); `grep -ci 'the eleven tables' docs/api/v1.md` → 0; `grep -cE '"DELETE"' app/src/main/kotlin/com/loosecannon/servicetag/api/ApiRouter.kt` → 1 (the shipped event delete, and nothing new); `git diff --stat <base> -- core/src/main app/src/main/kotlin/com/loosecannon/servicetag/ui app/src/main/kotlin/com/loosecannon/servicetag/data app/src/main/kotlin/com/loosecannon/servicetag/di tools libs` → empty.
 - No device run (the live proof is the controller's, master §17).
 
 ## Strings

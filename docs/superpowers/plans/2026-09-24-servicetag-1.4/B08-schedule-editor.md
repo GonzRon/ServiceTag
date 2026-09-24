@@ -41,7 +41,7 @@ enum class PolicyOption { BEFORE_SEASON, BEFORE_BREAK, WHEN_SEASON_STARTS, AFTER
 | a group target | the question is **not drawn**; the policy is CONTINUOUS (inv. 106) |
 
 - **Mapping:** S66, S69 → PRE_SERVICE with `policyOffsetDays = −(Days before it starts)`; S67 → IN_SERVICE_AT_START (with **S73 "Start counting from"**: S74 "The season's start" + S72 "Days after it starts", 0–365, default 0) or IN_SERVICE_RESUME_CLAMPED (S75, no offset); S70 → IN_SERVICE_AT_START, offset 0, no field; S68 → CONTINUOUS.
-- **S71 "Days before it starts"** accepts 1–365 and is **empty until the owner enters it** (inv. 121); Save with it empty shows **S83** and writes nothing. The field bounds make `POLICY_OFFSET_INVALID` unreachable from the editor.
+- **S71 "Days before it starts"** accepts 1–365 and is **empty until the owner enters it** (inv. 121); Save with it empty shows **S83** and writes nothing. **No unratified sentence is ever needed (master dec. 46, ruled on I10):** S71 and S72 take a **digits-only input filter capped at 365** (a fourth digit, or a value above 365, is not accepted as typed), and **Save stays disabled while S71 is 0**, as it is while S71 is empty — so `POLICY_OFFSET_INVALID` is unreachable from the editor and no refusal has to be worded. If a field is still found to need a sentence, the controller escalates to the owner before this wave; the implementer never writes one.
 - **A meter-only schedule** (spec §10.4): no pre-service option and no offset field. **Plan decision:** the in-service option keeps its asset's label — S67 on CALENDAR and MANUAL, S70 on YEAR_ROUND with a break — because "When the season starts" names nothing on an asset without a season.
 - **Helpers**, under the chosen option: S78 (before the season), S79 (before the break), S80 (when the season starts), S81 (after the break), S82 (whenever it is due).
 - **Warnings, never refusals:** **S76** when S67 is chosen on a CALENDAR asset and the anchor date lies outside the window; **S84** when S74 is chosen on a CALENDAR asset and the season's start plus the offset falls after that season's end.
@@ -64,6 +64,8 @@ A Save refused with `ScheduleDrivesHealthSubject(name)` opens **S140** ("This sc
 | a meter-only pre-service choice | `SchedulePolicyFormTest` · `aMeterOnlyScheduleHasNoPreServiceOptionAndNoOffset` | keep S71 for meter-only |
 | the offset's sign or default | `SchedulePolicyFormTest` · `optionsMapToPolicyAndSignedOffset` (14 before → −14; S74 with nothing typed → 0; S75 → null; S70 → 0) | send +14 for PRE_SERVICE |
 | a prefilled margin | `SchedulePolicyFormTest` · `theMarginIsEmptyUntilEnteredAndSaveRefusesWithS83` (nothing reaches `SaveSchedule`) | default the margin to 14 |
+| S71 out of range (I10) | `SchedulePolicyFormTest` · `s71TakesDigitsOnlyCappedAt365AndZeroKeepsSaveDisabled` ("400" is not accepted, "0" disables Save, no refusal text appears) | accept "0" and send it |
+| S72 out of range (I10) | `SchedulePolicyFormTest` · `s72TakesDigitsOnlyCappedAt365` | allow a fourth digit |
 | a stored row misread | `SchedulePolicyFormTest` · `aStoredPolicyLoadsIntoItsOption` | map RESUME_CLAMPED to S74 |
 | the warnings | `SchedulePolicyFormTest` · `s76WhenTheAnchorIsOutsideTheSeason`, `s84WhenTheOffsetPassesTheSeasonsEnd` | compare against the break instead of the window |
 | the merged state | `SchedulePolicyFormTest` · `aStoredPolicyWithNoBoundaryShowsS77AndOnlyS68` | hide the question and keep PRE_SERVICE |

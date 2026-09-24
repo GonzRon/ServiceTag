@@ -12,7 +12,8 @@ Ship the workstation half of 1.4 with the app, so no version pairing silently lo
 
 **Modify (MCP)**
 
-- `tools/servicetag-mcp/src/servicetag_mcp/server.py` — the fourteen tools; `create_schedule` / `update_schedule` / `archive_schedule` changes; `update_asset` and `update_schedule` driven by `docs/api/command-shapes.json`; `_SCHEDULE_NULLABLE_CLEARABLE` gains `policy_offset_days` (keeping `season_reentry`, `season_reentry_offset_days`); `TOOL_NAMES` and `_forbid_unknown_arguments(expected_count=55)`; the schema check; the `get_schedule`/`list_due` docstrings name `DEFERRED` and the new state fields.
+- `tools/servicetag-mcp/src/servicetag_mcp/server.py` — the fourteen tools; `create_schedule` / `update_schedule` / `archive_schedule` changes; `update_asset` and `update_schedule` driven by the vendored key lists; `_SCHEDULE_NULLABLE_CLEARABLE` gains `policy_offset_days` (keeping `season_reentry`, `season_reentry_offset_days`); `TOOL_NAMES` and `_forbid_unknown_arguments(expected_count=55)`; the schema check; the `get_schedule`/`list_due` docstrings name `DEFERRED` and the new state fields.
+- `tools/servicetag-mcp/src/servicetag_mcp/command_shapes.py` (new) — the command key lists **vendored into the package** (master dec. 48, ruled on M15): the `asset`, `schedule` and `healthSubject` entries of `docs/api/command-shapes.json` (keys, legacy keys, action flags, `rowToCommand`) as Python constants. **Nothing reads a repository file at runtime**; pytest proves the copy equal to the golden.
 - `tools/servicetag-mcp/src/servicetag_mcp/client.py` — only if the cached status needs a home there.
 - `tools/servicetag-mcp/README.md` — "Fifty-five"; a "Seasons, condition and health (needs ServiceTag 1.4.0)" list; the deprecated arguments and the mixed refusal; the clearable table's new rows; `import_merge` reading formats **1–8** and reporting **fourteen** tables (the stale "1–6" and "ten" corrected).
 - Tests: `tools/servicetag-mcp/tests/test_season_health_tools.py` (new), `test_schedule_forms.py` (new), `test_command_shapes.py` (new); `test_argument_guard.py`, `test_tools.py`, `test_maintenance_tools.py` (extended).
@@ -30,7 +31,7 @@ Ship the workstation half of 1.4 with the app, so no version pairing silently lo
 
 ## Interfaces
 
-**Consumes:** B09's routes, codes and `ScheduleRowResponse`; `docs/api/command-shapes.json` (B09) and `docs/api/legacy-season-mapping.json` (B01), read from the repository at test time.
+**Consumes:** B09's routes, codes and `ScheduleRowResponse`; `docs/api/command-shapes.json` (B09) and `docs/api/legacy-season-mapping.json` (B01), **read only by tests** (the package carries its own vendored copy of the first).
 
 **Produces:** the tool surface below. Argument names are snake_case mirrors of the wire (`service_policy` ↔ `servicePolicy`), the shipped convention.
 
@@ -52,12 +53,12 @@ Ship the workstation half of 1.4 with the app, so no version pairing silently lo
 - `create_schedule` and `update_schedule` gain `service_policy` and `policy_offset_days`; `update_schedule` and `archive_schedule` gain `unlink_health_subject`.
 - **A deprecated argument** (`season_behavior`, `season_reentry`, `season_reentry_offset_days`) makes the body the **legacy form** — only legacy keys, never `servicePolicy`/`policyOffsetDays`; `update_schedule` overlays it on the row's derived triple. **No deprecated argument** makes it the **1.4 form** — `servicePolicy`/`policyOffsetDays` overlaid from the row, and no legacy key. **The MCP never translates**; the API does, and refuses with the same codes (`LEGACY_WRITE_CANNOT_REPRESENT` arrives as a `ToolError` carrying it).
 - **A deprecated and a 1.4 argument together** (including via `clear_fields`) → `ToolError` carrying `LEGACY_AND_CURRENT_FIELDS_MIXED`, **before any HTTP**.
-- **The overlays stop enumerating fields:** `update_schedule` and `update_asset` build the body from every key the golden `command-shapes.json` lists for their command (the schedule's `rowToCommand` renames included), overlay the supplied arguments, and apply `clear_fields`. `update_asset` keeps the season pair (the one compatibility input) and `_ASSET_NULLABLE_CLEARABLE` keeps it.
+- **The overlays stop enumerating fields:** `update_schedule` and `update_asset` build the body from every key the vendored `command_shapes` lists for their command (the schedule's `rowToCommand` renames included), overlay the supplied arguments, and apply `clear_fields`. `update_asset` keeps the season pair (the one compatibility input) and `_ASSET_NULLABLE_CLEARABLE` keeps it.
 - **The schema check.** Before any non-`GET` call (except the read-only `/v1/import-merge/plan`), the server confirms `/v1/status.schemaVersion ≥ 8`, once per pairing, cached; an older app gets a `ToolError` carrying `APP_SCHEMA_TOO_OLD` and nothing is sent (master §20.25). Reads keep working against a 1.3 app.
 
 ## Invariants this brief must hold
 
-**127** (no tool amends or deletes a condition or activation, deletes a subject or writes a health value), **128** (deprecated arguments translated only by the API; mixed refused), and the loader half of lockstep (the Stage-B manifest re-plans IDENTICAL).
+**127** (half: no tool amends or deletes a condition or activation, deletes a subject or writes a health value), **128** (half: deprecated arguments translated only by the API; mixed refused), **129** (half: no tool this brief adds names an installed component or assembly, or reads stock), and the loader half of lockstep (the Stage-B manifest re-plans IDENTICAL).
 
 ## Test matrix
 
@@ -71,7 +72,8 @@ All MCP tests run against the stdlib HTTP server fixture; no device, no `adb`.
 | each route's shape | `test_season_health_tools.py` · one case per tool: method, path, body keys, `ToolError` carrying the server's code | send `occurredOn` as `occurred_on` |
 | **the deprecated arguments** | `test_schedule_forms.py` · `test_a_deprecated_argument_sends_a_legacy_body_verbatim` (no `servicePolicy` key, values untranslated), `test_new_arguments_send_the_14_form`, `test_a_422_from_a_legacy_body_is_a_tool_error_with_its_code` | translate in Python |
 | **the mixed refusal** | `test_schedule_forms.py` · `test_mixing_is_refused_before_any_http` (also through `clear_fields`) | let the API refuse it |
-| **the overlay enumerates** | `test_command_shapes.py` · `test_update_schedule_and_update_asset_submit_exactly_the_golden_keys` (both forms), `test_a_new_golden_key_is_carried_without_code_changes` | keep the hard-coded field list |
+| **the overlay enumerates** | `test_command_shapes.py` · `test_update_schedule_and_update_asset_submit_exactly_the_vendored_keys` (both forms), `test_a_new_vendored_key_is_carried_without_tool_changes` | keep the hard-coded field list |
+| **the vendored copy drifts** (M15) | `test_command_shapes.py` · `test_the_vendored_key_lists_equal_the_golden_file` (reads `docs/api/command-shapes.json` from the repository root, test-time only) | drop a key from the copy |
 | the flag | `test_schedule_forms.py` · `test_unlink_health_subject_on_update_and_archive` | drop it from the body |
 | clearing | `test_maintenance_tools.py` · `test_policy_offset_days_is_clearable_and_none_leaves_it` | treat `None` as clear |
 | **the schema check** | `test_season_health_tools.py` · `test_writes_refuse_an_app_older_than_schema_8`, `test_reads_still_work`, `test_the_status_is_read_once_per_pairing` | check only new tools |
@@ -95,7 +97,7 @@ All MCP tests run against the stdlib HTTP server fixture; no device, no `adb`.
 - `cd tools/servicetag-mcp && uv run --frozen pytest` → green; count recorded.
 - `cd tools/servicetag-schedules && uv run --frozen pytest` → green; count recorded.
 - `cd tools/servicetag-bundle && uv run --frozen pytest` → green and `git diff --stat <base> -- tools/servicetag-bundle` → empty.
-- Anchored: `grep -c '^@mcp\.tool' tools/servicetag-mcp/src/servicetag_mcp/server.py` → **55**; `grep -ci 'forty-one' tools/servicetag-mcp/README.md` → 0; `grep -c 'Fifty-five' tools/servicetag-mcp/README.md` → ≥ 1; `grep -rnE '^def (delete_health_subject|update_condition|delete_condition|update_activation)\b' tools/servicetag-mcp/src/servicetag_mcp/server.py` → no output; `git diff --stat <base> -- app core docs/api tools/servicetag-schedules/src/servicetag_schedules/apply.py tools/servicetag-schedules/src/servicetag_schedules/manifest.py` → empty.
+- Anchored: `grep -c '^@mcp\.tool' tools/servicetag-mcp/src/servicetag_mcp/server.py` → **55**; `grep -rnE '(open|read_text|read_bytes|Path)\(.*command-shapes' tools/servicetag-mcp/src` → no output (no runtime read; a provenance comment naming the file cannot match); inv. 129: `git diff <base> -- tools/servicetag-mcp/src | grep -niE '^\+.*\b(assembly|assemblies|installed_?component|stock)\b'` → no output; `grep -ci 'forty-one' tools/servicetag-mcp/README.md` → 0; `grep -c 'Fifty-five' tools/servicetag-mcp/README.md` → ≥ 1; `grep -rnE '^def (delete_health_subject|update_condition|delete_condition|update_activation)\b' tools/servicetag-mcp/src/servicetag_mcp/server.py` → no output; `git diff --stat <base> -- app core docs/api tools/servicetag-schedules/src/servicetag_schedules/apply.py tools/servicetag-schedules/src/servicetag_schedules/manifest.py` → empty.
 
 ## Strings
 
@@ -112,7 +114,7 @@ All MCP tests run against the stdlib HTTP server fixture; no device, no `adb`.
 ## Review focus
 
 - No Python code maps a legacy argument onto a policy for sending; the only Python mapping is the loader's comparison, and it is proved against the golden file.
-- The overlays read their key lists from `docs/api/command-shapes.json`; no field name list remains in the two update tools.
+- The overlays read their key lists from the vendored `command_shapes` module, which a test proves equal to `docs/api/command-shapes.json`; no field name list remains in the two update tools.
 - The fifty-five tools and the README agree.
 
 ## Size

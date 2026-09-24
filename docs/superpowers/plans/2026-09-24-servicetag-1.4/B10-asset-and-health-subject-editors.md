@@ -42,9 +42,24 @@ Let the owner configure everything #14, #60 and #61 need from the phone, with no
 
 - Name (the shipped word), **S113 "What is it?"** (S114 / S115 / S116), **S117 "What wears it down?"** (S118 / S119).
 - **Age since replacement:** **S120 "Replacement quick action"** — **S121 "Any replacement"** plus this asset's REPLACEMENT quick actions only; thresholds labelled by **S123**'s three labels. **No starting point** is offered (spec §6.3: AGE has none).
-- **Overdue maintenance:** **S122 "Maintenance schedule"** — this asset's asset-targeted schedules with a time rule; thresholds labelled by **S124**'s three labels; **S127 "Use a starting point"** offers the two **S128** names; picking one opens **S129** with **S130 "Use these numbers"** and Cancel, and only **S130** fills the three fields (inv. 121). Cancel fills nothing.
+- **Overdue maintenance:** **S122 "Maintenance schedule"** — this asset's asset-targeted schedules with a time rule, **archived schedules excluded** (master dec. 45, ruled on I8); thresholds labelled by **S124**'s three labels; **S127 "Use a starting point"** offers the two **S128** names; picking one opens **S129** with **S130 "Use these numbers"** and Cancel, and only **S130** fills the three fields (inv. 121). Cancel fills nothing.
 - **The three thresholds start empty.** Save is disabled until all three hold a number, with **S126** beside the disabled Save; an order that is not strictly increasing is **S125**.
 - **S133 "Weight"** appears only when the asset combines by Weighted average.
+- **Restore subject (S136)** is **disabled** while the subject's link would be refused — its schedule archived, retargeted or rule-less (B06's full link re-check) — so the owner edits the subject to another schedule first; no refusal sentence is needed. A restore refused because the schedule is taken still answers S135.
+- **The race rule** (B08's shape): if an API or MCP write archives, retargets or de-rules the schedule between the view model's check and the tap, a Save or Restore answered `FOREIGN_SCHEDULE` or `HEALTH_SCHEDULE_NEEDS_A_TIME_RULE` **reloads the S122 picker and the Restore state, writes nothing and draws no sentence**.
+
+### Fields with no ratified refusal (master dec. 46, ruled on I10 — mechanisms, never new words)
+
+| field | mechanism |
+|---|---|
+| S32 / S33 under S30 | both **marked required** — the mark is **non-verbal**: an asterisk in the ratified label or the field's error outline, never "Required" text; Save **disabled** until both hold a valid `MM-DD`; one date alone draws no sentence (the shipped "Set both season dates or neither" is no longer drawn here — "neither" is not allowed for CALENDAR, so it would be false) |
+| S60 / S61 | the same: both required once S59 is on, with the same non-verbal mark; Save disabled until both are valid |
+| any `MM-DD` malformed | the shipped **"Not a real month and day"** under the field |
+| the three thresholds | a **digits-only filter capped at 36,500** |
+| S133 Weight | a **1–10 stepper**, never free text |
+| the subject name | a **60-character input limit** |
+
+If any field is still found to need a sentence, the controller escalates to the owner before this wave; the implementer never writes one.
 - **S135** answers `HealthScheduleTaken`. **S136**'s two actions archive and restore; archiving the primary answers **S137**.
 
 ## Invariants this brief must hold
@@ -68,6 +83,11 @@ Let the owner configure everything #14, #60 and #61 need from the phone, with no
 | refusals | `HealthSubjectEditViewModelTest` · `aTakenScheduleShowsS135`, `archivingThePrimaryShowsS137` | ignore `HealthScheduleTaken` |
 | the screens | `AssetEditorSeasonAndHealthTest` (connected) · `operatingSeasonOptionsAndFields`, `theManualQuestion`, `theBreakToggle`, `healthSubjectsAndCombine`; `HealthSubjectEditorTest` (connected) · `emptyThresholdsDisableSave`, `startingPointConfirmation`, `archiveAndRestore` | draw S35 on an already-MANUAL asset |
 | retired words | `AssetEditorSeasonAndHealthTest` · `theRetiredSeasonSentenceIsGone` | keep "Off means…" |
+| a half-filled window (I10) | `AssetSettingsFormTest` · `calendarWithOneDateDisablesSaveWithNoSentence`, `aHalfFilledBreakDisablesSave`, `aMalformedMonthDayShowsTheShippedSentence` | draw "Set both season dates or neither" |
+| out-of-range numbers (I10) | `HealthSubjectEditViewModelTest` · `thresholdsTakeDigitsCappedAt36500`, `weightIsAStepperFrom1To10`, `theNameStopsAt60Characters` | accept 36,501 |
+| an archived schedule offered (I8) | `HealthSubjectEditViewModelTest` · `s122ExcludesArchivedSchedules`, `restoreIsDisabledWhileTheLinkWouldBeRefused` | list every timed schedule |
+| a race reaches the refusal (F5) | `HealthSubjectEditViewModelTest` · `aForeignOrRuleLessAnswerReloadsThePickerAndRestoreStateAndDrawsNothing` (the fake use case answers each code once; no write, no text, picker and Restore state re-read) | show the exception's message |
+| the required mark speaks (F4) | `AssetSettingsFormTest` · `theRequiredMarkIsNonVerbal` (the form state adds no literal outside §10.7 and the shipped words; the mark is an asterisk or an error outline) | add "Required" supporting text |
 
 ## Edge cases
 
@@ -78,7 +98,7 @@ Let the owner configure everything #14, #60 and #61 need from the phone, with no
 - **A hidden weight** (the asset does not combine by Weighted average) keeps its stored value; it is not reset to 1.
 - **`t1 = 0`** is legal (`0 ≤ t1`); **36,500** is the upper bound; the field accepts digits only.
 - **Kind and driver are independent**: a MEDIUM subject may use age, a PART may use overdue maintenance; only the clock differs (spec §6.1).
-- **Restoring an archived subject** whose schedule is now driven by another answers S135 and stays archived.
+- **Restoring an archived subject** whose schedule is now driven by another answers S135 and stays archived; one whose schedule is archived, retargeted or rule-less cannot be restored (the action is disabled) until it is edited onto a valid schedule.
 - **The subject editor's Cancel** writes nothing; leaving the asset editor without Save writes nothing.
 
 ## Gate
@@ -94,6 +114,7 @@ Let the owner configure everything #14, #60 and #61 need from the phone, with no
 ## Must NOT
 
 - default the manual phase, the break, a margin or a threshold, or apply a starting point without S130;
+- write a refusal sentence for a field that has none (the mechanisms above make each unreachable), or draw the false "Set both season dates or neither";
 - offer a starting point for an age subject;
 - save the four settings in more than one transaction, or write anything on a refusal;
 - touch the asset list or detail view models, the API, `AppGraph` or `:core`.
