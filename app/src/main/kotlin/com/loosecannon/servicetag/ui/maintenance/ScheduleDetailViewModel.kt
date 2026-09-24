@@ -18,9 +18,11 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.core.usecase.ArchiveSchedule
 import com.loosecannon.servicetag.core.usecase.CloseRound
+import com.loosecannon.servicetag.core.usecase.HealthSubjectIsPrimary
 import com.loosecannon.servicetag.core.usecase.PauseSchedule
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
+import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
 import com.loosecannon.servicetag.core.usecase.occurrenceWindowOpensOn
 import com.loosecannon.servicetag.di.AppGraph
 import java.time.LocalDate
@@ -147,6 +149,8 @@ data class ScheduleDetailState(
     val busy: Boolean = false,
     val loaded: Boolean = false,
     val missing: Boolean = false,
+    /** The archive action's link-guard dialog (S140–S141, or S137), when one is open. */
+    val linkGuard: LinkGuardPrompt? = null,
 ) {
     /**
      * The RATIFIED status word, withheld for a round that obliges nobody — "NO BASELINE" belongs to
@@ -325,8 +329,12 @@ class ScheduleDetailViewModel(
         // and the closure's unique index absorb a double — but it is a hole in the state machine
         // and not a property worth leaning on.
         val inFlight = _state.value.busy
+        // The link-guard dialog likewise: a resume re-derives, and must not close a question the
+        // owner has not answered yet.
+        val asking = _state.value.linkGuard
         _state.value = ScheduleDetailState(
             busy = inFlight,
+            linkGuard = asking,
             scheduleId = schedule.id,
             title = schedule.title,
             description = schedule.description,
@@ -400,22 +408,61 @@ class ScheduleDetailViewModel(
 
     fun pause(paused: Boolean) = operate { pauseSchedule.run(scheduleId, paused) }
 
-    fun archive(archived: Boolean) = operate { archiveSchedule.run(scheduleId, archived) }
+    /**
+     * Archive or restore. **Archiving a schedule a health subject depends on asks first** (spec §6.1,
+     * D-30; inv. 130): the refusal naming the subject opens S140, and nothing is archived until the
+     * owner answers "Archive both". A restore is never guarded.
+     */
+    fun archive(archived: Boolean) = operateGuarded {
+        try {
+            archiveSchedule.run(scheduleId, archived)
+            null
+        } catch (refused: ScheduleDrivesHealthSubject) {
+            LinkGuardPrompt.Asks(refused.name)
+        }
+    }
+
+    /**
+     * S141 "Archive both": the same archive, with the unlink flag, so the subject is archived in the same
+     * transaction. When that subject is the one its asset's health follows the whole write is refused
+     * and S137 is shown instead — neither the schedule nor the subject is archived.
+     */
+    fun archiveBoth() {
+        if (_state.value.linkGuard !is LinkGuardPrompt.Asks) return
+        operateGuarded {
+            try {
+                archiveSchedule.run(scheduleId, true, unlinkHealthSubject = true)
+                null
+            } catch (refused: HealthSubjectIsPrimary) {
+                LinkGuardPrompt.Primary
+            }
+        }
+    }
+
+    /** Cancel on the link-guard dialog: it closes and nothing is written. */
+    fun cancelLinkGuard() = _state.update { it.copy(linkGuard = null) }
 
     /**
      * Runs one operation and re-derives.
      *
      * A refusal is folded into the re-derivation rather than announced: §17 ratifies no wording for
      * one, and every refusal this screen can reach is a state whose action the gates above already
-     * withhold — so the honest answer is the state as it now is.
+     * withhold — so the honest answer is the state as it now is. The one exception is the health link
+     * guard, which has ratified words and a remedy: see [archive].
      */
-    private fun operate(block: suspend () -> Unit) {
+    private fun operate(block: suspend () -> Unit) = operateGuarded {
+        block()
+        null
+    }
+
+    /** [operate], for an operation that may end in the link-guard dialog it returns. */
+    private fun operateGuarded(block: suspend () -> LinkGuardPrompt?) {
         if (_state.value.busy) return
-        _state.update { it.copy(busy = true) }
+        _state.update { it.copy(busy = true, linkGuard = null) }
         viewModelScope.launch {
-            runCatching { block() }
+            val prompt = runCatching { block() }.getOrNull()
             load()
-            _state.update { it.copy(busy = false) }
+            _state.update { it.copy(busy = false, linkGuard = prompt) }
         }
     }
 }

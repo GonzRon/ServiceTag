@@ -1,22 +1,43 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.text.AnnotatedString
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionKind
+import com.loosecannon.servicetag.core.model.HealthDriver
+import com.loosecannon.servicetag.core.model.HealthSubjectKind
+import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.DefinitionCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
+import com.loosecannon.servicetag.core.usecase.HealthSubjectCommand
+import com.loosecannon.servicetag.core.usecase.ScheduleCommand
+import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.reminders.NOTIFICATION_PERMISSION_RATIONALE
 import com.loosecannon.servicetag.ui.app
@@ -35,7 +56,12 @@ import org.junit.runner.RunWith
  * What only a real tree shows: that a schedule can be created against **an asset** and against **a
  * group** and is in the store afterwards, that every ratified label is on screen **verbatim** — the
  * one place an upper-casing section header or a smoothed-out placeholder would be caught — and that
- * a group target draws **none** of its three forbidden controls.
+ * a group target draws **none** of its three forbidden controls. For 1.4 (B08): the service-policy
+ * question, drawn only where the asset's season or break gives it meaning, its helpers and fields, the
+ * health link guard's dialog, and the retired words' absence.
+ *
+ * Store checks use `check`, not Kotlin's `assert`: the platform runs with assertions disabled, so an
+ * `assert` here would never fail.
  *
  * The permission request is deliberately **not** asserted here. Its timing and its denial are proved
  * against B05's seam in `ScheduleEditViewModelTest`, where the answer is injected; on a device the
@@ -56,13 +82,14 @@ class ScheduleEditorTest {
         graph: AppGraph,
         targetAssetId: String? = null,
         targetGroupId: String? = null,
+        scheduleId: String? = null,
     ): MutableList<String> {
         val saved = mutableListOf<String>()
         rule.setContent {
             ServiceTagTheme {
                 ScheduleEditScreen(
                     graph = graph,
-                    scheduleId = null,
+                    scheduleId = scheduleId,
                     targetAssetId = targetAssetId,
                     targetGroupId = targetGroupId,
                     onDone = { saved += it },
@@ -117,9 +144,6 @@ class ScheduleEditorTest {
         rule.onNodeWithText("when I complete it").assertIsDisplayed()
         rule.onNodeWithText("Every N").assertExists()
         rule.onNodeWithText("Remind me N days early").assertExists()
-        rule.onNodeWithText("Out of season").assertExists()
-        rule.onNodeWithText("Pause with the asset's season").assertExists()
-        rule.onNodeWithText("Remind me year round").assertExists()
         rule.onNodeWithText("Completing this takes").assertExists()
         rule.onNodeWithText("One tap").assertExists()
         rule.onNodeWithText("The full form").assertExists()
@@ -130,18 +154,18 @@ class ScheduleEditorTest {
         saveAndSettle(saved)
 
         val stored = runBlocking { graph.schedules.all() }
-        assert(stored.size == 1) { "one schedule, created: $stored" }
-        assert(stored.single().title == "Blade sharpen") { "wrong schedule: ${stored.single()}" }
-        assert(stored.single().target == ScheduleTarget.AssetTarget(mower.id)) { "wrong target" }
+        check(stored.size == 1) { "one schedule, created: $stored" }
+        check(stored.single().title == "Blade sharpen") { "wrong schedule: ${stored.single()}" }
+        check(stored.single().target == ScheduleTarget.AssetTarget(mower.id)) { "wrong target" }
         // The permission answer cost nothing either way (D-22, invariant 61).
-        assert(stored.single().remindersEnabled) { "reminders were switched off: ${stored.single()}" }
-        assert(stored.single().providers.size == 1) { "one provider row: ${stored.single().providers}" }
+        check(stored.single().remindersEnabled) { "reminders were switched off: ${stored.single()}" }
+        check(stored.single().providers.size == 1) { "one provider row: ${stored.single().providers}" }
     }
 
     /**
      * Matrix rows **"a schedule cannot be created at all"** (the group half) and **"an illegal group
      * schedule"**: a group target draws **no** meter rule, **no** profile picker and **no**
-     * `FOLLOW_ASSET` option at all (D-12, D-28; invariants 2, 3, 27).
+     * service-policy question at all (D-12; invariants 2, 3, 106).
      *
      * They are absent rather than disabled, which is what makes the illegal state unreachable through
      * the UI instead of merely refused on save — and the member asset really does carry a meter, so
@@ -180,10 +204,9 @@ class ScheduleEditorTest {
         // The three controls a group target does not get.
         rule.onAllNodesWithText("Also due by use").assertCountEquals(0)
         rule.onAllNodesWithText("Use this form").assertCountEquals(0)
-        rule.onAllNodesWithText("Pause with the asset's season").assertCountEquals(0)
+        rule.onAllNodesWithText(QUESTION).assertCountEquals(0)
         rule.onAllNodesWithText("The full form").assertCountEquals(0)
-        // And the one option each of those choices does have, stated rather than silently defaulted.
-        rule.onNodeWithText("Remind me year round").assertExists()
+        // And the one completion mode it does have, stated rather than silently defaulted.
         rule.onNodeWithText("One tap").assertExists()
 
         rule.onNodeWithText("Name").performTextInput("Head check")
@@ -191,14 +214,364 @@ class ScheduleEditorTest {
         saveAndSettle(saved)
 
         val stored = runBlocking { graph.schedules.all().single() }
-        assert(stored.target is ScheduleTarget.GroupTarget) { "wrong target: ${stored.target}" }
-        assert(stored.meterDefinitionId == null) { "a group target carries no meter rule" }
-        assert(stored.profileId == null) { "a group target carries no profile" }
-        assert(stored.completionMode == CompletionMode.QUICK) {
+        check(stored.target is ScheduleTarget.GroupTarget) { "wrong target: ${stored.target}" }
+        check(stored.meterDefinitionId == null) { "a group target carries no meter rule" }
+        check(stored.profileId == null) { "a group target carries no profile" }
+        check(stored.completionMode == CompletionMode.QUICK) {
             "a group target is QUICK-only: ${stored.completionMode}"
         }
-        assert(stored.servicePolicy == ServicePolicy.CONTINUOUS) {
+        check(stored.servicePolicy == ServicePolicy.CONTINUOUS) {
             "a group target is CONTINUOUS only: ${stored.servicePolicy}"
         }
+    }
+
+    /** An asset in a calendar season, November through March, made through the shipped commands. */
+    private fun aSeasonalAsset(graph: AppGraph, name: String = "Snowblower"): AssetId = runBlocking {
+        val asset = graph.createAsset.run(AssetCommand(name = name, category = "Yard"))
+        graph.setSeasonMode.run(asset.id, SeasonModeCommand(SeasonMode.CALENDAR, "11-01", "03-31"))
+        asset.id
+    }
+
+    /** The editor on a target the test can change, so one test can look at two targets. */
+    private fun switchableEditor(graph: AppGraph, first: Pair<String?, String?>): (Pair<String?, String?>) -> Unit {
+        var target by mutableStateOf(first)
+        rule.setContent {
+            ServiceTagTheme {
+                ScheduleEditScreen(
+                    graph = graph,
+                    scheduleId = null,
+                    targetAssetId = target.first,
+                    targetGroupId = target.second,
+                    onDone = {},
+                    onBack = {},
+                )
+            }
+        }
+        return { next -> rule.runOnIdle { target = next } }
+    }
+
+    private fun gone(text: String) = rule.onAllNodesWithText(text).assertCountEquals(0)
+
+    /**
+     * Matrix row **"the screen"**: S65 is **not drawn** for a group target (inv. 106) nor for a
+     * YEAR_ROUND asset without a break — not even one option of it — whatever the time rule.
+     */
+    @Test fun theQuestionIsHiddenForAGroupAndAYearRoundAssetWithoutABreak() {
+        val graph = app.graph
+        val (mower, group) = runBlocking {
+            val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+            mower.id to graph.saveGroup.run(
+                null,
+                GroupCommand(name = "Yard run", members = listOf(GroupMemberInput(assetId = mower.id))),
+            ).id
+        }
+        val switchTo = switchableEditor(graph, mower.value to null)
+
+        rule.awaitText("One asset")
+        rule.onNodeWithText("Every N").performTextInput("3")
+        gone(QUESTION)
+        gone("Whenever it is due")
+        gone("When the season starts")
+
+        switchTo(null to group.value)
+        rule.awaitText("A maintenance group")
+        rule.onNodeWithText("Every N").performTextInput("3")
+        gone(QUESTION)
+        gone("Whenever it is due")
+        gone("When the season starts")
+    }
+
+    /**
+     * Matrix row **"the screen"**: a CALENDAR asset's three answers, verbatim and in order of
+     * appearance, with the chosen one's helper under it and no other helper. A new schedule starts on
+     * S68 (master dec. 43); the before-option waits for a time rule.
+     */
+    @Test fun aCalendarAssetOffersThreeOptionsWithHelpers() {
+        val graph = app.graph
+        val asset = aSeasonalAsset(graph)
+        editorFor(graph, targetAssetId = asset.value)
+
+        rule.awaitText(QUESTION)
+        gone("Before the season starts")
+        rule.onNodeWithText("Every N").performTextInput("3")
+        rule.onNodeWithText("Before the season starts").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("When the season starts").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Whenever it is due").performScrollTo().assertIsDisplayed()
+        // In order of appearance, top to bottom, on the tree itself.
+        val tops = listOf("Before the season starts", "When the season starts", "Whenever it is due")
+            .map { rule.onNodeWithText(it).fetchSemanticsNode().boundsInRoot.top }
+        check(tops.zipWithNext().all { (upper, lower) -> upper < lower }) { "the answers are out of order: $tops" }
+        val s78 = "A date in the season or the maintenance break becomes due on an allowed day before the season starts."
+        val s80 = "This maintenance waits while the season is off and becomes active again when it starts."
+        val s82 = "The season and the maintenance break never change when this is due."
+        rule.onNodeWithText(s82).assertExists()
+        gone(s78)
+        gone(s80)
+
+        rule.onNodeWithText("Before the season starts").performScrollTo().performClick()
+        rule.onNodeWithText(s78).assertExists()
+        gone(s80)
+        gone(s82)
+
+        rule.onNodeWithText("When the season starts").performScrollTo().performClick()
+        rule.onNodeWithText(s80).assertExists()
+        gone(s78)
+        gone(s82)
+
+        rule.onNodeWithText("Whenever it is due").performScrollTo().performClick()
+        rule.onNodeWithText(s82).assertExists()
+        gone(s78)
+        gone(s80)
+    }
+
+    /** Matrix row **"the screen"**: S73 and its two answers appear only under S67; S72 only under S74. */
+    @Test fun startCountingFromShowsOnlyUnderWhenTheSeasonStarts() {
+        val graph = app.graph
+        val asset = aSeasonalAsset(graph)
+        editorFor(graph, targetAssetId = asset.value)
+
+        rule.awaitText(QUESTION)
+        rule.onNodeWithText("Every N").performTextInput("3")
+        gone("Start counting from")
+        gone("The season's start")
+
+        rule.onNodeWithText("When the season starts").performScrollTo().performClick()
+        rule.onNodeWithText("Start counting from").assertExists()
+        rule.onNodeWithText("The season's start").assertExists()
+        rule.onNodeWithText("Its own date, but not before the season starts").assertExists()
+        rule.onNodeWithText("Days after it starts").assertExists()
+
+        rule.onNodeWithText("Its own date, but not before the season starts").performScrollTo().performClick()
+        gone("Days after it starts")
+
+        rule.onNodeWithText("Before the season starts").performScrollTo().performClick()
+        gone("Start counting from")
+        gone("Its own date, but not before the season starts")
+    }
+
+    /**
+     * Matrix row **"the screen"**: S71 starts **empty** with S83 under it and Save held (inv. 121); a
+     * value above 365 is not accepted as typed; a margin releases Save.
+     */
+    @Test fun theDaysBeforeFieldStartsEmpty() {
+        val graph = app.graph
+        val asset = aSeasonalAsset(graph)
+        editorFor(graph, targetAssetId = asset.value)
+
+        rule.awaitText(QUESTION)
+        rule.onNodeWithText("Name").performTextInput("Belt check")
+        rule.onNodeWithText("Every N").performTextInput("3")
+        rule.onNodeWithText("Save").assertIsEnabled()
+        rule.onNodeWithText("Before the season starts").performScrollTo().performClick()
+
+        val field = rule.onNode(hasSetTextAction() and hasText("Days before it starts"))
+        field.performScrollTo()
+        field.assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+        rule.onNodeWithText("Enter the number of days.").assertExists()
+        rule.onNodeWithText("Save").assertIsNotEnabled()
+
+        field.performTextInput("400")
+        field.assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+        rule.onNodeWithText("Save").assertIsNotEnabled()
+
+        field.performTextInput("14")
+        field.assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("14")))
+        gone("Enter the number of days.")
+        rule.onNodeWithText("Save").assertIsEnabled()
+    }
+
+    /**
+     * Matrix row **"the screen"**: removing the time rule of a schedule a health subject depends on asks
+     * S140 naming the subject; Cancel closes it and writes nothing; "Archive both" saves and archives
+     * the subject with it (spec §6.1, D-30; inv. 130).
+     */
+    @Test fun theLinkGuardDialogConfirmsAndCancels() {
+        val graph = app.graph
+        val (scheduleId, subjectId) = runBlocking {
+            val generator = graph.createAsset.run(AssetCommand(name = "Generator", category = "Power"))
+            val hours = graph.saveDefinition.run(
+                null,
+                DefinitionCommand(
+                    assetId = generator.id,
+                    key = "engine_hours",
+                    label = "Engine hours",
+                    unit = "h",
+                    kind = DefinitionKind.ENTERED,
+                    valueType = ValueType.NUMBER,
+                    decimals = 0,
+                    rangeLow = null,
+                    rangeHigh = null,
+                    isMeter = true,
+                    formula = null,
+                    sourceA = null,
+                    sourceB = null,
+                ),
+            )
+            val schedule = graph.saveSchedule.run(
+                null,
+                ScheduleCommand(
+                    targetAssetId = generator.id,
+                    targetGroupId = null,
+                    title = "Oil change",
+                    timeInterval = 6,
+                    timeUnit = RecurrenceUnit.MONTH,
+                    anchorOn = "2026-01-01",
+                    meterDefinitionId = hours.id,
+                    meterInterval = 100.0,
+                ),
+            )
+            val subject = graph.saveHealthSubject.create(
+                generator.id,
+                HealthSubjectCommand(
+                    name = "Engine oil",
+                    kind = HealthSubjectKind.PART,
+                    driver = HealthDriver.MAINTENANCE_OVERDUE,
+                    scheduleId = schedule.id,
+                    nominalUntilDays = 0,
+                    warningFromDays = 7,
+                    criticalFromDays = 30,
+                ),
+            )
+            schedule.id to subject.id
+        }
+        val saved = editorFor(graph, scheduleId = scheduleId.value)
+        val asks = "This schedule drives the health subject Engine oil. Archive that subject as well?"
+
+        rule.awaitText("Oil change")
+        rule.onNodeWithText("Every N").performTextClearance()
+        rule.onNodeWithText("Save").performClick()
+        rule.awaitText(asks)
+        rule.onNodeWithText("Archive both").assertExists()
+
+        rule.onNodeWithText("Cancel").performClick()
+        rule.waitUntil(10_000) { rule.onAllNodesWithText(asks).fetchSemanticsNodes().isEmpty() }
+        runBlocking {
+            check(graph.schedules.get(scheduleId)!!.timeInterval == 6) { "Cancel wrote the schedule" }
+            check(graph.healthSubjects.get(subjectId)!!.archivedAt == null) { "Cancel archived the subject" }
+        }
+        check(saved.isEmpty()) { "Cancel left the editor: $saved" }
+
+        rule.onNodeWithText("Save").performClick()
+        rule.awaitText(asks)
+        rule.onNodeWithText("Archive both").performClick()
+        rule.waitUntil(10_000) { saved.isNotEmpty() }
+        runBlocking {
+            val stored = graph.schedules.get(scheduleId)!!
+            check(stored.timeInterval == null) { "the time rule stayed: $stored" }
+            check(stored.meterInterval == 100.0) { "the meter rule went: $stored" }
+            check(graph.healthSubjects.get(subjectId)!!.archivedAt != null) { "the subject was not archived" }
+        }
+    }
+
+    /**
+     * Matrix row **"retired words linger"**: 1.2's two-option season choice and its heading are gone
+     * from the editor, for an asset with a season and for a group alike (master plan §1).
+     */
+    @Test fun theRetiredOptionWordsAreGone() {
+        val graph = app.graph
+        val asset = aSeasonalAsset(graph)
+        val group = runBlocking {
+            graph.saveGroup.run(
+                null,
+                GroupCommand(name = "Yard run", members = listOf(GroupMemberInput(assetId = asset))),
+            ).id
+        }
+        val switchTo = switchableEditor(graph, asset.value to null)
+        val retired = listOf("Pause with the asset's season", "Remind me year round", "Out of season")
+
+        rule.awaitText(QUESTION)
+        rule.onNodeWithText("Every N").performTextInput("3")
+        retired.forEach(::gone)
+
+        switchTo(null to group.value)
+        rule.awaitText("A maintenance group")
+        retired.forEach(::gone)
+    }
+
+    /** The editor on a stored schedule the test can change, so one test can open several. */
+    private fun switchableScheduleEditor(graph: AppGraph, first: String): (String) -> Unit {
+        var scheduleId by mutableStateOf(first)
+        rule.setContent {
+            ServiceTagTheme {
+                ScheduleEditScreen(
+                    graph = graph,
+                    scheduleId = scheduleId,
+                    targetAssetId = null,
+                    targetGroupId = null,
+                    onDone = {},
+                    onBack = {},
+                )
+            }
+        }
+        return { next -> rule.runOnIdle { scheduleId = next } }
+    }
+
+    /** A stored schedule on [asset], every three months from [anchorOn], with the policy given. */
+    private fun aStoredSchedule(
+        graph: AppGraph,
+        asset: AssetId,
+        title: String,
+        anchorOn: String,
+        policy: ServicePolicy,
+        offset: Int?,
+    ): String = runBlocking {
+        graph.saveSchedule.run(
+            null,
+            ScheduleCommand(
+                targetAssetId = asset,
+                targetGroupId = null,
+                title = title,
+                timeInterval = 3,
+                timeUnit = RecurrenceUnit.MONTH,
+                anchorOn = anchorOn,
+                servicePolicy = policy,
+                policyOffsetDays = offset,
+            ),
+        ).id.value
+    }
+
+    /**
+     * The three warnings are drawn, not only computed (review F4). Built from stored rows, so no
+     * answer depends on the device's clock:
+     * - S76: a November–March season, S67 · S74 · 0, anchored in June, outside the window;
+     * - S84: the same season, S74 · 200, and 1 Nov + 200 passes 31 Mar in every year;
+     * - S77: a YEAR_ROUND asset without a break holding AT_START 0 (a migrated 1.3 row), with S68 as
+     *   its only answer.
+     */
+    @Test fun theThreeWarningsAreDrawn() {
+        val graph = app.graph
+        val snowblower = aSeasonalAsset(graph)
+        val mower = runBlocking { graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard")).id }
+        val outside = aStoredSchedule(graph, snowblower, "Belt check", "2026-06-01", ServicePolicy.IN_SERVICE_AT_START, 0)
+        val late = aStoredSchedule(graph, snowblower, "Auger check", "2026-12-01", ServicePolicy.IN_SERVICE_AT_START, 200)
+        val merged = aStoredSchedule(graph, mower, "Blade sharpen", "2026-06-01", ServicePolicy.IN_SERVICE_AT_START, 0)
+        val s76 = "The first due date is outside this asset's season, so it will wait for the season to start."
+        val s77 = "This asset has no season or maintenance break to be ready before, so this is due whenever its date comes."
+        val s84 = "That is after the season ends, so this would never become due."
+        val switchTo = switchableScheduleEditor(graph, outside)
+
+        rule.awaitText("Belt check")
+        rule.onNodeWithText(s76).performScrollTo().assertIsDisplayed()
+        gone(s84)
+        gone(s77)
+
+        switchTo(late)
+        rule.awaitText("Auger check")
+        rule.onNodeWithText(s84).performScrollTo().assertIsDisplayed()
+        gone(s76)
+        gone(s77)
+
+        switchTo(merged)
+        rule.awaitText("Blade sharpen")
+        rule.onNodeWithText(s77).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Whenever it is due").assertExists()
+        gone("When the season starts")
+        gone("Before the season starts")
+        rule.onNodeWithText("Save").assertIsNotEnabled()
+    }
+
+    private companion object {
+        /** S65, verbatim. */
+        const val QUESTION = "When should this maintenance be done?"
     }
 }
