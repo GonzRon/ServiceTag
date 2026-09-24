@@ -122,3 +122,7 @@ Large: fourteen rows, two forms, one document. Split seam if one review cannot h
 ## Carry-forward from B03 (controller, 2026-09-24)
 
 - `MergeReport`'s three new tallies (tables 12–14) must reach the wire: `MergeReportResponse` mirrors them in write order and `/v1/status` gains their count keys; `theMergeReportWireMirrorCarriesEveryTallyInWriteOrder` pins fourteen, not eleven (RED: leave one out).
+
+## Carry-forward from B03's review (controller, 2026-09-24)
+
+- `/v1` asset responses already carry the five new asset fields since B01/B03; this brief documents them in `docs/api/v1.md` beside the deprecated season inputs and pins them in the asset-response shape test.
