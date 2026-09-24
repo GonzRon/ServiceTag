@@ -35,16 +35,21 @@ class HealthClockTest {
     private fun on(date: String) = LocalDate.parse(date)
 
     /**
-     * Spec §7.1, literally and one day at a time: `d` over `min(O, P ?: R) < d ≤ T`, counted when the
-     * phase on `d` is ACTIVE, `d > A(d)` with today's postponement, and — MEDIUM on IN_SERVICE only —
-     * `d` is on or after the latest cycle start at or before `T`.
+     * Spec §7.1's rule, one day at a time: `d` counts when the phase on `d` is ACTIVE, `d > A(d)` with
+     * today's postponement, and — MEDIUM on IN_SERVICE only — `d` is on or after the latest cycle
+     * start at or before `T`.
+     *
+     * The walk starts [ORACLE_LEAD_DAYS] before `min(O, P ?: R)`, the bound production evaluates from
+     * (plan decision 16). That bound is an evaluation bound only (O-10, inv. 116): no day at or below it
+     * can pass `d > A(d)`. Walking from well before it lets the property show that, instead of taking
+     * it on trust by sharing the bound.
      */
     private fun oracle(link: PolicyInputs, season: SeasonContext?, kind: HealthSubjectKind, today: LocalDate): Long {
         val due = link.postponedDueOn ?: link.rawDueOn ?: return 0
         val inService = link.policy == ServicePolicy.IN_SERVICE_AT_START || link.policy == ServicePolicy.IN_SERVICE_RESUME_CLAMPED
         val restart = if (kind == HealthSubjectKind.MEDIUM && inService) season?.latestCycleStartOnOrBefore(today) else null
         var counted = 0L
-        var d = minOf(link.openedOn, due).plusDays(1)
+        var d = minOf(link.openedOn, due).minusDays(ORACLE_LEAD_DAYS)
         while (d <= today) {
             val outcome = ServicePolicyEngine.evaluate(link, season, at = d)
             val a = outcome.actionableOn
@@ -62,7 +67,7 @@ class HealthClockTest {
         var restarted = 0
         var moved = 0
         var late = 0
-        var dormantSpans = 0
+        var runChanges = 0
         repeat(500) { case ->
             val inputs = randomSeason(random)
             val season = inputs?.let(SeasonContext::of)
@@ -92,17 +97,26 @@ class HealthClockTest {
                 if (expected > 0) late++
                 val a = ServicePolicyEngine.evaluate(link, season, today).actionableOn
                 if (a != null && a != (postponement ?: raw)) moved++
-                if (kind == HealthSubjectKind.MEDIUM && season?.latestCycleStartOnOrBefore(today) != null) restarted++
-                if (season != null && season.phaseAt(today) != season.phaseAt(today.minusDays(200))) dormantSpans++
+                val inService = policy == ServicePolicy.IN_SERVICE_AT_START || policy == ServicePolicy.IN_SERVICE_RESUME_CLAMPED
+                val rangeStart = raw?.let { minOf(opened, postponement ?: it).plusDays(1) }
+                val restart = season?.latestCycleStartOnOrBefore(today)
+                if (kind == HealthSubjectKind.MEDIUM && inService && rangeStart != null && restart != null && rangeStart < restart) {
+                    restarted++
+                }
+                if (inService && season != null && rangeStart != null && rangeStart < today &&
+                    (season.phaseAt(rangeStart) to season.cycleStartAt(rangeStart)) != (season.phaseAt(today) to season.cycleStartAt(today))
+                ) {
+                    runChanges++
+                }
             }
         }
         // The property is only as good as what it reached.
         assertTrue(rawBeforeOpened > 40, "histories with R < O: $rawBeforeOpened")
         assertTrue(postponed > 40, "postponed occurrences: $postponed")
-        assertTrue(restarted > 40, "MEDIUM restarts: $restarted")
+        assertTrue(restarted > 40, "MEDIUM restarts inside the range, on IN_SERVICE: $restarted")
         assertTrue(moved > 100, "actionable dates the policy moved: $moved")
         assertTrue(late > 300, "cases with counted days: $late")
-        assertTrue(dormantSpans > 100, "cases crossing a phase change: $dormantSpans")
+        assertTrue(runChanges > 100, "IN_SERVICE cases whose phase or cycle start changes inside the range: $runChanges")
     }
 
     /**
@@ -299,5 +313,8 @@ class HealthClockTest {
 
     private companion object {
         val BASE: LocalDate = LocalDate.parse("2024-01-01")
+
+        /** More than a year: the walk starts in a different season and break from the bound. */
+        const val ORACLE_LEAD_DAYS = 400L
     }
 }
