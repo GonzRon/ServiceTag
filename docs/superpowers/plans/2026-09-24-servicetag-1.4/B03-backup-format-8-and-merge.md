@@ -121,3 +121,7 @@ object LegacyArchive {                 // core/.../core/backup/LegacyArchive.kt
 ## Size
 
 Medium-large: three DTO pairs, one upgrade function, three planner passes, four use-case edits. Split seam if needed: **B03a** format 8 and the upgrade; **B03b** the merge and the four use cases; the interface is the DTO field sets of master §5.
+
+## Carry-forward from B01's review (controller, 2026-09-24)
+
+- **M6:** the format-8 export → import round trip must not re-seed `ruleChangedAt` from `updatedAt` (that would bring #64 back through a backup). The round-trip test uses a schedule whose `ruleChangedAt` differs from `updatedAt` and asserts both survive unchanged; RED mutation: import derives `ruleChangedAt` from `updatedAt`.

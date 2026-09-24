@@ -593,6 +593,9 @@ B01 gates everything. B02 gates B04 (boundary kinds, `SeasonContext`) and B05 (t
 
 ---
 
+
+**Carry-forwards from B01's review (controller, 2026-09-24):** `MaintenanceDaos.kt` (`observeAll` ORDER BY) joins B02's file set; B03's round trip keeps `ruleChangedAt` independent of `updatedAt`; B04 removes B01's `calendar()` fixture helper once the legacy-pair rule lands. Each brief carries the row.
+
 ## 17. Release acceptance and controller proofs
 
 The standing runbook is `docs/release-proofs.md` (R1–R7); B15 adds the 1.4 lines to it. Everything below runs at the **exact final tip**, by the controller.

@@ -112,3 +112,7 @@ Every date is an injected `T`. Literal values are spec §7 and §12.1's.
 ## Size
 
 Large but pure: two new engine files, three modified. Split seam if one review cannot hold it: **B02a** `SeasonContext` + `ServicePolicyEngine` + their tests; **B02b** `rebuild`, `statusOf`, `readState`, reminders and the worked timelines. The interface between them is `evaluate`.
+
+## Carry-forward from B01's review (controller, 2026-09-24)
+
+- **M5 (ownership added):** `app/src/main/kotlin/com/loosecannon/servicetag/data/MaintenanceDaos.kt` joins this brief's Files for one change: `ScheduleStateDao.observeAll` orders by `actionable_due_on` (the column B01 indexed), not `effective_due_on`, because this brief makes the two diverge. One JVM or DAO test row: two rows whose actionable and effective dates order differently come back in actionable order; RED mutation: keep the old `ORDER BY`.

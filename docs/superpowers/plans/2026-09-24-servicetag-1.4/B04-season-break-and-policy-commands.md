@@ -106,3 +106,7 @@ class AcceptSeasonOffer  { suspend fun run(assetId: AssetId, event: AssetEvent, 
 ## Size
 
 Medium: four small use cases, two extended ones and one pure view; most of the weight is in the refusal matrix. No split expected.
+
+## Carry-forward from B01's review (controller, 2026-09-24)
+
+- **M4:** B01 made the shipped fixtures that create a seasonal asset through `createAsset` set CALENDAR directly (a `FakeGraph.calendar` helper and one inline copy in `DashboardAttentionTest`). Once this brief's legacy-pair rule lands in the asset commands (an asset given a season window takes CALENDAR; inv. 88), remove that helper and the inline copy and add the create-path case to this brief's matrix: creating an asset with a window yields `seasonMode = CALENDAR` and its non-CONTINUOUS schedules read INACTIVE_SEASON out of season; RED mutation: leave `seasonMode` at its default.
