@@ -2,8 +2,10 @@ package com.loosecannon.servicetag.core.schedule
 
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleStatus
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.SeasonInputs
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.testing.calendarSeason
 import com.loosecannon.servicetag.core.testing.readingOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import java.time.LocalDate
@@ -31,7 +33,7 @@ class ScheduleStatusTest {
         schedule: com.loosecannon.servicetag.core.model.MaintenanceSchedule,
         today: String,
         events: List<com.loosecannon.servicetag.core.model.AssetEvent> = emptyList(),
-        season: SeasonWindow? = null,
+        season: SeasonInputs? = null,
     ): DueStatus {
         val state = ScheduleRecompute.rebuild(
             schedule, events, emptyList(), emptyList(), on(today), ZoneOffset.UTC, season,
@@ -122,14 +124,14 @@ class ScheduleStatusTest {
         assertFalse(archivedStatus.notifies)
 
         // the winter window of D5 §10.4: Oct 15 → Apr 15, evaluated in July
-        val winter = quarterly.copy(seasonBehavior = SeasonBehavior.FOLLOW_ASSET)
-        val window = SeasonWindow("10-15", "04-15")
+        val winter = quarterly.copy(servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0)
+        val window = calendarSeason("10-15", "04-15")
         assertEquals(DueStatus.INACTIVE_SEASON, statusAt(winter, "2026-07-01", season = window))
         assertFalse(DueStatus.INACTIVE_SEASON.countsAsDue)
         assertFalse(DueStatus.INACTIVE_SEASON.notifies)
         // and inside the window the same schedule is honestly overdue again
         assertEquals(DueStatus.OVERDUE, statusAt(winter, "2026-11-01", season = window))
-        // an IGNORE schedule -- which is all a group target may be -- never sees the window
+        // a CONTINUOUS schedule -- which is all a group target may be -- never sees the window
         assertEquals(DueStatus.OVERDUE, statusAt(quarterly, "2026-07-01", season = window))
     }
 
@@ -154,8 +156,8 @@ class ScheduleStatusTest {
         assertEquals(order.indexOf(DueStatus.OVERDUE), worst)
 
         // the named exception: crossing out of season is a move to INACTIVE_SEASON, not to OK
-        val winter = quarterly.copy(seasonBehavior = SeasonBehavior.FOLLOW_ASSET)
-        val window = SeasonWindow("10-15", "04-15")
+        val winter = quarterly.copy(servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0)
+        val window = calendarSeason("10-15", "04-15")
         assertEquals(DueStatus.OVERDUE, statusAt(winter, "2026-04-15", season = window))
         assertEquals(DueStatus.INACTIVE_SEASON, statusAt(winter, "2026-04-16", season = window))
     }

@@ -60,7 +60,10 @@ enum class RecurrenceUnit { DAY, WEEK, MONTH, YEAR }
 /** Whether the series is pinned to its anchor or restarts from each termination. */
 enum class TimeBasis { FIXED, COMPLETION }
 
-/** Whether the schedule follows its Asset's season window or ignores it. */
+/**
+ * The 1.3 season switch. **Legacy only**: it is the input type of [LegacySeasonMapping] and
+ * nothing else — no schedule, command or engine reads it; [ServicePolicy] replaced it in schema 8.
+ */
 enum class SeasonBehavior { FOLLOW_ASSET, IGNORE }
 
 /** One tap, or the profile form. */
@@ -82,9 +85,11 @@ data class ScheduleProviderRow(val provider: String, val enabled: Boolean)
  * The maintenance schedule aggregate root: configuration, plus exactly one override.
  *
  * [postponedDueOn] is the row's **only** override — the snooze is device-local delivery state and
- * is deliberately not here. [seasonReentry] and [seasonReentryOffsetDays] are **stored and never
- * read in 1.2**: they exist so the column does not have to be added later, and no 1.2 code path
- * looks at them.
+ * is deliberately not here.
+ *
+ * [ruleChangedAt] is the pin's floor (#64, D-28): written on a create and by an edit that changes a
+ * rule field, and by nothing else. [updatedAt] is bookkeeping that every save stamps; it is never
+ * the floor.
  *
  * Two shape rules are use-case invariants with tests rather than SQL `CHECK` constraints, because
  * Room cannot declare one on an entity and a CHECK written only into a migration would give
@@ -109,10 +114,10 @@ data class MaintenanceSchedule(
     val meterInterval: Double?,
     val anchorMeter: Double?,
     val meterLead: Double?,
-    // season
-    val seasonBehavior: SeasonBehavior,
-    val seasonReentry: String?,
-    val seasonReentryOffsetDays: Int?,
+    // service policy (spec §4.1, §4.2)
+    val servicePolicy: ServicePolicy,
+    /** Signed days from the boundary: 0–365 for AT_START, −365 to −1 for PRE_SERVICE, else null. */
+    val policyOffsetDays: Int?,
     // completion
     val completionMode: CompletionMode,
     val profileId: ProfileId?,
@@ -122,6 +127,8 @@ data class MaintenanceSchedule(
     val postponedDueOn: String?,
     val createdAt: Long,
     val updatedAt: Long,
+    /** The instant of the last rule change (or the create): the never-terminated pin's floor. */
+    val ruleChangedAt: Long,
     val providers: List<ScheduleProviderRow>,
 )
 
@@ -163,9 +170,15 @@ data class ScheduleState(
     val lastTerminationEffectiveOn: String?,
     val lastTerminationKind: TerminationKind,
     val computedDueOn: String?,
-    /** The sort key: `postponedDueOn ?: computedDueOn`. */
+    /** `postponedDueOn ?: computedDueOn`, its 1.2 meaning unchanged. */
     val effectiveDueOn: String?,
-    val seasonActive: Boolean,
+    /** Whether the schedule is surfacing work or held out of season. */
+    val policyPhase: PolicyPhase,
+    /** The policy applied to [effectiveDueOn]: the status input and the sort key. */
+    val actionableDueOn: String?,
+    val policyReason: PolicyReason,
+    /** Inside the asset's maintenance break under a non-CONTINUOUS policy: nothing notifies. */
+    val quiet: Boolean,
     /** The `T` this state was computed for. */
     val computedForOn: String,
     val computedAt: Long,

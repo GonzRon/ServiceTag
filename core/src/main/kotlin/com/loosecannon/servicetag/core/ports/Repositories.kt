@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.ports
 
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
@@ -12,6 +13,8 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.HealthSubject
+import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -22,6 +25,7 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
+import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import kotlinx.coroutines.flow.Flow
@@ -281,4 +285,41 @@ interface ReferenceRepository {
     suspend fun delete(id: ReferenceId)
     suspend fun deleteAll()
     fun observeForAsset(assetId: AssetId): Flow<List<AssetReference>>
+}
+
+/**
+ * 1.4. **Insert and query only**, the [ClosureRepository] shape: an activation row is an immutable
+ * fact (inv. 89). There is no update, no delete and no `deleteAll`; a row leaves only by its
+ * asset's CASCADE. Every list orders by `(occurredOn, createdAt, id)`.
+ */
+interface SeasonActivationRepository {
+    suspend fun insert(row: SeasonActivation)
+    suspend fun forAsset(assetId: AssetId): List<SeasonActivation>
+    suspend fun all(): List<SeasonActivation>
+    fun observeForAsset(assetId: AssetId): Flow<List<SeasonActivation>>
+}
+
+/**
+ * 1.4. **Insert and query only**: a condition row is an immutable fact (inv. 107), and a
+ * correction is a new row. Every list orders by `(occurredOn, occurredTime nulls first,
+ * createdAt, id)`, so the last element is the current condition.
+ */
+interface ConditionRepository {
+    suspend fun insert(row: AssetCondition)
+    suspend fun forAsset(assetId: AssetId): List<AssetCondition>
+    suspend fun all(): List<AssetCondition>
+    fun observeForAsset(assetId: AssetId): Flow<List<AssetCondition>>
+}
+
+/**
+ * 1.4. Health **configuration**: upsert and query, and **no delete** — a subject is archived, and
+ * only its asset's or its schedule's CASCADE removes the row. Lists order by `(sortOrder, id)`.
+ */
+interface HealthSubjectRepository {
+    suspend fun upsert(subject: HealthSubject)
+    suspend fun get(id: HealthSubjectId): HealthSubject?
+    suspend fun forAsset(assetId: AssetId): List<HealthSubject>
+    suspend fun forSchedule(id: ScheduleId): List<HealthSubject>
+    suspend fun all(): List<HealthSubject>
+    fun observeForAsset(assetId: AssetId): Flow<List<HealthSubject>>
 }

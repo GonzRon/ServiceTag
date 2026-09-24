@@ -20,9 +20,11 @@ import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.ClosureRepository
+import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
+import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
@@ -30,6 +32,7 @@ import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
+import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
@@ -88,18 +91,22 @@ import com.loosecannon.servicetag.data.room.MIGRATION_3_4
 import com.loosecannon.servicetag.data.room.MIGRATION_4_5
 import com.loosecannon.servicetag.data.room.MIGRATION_5_6
 import com.loosecannon.servicetag.data.room.MIGRATION_6_7
+import com.loosecannon.servicetag.data.room.MIGRATION_7_8
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomClosureRepository
+import com.loosecannon.servicetag.data.room.RoomConditionRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
+import com.loosecannon.servicetag.data.room.RoomHealthSubjectRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
 import com.loosecannon.servicetag.data.room.RoomReferenceRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
+import com.loosecannon.servicetag.data.room.RoomSeasonActivationRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.prefs.AppPrefs
@@ -159,7 +166,7 @@ class AppGraph(private val context: Context) {
         .setQueryCoroutineContext(Dispatchers.IO)
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-            MIGRATION_6_7,
+            MIGRATION_6_7, MIGRATION_7_8,
         )
         .build()
 
@@ -183,6 +190,12 @@ class AppGraph(private val context: Context) {
     /** 1.3's one new data port: the URIs on an asset. Its rules live in the use cases. */
     val references: ReferenceRepository = RoomReferenceRepository(db.assetReferenceDao())
 
+    // 1.4's three data ports. The two fact stores are insert and query only; the subjects are
+    // configuration, upserted and never deleted. Their rules live in the use cases that write them.
+    val seasonActivations: SeasonActivationRepository = RoomSeasonActivationRepository(db.seasonActivationDao())
+    val conditions: ConditionRepository = RoomConditionRepository(db.assetConditionDao())
+    val healthSubjects: HealthSubjectRepository = RoomHealthSubjectRepository(db.healthSubjectDao())
+
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
 
@@ -199,7 +212,7 @@ class AppGraph(private val context: Context) {
      * closure arrives with the groups work; until then the seam answers with nothing.
      */
     val recomputeSchedules: RecomputeSchedules = RecomputeSchedules(
-        schedules, scheduleStates, events, closures, groups, assets, today, clock,
+        schedules, scheduleStates, events, closures, groups, assets, seasonActivations, today, clock,
         zone = { ZoneId.systemDefault() },
     )
 
@@ -380,13 +393,14 @@ class AppGraph(private val context: Context) {
      */
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
+        attachments, references, seasonActivations, conditions, healthSubjects,
+        uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
     )
 
     /** Wipe-and-load import. Replace is the only mode Phase 1A ships (D7 1A). */
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
         // Derived state is rebuilt after any import, and the wipe took it with the schedule rows.
         rebuildAll = { recomputeSchedules.all() },
     )
@@ -399,11 +413,11 @@ class AppGraph(private val context: Context) {
      */
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
     )
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
         // The total post-apply recompute, wired to the engine: an imported event, membership row,
         // closure or meter reading can each move a due date, and rebuilding every schedule inside
         // the apply's own transaction is cheaper than enumerating which.
@@ -626,6 +640,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 7
+        const val SCHEMA_VERSION = 8
     }
 }

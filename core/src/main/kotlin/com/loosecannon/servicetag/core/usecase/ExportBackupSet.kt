@@ -12,14 +12,17 @@ import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.ClosureRepository
+import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
+import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -51,6 +54,14 @@ class ExportBackupSet(
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
     private val references: ReferenceRepository,
+    /**
+     * The three 1.4 stores — manual season activations, conditions and health subjects — held for
+     * the format-8 archive. Wired here in 1.4's first change so the constructor does not move
+     * again when the archive starts carrying them; format 7 reads and writes none of them.
+     */
+    private val seasonActivations: SeasonActivationRepository,
+    private val conditions: ConditionRepository,
+    private val healthSubjects: HealthSubjectRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,

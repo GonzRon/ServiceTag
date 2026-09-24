@@ -1,0 +1,16 @@
+{
+  "assets": {
+    "a-generator": {"seasonMode": "YEAR_ROUND"},
+    "a-snowblower": {"seasonMode": "CALENDAR"}
+  },
+  "schedules": {
+    "s-generator-follow-mmdd-5": {"servicePolicy": "IN_SERVICE_AT_START", "policyOffsetDays": 5},
+    "s-generator-ignore": {"servicePolicy": "CONTINUOUS", "policyOffsetDays": null},
+    "s-generator-ignore-leftovers": {"servicePolicy": "CONTINUOUS", "policyOffsetDays": null},
+    "s-snowblower-follow-at-start-5": {"servicePolicy": "IN_SERVICE_AT_START", "policyOffsetDays": 5},
+    "s-snowblower-follow-clamped": {"servicePolicy": "IN_SERVICE_RESUME_CLAMPED", "policyOffsetDays": null},
+    "s-snowblower-follow-meter-only": {"servicePolicy": "IN_SERVICE_AT_START", "policyOffsetDays": 0},
+    "s-snowblower-follow-mmdd-400": {"servicePolicy": "IN_SERVICE_AT_START", "policyOffsetDays": 0},
+    "s-snowblower-follow-null": {"servicePolicy": "IN_SERVICE_AT_START", "policyOffsetDays": 0}
+  }
+}

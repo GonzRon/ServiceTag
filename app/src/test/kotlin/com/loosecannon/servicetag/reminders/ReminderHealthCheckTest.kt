@@ -6,6 +6,8 @@ import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.PolicyPhase
+import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
@@ -132,7 +134,6 @@ private fun derivedState(
     computedDueMeter: Double? = null,
     currentMeter: Double? = null,
     effectiveDueOn: String? = "2026-10-01",
-    seasonActive: Boolean = true,
 ): ScheduleState = ScheduleState(
     scheduleId = ScheduleId(id),
     lastCompletedOn = null,
@@ -144,7 +145,10 @@ private fun derivedState(
     lastTerminationKind = TerminationKind.NONE,
     computedDueOn = effectiveDueOn,
     effectiveDueOn = effectiveDueOn,
-    seasonActive = seasonActive,
+    policyPhase = PolicyPhase.ACTIVE,
+    actionableDueOn = effectiveDueOn,
+    policyReason = PolicyReason.NONE,
+    quiet = false,
     computedForOn = TODAY.toString(),
     computedAt = dayMillis("2026-09-22"),
 )

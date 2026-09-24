@@ -4,12 +4,13 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.reminders.Severity
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.calendar
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.ui.maintenance.AttentionSection
@@ -86,12 +87,14 @@ class DashboardViewModelMaintenanceTest {
      * empty header, is exactly what D12 §10 forbids (`:706-707`).
      */
     @Test fun sectionsComeOutInTheFixedOrderAndEmptyOnesAreOmitted() = runTest {
-        val blower = graph.createAsset.run(
-            AssetCommand(name = "Snowblower", category = "Yard", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
+        val blower = graph.calendar(
+            graph.createAsset.run(
+                AssetCommand(name = "Snowblower", category = "Yard", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
+            ),
         )
         val mower = asset("Mower")
         seed(scheduleOf("s-overdue", assetId = mower.id.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
-        seed(scheduleOf("s-season", assetId = blower.id.value, title = "Pre-season check", anchorOn = "2026-01-01", seasonBehavior = SeasonBehavior.FOLLOW_ASSET))
+        seed(scheduleOf("s-season", assetId = blower.id.value, title = "Pre-season check", anchorOn = "2026-01-01", servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0))
 
         val vm = viewModel()
         backgroundScope.launch { vm.state.collect() }
@@ -191,8 +194,10 @@ class DashboardViewModelMaintenanceTest {
      * shows the total (invariants 22, 74, D-15).
      */
     @Test fun theDueTotalCountsAGroupOnceAndCountsNeitherPausedNorParkedNorEmpty() = runTest {
-        val blower = graph.createAsset.run(
-            AssetCommand(name = "Snowblower", category = "Yard", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
+        val blower = graph.calendar(
+            graph.createAsset.run(
+                AssetCommand(name = "Snowblower", category = "Yard", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
+            ),
         )
         val members = (1..5).map { asset("Sprinkler $it", category = "Irrigation") }
         graph.groups.upsert(groupOf("g1", members = members.map { Triple(it.id.value, "2026-01-01", null) }))
@@ -201,7 +206,7 @@ class DashboardViewModelMaintenanceTest {
         seed(scheduleOf("s-group", groupId = "g1", title = "Head check", anchorOn = "2026-01-01", leadDays = 0))
         seed(scheduleOf("s-empty", groupId = "g-empty", title = "Nobody's round", anchorOn = "2026-01-01"))
         seed(scheduleOf("s-paused", assetId = blower.id.value, title = "Paused work", anchorOn = "2026-01-01", status = ScheduleStatus.PAUSED))
-        seed(scheduleOf("s-season", assetId = blower.id.value, title = "Parked work", anchorOn = "2026-01-01", seasonBehavior = SeasonBehavior.FOLLOW_ASSET))
+        seed(scheduleOf("s-season", assetId = blower.id.value, title = "Parked work", anchorOn = "2026-01-01", servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0))
 
         graph.completeGroupMembers.run(
             ScheduleId("s-group"),

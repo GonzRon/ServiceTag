@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
@@ -103,13 +104,13 @@ fun MaintenanceSchedule.targetInService(
  * neither counts as due nor notifies — because a total function that fails safe is better than one
  * that throws inside a read model, and a due word for an archived row would be a lie.
  *
- * `seasonActive` is read off the state rather than recomputed here: the window lives on the Asset
+ * `policyPhase` is read off the state rather than recomputed here: the season lives on the Asset
  * and this function has no Asset. The daily rebuild is what keeps it fresh, and a boundary crossed
  * between rebuilds is the one exception invariant 23 names.
  */
 fun statusOf(schedule: MaintenanceSchedule, state: ScheduleState, today: LocalDate): DueStatus {
     if (schedule.status != ScheduleStatus.ACTIVE) return DueStatus.PAUSED
-    if (!state.seasonActive) return DueStatus.INACTIVE_SEASON
+    if (state.policyPhase == PolicyPhase.DORMANT) return DueStatus.INACTIVE_SEASON
 
     val timeEvaluable = schedule.timeInterval != null && state.effectiveDueOn != null
     val meterEvaluable = schedule.meterDefinitionId != null && state.computedDueMeter != null

@@ -50,10 +50,10 @@ class MaintenanceDaoConstraintTest {
         id = id, assetId = assetId, groupId = null, title = "Filter change", description = "",
         timeInterval = 3, timeUnit = "MONTH", timeBasis = "COMPLETION", anchorOn = "2026-03-01",
         leadDays = 7, meterDefinitionId = null, meterInterval = null, anchorMeter = null,
-        meterLead = null, seasonBehavior = "IGNORE", seasonReentry = null,
-        seasonReentryOffsetDays = null, completionMode = "QUICK", profileId = null,
+        meterLead = null, servicePolicy = "CONTINUOUS", policyOffsetDays = null,
+        completionMode = "QUICK", profileId = null,
         remindersEnabled = true, status = "ACTIVE", postponedDueOn = null,
-        createdAt = 1L, updatedAt = 2L,
+        createdAt = 1L, updatedAt = 2L, ruleChangedAt = 2L,
     )
 
     private fun closure(id: String, scheduleId: String, occurrenceOn: String, closedOn: String) =

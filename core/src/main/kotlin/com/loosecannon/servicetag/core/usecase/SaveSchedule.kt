@@ -24,17 +24,18 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * **What an edit does beyond the rule:**
  *
- * - it **clears the postponement** when a rule field actually changed (invariant 19). A title or a
- *   lead edit leaves it alone: the current occurrence's agreed date has nothing to do with the
- *   words on it.
+ * - it **clears the postponement** when a rule field actually changed (invariant 19). A title, a
+ *   lead or a policy edit leaves it alone: the current occurrence's agreed date has nothing to do
+ *   with the words on it.
  * - it **abandons an open, partially complete occurrence** (D-9) — by doing nothing to it. The
  *   member completions already recorded stay exactly as they are, truthful history that no advance
  *   ever rewrites (invariant 14), and the edited rule simply produces the new current occurrence.
  *   There is no tidying step, and adding one would be the bug.
- * - it **moves the pin's floor to the edit date**, because `updated_at` is that floor (spec §2.1).
- *   Without it, re-anchoring an old never-terminated schedule would pin it immediately overdue.
- *   This is why the other operations leave `updated_at` alone: only an edit moves the floor
- *   (invariant 25).
+ * - it **moves the pin's floor to the edit date when a rule field changed**, because
+ *   `rule_changed_at` is that floor (D-28, #64). Without it, re-anchoring an old never-terminated
+ *   schedule would pin it immediately overdue. Any other edit keeps the stored instant, so a title,
+ *   lead or policy edit moves nothing (invariant 87). `updated_at` is still stamped on every save:
+ *   it is bookkeeping, and the engine never reads it.
  *
  * A group-targeted schedule is refused on a group that would **oblige nobody** — no open window, or
  * none whose Asset's own lifecycle leaves it standing (D-16). Its first round would oblige nobody,
@@ -121,9 +122,8 @@ class SaveSchedule(
             meterInterval = cmd.meterInterval,
             anchorMeter = cmd.anchorMeter,
             meterLead = cmd.meterLead,
-            seasonBehavior = cmd.seasonBehavior,
-            seasonReentry = cmd.seasonReentry,
-            seasonReentryOffsetDays = cmd.seasonReentryOffsetDays,
+            servicePolicy = cmd.servicePolicy,
+            policyOffsetDays = cmd.policyOffsetDays,
             completionMode = cmd.completionMode,
             profileId = cmd.profileId,
             remindersEnabled = cmd.remindersEnabled,
@@ -131,10 +131,13 @@ class SaveSchedule(
             postponedDueOn = existing?.postponedDueOn,
             createdAt = existing?.createdAt ?: now,
             updatedAt = now,
+            // A create stamps the floor with its own instant; an edit keeps the stored one unless
+            // it changed the rule, just below.
+            ruleChangedAt = existing?.ruleChangedAt ?: now,
             providers = cmd.providers.sortedBy { it.provider },
         )
         val saved = if (existing != null && ruleChanged(existing, candidate)) {
-            candidate.copy(postponedDueOn = null)
+            candidate.copy(postponedDueOn = null, ruleChangedAt = now)
         } else {
             candidate
         }
@@ -149,7 +152,8 @@ class SaveSchedule(
     /**
      * Whether this edit touched the recurrence itself. The lead is deliberately **not** a rule
      * field: it moves when a schedule starts *warning*, not when it is due, so changing it must
-     * not throw away an agreed postponement.
+     * not throw away an agreed postponement. Neither is the service policy or its offset: they
+     * decide when the work is *actionable*, not when it is due (spec §4.3, "Rule fields").
      */
     private fun ruleChanged(before: MaintenanceSchedule, after: MaintenanceSchedule): Boolean =
         before.timeInterval != after.timeInterval ||
@@ -158,6 +162,5 @@ class SaveSchedule(
             before.anchorOn != after.anchorOn ||
             before.meterDefinitionId != after.meterDefinitionId ||
             before.meterInterval != after.meterInterval ||
-            before.anchorMeter != after.anchorMeter ||
-            before.seasonBehavior != after.seasonBehavior
+            before.anchorMeter != after.anchorMeter
 }

@@ -29,3 +29,6 @@ value class GroupId(val value: String)
 
 @JvmInline
 value class ReferenceId(val value: String)
+
+@JvmInline
+value class HealthSubjectId(val value: String)

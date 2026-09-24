@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
+import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.dayMillis
 import java.time.LocalDate
@@ -71,7 +72,9 @@ class ScheduleCommandRulesTest {
     private val todayPort = Today { today }
 
     private val recompute =
-        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock) { ZoneOffset.UTC }
+        RecomputeSchedules(
+            schedules, states, events, closures, groups, assets, InMemorySeasonActivationRepository(), todayPort, clock,
+        ) { ZoneOffset.UTC }
     private val save =
         SaveSchedule(schedules, assets, groups, defs, profiles, uow, ids, clock, recompute)
     private val completeMembers = CompleteGroupMembers(

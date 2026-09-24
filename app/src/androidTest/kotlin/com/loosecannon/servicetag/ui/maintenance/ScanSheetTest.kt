@@ -19,7 +19,7 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
@@ -96,9 +96,8 @@ class ScanSheetTest {
         meterInterval = null,
         anchorMeter = null,
         meterLead = null,
-        seasonBehavior = SeasonBehavior.IGNORE,
-        seasonReentry = null,
-        seasonReentryOffsetDays = null,
+        servicePolicy = ServicePolicy.CONTINUOUS,
+        policyOffsetDays = null,
         completionMode = CompletionMode.QUICK,
         profileId = null,
         remindersEnabled = true,
@@ -106,6 +105,7 @@ class ScanSheetTest {
         postponedDueOn = null,
         createdAt = dayMillis(createdOn),
         updatedAt = dayMillis(createdOn),
+        ruleChangedAt = dayMillis(createdOn),
         providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
     )
 

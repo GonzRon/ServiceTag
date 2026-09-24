@@ -64,6 +64,7 @@ internal fun openMigrated(file: File): AppDatabase = Room
     .setQueryCoroutineContext(Dispatchers.Default)
     .addMigrations(
         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+        MIGRATION_7_8,
     )
     .build()
 
@@ -188,6 +189,24 @@ private fun schemaFile(version: Int): File {
     return listOf(File(relative), File("app/$relative")).firstOrNull { it.isFile }
         ?: error("cannot find the exported schema $relative from ${File(".").absolutePath}")
 }
+
+/** The five columns schema v8 appends to `asset`, in `MIGRATION_7_8`'s order. */
+internal val V8_NEW_ASSET_COLUMNS = setOf(
+    "season_mode",
+    "blackout_start_mmdd",
+    "blackout_end_mmdd",
+    "health_aggregation",
+    "health_primary_subject_id",
+)
+
+/** The three `maintenance_schedule` season columns schema v8 dropped. */
+internal val V7_SEASON_COLUMNS = setOf("season_behavior", "season_reentry", "season_reentry_offset_days")
+
+/** The three `maintenance_schedule` columns schema v8 added. */
+internal val V8_SCHEDULE_COLUMNS = setOf("service_policy", "policy_offset_days", "rule_changed_at")
+
+/** The three tables schema v8 added. */
+internal val V8_TABLES = setOf("asset_season_activation", "asset_condition", "health_subject")
 
 /** The seven tables schema v2 added. */
 internal val JOURNAL_TABLES = setOf(

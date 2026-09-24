@@ -10,7 +10,7 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.reminders.ProviderId
 import java.time.LocalDate
@@ -42,9 +42,8 @@ data class ScheduleCommand(
     val meterInterval: Double? = null,
     val anchorMeter: Double? = null,
     val meterLead: Double? = null,
-    val seasonBehavior: SeasonBehavior = SeasonBehavior.IGNORE,
-    val seasonReentry: String? = null,
-    val seasonReentryOffsetDays: Int? = null,
+    val servicePolicy: ServicePolicy = ServicePolicy.CONTINUOUS,
+    val policyOffsetDays: Int? = null,
     val completionMode: CompletionMode = CompletionMode.QUICK,
     val profileId: ProfileId? = null,
     val remindersEnabled: Boolean = true,
@@ -88,7 +87,7 @@ sealed interface ScheduleProblem {
     /** A meter is a reading of one Asset's definition, so a group target can carry no meter rule. */
     data object MeterRuleOnGroupTarget : ScheduleProblem
 
-    /** A season window lives on an Asset, so a group target is `IGNORE` only. */
+    /** A season lives on an Asset, so a group target is CONTINUOUS only. */
     data object SeasonFollowsAssetOnGroupTarget : ScheduleProblem
 
     /** A profile is one Asset's quick action, so a group target carries no `profileId`. */
@@ -279,7 +278,7 @@ internal fun scheduleProblems(
         if (cmd.completionMode == CompletionMode.FORM) {
             problems += ScheduleProblem.FormCompletionOnGroupTarget
         }
-        if (cmd.seasonBehavior == SeasonBehavior.FOLLOW_ASSET) {
+        if (cmd.servicePolicy != ServicePolicy.CONTINUOUS) {
             problems += ScheduleProblem.SeasonFollowsAssetOnGroupTarget
         }
         // Null means the caller could not resolve the group at all, which is reported as

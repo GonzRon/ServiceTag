@@ -10,9 +10,12 @@ import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.ExternalLink
+import com.loosecannon.servicetag.core.model.HealthAggregation
+import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.PayloadFormat
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.StorageProvider
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
@@ -54,6 +57,11 @@ fun AssetEntity.toDomain(): Asset = Asset(
     parentAssetId = parentAssetId?.let(::AssetId),
     seasonStartMmdd = seasonStartMmdd,
     seasonEndMmdd = seasonEndMmdd,
+    seasonMode = SeasonMode.valueOf(seasonMode),
+    blackoutStartMmdd = blackoutStartMmdd,
+    blackoutEndMmdd = blackoutEndMmdd,
+    healthAggregation = HealthAggregation.valueOf(healthAggregation),
+    healthPrimarySubjectId = healthPrimarySubjectId?.let(::HealthSubjectId),
 )
 
 fun Asset.toEntity(): AssetEntity = AssetEntity(
@@ -81,6 +89,11 @@ fun Asset.toEntity(): AssetEntity = AssetEntity(
     parentAssetId = parentAssetId?.value,
     seasonStartMmdd = seasonStartMmdd,
     seasonEndMmdd = seasonEndMmdd,
+    seasonMode = seasonMode.name,
+    blackoutStartMmdd = blackoutStartMmdd,
+    blackoutEndMmdd = blackoutEndMmdd,
+    healthAggregation = healthAggregation.name,
+    healthPrimarySubjectId = healthPrimarySubjectId?.value,
 )
 
 fun NfcTagEntity.toDomain(): TagBinding = TagBinding(

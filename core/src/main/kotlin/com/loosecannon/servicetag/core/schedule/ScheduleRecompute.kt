@@ -6,17 +6,18 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
+import com.loosecannon.servicetag.core.model.PolicyPhase
+import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.Season
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.SeasonInputs
+import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TerminationKind
 import com.loosecannon.servicetag.core.model.TimeBasis
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-
-/** An Asset's season window, as the engine needs it: the two `MM-DD` strings, or nulls for year-round. */
-data class SeasonWindow(val startMmdd: String?, val endMmdd: String?)
 
 /**
  * One terminated occurrence: the key `D` it satisfied, the effective date `E` the recurrence
@@ -49,12 +50,12 @@ object ScheduleRecompute {
      * [events] are the target's events — for a group-targeted schedule, every required member's —
      * and include the ordinary readings the meter side needs, not only this schedule's completions.
      * [closures] are this schedule's, [membership] is empty for an asset target, and [season] is
-     * the target Asset's window: null means year-round, and a schedule that IGNOREs the season is
-     * seasonally active whatever it says.
+     * the target Asset's [SeasonInputs]: null means no season and no break, and a CONTINUOUS
+     * schedule is active whatever they say.
      *
-     * [season] is a parameter rather than a lookup because the window lives on the Asset and this
-     * function takes no repository; it carries a default so a caller with no window to supply — a
-     * group target, or an asset with none — says so by saying nothing.
+     * [season] is a parameter rather than a lookup because the season lives on the Asset and this
+     * function takes no repository; it carries a default so a caller with nothing to supply — a
+     * group target, or an asset that is gone — says so by saying nothing.
      *
      * [zone] is the owner's zone, and it is here for the same reason [today] is: the pin needs to
      * read one stored instant as a date (see [pinFloor]) and the engine may not ask a device which
@@ -69,7 +70,7 @@ object ScheduleRecompute {
         membership: List<GroupMember>,
         today: LocalDate,
         zone: ZoneId,
-        season: SeasonWindow? = null,
+        season: SeasonInputs? = null,
     ): ScheduleState {
         val completions = completionsOf(schedule, events)
         val newest = completions.maxWithOrNull(EventChronology)
@@ -102,6 +103,7 @@ object ScheduleRecompute {
         val actionable = due == null ||
             OccurrenceBasis.of(schedule, events, closures, membership).required(due).isNotEmpty()
         val computedDueOn = if (actionable) due else null
+        val effectiveDueOn = if (actionable) schedule.postponedDueOn ?: computedDueOn else null
         return ScheduleState(
             scheduleId = schedule.id,
             lastCompletedOn = newest?.occurredOn,
@@ -112,8 +114,13 @@ object ScheduleRecompute {
             lastTerminationEffectiveOn = last?.effectiveOn,
             lastTerminationKind = last?.kind ?: TerminationKind.NONE,
             computedDueOn = computedDueOn,
-            effectiveDueOn = if (actionable) schedule.postponedDueOn ?: computedDueOn else null,
-            seasonActive = seasonActive(schedule, season, today),
+            effectiveDueOn = effectiveDueOn,
+            policyPhase = if (dormant(schedule, season, today)) PolicyPhase.DORMANT else PolicyPhase.ACTIVE,
+            // Until the policy engine lands, no policy moves a date and nothing is quiet: the
+            // actionable date is the effective one, exactly as 1.3 sorted and judged it.
+            actionableDueOn = effectiveDueOn,
+            policyReason = PolicyReason.NONE,
+            quiet = false,
             computedForOn = today.toString(),
             // The caller's stamp. See the class KDoc: a pure function has no clock.
             computedAt = 0L,
@@ -267,11 +274,11 @@ object ScheduleRecompute {
     }
 
     /**
-     * The pin's floor: the date of the row's `updated_at`, which is its creation date until
-     * something edits it (spec §2.1). Without the floor, re-anchoring an old never-terminated
-     * schedule would pin it immediately overdue; with it, only an explicit edit moves the floor,
-     * to the edit date (invariant 25). The schedule operations are written so that the writes which
-     * are *not* rule changes leave `updated_at` alone, which is what keeps that true.
+     * The pin's floor: the date of the row's `rule_changed_at`, which is its creation instant until
+     * a rule edit moves it (D-28, #64). Without the floor, re-anchoring an old never-terminated
+     * schedule would pin it immediately overdue; with it, only a rule edit moves the floor, to the
+     * edit date (invariant 87). `updated_at` is never read here: every save stamps it, so reading
+     * it let a title or lead edit move the pin (#64).
      *
      * This is the one instant the engine has to see a date for, and it is read in the **owner's**
      * zone, which arrives as [rebuild]'s `zone` argument (controller ruling, 2026-09-22). D-27 says
@@ -287,7 +294,7 @@ object ScheduleRecompute {
      * job — `RecomputeSchedules` reads the device once, the way it already reads `today`.
      */
     private fun pinFloor(schedule: MaintenanceSchedule, zone: ZoneId): LocalDate =
-        Instant.ofEpochMilli(schedule.updatedAt).atZone(zone).toLocalDate()
+        Instant.ofEpochMilli(schedule.ruleChangedAt).atZone(zone).toLocalDate()
 
     /**
      * The newest reading of [definitionId] by [EventChronology] — **the latest, never the maximum**.
@@ -304,18 +311,23 @@ object ScheduleRecompute {
         return events.filter { reading(it) != null }.maxWithOrNull(EventChronology)?.let { reading(it) }
     }
 
-    /** A schedule that IGNOREs the season is always active; otherwise the Asset's window decides. */
-    private fun seasonActive(
+    /**
+     * DORMANT exactly when 1.3 read the schedule as out of season: a non-CONTINUOUS policy on a
+     * CALENDAR asset whose window does not contain [today]. Every other mode, and a CONTINUOUS
+     * schedule, is ACTIVE until the policy engine reads them.
+     */
+    private fun dormant(
         schedule: MaintenanceSchedule,
-        season: SeasonWindow?,
+        season: SeasonInputs?,
         today: LocalDate,
     ): Boolean {
-        if (schedule.seasonBehavior == SeasonBehavior.IGNORE) return true
-        val start = season?.startMmdd
-        val end = season?.endMmdd
-        // Both-or-neither is the Asset's own invariant; a half-set window is read as year-round
+        if (schedule.servicePolicy == ServicePolicy.CONTINUOUS) return false
+        if (season?.mode != SeasonMode.CALENDAR) return false
+        val start = season.seasonStartMmdd
+        val end = season.seasonEndMmdd
+        // Both-or-neither is the Asset's own invariant; a half-set window is read as in season
         // rather than thrown at, because the engine is not where that rule is enforced.
-        if (start == null || end == null) return true
-        return Season.inSeason(start, end, today)
+        if (start == null || end == null) return false
+        return !Season.inSeason(start, end, today)
     }
 }

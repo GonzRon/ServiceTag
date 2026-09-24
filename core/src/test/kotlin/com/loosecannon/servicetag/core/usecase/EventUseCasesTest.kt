@@ -34,6 +34,7 @@ class EventUseCasesTest {
     private val schedules = InMemoryScheduleRepository(closures, states)
     private val recompute = RecomputeSchedules(
         schedules, states, events, closures, groups, assets,
+        com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository(),
         com.loosecannon.servicetag.core.ports.Today { java.time.LocalDate.parse("2026-02-10") }, clock,
         zone = { java.time.ZoneOffset.UTC },
     )

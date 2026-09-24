@@ -594,6 +594,44 @@ class MaintenanceRoutesTest {
     }
 
     /**
+     * A 1.3 client's create still works (Q-9): a legacy body with `seasonBehavior: FOLLOW_ASSET` and
+     * no re-entry is translated through the legacy mapping, and the row reads back as the
+     * normalised triple `FOLLOW_ASSET` / `AT_START` / 0. Sending that triple back is a no-op: the
+     * policy, its offset and the pin's floor stay where they were, and only `updatedAt` moves.
+     */
+    @Test fun aLegacyFollowAssetCreateReadsBackANormalisedTriple() {
+        val asset = createAsset("Snowblower")
+        val legacy = """{"title":"Auger belt","targetAssetId":"$asset","timeInterval":1,
+            "timeUnit":"YEAR","timeBasis":"FIXED","anchorOn":"2026-02-01",
+            "seasonBehavior":"FOLLOW_ASSET"}"""
+        val created = call("POST", "/v1/schedules", legacy)
+        assertEquals(created.text(), 201, created.status)
+        val id = scheduleIn(created).id
+
+        fun detail() = ApiJson.decodeFromString(
+            ScheduleDetailResponse.serializer(), call("GET", "/v1/schedules/$id").text(),
+        ).schedule
+        val read = detail()
+        assertEquals("FOLLOW_ASSET", read.seasonBehavior)
+        assertEquals("AT_START", read.seasonReentry)
+        assertEquals(0, read.seasonReentryOffsetDays)
+        val stored = runBlocking { graph.schedules.get(ScheduleId(id))!! }
+
+        graph.now = dayMillis("2026-02-05")
+        val echoed = legacy.replace(
+            """"seasonBehavior":"FOLLOW_ASSET"}""",
+            """"seasonBehavior":"FOLLOW_ASSET","seasonReentry":"AT_START","seasonReentryOffsetDays":0}""",
+        )
+        val patched = call("PATCH", "/v1/schedules/$id", echoed)
+        assertEquals(patched.text(), 200, patched.status)
+
+        assertEquals(read.copy(updatedAt = dayMillis("2026-02-05")), detail())
+        val after = runBlocking { graph.schedules.get(ScheduleId(id))!! }
+        assertEquals(stored.copy(updatedAt = dayMillis("2026-02-05")), after)
+        assertEquals(stored.ruleChangedAt, after.ruleChangedAt)
+    }
+
+    /**
      * A `PATCH /v1/groups/{id}` that omits a member **soft-removes** it: the row is still there with
      * `removedAt` stamped, and nothing was deleted (invariants 8, 79, 80).
      */

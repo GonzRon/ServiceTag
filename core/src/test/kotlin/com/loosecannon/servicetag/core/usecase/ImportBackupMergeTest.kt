@@ -26,7 +26,7 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
@@ -45,13 +45,16 @@ import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentStore
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
+import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryHealthSubjectRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
+import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
 import java.io.InputStream
@@ -106,11 +109,15 @@ class ImportBackupMergeTest {
 
         val build = BuildBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, references, storage, uow,
+            events, attachments, references,
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
+            storage, uow,
         )
         val apply = ApplyBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, references, storage, uow,
+            events, attachments, references,
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
+            storage, uow,
             rebuildAll = {
                 rebuilds += 1
                 writesAtRebuild = runBlocking {
@@ -196,6 +203,7 @@ class ImportBackupMergeTest {
         ExportBackupSet(
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
             f.closures, f.events, f.attachments, f.references,
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
             appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
@@ -214,10 +222,10 @@ class ImportBackupMergeTest {
         title = "Top up feeders", description = "", timeInterval = 1,
         timeUnit = RecurrenceUnit.WEEK, timeBasis = TimeBasis.FIXED, anchorOn = "2026-04-06",
         leadDays = 1, meterDefinitionId = null, meterInterval = null, anchorMeter = null,
-        meterLead = null, seasonBehavior = SeasonBehavior.IGNORE, seasonReentry = null,
-        seasonReentryOffsetDays = null, completionMode = CompletionMode.QUICK, profileId = null,
+        meterLead = null, servicePolicy = ServicePolicy.CONTINUOUS, policyOffsetDays = null,
+        completionMode = CompletionMode.QUICK, profileId = null,
         remindersEnabled = true, status = ScheduleStatus.ACTIVE, postponedDueOn = null,
-        createdAt = 30L, updatedAt = 40L,
+        createdAt = 30L, updatedAt = 40L, ruleChangedAt = 40L,
         providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
     )
 

@@ -26,13 +26,16 @@ import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentStore
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
+import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryHealthSubjectRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
+import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import kotlinx.coroutines.test.runTest
 import java.io.ByteArrayInputStream
@@ -69,7 +72,9 @@ class ArtifactsUseCasesTest {
 
     private val export = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, uow,
+        attachments, references,
+        InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
+        uow,
         IdGenerator { "set-1" }, Clock { 1_726_000_000_000L }, appVersion = "2.4", schemaVersion = 5,
     )
     private val restore = RestoreArtifacts(attachments, storage)

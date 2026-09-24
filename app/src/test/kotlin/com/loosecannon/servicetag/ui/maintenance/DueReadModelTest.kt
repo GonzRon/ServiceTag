@@ -5,11 +5,12 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.calendar
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.meterDefinitionOf
@@ -74,8 +75,10 @@ class DueReadModelTest {
     @Test fun everyStatusLandsInItsOwnSectionAndPausedLandsInNone() = runTest {
         val mower = asset("Mower")
         // A season that is shut on 15 April: November through February.
-        val blower = graph.createAsset.run(
-            AssetCommand(name = "Snowblower", category = "Yard", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
+        val blower = graph.calendar(
+            graph.createAsset.run(
+                AssetCommand(name = "Snowblower", category = "Yard", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
+            ),
         )
 
         seed(scheduleOf("s-overdue", assetId = mower.id.value, title = "Overdue one", anchorOn = "2026-01-01", leadDays = 0))
@@ -94,7 +97,7 @@ class DueReadModelTest {
         seed(
             scheduleOf(
                 "s-season", assetId = blower.id.value, title = "Season one",
-                anchorOn = "2026-01-01", seasonBehavior = SeasonBehavior.FOLLOW_ASSET,
+                anchorOn = "2026-01-01", servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0,
             ),
         )
         seed(scheduleOf("s-paused", assetId = mower.id.value, title = "Paused one", status = ScheduleStatus.PAUSED))
@@ -276,11 +279,13 @@ class DueReadModelTest {
      * contributes to a due count, whatever else they do.
      */
     @Test fun pausedAndOutOfSeasonNeverCountAsDue() = runTest {
-        val blower = graph.createAsset.run(
-            AssetCommand(name = "Snowblower", category = "Yard", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
+        val blower = graph.calendar(
+            graph.createAsset.run(
+                AssetCommand(name = "Snowblower", category = "Yard", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
+            ),
         )
         seed(scheduleOf("s-paused", assetId = blower.id.value, title = "Paused", anchorOn = "2026-01-01", status = ScheduleStatus.PAUSED))
-        seed(scheduleOf("s-season", assetId = blower.id.value, title = "Season", anchorOn = "2026-01-01", seasonBehavior = SeasonBehavior.FOLLOW_ASSET))
+        seed(scheduleOf("s-season", assetId = blower.id.value, title = "Season", anchorOn = "2026-01-01", servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0))
 
         assertEquals(emptyList<String>(), readModel().items().filter { it.countsAsDue }.map { it.scheduleId.value })
     }

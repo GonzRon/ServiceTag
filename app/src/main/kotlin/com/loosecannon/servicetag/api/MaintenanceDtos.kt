@@ -8,6 +8,8 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.LegacySeasonMapping
+import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
@@ -88,7 +90,8 @@ internal fun ScheduleState.stateDto(): ScheduleStateDto = ScheduleStateDto(
     lastTerminationKind = lastTerminationKind.name,
     computedDueOn = computedDueOn,
     effectiveDueOn = effectiveDueOn,
-    seasonActive = seasonActive,
+    // The 1.3 field, answered as 1.3 answered it: a DORMANT schedule is the one out of season.
+    seasonActive = policyPhase == PolicyPhase.ACTIVE,
     computedForOn = computedForOn,
     computedAt = computedAt,
 )
@@ -260,31 +263,43 @@ internal data class ScheduleCommandRequest(
     val providers: List<ScheduleProviderRequest> = emptyList(),
 )
 
-internal fun ScheduleCommandRequest.toCommand() = ScheduleCommand(
-    targetAssetId = targetAssetId?.let(::AssetId),
-    targetGroupId = targetGroupId?.let(::GroupId),
-    title = title,
-    description = description,
-    timeInterval = timeInterval,
-    timeUnit = timeUnit?.let { enumOr400<RecurrenceUnit>(it, "timeUnit") },
-    timeBasis = enumOr400<TimeBasis>(timeBasis, "timeBasis"),
-    anchorOn = anchorOn,
-    leadDays = leadDays,
-    meterDefinitionId = meterDefinitionId?.let(::DefinitionId),
-    meterInterval = meterInterval,
-    anchorMeter = anchorMeter,
-    meterLead = meterLead,
-    seasonBehavior = enumOr400<SeasonBehavior>(seasonBehavior, "seasonBehavior"),
-    seasonReentry = seasonReentry,
-    seasonReentryOffsetDays = seasonReentryOffsetDays,
-    completionMode = enumOr400<CompletionMode>(completionMode, "completionMode"),
-    profileId = profileId?.let(::ProfileId),
-    remindersEnabled = remindersEnabled,
-    // The provider name stays text all the way to the use case: an unknown one is a *validation*
-    // problem it reports by name (`UnknownProvider`), not a 400 about a bad enum, because the
-    // column is TEXT and the set grows without a migration.
-    providers = providers.map { ScheduleProviderRow(it.provider, it.enabled) },
-)
+internal fun ScheduleCommandRequest.toCommand(): ScheduleCommand {
+    // Parsed in the shipped field order, so a body with two bad enum names still names the first.
+    val unit = timeUnit?.let { enumOr400<RecurrenceUnit>(it, "timeUnit") }
+    val basis = enumOr400<TimeBasis>(timeBasis, "timeBasis")
+    // The three 1.3 season fields reach the command only through the legacy mapping, which
+    // normalises them; an unknown `seasonBehavior` name is still the shipped 400.
+    val policy = LegacySeasonMapping.toPolicy(
+        behavior = enumOr400<SeasonBehavior>(seasonBehavior, "seasonBehavior"),
+        reentry = seasonReentry,
+        offsetDays = seasonReentryOffsetDays,
+        hasTimeRule = timeInterval != null,
+    )
+    return ScheduleCommand(
+        targetAssetId = targetAssetId?.let(::AssetId),
+        targetGroupId = targetGroupId?.let(::GroupId),
+        title = title,
+        description = description,
+        timeInterval = timeInterval,
+        timeUnit = unit,
+        timeBasis = basis,
+        anchorOn = anchorOn,
+        leadDays = leadDays,
+        meterDefinitionId = meterDefinitionId?.let(::DefinitionId),
+        meterInterval = meterInterval,
+        anchorMeter = anchorMeter,
+        meterLead = meterLead,
+        servicePolicy = policy.servicePolicy,
+        policyOffsetDays = policy.policyOffsetDays,
+        completionMode = enumOr400<CompletionMode>(completionMode, "completionMode"),
+        profileId = profileId?.let(::ProfileId),
+        remindersEnabled = remindersEnabled,
+        // The provider name stays text all the way to the use case: an unknown one is a *validation*
+        // problem it reports by name (`UnknownProvider`), not a 400 about a bad enum, because the
+        // column is TEXT and the set grows without a migration.
+        providers = providers.map { ScheduleProviderRow(it.provider, it.enabled) },
+    )
+}
 
 /**
  * One completion of one occurrence.

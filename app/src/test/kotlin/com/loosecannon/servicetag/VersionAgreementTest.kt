@@ -54,9 +54,9 @@ class VersionAgreementTest {
     }
 
     /**
-     * The schema and format numbers, and the two constants agreeing with each other. 1.3 bumps
-     * both together — `asset_reference` and the archive that carries it — so a build where they
-     * differ is a build where an export and an import disagree about what they are exchanging.
+     * The schema and format numbers. 1.3 bumped both together; 1.4 moves them in two steps — schema
+     * 8 lands first, with the migration, and format 8 follows with the archive that carries the new
+     * tables — so at this tip the schema is 8 and the format is still 7.
      *
      * The expected numbers are this test's own, deliberately: they are what the schema and the
      * format are at this tip, and they move only when a release changes them. They are **not**
@@ -64,10 +64,9 @@ class VersionAgreementTest {
      * `versionName`/`versionCode` cases own — otherwise bumping the schema in one file only would
      * still pass here, which is the whole failure this class exists to catch.
      */
-    @Test fun theSchemaAndTheFormatAreBothSeven() {
-        assertEquals(7, AppGraph.SCHEMA_VERSION)
+    @Test fun theSchemaIsEightAndTheFormatIsStillSeven() {
+        assertEquals(8, AppGraph.SCHEMA_VERSION)
         assertEquals(7, BackupCodec.FORMAT_VERSION)
-        assertEquals(AppGraph.SCHEMA_VERSION, BackupCodec.FORMAT_VERSION)
     }
 
     /**
@@ -129,7 +128,7 @@ class VersionAgreementTest {
             StatusResponse.serializer(), response.body.decodeToString(),
         )
         assertEquals("1.3.0", status.appVersion)
-        assertEquals(7, status.schemaVersion)
+        assertEquals(8, status.schemaVersion)
         assertEquals(7, status.backupFormatVersion)
     }
 

@@ -27,13 +27,13 @@ class ScheduleRecomputeTest {
 
     private fun on(date: String) = LocalDate.parse(date)
 
-    private fun quarterly(createdOn: String = "2026-02-10", updatedOn: String = createdOn) = scheduleOf(
+    private fun quarterly(createdOn: String = "2026-02-10", ruleChangedOn: String = createdOn) = scheduleOf(
         timeInterval = 3,
         timeUnit = RecurrenceUnit.MONTH,
         timeBasis = TimeBasis.FIXED,
         anchorOn = "2026-01-01",
         createdOn = createdOn,
-        updatedOn = updatedOn,
+        ruleChangedOn = ruleChangedOn,
     )
 
     /**
@@ -87,7 +87,7 @@ class ScheduleRecomputeTest {
         )
 
         // (4) a recurrence edit on 2026-06-20 moves the floor to the edit date
-        val edited = quarterly(createdOn = "2026-02-10", updatedOn = "2026-06-20")
+        val edited = quarterly(createdOn = "2026-02-10", ruleChangedOn = "2026-06-20")
         assertEquals(
             "2026-07-01",
             ScheduleRecompute.rebuild(
@@ -126,7 +126,7 @@ class ScheduleRecomputeTest {
             timeBasis = TimeBasis.FIXED,
             anchorOn = "2026-09-22",
             createdOn = "2026-09-22",
-        ).copy(createdAt = evening, updatedAt = evening)
+        ).copy(createdAt = evening, updatedAt = evening, ruleChangedAt = evening)
 
         fun dueIn(zone: ZoneId) = ScheduleRecompute.rebuild(
             saved, emptyList(), emptyList(), emptyList(), on("2026-09-22"), zone,

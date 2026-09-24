@@ -9,13 +9,16 @@ import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
+import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryHealthSubjectRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
+import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
@@ -130,12 +133,16 @@ class BackupFormat7Test {
         )
         val export = ExportBackupSet(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, references, uow, IdGenerator { "set-format-7" },
+            events, attachments, references,
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
+            uow, IdGenerator { "set-format-7" },
             Clock { 1_758_400_000_000L }, appVersion = "1.3.0", schemaVersion = 7,
         )
         val restore = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, references, storage, uow, rebuildAll = { },
+            events, attachments, references,
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
+            storage, uow, rebuildAll = { },
         )
     }
 

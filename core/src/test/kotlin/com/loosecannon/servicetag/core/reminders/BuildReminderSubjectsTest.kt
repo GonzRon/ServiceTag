@@ -8,7 +8,8 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
@@ -22,6 +23,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
+import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
 import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.dayMillis
 import com.loosecannon.servicetag.core.testing.groupOf
@@ -60,7 +62,9 @@ class BuildReminderSubjectsTest {
     private val clock = Clock { dayMillis("2026-04-15") }
 
     private val recompute =
-        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock) { ZoneOffset.UTC }
+        RecomputeSchedules(
+            schedules, states, events, closures, groups, assets, InMemorySeasonActivationRepository(), todayPort, clock,
+        ) { ZoneOffset.UTC }
     private val build = BuildReminderSubjects(schedules, states, groups, assets, recompute)
 
     private suspend fun seedAsset(
@@ -77,6 +81,8 @@ class BuildReminderSubjectsTest {
             updatedAt = dayMillis("2026-01-01"),
             seasonStartMmdd = seasonStartMmdd,
             seasonEndMmdd = seasonEndMmdd,
+            // Schema 8: an asset with a window is CALENDAR, the rule the 7 -> 8 migration applies.
+            seasonMode = if (seasonStartMmdd != null && seasonEndMmdd != null) SeasonMode.CALENDAR else SeasonMode.YEAR_ROUND,
         )
         assets.upsert(asset)
         return asset.id
@@ -195,7 +201,8 @@ class BuildReminderSubjectsTest {
                 timeInterval = 1,
                 timeUnit = RecurrenceUnit.MONTH,
                 anchorOn = "2026-01-01",
-                seasonBehavior = SeasonBehavior.FOLLOW_ASSET,
+                servicePolicy = ServicePolicy.IN_SERVICE_AT_START,
+                policyOffsetDays = 0,
             ),
         )
         rebuild()
@@ -356,7 +363,8 @@ class BuildReminderSubjectsTest {
             scheduleOf(
                 id = "s-fixed", timeInterval = 3, timeUnit = RecurrenceUnit.MONTH,
                 timeBasis = TimeBasis.FIXED, anchorOn = "2026-04-01",
-                seasonBehavior = SeasonBehavior.FOLLOW_ASSET,
+                servicePolicy = ServicePolicy.IN_SERVICE_AT_START,
+                policyOffsetDays = 0,
             ),
         )
         schedules.upsert(

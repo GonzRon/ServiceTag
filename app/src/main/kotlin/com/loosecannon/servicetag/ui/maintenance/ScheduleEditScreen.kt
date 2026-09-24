@@ -49,7 +49,7 @@ import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.reminders.NOTIFICATION_PERMISSION_RATIONALE
@@ -289,10 +289,10 @@ fun ScheduleEditScreen(
                 MaintenanceSectionTitle(OUT_OF_SEASON_FIELD)
                 ChoiceRow(
                     options = listOf(
-                        PAUSE_WITH_THE_SEASON to SeasonBehavior.FOLLOW_ASSET,
-                        REMIND_ME_YEAR_ROUND to SeasonBehavior.IGNORE,
+                        PAUSE_WITH_THE_SEASON to ServicePolicy.IN_SERVICE_AT_START,
+                        REMIND_ME_YEAR_ROUND to ServicePolicy.CONTINUOUS,
                     ),
-                    selected = state.seasonBehavior,
+                    selected = state.servicePolicy,
                     onSelect = model::onSeason,
                 )
 
@@ -314,7 +314,7 @@ fun ScheduleEditScreen(
                     )
                 }
             } else {
-                // D-28: a group target is `IGNORE` season only, and there is no control for the
+                // D-28: a group target is CONTINUOUS only, and there is no control for the
                 // other value — the one option it does have is stated so the behaviour is not a
                 // silent default.
                 MaintenanceSectionTitle(OUT_OF_SEASON_FIELD)

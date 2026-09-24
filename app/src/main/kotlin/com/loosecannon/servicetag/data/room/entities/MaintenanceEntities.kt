@@ -86,8 +86,11 @@ data class MaintenanceGroupMemberEntity(
  * The meter definition is **RESTRICT**: a definition a schedule measures against is not something a
  * settings screen may delete out from under it. The profile is **SET NULL**, as `asset_event`'s
  * already is. `status` is the lifecycle column and never the derived status word, which is computed
- * at read time and stored nowhere. `season_reentry` and `season_reentry_offset_days` are stored and
- * read by nothing in 1.2.
+ * at read time and stored nowhere.
+ *
+ * Schema v8 (the 12-step recreate of `MIGRATION_7_8`) replaced the three 1.3 season columns with
+ * `service_policy` and `policy_offset_days`, and added `rule_changed_at`: the pin's floor, written
+ * only by a create or a rule change (#64). The four foreign keys and four indices are unchanged.
  */
 @Entity(
     tableName = "maintenance_schedule",
@@ -139,9 +142,8 @@ data class MaintenanceScheduleEntity(
     @ColumnInfo(name = "meter_interval") val meterInterval: Double?,
     @ColumnInfo(name = "anchor_meter") val anchorMeter: Double?,
     @ColumnInfo(name = "meter_lead") val meterLead: Double?,
-    @ColumnInfo(name = "season_behavior") val seasonBehavior: String,
-    @ColumnInfo(name = "season_reentry") val seasonReentry: String?,
-    @ColumnInfo(name = "season_reentry_offset_days") val seasonReentryOffsetDays: Int?,
+    @ColumnInfo(name = "service_policy") val servicePolicy: String,
+    @ColumnInfo(name = "policy_offset_days") val policyOffsetDays: Int?,
     @ColumnInfo(name = "completion_mode") val completionMode: String,
     @ColumnInfo(name = "profile_id") val profileId: String?,
     @ColumnInfo(name = "reminders_enabled") val remindersEnabled: Boolean,
@@ -149,6 +151,7 @@ data class MaintenanceScheduleEntity(
     @ColumnInfo(name = "postponed_due_on") val postponedDueOn: String?,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "rule_changed_at") val ruleChangedAt: Long,
 )
 
 /**
@@ -209,8 +212,9 @@ data class OccurrenceClosureEntity(
 /**
  * Derived due state, one row per schedule, keyed by the schedule itself. Every column is
  * recomputable, the recompute function is the only write path into it, and it is **never exported**
- * and never merged. `effective_due_on` is indexed because it is the sort key the dashboard and the
- * due list read.
+ * and never merged. `actionable_due_on` is indexed because it is the sort key (schema v8; it was
+ * `effective_due_on` through v7). `MIGRATION_7_8` recreates the table empty: it fills on the next
+ * recompute.
  */
 @Entity(
     tableName = "schedule_state",
@@ -222,7 +226,7 @@ data class OccurrenceClosureEntity(
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("effective_due_on")],
+    indices = [Index("actionable_due_on")],
 )
 data class ScheduleStateEntity(
     @PrimaryKey @ColumnInfo(name = "schedule_id") val scheduleId: String,
@@ -235,7 +239,10 @@ data class ScheduleStateEntity(
     @ColumnInfo(name = "last_termination_kind") val lastTerminationKind: String,
     @ColumnInfo(name = "computed_due_on") val computedDueOn: String?,
     @ColumnInfo(name = "effective_due_on") val effectiveDueOn: String?,
-    @ColumnInfo(name = "season_active") val seasonActive: Boolean,
+    @ColumnInfo(name = "policy_phase") val policyPhase: String,
+    @ColumnInfo(name = "actionable_due_on") val actionableDueOn: String?,
+    @ColumnInfo(name = "policy_reason") val policyReason: String,
+    val quiet: Boolean,
     @ColumnInfo(name = "computed_for_on") val computedForOn: String,
     @ColumnInfo(name = "computed_at") val computedAt: Long,
 )

@@ -20,6 +20,12 @@ import androidx.room3.PrimaryKey
  * deleted while a child still points at it. That is deliberate — losing a sub-assembly to a
  * cascade nobody pictured is worse than a refusal, so `DeleteAsset` refuses and names the
  * children, and a full wipe walks the tree children-first (`RoomAssetRepository.deleteAll`).
+ *
+ * Schema v8 appends five columns, in the order `MIGRATION_7_8` adds them: the season mode, the
+ * maintenance break's two `MM-DD` bounds, the health aggregation and the primary health subject. The
+ * two NOT NULL ones carry a `defaultValue` equal to the migration's `DEFAULT`, or an upgraded and a
+ * fresh database would be two schemas for one version. `health_primary_subject_id` is a **soft
+ * link** with no foreign key (inv. 109).
  */
 @Entity(
     tableName = "asset",
@@ -58,4 +64,9 @@ data class AssetEntity(
     @ColumnInfo(name = "parent_asset_id") val parentAssetId: String? = null,
     @ColumnInfo(name = "season_start_mmdd") val seasonStartMmdd: String? = null,
     @ColumnInfo(name = "season_end_mmdd") val seasonEndMmdd: String? = null,
+    @ColumnInfo(name = "season_mode", defaultValue = "YEAR_ROUND") val seasonMode: String = "YEAR_ROUND",
+    @ColumnInfo(name = "blackout_start_mmdd") val blackoutStartMmdd: String? = null,
+    @ColumnInfo(name = "blackout_end_mmdd") val blackoutEndMmdd: String? = null,
+    @ColumnInfo(name = "health_aggregation", defaultValue = "WORST") val healthAggregation: String = "WORST",
+    @ColumnInfo(name = "health_primary_subject_id") val healthPrimarySubjectId: String? = null,
 )

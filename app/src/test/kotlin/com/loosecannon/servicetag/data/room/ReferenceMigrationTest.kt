@@ -59,11 +59,25 @@ class ReferenceMigrationTest {
             }
 
             // Every seeded row, field for field, before and after. No pre-existing table gains a
-            // column here, so the comparison is the whole row on both sides.
+            // column in *this* migration, but the chain now runs on to v8, so v8's known deltas —
+            // which `Migration7To8Test` owns — are taken out, and only those: the schedule's three
+            // season columns before, and the asset's five and the schedule's three new ones after.
             val after = withConnection(migrated) { c ->
                 SEEDED.associateWith { (t, id) -> c.rowOf(t, id) }
             }
-            assertEquals(before, after)
+            fun List<String>.without(columns: Set<String>) = filterNot { it.substringBefore('=') in columns }
+            assertEquals(
+                before.mapValues { (key, row) ->
+                    if (key.first == "maintenance_schedule") row.without(V7_SEASON_COLUMNS) else row
+                },
+                after.mapValues { (key, row) ->
+                    when (key.first) {
+                        "asset" -> row.without(V8_NEW_ASSET_COLUMNS)
+                        "maintenance_schedule" -> row.without(V8_SCHEDULE_COLUMNS)
+                        else -> row
+                    }
+                },
+            )
 
             // and the shape, against what Room builds from the entities with no migration at all
             val new = openFresh(fresh)
@@ -85,7 +99,7 @@ class ReferenceMigrationTest {
                     // A v7 table added later without a line in the loop below fails here first.
                     assertEquals(
                         "UNTOUCHED must name every table the migration found",
-                        m.tableNames() - REFERENCE - ROOM_INTERNAL,
+                        m.tableNames() - REFERENCE - ROOM_INTERNAL - V8_TABLES,
                         UNTOUCHED,
                     )
                     assertEquals("asset_reference columns", f.columnsOf(REFERENCE), m.columnsOf(REFERENCE))

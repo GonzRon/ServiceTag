@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
+import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.dayMillis
 import java.time.LocalDate
@@ -78,7 +79,9 @@ class GroupCompletionTest {
     }
 
     private val recompute =
-        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock) { ZoneOffset.UTC }
+        RecomputeSchedules(
+            schedules, states, events, closures, groups, assets, InMemorySeasonActivationRepository(), todayPort, clock,
+        ) { ZoneOffset.UTC }
     private val saveGroup = SaveGroup(groups, assets, uow, ids, clock)
     private val saveSchedule =
         SaveSchedule(countedSchedules, assets, groups, defs, profiles, uow, ids, clock, recompute)
