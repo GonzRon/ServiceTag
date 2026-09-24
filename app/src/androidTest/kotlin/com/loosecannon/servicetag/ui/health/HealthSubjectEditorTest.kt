@@ -136,7 +136,9 @@ class HealthSubjectEditorTest {
 
     /** Name, kind, driver and schedule answered: only the thresholds are left. */
     private fun answerUpToTheThresholds() {
-        field(NAME).performTextInput("Engine")
+        // Blank, the name's label carries the required mark.
+        field("$NAME *").performTextInput("Engine")
+        field(NAME).assertExists()
         rule.onNodeWithText(THE_WHOLE_ASSET).performScrollTo().performClick()
         rule.onNodeWithText(OVERDUE_MAINTENANCE).performScrollTo().performClick()
         rule.onNodeWithText("Oil change").performScrollTo().performClick()
