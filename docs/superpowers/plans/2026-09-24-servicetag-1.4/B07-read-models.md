@@ -144,3 +144,8 @@ Medium: three new read models and one predicate over shipped projections, all JV
 - `AssetHealthResult.aggregate` is a `Scored?` whose `trackedDays` is null on the aggregate (only subjects carry a day count); read models never render a day count for the aggregate.
 - A subject the engine cannot score (it throws on a malformed threshold set or weight) is rendered NOT TRACKED with no driver line, caught per subject in the read model, never crashing the screen; one test row (RED: let the exception propagate).
 - The behavioural snooze proof: snoozing a due item through the app's real snooze path leaves every health number unchanged; one JVM test over the read model (RED: route snooze through the postponement).
+
+## Carry-forward from B05's review (controller, 2026-09-24)
+
+- `AssetHealthEngine.evaluate` works on the whole asset and throws on a malformed subject, so "catch per subject" means SCREEN first: call B05's pure `:core` shape check (`HealthSubjectShape.problems(subject)` or the name B05 ships) and pass only well-formed subjects to `evaluate`; each screened-out subject renders NOT TRACKED with no driver line. Do not re-implement the bounds. One test row (RED: skip the screen).
+- `HealthRow`, `HealthState` and `HealthAction` in `ui.maintenance` are the REMINDER-health types and keep their names; asset-health read-model types take other names (for example `AssetHealthRow`).
