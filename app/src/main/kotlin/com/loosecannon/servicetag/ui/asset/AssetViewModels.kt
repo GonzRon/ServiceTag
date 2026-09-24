@@ -14,10 +14,14 @@ import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.HealthAggregation
+import com.loosecannon.servicetag.core.model.HealthSubject
+import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.Season as SeasonWindow
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.isRetired
@@ -26,11 +30,13 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
+import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.usecase.ApplyResult
 import com.loosecannon.servicetag.core.usecase.ApplyTemplate
 import com.loosecannon.servicetag.core.usecase.ArchiveAsset
@@ -39,11 +45,20 @@ import com.loosecannon.servicetag.core.usecase.AssetCycle
 import com.loosecannon.servicetag.core.usecase.AssetHasChildren
 import com.loosecannon.servicetag.core.usecase.AssetMembershipReferenced
 import com.loosecannon.servicetag.core.usecase.AssetProblem
+import com.loosecannon.servicetag.core.usecase.AssetSettingsCommand
 import com.loosecannon.servicetag.core.usecase.AssetValidation
-import com.loosecannon.servicetag.core.usecase.CreateAsset
+import com.loosecannon.servicetag.core.usecase.BreakCommand
+import com.loosecannon.servicetag.core.usecase.BreakStrandsPolicy
 import com.loosecannon.servicetag.core.usecase.DeleteAsset
+import com.loosecannon.servicetag.core.usecase.HealthPolicyCommand
+import com.loosecannon.servicetag.core.usecase.HealthValidation
 import com.loosecannon.servicetag.core.usecase.RetireAsset
-import com.loosecannon.servicetag.core.usecase.UpdateAsset
+import com.loosecannon.servicetag.core.usecase.SaveAssetSettings
+import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
+import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
+import com.loosecannon.servicetag.core.usecase.SeasonProblem
+import com.loosecannon.servicetag.core.usecase.SeasonValidation
+import com.loosecannon.servicetag.core.usecase.StrandedSchedule
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
@@ -547,14 +562,52 @@ data class ParentChoice(val id: String?, val label: String)
 object AssetField {
     const val NAME = "name"
     const val PARENT = "parent"
-    const val SEASON = "season"
     const val SEASON_START = "seasonStart"
     const val SEASON_END = "seasonEnd"
+    const val BREAK_START = "breakStart"
+    const val BREAK_END = "breakEnd"
     const val PURCHASE_ON = "purchaseOn"
     const val IN_SERVICE_ON = "inServiceOn"
     const val PRICE = "price"
     const val CURRENCY = "currency"
     const val WARRANTY_EXPIRES_ON = "warrantyExpiresOn"
+}
+
+/** One row of the asset editor's "Health subjects" (S111): the subject's name, archived ones marked. */
+data class SubjectRow(val id: String, val name: String, val archived: Boolean)
+
+/**
+ * One `MM-DD` field as the form draws it (spec §10.4; master dec. 46, the controller's ruling on I10).
+ *
+ * [label] is the ratified word; [required] puts the **non-verbal** required mark on it — an asterisk,
+ * [drawnLabel] — while its pair is required and not yet two real month-days; [outlined] is the field's
+ * error outline; [problem] is the one line under it, and only ever the shipped "Not a real month and
+ * day". A missing or half-filled pair draws **no sentence**: Save is held instead, and the asterisks
+ * say which fields hold it.
+ */
+data class MonthDayInput(
+    val label: String,
+    val required: Boolean,
+    val text: String,
+    val outlined: Boolean,
+    val problem: String?,
+) {
+    val drawnLabel: String get() = if (required) requiredMark(label) else label
+}
+
+/** The shipped line under a month-day that is not one. */
+internal const val NOT_A_REAL_MONTH_AND_DAY = "Not a real month and day"
+
+/**
+ * The non-verbal required mark (the controller's ruling on I10 and B06's plan-review F4): an asterisk
+ * in the ratified label, never a word.
+ */
+internal fun requiredMark(label: String): String = "$label *"
+
+/** Whether [text] is a real `MM-DD`, by the shipped rule every season and break command uses. */
+internal fun isMonthDay(text: String): Boolean {
+    val value = text.trim()
+    return value.isNotEmpty() && SeasonWindow.validate(value, value).isEmpty()
 }
 
 /**
@@ -566,6 +619,12 @@ object AssetField {
  * anything — and editing a field clears its own mark. [templateTouched] is the memory the hint
  * rule of §8 needs: a category suggestion pre-selects a template only while the answer to "did
  * you choose one yourself?" is still no.
+ *
+ * **1.4 (B10).** The season, the maintenance break and the health policy are four parts of one
+ * save (spec §10.4; `SaveAssetSettings`), and **nothing in them is decided for the owner**: the
+ * manual phase has no default, the break is off unless one is stored and its dates start empty, and
+ * "One subject" names no subject until one is chosen. Save is held ([canSave]) instead of any of
+ * those becoming a refusal that would need a sentence the spec does not ratify (master dec. 46).
  */
 data class AssetEditState(
     val name: String = "",
@@ -578,9 +637,30 @@ data class AssetEditState(
     val parentId: String? = null,
     /** Empty until the picker has loaded; [NO_PARENT] is its first row from then on (spec §5). */
     val parentChoices: List<ParentChoice> = emptyList(),
-    val seasonYearRound: Boolean = true,
+    /** S28's answer: S29, S30 or S31. */
+    val seasonMode: SeasonMode = SeasonMode.YEAR_ROUND,
+    /** What the asset holds; a new asset counts as YEAR_ROUND, as `SaveAssetSettings` does. */
+    val storedSeasonMode: SeasonMode = SeasonMode.YEAR_ROUND,
+    /** S32 and S33, sent only under S30. */
     val seasonStart: String = "",
     val seasonEnd: String = "",
+    /** S35's answer, **no default** (inv. 92): asked only on a switch into MANUAL, and sent only then. */
+    val manualPhase: SeasonPhase? = null,
+    /** S59: off unless a break is stored (inv. 121). */
+    val breakOn: Boolean = false,
+    /** S60 and S61: empty whenever S59 is turned on. */
+    val breakStart: String = "",
+    val breakEnd: String = "",
+    /** S55, naming the schedules, when the season's change was refused. */
+    val seasonRefusal: String? = null,
+    /** S63 or S64 (naming the schedules), when the break's change was refused. */
+    val breakRefusal: String? = null,
+    /** The asset's subjects in `sortOrder`, archived ones included and marked (S111). Existing assets only. */
+    val subjects: List<SubjectRow> = emptyList(),
+    /** S131's answer. */
+    val aggregation: HealthAggregation = HealthAggregation.WORST,
+    /** S134's answer under "One subject"; null until chosen. */
+    val primaryId: String? = null,
     val purchaseOn: String = "",
     val inServiceOn: String = "",
     val price: String = "",
@@ -597,7 +677,68 @@ data class AssetEditState(
     val templateKey: String? = null,
     /** True once the user picked a template by hand; category edits stop touching it then (§8). */
     val templateTouched: Boolean = false,
-)
+) {
+    /** S35 is asked only when S31 is chosen on an asset that is not already MANUAL (inv. 92, UI half). */
+    val asksManualPhase: Boolean
+        get() = seasonMode == SeasonMode.MANUAL && storedSeasonMode != SeasonMode.MANUAL
+
+    /** S35 as drawn: the asterisk stays until it is answered. */
+    val manualQuestionLabel: String
+        get() = if (manualPhase == null) requiredMark(IS_THIS_ASSET_IN_SEASON) else IS_THIS_ASSET_IN_SEASON
+
+    val seasonStartInput: MonthDayInput
+        get() = monthDay(SEASON_STARTS, seasonStart, seasonWindowReady, AssetField.SEASON_START)
+    val seasonEndInput: MonthDayInput
+        get() = monthDay(SEASON_ENDS, seasonEnd, seasonWindowReady, AssetField.SEASON_END)
+    val breakStartInput: MonthDayInput
+        get() = monthDay(BREAK_STARTS, breakStart, breakWindowReady, AssetField.BREAK_START)
+    val breakEndInput: MonthDayInput
+        get() = monthDay(BREAK_ENDS, breakEnd, breakWindowReady, AssetField.BREAK_END)
+
+    /** S134's choices: the non-archived subjects only, so `HEALTH_PRIMARY_INVALID` is unreachable. */
+    val primaryChoices: List<SubjectRow> get() = subjects.filterNot { it.archived }
+
+    /** S134 as drawn: the asterisk stays until a subject is chosen. */
+    val primaryQuestionLabel: String
+        get() = if (primaryReady) WHICH_SUBJECT else requiredMark(WHICH_SUBJECT)
+
+    /**
+     * Save is held — never refused with words — while an answer the owner must give is missing: two
+     * real `MM-DD`s under S30 and under S59, S35 on a switch into MANUAL, and S134 under "One subject".
+     */
+    val canSave: Boolean
+        get() = !saving && seasonReady && breakWindowReady && primaryReady
+
+    private val seasonWindowReady: Boolean get() = isMonthDay(seasonStart) && isMonthDay(seasonEnd)
+
+    private val seasonReady: Boolean
+        get() = when (seasonMode) {
+            SeasonMode.YEAR_ROUND -> true
+            SeasonMode.CALENDAR -> seasonWindowReady
+            SeasonMode.MANUAL -> !asksManualPhase || manualPhase != null
+        }
+
+    private val breakWindowReady: Boolean get() = !breakOn || (isMonthDay(breakStart) && isMonthDay(breakEnd))
+
+    private val primaryReady: Boolean
+        get() = aggregation != HealthAggregation.TRACK_ONE || primaryChoices.any { it.id == primaryId }
+
+    /**
+     * One month-day field. Both of a pair carry the asterisk until the pair is two real month-days; a
+     * value that is not one is outlined with the shipped line, and so is one the save was refused for.
+     */
+    private fun monthDay(label: String, text: String, pairReady: Boolean, field: String): MonthDayInput {
+        val malformed = text.isNotBlank() && !isMonthDay(text)
+        val problem = if (malformed) NOT_A_REAL_MONTH_AND_DAY else problems[field]
+        return MonthDayInput(
+            label = label,
+            required = !pairReady,
+            text = text,
+            outlined = problem != null,
+            problem = problem,
+        )
+    }
+}
 
 /** The label of the empty choice in the "Part of" picker, and of the asset with no parent. */
 const val NO_PARENT = "None"
@@ -609,17 +750,22 @@ const val NO_PARENT = "None"
  *
  * [presetParentId] is the "Part of" a new asset opens with, which is how "+ Add component" on a
  * parent's screen makes a child (spec §9). An existing asset's stored parent always wins over it.
+ *
+ * **1.4 (B10): one save.** The asset, its season mode, its break and its health policy go to
+ * [SaveAssetSettings] as one [AssetSettingsCommand], in one transaction: a refusal of any part writes
+ * none of them (spec §10.4; master §10.1). A season or break change that would strand pre-service
+ * work is said by name — S55 or S64 with the schedules' titles — and the form stays as typed.
  */
 class AssetEditViewModel(
     private val assets: AssetRepository,
-    private val createAsset: CreateAsset,
-    private val updateAsset: UpdateAsset,
+    private val healthSubjects: HealthSubjectRepository,
+    private val saveAssetSettings: SaveAssetSettings,
     private val id: AssetId?,
     presetParentId: String? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String?, parentId: String? = null) :
-        this(graph.assets, graph.createAsset, graph.updateAsset, id?.let(::AssetId), parentId)
+        this(graph.assets, graph.healthSubjects, graph.saveAssetSettings, id?.let(::AssetId), parentId)
 
     private val _state = MutableStateFlow(
         AssetEditState(
@@ -646,9 +792,19 @@ class AssetEditViewModel(
         viewModelScope.launch {
             val all = assets.all()
             val row = id?.let { existing -> all.firstOrNull { it.id == existing } }
+            val subjects = id?.let { healthSubjects.forAsset(it) }.orEmpty()
             _state.update { form ->
-                val filled = if (row == null) form else form.filledFrom(row)
+                val filled = if (row == null) form else form.filledFrom(row, subjects)
                 filled.copy(parentChoices = choicesIn(all))
+            }
+        }
+        // The subject list follows the store, so one added or archived in the subject editor is
+        // here on return. Only the list: the stored policy was read once, above.
+        id?.let { existing ->
+            viewModelScope.launch {
+                healthSubjects.observeForAsset(existing).collect { rows ->
+                    _state.update { it.copy(subjects = rowsOf(rows)) }
+                }
             }
         }
     }
@@ -678,21 +834,49 @@ class AssetEditViewModel(
     fun onLocation(value: String) = edit { it.copy(location = value) }
     fun onParent(value: String?) = edit(AssetField.PARENT) { it.copy(parentId = value) }
 
-    /** Year-round is both dates absent (spec §6), so turning it on is what clears them. */
-    fun onSeasonYearRound(yearRound: Boolean) =
-        edit(AssetField.SEASON, AssetField.SEASON_START, AssetField.SEASON_END) { form ->
-            if (yearRound) {
-                form.copy(seasonYearRound = true, seasonStart = "", seasonEnd = "")
+    /**
+     * S28's answer. Leaving an answer forgets S35's, so a return to S31 asks again with no default;
+     * the typed S32 and S33 stay in the form and are sent only under S30.
+     */
+    fun onSeasonMode(mode: SeasonMode) =
+        edit(AssetField.SEASON_START, AssetField.SEASON_END) { form ->
+            if (form.seasonMode == mode) {
+                form
             } else {
-                form.copy(seasonYearRound = false)
+                form.copy(seasonMode = mode, manualPhase = null, seasonRefusal = null)
             }
         }
 
+    /** S36 or S37, the answer to S35. */
+    fun onManualPhase(phase: SeasonPhase) = _state.update { it.copy(manualPhase = phase, seasonRefusal = null) }
+
     fun onSeasonStart(value: String) =
-        edit(AssetField.SEASON, AssetField.SEASON_START) { it.copy(seasonStart = value) }
+        edit(AssetField.SEASON_START) { it.copy(seasonStart = value, seasonRefusal = null) }
 
     fun onSeasonEnd(value: String) =
-        edit(AssetField.SEASON, AssetField.SEASON_END) { it.copy(seasonEnd = value) }
+        edit(AssetField.SEASON_END) { it.copy(seasonEnd = value, seasonRefusal = null) }
+
+    /** S59. Either way both dates start empty: a break is never prefilled (inv. 121). */
+    fun onBreak(on: Boolean) =
+        edit(AssetField.BREAK_START, AssetField.BREAK_END) {
+            it.copy(breakOn = on, breakStart = "", breakEnd = "", breakRefusal = null)
+        }
+
+    fun onBreakStart(value: String) =
+        edit(AssetField.BREAK_START) { it.copy(breakStart = value, breakRefusal = null) }
+
+    fun onBreakEnd(value: String) =
+        edit(AssetField.BREAK_END) { it.copy(breakEnd = value, breakRefusal = null) }
+
+    /** S131's answer. Only "One subject" names a subject, and it starts naming none. */
+    fun onAggregation(aggregation: HealthAggregation) = _state.update { form ->
+        if (form.aggregation == aggregation) form else form.copy(aggregation = aggregation, primaryId = null)
+    }
+
+    /** S134's answer: a non-archived subject of this asset, or nothing. */
+    fun onPrimary(subjectId: String) = _state.update { form ->
+        if (form.primaryChoices.any { it.id == subjectId }) form.copy(primaryId = subjectId) else form
+    }
 
     fun onPurchaseOn(value: String) = edit(AssetField.PURCHASE_ON) { it.copy(purchaseOn = value) }
     fun onInServiceOn(value: String) = edit(AssetField.IN_SERVICE_ON) { it.copy(inServiceOn = value) }
@@ -725,7 +909,7 @@ class AssetEditViewModel(
      * first suspension, so two taps inside one frame create one asset, not two.
      */
     fun save() {
-        if (_state.value.saving) return
+        if (!_state.value.canSave) return
         _state.update { it.copy(saving = true) }
         viewModelScope.launch {
             val form = _state.value
@@ -738,18 +922,40 @@ class AssetEditViewModel(
         }
     }
 
+    /**
+     * One [SaveAssetSettings] call per Save. Every refusal leaves the form as typed and writes
+     * nothing, because the use case wrote nothing: S55 or S64 names the schedules, S63 is the
+     * year-long break, the asset's own fields keep their shipped lines. A refusal the held Save
+     * already makes unreachable — a missing phase, a half window, a primary that is not a live
+     * subject — draws nothing, since no sentence for it is ratified (master dec. 46).
+     */
     private suspend fun commit(form: AssetEditState, priceMinor: Long?) {
-        val cmd = form.toCommand(priceMinor)
+        val cmd = form.settingsCommand(priceMinor)
         val result = runCatching {
-            if (id == null) createAsset.run(cmd, form.templateKey) else updateAsset.run(id, cmd)
+            saveAssetSettings.run(id, cmd, form.templateKey.takeIf { id == null })
         }
         when (val failure = result.exceptionOrNull()) {
             null -> {
                 _state.update { it.copy(saving = false, problems = emptyMap()) }
                 result.getOrNull()?.let { saved -> _saved.tryEmit(saved.id) }
             }
+            is SeasonModeStrandsPolicy -> _state.update {
+                it.copy(saving = false, seasonRefusal = seasonStrands(failure.schedules.map(StrandedSchedule::title)))
+            }
+            is BreakStrandsPolicy -> _state.update {
+                it.copy(saving = false, breakRefusal = breakStrands(failure.schedules.map(StrandedSchedule::title)))
+            }
+            is SeasonValidation -> _state.update { form ->
+                form.copy(
+                    saving = false,
+                    breakRefusal = BREAK_CANNOT_COVER_THE_YEAR
+                        .takeIf { SeasonProblem.BlackoutCoversTheYear in failure.problems },
+                    problems = failure.problems.mapNotNull(::monthDayMarkFor).toMap(),
+                )
+            }
+            is HealthValidation -> _state.update { it.copy(saving = false) }
             is AssetValidation ->
-                _state.update { it.copy(saving = false, problems = failure.problems.associate(::markFor)) }
+                _state.update { it.copy(saving = false, problems = failure.problems.mapNotNull(::markFor).toMap()) }
             is AssetCycle -> {
                 _state.update { it.copy(saving = false) }
                 _messages.tryEmit("${nameOf(failure.parentId)} is already part of this asset.")
@@ -760,6 +966,31 @@ class AssetEditViewModel(
             }
         }
     }
+
+    /**
+     * The four parts of one Save (spec §10.4). The asset part carries no `MM-DD` pair: the season-mode
+     * part decides the season. A window goes only with S30, a phase only with a switch into MANUAL,
+     * a break only while S59 is on, and a primary only with "One subject".
+     */
+    private fun AssetEditState.settingsCommand(priceMinor: Long?) = AssetSettingsCommand(
+        asset = toCommand(priceMinor),
+        seasonMode = SeasonModeCommand(
+            seasonMode = seasonMode,
+            seasonStartMmdd = seasonStart.trim().takeIf { seasonMode == SeasonMode.CALENDAR },
+            seasonEndMmdd = seasonEnd.trim().takeIf { seasonMode == SeasonMode.CALENDAR },
+            manualPhase = manualPhase.takeIf { asksManualPhase },
+        ),
+        maintenanceBreak = if (breakOn) {
+            BreakCommand(breakStart.trim(), breakEnd.trim())
+        } else {
+            BreakCommand(null, null)
+        },
+        healthPolicy = HealthPolicyCommand(
+            healthAggregation = aggregation,
+            healthPrimarySubjectId = primaryId?.let(::HealthSubjectId)
+                .takeIf { aggregation == HealthAggregation.TRACK_ONE },
+        ),
+    )
 
     private fun AssetEditState.toCommand(priceMinor: Long?) = AssetCommand(
         name = name,
@@ -778,32 +1009,50 @@ class AssetEditViewModel(
         warrantyExpiresOn = warrantyExpiresOn.ifBlank { null },
         warrantyNotes = warrantyNotes,
         parentAssetId = parentId?.let(::AssetId),
-        seasonStartMmdd = if (seasonYearRound) null else seasonStart.ifBlank { null },
-        seasonEndMmdd = if (seasonYearRound) null else seasonEnd.ifBlank { null },
+        // The season-mode part is authoritative; `SaveAssetSettings` keeps the stored pair here.
+        seasonStartMmdd = null,
+        seasonEndMmdd = null,
     )
 
-    /** A stored row as form text. Minor units come back through [Money], never by hand. */
-    private fun AssetEditState.filledFrom(row: Asset) = copy(
-        name = row.name,
-        category = row.category,
-        manufacturer = row.manufacturer,
-        model = row.model,
-        serialNumber = row.serialNumber,
-        description = row.description,
-        location = row.location,
-        parentId = row.parentAssetId?.value,
-        seasonYearRound = row.seasonStartMmdd == null && row.seasonEndMmdd == null,
-        seasonStart = row.seasonStartMmdd.orEmpty(),
-        seasonEnd = row.seasonEndMmdd.orEmpty(),
-        purchaseOn = row.purchaseOn.orEmpty(),
-        inServiceOn = row.inServiceOn.orEmpty(),
-        price = priceTextOf(row.purchasePriceMinor, row.currency),
-        currency = row.currency.orEmpty(),
-        vendor = row.vendor,
-        warrantyExpiresOn = row.warrantyExpiresOn.orEmpty(),
-        warrantyNotes = row.warrantyNotes,
-        notes = row.notes,
-    )
+    /**
+     * A stored row as form text. Minor units come back through [Money], never by hand.
+     *
+     * **A dangling primary is not re-sent** (the controller's carry-forward from B06's review): a
+     * TRACK_ONE whose primary names no non-archived subject of this asset — a state only a merge
+     * reaches — is read as the engine already reads it, Worst subject with no primary (S138), so a
+     * rename or a season change on that asset is not refused for a choice the owner never made here.
+     */
+    private fun AssetEditState.filledFrom(row: Asset, subjects: List<HealthSubject>): AssetEditState {
+        val (aggregation, primary) = policyOf(row, subjects)
+        return copy(
+            name = row.name,
+            category = row.category,
+            manufacturer = row.manufacturer,
+            model = row.model,
+            serialNumber = row.serialNumber,
+            description = row.description,
+            location = row.location,
+            parentId = row.parentAssetId?.value,
+            seasonMode = row.seasonMode,
+            storedSeasonMode = row.seasonMode,
+            seasonStart = row.seasonStartMmdd.orEmpty(),
+            seasonEnd = row.seasonEndMmdd.orEmpty(),
+            breakOn = row.blackoutStartMmdd != null && row.blackoutEndMmdd != null,
+            breakStart = row.blackoutStartMmdd.orEmpty(),
+            breakEnd = row.blackoutEndMmdd.orEmpty(),
+            subjects = rowsOf(subjects),
+            aggregation = aggregation,
+            primaryId = primary,
+            purchaseOn = row.purchaseOn.orEmpty(),
+            inServiceOn = row.inServiceOn.orEmpty(),
+            price = priceTextOf(row.purchasePriceMinor, row.currency),
+            currency = row.currency.orEmpty(),
+            vendor = row.vendor,
+            warrantyExpiresOn = row.warrantyExpiresOn.orEmpty(),
+            warrantyNotes = row.warrantyNotes,
+            notes = row.notes,
+        )
+    }
 
     /**
      * The picker of spec §5: everything but this asset and everything under it, so choosing a
@@ -882,8 +1131,14 @@ private fun localeCurrencyCode(): String = try {
     ""
 }
 
-/** One typed problem as the field it belongs under and the line that field shows. */
-private fun markFor(problem: AssetProblem): Pair<String, String> = when (problem) {
+/**
+ * One typed problem as the field it belongs under and the line that field shows, or null for one
+ * this form cannot reach and has no ratified words for. The asset part of a settings save carries
+ * the stored `MM-DD` pair, so a season problem here is a stored pair gone bad — marked on its field
+ * with the shipped line, and never as the both-or-neither sentence, which a calendar season that
+ * requires both dates would make false (the controller's ruling on I10).
+ */
+private fun markFor(problem: AssetProblem): Pair<String, String>? = when (problem) {
     AssetProblem.NameRequired -> AssetField.NAME to "Give the asset a name"
     AssetProblem.BadCurrency -> AssetField.CURRENCY to BAD_CURRENCY
     AssetProblem.CurrencyRequired -> AssetField.CURRENCY to CURRENCY_REQUIRED
@@ -891,12 +1146,54 @@ private fun markFor(problem: AssetProblem): Pair<String, String> = when (problem
     AssetProblem.UnknownParent -> AssetField.PARENT to "That asset is no longer there"
     is AssetProblem.BadDate -> problem.field to "Enter a date as YYYY-MM-DD"
     is AssetProblem.Season -> when (val season = problem.p) {
-        SeasonWindow.Problem.BothOrNeither -> AssetField.SEASON to "Set both season dates or neither"
+        SeasonWindow.Problem.BothOrNeither -> null
         is SeasonWindow.Problem.BadDate ->
             (if (season.which == "start") AssetField.SEASON_START else AssetField.SEASON_END) to
-                "Not a real month and day"
+                NOT_A_REAL_MONTH_AND_DAY
     }
 }
+
+/**
+ * A season or break command's `MM-DD` refusal on its field, with the shipped line. The held Save
+ * keeps these out of reach; this is what a refusal would still draw. Nothing else in a
+ * [SeasonValidation] has a field or ratified words (S63 is drawn by the caller).
+ */
+private fun monthDayMarkFor(problem: SeasonProblem): Pair<String, String>? {
+    val field = when ((problem as? SeasonProblem.BadDate)?.field) {
+        "seasonStartMmdd" -> AssetField.SEASON_START
+        "seasonEndMmdd" -> AssetField.SEASON_END
+        "blackoutStartMmdd" -> AssetField.BREAK_START
+        "blackoutEndMmdd" -> AssetField.BREAK_END
+        else -> return null
+    }
+    return field to NOT_A_REAL_MONTH_AND_DAY
+}
+
+/** The subjects in `sortOrder`, then id, as S111 lists them. */
+private fun rowsOf(subjects: List<HealthSubject>): List<SubjectRow> =
+    subjects
+        .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+        .map { SubjectRow(id = it.id.value, name = it.name, archived = it.archivedAt != null) }
+
+/**
+ * The stored policy as the form's answer. A primary goes with TRACK_ONE alone, and a dangling one —
+ * naming no non-archived subject of the asset — falls back to Worst subject, as the engine reads it.
+ */
+private fun policyOf(row: Asset, subjects: List<HealthSubject>): Pair<HealthAggregation, String?> {
+    if (row.healthAggregation != HealthAggregation.TRACK_ONE) return row.healthAggregation to null
+    val live = subjects.filter { it.archivedAt == null && it.assetId == row.id }.map { it.id }
+    val primary = row.healthPrimarySubjectId?.takeIf { it in live }
+        ?: return HealthAggregation.WORST to null
+    return HealthAggregation.TRACK_ONE to primary.value
+}
+
+/** S55 with its one substitution: the stranded schedules' titles. */
+internal fun seasonStrands(titles: List<String>): String =
+    SEASON_STRANDS_PRE_SERVICE.replace("<titles>", titles.joinToString(", "))
+
+/** S64 with its one substitution: the stranded schedules' titles. */
+internal fun breakStrands(titles: List<String>): String =
+    BREAK_STRANDS_PRE_SERVICE.replace("<titles>", titles.joinToString(", "))
 
 private const val BAD_CURRENCY = "Currency is a three-letter code like USD"
 private const val CURRENCY_REQUIRED = "A price needs a currency"
