@@ -25,9 +25,9 @@ class BackupCodecTest {
 
     private fun fixture(): BackupData = BackupData(
         assets = listOf(
-            AssetDto("a1", "Furnace", "basement unit", "hvac", "filter 16x25", "ACTIVE", 100L, 200L),
-            AssetDto("a2", "Mower", "", "yard", "", "ARCHIVED", 101L, 201L),
-            AssetDto("a3", "Water heater", "40 gal", "plumbing", "", "ACTIVE", 102L, 202L),
+            AssetDto("a1", "Furnace", "basement unit", "hvac", "filter 16x25", "ACTIVE", 100L, 200L, seasonMode = "YEAR_ROUND", blackoutStartMmdd = null, blackoutEndMmdd = null, healthAggregation = "WORST", healthPrimarySubjectId = null),
+            AssetDto("a2", "Mower", "", "yard", "", "ARCHIVED", 101L, 201L, seasonMode = "YEAR_ROUND", blackoutStartMmdd = null, blackoutEndMmdd = null, healthAggregation = "WORST", healthPrimarySubjectId = null),
+            AssetDto("a3", "Water heater", "40 gal", "plumbing", "", "ACTIVE", 102L, 202L, seasonMode = "YEAR_ROUND", blackoutStartMmdd = null, blackoutEndMmdd = null, healthAggregation = "WORST", healthPrimarySubjectId = null),
         ),
         nfcTags = listOf(
             // bound to an asset, every optional field filled in
@@ -49,7 +49,11 @@ class BackupCodecTest {
 
     // --- journal fixtures ------------------------------------------------------------------------
 
-    private fun assetDto(id: String) = AssetDto(id, "Asset $id", "", "", "", "ACTIVE", 1L, 2L)
+    private fun assetDto(id: String) = AssetDto(
+        id, "Asset $id", "", "", "", "ACTIVE", 1L, 2L,
+        seasonMode = "YEAR_ROUND", blackoutStartMmdd = null, blackoutEndMmdd = null,
+        healthAggregation = "WORST", healthPrimarySubjectId = null,
+    )
 
     private fun definitionDto(
         id: String,
@@ -223,6 +227,8 @@ class BackupCodecTest {
                 "maintenanceSchedules" to 0, "scheduleProviders" to 0,
                 "occurrenceClosures" to 0,
                 "assetReferences" to 0,
+                // Format 8's three keys, at zero here because this class pins the whole map.
+                "seasonActivations" to 0, "assetConditions" to 0, "healthSubjects" to 0,
             ),
             manifest.counts,
         )
@@ -442,6 +448,8 @@ class BackupCodecTest {
                 "maintenanceSchedules" to 0, "scheduleProviders" to 0,
                 "occurrenceClosures" to 0,
                 "assetReferences" to 0,
+                // Format 8's three keys, at zero here because this class pins the whole map.
+                "seasonActivations" to 0, "assetConditions" to 0, "healthSubjects" to 0,
             ),
             decoded.manifest.counts,
         )
@@ -712,6 +720,8 @@ class BackupCodecTest {
             parentAssetId = null,
             seasonStartMmdd = "04-01",
             seasonEndMmdd = "10-31",
+            // Format 8: a window is a CALENDAR asset's, and only a CALENDAR asset's (inv. 88).
+            seasonMode = "CALENDAR",
         )
         val child = assetDto("child").copy(parentAssetId = "root", retiredOn = "2025-06-01")
         val grandchild = assetDto("grandchild").copy(parentAssetId = "child")
@@ -995,6 +1005,11 @@ class BackupCodecTest {
                 status = rng.pick(listOf("ACTIVE", "ARCHIVED")),
                 createdAt = rng.nextLong(0, 2_000_000_000_000L),
                 updatedAt = rng.nextLong(0, 2_000_000_000_000L),
+                seasonMode = "YEAR_ROUND",
+                blackoutStartMmdd = null,
+                blackoutEndMmdd = null,
+                healthAggregation = "WORST",
+                healthPrimarySubjectId = null,
             )
         }
         val links = linkIds.map { lid ->

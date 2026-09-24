@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.usecase.AssetMembershipReferenced
 import com.loosecannon.servicetag.core.usecase.CreateAsset
@@ -17,6 +18,11 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.descriptors.elementNames
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -632,6 +638,76 @@ class MaintenanceRoutesTest {
     }
 
     /**
+     * 1.4 (B03): format 8 took 1.3's season triple out of the schedule row, and `/v1` still reports
+     * it — **derived**, through spec §4.1 reversed, beside the row's own policy (master plan §11.3).
+     * An AT_START schedule reads `FOLLOW_ASSET` / `AT_START` / its offset; a CONTINUOUS one reads
+     * `IGNORE` / null / null; `PRE_SERVICE`, which 1.3 cannot spell, reads null throughout. The keys
+     * are read off the **wire**, so a response that fell back to the bare format-8 row fails here, and
+     * every schedule-bearing response is pinned to [ScheduleRowResponse] structurally as well.
+     */
+    @Test fun aScheduleResponseCarriesTheDerivedTriple() {
+        val row = ScheduleRowResponse.serializer().descriptor.serialName
+        for (descriptor in listOf(
+            ScheduleResponse.serializer().descriptor,
+            ScheduleDetailResponse.serializer().descriptor,
+            ScheduleAndStateResponse.serializer().descriptor,
+            CompletionResponse.serializer().descriptor,
+            CloseRoundResponse.serializer().descriptor,
+        )) {
+            assertEquals(
+                descriptor.serialName, row,
+                descriptor.getElementDescriptor(descriptor.getElementIndex("schedule")).serialName,
+            )
+        }
+        val list = ScheduleListResponse.serializer().descriptor
+        assertEquals(row, list.getElementDescriptor(list.getElementIndex("schedules")).getElementDescriptor(0).serialName)
+
+        val asset = createAsset("Snowblower")
+        val atStart = call(
+            "POST", "/v1/schedules",
+            """{"title":"Auger belt","targetAssetId":"$asset","timeInterval":1,"timeUnit":"YEAR",
+               "timeBasis":"FIXED","anchorOn":"2026-02-01","seasonBehavior":"FOLLOW_ASSET",
+               "seasonReentry":"AT_START","seasonReentryOffsetDays":5}""",
+        )
+        assertEquals(atStart.text(), 201, atStart.status)
+        val atStartId = scheduleIn(atStart).id
+        val continuousId = createAssetSchedule(asset, "Oil change")
+
+        fun wireRow(response: ApiResponse): JsonObject =
+            ApiJson.parseToJsonElement(response.text()).jsonObject.getValue("schedule").jsonObject
+        fun JsonObject.triple() = listOf(get("seasonBehavior"), get("seasonReentry"), get("seasonReentryOffsetDays"))
+
+        val atStartRow = wireRow(call("GET", "/v1/schedules/$atStartId"))
+        assertEquals(listOf(JsonPrimitive("FOLLOW_ASSET"), JsonPrimitive("AT_START"), JsonPrimitive(5)), atStartRow.triple())
+        assertEquals(JsonPrimitive("IN_SERVICE_AT_START"), atStartRow["servicePolicy"])
+        assertEquals(JsonPrimitive(5), atStartRow["policyOffsetDays"])
+        assertTrue("ruleChangedAt" in atStartRow)
+
+        val continuousRow = wireRow(call("GET", "/v1/schedules/$continuousId"))
+        assertEquals(listOf(JsonPrimitive("IGNORE"), JsonNull, JsonNull), continuousRow.triple())
+        assertEquals(JsonPrimitive("CONTINUOUS"), continuousRow["servicePolicy"])
+
+        // The list, a postpone and a completion carry the same row.
+        val listed = ApiJson.parseToJsonElement(call("GET", "/v1/schedules").text()).jsonObject
+            .getValue("schedules").jsonArray.map { it.jsonObject }
+        assertEquals(2, listed.size)
+        assertTrue(listed.all { it.triple().size == 3 && "seasonBehavior" in it && "seasonReentryOffsetDays" in it })
+        val postponed = call("POST", "/v1/schedules/$atStartId/postpone", """{"postponedDueOn":"2027-03-01"}""")
+        assertEquals(postponed.text(), 200, postponed.status)
+        assertEquals(atStartRow.triple(), wireRow(postponed).triple())
+        val completed = call("POST", "/v1/schedules/$continuousId/complete", completionBody())
+        assertEquals(completed.text(), 201, completed.status)
+        assertEquals(continuousRow.triple(), wireRow(completed).triple())
+
+        // PRE_SERVICE has no 1.3 spelling: the builder reports null in all three.
+        val stored = runBlocking { graph.schedules.get(ScheduleId(continuousId))!! }
+        val preService = stored.copy(servicePolicy = ServicePolicy.PRE_SERVICE, policyOffsetDays = -14).rowResponse()
+        assertEquals(listOf(null, null, null), listOf(preService.seasonBehavior, preService.seasonReentry, preService.seasonReentryOffsetDays))
+        assertEquals("PRE_SERVICE", preService.servicePolicy)
+        assertEquals(-14, preService.policyOffsetDays)
+    }
+
+    /**
      * A `PATCH /v1/groups/{id}` that omits a member **soft-removes** it: the row is still there with
      * `removedAt` stamped, and nothing was deleted (invariants 8, 79, 80).
      */
@@ -1034,7 +1110,7 @@ class MaintenanceRoutesTest {
     // --- the merge report's three new tables -----------------------------------------------------
 
     /**
-     * `import_merge` reads a **format-7** archive, and the report carries the `groups`, `schedules`
+     * `import_merge` reads a **format-8** archive, and the report carries the `groups`, `schedules`
      * and `closures` tallies beside the shipped ones, plus 1.3's `references`. `applicable` still
      * governs.
      *
@@ -1054,7 +1130,7 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(7, report.formatVersion)
+        assertEquals(8, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)

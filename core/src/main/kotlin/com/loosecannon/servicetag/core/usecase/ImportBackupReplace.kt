@@ -60,11 +60,7 @@ class ImportBackupReplace(
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
     private val references: ReferenceRepository,
-    /**
-     * The three 1.4 stores — manual season activations, conditions and health subjects — held for
-     * the format-8 archive. Wired here in 1.4's first change so the constructor does not move
-     * again when the archive starts carrying them; format 7 reads and writes none of them.
-     */
+    /** The three 1.4 stores — manual season activations, conditions and health subjects. */
     private val seasonActivations: SeasonActivationRepository,
     private val conditions: ConditionRepository,
     private val healthSubjects: HealthSubjectRepository,
@@ -101,6 +97,9 @@ class ImportBackupReplace(
             links.deleteAll()
             // References point only at assets, so they clear just before them.
             references.deleteAll()
+            // The three 1.4 tables need no line: activations and conditions point only at an
+            // asset and subjects at an asset or a schedule, all ON DELETE CASCADE, and neither fact
+            // table has a delete of its own because its rows are immutable.
             assets.deleteAll()
 
             // insert in reference order so foreign keys are satisfied at every step. Assets go
@@ -123,6 +122,11 @@ class ImportBackupReplace(
             data.eventProfiles.forEach { profiles.upsert(it.toDomain()) }
             data.maintenanceSchedules.forEach { schedules.upsert(it.toDomain()) }
             data.occurrenceClosures.forEach { closures.insert(it.toDomain()) }
+            // After assets and schedules, the two things they point at. `eventId` is a soft link,
+            // so the facts need no event to be in first.
+            data.seasonActivations.forEach { seasonActivations.insert(it.toDomain()) }
+            data.assetConditions.forEach { conditions.insert(it.toDomain()) }
+            data.healthSubjects.forEach { healthSubjects.upsert(it.toDomain()) }
             data.externalLinks.forEach { links.upsert(it.toDomain()) }
             data.nfcTags.forEach { tags.upsert(it.toDomain()) }
             data.assetEvents.forEach { events.upsert(it.toDomain()) }
