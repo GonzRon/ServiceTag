@@ -149,3 +149,7 @@ Medium: three new read models and one predicate over shipped projections, all JV
 
 - `AssetHealthEngine.evaluate` works on the whole asset and throws on a malformed subject, so "catch per subject" means SCREEN first: call B05's pure `:core` shape check (`HealthSubjectShape.problems(subject)` or the name B05 ships) and pass only well-formed subjects to `evaluate`; each screened-out subject renders NOT TRACKED with no driver line. Do not re-implement the bounds. One test row (RED: skip the screen).
 - `HealthRow`, `HealthState` and `HealthAction` in `ui.maintenance` are the REMINDER-health types and keep their names; asset-health read-model types take other names (for example `AssetHealthRow`).
+
+## Carry-forward from B06's follow-up (controller, 2026-09-25)
+
+- A restored condition may name a zone this device cannot resolve (B06's content pass judges a zone by its form within the archive, never against the device). Any surface that shows a condition's zone shows it as text and never resolves it without a null-safe guard; nothing crashes or hides the row. One test row where it is drawn (RED: resolve unguarded).

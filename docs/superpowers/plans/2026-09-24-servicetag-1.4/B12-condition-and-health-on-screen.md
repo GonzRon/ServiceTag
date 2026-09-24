@@ -147,3 +147,7 @@ Large. Split seam: **B12a** tokens, icons, words, badges and the scan sheet; **B
 ## Carry-forward from B06's review (controller, 2026-09-25)
 
 - The "Mark operational?" offer is never made for an event whose zone does not resolve on this asset (the command would refuse it); one view-model case (RED: offer it).
+
+## Carry-forward from B06's follow-up (controller, 2026-09-25)
+
+- A restored condition may name a zone this device cannot resolve (B06's content pass judges a zone by its form within the archive, never against the device). Any surface that shows a condition's zone shows it as text and never resolves it without a null-safe guard; nothing crashes or hides the row. One test row where it is drawn (RED: resolve unguarded).

@@ -108,3 +108,7 @@ Medium-large: three sections and two dialogs on one screen, most of the logic in
 ## Carry-forward from B05's review (controller, 2026-09-24)
 
 - `HealthRow`, `HealthState`, `HealthAction` stay the reminder-health names in `ui.maintenance`; nothing on asset detail reuses them for asset health.
+
+## Carry-forward from B06's follow-up (controller, 2026-09-25)
+
+- A restored condition may name a zone this device cannot resolve (B06's content pass judges a zone by its form within the archive, never against the device). Any surface that shows a condition's zone shows it as text and never resolves it without a null-safe guard; nothing crashes or hides the row. One test row where it is drawn (RED: resolve unguarded).
