@@ -162,7 +162,7 @@ class ManualSeasonTest {
     @Test
     fun seasonCommandsChangeOnlyTheAssetColumnsTheyOwn() = runTest {
         val h = SeasonCommandHarness()
-        var before = h.asset().copy(category = "Yard", notes = "Kept", location = "Shed")
+        var before = h.asset().copy(category = "Outdoor", notes = "Kept", location = "Rack B")
         h.assets.rows[before.id.value] = before
 
         h.now += 1_000L
