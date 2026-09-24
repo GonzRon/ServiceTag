@@ -59,15 +59,15 @@ and `send_bad_grant` sets `ClipData` from the URI without the flag: a share that
 `ClipData` is not migrated, so it really arrives ungranted. A "no flag, no `ClipData`" share would
 carry a real grant and could never be refused.
 
-### Why the bad-grant case shares with a grant first
+### The bad-grant case from a fresh install
 
-ServiceTag cannot see this package (API 30+ package visibility) until this package has granted it
-a URI. Until then an ungranted stream is not refused at all: the resolver cannot find the provider,
-`query` answers null, and the intake draws a byte form with an empty Received line. So
-`ShareBoundaryTest`'s bad-grant case runs `send_file` once, finishes that intake, and then runs
-`send_bad_grant`, which the platform now denies ("Permission Denial") and the intake answers with
-"Could not read what was shared". The fresh-sharer empty form is issue #63; when it lands, the
-granted share goes.
+Nothing is shared first. ServiceTag cannot see this package (API 30+ package visibility) until
+this package has granted it a URI, so a `send_bad_grant` from a fresh install reaches a provider
+ServiceTag cannot find: `query` answers null, and the intake draws "Could not read what was shared"
+at read time (#63). Once any grant has been made, the provider is visible and the platform denies
+the read instead ("Permission Denial"), which is the same dead end. `ShareBoundaryTest` runs its
+bad-grant case first (`NAME_ASCENDING`, its name sorts first), so every run exercises the
+fresh-install shape.
 
 To fire one by hand on the emulator:
 
