@@ -231,13 +231,13 @@ class GroupScreensTest {
 
         val south = runBlocking { app.graph.groups.all().single { it.name == "South run" } }
         val windows = south.members.filter { it.assetId.value == assetIdOf("Sprinkler 1") }
-        assert(windows.size == 2) { "a re-add is a second window, not a reopened one: $windows" }
-        assert(windows.count { it.removedAt == null } == 1) { "exactly one open window: $windows" }
+        check(windows.size == 2) { "a re-add is a second window, not a reopened one: $windows" }
+        check(windows.count { it.removedAt == null } == 1) { "exactly one open window: $windows" }
         val closed = windows.single { it.removedAt != null }
         val opened = windows.single { it.removedAt == null }
-        assert(closed.addedAt < opened.addedAt) { "the second window is newer: $windows" }
-        assert(closed.id != opened.id) { "a new durable id: $windows" }
-        assert(south.members.size == 3) { "nothing was deleted: ${south.members}" }
+        check(closed.addedAt < opened.addedAt) { "the second window is newer: $windows" }
+        check(closed.id != opened.id) { "a new durable id: $windows" }
+        check(south.members.size == 3) { "nothing was deleted: ${south.members}" }
     }
 
     /**
@@ -263,10 +263,10 @@ class GroupScreensTest {
         rule.onAllNodesWithText("Head check").assertCountEquals(0)
 
         val stored = runBlocking { app.graph.groups.all().single { it.name == "North run" } }
-        assert(stored.archivedAt != null) { "the column was written" }
-        assert(stored.members.size == 3) { "archive cascades nothing: ${stored.members}" }
+        check(stored.archivedAt != null) { "the column was written" }
+        check(stored.members.size == 3) { "archive cascades nothing: ${stored.members}" }
         val events = runBlocking { app.graph.events.all() }
-        assert(events.size == 1) { "the member completion is retained: $events" }
+        check(events.size == 1) { "the member completion is retained: $events" }
     }
 
     /**
@@ -303,12 +303,12 @@ class GroupScreensTest {
 
         rule.awaitText("2 of 3 complete")
         val after = runBlocking { app.graph.events.all() }
-        assert(after.size == before + 1) { "one member, one event: ${after.size} vs $before" }
+        check(after.size == before + 1) { "one member, one event: ${after.size} vs $before" }
         val written = after.maxBy { it.createdAt }
         val owed = setOf(assetIdOf("Sprinkler 2"), assetIdOf("Sprinkler 3"))
-        assert(written.assetId.value in owed) { "a member the round owed, and only one: $written" }
-        assert(written.scheduleId != null) { "the completion carries its schedule: $written" }
-        assert(written.occurrenceOn != null) { "and its occurrence key: $written" }
+        check(written.assetId.value in owed) { "a member the round owed, and only one: $written" }
+        check(written.scheduleId != null) { "the completion carries its schedule: $written" }
+        check(written.occurrenceOn != null) { "and its occurrence key: $written" }
     }
 
     /**

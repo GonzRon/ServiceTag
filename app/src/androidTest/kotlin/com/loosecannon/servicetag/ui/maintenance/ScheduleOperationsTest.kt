@@ -146,15 +146,15 @@ class ScheduleOperationsTest {
 
         // The recurrence edit is the editor, reached through its seam and nowhere else.
         rule.onNodeWithText("Edit").performClick()
-        rule.runOnIdle { assert(record == listOf("edit:b14-asset")) { "unexpected: $record" } }
+        rule.runOnIdle { check(record == listOf("edit:b14-asset")) { "unexpected: $record" } }
 
         // Snooze: no date moves and no event appears.
         val rowBefore = runBlocking { graph.schedules.get(ScheduleId("b14-asset"))!! }
         rule.onNodeWithText("Snooze").performClick()
         rule.waitForIdle()
         val rowAfter = runBlocking { graph.schedules.get(ScheduleId("b14-asset"))!! }
-        assert(rowBefore == rowAfter) { "the snooze wrote a column: $rowBefore -> $rowAfter" }
-        assert(runBlocking { graph.events.all() }.isEmpty()) { "the snooze wrote an event" }
+        check(rowBefore == rowAfter) { "the snooze wrote a column: $rowBefore -> $rowAfter" }
+        check(runBlocking { graph.events.all() }.isEmpty()) { "the snooze wrote an event" }
 
         // The canonical affordance, in the ratified words, and it is what writes.
         rule.onNodeWithText("Log maintenance").performClick()
@@ -162,8 +162,8 @@ class ScheduleOperationsTest {
         rule.onNodeWithText("Save").performClick()
         rule.waitUntil(5_000) { runBlocking { graph.events.all() }.size == 1 }
         val event = runBlocking { graph.events.all().single() }
-        assert(event.scheduleId == ScheduleId("b14-asset")) { "the completion names its schedule" }
-        assert(event.occurredOn == today.toString()) { "today by default: ${event.occurredOn}" }
+        check(event.scheduleId == ScheduleId("b14-asset")) { "the completion names its schedule" }
+        check(event.occurredOn == today.toString()) { "today by default: ${event.occurredOn}" }
     }
 
     /**
@@ -253,14 +253,14 @@ class ScheduleOperationsTest {
 
         rule.waitUntil(5_000) { runBlocking { graph.closures.all() }.size == 1 }
         val closure = runBlocking { graph.closures.all().single() }
-        assert(closure.closedOn == today.toString()) { "today by default: ${closure.closedOn}" }
-        assert(runBlocking { graph.schedules.get(ScheduleId("b14-group"))!! } == scheduleBefore) {
+        check(closure.closedOn == today.toString()) { "today by default: ${closure.closedOn}" }
+        check(runBlocking { graph.schedules.get(ScheduleId("b14-group"))!! } == scheduleBefore) {
             "the close wrote a schedule column"
         }
         val historyAfter = runBlocking {
             graph.events.all().map { it.id.value to it.assetId.value }.toSet()
         }
-        assert(historyAfter == historyBefore) { "a member was recorded as serviced: $historyAfter" }
+        check(historyAfter == historyBefore) { "a member was recorded as serviced: $historyAfter" }
     }
 
     /**

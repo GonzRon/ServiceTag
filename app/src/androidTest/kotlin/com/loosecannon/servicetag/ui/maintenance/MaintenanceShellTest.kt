@@ -147,12 +147,12 @@ class MaintenanceShellTest {
         rule.onNodeWithText("Reminders").performClick()
 
         rule.runOnIdle {
-            assert(record.size == 4) { "four navigations, not $record" }
-            assert(record[0].startsWith("schedule:")) { "the due row opens a schedule, not ${record[0]}" }
-            assert(record[1].startsWith("schedule:")) { "the schedules row opens a schedule, not ${record[1]}" }
-            assert(record[0] != record[1]) { "the two rows are different schedules: $record" }
-            assert(record[2].startsWith("group:")) { "the group row opens a group, not ${record[2]}" }
-            assert(record[3] == "health") { "the Reminders row opens reminder health, not ${record[3]}" }
+            check(record.size == 4) { "four navigations, not $record" }
+            check(record[0].startsWith("schedule:")) { "the due row opens a schedule, not ${record[0]}" }
+            check(record[1].startsWith("schedule:")) { "the schedules row opens a schedule, not ${record[1]}" }
+            check(record[0] != record[1]) { "the two rows are different schedules: $record" }
+            check(record[2].startsWith("group:")) { "the group row opens a group, not ${record[2]}" }
+            check(record[3] == "health") { "the Reminders row opens reminder health, not ${record[3]}" }
         }
     }
 
@@ -258,11 +258,11 @@ class MaintenanceShellTest {
         rule.onNodeWithText("Add asset").performClick()
 
         rule.runOnIdle {
-            assert(record.containsAll(listOf("log", "scan", "asset"))) { "missing an action: $record" }
+            check(record.containsAll(listOf("log", "scan", "asset"))) { "missing an action: $record" }
         }
         // The flow B14 owns is what writes; this screen's tap wrote nothing on its own.
         val after = runBlocking { graph.events.all().size }
-        assert(before == after) { "the quick action wrote an event: $before -> $after" }
+        check(before == after) { "the quick action wrote an event: $before -> $after" }
     }
 
     /** The empty state, verbatim, on a phone with nothing scheduled. */
@@ -287,7 +287,7 @@ class MaintenanceShellTest {
         rule.awaitText("No maintenance schedules yet. Add one from an asset or a maintenance group.")
         // Reminders is still reachable: a phone with no schedules can still have blocked ones.
         rule.onNodeWithText("Reminders").performClick()
-        rule.runOnIdle { assert(record == listOf("health")) { "unexpected navigation: $record" } }
+        rule.runOnIdle { check(record == listOf("health")) { "unexpected navigation: $record" } }
     }
 
     private companion object {
