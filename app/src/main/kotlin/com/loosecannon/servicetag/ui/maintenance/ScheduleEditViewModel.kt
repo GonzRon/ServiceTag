@@ -14,8 +14,11 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.SeasonInputs
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
@@ -23,12 +26,19 @@ import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.reminders.ProviderId
+import com.loosecannon.servicetag.core.schedule.BoundaryKind
+import com.loosecannon.servicetag.core.schedule.SeasonContext
+import com.loosecannon.servicetag.core.schedule.SeasonPhase
+import com.loosecannon.servicetag.core.usecase.HealthSubjectIsPrimary
+import com.loosecannon.servicetag.core.usecase.PreServiceNeedsDates
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
+import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
 import com.loosecannon.servicetag.core.usecase.ScheduleValidation
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.reminders.NotificationPermission
+import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -43,7 +53,10 @@ import kotlinx.coroutines.launch
  * refused save marks the control the refusal is actually about, in the shipped editors' idiom.
  *
  * **They are field names, never sentences.** §17 ratifies no wording for a refused schedule save,
- * and no brief invents one, so the form marks the field and says nothing — see [fieldOf].
+ * and no brief invents one, so the form marks the field and says nothing — see [fieldOf]. Two
+ * refusals are the exceptions, because 1.4 ratified words for them: the health link guard's
+ * `ScheduleDrivesHealthSubject` and `HealthSubjectIsPrimary` draw S140–S141 and S137, and the
+ * `PreServiceNeedsDates` race draws S77. Neither of them is a field mark.
  */
 object ScheduleField {
     const val TITLE = "title"
@@ -54,7 +67,10 @@ object ScheduleField {
     const val METER = "meter"
     const val METER_INTERVAL = "meterInterval"
     const val METER_LEAD = "meterLead"
-    const val SEASON = "season"
+    /** The service-policy question, S65 (spec §10.4). */
+    const val POLICY = "policy"
+    /** The question's day field: S71 under a "Before…" option, S72 under S74. */
+    const val POLICY_OFFSET = "policyOffset"
     const val COMPLETION_MODE = "completionMode"
     const val PROFILE = "profile"
     const val PROVIDER = "provider"
@@ -83,15 +99,129 @@ fun fieldOf(problem: ScheduleProblem): String = when (problem) {
     ScheduleProblem.NegativeMeterLead -> ScheduleField.METER_LEAD
     is ScheduleProblem.ForeignMeterDefinition -> ScheduleField.METER
     is ScheduleProblem.MeterDefinitionNotAMeter -> ScheduleField.METER
-    ScheduleProblem.SeasonFollowsAssetOnGroupTarget -> ScheduleField.SEASON
-    ScheduleProblem.PolicyOffsetInvalid -> ScheduleField.SEASON
-    ScheduleProblem.SeasonPolicyNeedsATimeRule -> ScheduleField.SEASON
+    // The three policy refusals are unreachable from this editor by mechanism (master dec. 46): a
+    // group draws no question, the option set drops every date-moving choice without a time rule, and
+    // the day fields filter to 0–365 with Save held while S71 is empty or 0. They still name the
+    // control they are about, so a refusal that arrives anyway marks it rather than nothing.
+    ScheduleProblem.SeasonFollowsAssetOnGroupTarget -> ScheduleField.POLICY
+    ScheduleProblem.PolicyOffsetInvalid -> ScheduleField.POLICY_OFFSET
+    ScheduleProblem.SeasonPolicyNeedsATimeRule -> ScheduleField.POLICY
     ScheduleProblem.FormCompletionOnGroupTarget -> ScheduleField.COMPLETION_MODE
     ScheduleProblem.ProfileOnGroupTarget -> ScheduleField.PROFILE
     is ScheduleProblem.ForeignProfile -> ScheduleField.PROFILE
     is ScheduleProblem.UnknownProvider -> ScheduleField.PROVIDER
     ScheduleProblem.PostponeNeedsTimeRule -> ScheduleField.INTERVAL
 }
+
+/**
+ * The answers to S65, "When should this maintenance be done?" (spec §10.4) — the editor's own model,
+ * called by no other surface. Each one is a ratified option word, and [ScheduleEditState.servicePolicy]
+ * is what it means:
+ *
+ * - [BEFORE_SEASON] (S66) and [BEFORE_BREAK] (S69) are PRE_SERVICE, `−(Days before it starts)`;
+ * - [WHEN_SEASON_STARTS] (S67) is IN_SERVICE_AT_START or IN_SERVICE_RESUME_CLAMPED, by
+ *   [StartCountingFrom];
+ * - [AFTER_BREAK] (S70) is IN_SERVICE_AT_START at offset 0, with no field;
+ * - [WHENEVER_DUE] (S68) is CONTINUOUS.
+ */
+enum class PolicyOption { BEFORE_SEASON, BEFORE_BREAK, WHEN_SEASON_STARTS, AFTER_BREAK, WHENEVER_DUE }
+
+/** S73 "Start counting from", under S67: S74 is AT_START ([SEASON_START]), S75 RESUME_CLAMPED ([OWN_DATE]). */
+enum class StartCountingFrom { SEASON_START, OWN_DATE }
+
+/**
+ * S140–S141, and S137 when the answer to "Archive both" is that the subject is the one its asset's
+ * health follows (spec §6.1, D-30; inv. 130). Shared by the editor's save and the detail's archive.
+ */
+sealed interface LinkGuardPrompt {
+    /** S140 naming the subject, with S141 "Archive both" and the shipped Cancel. */
+    data class Asks(val subjectName: String) : LinkGuardPrompt
+
+    /** S137: "Archive both" was refused with `HEALTH_SUBJECT_IS_PRIMARY`, and nothing was written. */
+    data object Primary : LinkGuardPrompt
+}
+
+/**
+ * The options spec §10.4's table draws for a target, in order; **empty means the question is not
+ * drawn** and the policy is CONTINUOUS — a group target ([season] null, inv. 106) and a YEAR_ROUND
+ * asset without a break.
+ *
+ * Without a time rule (a meter-only schedule) no "Before…" option is offered, because PRE_SERVICE
+ * moves a date the schedule does not have (O-7); the in-service option keeps its asset's label (master
+ * dec. 38). "A break is set" is read through [SeasonContext], the engine's own reading, so a break the
+ * engine would ignore (one bound only, merge-only) offers nothing it could not honour.
+ *
+ * **Plan decision (B08):** on a MANUAL asset with a break, S69 is drawn first, so every row reads
+ * earliest to latest and "Whenever it is due" is always last.
+ */
+internal fun policyOptionsFor(season: SeasonInputs?, hasTimeRule: Boolean): List<PolicyOption> {
+    if (season == null) return emptyList()
+    val hasBreak = SeasonContext.of(season).boundaryKind == BoundaryKind.BREAK
+    return when (season.mode) {
+        SeasonMode.CALENDAR -> listOfNotNull(
+            PolicyOption.BEFORE_SEASON.takeIf { hasTimeRule },
+            PolicyOption.WHEN_SEASON_STARTS,
+            PolicyOption.WHENEVER_DUE,
+        )
+        SeasonMode.MANUAL -> listOfNotNull(
+            PolicyOption.BEFORE_BREAK.takeIf { hasTimeRule && hasBreak },
+            PolicyOption.WHEN_SEASON_STARTS,
+            PolicyOption.WHENEVER_DUE,
+        )
+        SeasonMode.YEAR_ROUND -> if (hasBreak) {
+            listOfNotNull(
+                PolicyOption.BEFORE_BREAK.takeIf { hasTimeRule },
+                PolicyOption.AFTER_BREAK,
+                PolicyOption.WHENEVER_DUE,
+            )
+        } else {
+            emptyList()
+        }
+    }
+}
+
+/** One answer to the question, with the text of whichever day field it carries. */
+internal data class PolicyChoice(
+    val option: PolicyOption,
+    val startCountingFrom: StartCountingFrom = StartCountingFrom.SEASON_START,
+    val daysBefore: String = "",
+    val daysAfter: String = "",
+)
+
+/**
+ * Which answer a stored row is, among [options] — or null when none of them is it, which the editor
+ * never guesses at: PRE_SERVICE −14 is the "Before…" option with 14, AT_START 5 is S67 · S74 · 5,
+ * RESUME_CLAMPED is S67 · S75, CONTINUOUS is S68. AT_START is S70 only at offset 0, because S70 has no
+ * field to show another offset in.
+ */
+internal fun storedChoice(policy: ServicePolicy, offsetDays: Int?, options: List<PolicyOption>): PolicyChoice? =
+    when (policy) {
+        ServicePolicy.CONTINUOUS -> PolicyChoice(PolicyOption.WHENEVER_DUE)
+        ServicePolicy.PRE_SERVICE ->
+            listOf(PolicyOption.BEFORE_SEASON, PolicyOption.BEFORE_BREAK).firstOrNull { it in options }
+                ?.let { PolicyChoice(it, daysBefore = offsetDays?.let { days -> (-days).toString() }.orEmpty()) }
+        ServicePolicy.IN_SERVICE_AT_START -> when {
+            PolicyOption.WHEN_SEASON_STARTS in options ->
+                PolicyChoice(PolicyOption.WHEN_SEASON_STARTS, daysAfter = (offsetDays ?: 0).toString())
+            PolicyOption.AFTER_BREAK in options && (offsetDays ?: 0) == 0 -> PolicyChoice(PolicyOption.AFTER_BREAK)
+            else -> null
+        }
+        ServicePolicy.IN_SERVICE_RESUME_CLAMPED ->
+            PolicyChoice(PolicyOption.WHEN_SEASON_STARTS, StartCountingFrom.OWN_DATE)
+                .takeIf { PolicyOption.WHEN_SEASON_STARTS in options }
+    }
+
+/** S71's and S72's bounds: 1–365 before, 0–365 after (spec §4.2). */
+internal const val MAX_POLICY_DAYS = 365
+
+/**
+ * S71's and S72's input filter (master dec. 46, the ruling on I10): digits only, at most three of them,
+ * and never above [MAX_POLICY_DAYS]. A keystroke that breaks it is **not accepted as typed** — the
+ * field keeps what it had — so no out-of-range value is ever turned into a different one and no
+ * refusal needs a sentence.
+ */
+internal fun acceptsPolicyDays(value: String): Boolean =
+    value.isEmpty() || (value.length <= 3 && value.all { it in '0'..'9' } && value.toInt() <= MAX_POLICY_DAYS)
 
 /**
  * The schedule form. Numbers are held as text until a save parses them, exactly as the shipped
@@ -103,7 +233,12 @@ fun fieldOf(problem: ScheduleProblem): String = when (problem) {
  * that opened the editor — and an edit keeps the stored target, so it is never editable afterwards.
  *
  * The three [isGroup] hides are the D-12 and D-28 rules made structural: a group target draws no
- * meter block, no profile picker and no season choice but CONTINUOUS.
+ * meter block, no profile picker and no service-policy question (inv. 106).
+ *
+ * **The policy is a choice, never a default the owner must decide** (spec §10.4, inv. 121): a new
+ * schedule starts on S68, the API's own default (master dec. 43), and the pre-service margin starts
+ * empty. [policyOption] is null while the question stands unanswered — a stored policy the options
+ * cannot show, or an option the time rule's removal withdrew — and Save waits for the owner's pick.
  */
 data class ScheduleEditState(
     val target: ScheduleTarget? = null,
@@ -119,12 +254,25 @@ data class ScheduleEditState(
     val meterInterval: String = "",
     val anchorMeter: String = "",
     val meterLead: String = "",
+    /** The target asset's season and break, read once; null for a group target, which has neither. */
+    val season: SeasonInputs? = null,
+    /** The answer to S65; null while it stands unanswered. */
+    val policyOption: PolicyOption? = PolicyOption.WHENEVER_DUE,
+    val startCountingFrom: StartCountingFrom = StartCountingFrom.SEASON_START,
+    /** S71, as typed: **empty until the owner enters it**, and nothing suggests a value (inv. 121). */
+    val daysBefore: String = "",
+    /** S72, as typed; empty means 0, the start itself (spec §4.2). */
+    val daysAfter: String = "",
     /**
-     * One of the two policies the shipped question offers: IN_SERVICE_AT_START (offset 0) for
-     * "pause with the season" and CONTINUOUS for "year round". A stored row with any other
-     * non-CONTINUOUS policy opens as the first, as 1.3 opened every FOLLOW_ASSET row.
+     * The S77 state (master dec. 30): a stored non-CONTINUOUS policy on an asset with no boundary to be
+     * ready before — reachable through a merge, a migrated 1.3 row, or a race with an asset edit
+     * (`PreServiceNeedsDates`). The question then offers S68 alone and waits for it to be picked.
      */
-    val servicePolicy: ServicePolicy = ServicePolicy.CONTINUOUS,
+    val noBoundary: Boolean = false,
+    /** The link-guard dialog, when a save was refused for a health subject it would strand. */
+    val linkGuard: LinkGuardPrompt? = null,
+    /** The day S84 measures the season from: its current span, or the next one. */
+    val todayOn: LocalDate = LocalDate.EPOCH,
     val completionMode: CompletionMode = CompletionMode.QUICK,
     val profileId: ProfileId? = null,
     val remindersEnabled: Boolean = true,
@@ -163,6 +311,128 @@ data class ScheduleEditState(
 
     /** A meter rule is present when a definition is chosen, which a group target can never be. */
     val hasMeterRule: Boolean get() = meterDefinitionId != null && !isGroup
+
+    /** Whether the command will carry a time rule: the interval is what `SaveSchedule` asks about. */
+    val hasTimeRule: Boolean get() = timeInterval.trim().toIntOrNull() != null
+
+    /** S65's options, in order; S68 alone in the S77 state, and none for a group. */
+    val policyOptions: List<PolicyOption>
+        get() = when {
+            isGroup -> emptyList()
+            noBoundary -> listOf(PolicyOption.WHENEVER_DUE)
+            else -> policyOptionsFor(season, hasTimeRule)
+        }
+
+    /** Whether S65 is drawn at all. When it is not, the policy is CONTINUOUS (inv. 106). */
+    val questionDrawn: Boolean get() = policyOptions.isNotEmpty()
+
+    /** The policy the chosen answer means; null while the question is drawn and unanswered. */
+    val servicePolicy: ServicePolicy?
+        get() = if (!questionDrawn) {
+            ServicePolicy.CONTINUOUS
+        } else {
+            when (policyOption) {
+                null -> null
+                PolicyOption.BEFORE_SEASON, PolicyOption.BEFORE_BREAK -> ServicePolicy.PRE_SERVICE
+                PolicyOption.WHEN_SEASON_STARTS -> when (startCountingFrom) {
+                    StartCountingFrom.SEASON_START -> ServicePolicy.IN_SERVICE_AT_START
+                    StartCountingFrom.OWN_DATE -> ServicePolicy.IN_SERVICE_RESUME_CLAMPED
+                }
+                PolicyOption.AFTER_BREAK -> ServicePolicy.IN_SERVICE_AT_START
+                PolicyOption.WHENEVER_DUE -> ServicePolicy.CONTINUOUS
+            }
+        }
+
+    /**
+     * The signed offset spec §4.2 stores: `−(Days before it starts)` for PRE_SERVICE; S72 for S74, where
+     * nothing typed is 0; 0 for S70; null otherwise. **On a meter-only schedule S74's offset is 0**
+     * whatever was typed, since the field is hidden and 0 is the only value one may carry (O-7) — the
+     * one documented place where the form sends something other than its text.
+     */
+    val policyOffsetDays: Int?
+        get() = if (!questionDrawn) {
+            null
+        } else {
+            when (policyOption) {
+                PolicyOption.BEFORE_SEASON, PolicyOption.BEFORE_BREAK -> daysBefore.toIntOrNull()?.let { -it }
+                PolicyOption.WHEN_SEASON_STARTS -> when (startCountingFrom) {
+                    StartCountingFrom.SEASON_START -> if (hasTimeRule) daysAfter.toIntOrNull() ?: 0 else 0
+                    StartCountingFrom.OWN_DATE -> null
+                }
+                PolicyOption.AFTER_BREAK -> 0
+                PolicyOption.WHENEVER_DUE, null -> null
+            }
+        }
+
+    /** A "Before…" option is chosen, so S71 is drawn and must hold a margin. */
+    val marginNeeded: Boolean
+        get() = questionDrawn &&
+            (policyOption == PolicyOption.BEFORE_SEASON || policyOption == PolicyOption.BEFORE_BREAK)
+
+    /** S83 under S71: the margin is still empty. */
+    val marginMissing: Boolean get() = marginNeeded && daysBefore.isEmpty()
+
+    /**
+     * Save is offered only for a command the policy half cannot refuse (master dec. 46): the question,
+     * when drawn, is answered, and S71 holds 1–365 — an empty margin and a margin of 0 both hold it.
+     */
+    val canSave: Boolean
+        get() = loaded && !saving && linkGuard == null && servicePolicy != null &&
+            (!marginNeeded || daysBefore.toIntOrNull() in 1..MAX_POLICY_DAYS)
+
+    /** The calendar season this asset reads, or null when it has none (only CALENDAR carries S76/S84). */
+    private val calendarSeason: SeasonContext?
+        get() = season?.takeIf { questionDrawn && it.mode == SeasonMode.CALENDAR }?.let(SeasonContext::of)
+
+    /**
+     * S76, a warning and never a refusal: S67 is chosen on a CALENDAR asset and the anchor date lies
+     * outside the season **window**.
+     */
+    val anchorOutsideSeason: Boolean
+        get() {
+            val context = calendarSeason ?: return false
+            if (policyOption != PolicyOption.WHEN_SEASON_STARTS || !hasTimeRule) return false
+            val anchor = runCatching { LocalDate.parse(anchorOn.trim()) }.getOrNull() ?: return false
+            return context.phaseAt(anchor) == SeasonPhase.OUT_OF_SEASON
+        }
+
+    /**
+     * S84, a warning and never a refusal: S74 is chosen on a CALENDAR asset and the season's start plus
+     * the offset falls after the end of **that** season — the span containing the start the offset is
+     * counted from (the current one, or the next), so a wrapping season is measured across the year end.
+     */
+    val offsetPassesSeasonEnd: Boolean
+        get() {
+            val context = calendarSeason ?: return false
+            if (policyOption != PolicyOption.WHEN_SEASON_STARTS) return false
+            if (startCountingFrom != StartCountingFrom.SEASON_START) return false
+            val offset = policyOffsetDays ?: return false
+            val start = context.cycleStartAt(todayOn) ?: return false
+            val end = context.seasonEndAt(start) ?: return false
+            return start.plusDays(offset.toLong()) > end
+        }
+
+    /** The same form with the question's answer cleared when it is no longer one of the options. */
+    internal fun withOfferedOption(): ScheduleEditState =
+        if (questionDrawn && policyOption != null && policyOption !in policyOptions) copy(policyOption = null) else this
+
+    /**
+     * A stored row's policy, loaded into its option. A policy the options cannot show is never guessed
+     * at: the question stands unanswered, and when the asset has no boundary at all it is the S77 state.
+     */
+    internal fun withStoredPolicy(row: MaintenanceSchedule): ScheduleEditState {
+        val choice = storedChoice(row.servicePolicy, row.policyOffsetDays, policyOptions)
+        if (choice != null) {
+            return copy(
+                policyOption = choice.option,
+                startCountingFrom = choice.startCountingFrom,
+                daysBefore = choice.daysBefore,
+                daysAfter = choice.daysAfter,
+            )
+        }
+        val boundaryless = season?.let { SeasonContext.of(it).boundaryKind == BoundaryKind.NONE } == true
+        return copy(policyOption = null, noBoundary = boundaryless)
+    }
 }
 
 /**
@@ -171,7 +441,9 @@ data class ScheduleEditState(
  * Every rule is `SaveSchedule`'s, called: this view model constructs the command, sends it and maps
  * whatever comes back onto the control it belongs to. What it adds is the three target-dependent
  * hides that make an illegal group schedule unreachable through the UI, D-11's non-blocking warning
- * and — on the **first** schedule creation only — the notification permission request.
+ * and — on the **first** schedule creation only — the notification permission request. 1.4 adds the
+ * service-policy question (S65–S84, spec §10.4), whose filters and held Save keep every policy refusal
+ * unreachable, and the health link guard's dialog on a refused save (S140–S141, S137; inv. 130).
  *
  * The permission request lives here and nowhere else (master plan decision 23, #24 AC 1). "First"
  * is derived from the store rather than a remembered flag: a create is the first one when the store
@@ -223,10 +495,16 @@ class ScheduleEditViewModel(
             val target = existing?.target ?: targetAssetId?.let(ScheduleTarget::AssetTarget)
                 ?: targetGroupId?.let(ScheduleTarget::GroupTarget)
             val assetId = (target as? ScheduleTarget.AssetTarget)?.assetId
+            // The asset's season and break decide which answers S65 offers. Activations are not read:
+            // no option depends on a MANUAL asset's phase, and CALENDAR's warnings read the window.
+            val season = assetId?.let { assets.get(it) }?.seasonInputs(emptyList())
+            val todayOn = today.localDate()
             _state.update { form ->
-                (existing?.let { form.filledFrom(it) } ?: form.blank()).copy(
+                val filled = (existing?.let { form.filledFrom(it) } ?: form.blank()).copy(
                     target = target,
                     targetName = nameOf(target),
+                    season = season,
+                    todayOn = todayOn,
                     // A group target is offered neither, so nothing is read for one (D-12).
                     meters = assetId?.let { definitions.forAsset(it).filter { d -> d.isMeter && d.archivedAt == null } }
                         .orEmpty(),
@@ -234,6 +512,8 @@ class ScheduleEditViewModel(
                         .orEmpty(),
                     loaded = true,
                 )
+                // After the rule fields are in, because the options depend on the time rule.
+                existing?.let { filled.withStoredPolicy(it) } ?: filled
             }
             refreshDuplicateWarning()
         }
@@ -260,11 +540,6 @@ class ScheduleEditViewModel(
         meterInterval = row.meterInterval?.let(::plainNumber).orEmpty(),
         anchorMeter = row.anchorMeter?.let(::plainNumber).orEmpty(),
         meterLead = row.meterLead?.let(::plainNumber).orEmpty(),
-        servicePolicy = if (row.servicePolicy == ServicePolicy.CONTINUOUS) {
-            ServicePolicy.CONTINUOUS
-        } else {
-            ServicePolicy.IN_SERVICE_AT_START
-        },
         completionMode = row.completionMode,
         profileId = row.profileId,
         remindersEnabled = row.remindersEnabled,
@@ -295,7 +570,13 @@ class ScheduleEditViewModel(
 
     fun onDescription(value: String) = _state.update { it.copy(description = value) }
 
-    fun onInterval(value: String) = clearing(ScheduleField.INTERVAL) { it.copy(timeInterval = value) }
+    /**
+     * The interval **is** the time rule, so it also decides which answers S65 offers. Removing it
+     * withdraws the "Before…" options: a chosen one is cleared and the question stands unanswered
+     * until the owner picks again — never silently re-answered.
+     */
+    fun onInterval(value: String) =
+        clearing(ScheduleField.INTERVAL) { it.copy(timeInterval = value).withOfferedOption() }
 
     fun onUnit(value: RecurrenceUnit) = clearing(ScheduleField.UNIT) { it.copy(timeUnit = value) }
 
@@ -324,9 +605,28 @@ class ScheduleEditViewModel(
 
     fun onMeterLead(value: String) = clearing(ScheduleField.METER_LEAD) { it.copy(meterLead = value) }
 
-    /** Only CONTINUOUS is reachable for a group target (D-28): a group has no season. */
-    fun onSeason(value: ServicePolicy) = clearing(ScheduleField.SEASON) { form ->
-        if (form.isGroup && value != ServicePolicy.CONTINUOUS) form else form.copy(servicePolicy = value)
+    /**
+     * The owner's answer to S65. Only an offered option is taken: a group target is offered none
+     * (inv. 106), and an asset only what its season and break make meaningful.
+     */
+    fun onPolicy(value: PolicyOption) = clearing(ScheduleField.POLICY, ScheduleField.POLICY_OFFSET) { form ->
+        if (value in form.policyOptions) form.copy(policyOption = value) else form
+    }
+
+    /** S73's answer, under S67 only. */
+    fun onStartCountingFrom(value: StartCountingFrom) =
+        clearing(ScheduleField.POLICY, ScheduleField.POLICY_OFFSET) { form ->
+            if (form.policyOption == PolicyOption.WHEN_SEASON_STARTS) form.copy(startCountingFrom = value) else form
+        }
+
+    /** S71, through its filter: a keystroke the filter refuses leaves the field as it was. */
+    fun onDaysBefore(value: String) = clearing(ScheduleField.POLICY_OFFSET) { form ->
+        if (acceptsPolicyDays(value)) form.copy(daysBefore = value) else form
+    }
+
+    /** S72, through the same filter. */
+    fun onDaysAfter(value: String) = clearing(ScheduleField.POLICY_OFFSET) { form ->
+        if (acceptsPolicyDays(value)) form.copy(daysAfter = value) else form
     }
 
     /**
@@ -391,22 +691,49 @@ class ScheduleEditViewModel(
      * disables nothing, and this is where that is true rather than asserted.
      *
      * The guard is set before the first suspension, so two taps in one frame write one row.
+     *
+     * **Nothing reaches `SaveSchedule` unless [ScheduleEditState.canSave]**: an unanswered question, an
+     * empty margin (S83) or a margin of 0 is held here, which is what keeps the policy refusals
+     * unreachable without a sentence (master dec. 46).
      */
     fun save() {
         val form = _state.value
-        if (form.saving) return
-        _state.update { it.copy(saving = true, problems = emptyList()) }
+        if (!form.canSave) return
+        submit(form.command(), unlinkHealthSubject = false)
+    }
+
+    /**
+     * S141 "Archive both": **the same command** that was refused, with the unlink flag and nothing
+     * else changed (spec §6.1, D-30) — not a rebuild from the form.
+     */
+    fun archiveBoth() {
+        val form = _state.value
+        val refused = pendingCommand
+        if (form.saving || form.linkGuard !is LinkGuardPrompt.Asks || refused == null) return
+        submit(refused, unlinkHealthSubject = true)
+    }
+
+    /** Cancel on the link-guard dialog: it closes, nothing is written, and the form is as typed. */
+    fun cancelLinkGuard() {
+        pendingCommand = null
+        _state.update { it.copy(linkGuard = null) }
+    }
+
+    /** The command S140 asked about, held for "Archive both" to repeat. */
+    private var pendingCommand: ScheduleCommand? = null
+
+    private fun submit(cmd: ScheduleCommand, unlinkHealthSubject: Boolean) {
+        _state.update { it.copy(saving = true, problems = emptyList(), linkGuard = null) }
         viewModelScope.launch {
             // Asked before the write, because after it the store is never empty again.
             val firstEver = scheduleId == null && schedules.all().isEmpty()
-            val outcome = runCatching { saveSchedule.run(scheduleId, form.command()) }
+            val outcome = runCatching { saveSchedule.run(scheduleId, cmd, unlinkHealthSubject) }
             val failure = outcome.exceptionOrNull()
             if (failure != null) {
-                _state.update {
-                    it.copy(saving = false, problems = (failure as? ScheduleValidation)?.problems.orEmpty())
-                }
+                refused(failure, cmd)
                 return@launch
             }
+            pendingCommand = null
             val saved = outcome.getOrThrow()
             if (firstEver && !notifications.granted()) {
                 // The rationale first, then the system dialog: spec §5.1 asks for the permission
@@ -416,6 +743,38 @@ class ScheduleEditViewModel(
             } else {
                 _state.update { it.copy(saving = false) }
                 _saved.tryEmit(saved.id)
+            }
+        }
+    }
+
+    /**
+     * What a refused save shows. Nothing was written in any branch.
+     *
+     * - `ScheduleDrivesHealthSubject` asks S140 about the subject it names;
+     * - `HealthSubjectIsPrimary`, the answer to "Archive both" for the subject its asset's health
+     *   follows, shows S137;
+     * - `PreServiceNeedsDates` — the asset lost its boundary while the form was open — re-reads the
+     *   asset and takes the S77 path: S77, the question with S68 alone, unanswered;
+     * - a `ScheduleValidation` marks its fields, as it always has.
+     */
+    private suspend fun refused(failure: Throwable, cmd: ScheduleCommand) {
+        when (failure) {
+            is ScheduleDrivesHealthSubject -> {
+                pendingCommand = cmd
+                _state.update { it.copy(saving = false, linkGuard = LinkGuardPrompt.Asks(failure.name)) }
+            }
+            is HealthSubjectIsPrimary -> {
+                pendingCommand = null
+                _state.update { it.copy(saving = false, linkGuard = LinkGuardPrompt.Primary) }
+            }
+            is PreServiceNeedsDates -> {
+                val fresh = assets.get(failure.assetId)?.seasonInputs(emptyList())
+                _state.update {
+                    it.copy(saving = false, season = fresh ?: it.season, noBoundary = true, policyOption = null)
+                }
+            }
+            else -> _state.update {
+                it.copy(saving = false, problems = (failure as? ScheduleValidation)?.problems.orEmpty())
             }
         }
     }
@@ -472,9 +831,10 @@ class ScheduleEditViewModel(
             // form marks the field (carry-forward (c): non-negative in the editor, now by refusal
             // rather than by erasure).
             meterLead = meterLead.trim().toDoubleOrNull().takeIf { meter != null },
-            servicePolicy = if (group != null) ServicePolicy.CONTINUOUS else servicePolicy,
-            // "Pause with the asset's season" is AT_START at the start itself.
-            policyOffsetDays = if (group == null && servicePolicy == ServicePolicy.IN_SERVICE_AT_START) 0 else null,
+            // The answer to S65, or CONTINUOUS where the question is not drawn — a group target
+            // always (inv. 106). `save` never builds a command while the question is unanswered.
+            servicePolicy = servicePolicy ?: ServicePolicy.CONTINUOUS,
+            policyOffsetDays = policyOffsetDays,
             completionMode = if (group != null) CompletionMode.QUICK else completionMode,
             profileId = profileId.takeIf { group == null && completionMode == CompletionMode.FORM },
             remindersEnabled = remindersEnabled,

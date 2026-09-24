@@ -308,7 +308,7 @@ class DashboardAttentionTest {
         val outOfSeasonTop = rule.onAllNodesWithText("OUT OF SEASON")
             .fetchSemanticsNodes()
             .minOf { it.positionInRoot.y }
-        assert(currentTop < outOfSeasonTop) {
+        check(currentTop < outOfSeasonTop) {
             "CURRENT must be drawn above OUT OF SEASON: $currentTop vs $outOfSeasonTop"
         }
         // And the season row is still in its own section, with its ratified word.

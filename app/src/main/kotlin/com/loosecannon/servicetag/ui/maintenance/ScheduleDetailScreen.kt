@@ -183,6 +183,10 @@ fun ScheduleDetailScreen(
             )
         }
 
+        state.linkGuard?.let { prompt ->
+            LinkGuardDialog(prompt = prompt, onArchiveBoth = model::archiveBoth, onCancel = model::cancelLinkGuard)
+        }
+
         // The affordance, wherever this schedule is completed from. It is the flow's own dialog, so
         // this screen and the scan sheet ask the same question in the same words.
         CompletionFlowHost(model.completion)
@@ -377,7 +381,8 @@ internal fun PostponeDialog(initial: String, onDismiss: () -> Unit, onConfirm: (
  * The pause row is labelled with the RATIFIED status word **PAUSED**, because §17 ratifies no verb
  * for the action and the word for the state is the one thing this brief may say; archive reuses the
  * shipped "Archive"/"Unarchive" pair. **Neither is destructive**: an archived schedule keeps its
- * history and its closures and can be brought back (invariant 76).
+ * history and its closures and can be brought back (invariant 76). Archiving one a health subject
+ * depends on asks S140 first ([LinkGuardDialog]).
  */
 @Composable
 private fun DetailOverflow(

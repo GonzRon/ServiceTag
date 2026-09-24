@@ -4,6 +4,10 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.HealthAggregation
+import com.loosecannon.servicetag.core.model.HealthDriver
+import com.loosecannon.servicetag.core.model.HealthSubjectId
+import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
@@ -14,6 +18,8 @@ import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
+import com.loosecannon.servicetag.core.usecase.HealthPolicyCommand
+import com.loosecannon.servicetag.core.usecase.HealthSubjectCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
 import com.loosecannon.servicetag.core.usecase.ScheduleValidation
@@ -38,6 +44,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -223,10 +230,11 @@ class ScheduleEditViewModelTest {
 
         // The three offers a group target does not get. Each setter is a no-op for one.
         vm.onMeterDefinition(meter.id)
-        vm.onSeason(ServicePolicy.IN_SERVICE_AT_START)
+        vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
         vm.onCompletionMode(CompletionMode.FORM)
         val form = vm.state.value
         assertNull("no meter rule on a group target", form.meterDefinitionId)
+        assertFalse("a group is asked no policy question (inv. 106)", form.questionDrawn)
         assertEquals(ServicePolicy.CONTINUOUS, form.servicePolicy)
         assertEquals(CompletionMode.QUICK, form.completionMode)
         assertNull("and so no profile", form.profileId)
@@ -525,11 +533,13 @@ class ScheduleEditViewModelTest {
      * mark are the three no interaction can provoke.
      *
      * The form renders a mark for TARGET, TITLE, INTERVAL, UNIT, ANCHOR, LEAD, METER,
-     * METER_INTERVAL and PROFILE. It renders none for SEASON, COMPLETION_MODE or PROVIDER, and that
-     * is safe only while those three refusals are unreachable through this editor: the season and
-     * completion-mode setters refuse the illegal value for a group target outright, and the provider
-     * is not settable at all. This test asserts the reachability rather than the mapping's
-     * non-blankness, because a name being non-blank is true of a dead end too.
+     * METER_INTERVAL, PROFILE and POLICY_OFFSET. It renders none for POLICY, COMPLETION_MODE or
+     * PROVIDER, and that is safe only while those refusals are unreachable through this editor: a
+     * group target is offered no policy answer and the completion-mode setter refuses FORM for one,
+     * and the provider is not settable at all. The policy form's own unreachability (the offset
+     * filters, the held Save and the option set without a time rule) is `SchedulePolicyFormTest`'s.
+     * This test asserts the reachability rather than the mapping's non-blankness, because a name
+     * being non-blank is true of a dead end too.
      */
     @Test fun everyRefusalMapsToAControlAndTheUnmarkedThreeAreUnreachable() = runTest {
         val problems = listOf(
@@ -545,6 +555,8 @@ class ScheduleEditViewModelTest {
             ScheduleProblem.MeterIntervalRequired,
             ScheduleProblem.MeterIntervalNotPositive,
             ScheduleProblem.SeasonFollowsAssetOnGroupTarget,
+            ScheduleProblem.PolicyOffsetInvalid,
+            ScheduleProblem.SeasonPolicyNeedsATimeRule,
             ScheduleProblem.FormCompletionOnGroupTarget,
             ScheduleProblem.ProfileOnGroupTarget,
             ScheduleProblem.PostponeNeedsTimeRule,
@@ -555,6 +567,10 @@ class ScheduleEditViewModelTest {
         )
         problems.forEach { problem -> assertTrue("$problem maps nowhere", fieldOf(problem).isNotBlank()) }
         assertEquals(problems.map(::fieldOf).toSet(), ScheduleEditState(problems = problems).marks)
+        // An out-of-range offset marks the day field it is about, which the screen draws; the other two
+        // policy refusals are about the question as a whole.
+        assertEquals(ScheduleField.POLICY_OFFSET, fieldOf(ScheduleProblem.PolicyOffsetInvalid))
+        assertEquals(ScheduleField.POLICY, fieldOf(ScheduleProblem.SeasonPolicyNeedsATimeRule))
 
         // The three the screen does not mark, and why it does not have to.
         val head = graph.createAsset.run(AssetCommand(name = "Sprinkler 1", category = "Irrigation"))
@@ -562,14 +578,14 @@ class ScheduleEditViewModelTest {
         val vm = viewModel(targetGroupId = group.id.value)
         vm.state.first { it.loaded }
 
-        vm.onSeason(ServicePolicy.IN_SERVICE_AT_START)
-        assertEquals("SEASON is unreachable: the setter refuses it", ServicePolicy.CONTINUOUS, vm.state.value.servicePolicy)
+        vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+        assertEquals("POLICY is unreachable: nothing is offered", ServicePolicy.CONTINUOUS, vm.state.value.servicePolicy)
         vm.onCompletionMode(CompletionMode.FORM)
         assertEquals("COMPLETION_MODE likewise", CompletionMode.QUICK, vm.state.value.completionMode)
         // PROVIDER: not settable from the screen at all, and the only value it can hold is legal.
         assertEquals(ProviderId.LOCAL, vm.state.value.provider)
         assertEquals(
-            listOf(ScheduleField.SEASON, ScheduleField.COMPLETION_MODE, ScheduleField.PROVIDER),
+            listOf(ScheduleField.POLICY, ScheduleField.COMPLETION_MODE, ScheduleField.PROVIDER),
             listOf(
                 fieldOf(ScheduleProblem.SeasonFollowsAssetOnGroupTarget),
                 fieldOf(ScheduleProblem.FormCompletionOnGroupTarget),
@@ -584,5 +600,132 @@ class ScheduleEditViewModelTest {
         // The save goes through, so none of the three was provoked.
         assertTrue(vm.state.first { !it.saving }.problems.isEmpty())
         saved.await()
+    }
+
+    /** A generator whose oil change has a time rule and a meter rule, and a subject that the oil drives. */
+    private suspend fun aDrivingSchedule(): Triple<AssetId, ScheduleId, HealthSubjectId> {
+        val generator = graph.createAsset.run(AssetCommand(name = "Generator", category = "Power"))
+        val hours = meterDefinitionOf("d-hours", generator.id.value)
+        graph.definitions.upsert(hours)
+        val schedule = graph.saveSchedule.run(
+            null,
+            ScheduleCommand(
+                targetAssetId = generator.id,
+                targetGroupId = null,
+                title = "Oil change",
+                timeInterval = 6,
+                timeUnit = RecurrenceUnit.MONTH,
+                anchorOn = "2026-01-01",
+                meterDefinitionId = hours.id,
+                meterInterval = 100.0,
+            ),
+        )
+        val subject = graph.saveHealthSubject.create(
+            generator.id,
+            HealthSubjectCommand(
+                name = "Engine oil",
+                kind = HealthSubjectKind.PART,
+                driver = HealthDriver.MAINTENANCE_OVERDUE,
+                scheduleId = schedule.id,
+                nominalUntilDays = 0,
+                warningFromDays = 7,
+                criticalFromDays = 30,
+            ),
+        )
+        return Triple(generator.id, schedule.id, subject.id)
+    }
+
+    /**
+     * Matrix row **"the guard, editor"**: an edit that removes the time rule of a schedule a health
+     * subject depends on is refused naming the subject, and asks S140 with nothing written. "Archive
+     * both" repeats **the same command** with the unlink flag: the schedule is saved meter-only and the
+     * subject is archived with it (spec §6.1, D-30; inv. 130).
+     */
+    @Test fun aGuardRefusalAsksAndArchiveBothRetriesWithTheFlag() = runTest {
+        val (_, scheduleId, subjectId) = aDrivingSchedule()
+        val vm = viewModel(scheduleId = scheduleId.value)
+        vm.state.first { it.loaded }
+
+        // The time rule goes; the meter rule stays, so the save is otherwise legal.
+        vm.onInterval("")
+        vm.save()
+        val asking = vm.state.first { !it.saving && it.linkGuard != null }
+        assertEquals(LinkGuardPrompt.Asks("Engine oil"), asking.linkGuard)
+        assertEquals(
+            "This schedule drives the health subject Engine oil. Archive that subject as well?",
+            scheduleDrivesSubject("Engine oil"),
+        )
+        assertFalse("Save waits for the dialog's answer", asking.canSave)
+        assertEquals("nothing written yet", 6, graph.schedules.get(scheduleId)!!.timeInterval)
+        assertNull(graph.healthSubjects.get(subjectId)!!.archivedAt)
+
+        // The form behind the dialog changes; "Archive both" must still repeat the command S140 asked
+        // about, not one rebuilt from the form.
+        vm.onTitle("Renamed")
+        vm.archiveBoth()
+        val done = vm.state.first { !it.saving }
+        assertNull(done.linkGuard)
+        val stored = graph.schedules.get(scheduleId)!!
+        assertEquals("the same command, with the flag and nothing else", "Oil change", stored.title)
+        assertNull("the time rule is gone", stored.timeInterval)
+        assertEquals("and the meter rule stays", 100.0, stored.meterInterval)
+        assertNotNull("and the subject is archived with it", graph.healthSubjects.get(subjectId)!!.archivedAt)
+    }
+
+    /**
+     * Matrix row **"the guard, editor"**, the other answer: Cancel closes the dialog, writes nothing —
+     * neither the schedule change nor the subject archive — and leaves the form as typed. A later
+     * "Archive both" has nothing to repeat.
+     */
+    @Test fun cancelWritesNothing() = runTest {
+        val (_, scheduleId, subjectId) = aDrivingSchedule()
+        val before = graph.schedules.get(scheduleId)!!
+        val vm = viewModel(scheduleId = scheduleId.value)
+        vm.state.first { it.loaded }
+
+        vm.onInterval("")
+        vm.save()
+        vm.state.first { !it.saving && it.linkGuard != null }
+
+        vm.cancelLinkGuard()
+        val cancelled = vm.state.first { !it.saving }
+        testScheduler.advanceUntilIdle()
+        assertNull(cancelled.linkGuard)
+        assertEquals("the form is as typed", "", cancelled.timeInterval)
+        assertEquals("the schedule is untouched", before, graph.schedules.get(scheduleId))
+        assertNull("the subject is not archived", graph.healthSubjects.get(subjectId)!!.archivedAt)
+
+        vm.archiveBoth()
+        testScheduler.advanceUntilIdle()
+        assertEquals("nothing is left to repeat", before, graph.schedules.get(scheduleId))
+        assertNull(graph.healthSubjects.get(subjectId)!!.archivedAt)
+    }
+
+    /**
+     * "Archive both" answered by `HEALTH_SUBJECT_IS_PRIMARY` — the subject is the one its asset's health
+     * follows — shows S137 and writes nothing; Cancel closes it.
+     */
+    @Test fun archiveBothOnThePrimaryShowsS137AndWritesNothing() = runTest {
+        val (assetId, scheduleId, subjectId) = aDrivingSchedule()
+        graph.setHealthPolicy.run(assetId, HealthPolicyCommand(HealthAggregation.TRACK_ONE, subjectId))
+        val before = graph.schedules.get(scheduleId)!!
+        val vm = viewModel(scheduleId = scheduleId.value)
+        vm.state.first { it.loaded }
+
+        vm.onInterval("")
+        vm.save()
+        vm.state.first { !it.saving && it.linkGuard != null }
+        vm.archiveBoth()
+        val primary = vm.state.first { !it.saving }
+        assertEquals(LinkGuardPrompt.Primary, primary.linkGuard)
+        assertEquals(
+            "This is the subject asset health follows. Choose another way to combine health first.",
+            THE_SUBJECT_HEALTH_FOLLOWS,
+        )
+        assertEquals(before, graph.schedules.get(scheduleId))
+        assertNull(graph.healthSubjects.get(subjectId)!!.archivedAt)
+
+        vm.cancelLinkGuard()
+        assertNull(vm.state.value.linkGuard)
     }
 }
