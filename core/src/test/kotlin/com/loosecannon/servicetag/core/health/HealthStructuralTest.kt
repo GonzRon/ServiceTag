@@ -22,7 +22,10 @@ class HealthStructuralTest {
     @Test
     fun theHealthPackageImportsNoPortAndNoDeliveryType() {
         assertTrue(healthSources.map { it.name }.containsAll(listOf("AssetHealthEngine.kt", "HealthClock.kt", "HealthScore.kt")))
-        val forbidden = Regex("""^import .*\.(ports\.[A-Za-z]*Repository|ports\.UnitOfWork|ports\.ScheduleLocalDelivery[A-Za-z]*)$""")
+        // A named port, a wildcard over the ports package, either one aliased.
+        val forbidden = Regex(
+            """^import .*\.ports\.([A-Za-z]*Repository|UnitOfWork|ScheduleLocalDelivery[A-Za-z]*|\*)( as \w+)?$""",
+        )
         val snooze = Regex("""^import .*[Ss]nooz""")
         val offenders = healthSources.flatMap { file ->
             file.readLines().mapIndexedNotNull { index, line ->
@@ -34,7 +37,7 @@ class HealthStructuralTest {
 
     @Test
     fun theHealthPackageReadsNoClock() {
-        val clock = Regex("""(\bLocalDate\.now\(|\bInstant\.now\(|System\.currentTimeMillis\(|^import .*\.ports\.(Clock|Today)$)""")
+        val clock = Regex("""(\bLocalDate\.now\(|\bInstant\.now\(|System\.currentTimeMillis\(|^import .*\.ports\.(Clock|Today)( as \w+)?$)""")
         val offenders = healthSources.flatMap { file ->
             file.readLines().mapIndexedNotNull { index, line ->
                 "${file.name}:${index + 1}: $line".takeIf { clock.containsMatchIn(line.trim()) }
