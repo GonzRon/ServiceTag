@@ -78,9 +78,12 @@ class ReleaseProofPolicyTest {
         val SCANNED = listOf("tools", "app/src/androidTest", "share-test-sender", ".github")
         const val RUNBOOK = "docs/release-proofs.md"
 
-        /** Whole tokens only: `performTextInput` and a word merely containing one never match. */
+        /**
+         * Whole tokens only: `performTextInput` and a word merely containing one never match.
+         * `uiautomator\d*` also takes `uiautomator2`, the Python client a tools/ harness would use.
+         */
         val FORBIDDEN = Regex(
-            """(?<![A-Za-z0-9_])(uiautomator|input\s+tap|input\s+text|dumpsys)(?![A-Za-z0-9_])""",
+            """(?<![A-Za-z0-9_])(uiautomator\d*|input\s+tap|input\s+text|dumpsys)(?![A-Za-z0-9_])""",
             RegexOption.IGNORE_CASE,
         )
 
