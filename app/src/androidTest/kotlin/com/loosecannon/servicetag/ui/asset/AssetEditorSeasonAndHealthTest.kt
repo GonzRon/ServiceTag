@@ -148,7 +148,7 @@ class AssetEditorSeasonAndHealthTest {
         }
         val show = editor(graph, null)
         rule.awaitText(OPERATING_SEASON)
-        field("Name").performTextInput("Pool pump")
+        field("Name").performTextInput("Mower")
 
         rule.onNodeWithText(STARTED_AND_ENDED_BY_HAND).performScrollTo().performClick()
         rule.onNodeWithText("$IS_THIS_ASSET_IN_SEASON *").performScrollTo().assertIsDisplayed()

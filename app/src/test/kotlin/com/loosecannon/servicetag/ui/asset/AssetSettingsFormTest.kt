@@ -145,9 +145,9 @@ class AssetSettingsFormTest {
         vm.onSeasonMode(SeasonMode.MANUAL)
         assertFalse(vm.state.value.asksManualPhase)
 
-        vm.onName("Hot tub (deck)")
+        vm.onName("Hot tub 2")
         vm.saveAndSettle()
-        assertEquals("the save was accepted: no phase was sent", "Hot tub (deck)", stored("tub").name)
+        assertEquals("the save was accepted: no phase was sent", "Hot tub 2", stored("tub").name)
         assertEquals(SeasonMode.MANUAL, stored("tub").seasonMode)
         assertTrue("no activation is written when nothing switched", graph.seasonActivations.all().isEmpty())
     }
