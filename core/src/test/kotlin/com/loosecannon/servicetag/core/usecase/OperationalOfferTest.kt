@@ -114,8 +114,10 @@ class OperationalOfferTest {
                 consumables = emptyList(),
             ),
         )
+        assertEquals(before, h.rows(), "the logged event wrote no condition row")
         assertTrue(operationalOfferFor(ConditionHistory.of(h.rows()).current, logged), "the offer is made")
 
+        // "Not yet": no call at all.
         assertEquals(before, h.rows(), "declined: the history is as it was")
         assertEquals(DOWN, ConditionHistory.of(h.rows()).current?.condition)
     }
