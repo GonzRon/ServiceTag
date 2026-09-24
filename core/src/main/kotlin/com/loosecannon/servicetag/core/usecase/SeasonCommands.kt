@@ -241,5 +241,3 @@ internal val ACTIVATION_ORDER: Comparator<SeasonActivation> =
 
 /** The latest of [rows], whatever order they were handed in. */
 internal fun latestOf(rows: List<SeasonActivation>): SeasonActivation? = rows.maxWithOrNull(ACTIVATION_ORDER)
-
-private fun String?.blankToNull(): String? = this?.trim()?.takeIf { it.isNotEmpty() }

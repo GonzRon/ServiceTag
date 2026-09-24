@@ -147,7 +147,8 @@ private fun AssetCommand.trimmed(): AssetCommand = copy(
     seasonEndMmdd = seasonEndMmdd.blankToNull(),
 )
 
-private fun String?.blankToNull(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
+/** Blank text is absent: the one rule every command's trimming uses. */
+internal fun String?.blankToNull(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
 
 /**
  * The season mode the legacy pair names on its own (spec §3.2; inv. 88): a window is a CALENDAR
