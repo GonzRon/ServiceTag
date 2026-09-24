@@ -28,6 +28,7 @@
   {"seasonBehavior": "FOLLOW_ASSET", "seasonReentry": "04-01", "seasonReentryOffsetDays": null, "hasTimeRule": true, "servicePolicy": "IN_SERVICE_AT_START", "policyOffsetDays": 0},
   {"seasonBehavior": "FOLLOW_ASSET", "seasonReentry": "04-01", "seasonReentryOffsetDays": 5, "hasTimeRule": false, "servicePolicy": "IN_SERVICE_AT_START", "policyOffsetDays": 0},
   {"seasonBehavior": "FOLLOW_ASSET", "seasonReentry": "at_start", "seasonReentryOffsetDays": 30, "hasTimeRule": true, "servicePolicy": "IN_SERVICE_AT_START", "policyOffsetDays": 30},
+  {"seasonBehavior": "FOLLOW_ASSET", "seasonReentry": "resume_clamped", "seasonReentryOffsetDays": null, "hasTimeRule": true, "servicePolicy": "IN_SERVICE_AT_START", "policyOffsetDays": 0},
 
   {"seasonBehavior": "FOLLOW_ASSET", "seasonReentry": "RESUME_CLAMPED", "seasonReentryOffsetDays": null, "hasTimeRule": true, "servicePolicy": "IN_SERVICE_RESUME_CLAMPED", "policyOffsetDays": null},
   {"seasonBehavior": "FOLLOW_ASSET", "seasonReentry": "RESUME_CLAMPED", "seasonReentryOffsetDays": 5, "hasTimeRule": true, "servicePolicy": "IN_SERVICE_RESUME_CLAMPED", "policyOffsetDays": null},

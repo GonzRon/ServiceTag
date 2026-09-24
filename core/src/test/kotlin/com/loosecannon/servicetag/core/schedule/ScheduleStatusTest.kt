@@ -131,7 +131,7 @@ class ScheduleStatusTest {
         assertFalse(DueStatus.INACTIVE_SEASON.notifies)
         // and inside the window the same schedule is honestly overdue again
         assertEquals(DueStatus.OVERDUE, statusAt(winter, "2026-11-01", season = window))
-        // an IGNORE schedule -- which is all a group target may be -- never sees the window
+        // a CONTINUOUS schedule -- which is all a group target may be -- never sees the window
         assertEquals(DueStatus.OVERDUE, statusAt(quarterly, "2026-07-01", season = window))
     }
 
