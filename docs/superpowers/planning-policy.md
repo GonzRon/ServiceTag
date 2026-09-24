@@ -85,3 +85,5 @@ pyramid, top to bottom by count:
 no JVM, instrumentation, Compose-semantics, API or structural test can. If it cannot name that
 boundary, it is not added. Ten semantic variations of one boundary are one boundary test plus ten
 in-process tests. See ServiceTag issue #62.
+
+The standing release runbook, one command per layer and R4 capped at `ShareBoundaryTest`, is `docs/release-proofs.md`.
