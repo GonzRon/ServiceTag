@@ -22,21 +22,28 @@ class SharedItemReaderTest {
     )
     private val linkPolicy = LinkLaunchPolicy()
 
-    /** A stream a test drives by hand. [onCall] fires before every provider-side answer. */
+    /**
+     * A stream a test drives by hand. [onCall] fires before every provider-side answer; [opened]
+     * counts the reads, which are the only way this seam ever opens the stream.
+     */
     private class FakeStream(
         override val scheme: String?,
         override val authority: String?,
-        private val facts: StreamFacts = StreamFacts(null, null, null),
+        private val facts: FactsAnswer = StreamFacts(null, null, null),
         private val body: ByteArray = ByteArray(0),
         private val onCall: () -> Unit = {},
     ) : SharedStream {
-        override fun facts(): StreamFacts {
+        var opened = 0
+            private set
+
+        override fun facts(): FactsAnswer {
             onCall()
             return facts
         }
 
         override fun readAtMost(limit: Int): ByteArray {
             onCall()
+            opened += 1
             return body.copyOf(minOf(limit, body.size))
         }
     }
@@ -113,6 +120,45 @@ class SharedItemReaderTest {
         val item = decide(declaredType = "application/pdf", stream = downloads())
 
         assertEquals(ShareContent.Bytes("manual.pdf", "application/pdf", 4_096L), item)
+    }
+
+    // --- I-11: a stream nobody can be asked about (#63) --------------------------------------
+
+    /**
+     * A sharer that has never granted this app anything is invisible to it under package
+     * visibility, and the resolver's query answers null without throwing. That is a read failure
+     * here, before a byte form with an empty Received line is ever drawn, and nothing is opened.
+     */
+    @Test fun aStreamWhoseProviderCannotBeQueriedIsUnreadableBeforeAnyOpen() {
+        val invisible = foreign(FactsAnswer.NoCursor)
+
+        assertEquals(
+            ShareContent.Refused(IntakeRefusal.UNREADABLE),
+            decide(declaredType = "application/pdf", stream = invisible),
+        )
+        assertEquals("an unreadable stream is never opened", 0, invisible.opened)
+    }
+
+    /**
+     * The other way of saying nothing: a cursor with no row in it. The refusal is about the
+     * missing row and not about missing columns, so a row that answers without a size still takes
+     * the byte arm, and the size is probed later as it always was.
+     */
+    @Test fun aStreamWhoseFactsComeBackEmptyIsUnreadable() {
+        val empty = foreign(FactsAnswer.NoRow)
+
+        assertEquals(
+            ShareContent.Refused(IntakeRefusal.UNREADABLE),
+            decide(declaredType = "application/pdf", stream = empty),
+        )
+        assertEquals("an unreadable stream is never opened", 0, empty.opened)
+        assertEquals(
+            ShareContent.Bytes("mower-manual.pdf", "application/pdf", null),
+            decide(
+                declaredType = "application/pdf",
+                stream = foreign(StreamFacts("mower-manual.pdf", "application/pdf", null)),
+            ),
+        )
     }
 
     // --- the two text extras, and a provider's own filename ----------------------------------
@@ -398,6 +444,13 @@ class SharedItemReaderTest {
             return directory.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
         }
     }
+
+    /** Another app's own provider, which is exactly the authority I-9 lets through. */
+    private fun foreign(answer: FactsAnswer) = FakeStream(
+        scheme = "content",
+        authority = "org.example.mowerlog.files",
+        facts = answer,
+    )
 
     private fun uriList(body: String, onCall: () -> Unit = {}) = FakeStream(
         scheme = "content",

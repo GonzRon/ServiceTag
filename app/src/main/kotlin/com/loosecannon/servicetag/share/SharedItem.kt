@@ -157,12 +157,28 @@ internal sealed interface ShareContent {
     data class Refused(val reason: IntakeRefusal) : ShareContent
 }
 
+/**
+ * What a provider said when it was asked about a stream, as plain values (I-11, #63). The two ways
+ * of saying nothing are named rather than arriving as a row of nulls, because a stream nobody can
+ * be asked about is a read failure at read time, not a form with an empty Received line.
+ */
+internal sealed interface FactsAnswer {
+    /**
+     * The query returned no cursor at all, and did not throw: there is no such provider, or package
+     * visibility hides it from this app because that package has never granted it anything.
+     */
+    data object NoCursor : FactsAnswer
+
+    /** A cursor came back, and it holds no row. */
+    data object NoRow : FactsAnswer
+}
+
 /** The provider's answers about a stream, as plain values. Read only after I-9 has accepted. */
 internal data class StreamFacts(
     val displayName: String?,
     val mimeType: String?,
     val size: Long?,
-)
+) : FactsAnswer
 
 /**
  * What the reader needs of an `EXTRA_STREAM`. [scheme] and [authority] are the two strings I-9 is
@@ -171,7 +187,7 @@ internal data class StreamFacts(
 internal interface SharedStream {
     val scheme: String?
     val authority: String?
-    fun facts(): StreamFacts
+    fun facts(): FactsAnswer
     fun readAtMost(limit: Int): ByteArray
 }
 
@@ -228,7 +244,8 @@ internal fun decideShare(
  * **The order inside the bytes arm is the contract.** I-9 answers first, on two strings; only a
  * `true` answer buys a provider query, so a refused URI is never opened at all — that is the call
  * site the invariant names, and a reader that asked for the name and size first would open
- * something it then refused.
+ * something it then refused. The query's answer comes second (I-11, #63): no cursor, or a cursor
+ * with no row, is a read failure before any open, never a form for a stream that cannot be read.
  */
 private fun byteStream(
     stream: SharedStream,
@@ -240,10 +257,17 @@ private fun byteStream(
     if (!streamPolicy.accepts(stream.scheme, stream.authority)) {
         return ShareContent.Refused(IntakeRefusal.STREAM_NOT_ACCEPTED)
     }
-    val facts = try {
+    val answer = try {
         stream.facts()
     } catch (_: Exception) {
         return ShareContent.Refused(IntakeRefusal.UNREADABLE)
+    }
+    // I-11: a stream whose facts cannot be read is unreadable now, so the first frame after the
+    // read is already the dead end. Only a row buys a form; a row may still lack a size.
+    val facts = when (answer) {
+        FactsAnswer.NoCursor -> return ShareContent.Refused(IntakeRefusal.UNREADABLE)
+        FactsAnswer.NoRow -> return ShareContent.Refused(IntakeRefusal.UNREADABLE)
+        is StreamFacts -> answer
     }
     return ShareContent.Bytes(
         // A provider names its own files, so the name is a path-free basename before anything
@@ -353,22 +377,26 @@ private class ResolverStream(
     override val scheme: String? get() = uri.scheme
     override val authority: String? get() = uri.authority
 
-    override fun facts(): StreamFacts {
+    /**
+     * A transcription and nothing more: what the resolver handed back, in [FactsAnswer]'s terms.
+     * What each answer means for the share is [decideShare]'s, where a JVM test can reach it.
+     */
+    override fun facts(): FactsAnswer {
         var displayName: String? = null
         var size: Long? = null
-        resolver.query(
+        val cursor = resolver.query(
             uri,
             arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
             null,
             null,
             null,
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val nameAt = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (nameAt >= 0 && !cursor.isNull(nameAt)) displayName = cursor.getString(nameAt)
-                val sizeAt = cursor.getColumnIndex(OpenableColumns.SIZE)
-                if (sizeAt >= 0 && !cursor.isNull(sizeAt)) size = cursor.getLong(sizeAt)
-            }
+        ) ?: return FactsAnswer.NoCursor
+        cursor.use {
+            if (!it.moveToFirst()) return FactsAnswer.NoRow
+            val nameAt = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameAt >= 0 && !it.isNull(nameAt)) displayName = it.getString(nameAt)
+            val sizeAt = it.getColumnIndex(OpenableColumns.SIZE)
+            if (sizeAt >= 0 && !it.isNull(sizeAt)) size = it.getLong(sizeAt)
         }
         return StreamFacts(displayName, resolver.getType(uri), size)
     }
