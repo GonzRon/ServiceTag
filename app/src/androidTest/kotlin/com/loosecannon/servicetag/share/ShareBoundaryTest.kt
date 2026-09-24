@@ -107,19 +107,16 @@ class ShareBoundaryTest {
      * Boundary: the same foreign URI **without** a grant. The platform refuses the read; the app
      * survives it and answers with the ratified read-failure dead end, and the activity is alive.
      *
-     * **One granted share goes first, and it is load-bearing.** Under API 30+ package visibility
-     * ServiceTag cannot see the sender's package until the sender has granted it a URI. Before
-     * that, the resolver reports "Failed to find provider info", `query` answers null without
-     * throwing, and the intake draws a byte form with an empty Received line instead of refusing
-     * (recorded in `docs/release-proofs.md`). After it, the provider is found and the platform
-     * denies the ungranted read — the refusal this case exists to prove. Doing it here, rather than
-     * relying on the grant case having run first, keeps the case independent of method order.
-     *
-     * The precondition exists because of #63 (the fresh-sharer empty form). When #63 lands, the
-     * granted share goes and the fresh-sharer refusal is asserted directly.
+     * **Nothing is shared first, and either refusal lands here.** Under API 30+ package visibility
+     * a sender that has never granted ServiceTag a URI is invisible to it: the resolver reports
+     * "Failed to find provider info" and `query` answers null without throwing. #63 made that a
+     * read failure at read time, so run alone from a fresh install this case proves the dead end
+     * is the first thing drawn, never a byte form with an empty Received line. Once the sender has
+     * granted anything — in this class's default order the grant case runs first — the provider
+     * is visible and the platform denies the ungranted read outright, which is the same dead end.
+     * So the case holds whatever order the methods run in.
      */
     @Test fun anExternalStreamWithoutAGrantIsRefusedNotCrashed() {
-        TestSender.finish(TestSender.share(Command.SEND_FILE))
         val refused = TestSender.share(Command.SEND_BAD_GRANT).also { intake = it }
         awaitTheReadToLand()
 
