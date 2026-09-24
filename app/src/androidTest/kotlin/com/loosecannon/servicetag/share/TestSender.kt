@@ -39,14 +39,14 @@ internal object TestSender {
 
     /**
      * Asks the sender for one share and waits for the [ShareIntakeActivity] it reaches, in
-     * `RESUMED`. The Compose rule sees every root in the process, so an intake left alive by an
-     * earlier case is a named failure here rather than a two-match error in an assertion.
+     * `RESUMED`. The Compose rule sees every root in the process, so an intake still alive from an
+     * earlier share is a named failure here rather than a two-match error in an assertion.
      */
     fun share(command: Command, text: String? = null): ShareIntakeActivity {
         val before = onMain { intakes(Stage.entries.filter { it != Stage.DESTROYED }) }
         check(before.isEmpty()) {
-            "An earlier ShareIntakeActivity is still alive (${before.size}); a previous case did " +
-                "not finish its intake, so this case's assertions could read the wrong screen."
+            "An earlier ShareIntakeActivity is still alive (${before.size}); an earlier share's " +
+                "intake was not finished, so this share's assertions could read the wrong screen."
         }
         val request = Intent()
             .setClassName(PACKAGE, ACTIVITY)
