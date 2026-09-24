@@ -63,9 +63,6 @@ object HealthClock {
         return counted
     }
 
-    private fun ServicePolicy.isInService(): Boolean =
-        this == ServicePolicy.IN_SERVICE_AT_START || this == ServicePolicy.IN_SERVICE_RESUME_CLAMPED
-
     /**
      * The last day, no later than [today], of the run of days that [start] belongs to. A run is the
      * days sharing one phase, one cycle start and one latest cycle start. Each run is contiguous and
@@ -90,3 +87,10 @@ object HealthClock {
 
     private data class Run(val phase: SeasonPhase, val cycleStart: LocalDate?, val latestCycleStart: LocalDate?)
 }
+
+/**
+ * The two policies that follow the season's phase: the clock's MEDIUM restart and the engine's
+ * OUT_OF_SEASON case both ask this, and nothing else in the health package does.
+ */
+internal fun ServicePolicy.isInService(): Boolean =
+    this == ServicePolicy.IN_SERVICE_AT_START || this == ServicePolicy.IN_SERVICE_RESUME_CLAMPED

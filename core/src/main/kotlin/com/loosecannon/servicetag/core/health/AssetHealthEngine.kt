@@ -14,7 +14,6 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.schedule.PolicyInputs
 import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.ServicePolicyEngine
@@ -227,9 +226,6 @@ object AssetHealthEngine {
     private fun LinkedSchedule.isValidFor(asset: Asset): Boolean =
         schedule.target == ScheduleTarget.AssetTarget(asset.id) &&
             schedule.timeInterval != null && schedule.timeUnit != null && schedule.anchorOn != null
-
-    private fun ServicePolicy.isInService(): Boolean =
-        this == ServicePolicy.IN_SERVICE_AT_START || this == ServicePolicy.IN_SERVICE_RESUME_CLAMPED
 
     private fun notTracked(subject: HealthSubject, reason: NotTrackedReason, line: DriverLine?): SubjectHealth =
         SubjectHealth(subject, SubjectValue.NotTracked(reason), listOfNotNull(line))
