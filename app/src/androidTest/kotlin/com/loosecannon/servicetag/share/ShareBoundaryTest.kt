@@ -114,6 +114,9 @@ class ShareBoundaryTest {
      * (recorded in `docs/release-proofs.md`). After it, the provider is found and the platform
      * denies the ungranted read — the refusal this case exists to prove. Doing it here, rather than
      * relying on the grant case having run first, keeps the case independent of method order.
+     *
+     * The precondition exists because of #63 (the fresh-sharer empty form). When #63 lands, the
+     * granted share goes and the fresh-sharer refusal is asserted directly.
      */
     @Test fun anExternalStreamWithoutAGrantIsRefusedNotCrashed() {
         TestSender.finish(TestSender.share(Command.SEND_FILE))

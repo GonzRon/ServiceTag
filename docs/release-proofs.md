@@ -99,7 +99,8 @@ Before and after `adb install -r` of the verified APK: `adb shell pm list packag
   nothing). Once the sharer has granted one URI, the provider is visible and an ungranted read is
   denied by the platform ("Permission Denial"), which the intake answers with the dead end. So
   `ShareBoundaryTest`'s bad-grant case sends one granted share first; the fresh-sharer behaviour
-  is a product gap, not something these proofs paper over.
+  is a product gap, issue #63, not something these proofs paper over. When #63 lands the granted
+  share goes and the fresh-sharer refusal is asserted directly.
 - **The sender's authority is outside ServiceTag's namespace.** `StreamSourcePolicy` refuses
   ServiceTag's application id and every authority under it, so the sender serves its fixtures as
   `com.loosecannon.sharetestsender.fixtures`, not under `com.loosecannon.servicetag.`

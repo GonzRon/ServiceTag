@@ -66,7 +66,8 @@ a URI. Until then an ungranted stream is not refused at all: the resolver cannot
 `query` answers null, and the intake draws a byte form with an empty Received line. So
 `ShareBoundaryTest`'s bad-grant case runs `send_file` once, finishes that intake, and then runs
 `send_bad_grant`, which the platform now denies ("Permission Denial") and the intake answers with
-"Could not read what was shared".
+"Could not read what was shared". The fresh-sharer empty form is issue #63; when it lands, the
+granted share goes.
 
 To fire one by hand on the emulator:
 
