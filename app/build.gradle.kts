@@ -179,8 +179,14 @@ tasks.named { it == "connectedDebugAndroidTest" }.configureEach {
 tasks.withType<Test>().configureEach {
     val root = rootProject.layout.projectDirectory
     inputs.files(
+        // The excludes mirror tools/*/.gitignore (and the root's build/), so the inputs are what
+        // the test's `git ls-files --exclude-standard` scan reads: a bundle or schedules run that
+        // writes private/, out/ or an archive neither re-runs this suite nor misses the cache.
         root.dir("tools").asFileTree.matching {
-            exclude("**/.venv/**", "**/__pycache__/**", "**/.pytest_cache/**", "**/build/**")
+            exclude(
+                "**/.venv/**", "**/__pycache__/**", "**/.pytest_cache/**", "**/*.pyc",
+                "**/private/**", "**/out/**", "**/*.zip", "**/build/**",
+            )
         },
         root.dir("share-test-sender").asFileTree.matching { exclude("build/**") },
         root.dir(".github").asFileTree,
