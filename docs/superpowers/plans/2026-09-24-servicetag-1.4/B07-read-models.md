@@ -138,3 +138,9 @@ Medium: three new read models and one predicate over shipped projections, all JV
 ## Carry-forward from B02's review (controller, 2026-09-24)
 
 - The maintenance sheet's `whyNow` still reads `effectiveDueOn` through `DueReadModel`. With B02, a reminder carries the actionable date; the sheet's why-line must agree with the status word the same way. Read the actionable date here too (this brief already routes `DueReadModel` through `readState`); one test row: an item pulled before its season shows the actionable date in the why-line (RED: read `effectiveDueOn`).
+
+## Carry-forward from B05 (controller, 2026-09-24)
+
+- `AssetHealthResult.aggregate` is a `Scored?` whose `trackedDays` is null on the aggregate (only subjects carry a day count); read models never render a day count for the aggregate.
+- A subject the engine cannot score (it throws on a malformed threshold set or weight) is rendered NOT TRACKED with no driver line, caught per subject in the read model, never crashing the screen; one test row (RED: let the exception propagate).
+- The behavioural snooze proof: snoozing a due item through the app's real snooze path leaves every health number unchanged; one JVM test over the read model (RED: route snooze through the postponement).

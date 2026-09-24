@@ -126,3 +126,7 @@ Large: fourteen rows, two forms, one document. Split seam if one review cannot h
 ## Carry-forward from B03's review (controller, 2026-09-24)
 
 - `/v1` asset responses already carry the five new asset fields since B01/B03; this brief documents them in `docs/api/v1.md` beside the deprecated season inputs and pins them in the asset-response shape test.
+
+## Carry-forward from B05 (controller, 2026-09-24)
+
+- In the `/health` response the aggregate's `trackedDays` is null (subjects carry a number); the shape test pins it.
