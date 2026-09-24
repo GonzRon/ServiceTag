@@ -22,7 +22,8 @@ enum class HealthBand { NOMINAL, WARNING, CRITICAL }
  * segments meet at their ends and each one falls, so the score **never rises as `x` grows**
  * (inv. 117).
  *
- * A negative `x` — an AGE baseline dated in the future — is below `t1` and scores 100.
+ * A negative `x` is below `t1` and scores 100; the engine never passes one (an AGE baseline dated
+ * after `T` is aged 0), but the formula stays total.
  */
 object HealthScore {
 

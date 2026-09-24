@@ -77,6 +77,15 @@ class AgeDriverTest {
         assertEquals(SubjectValue.Scored(17, HealthBand.CRITICAL, 1579), upsOn("2026-09-27").value, "deleting it restores 2022-06-01")
     }
 
+    /** Controller ruling: a baseline dated after today reads as age 0 — a score of 100 — never a negative age. */
+    @Test
+    fun aBaselineDatedAfterTodayReadsAsAgeZero() {
+        val ahead = HealthFixtures.eventOf("e-ups-ahead", "ups", EventKind.REPLACEMENT, "Battery replaced", "2026-09-30")
+        val read = upsOn("2026-09-24", upsEvents + ahead)
+        assertEquals(SubjectValue.Scored(100, HealthBand.NOMINAL, 0), read.value)
+        assertEquals(listOf(DriverLine.Replaced(LocalDate.parse("2026-09-30"), 0)), read.lines, "dated as logged, aged 0")
+    }
+
     /** Inv. 113: a deleted baseline quick action leaves NOT TRACKED — never "any replacement". */
     @Test
     fun aMissingBaselineProfileIsNotTrackedNeverAnyReplacement() {

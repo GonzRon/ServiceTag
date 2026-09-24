@@ -66,7 +66,7 @@ sealed interface SubjectValue {
  * member names the one string it feeds.
  */
 sealed interface DriverLine {
-    /** S99: the AGE baseline's date and the days since it. */
+    /** S99: the AGE baseline's date and the days since it, 0 for a baseline dated after `T`. */
     data class Replaced(val on: LocalDate, val ageDays: Long) : DriverLine
 
     /** S100. */
@@ -164,7 +164,8 @@ object AssetHealthEngine {
      * AGE (spec §6.2, §6.4): `x` is the days from the latest REPLACEMENT on the asset — by
      * [EventChronology], logged with the baseline quick action when one is named — to `T`. Season,
      * policy and pause play no part. A named quick action that no longer exists leaves the subject
-     * NOT TRACKED; it is **never** read as "any replacement" (inv. 113).
+     * NOT TRACKED; it is **never** read as "any replacement" (inv. 113). A baseline dated after `T`
+     * reads as age 0 — a score of 100 — never a negative age (controller ruling).
      */
     private fun age(
         asset: Asset,
@@ -183,7 +184,7 @@ object AssetHealthEngine {
             .maxWithOrNull(EventChronology)
             ?: return SubjectHealth(subject, SubjectValue.NotTracked(NotTrackedReason.NO_REPLACEMENT), listOf(DriverLine.NoReplacement))
         val replacedOn = LocalDate.parse(baseline.occurredOn)
-        val x = ChronoUnit.DAYS.between(replacedOn, today)
+        val x = maxOf(0L, ChronoUnit.DAYS.between(replacedOn, today))
         return SubjectHealth(subject, scored(subject, x), listOf(DriverLine.Replaced(replacedOn, x)))
     }
 
