@@ -112,6 +112,20 @@ class ServicePolicyEvaluatorTest {
         assertEquals(PolicyReason.AFTER_BREAK, windowWins.reason)
     }
 
+    /**
+     * The pull is strict (controller ruling on concern 5; `PolicyReason` is NONE when nothing moved).
+     * With the mower's break to 04-05, `W` is 6–14 Apr and nothing in it is on or before 1 Apr, so the
+     * point is `W`'s first day, 6 Apr. A raw due of exactly 6 Apr opened long before is not moved, so
+     * it carries no reason.
+     */
+    @Test
+    fun aPullThatLandsOnTheRawDateHasNoReason() {
+        val longBreak = SeasonContext.of(SeasonFixtures.mowerAsset(breakEnd = "04-05").seasonInputs(emptyList()))
+        val outcome = evaluate(preService(raw = "2027-04-06", opened = "2026-03-02"), longBreak)
+        assertEquals(on("2027-04-06"), outcome.actionableOn)
+        assertEquals(PolicyReason.NONE, outcome.reason)
+    }
+
     /** §4.3's guard values with the snowblower (deadline 1 Nov). */
     @Test
     fun theGuardValuesOfSection4_3() {

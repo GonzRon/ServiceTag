@@ -71,17 +71,31 @@ object ServicePolicyEngine {
     /**
      * `A` and its reason. The policy applies to `P ?: R`; a meter-only schedule has no time side, so
      * it has no actionable date at all and its phase and quiet are all the policy gives it (O-7).
+     *
+     * A reason that says the date **moved** is reported only when it did: a result equal to `P ?: R`
+     * carries NONE (`PolicyReason`'s own contract). The strict pull in [preService] already ensures
+     * this on every reachable path; the mapping here covers a break that fills the whole year, which
+     * only a merge can store and under which there is no allowed day to move to.
      */
     private fun actionable(inputs: PolicyInputs, season: SeasonContext?, at: LocalDate): Pair<LocalDate?, PolicyReason> {
         val raw = inputs.rawDueOn ?: return null to PolicyReason.NONE
         val date = inputs.postponedDueOn ?: raw
-        return when (inputs.policy) {
+        val (result, reason) = when (inputs.policy) {
             ServicePolicy.CONTINUOUS -> date to PolicyReason.NONE
             ServicePolicy.IN_SERVICE_AT_START, ServicePolicy.IN_SERVICE_RESUME_CLAMPED ->
                 inService(inputs, date, season, at)
             ServicePolicy.PRE_SERVICE -> preService(inputs, raw, season)
         }
+        return result to if (result == date && reason in MOVING) PolicyReason.NONE else reason
     }
+
+    /** The reasons that claim the date moved; POLICY_INAPPLICABLE and AWAITING_START do not. */
+    private val MOVING = setOf(
+        PolicyReason.SEASON_START,
+        PolicyReason.AFTER_BREAK,
+        PolicyReason.BEFORE_SEASON,
+        PolicyReason.BEFORE_BREAK,
+    )
 
     /**
      * IN_SERVICE reads the cycle of **`at`**, not of the date (#14 AC 4): out of season that is the
@@ -122,7 +136,8 @@ object ServicePolicyEngine {
      * `W` on or before that deadline, else `W`'s first day, else — only when `W` is empty — the day
      * before the break. A point later than `R` applies unconditionally (R sat in the break); a point
      * earlier than `R` applies only when the occurrence opened before it (the opened-before guard),
-     * and otherwise `R` is kept when allowed or moved past the break.
+     * and otherwise `R` is kept when allowed or moved past the break. The pull is **strict**: a point
+     * equal to `R` moves nothing, and since the point is always an allowed day, `R` is kept with NONE.
      */
     private fun preService(inputs: PolicyInputs, raw: LocalDate, season: SeasonContext?): Pair<LocalDate?, PolicyReason> {
         val postponed = inputs.postponedDueOn
@@ -148,7 +163,7 @@ object ServicePolicyEngine {
             ?: season.dayBeforeBreakContaining(s.minusDays(1))
         if (point > raw) return point to PolicyReason.AFTER_BREAK
         return when {
-            inputs.openedOn < point -> point to
+            inputs.openedOn < point && point < raw -> point to
                 if (window != null && point in window && boundary.kind == BoundaryKind.SEASON) {
                     PolicyReason.BEFORE_SEASON
                 } else {
