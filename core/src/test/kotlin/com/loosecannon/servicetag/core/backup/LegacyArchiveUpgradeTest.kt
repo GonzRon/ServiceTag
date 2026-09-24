@@ -130,16 +130,37 @@ class LegacyArchiveUpgradeTest {
         assertFailsWith<BackupCorrupt> {
             BackupCodec.decode(format7Archive(scheduleWith(true), LegacyTriple("SOMETIMES", null, null)))
         }
-        // and a quoted offset, which 1.3's Int field refused, is refused the same way
-        val quoted = dataTreeOf(format7Archive(scheduleWith(true), LegacyTriple("FOLLOW_ASSET", "AT_START", 5)))
-        val tree = JsonObject(
-            quoted + ("maintenanceSchedules" to JsonArray(
-                quoted.getValue("maintenanceSchedules").jsonArray.map {
-                    it.jsonObject.with("seasonReentryOffsetDays", JsonPrimitive("5"))
-                },
-            )),
-        )
-        assertFailsWith<BackupCorrupt> { BackupCodec.decode(sealed(tree, formatVersion = 7)) }
+    }
+
+    /**
+     * Every archive 1.3 read still imports: 1.3's strict decoder accepted a **quoted** whole number
+     * for its `Int?` offset, so a quoted `"5"` decodes exactly as `5` does — while a value 1.3 refused
+     * (non-integral, or not a number at all) is still `BackupCorrupt`.
+     */
+    @Test
+    fun aQuotedLegacyOffsetReadsAs1_3ReadIt() {
+        val bytes = format7Archive(scheduleWith(true), LegacyTriple("FOLLOW_ASSET", "AT_START", 5))
+        fun withOffset(value: JsonPrimitive): ByteArray {
+            val tree = dataTreeOf(bytes)
+            return sealed(
+                JsonObject(
+                    tree + ("maintenanceSchedules" to JsonArray(
+                        tree.getValue("maintenanceSchedules").jsonArray.map {
+                            it.jsonObject.with("seasonReentryOffsetDays", value)
+                        },
+                    )),
+                ),
+                formatVersion = 7,
+            )
+        }
+        val unquoted = decodedSchedule(bytes)
+        assertEquals(ServicePolicy.IN_SERVICE_AT_START, unquoted.servicePolicy)
+        assertEquals(5, unquoted.policyOffsetDays)
+        assertEquals(unquoted, decodedSchedule(withOffset(JsonPrimitive("5"))))
+
+        for (refused in listOf(JsonPrimitive("5.5"), JsonPrimitive("five"), JsonPrimitive(5.5), JsonPrimitive(true))) {
+            assertFailsWith<BackupCorrupt>("$refused") { BackupCodec.decode(withOffset(refused)) }
+        }
     }
 
     // --- assets ----------------------------------------------------------------------------------

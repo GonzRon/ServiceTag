@@ -51,9 +51,10 @@ object LegacyArchive {
 
     private fun upgradeAsset(asset: JsonObject): JsonObject {
         val calendar = asset.text("seasonStartMmdd") != null && asset.text("seasonEndMmdd") != null
+        val mode = if (calendar) SeasonMode.CALENDAR else SeasonMode.YEAR_ROUND
         return JsonObject(
             asset + mapOf(
-                "seasonMode" to JsonPrimitive(if (calendar) SeasonMode.CALENDAR.name else SeasonMode.YEAR_ROUND.name),
+                "seasonMode" to JsonPrimitive(mode.name),
                 "blackoutStartMmdd" to JsonNull,
                 "blackoutEndMmdd" to JsonNull,
                 "healthAggregation" to JsonPrimitive(HealthAggregation.WORST.name),
@@ -90,7 +91,10 @@ object LegacyArchive {
     }
 
     /** Rewrites each object row of the array under [key]; anything else is left for the decode. */
-    private fun MutableMap<String, JsonElement>.rewriteRows(key: String, rewrite: (JsonObject) -> JsonObject) {
+    private fun MutableMap<String, JsonElement>.rewriteRows(
+        key: String,
+        rewrite: (JsonObject) -> JsonObject,
+    ) {
         val rows = this[key] as? JsonArray ?: return
         this[key] = JsonArray(rows.map { if (it is JsonObject) rewrite(it) else it })
     }
@@ -109,11 +113,15 @@ object LegacyArchive {
         else -> text(key) ?: throw BackupCorrupt("$key on $owner is not a string")
     }
 
-    /** A nullable Int: absent and JSON null are null; a quoted or non-integral value is corrupt. */
+    /**
+     * A nullable Int, read as 1.3's `Int?` field read it: absent and JSON null are null, and a
+     * whole number is accepted **quoted or not** (`5` and `"5"`), because 1.3's strict decoder
+     * accepted both and every archive 1.3 read must still import. A non-integral or non-numeric
+     * value was corrupt in 1.3 and still is.
+     */
     private fun JsonObject.optionalInt(key: String, owner: String): Int? = when (val value = this[key]) {
         null, JsonNull -> null
-        is JsonPrimitive -> value.takeIf { !it.isString }?.intOrNull
-            ?: throw BackupCorrupt("$key on $owner is not a whole number")
+        is JsonPrimitive -> value.intOrNull ?: throw BackupCorrupt("$key on $owner is not a whole number")
         else -> throw BackupCorrupt("$key on $owner is not a whole number")
     }
 }
