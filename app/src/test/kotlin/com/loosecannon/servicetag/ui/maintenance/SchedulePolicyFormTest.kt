@@ -611,7 +611,7 @@ class SchedulePolicyFormTest {
         )
         vm.save()
         val raced = vm.state.first { !it.saving }
-        assertTrue(raced.noBoundary)
+        assertTrue("the 409 takes the S77 path", raced.noBoundary)
         assertEquals(listOf(PolicyOption.WHENEVER_DUE), raced.policyOptions)
         assertNull(raced.policyOption)
         assertTrue("nothing was written", graph.schedules.all().none { it.target == ScheduleTarget.AssetTarget(snowblower) })

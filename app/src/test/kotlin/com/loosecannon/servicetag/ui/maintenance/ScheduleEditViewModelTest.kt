@@ -566,6 +566,10 @@ class ScheduleEditViewModelTest {
         )
         problems.forEach { problem -> assertTrue("$problem maps nowhere", fieldOf(problem).isNotBlank()) }
         assertEquals(problems.map(::fieldOf).toSet(), ScheduleEditState(problems = problems).marks)
+        // An out-of-range offset marks the day field it is about, which the screen draws; the other two
+        // policy refusals are about the question as a whole.
+        assertEquals(ScheduleField.POLICY_OFFSET, fieldOf(ScheduleProblem.PolicyOffsetInvalid))
+        assertEquals(ScheduleField.POLICY, fieldOf(ScheduleProblem.SeasonPolicyNeedsATimeRule))
 
         // The three the screen does not mark, and why it does not have to.
         val head = graph.createAsset.run(AssetCommand(name = "Sprinkler 1", category = "Irrigation"))
