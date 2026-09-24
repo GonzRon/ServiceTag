@@ -5,7 +5,7 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ServicePolicy
-import com.loosecannon.servicetag.core.reminders.Severity
+import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
@@ -243,9 +243,9 @@ class DashboardViewModelMaintenanceTest {
         val mower = asset("Mower")
         seed(scheduleOf("s-1", assetId = mower.id.value, title = "Blade sharpen", anchorOn = "2026-01-01"))
 
-        for ((severity, shows) in listOf(null to false, Severity.INFO to false, Severity.WARN to true, Severity.ERROR to true)) {
+        for ((severity, shows) in listOf(null to false, ReminderHealthSeverity.INFO to false, ReminderHealthSeverity.WARN to true, ReminderHealthSeverity.ERROR to true)) {
             val vm = viewModel(health = object : HealthSummary {
-                override suspend fun worstSeverity(): Severity? = severity
+                override suspend fun worstSeverity(): ReminderHealthSeverity? = severity
             })
             backgroundScope.launch { vm.state.collect() }
             val state = vm.state.first { it.sections.isNotEmpty() }
@@ -327,7 +327,7 @@ class DashboardViewModelMaintenanceTest {
 
         var healthCalls = 0
         val vm = viewModel(health = object : HealthSummary {
-            override suspend fun worstSeverity(): Severity? {
+            override suspend fun worstSeverity(): ReminderHealthSeverity? {
                 healthCalls += 1
                 return null
             }

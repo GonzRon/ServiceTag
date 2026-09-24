@@ -8,10 +8,10 @@ import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
-import com.loosecannon.servicetag.core.reminders.HealthFinding
+import com.loosecannon.servicetag.core.reminders.ReminderHealthFinding
+import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.reminders.ReminderProvider
 import com.loosecannon.servicetag.core.reminders.RepairAction
-import com.loosecannon.servicetag.core.reminders.Severity
 import com.loosecannon.servicetag.core.schedule.listedForDue
 import com.loosecannon.servicetag.core.schedule.targetInService
 import kotlin.coroutines.CoroutineContext
@@ -98,7 +98,7 @@ class WorkManagerBackstop(private val context: Context) : BackstopWork {
  * `ui/maintenance/` — so the dependency points from the UI at the delivery platform and not back.
  */
 fun interface ReminderHealthRun {
-    suspend fun runAndRepair(): List<HealthFinding>
+    suspend fun runAndRepair(): List<ReminderHealthFinding>
 }
 
 /**
@@ -165,14 +165,14 @@ class ReminderHealthCheck(
      * Every finding, **worst first**, so the position on the screen carries the severity as well as
      * the icon and the wording do — never colour alone (D12 §5).
      */
-    suspend fun run(): List<HealthFinding> = withContext(io) {
+    suspend fun run(): List<ReminderHealthFinding> = withContext(io) {
         buildList {
             addAll(provider.health())
             if (!backstop.enqueued()) {
                 add(
-                    HealthFinding(
+                    ReminderHealthFinding(
                         code = "BACKSTOP_WORK_MISSING",
-                        severity = Severity.WARN,
+                        severity = ReminderHealthSeverity.WARN,
                         message = "The background safety check is not running, " +
                             "so a missed reminder would not be caught.",
                         repair = RepairAction.Automatic(ReminderRepair.ENQUEUE_BACKSTOP),
@@ -181,9 +181,9 @@ class ReminderHealthCheck(
             }
             if (platform.appRestricted() != AppRestriction.NORMAL) {
                 add(
-                    HealthFinding(
+                    ReminderHealthFinding(
                         code = "APP_RESTRICTED",
-                        severity = Severity.WARN,
+                        severity = ReminderHealthSeverity.WARN,
                         // One sentence for both restricted states, because the cost is the same
                         // either way; which of the two a phone that is both gets is settled
                         // upstream by `appRestrictionOf`'s ratified battery-first precedence. It is
@@ -216,7 +216,7 @@ class ReminderHealthCheck(
      * Answers whether this was a repair the app owns, which is what [runAndRepair] needs and the one
      * question a caller could not ask without re-deciding the policy itself.
      */
-    suspend fun repair(finding: HealthFinding): Boolean {
+    suspend fun repair(finding: ReminderHealthFinding): Boolean {
         val repair = finding.repair
         if (repair !is RepairAction.Automatic) return false
         return withContext(io) {
@@ -244,7 +244,7 @@ class ReminderHealthCheck(
      * The second [run] happens only when something was actually repaired, so a healthy phone pays
      * for exactly one pass.
      */
-    suspend fun runAndRepair(): List<HealthFinding> {
+    suspend fun runAndRepair(): List<ReminderHealthFinding> {
         val found = run()
         var repaired = false
         found.forEach { if (repair(it)) repaired = true }
@@ -275,7 +275,7 @@ class ReminderHealthCheck(
      * A schedule with **no derived row at all** is skipped: the recompute has not run for it yet,
      * and a finding derived from nothing would be a guess.
      */
-    private suspend fun scheduleFindings(): List<HealthFinding> = buildList {
+    private suspend fun scheduleFindings(): List<ReminderHealthFinding> = buildList {
         val listed = inService(schedules.all().listedForDue())
 
         val undeliverable = listed.filter {
@@ -285,11 +285,11 @@ class ReminderHealthCheck(
         }
         if (undeliverable.isNotEmpty()) {
             add(
-                HealthFinding(
+                ReminderHealthFinding(
                     code = "SCHEDULE_NO_PROVIDER",
-                    severity = Severity.WARN,
+                    severity = ReminderHealthSeverity.WARN,
                     // RATIFIED verbatim, count-shaped (master plan §17.1a). The finding cannot name
-                    // the schedule — the ratified sentence counts them and `HealthFinding` has no
+                    // the schedule — the ratified sentence counts them and `ReminderHealthFinding` has no
                     // field for a name — so the repair is what reaches one, and the count is what
                     // says there are more.
                     message = "${undeliverable.size} schedules have reminders switched on " +
@@ -306,9 +306,9 @@ class ReminderHealthCheck(
         }
         if (withoutBaseline.isNotEmpty()) {
             add(
-                HealthFinding(
+                ReminderHealthFinding(
                     code = "NO_DATA",
-                    severity = Severity.WARN,
+                    severity = ReminderHealthSeverity.WARN,
                     message = "${withoutBaseline.size} schedules need a meter reading " +
                         "before they can come due.",
                     repair = RepairAction.OpenInApp(targeted(ReminderRepair.LOG_METER_READING, withoutBaseline)),

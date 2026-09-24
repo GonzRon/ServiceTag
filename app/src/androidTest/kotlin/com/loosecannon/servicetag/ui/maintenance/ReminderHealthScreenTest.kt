@@ -44,7 +44,7 @@ private const val ALARM_FINDING =
  * Emulator only, pinned: the suite touches the process's real alarm.
  */
 @RunWith(AndroidJUnit4::class)
-class HealthScreenTest {
+class ReminderHealthScreenTest {
 
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
 

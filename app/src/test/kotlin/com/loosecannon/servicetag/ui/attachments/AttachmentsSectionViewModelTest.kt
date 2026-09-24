@@ -337,7 +337,7 @@ class AttachmentsSectionViewModelTest {
         // both have been the whole way through the path, whatever order they took. **How this
         // fails:** if only one signal ever lands, `await()` never returns, so the RED shape is a
         // `runTest` timeout and not an assertion message — the same shape, for the same reason,
-        // as the cold-launch badge case in `HealthViewModelTest`.
+        // as the cold-launch badge case in `ReminderHealthViewModelTest`.
         val closed = async(Dispatchers.Main) { vm.saved.take(2).toList() }
 
         vm.save(row.id, UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes))

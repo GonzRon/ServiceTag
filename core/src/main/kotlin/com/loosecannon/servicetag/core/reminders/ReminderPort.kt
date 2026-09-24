@@ -48,8 +48,9 @@ enum class ProviderId { LOCAL }
  *
  * [Parked] is the member that earns the type: a paused or seasonally inactive obligation is **in**
  * the list and parked, never absent and never overdue, so a provider has something to clear and
- * something to show. [reentryOn] is the date it comes back — the season's next start — and is null
- * for a pause, which has no date, so the provider can say when without knowing what a season is.
+ * something to show. [reentryOn] is the date it comes back — the actionable date, or the first day
+ * after the break — and is null for a pause, which has no date, and for a MANUAL asset out of season,
+ * whose next START is never predicted, so the provider can say when without knowing what a season is.
  *
  * [Withdrawn] is how a retired obligation arrives: **in** the list, so a provider is told to stop
  * holding it rather than left to infer it from an absence.
@@ -101,8 +102,10 @@ data class RuleFacts(
  *
  * [contentHash] covers every field that changes what a provider should show — [title], [body],
  * [dueOn], [leadDays], [state] and [rule] — and nothing else, so an edit a provider cannot see does
- * not churn it. [dueOn] is the **effective** due date and is null for a use-based rule and for a
- * parked subject: a fabricated date is how a provider comes to announce something that has no date.
+ * not churn it. [dueOn] is the **actionable** date for an active subject — the one its status word
+ * is measured against — and the effective date a withdrawn subject was last shown with. It is null
+ * for a use-based rule and for a parked subject: a fabricated date is how a provider comes to announce
+ * something that has no date.
  */
 data class ReminderSubject(
     val key: SubjectKey,
@@ -158,7 +161,7 @@ data class ReconcileReport(
 data class RemoteChange(val key: SubjectKey, val effectiveOn: LocalDate?)
 
 /** How loudly a finding should be shown. The badge threshold is `>= WARN`, which the order gives. */
-enum class Severity { INFO, WARN, ERROR }
+enum class ReminderHealthSeverity { INFO, WARN, ERROR }
 
 /**
  * What can be done about a finding, in the three kinds that make the repair policy visible in the
@@ -182,9 +185,9 @@ sealed interface RepairAction {
  * [repair] null when there is nothing honest to offer. A finding with no repair is still worth
  * showing: explaining a platform reality is better than hiding it behind a button that cannot help.
  */
-data class HealthFinding(
+data class ReminderHealthFinding(
     val code: String,
-    val severity: Severity,
+    val severity: ReminderHealthSeverity,
     val message: String,
     val repair: RepairAction?,
 )
@@ -209,5 +212,5 @@ interface ReminderProvider {
      * was told.
      */
     suspend fun pullChanges(): List<RemoteChange>
-    suspend fun health(): List<HealthFinding>
+    suspend fun health(): List<ReminderHealthFinding>
 }

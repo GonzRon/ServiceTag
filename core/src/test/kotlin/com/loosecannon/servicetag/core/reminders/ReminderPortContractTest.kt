@@ -47,7 +47,7 @@ class ReminderPortContractTest {
         }
 
         override suspend fun pullChanges(): List<RemoteChange> = emptyList()
-        override suspend fun health(): List<HealthFinding> = emptyList()
+        override suspend fun health(): List<ReminderHealthFinding> = emptyList()
     }
 
     private fun subject(

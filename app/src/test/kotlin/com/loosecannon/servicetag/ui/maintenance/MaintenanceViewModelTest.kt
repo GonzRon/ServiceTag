@@ -2,7 +2,7 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleStatus
-import com.loosecannon.servicetag.core.reminders.Severity
+import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.reminders.NotificationPermission
@@ -210,9 +210,9 @@ class MaintenanceViewModelTest {
 
     /** The badge threshold is one rule, shared with the dashboard: >= WARN, and INFO alone is not. */
     @Test fun theBadgeThresholdIsTheSameHere() = runTest {
-        for ((severity, shows) in listOf(null to false, Severity.INFO to false, Severity.WARN to true, Severity.ERROR to true)) {
+        for ((severity, shows) in listOf(null to false, ReminderHealthSeverity.INFO to false, ReminderHealthSeverity.WARN to true, ReminderHealthSeverity.ERROR to true)) {
             val vm = viewModel(health = object : HealthSummary {
-                override suspend fun worstSeverity(): Severity? = severity
+                override suspend fun worstSeverity(): ReminderHealthSeverity? = severity
             })
             backgroundScope.launch { vm.state.collect() }
             val state = vm.state.first { it.loaded }

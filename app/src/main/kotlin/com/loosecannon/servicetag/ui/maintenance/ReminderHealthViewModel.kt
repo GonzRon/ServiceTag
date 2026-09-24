@@ -2,9 +2,9 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.loosecannon.servicetag.core.reminders.HealthFinding
+import com.loosecannon.servicetag.core.reminders.ReminderHealthFinding
+import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.reminders.RepairAction
-import com.loosecannon.servicetag.core.reminders.Severity
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.reminders.ReminderHealthCheck
@@ -63,12 +63,12 @@ sealed interface HealthAction {
  * explaining a platform reality beats a button that cannot help.
  */
 data class HealthRow(
-    val finding: HealthFinding,
+    val finding: ReminderHealthFinding,
     val label: String?,
     val action: HealthAction?,
 ) {
     val code: String get() = finding.code
-    val severity: Severity get() = finding.severity
+    val severity: ReminderHealthSeverity get() = finding.severity
     val message: String get() = finding.message
 }
 
@@ -85,7 +85,7 @@ data class HealthState(
     val loaded: Boolean = false,
 ) {
     /** The badge's own question, over the same findings the rows came from. */
-    val worstSeverity: Severity? get() = rows.maxByOrNull { it.severity }?.severity
+    val worstSeverity: ReminderHealthSeverity? get() = rows.maxByOrNull { it.severity }?.severity
 }
 
 /**
@@ -101,15 +101,15 @@ data class HealthState(
 class ReminderHealth(private val check: ReminderHealthCheck) : HealthSummary, ReminderHealthRun {
 
     @Volatile
-    private var cached: List<HealthFinding>? = null
+    private var cached: List<ReminderHealthFinding>? = null
 
     private val _changes = MutableStateFlow(0)
     override val changes: StateFlow<Int> = _changes.asStateFlow()
 
-    override suspend fun worstSeverity(): Severity? = cached?.maxByOrNull { it.severity }?.severity
+    override suspend fun worstSeverity(): ReminderHealthSeverity? = cached?.maxByOrNull { it.severity }?.severity
 
     /** Runs the check and caches what it found. The Health screen's own refresh, and launch's. */
-    suspend fun refresh(): List<HealthFinding> = check.run().also(::publish)
+    suspend fun refresh(): List<ReminderHealthFinding> = check.run().also(::publish)
 
     /**
      * One pass for a background run: report, repair the unambiguous, and cache the result.
@@ -117,16 +117,16 @@ class ReminderHealth(private val check: ReminderHealthCheck) : HealthSummary, Re
      * This — not the bare check — is what the backstop worker drives, so a repair it applies reaches
      * the badge instead of leaving it lit until the next launch (fix round 1, S3).
      */
-    override suspend fun runAndRepair(): List<HealthFinding> = check.runAndRepair().also(::publish)
+    override suspend fun runAndRepair(): List<ReminderHealthFinding> = check.runAndRepair().also(::publish)
 
     /** Applies one automatic repair, and nothing else; the caller refreshes after it. */
-    suspend fun repair(finding: HealthFinding) = check.repair(finding)
+    suspend fun repair(finding: ReminderHealthFinding) = check.repair(finding)
 
     /**
      * The cache, then the tick — in that order, because a surface woken by the tick reads the cache,
      * and a tick published first is a wake-up to the previous answer.
      */
-    private fun publish(findings: List<HealthFinding>) {
+    private fun publish(findings: List<ReminderHealthFinding>) {
         cached = findings
         _changes.update { it + 1 }
     }
@@ -142,7 +142,7 @@ class ReminderHealth(private val check: ReminderHealthCheck) : HealthSummary, Re
  * other four take the owner somewhere: two system screens and two in-app destinations, both
  * performed by the screen.
  */
-class HealthViewModel(
+class ReminderHealthViewModel(
     private val health: ReminderHealth,
     private val prefs: AppPrefs,
     /**
@@ -198,11 +198,11 @@ class HealthViewModel(
         }
     }
 
-    private fun emit(findings: List<HealthFinding>) {
+    private fun emit(findings: List<ReminderHealthFinding>) {
         _state.value = HealthState(rows = findings.map(::rowOf), loaded = true)
     }
 
-    private fun rowOf(finding: HealthFinding): HealthRow {
+    private fun rowOf(finding: ReminderHealthFinding): HealthRow {
         val repair = finding.repair
         return HealthRow(
             finding = finding,
