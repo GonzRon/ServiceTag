@@ -112,12 +112,14 @@ class AttentionReadModelTest {
      * subject's `sortOrder` and id.
      */
     @Test fun tiesBreakByAssetNameThenId() = runTest {
-        graph.assets.upsert(assetRow("z2", name = "ups"))
-        graph.conditions.insert(conditionRow("c1", "z2", OperationalCondition.DOWN, "2026-04-01"))
-        graph.assets.upsert(assetRow("z1", name = "UPS"))
-        graph.conditions.insert(conditionRow("c2", "z1", OperationalCondition.DOWN, "2026-04-01"))
-        graph.assets.upsert(assetRow("a9", name = "Generator"))
-        graph.conditions.insert(conditionRow("c3", "a9", OperationalCondition.DOWN, "2026-04-01"))
+        // Name order is not id order, and the two UPS rows differ only in case: case-insensitively
+        // they tie, so the id decides — b1 before b2 — although "UPS" sorts before "ups" by code.
+        graph.assets.upsert(assetRow("b2", name = "UPS"))
+        graph.conditions.insert(conditionRow("c1", "b2", OperationalCondition.DOWN, "2026-04-01"))
+        graph.assets.upsert(assetRow("b1", name = "ups"))
+        graph.conditions.insert(conditionRow("c2", "b1", OperationalCondition.DOWN, "2026-04-01"))
+        graph.assets.upsert(assetRow("k1", name = "Generator"))
+        graph.conditions.insert(conditionRow("c3", "k1", OperationalCondition.DOWN, "2026-04-01"))
         // Two CRITICAL subjects on one asset: sortOrder first, then id.
         graph.assets.upsert(assetRow("pack", name = "Battery pack"))
         graph.events.upsert(replacementOf("e-pack", "pack", "2026-01-15"))
@@ -127,7 +129,7 @@ class AttentionReadModelTest {
 
         val rows = items()
 
-        assertEquals(listOf("a9", "z1", "z2", "pack", "pack", "pack"), rows.map { it.assetId.value })
+        assertEquals(listOf("k1", "b1", "b2", "pack", "pack", "pack"), rows.map { it.assetId.value })
         assertEquals(listOf("h-c", "h-a", "h-b"), rows.drop(3).map { it.healthSubjectId?.value })
         assertEquals((0..5).toList(), rows.map { it.rank })
     }
