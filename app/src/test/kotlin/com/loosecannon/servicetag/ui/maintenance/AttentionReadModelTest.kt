@@ -135,6 +135,55 @@ class AttentionReadModelTest {
     }
 
     /**
+     * The controller's ruling on B07's concern 3: a CONDITION row's `since` is the day the current
+     * run of that word began — the S22 "since" date, `ConditionView.since` — while `occurredOn` and
+     * `reason` are the latest row's. A DOWN recorded again with a new reason moves neither `since`.
+     */
+    @Test fun sinceIsTheStartOfTheCurrentRun() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.conditions.insert(conditionRow("c1", "gen", OperationalCondition.DEGRADED, "2026-03-20", reason = "Rough idle"))
+        graph.conditions.insert(conditionRow("c2", "gen", OperationalCondition.DOWN, "2026-04-01", reason = "Won't start"))
+        graph.conditions.insert(conditionRow("c3", "gen", OperationalCondition.DOWN, "2026-04-05", reason = "Still won't start"))
+
+        val row = items().single()
+
+        assertEquals("2026-04-01", row.since)
+        assertEquals("2026-04-05", row.occurredOn)
+        assertEquals("Still won't start", row.reason)
+        assertEquals(OperationalCondition.DOWN, row.condition)
+        assertEquals(OperationalCondition.DOWN, row.assetCondition)
+        assertEquals(
+            "the same date the health view calls since",
+            graph.assetHealthReadModel.forAsset(AssetId("gen")).condition?.since?.toString(),
+            row.since,
+        )
+    }
+
+    /**
+     * The same ruling's second half: every row carries its asset's **current** condition, so a
+     * condition filter matches a HEALTH row too. A DEGRADED asset's CRITICAL subject says DEGRADED;
+     * an asset with nothing recorded says null. `condition` stays "this row is about a condition".
+     */
+    @Test fun aHealthRowCarriesItsAssetsCurrentCondition() = runTest {
+        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        graph.conditions.insert(conditionRow("c1", "ups", OperationalCondition.DEGRADED, "2026-04-02"))
+        ageSubject("h-ups", "ups", daysAgo = 90)
+        graph.assets.upsert(assetRow("pack", name = "Battery pack"))
+        ageSubject("h-pack", "pack", daysAgo = 50)
+
+        val rows = items()
+
+        val degraded = rows.single { it.kind == AttentionKind.CONDITION }
+        val critical = rows.single { it.healthSubjectId?.value == "h-ups" }
+        val warning = rows.single { it.healthSubjectId?.value == "h-pack" }
+        assertEquals(OperationalCondition.DEGRADED, degraded.assetCondition)
+        assertEquals("the health row carries its asset's condition", OperationalCondition.DEGRADED, critical.assetCondition)
+        assertNull("but is not a condition row", critical.condition)
+        assertNull(critical.since)
+        assertNull("nothing recorded", warning.assetCondition)
+    }
+
+    /**
      * Plan decision 21: only AGE subjects are independent rows. A MAINTENANCE_OVERDUE subject
      * scoring CRITICAL rides its schedule's row and never appears here.
      */

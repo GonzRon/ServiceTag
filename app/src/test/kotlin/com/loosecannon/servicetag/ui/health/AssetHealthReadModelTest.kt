@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.health
 
 import com.loosecannon.servicetag.core.health.HealthBand
+import com.loosecannon.servicetag.core.health.NotTrackedReason
 import com.loosecannon.servicetag.core.health.SubjectValue
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
@@ -165,7 +166,7 @@ class AssetHealthReadModelTest {
 
         assertEquals(listOf("h-bad", "h-good"), result.subjects.map { it.subject.id.value })
         val bad = result.subjects[0]
-        assertTrue("NOT TRACKED", bad.value is SubjectValue.NotTracked)
+        assertEquals("NOT TRACKED for its own reason", SubjectValue.NotTracked(NotTrackedReason.UNSCORABLE), bad.value)
         assertEquals("no driver line", emptyList<Any>(), bad.lines)
         assertEquals(HealthBand.CRITICAL, (result.subjects[1].value as SubjectValue.Scored).band)
         assertEquals(listOf("h-good"), result.critical.map { it.subject.id.value })

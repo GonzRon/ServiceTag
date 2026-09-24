@@ -95,6 +95,11 @@ data class SubjectBandFact(
  *
  * `result.aggregate` is a `Scored?` whose `trackedDays` is always null (B05): an aggregate has no
  * day count of its own, and no surface renders one for it.
+ *
+ * [inService] is the asset's own lifecycle — active and not retired — and false for an asset that
+ * no longer exists. An asset out of service never opens the scan sheet and is never offered "Mark
+ * operational" (the controller's ruling on B07's review, M1); its view still carries everything,
+ * because asset detail shows the same lines.
  */
 data class AssetHealthView(
     val assetId: AssetId,
@@ -103,6 +108,7 @@ data class AssetHealthView(
     val aggregation: HealthAggregation,
     val result: AssetHealthResult,
     val components: List<ComponentCondition>,
+    val inService: Boolean,
 )
 
 /**
@@ -120,8 +126,8 @@ data class AssetHealthView(
  * `AssetHealthEngine.evaluate` works on the whole asset and refuses it outright when any
  * non-archived subject is malformed, so each subject is screened first with B05's own
  * [HealthSubjectShape.problems] — the bounds are not re-implemented here — and only well-formed ones
- * reach the engine. A screened-out subject is still listed, NOT TRACKED with **no driver line**
- * (S98 alone), in the shape an archived linked schedule already has (plan decision 17). Commands
+ * reach the engine. A screened-out subject is still listed, NOT TRACKED for
+ * [NotTrackedReason.UNSCORABLE] with **no driver line** (S98 alone). Commands
  * and the format-8 content pass keep such rows out, so this is the belt that keeps one bad merged
  * row from taking a whole screen down.
  */
@@ -158,8 +164,17 @@ class AssetHealthReadModel(
             aggregation = asset?.healthAggregation ?: HealthAggregation.WORST,
             result = asset?.let { resultFor(it, t) } ?: NO_HEALTH,
             components = asset?.let { componentsOf(it, all) }.orEmpty(),
+            inService = asset?.inService == true,
         )
     }
+
+    /**
+     * Every asset's condition history, from one read: the current row and the row that began its
+     * run (`ConditionHistory.since`). The attention list and the due projection both read condition
+     * here, so every surface agrees about what "current" and "since" mean.
+     */
+    internal suspend fun conditionHistories(): Map<AssetId, ConditionHistory> =
+        conditions.all().groupBy { it.assetId }.mapValues { (_, rows) -> ConditionHistory.of(rows) }
 
     /**
      * The band of the subject each of [assetId]'s schedules drives, keyed by schedule (master plan
@@ -246,10 +261,10 @@ class AssetHealthReadModel(
     private suspend fun componentsOf(asset: Asset, all: List<Asset>): List<ComponentCondition> {
         val under = AssetTree.descendants(all, asset.id)
         if (under.isEmpty()) return emptyList()
-        val rows = conditions.all().groupBy { it.assetId }
+        val histories = conditionHistories()
         return all.filter { it.id in under && it.inService }
             .mapNotNull { component ->
-                ConditionHistory.of(rows[component.id].orEmpty()).current
+                histories[component.id]?.current
                     ?.takeIf { it.condition.needsAttention }
                     ?.let { component.conditionLine(it) }
             }
@@ -272,11 +287,12 @@ class AssetHealthReadModel(
         val NO_HEALTH = AssetHealthResult(subjects = emptyList(), aggregate = null, fallback = false, critical = emptyList())
 
         /**
-         * A screened-out subject's row: NOT TRACKED with no driver line, the shape plan decision
-         * 17 gives an archived linked schedule and the controller's ruling borrows ("no new word").
+         * A screened-out subject's row: NOT TRACKED for its own reason, [NotTrackedReason.UNSCORABLE],
+         * with no driver line (S98 alone; the controller's rulings on B05's concern 3 and B07's
+         * concern 2) — never a borrowed reason that would say something untrue on `/v1`.
          */
         fun unscorableRow(subject: HealthSubject) =
-            SubjectHealth(subject, SubjectValue.NotTracked(NotTrackedReason.SCHEDULE_ARCHIVED), emptyList())
+            SubjectHealth(subject, SubjectValue.NotTracked(NotTrackedReason.UNSCORABLE), emptyList())
 
         /** The engine's own subject order. */
         val SUBJECT_ORDER: Comparator<SubjectHealth> =

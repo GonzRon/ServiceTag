@@ -101,6 +101,7 @@ import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
+import com.loosecannon.servicetag.ui.maintenance.LastCompletionEventId
 import com.loosecannon.servicetag.ui.maintenance.ScanRoundMembership
 import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
 import com.loosecannon.servicetag.ui.maintenance.ScheduleSnooze
@@ -175,7 +176,7 @@ class FakeGraph(
         recomputeSchedules, todayPort, zone = { ZoneOffset.UTC },
     )
     val attentionReadModel: AttentionReadModel =
-        AttentionReadModel(assets, conditions, assetHealthReadModel, todayPort)
+        AttentionReadModel(assets, assetHealthReadModel, todayPort)
 
     /**
      * 1.2 — the one due projection, mirroring `AppGraph`'s field so a view-model test takes the
@@ -193,6 +194,11 @@ class FakeGraph(
      */
     val scheduleStateReader: ScheduleStateReader = ScheduleStateReader { id ->
         schedules.get(id)?.let { recomputeSchedules.readState(it) }
+    }
+
+    /** The sheet's last-completion seam, mirroring `AppGraph`'s: through `readState` (review M2). */
+    val lastCompletionEventId: LastCompletionEventId = LastCompletionEventId { scheduleId ->
+        schedules.get(scheduleId)?.let { recomputeSchedules.readState(it) }?.lastCompletionEventId
     }
 
     /** The scan's round seam and routing question, mirroring `AppGraph`'s two fields. */

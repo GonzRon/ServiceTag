@@ -21,6 +21,8 @@ import com.loosecannon.servicetag.ui.health.needsAttention
  * [maintenance] is empty whenever the sheet does not open; the other lists are filled either way,
  * because asset detail shows the same lines. [aggregate] is present only when it is WARNING or
  * CRITICAL; [critical] lists every CRITICAL subject whatever the aggregate says (inv. 119).
+ * [subjects] is every non-archived subject with its value, in the engine's order — the ones with a
+ * score are the contributors the aggregate line (S108) names — so the sheet reads health once.
  */
 data class ScanSheetContent(
     val opens: Boolean,
@@ -31,6 +33,7 @@ data class ScanSheetContent(
     /** Only when WARNING or CRITICAL; its `trackedDays` is always null (an aggregate has no day count). */
     val aggregate: SubjectValue.Scored?,
     val maintenance: List<DueItem>,
+    val subjects: List<SubjectHealth>,
 )
 
 /**
@@ -45,17 +48,26 @@ data class ScanSheetContent(
  * along — whatever opened it, condition included (plan decision 35) — in the attention order the
  * projection already has. [items] must already be narrowed to the rounds that oblige this asset
  * ([scanSheetContentFor] does that).
+ *
+ * [inService] is the scanned asset's own lifecycle. An archived or retired asset **never** opens the
+ * sheet and is never offered "Mark operational", whatever its condition or its schedules say: the
+ * scan goes to asset detail, which shows the same lines (the controller's ruling on B07's review,
+ * M1). It defaults to true only so the pinned four-argument form still reads a live asset;
+ * [scanSheetContentFor], the one production caller, always passes the asset's own answer.
  */
 fun scanSheetContent(
     items: List<DueItem>,
     condition: ConditionView?,
     components: List<ComponentCondition>,
     health: AssetHealthResult?,
+    inService: Boolean = true,
 ): ScanSheetContent {
-    val unitNeedsAttention = condition?.condition?.needsAttention == true
-    val opens = items.any { it.actionableOnScanSheet } ||
-        unitNeedsAttention ||
-        components.any { it.condition.needsAttention }
+    val unitNeedsAttention = inService && condition?.condition?.needsAttention == true
+    val opens = inService && (
+        items.any { it.actionableOnScanSheet } ||
+            unitNeedsAttention ||
+            components.any { it.condition.needsAttention }
+        )
     return ScanSheetContent(
         opens = opens,
         condition = condition,
@@ -64,6 +76,7 @@ fun scanSheetContent(
         critical = health?.critical.orEmpty(),
         aggregate = health?.aggregate?.takeIf { it.band != HealthBand.NOMINAL },
         maintenance = if (opens) items.filter { it.actionableOnScanSheet || it.ridesAlong } else emptyList(),
+        subjects = health?.subjects.orEmpty(),
     )
 }
 
@@ -84,6 +97,7 @@ suspend fun scanSheetContentFor(
         condition = view.condition,
         components = view.components,
         health = view.result,
+        inService = view.inService,
     )
 }
 

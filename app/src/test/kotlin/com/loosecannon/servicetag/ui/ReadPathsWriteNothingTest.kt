@@ -34,6 +34,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
@@ -115,7 +116,7 @@ class ReadPathsWriteNothingTest {
             assets, subjects, schedules, events, profiles, activations, conditions, recompute, graph.todayPort,
             zone = { ZoneOffset.UTC },
         )
-        val attention = AttentionReadModel(assets, conditions, health, graph.todayPort)
+        val attention = AttentionReadModel(assets, health, graph.todayPort)
         val due = DueReadModel(
             schedules, assets, groups, definitions, recompute, graph.todayPort, health,
             snoozedUntilOf = { delivery.get(it)?.snoozedUntilAt },
@@ -154,6 +155,24 @@ class ReadPathsWriteNothingTest {
         assertEquals("2026-04-15", read.computedForOn)
         assertEquals("a missing row is derived too", "2026-04-15", graph.scheduleStateReader.stateOf(ScheduleId("s-new"))?.computedForOn)
         assertEquals("nothing was written", before, graph.scheduleStates.all())
+    }
+
+    /**
+     * Review M2: the scan sheet's last-completion seam reads through the same accessor, so right
+     * after the 7 → 8 migration — `schedule_state` recreated empty — the sheet still finds the last
+     * completion (and so its readings), and finding it writes nothing.
+     */
+    @Test fun theSheetsLastCompletionReadsThroughTheSeam() = runTest {
+        graph.today = LocalDate.parse("2026-04-15")
+        graph.now = dayMillis("2026-04-15")
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.schedules.upsert(scheduleOf("s-gen", assetId = "gen", title = "Engine oil service", anchorOn = "2026-01-01", leadDays = 0))
+        graph.recomputeSchedules.forSchedule(ScheduleId("s-gen"))
+        val done = graph.completeSchedule.run(ScheduleId("s-gen"), CompletionCommand(occurredOn = "2026-04-15", tzId = "UTC"))
+        graph.scheduleStates.deleteAll()
+
+        assertEquals(done.id, graph.lastCompletionEventId.of(ScheduleId("s-gen")))
+        assertEquals("nothing was written back", emptyList<ScheduleState>(), graph.scheduleStates.all())
     }
 
     // ---------------------------------------------------------------- recording repositories

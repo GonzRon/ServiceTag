@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleId
@@ -65,10 +66,10 @@ enum class AttentionSection { ATTENTION, UPCOMING, CURRENT, DEFERRED, OUT_OF_SEA
  * `RecomputeSchedules.occurrenceOf` for a group one — never from a raw membership count, which
  * would include members the round does not oblige.
  *
- * [snoozedUntil] is the device-local snooze of `schedule_local_delivery` (D-13). B06 owns that row
- * and its port; until it lands this projection is handed a source that always answers null (see
- * [DueReadModel]'s `snoozedUntilOf`), so the field exists for B07's and B09's "Snoozed until
- * \<date\>" without this brief inventing a second reader of a table it does not own.
+ * [snoozedUntil] is the device-local snooze of `schedule_local_delivery` (D-13), the instant the
+ * notification's "Snooze 1 day" or the in-app "Snooze" wrote, read through [DueReadModel]'s
+ * `snoozedUntilOf` and never written here. It is what "Snoozed until \<date\>" draws; it moves no
+ * date and no status.
  *
  * **1.4's policy facts** (master plan §13.1), all read from the state derived for today:
  * [actionableDueOn] is the date the status word is measured against and the sort key;
@@ -77,7 +78,10 @@ enum class AttentionSection { ATTENTION, UPCOMING, CURRENT, DEFERRED, OUT_OF_SEA
  * start of a DORMANT row on a CALENDAR Asset — a meter-only one included — and null otherwise,
  * because a MANUAL start is never predicted (plan decision 37). [health] is the band of the
  * subject this schedule drives, when that subject is tracked: overdue-driven health rides its
- * schedule's row rather than being a row of its own (spec §10.2).
+ * schedule's row rather than being a row of its own (spec §10.2). [assetCondition] is the target
+ * Asset's **current** condition — a component's own — and null for a group target or when none is
+ * recorded, so a condition filter reads it off the row (the controller's ruling on B07's
+ * concern 3).
  */
 data class DueItem(
     val scheduleId: ScheduleId,
@@ -123,6 +127,7 @@ data class DueItem(
     val membersComplete: Int?,
     val snoozedUntil: Long?,
     val health: SubjectBandFact?,
+    val assetCondition: OperationalCondition?,
     val rank: Int,
 ) {
     /**
@@ -157,13 +162,13 @@ data class DueItem(
  * by the use cases. [today] is the same `Today` port `readState` reads (`AppGraph` hands both the
  * one instance), so the status and the state it is measured on are for the same day.
  *
- * [health] supplies `DueItem.health`: the one health computation, read once per Asset per call.
+ * [health] supplies `DueItem.health` — the one health computation, read once per Asset per call —
+ * and `DueItem.assetCondition`, from the same condition read every health surface uses.
  *
- * [snoozedUntilOf] is the seam B06's `schedule_local_delivery` port fills, and it has **no
- * default**: `AppGraph` passes "no snooze" explicitly today, so wiring the real reader is one
- * visible line at one call site. A defaulted seam could be forgotten in silence — `snoozedUntil`
- * would stay null for ever, B07's and B09's ratified "Snoozed until \<date\>" would be dead, and
- * nothing would fail.
+ * [snoozedUntilOf] is the reader of B06's `schedule_local_delivery` row, and it has **no
+ * default**: `AppGraph` and the test graph both hand it the real table's `snoozedUntilAt`, read and
+ * never written. A defaulted seam could be forgotten in silence — `snoozedUntil` would stay null
+ * for ever, the ratified "Snoozed until \<date\>" would be dead, and nothing would fail.
  */
 class DueReadModel(
     private val schedules: ScheduleRepository,
@@ -217,6 +222,7 @@ class DueReadModel(
     private suspend fun project(rows: List<MaintenanceSchedule>, world: World): List<DueItem> {
         val t = today.localDate()
         val bands = mutableMapOf<AssetId, Map<ScheduleId, SubjectBandFact>>()
+        val conditions = health.conditionHistories()
         val items = rows.map { schedule ->
             // Never a stored row from another day, and never a write (master plan §8.6).
             val state = recompute.readState(schedule)
@@ -227,7 +233,10 @@ class DueReadModel(
             val band = (schedule.target as? ScheduleTarget.AssetTarget)?.let { target ->
                 bands.getOrPut(target.assetId) { health.bandsBySchedule(target.assetId) }[schedule.id]
             }
-            item(schedule, state, occurrence, world, t, band)
+            val condition = (schedule.target as? ScheduleTarget.AssetTarget)?.let { target ->
+                conditions[target.assetId]?.current?.condition
+            }
+            item(schedule, state, occurrence, world, t, band, condition)
         }
         // `rank` is assigned after the total order, once, so it is the position in the one order
         // every surface shares (decision 30).
@@ -241,6 +250,7 @@ class DueReadModel(
         world: World,
         t: LocalDate,
         band: SubjectBandFact?,
+        condition: OperationalCondition?,
     ): DueItem {
         val status = statusOf(schedule, state, t)
         // A group target's required set can be empty; an asset target's never is — it is its own
@@ -280,6 +290,7 @@ class DueReadModel(
             membersComplete = progress?.first,
             snoozedUntil = snoozedUntilOf(schedule.id),
             health = band,
+            assetCondition = condition,
             rank = 0,
         )
     }

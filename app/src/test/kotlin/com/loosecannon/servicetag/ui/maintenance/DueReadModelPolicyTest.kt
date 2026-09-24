@@ -5,16 +5,20 @@ import com.loosecannon.servicetag.core.health.HealthScore
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.model.TerminationKind
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.meterDefinitionOf
 import com.loosecannon.servicetag.testing.replacementOf
@@ -22,6 +26,7 @@ import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.testing.subjectRow
 import com.loosecannon.servicetag.ui.health.SubjectBandFact
 import java.time.LocalDate
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -259,34 +264,80 @@ class DueReadModelPolicyTest {
         assertNull("its subject is NOT TRACKED while the schedule is paused", rows.getValue("s-paused").health)
     }
 
+    // ---------------------------------------------------------------- the asset's condition
+
+    /**
+     * The controller's ruling on B07's concern 3: each row carries its target Asset's **current**
+     * condition — a component's own, not its parent's — and null for a group target or when none is
+     * recorded, so a condition filter reads it off the row.
+     */
+    @Test fun aRowCarriesItsTargetsCurrentCondition() = runTest {
+        graph.today = LocalDate.parse("2026-04-15")
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.assets.upsert(assetRow("pack", name = "Battery pack", parent = "gen"))
+        graph.assets.upsert(assetRow("mow", name = "Mower"))
+        graph.conditions.insert(conditionRow("c1", "gen", OperationalCondition.DOWN, "2026-04-01"))
+        graph.conditions.insert(conditionRow("c2", "gen", OperationalCondition.OPERATIONAL, "2026-04-10"))
+        graph.conditions.insert(conditionRow("c3", "pack", OperationalCondition.DEGRADED, "2026-04-12"))
+        graph.groups.upsert(groupOf("g1", name = "Generators", members = listOf(Triple("gen", "2026-01-01", null))))
+        seed(scheduleOf("s-gen", assetId = "gen", title = "Engine oil service"))
+        seed(scheduleOf("s-pack", assetId = "pack", title = "Load test"))
+        seed(scheduleOf("s-mow", assetId = "mow", title = "Blade sharpen"))
+        seed(scheduleOf("s-group", groupId = "g1", title = "Fuel check"))
+
+        val rows = items()
+
+        assertEquals("the latest row, not the first", OperationalCondition.OPERATIONAL, rows.getValue("s-gen").assetCondition)
+        assertEquals("a component's own", OperationalCondition.DEGRADED, rows.getValue("s-pack").assetCondition)
+        assertNull("not recorded", rows.getValue("s-mow").assetCondition)
+        assertNull("a group has no condition", rows.getValue("s-group").assetCondition)
+    }
+
     // ---------------------------------------------------------------- the shared fake's order
 
     /**
-     * B02's carry-forward: the shared in-memory state fake orders `observeAll` exactly as the Room
-     * DAO does — on the actionable date, then the schedule id, a null date first as SQLite sorts
-     * it — so a `:core` test over the fake and the app over the DAO see one order. The two live in
-     * test source sets that cannot see each other, so their order keys are read and compared.
+     * B02's carry-forward, made behavioural (review M5): the Room DAO orders the shared fixture
+     * `core/src/test/resources/state-order/rows.csv` into its "expected" line, and `:core`'s
+     * `InMemoryScheduleStateOrderTest` holds the shared in-memory fake to the same line over the
+     * same rows — so the fake and the DAO agree on order. The two test source sets cannot see each
+     * other, so the fixture file is what they share.
      */
-    @Test fun theSharedFakeOrdersStateRowsAsTheDaoDoes() {
-        val dao = sourceFile("app/src/main/kotlin/com/loosecannon/servicetag/data/room/dao/MaintenanceDaos.kt").readText()
-        // The query on `ScheduleStateDao.observeAll`, the one the fake's `observeAll` stands in for.
-        val daoKeys = Regex("""SELECT \* FROM schedule_state ORDER BY ([a-z_, ]+)"\)\s*fun observeAll\(""").find(dao)!!
-            .groupValues[1].split(",").map { camel(it.trim()) }
+    @Test fun theDaoOrdersTheSharedFixtureAsTheFakeMust() = runTest {
+        val lines = sourceFile("core/src/test/resources/state-order/rows.csv").readLines()
+            .filter { it.isNotBlank() && !it.startsWith("#") }
+            .map { it.split(",") }
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        // Inserted in reverse, so the fixture's own order can never pass for the sorted one.
+        lines.filter { it[0] == "row" }.reversed().forEach { (_, id, effective, actionable) ->
+            graph.schedules.upsert(scheduleOf(id, assetId = "gen"))
+            graph.scheduleStates.upsert(
+                stateRow(id, effective, actionable.ifEmpty { null }),
+            )
+        }
+        val expected = lines.single { it[0] == "expected" }.drop(1)
 
-        val fake = sourceFile("core/src/test/kotlin/com/loosecannon/servicetag/core/testing/InMemoryRepositories.kt").readText()
-        val observeAll = fake.substringAfter("class InMemoryScheduleStateRepository")
-            .substringAfter("override fun observeAll()")
-            .substringBefore("\n    }")
-        val fakeKeys = Regex("""it\.(\w+)""").findAll(observeAll).map { it.groupValues[1] }.toList()
-
-        assertEquals(listOf("actionableDueOn", "scheduleId"), daoKeys)
-        assertEquals("the fake sorts on the DAO's keys, in the DAO's order", daoKeys, fakeKeys)
-        assertTrue("a null date sorts first, as SQLite's ascending order puts it", "it.actionableDueOn ?: \"\"" in observeAll)
+        assertEquals(expected, graph.scheduleStates.observeAll().first().map { it.scheduleId.value })
     }
 
     private companion object {
-        fun camel(column: String): String =
-            column.split("_").mapIndexed { i, part -> if (i == 0) part else part.replaceFirstChar(Char::uppercase) }.joinToString("")
+        fun stateRow(id: String, effective: String, actionable: String?) = ScheduleState(
+            scheduleId = ScheduleId(id),
+            lastCompletedOn = null,
+            lastCompletionEventId = null,
+            lastCompletedMeter = null,
+            currentMeter = null,
+            computedDueMeter = null,
+            lastTerminationEffectiveOn = null,
+            lastTerminationKind = TerminationKind.NONE,
+            computedDueOn = effective,
+            effectiveDueOn = effective,
+            policyPhase = PolicyPhase.ACTIVE,
+            actionableDueOn = actionable,
+            policyReason = PolicyReason.NONE,
+            quiet = false,
+            computedForOn = "2026-09-24",
+            computedAt = 0L,
+        )
 
         fun sourceFile(path: String): java.io.File {
             var dir = java.io.File(".").absoluteFile

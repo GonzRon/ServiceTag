@@ -157,8 +157,12 @@ val DueItem.actionableOnScanSheet: Boolean
  *
  * An **archived** schedule is already gone before this sees it: every due and projection query
  * starts from `listedForDue()`, inside `DueReadModel` (carry-forward (a)).
+ *
+ * `internal`, with its asset-level twin [scanSheetItemsFor]: a condition-blind subset of the
+ * predicate is not a routing answer, so main exposes none (review M3). Only the module's own tests
+ * ask it.
  */
-fun scanSheetItems(items: List<DueItem>): List<DueItem> =
+internal fun scanSheetItems(items: List<DueItem>): List<DueItem> =
     scanSheetContent(items, condition = null, components = emptyList(), health = null).maintenance
 
 /**
@@ -180,7 +184,7 @@ fun scanSheetItems(items: List<DueItem>): List<DueItem> =
  * time rule, and a group target carries no meter rule (invariant 2) — is not admitted: there is no
  * occurrence to oblige anybody.
  */
-suspend fun scanSheetItemsFor(
+internal suspend fun scanSheetItemsFor(
     assetId: AssetId,
     items: List<DueItem>,
     rounds: ScanRoundMembership,

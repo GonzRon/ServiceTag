@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.health.SubjectHealth
 import com.loosecannon.servicetag.core.health.SubjectValue
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.PolicyPhase
@@ -113,6 +114,42 @@ class ScanSheetContentTest {
         assertEquals(HealthBand.CRITICAL, content.aggregate?.band)
     }
 
+    /**
+     * The controller's ruling on B07's review (M1): an archived or retired asset never opens the
+     * sheet and is never offered "Mark operational", however DOWN it is and whatever is due on it;
+     * the scan goes to asset detail, whose lines the content still carries.
+     */
+    @Test fun anArchivedOrRetiredAssetNeverOpensTheSheet() = runTest {
+        val content = scanSheetContent(
+            items = listOf(item("s-overdue", DueStatus.OVERDUE)),
+            condition = view(OperationalCondition.DOWN),
+            components = emptyList(),
+            health = null,
+            inService = false,
+        )
+        assertFalse("out of service: never the sheet", content.opens)
+        assertFalse("and never Mark operational", content.offersMarkOperational)
+        assertEquals(emptyList<DueItem>(), content.maintenance)
+        assertEquals("asset detail still shows the condition", OperationalCondition.DOWN, content.condition?.condition)
+
+        val graph = FakeGraph().also { it.today = LocalDate.parse("2026-04-15") }
+        try {
+            graph.assets.upsert(assetRow("gen", name = "Generator", status = AssetStatus.ARCHIVED))
+            graph.conditions.insert(conditionRow("c-gen", "gen", OperationalCondition.DOWN, "2026-04-10"))
+            graph.schedules.upsert(scheduleOf("s-gen", assetId = "gen", title = "Engine oil service", anchorOn = "2026-01-01", leadDays = 0))
+            graph.assets.upsert(assetRow("mow", name = "Mower", retiredOn = "2026-03-01"))
+            graph.conditions.insert(conditionRow("c-mow", "mow", OperationalCondition.DEGRADED, "2026-04-10"))
+            graph.assets.upsert(assetRow("tub", name = "Hot tub"))
+            graph.conditions.insert(conditionRow("c-tub", "tub", OperationalCondition.DOWN, "2026-04-10"))
+
+            assertFalse("archived", graph.scanSheetOffer.has(AssetId("gen")))
+            assertFalse("retired", graph.scanSheetOffer.has(AssetId("mow")))
+            assertTrue("the in-service control", graph.scanSheetOffer.has(AssetId("tub")))
+        } finally {
+            graph.close()
+        }
+    }
+
     // ---------------------------------------------------------------- what it lists
 
     /** Inv. 119: an AVERAGE that reads NOMINAL still shows its one CRITICAL subject, and no aggregate. */
@@ -140,6 +177,32 @@ class ScanSheetContentTest {
         assertEquals(SubjectValue.Scored(50, HealthBand.WARNING, null), shown(HealthBand.WARNING, 50))
         assertEquals(SubjectValue.Scored(10, HealthBand.CRITICAL, null), shown(HealthBand.CRITICAL, 10))
         assertNull("NOT TRACKED shows no aggregate", scanSheetContent(emptyList(), view(OperationalCondition.DOWN), emptyList(), health(emptyList(), null)).aggregate)
+    }
+
+    /**
+     * Review M4: the content carries every subject with its value, in the engine's order, so the
+     * aggregate line (S108) can name its contributors without a second health read.
+     */
+    @Test fun theSubjectsTheAggregateLineNamesRideWithTheContent() {
+        val nominal = SubjectHealth(
+            subject = subjectRow("h-fan", "ups", name = "Fan age", sortOrder = 1),
+            value = SubjectValue.Scored(90, HealthBand.NOMINAL, 10),
+            lines = listOf(DriverLine.Replaced(LocalDate.parse("2026-04-05"), 10)),
+        )
+        val content = scanSheetContent(
+            items = emptyList(),
+            condition = view(OperationalCondition.DOWN),
+            components = emptyList(),
+            health = AssetHealthResult(
+                subjects = listOf(battery, nominal),
+                aggregate = SubjectValue.Scored(52, HealthBand.WARNING, null),
+                fallback = false,
+                critical = listOf(battery),
+            ),
+        )
+
+        assertEquals(listOf(battery, nominal), content.subjects)
+        assertEquals(listOf(battery), content.critical)
     }
 
     /** Plan decision 35: a DUE SOON row rides along whenever the sheet is open, condition included. */
@@ -261,6 +324,7 @@ class ScanSheetContentTest {
         membersComplete = null,
         snoozedUntil = null,
         health = null,
+        assetCondition = null,
         rank = 0,
     )
 }

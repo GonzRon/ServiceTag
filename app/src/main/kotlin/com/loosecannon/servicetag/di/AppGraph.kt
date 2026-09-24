@@ -569,7 +569,7 @@ class AppGraph(private val context: Context) {
 
     /** 1.4 — the asset-level attention rows (DOWN, DEGRADED, independent health), `/v1/attention`'s. */
     val attentionReadModel: AttentionReadModel =
-        AttentionReadModel(assets, conditions, assetHealthReadModel, today)
+        AttentionReadModel(assets, assetHealthReadModel, today)
 
     /**
      * 1.2 — the one due projection behind the dashboard, the Maintenance destination, the scan
@@ -683,7 +683,9 @@ class AppGraph(private val context: Context) {
         events.get(eventId)?.measurements.orEmpty()
     }
     val lastCompletionEventId: LastCompletionEventId = LastCompletionEventId { scheduleId ->
-        scheduleStates.get(scheduleId)?.lastCompletionEventId
+        // Through the one read accessor (master plan §8.6), so a schedule with no stored row yet —
+        // right after the 7 → 8 migration — still shows its last completion's readings.
+        schedules.get(scheduleId)?.let { recomputeSchedules.readState(it) }?.lastCompletionEventId
     }
     val reminderReconcile: ReminderReconcile = ReminderReconcile { reminderRuns.reconcileAll() }
     /**

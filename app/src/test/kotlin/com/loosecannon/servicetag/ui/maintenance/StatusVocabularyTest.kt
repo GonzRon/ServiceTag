@@ -145,6 +145,7 @@ class StatusVocabularyTest {
         membersComplete = null,
         snoozedUntil = snoozedUntil,
         health = null,
+        assetCondition = null,
         rank = 0,
     )
 }
