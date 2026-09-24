@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.PolicyPhase
+import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
@@ -22,10 +23,12 @@ import java.time.LocalDate
  * structural grep for "no stored status" possible at all.
  *
  * `OVERDUE > DUE > DUE_SOON > OK` is the worst-of order the combined rule folds the two sides with;
- * the four words after them are not degrees of the same thing and never take part in that fold.
+ * the words after them are not degrees of the same thing and never take part in that fold.
+ * [DEFERRED] is **appended** rather than inserted for exactly that reason: the fold compares
+ * ordinals, and a member placed among the first four would re-rank them (master plan §8.4).
  */
 enum class DueStatus {
-    OK, DUE_SOON, DUE, OVERDUE, INACTIVE_SEASON, PAUSED, NO_DATA;
+    OK, DUE_SOON, DUE, OVERDUE, INACTIVE_SEASON, PAUSED, NO_DATA, DEFERRED;
 
     /**
      * Whether this status puts the schedule in a due total. `NO_DATA` is a repair, not an
@@ -39,9 +42,10 @@ enum class DueStatus {
     val countsAsDue: Boolean get() = this == DUE || this == OVERDUE
 
     /**
-     * Whether a reminder provider may deliver for it. `INACTIVE_SEASON` and `PAUSED` never notify
-     * (invariant 22), and the snooze does not appear here at all: it suppresses delivery without
-     * changing what the schedule's status is.
+     * Whether a reminder provider may deliver for it. `INACTIVE_SEASON`, `PAUSED` and `DEFERRED`
+     * never notify (invariant 22), and the snooze does not appear here at all: it suppresses
+     * delivery without changing what the schedule's status is. Nor does `quiet`, which is a fact
+     * about the day rather than a status: a quiet OVERDUE item is still OVERDUE (invariant 102).
      */
     val notifies: Boolean get() = this == DUE_SOON || this == DUE || this == OVERDUE
 }
@@ -95,29 +99,35 @@ fun MaintenanceSchedule.targetInService(
 /**
  * `status(schedule, state, T)` of D5 §1 — a pure function, never stored (invariant 18).
  *
- * The order of the three early answers is the order of the questions a person would ask: has this
- * been switched off, is its season shut, is there anything to measure against at all. Only then are
- * the two rule sides folded, worst-of.
+ * The order is spec §4.5's: has this been switched off, is its season shut, is there anything to
+ * measure against at all. Only then are the two rule sides folded, worst-of — with the time side
+ * measured against the **actionable** date, the policy's answer, and not the effective one. A time
+ * side the maintenance break is holding counts as OK in that fold; when the fold then answers OK,
+ * the status is [DueStatus.DEFERRED]. Deciding it **after** the fold is what keeps a crossed meter
+ * threshold from ever being hidden behind a held date (invariants 95, 103).
  *
  * An **archived** schedule is excluded from every list before a status is ever asked for (see
  * [listedForDue]); if one arrives here anyway the answer is [DueStatus.PAUSED] — the one word that
  * neither counts as due nor notifies — because a total function that fails safe is better than one
  * that throws inside a read model, and a due word for an archived row would be a lie.
  *
- * `policyPhase` is read off the state rather than recomputed here: the season lives on the Asset
- * and this function has no Asset. The daily rebuild is what keeps it fresh, and a boundary crossed
- * between rebuilds is the one exception invariant 23 names.
+ * [state] must be derived for [today]: `policyPhase`, `actionableDueOn` and `policyReason` are the
+ * policy's answer **for that day**, and a boundary crossed since a stored row was written changes
+ * them with no history change (invariant 23). A read path hands this a state from
+ * `RecomputeSchedules.readState`, which derives a stale row in memory rather than trusting it.
  */
 fun statusOf(schedule: MaintenanceSchedule, state: ScheduleState, today: LocalDate): DueStatus {
     if (schedule.status != ScheduleStatus.ACTIVE) return DueStatus.PAUSED
     if (state.policyPhase == PolicyPhase.DORMANT) return DueStatus.INACTIVE_SEASON
 
-    val timeEvaluable = schedule.timeInterval != null && state.effectiveDueOn != null
+    val actionable = state.actionableDueOn?.let(LocalDate::parse)
+    val timeEvaluable = schedule.timeInterval != null && actionable != null
     val meterEvaluable = schedule.meterDefinitionId != null && state.computedDueMeter != null
     if (!timeEvaluable && !meterEvaluable) return DueStatus.NO_DATA
 
-    val time = if (!timeEvaluable) DueStatus.OK else timeStatus(
-        due = LocalDate.parse(state.effectiveDueOn),
+    val held = timeEvaluable && isHeld(state, actionable, today, schedule.leadDays)
+    val time = if (!timeEvaluable || held) DueStatus.OK else timeStatus(
+        due = actionable,
         today = today,
         leadDays = schedule.leadDays,
     )
@@ -126,7 +136,20 @@ fun statusOf(schedule: MaintenanceSchedule, state: ScheduleState, today: LocalDa
         current = state.currentMeter,
         lead = schedule.meterLead,
     )
-    return if (time.ordinal >= meter.ordinal) time else meter
+    val folded = if (time.ordinal >= meter.ordinal) time else meter
+    return if (folded == DueStatus.OK && held) DueStatus.DEFERRED else folded
+}
+
+/**
+ * The time side is **held** by the break (spec §4.5) when the policy moved its date past the break,
+ * the item would already be surfacing against its own date (`T ≥ (P ?: R) − leadDays`), and the
+ * actionable date has not arrived yet. Before the lead it is simply OK; from the actionable date on
+ * it is judged against that date like any other.
+ */
+private fun isHeld(state: ScheduleState, actionable: LocalDate, today: LocalDate, leadDays: Int): Boolean {
+    if (state.policyReason != PolicyReason.AFTER_BREAK) return false
+    val own = state.effectiveDueOn?.let(LocalDate::parse) ?: return false
+    return !today.isBefore(own.minusDays(leadDays.toLong())) && today.isBefore(actionable)
 }
 
 /** A schedule due today is DUE all day; the lead only ever produces DUE_SOON. */

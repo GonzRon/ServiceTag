@@ -53,6 +53,7 @@ fun statusLabel(status: DueStatus): String = when (status) {
     DueStatus.INACTIVE_SEASON -> "OUT OF SEASON"
     DueStatus.PAUSED -> "PAUSED"
     DueStatus.NO_DATA -> "NO BASELINE"
+    DueStatus.DEFERRED -> "DEFERRED"
 }
 
 /** The RATIFIED dashboard section labels (D12 §10 `:706-707`). */
@@ -74,11 +75,13 @@ fun sectionLabel(section: AttentionSection): String = when (section) {
  * its vector and is `@Composable` only because [ServiceTagIcons] reads its drawables out of
  * resources.
  */
-enum class StatusGlyph { CHECK_CIRCLE, SCHEDULE, EVENT, WARNING, CALENDAR_MONTH, PAUSE_CIRCLE, METER }
+enum class StatusGlyph { CHECK_CIRCLE, SCHEDULE, EVENT, WARNING, CALENDAR_MONTH, PAUSE_CIRCLE, METER, HOURGLASS }
 
 /**
  * One glyph per status, from D12 §5's table row by row. `NO BASELINE` takes the meter glyph rather
- * than a warning: what is missing is a reading, and the row's own repair action says so.
+ * than a warning: what is missing is a reading, and the row's own repair action says so. `DEFERRED`
+ * takes the hourglass (1.4 spec §10.6): held by the maintenance break, not paused and not out of
+ * season, so it shares neither of their glyphs.
  */
 fun statusGlyph(status: DueStatus): StatusGlyph = when (status) {
     DueStatus.OK -> StatusGlyph.CHECK_CIRCLE
@@ -88,6 +91,7 @@ fun statusGlyph(status: DueStatus): StatusGlyph = when (status) {
     DueStatus.INACTIVE_SEASON -> StatusGlyph.CALENDAR_MONTH
     DueStatus.PAUSED -> StatusGlyph.PAUSE_CIRCLE
     DueStatus.NO_DATA -> StatusGlyph.METER
+    DueStatus.DEFERRED -> StatusGlyph.HOURGLASS
 }
 
 @Composable
@@ -99,9 +103,14 @@ fun statusIcon(status: DueStatus): ImageVector = when (statusGlyph(status)) {
     StatusGlyph.CALENDAR_MONTH -> ServiceTagIcons.CalendarMonth
     StatusGlyph.PAUSE_CIRCLE -> ServiceTagIcons.PauseCircle
     StatusGlyph.METER -> ServiceTagIcons.Speed
+    StatusGlyph.HOURGLASS -> ServiceTagIcons.HourglassTop
 }
 
-/** D12 §5's row for each status. Never read at a call site as a raw colour (D12 §15). */
+/**
+ * D12 §5's row for each status. Never read at a call site as a raw colour (D12 §15). `DEFERRED` is
+ * season-inactive grey (1.4 spec §10.6): quiet, like out of season, and told apart from it by its
+ * word and its glyph, never by colour.
+ */
 fun statusColors(status: DueStatus, colors: ServiceTagSemanticColors): StatusColor = when (status) {
     DueStatus.OK -> colors.maintenanceOkay
     DueStatus.DUE_SOON -> colors.dueSoon
@@ -110,6 +119,7 @@ fun statusColors(status: DueStatus, colors: ServiceTagSemanticColors): StatusCol
     DueStatus.INACTIVE_SEASON -> colors.seasonInactive
     DueStatus.PAUSED -> colors.paused
     DueStatus.NO_DATA -> colors.measurementNoTarget
+    DueStatus.DEFERRED -> colors.seasonInactive
 }
 
 /** The RATIFIED repair label, offered only by a **repairable** missing-meter-baseline row. */

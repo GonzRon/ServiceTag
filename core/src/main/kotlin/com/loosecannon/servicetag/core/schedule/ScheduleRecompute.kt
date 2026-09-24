@@ -9,10 +9,7 @@ import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleState
-import com.loosecannon.servicetag.core.model.Season
 import com.loosecannon.servicetag.core.model.SeasonInputs
-import com.loosecannon.servicetag.core.model.SeasonMode
-import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TerminationKind
 import com.loosecannon.servicetag.core.model.TimeBasis
 import java.time.Instant
@@ -51,7 +48,9 @@ object ScheduleRecompute {
      * and include the ordinary readings the meter side needs, not only this schedule's completions.
      * [closures] are this schedule's, [membership] is empty for an asset target, and [season] is
      * the target Asset's [SeasonInputs]: null means no season and no break, and a CONTINUOUS
-     * schedule is active whatever they say.
+     * schedule is active whatever they say. The season reaches the state only through
+     * [ServicePolicyEngine], evaluated for [today]: it fills `actionableDueOn`, `policyReason`,
+     * `policyPhase` and `quiet`, and nothing else.
      *
      * [season] is a parameter rather than a lookup because the season lives on the Asset and this
      * function takes no repository; it carries a default so a caller with nothing to supply — a
@@ -104,7 +103,7 @@ object ScheduleRecompute {
             OccurrenceBasis.of(schedule, events, closures, membership).required(due).isNotEmpty()
         val computedDueOn = if (actionable) due else null
         val effectiveDueOn = if (actionable) schedule.postponedDueOn ?: computedDueOn else null
-        return ScheduleState(
+        val raw = ScheduleState(
             scheduleId = schedule.id,
             lastCompletedOn = newest?.occurredOn,
             lastCompletionEventId = newest?.id,
@@ -115,9 +114,8 @@ object ScheduleRecompute {
             lastTerminationKind = last?.kind ?: TerminationKind.NONE,
             computedDueOn = computedDueOn,
             effectiveDueOn = effectiveDueOn,
-            policyPhase = if (dormant(schedule, season, today)) PolicyPhase.DORMANT else PolicyPhase.ACTIVE,
-            // Until the policy engine lands, no policy moves a date and nothing is quiet: the
-            // actionable date is the effective one, exactly as 1.3 sorted and judged it.
+            // Filled in below from the policy; placeholders only until then.
+            policyPhase = PolicyPhase.ACTIVE,
             actionableDueOn = effectiveDueOn,
             policyReason = PolicyReason.NONE,
             quiet = false,
@@ -125,7 +123,41 @@ object ScheduleRecompute {
             // The caller's stamp. See the class KDoc: a pure function has no clock.
             computedAt = 0L,
         )
+        // The policy reads the occurrence the lines above derived and never writes back into it:
+        // `computedDueOn` and `effectiveDueOn` are what they were for every policy (inv. 84, 10).
+        val outcome = ServicePolicyEngine.evaluate(
+            inputs = policyInputsOf(schedule, raw, zone),
+            season = season?.let(SeasonContext::of),
+            at = today,
+        )
+        return raw.copy(
+            policyPhase = outcome.phase,
+            actionableDueOn = outcome.actionableOn?.toString(),
+            policyReason = outcome.reason,
+            quiet = outcome.quiet,
+        )
     }
+
+    /**
+     * What the policy reads about [schedule]'s current occurrence, off a [state] derived for it
+     * (master plan §8.1, §8.2): `R` is `computedDueOn`, `P` the postponement, and `O` — the day the
+     * occurrence opened — the last termination's effective date, or for a schedule that has never
+     * terminated the date of `rule_changed_at` in [zone] (D-28). **Never `updated_at`**: every save
+     * stamps it, and an `O` that moved on a title edit would re-open the opened-before guard.
+     *
+     * A round nobody is required for carries no date in [state], and so no postponement reaches the
+     * policy either: there is nothing to act on, which is how [statusOf] comes to answer `NO_DATA`.
+     *
+     * Public so the health clock can ask the policy about any day with the occurrence as it stands.
+     */
+    fun policyInputsOf(schedule: MaintenanceSchedule, state: ScheduleState, zone: ZoneId): PolicyInputs =
+        PolicyInputs(
+            policy = schedule.servicePolicy,
+            offsetDays = schedule.policyOffsetDays,
+            rawDueOn = state.computedDueOn?.let(LocalDate::parse),
+            postponedDueOn = if (state.computedDueOn == null) null else schedule.postponedDueOn?.let(LocalDate::parse),
+            openedOn = state.lastTerminationEffectiveOn?.let(LocalDate::parse) ?: pinFloor(schedule, zone),
+        )
 
     /**
      * Every terminated occurrence of [schedule], oldest first. The fold is **total**: an occurrence
@@ -309,25 +341,5 @@ object ScheduleRecompute {
             .firstOrNull { it.definitionId == definitionId && it.valueNum != null }
             ?.valueNum
         return events.filter { reading(it) != null }.maxWithOrNull(EventChronology)?.let { reading(it) }
-    }
-
-    /**
-     * DORMANT exactly when 1.3 read the schedule as out of season: a non-CONTINUOUS policy on a
-     * CALENDAR asset whose window does not contain [today]. Every other mode, and a CONTINUOUS
-     * schedule, is ACTIVE until the policy engine reads them.
-     */
-    private fun dormant(
-        schedule: MaintenanceSchedule,
-        season: SeasonInputs?,
-        today: LocalDate,
-    ): Boolean {
-        if (schedule.servicePolicy == ServicePolicy.CONTINUOUS) return false
-        if (season?.mode != SeasonMode.CALENDAR) return false
-        val start = season.seasonStartMmdd
-        val end = season.seasonEndMmdd
-        // Both-or-neither is the Asset's own invariant; a half-set window is read as in season
-        // rather than thrown at, because the engine is not where that rule is enforced.
-        if (start == null || end == null) return false
-        return !Season.inSeason(start, end, today)
     }
 }

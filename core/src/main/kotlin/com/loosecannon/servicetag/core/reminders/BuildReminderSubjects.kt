@@ -200,6 +200,7 @@ class BuildReminderSubjects(
         DueStatus.PAUSED -> "PAUSED"
         DueStatus.NO_DATA ->
             if (schedule.meterDefinitionId != null && state.computedDueMeter == null) "NO BASELINE" else null
+        DueStatus.DEFERRED -> "DEFERRED"
     }
 
     /**
