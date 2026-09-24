@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import java.time.LocalDate
@@ -36,19 +37,32 @@ fun seasonOfferFor(asset: Asset, activations: List<SeasonActivation>, event: Ass
  * Accepting the season offer (plan decision 51): one activation through [RecordSeasonActivation],
  * dated on the event's day **clamped** to `[the latest row's date, today]` — so a backdated event can
  * never slip in before history already recorded, nor a future one land ahead of today — with the
- * event linked by `eventId`. Every refusal is [RecordSeasonActivation]'s own.
+ * event linked by `eventId`.
+ *
+ * The action is the **event's own** — START for a `SEASON_START`, END for a `SEASON_END` — and the
+ * caller's [SeasonAction] must name it: anything else is a programmer error, never a row. The clamp's
+ * read and the record share **one write transaction**, so the phase the row is checked against
+ * ([RecordSeasonActivation]'s refusals, which are the only refusals here) and the date it is clamped to
+ * are the stored ones at the moment it is written.
  */
 class AcceptSeasonOffer(
     private val activations: SeasonActivationRepository,
     private val record: RecordSeasonActivation,
+    private val uow: UnitOfWork,
     private val today: Today,
 ) {
-    suspend fun run(assetId: AssetId, event: AssetEvent, action: SeasonAction): SeasonActivation {
+    suspend fun run(assetId: AssetId, event: AssetEvent, action: SeasonAction): SeasonActivation = uow.write {
+        val own = when (event.kind) {
+            EventKind.SEASON_START -> SeasonAction.START
+            EventKind.SEASON_END -> SeasonAction.END
+            else -> null
+        }
+        require(own != null && own == action) { "a ${event.kind} event cannot be accepted as a season $action" }
         val t = today.localDate()
         val latest = latestOf(activations.forAsset(assetId))?.let { parseDate(it.occurredOn) }
         val eventOn = parseDate(event.occurredOn) ?: t
         val upToToday = if (eventOn > t) t else eventOn
         val clamped = if (latest != null && upToToday < latest) latest else upToToday
-        return record.run(assetId, ActivationCommand(action = action, occurredOn = clamped.toString(), eventId = event.id))
+        record.run(assetId, ActivationCommand(action = own, occurredOn = clamped.toString(), eventId = event.id))
     }
 }

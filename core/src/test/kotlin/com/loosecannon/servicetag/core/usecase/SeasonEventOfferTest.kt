@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.testing.dayMillis
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlinx.coroutines.test.runTest
 
@@ -91,6 +92,33 @@ class SeasonEventOfferTest {
         val third = h.acceptSeasonOffer.run(a1, ahead, SeasonAction.START)
         assertEquals("2026-06-10" to EventId("e3"), third.occurredOn to third.eventId, "lowered to today")
         assertEquals(SeasonPhase.IN_SEASON, h.getAssetSeason.run(a1).phase)
+    }
+
+    /**
+     * The row's action is the event's own, never the caller's say-so, and the phase it is checked against
+     * is the one stored when the accept runs: an END event cannot be accepted as a START, a journal note
+     * cannot be accepted at all, and a second accept of one START meets the stored START.
+     */
+    @Test
+    fun acceptingWritesTheEventsOwnActionAgainstTheStoredPhase() = runTest {
+        val h = SeasonCommandHarness()
+        h.asset(mode = SeasonMode.MANUAL)
+        val end = event("e1", EventKind.SEASON_END, "2026-06-10")
+        val note = event("e2", EventKind.MAINTENANCE, "2026-06-10")
+        val start = event("e3", EventKind.SEASON_START, "2026-06-10")
+        listOf(end, note, start).forEach { h.events.rows[it.id.value] = it }
+
+        val mismatched = assertFailsWith<IllegalArgumentException> { h.acceptSeasonOffer.run(a1, end, SeasonAction.START) }
+        assertEquals(IllegalArgumentException::class, mismatched::class, "a programmer error, not a refusal code")
+        assertEquals(
+            IllegalArgumentException::class,
+            assertFailsWith<IllegalArgumentException> { h.acceptSeasonOffer.run(a1, note, SeasonAction.START) }::class,
+        )
+        assertEquals(emptyList(), h.rows(), "nothing written")
+
+        h.acceptSeasonOffer.run(a1, start, SeasonAction.START)
+        assertFailsWith<SeasonAlreadyStarted> { h.acceptSeasonOffer.run(a1, start, SeasonAction.START) }
+        assertEquals(listOf(SeasonAction.START to start.id), h.rows().map { it.action to it.eventId })
     }
 
     /** Inv. 93: logging a season event writes no activation; only accepting the offer does. */

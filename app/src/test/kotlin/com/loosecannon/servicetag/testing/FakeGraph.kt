@@ -191,7 +191,7 @@ class FakeGraph(
     val recordSeasonActivation: RecordSeasonActivation =
         RecordSeasonActivation(assets, events, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules)
     val getAssetSeason: GetAssetSeason = GetAssetSeason(assets, seasonActivations, uow, todayPort)
-    val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(seasonActivations, recordSeasonActivation, todayPort)
+    val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(seasonActivations, recordSeasonActivation, uow, todayPort)
     val archiveAsset: ArchiveAsset =
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
     val retireAsset: RetireAsset =

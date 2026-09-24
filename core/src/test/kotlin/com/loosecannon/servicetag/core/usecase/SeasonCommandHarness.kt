@@ -76,7 +76,7 @@ internal class SeasonCommandHarness(today: String = "2026-06-10") {
     val recordSeasonActivation =
         RecordSeasonActivation(assets, events, activations, uow, ids, clock, todayPort, recompute)
     val getAssetSeason = GetAssetSeason(assets, activations, uow, todayPort)
-    val acceptSeasonOffer = AcceptSeasonOffer(activations, recordSeasonActivation, todayPort)
+    val acceptSeasonOffer = AcceptSeasonOffer(activations, recordSeasonActivation, uow, todayPort)
     val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute)
     val createAsset = CreateAsset(assets, uow, ids, clock, ApplyTemplate(definitions, profiles, assets, uow, ids, clock))
     val saveSchedule = SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute)

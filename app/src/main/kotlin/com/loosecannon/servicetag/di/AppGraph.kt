@@ -473,7 +473,7 @@ class AppGraph(private val context: Context) {
     val recordSeasonActivation: RecordSeasonActivation =
         RecordSeasonActivation(assets, events, seasonActivations, uow, ids, clock, today, recomputeSchedules)
     val getAssetSeason: GetAssetSeason = GetAssetSeason(assets, seasonActivations, uow, today)
-    val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(seasonActivations, recordSeasonActivation, today)
+    val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(seasonActivations, recordSeasonActivation, uow, today)
 
     val archiveAsset: ArchiveAsset =
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
