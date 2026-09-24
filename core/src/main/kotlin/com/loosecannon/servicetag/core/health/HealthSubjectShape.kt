@@ -30,7 +30,7 @@ object HealthSubjectShape {
 
     fun weightValid(weight: Int): Boolean = weight in WEIGHTS
 
-    /** Empty exactly when [AssetHealthEngine.evaluate] accepts [subject]. */
+    /** Empty exactly when `evaluate`'s subject check accepts [subject] as one of the asset's non-archived subjects. */
     fun problems(subject: HealthSubject): Set<HealthSubjectShapeProblem> = buildSet {
         if (!thresholdsValid(subject.nominalUntilDays, subject.warningFromDays, subject.criticalFromDays)) {
             add(HealthSubjectShapeProblem.THRESHOLDS_INVALID)

@@ -28,7 +28,7 @@ class HealthSubjectShapeTest {
 
     private fun engineRefuses(subject: HealthSubject): Boolean = runCatching {
         HealthFixtures.healthOn(SPEC_DAY.toString(), asset, listOf(subject), events = listOf(HealthFixtures.upsBatteryReplaced()))
-    }.exceptionOrNull()?.let { it is IllegalArgumentException || it is ArithmeticException } == true
+    }.exceptionOrNull() is IllegalArgumentException
 
     @Test
     fun theShapeIsTheCommandsBoundsAndTheEngineAgrees() {
