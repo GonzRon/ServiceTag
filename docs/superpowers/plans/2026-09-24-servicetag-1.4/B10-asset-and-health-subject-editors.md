@@ -128,3 +128,7 @@ If any field is still found to need a sentence, the controller escalates to the 
 ## Size
 
 Medium-large: one editor extended, one editor new, both mostly form state proved in JVM. Split seam if needed: **B10a** the asset editor; **B10b** the subject editor and its route.
+
+## Carry-forward from B06's review (controller, 2026-09-25)
+
+- The asset editor never re-sends a dangling TRACK_ONE primary (a primary subject id that no longer names a non-archived subject): when the stored primary is dangling, the editor's save omits it (the policy falls back as the engine already does) instead of letting every settings save on that asset be refused. One form-test case (RED: send the stored id through).

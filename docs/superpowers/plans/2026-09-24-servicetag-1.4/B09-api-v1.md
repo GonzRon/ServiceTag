@@ -136,3 +136,7 @@ Large: fourteen rows, two forms, one document. Split seam if one review cannot h
 - The 1.4 form turns an omitted or explicit-null `policyOffsetDays` on IN_SERVICE_AT_START into 0 BEFORE building the command (decision 31); the use case itself rejects a null offset as `POLICY_OFFSET_INVALID`. One route test: null → 200 with 0 stored (RED: pass null through).
 - Refusal order on `POST …/season/activations`: a 422 on the request body wins over a 409 on the stored state when both apply; the route tests expect that order.
 - `ApiJson.scheduleProblemCode` already carries `POLICY_OFFSET_INVALID` and `SEASON_POLICY_NEEDS_A_TIME_RULE` (B04's compile-through lines); this brief documents both in `docs/api/v1.md`.
+
+## Carry-forward from B06 (controller, 2026-09-25)
+
+- Map every refusal B04 and B06 introduced to its §9.2 code and status, so none answers 500: `SCHEDULE_DRIVES_HEALTH_SUBJECT` (422), `HEALTH_SUBJECT_IS_PRIMARY` (409), `FOREIGN_SCHEDULE` for an archived link, `HEALTH_SCHEDULE_TAKEN`, `HEALTH_SCHEDULE_NEEDS_A_TIME_RULE`, `HEALTH_SUBJECT_NAME_REQUIRED` (with `field: "name"` and the 1–60 limit in the message), `PROFILE_NOT_A_REPLACEMENT`, `CONDITION_DATE_IN_FUTURE`, `FOREIGN_EVENT`, `SEASON_MODE_STRANDS_POLICY` / `BREAK_STRANDS_POLICY` (409), `POLICY_OFFSET_INVALID`, `SEASON_POLICY_NEEDS_A_TIME_RULE`, `BLACKOUT_COVERS_THE_YEAR`, `SEASON_ALREADY_ENDED` and the activation-order codes. One route test per code (RED: drop the mapping → 500). B06's report lists the problem types by name.
