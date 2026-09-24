@@ -49,7 +49,6 @@ import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
-import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.reminders.NOTIFICATION_PERMISSION_RATIONALE
@@ -75,9 +74,6 @@ const val ALSO_DUE_BY_USE = "Also due by use"
 const val EVERY_N_UNIT_OF_USE = "Every <n> <unit> of use"
 const val LAST_DONE_AT = "Last done at"
 const val REMIND_ME_N_UNIT_EARLY = "Remind me <n> <unit> early"
-const val OUT_OF_SEASON_FIELD = "Out of season"
-const val PAUSE_WITH_THE_SEASON = "Pause with the asset's season"
-const val REMIND_ME_YEAR_ROUND = "Remind me year round"
 const val COMPLETING_THIS_TAKES = "Completing this takes"
 const val ONE_TAP = "One tap"
 const val THE_FULL_FORM = "The full form"
@@ -87,12 +83,114 @@ const val REMIND_ME_THROUGH = "Remind me through"
 /** D-11's non-blocking line, RATIFIED (§17). Shown, dismissible by fixing the title, never a gate. */
 const val SIMILAR_THROUGH_A_GROUP = "This asset already has a similar schedule through another group."
 
+// The service-policy question, RATIFIED (spec §10.7, S65–S84), verbatim and by number. It replaces
+// 1.2's two-option season choice, whose words are retired with it (master plan §1).
+
+/** S65, the schedule question. */
+const val WHEN_SHOULD_THIS_BE_DONE = "When should this maintenance be done?"
+
+/** S66, option. */
+const val BEFORE_THE_SEASON_STARTS = "Before the season starts"
+
+/** S67, option. */
+const val WHEN_THE_SEASON_STARTS = "When the season starts"
+
+/** S68, option. */
+const val WHENEVER_IT_IS_DUE = "Whenever it is due"
+
+/** S69, option. */
+const val BEFORE_THE_MAINTENANCE_BREAK = "Before the maintenance break"
+
+/** S70, option. */
+const val AFTER_THE_MAINTENANCE_BREAK = "After the maintenance break"
+
+/** S71, field. */
+const val DAYS_BEFORE_IT_STARTS = "Days before it starts"
+
+/** S72, field. */
+const val DAYS_AFTER_IT_STARTS = "Days after it starts"
+
+/** S73, field. */
+const val START_COUNTING_FROM = "Start counting from"
+
+/** S74, option. */
+const val THE_SEASONS_START = "The season's start"
+
+/** S75, option. */
+const val ITS_OWN_DATE_NOT_BEFORE_THE_SEASON = "Its own date, but not before the season starts"
+
+/** S76, warning. */
+const val FIRST_DUE_OUTSIDE_THE_SEASON =
+    "The first due date is outside this asset's season, so it will wait for the season to start."
+
+/** S77, warning. */
+const val NOTHING_TO_BE_READY_BEFORE =
+    "This asset has no season or maintenance break to be ready before, so this is due whenever its date comes."
+
+/** S78, helper under S66. */
+const val HELPER_BEFORE_THE_SEASON =
+    "A date in the season or the maintenance break becomes due on an allowed day before the season starts."
+
+/** S79, helper under S69. */
+const val HELPER_BEFORE_THE_BREAK = "A date in the maintenance break becomes due before the break starts."
+
+/** S80, helper under S67. */
+const val HELPER_WHEN_THE_SEASON_STARTS =
+    "This maintenance waits while the season is off and becomes active again when it starts."
+
+/** S81, helper under S70. */
+const val HELPER_AFTER_THE_BREAK = "A date in the maintenance break moves to the first day after it."
+
+/** S82, helper under S68. */
+const val HELPER_WHENEVER_IT_IS_DUE = "The season and the maintenance break never change when this is due."
+
+/** S83, under an empty S71. */
+const val ENTER_THE_NUMBER_OF_DAYS = "Enter the number of days."
+
+/** S84, warning under S72. */
+const val AFTER_THE_SEASON_ENDS = "That is after the season ends, so this would never become due."
+
+// The health link guard (spec §6.1, D-30), RATIFIED. S137 is defined here because this dialog lands
+// first; B10's subject editor uses the same constant (master dec. 42).
+
+/** S137, refusal: archiving the subject its asset's health follows. */
+const val THE_SUBJECT_HEALTH_FOLLOWS =
+    "This is the subject asset health follows. Choose another way to combine health first."
+
+/** S140, the link-guard dialog; `<name>` is the subject's name — see [scheduleDrivesSubject]. */
+const val SCHEDULE_DRIVES_SUBJECT =
+    "This schedule drives the health subject <name>. Archive that subject as well?"
+
+/** S141, the link-guard confirm. */
+const val ARCHIVE_BOTH = "Archive both"
+
+/** S140 with its one substitution. */
+fun scheduleDrivesSubject(name: String): String = SCHEDULE_DRIVES_SUBJECT.replace("<name>", name)
+
+/** Each option's ratified word. */
+internal fun policyOptionLabel(option: PolicyOption): String = when (option) {
+    PolicyOption.BEFORE_SEASON -> BEFORE_THE_SEASON_STARTS
+    PolicyOption.BEFORE_BREAK -> BEFORE_THE_MAINTENANCE_BREAK
+    PolicyOption.WHEN_SEASON_STARTS -> WHEN_THE_SEASON_STARTS
+    PolicyOption.AFTER_BREAK -> AFTER_THE_MAINTENANCE_BREAK
+    PolicyOption.WHENEVER_DUE -> WHENEVER_IT_IS_DUE
+}
+
+/** Each option's helper, S78–S82, drawn under it while it is chosen. */
+internal fun policyOptionHelper(option: PolicyOption): String = when (option) {
+    PolicyOption.BEFORE_SEASON -> HELPER_BEFORE_THE_SEASON
+    PolicyOption.BEFORE_BREAK -> HELPER_BEFORE_THE_BREAK
+    PolicyOption.WHEN_SEASON_STARTS -> HELPER_WHEN_THE_SEASON_STARTS
+    PolicyOption.AFTER_BREAK -> HELPER_AFTER_THE_BREAK
+    PolicyOption.WHENEVER_DUE -> HELPER_WHENEVER_IT_IS_DUE
+}
+
 /**
  * Create ([scheduleId] null) or edit one schedule, in the shape of the shipped editors.
  *
  * **The three group hides are the point of this screen.** A group target draws no meter block, no
- * profile picker and no "Pause with the asset's season" option, so the illegal group schedule D-12
- * and D-28 forbid is unreachable here rather than merely refused on save — and the target itself is
+ * profile picker and no service-policy question, so the illegal group schedule D-12 and inv. 106
+ * forbid is unreachable here rather than merely refused on save — and the target itself is
  * one value chosen once by the entry point, so no interaction sequence produces a command with both
  * a target asset and a target group (invariant 1).
  *
@@ -146,7 +244,9 @@ fun ScheduleEditScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = model::save, enabled = !state.saving) { Text("Save") }
+                    // Held while the question is unanswered or S71 is empty or 0 (master dec. 46), so
+                    // no policy refusal is reachable and none needs a sentence.
+                    TextButton(onClick = model::save, enabled = state.canSave) { Text("Save") }
                 },
             )
         },
@@ -165,6 +265,9 @@ fun ScheduleEditScreen(
                 confirmButton = { TextButton(onClick = model::requestNotifications) { Text("OK") } },
                 dismissButton = { TextButton(onClick = model::dismissNotifications) { Text("Not now") } },
             )
+        }
+        state.linkGuard?.let { prompt ->
+            LinkGuardDialog(prompt = prompt, onArchiveBoth = model::archiveBoth, onCancel = model::cancelLinkGuard)
         }
 
         Column(
@@ -286,15 +389,11 @@ fun ScheduleEditScreen(
                     }
                 }
 
-                MaintenanceSectionTitle(OUT_OF_SEASON_FIELD)
-                ChoiceRow(
-                    options = listOf(
-                        PAUSE_WITH_THE_SEASON to ServicePolicy.IN_SERVICE_AT_START,
-                        REMIND_ME_YEAR_ROUND to ServicePolicy.CONTINUOUS,
-                    ),
-                    selected = state.servicePolicy,
-                    onSelect = model::onSeason,
-                )
+                // Spec §10.4: the question only where the asset's season or break gives it meaning.
+                // An asset with neither sees nothing here, and its schedule stays CONTINUOUS.
+                if (state.questionDrawn) {
+                    PolicyQuestion(state = state, model = model)
+                }
 
                 MaintenanceSectionTitle(COMPLETING_THIS_TAKES)
                 ChoiceRow(
@@ -314,12 +413,9 @@ fun ScheduleEditScreen(
                     )
                 }
             } else {
-                // D-28: a group target is CONTINUOUS only, and there is no control for the
-                // other value — the one option it does have is stated so the behaviour is not a
-                // silent default.
-                MaintenanceSectionTitle(OUT_OF_SEASON_FIELD)
-                QuietLine(REMIND_ME_YEAR_ROUND)
-                // D-12: QUICK-only, and the same reasoning.
+                // Inv. 106: a group target is CONTINUOUS only and is asked no question at all — a
+                // group has no season and no break for one to be about.
+                // D-12: QUICK-only, stated so the behaviour is not a silent default.
                 MaintenanceSectionTitle(COMPLETING_THIS_TAKES)
                 QuietLine(ONE_TAP)
             }
@@ -352,6 +448,106 @@ fun ScheduleEditScreen(
             // not list, and no brief invents one, so this form commits from the app bar alone.
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+/**
+ * S65 and its answers, spec §10.4: the options the asset's season and break make meaningful, in
+ * order, each with its helper under it while it is chosen, and the chosen option's own fields.
+ *
+ * Nothing here is prefilled that the owner must decide: S71 starts empty and shows S83 until a
+ * number is entered (inv. 121); S72 is empty, which is 0, the start itself. S76, S77 and S84 are
+ * warnings — the line is shown and nothing is refused.
+ */
+@Composable
+private fun PolicyQuestion(state: ScheduleEditState, model: ScheduleEditViewModel) {
+    MaintenanceSectionTitle(WHEN_SHOULD_THIS_BE_DONE)
+    if (state.noBoundary) QuietLine(NOTHING_TO_BE_READY_BEFORE)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        state.policyOptions.forEach { option ->
+            ChoiceOption(
+                label = policyOptionLabel(option),
+                selected = state.policyOption == option,
+                enabled = true,
+                onSelect = { model.onPolicy(option) },
+            )
+            if (state.policyOption == option) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(start = 48.dp, bottom = 8.dp),
+                ) {
+                    QuietLine(policyOptionHelper(option))
+                    when (option) {
+                        PolicyOption.BEFORE_SEASON, PolicyOption.BEFORE_BREAK -> MaintenanceField(
+                            value = state.daysBefore,
+                            onValueChange = model::onDaysBefore,
+                            label = DAYS_BEFORE_IT_STARTS,
+                            numeric = true,
+                            hint = if (state.marginMissing) ENTER_THE_NUMBER_OF_DAYS else null,
+                            problem = ScheduleField.POLICY_OFFSET in state.marks,
+                        )
+                        PolicyOption.WHEN_SEASON_STARTS -> StartCounting(state = state, model = model)
+                        PolicyOption.AFTER_BREAK, PolicyOption.WHENEVER_DUE -> Unit
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** S73 under S67: S74 with S72's offset, or S75. S72 is absent on a meter-only schedule (O-7). */
+@Composable
+private fun StartCounting(state: ScheduleEditState, model: ScheduleEditViewModel) {
+    if (state.anchorOutsideSeason) QuietLine(FIRST_DUE_OUTSIDE_THE_SEASON)
+    Text(
+        text = START_COUNTING_FROM,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    ChoiceOption(
+        label = THE_SEASONS_START,
+        selected = state.startCountingFrom == StartCountingFrom.SEASON_START,
+        enabled = true,
+        onSelect = { model.onStartCountingFrom(StartCountingFrom.SEASON_START) },
+    )
+    if (state.startCountingFrom == StartCountingFrom.SEASON_START && state.hasTimeRule) {
+        MaintenanceField(
+            value = state.daysAfter,
+            onValueChange = model::onDaysAfter,
+            label = DAYS_AFTER_IT_STARTS,
+            numeric = true,
+            problem = ScheduleField.POLICY_OFFSET in state.marks,
+        )
+        if (state.offsetPassesSeasonEnd) QuietLine(AFTER_THE_SEASON_ENDS)
+    }
+    ChoiceOption(
+        label = ITS_OWN_DATE_NOT_BEFORE_THE_SEASON,
+        selected = state.startCountingFrom == StartCountingFrom.OWN_DATE,
+        enabled = true,
+        onSelect = { model.onStartCountingFrom(StartCountingFrom.OWN_DATE) },
+    )
+}
+
+/**
+ * The health link guard's dialog (spec §6.1, D-30; inv. 130), for the editor's save and the schedule
+ * detail's archive alike: S140 naming the subject, with S141 "Archive both" and the shipped Cancel;
+ * or S137, when "Archive both" was answered that the subject is the one its asset's health follows,
+ * with Cancel alone. **Cancel writes nothing.**
+ */
+@Composable
+internal fun LinkGuardDialog(prompt: LinkGuardPrompt, onArchiveBoth: () -> Unit, onCancel: () -> Unit) {
+    when (prompt) {
+        is LinkGuardPrompt.Asks -> AlertDialog(
+            onDismissRequest = onCancel,
+            text = { Text(scheduleDrivesSubject(prompt.subjectName)) },
+            confirmButton = { TextButton(onClick = onArchiveBoth) { Text(ARCHIVE_BOTH) } },
+            dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
+        )
+        LinkGuardPrompt.Primary -> AlertDialog(
+            onDismissRequest = onCancel,
+            text = { Text(THE_SUBJECT_HEALTH_FOLLOWS) },
+            confirmButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
+        )
     }
 }
 
