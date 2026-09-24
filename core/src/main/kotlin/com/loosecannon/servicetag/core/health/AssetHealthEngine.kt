@@ -138,7 +138,10 @@ object AssetHealthEngine {
         season: SeasonContext?,
         today: LocalDate,
     ): AssetHealthResult {
-        val live = subjects
+        // The asset's own subjects only, as the events below are the asset's own: a subject never
+        // changes asset (spec §6.1), so another asset's row is never this asset's health or primary.
+        val own = subjects.filter { it.assetId == asset.id }
+        val live = own
             .filter { it.archivedAt == null }
             .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
             .map { subject ->
@@ -148,7 +151,7 @@ object AssetHealthEngine {
                 }
             }
         val contributors = live.filter { it.value is SubjectValue.Scored }
-        val (aggregate, fallback) = aggregate(asset, subjects, live, contributors)
+        val (aggregate, fallback) = aggregate(asset, own, live, contributors)
         return AssetHealthResult(
             subjects = live,
             aggregate = aggregate,

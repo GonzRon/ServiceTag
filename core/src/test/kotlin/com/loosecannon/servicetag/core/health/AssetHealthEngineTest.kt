@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.health
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
@@ -172,5 +173,24 @@ class AssetHealthEngineTest {
         // Archived subjects are not reported at all; the rest come in (sortOrder, id) order.
         val archived = HealthFixtures.upsBatteryAge().copy(archivedAt = dayMillis("2026-09-01"))
         assertEquals(emptyList(), HealthFixtures.healthOn(day, HealthFixtures.upsAsset(), listOf(archived), events = listOf(HealthFixtures.upsBatteryReplaced())).subjects)
+    }
+
+    /** Spec §6.1, "a subject never changes asset": another asset's subject is not this asset's health. */
+    @Test
+    fun onlyTheAssetsOwnSubjectsAreRead() {
+        val ups = HealthFixtures.upsAsset()
+        val own = HealthFixtures.upsBatteryAge()
+        val packs = HealthFixtures.packBatteryAge()
+        val events = listOf(HealthFixtures.upsBatteryReplaced(), HealthFixtures.packBatteryReplaced())
+
+        val result = HealthFixtures.healthOn(SPEC_DAY.toString(), ups, listOf(packs, own), events = events)
+        assertEquals(listOf(own.id), result.subjects.map { it.subject.id }, "the battery pack's subject is not the UPS's")
+        assertEquals(SubjectValue.Scored(18, HealthBand.CRITICAL, null), result.aggregate)
+
+        // Nor can another asset's subject be this asset's primary: it reads as missing.
+        val following = ups.copy(healthAggregation = HealthAggregation.TRACK_ONE, healthPrimarySubjectId = packs.id)
+        val tracked = HealthFixtures.healthOn(SPEC_DAY.toString(), following, listOf(packs, own), events = events)
+        assertEquals(SubjectValue.Scored(18, HealthBand.CRITICAL, null), tracked.aggregate)
+        assertEquals(true, tracked.fallback, "a foreign primary falls back to WORST")
     }
 }
