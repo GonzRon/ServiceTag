@@ -75,6 +75,16 @@ Before and after `adb install -r` of the verified APK: `adb shell pm list packag
 - **The shell cannot delegate a documents-provider grant.** A shell-built share of a SAF URI
   arrives ungranted and correctly reads as "Could not read what was shared". That is why a real
   sender with its own `FileProvider` exists: it holds the grant it passes on.
+- **The platform grants a flagless share by itself.** On API 37 an `ACTION_SEND` with a stream,
+  no grant flag and no `ClipData` is migrated by `Intent.migrateExtraStreamToClipData`, which adds
+  `FLAG_GRANT_READ_URI_PERMISSION`; the sender's logcat reads "Implicit URI grant for
+  android.intent.action.SEND action will be discontinued from Android 18 onwards. Please set the
+  grant explicitly in the app." So the sender's `send_file` sets the flag explicitly, and
+  `send_bad_grant` carries `ClipData` without the flag so that it genuinely arrives ungranted.
+- **The sender's authority is outside ServiceTag's namespace.** `StreamSourcePolicy` refuses
+  ServiceTag's application id and every authority under it, so the sender serves its fixtures as
+  `com.loosecannon.sharetestsender.fixtures`, not under `com.loosecannon.servicetag.`
+  (`share-test-sender/README.md`).
 
 ## The tripwire
 

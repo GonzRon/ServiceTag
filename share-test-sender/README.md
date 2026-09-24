@@ -25,13 +25,39 @@ has no intent filter and draws nothing. It reads three string extras, fires one 
 |---|---|
 | `send_text` | `text/plain`, `EXTRA_TEXT` = the `text` extra (default `https://example-mower.invalid/xt1/manual.pdf`) |
 | `send_file` | the fixture's type, `EXTRA_STREAM` = the fixture's `content://` URI, `ClipData` from that URI, `FLAG_GRANT_READ_URI_PERMISSION` |
-| `send_bad_grant` | the same stream with no read grant |
+| `send_bad_grant` | the same stream and `ClipData`, with no grant flag, so no read grant |
 
 `fixture` is `mower-manual.pdf` (default, `application/pdf`) or `mower-shot.png` (`image/png`);
 any other name sends nothing. Both are fictional. The fixture is copied out of `assets/` into
 the app's files directory once and served by a non-exported `FileProvider` under
-`com.loosecannon.servicetag.testsender.fixtures` — not ServiceTag's own authority, so the share
-target's own-authority refusal does not apply.
+`com.loosecannon.sharetestsender.fixtures`.
+
+### Why the authority is not under `com.loosecannon.servicetag`
+
+The package is `com.loosecannon.servicetag.testsender`, but the provider's authority deliberately
+is not. ServiceTag refuses a shared stream whose authority is its own application id **or anything
+under it**: `StreamSourcePolicy` matches each own authority as a namespace
+(`core/src/main/kotlin/com/loosecannon/servicetag/core/references/StreamSourcePolicy.kt:34`,
+`host == it || host.startsWith("$it.")`), and the app feeds it `BuildConfig.APPLICATION_ID`
+(`app/src/main/kotlin/com/loosecannon/servicetag/di/AppGraph.kt:358-359`). An authority of
+`com.loosecannon.servicetag.testsender.fixtures` was tried first and was refused as ServiceTag's
+own ("That file cannot be accepted from the app that shared it.") before any grant was consulted.
+
+### Why `send_file` sets the grant flag and `send_bad_grant` keeps its `ClipData`
+
+On this API (37) the platform grants a flagless `ACTION_SEND` by itself when it has a stream and
+no `ClipData`: `Instrumentation.execStartActivity` calls `Intent.migrateExtraStreamToClipData`,
+which copies `EXTRA_STREAM` into `ClipData` and adds `FLAG_GRANT_READ_URI_PERMISSION`. The sender's
+logcat says so:
+
+```
+E/Intent: Implicit URI grant for android.intent.action.SEND action will be discontinued from Android 18 onwards. Please set the grant explicitly in the app.
+```
+
+So `send_file` sets the flag explicitly instead of relying on a behaviour that is being retired,
+and `send_bad_grant` sets `ClipData` from the URI without the flag: a share that already carries
+`ClipData` is not migrated, so it really arrives ungranted. A "no flag, no `ClipData`" share would
+carry a real grant and could never be refused.
 
 To fire one by hand on the emulator:
 

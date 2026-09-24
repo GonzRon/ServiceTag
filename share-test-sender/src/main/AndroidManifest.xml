@@ -27,12 +27,15 @@
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
-        <!-- Serves the fixtures under this package's own authority, so a share arrives from a
-             provider ServiceTag does not own. Not exported: the only way in is the temporary
-             read grant a share carries. -->
+        <!-- Serves the fixtures under an authority ServiceTag does not own. Not exported: the
+             only way in is the temporary read grant a share carries. The authority deliberately
+             sits outside ServiceTag's applicationId namespace: StreamSourcePolicy
+             (core/.../references/StreamSourcePolicy.kt:34) refuses its own id and everything
+             under it, so com.loosecannon.servicetag.* would be refused before any grant counts.
+             SenderActivity.AUTHORITY carries the same string. -->
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.loosecannon.servicetag.testsender.fixtures"
+            android:authorities="com.loosecannon.sharetestsender.fixtures"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

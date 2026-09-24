@@ -18,9 +18,18 @@ import java.io.File
  * |------------------|--------------------------------------------------------------------|
  * | `send_text`      | `text/plain`, `EXTRA_TEXT` = the `text` extra                      |
  * | `send_file`      | the fixture's type, `EXTRA_STREAM` = its `content://` URI, `ClipData` from the URI, `FLAG_GRANT_READ_URI_PERMISSION` |
- * | `send_bad_grant` | the same stream with no grant flag and no `ClipData`               |
+ * | `send_bad_grant` | the same stream and `ClipData`, with no grant flag                 |
  *
  * The target is named explicitly, so no chooser and no other share target is ever involved.
+ *
+ * **Why `send_bad_grant` keeps its `ClipData`.** On API 37 a flagless `ACTION_SEND` with a stream
+ * and no `ClipData` is granted anyway: `Instrumentation.execStartActivity` calls
+ * `Intent.migrateExtraStreamToClipData`, which copies `EXTRA_STREAM` into `ClipData` and adds
+ * `FLAG_GRANT_READ_URI_PERMISSION` itself, logging "Implicit URI grant for
+ * android.intent.action.SEND action will be discontinued from Android 18 onwards. Please set the
+ * grant explicitly in the app." A share that already carries `ClipData` is left alone, so this one
+ * arrives with no grant at all — and `send_file` sets its flag explicitly rather than lean on a
+ * platform behaviour that is on its way out.
  */
 class SenderActivity : Activity() {
 
@@ -45,6 +54,7 @@ class SenderActivity : Activity() {
             SEND_FILE -> {
                 val fixture = fixtureFrom(request) ?: return null
                 val uri = uriFor(fixture)
+                // The grant is set here, explicitly: the platform's implicit one is being retired.
                 share.setType(TYPES.getValue(fixture))
                     .putExtra(Intent.EXTRA_STREAM, uri)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -53,8 +63,12 @@ class SenderActivity : Activity() {
 
             SEND_BAD_GRANT -> {
                 val fixture = fixtureFrom(request) ?: return null
+                val uri = uriFor(fixture)
                 share.setType(TYPES.getValue(fixture))
-                    .putExtra(Intent.EXTRA_STREAM, uriFor(fixture))
+                    .putExtra(Intent.EXTRA_STREAM, uri)
+                // No grant flag. The ClipData is what keeps it that way: without it the platform
+                // would migrate the stream and grant it anyway (see the class comment).
+                share.clipData = ClipData(fixture, arrayOf(TYPES.getValue(fixture)), ClipData.Item(uri))
             }
 
             else -> {
@@ -92,7 +106,16 @@ class SenderActivity : Activity() {
 
         const val TARGET_PACKAGE = "com.loosecannon.servicetag"
         const val TARGET_ACTIVITY = "com.loosecannon.servicetag.share.ShareIntakeActivity"
-        const val AUTHORITY = "com.loosecannon.servicetag.testsender.fixtures"
+        /**
+         * **Outside ServiceTag's `applicationId` namespace on purpose.** ServiceTag refuses a
+         * stream whose authority is its own application id or anything under it
+         * (`core/src/main/kotlin/com/loosecannon/servicetag/core/references/StreamSourcePolicy.kt:34`,
+         * `host == it || host.startsWith("$it.")`, fed `BuildConfig.APPLICATION_ID` at
+         * `app/src/main/kotlin/com/loosecannon/servicetag/di/AppGraph.kt:358-359`). An authority
+         * under `com.loosecannon.servicetag.` — this package's own id included — would be refused
+         * as ServiceTag's own before any grant was looked at.
+         */
+        const val AUTHORITY = "com.loosecannon.sharetestsender.fixtures"
 
         const val EXTRA_COMMAND = "command"
         const val EXTRA_FIXTURE = "fixture"
