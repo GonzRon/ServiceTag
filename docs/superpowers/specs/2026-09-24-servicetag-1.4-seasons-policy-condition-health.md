@@ -1090,7 +1090,7 @@ D5 §6's "nothing stored at season end" and "MANUAL_STARTUP deferred" are retire
 113. An AGE baseline is the latest qualifying REPLACEMENT; a deleted baseline profile leaves NOT TRACKED, never a widened filter.
 114. A MEDIUM subject on an IN_SERVICE schedule is NOT TRACKED while dormant and counts from the latest cycle start; others freeze and carry.
 115. Pre-service lateness counts from the pre-service point and is never reset by season start; break days count for already-late work and not for deferred work.
-116. Counted days are measured against the actionable date as postponed (§7.1; semantics in 131).
+116. Counted days are measured against the actionable date as postponed (§7.1; semantics in 131). An implementation may begin evaluating from an earlier conservative bound, but after a postponement counted lateness is zero until the policy-derived postponed actionable date has passed; no day before that actionable date contributes to health (owner, 2026-09-24).
 117. `score` is non-increasing; WARNING starts exactly at `t2`, CRITICAL exactly at `t3`.
 118. An untracked subject is excluded from aggregation and shown as NOT TRACKED, never as 100.
 119. Every CRITICAL contributor and every DOWN or DEGRADED in-service component is shown on every surface that shows health; a DOWN asset's health is never shown without its condition.
