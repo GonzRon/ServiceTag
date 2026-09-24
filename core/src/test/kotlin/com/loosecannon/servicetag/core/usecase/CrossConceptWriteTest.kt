@@ -78,7 +78,8 @@ import org.junit.jupiter.api.Test
  */
 class CrossConceptWriteTest {
 
-    private val writes = mutableSetOf<String>()
+    /** Every write, one entry per call, so a count is asserted as well as a table. */
+    private val writes = mutableListOf<String>()
 
     private val assetRows = InMemoryAssetRepository()
     private val eventRows = InMemoryEventRepository()
@@ -203,9 +204,13 @@ class CrossConceptWriteTest {
         eventRows.rows["e-season"] = HealthFixtures.eventOf("e-season", "a2", EventKind.SEASON_START, "Opened", "2026-09-23")
     }
 
+    /** Each use case's writes, table by table, with how many each table took. */
+    private val counts = mutableMapOf<String, Map<String, Int>>()
+
     private suspend fun wrote(what: String, run: suspend () -> Any?): Pair<String, Set<String>> {
         writes.clear()
         run()
+        counts[what] = writes.groupingBy { it }.eachCount()
         return what to writes.toSet()
     }
 
@@ -315,5 +320,13 @@ class CrossConceptWriteTest {
             cases.filter { (_, tables) -> "asset_condition" in tables }.map { it.first }.toSet(),
             "only the two condition writers write asset_condition",
         )
+        val activationWriters =
+            listOf("SetSeasonMode into MANUAL", "SaveAssetSettings", "RecordSeasonActivation", "AcceptSeasonOffer")
+        for (what in activationWriters) {
+            assertEquals(1, counts.getValue(what)["asset_season_activation"], "$what writes exactly one activation")
+        }
+        for (what in listOf("RecordCondition", "AcceptOperationalOffer")) {
+            assertEquals(1, counts.getValue(what)["asset_condition"], "$what writes exactly one condition")
+        }
     }
 }

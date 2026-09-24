@@ -130,6 +130,28 @@ class ScheduleHealthLinkGuardTest {
     }
 
     /**
+     * B06-F3: the refusal order with `PreServiceNeedsDates`. Retargeting a driving PRE_SERVICE schedule
+     * onto an asset with no season and no break is two refusals at once. The guard's 422 comes first,
+     * because its remedy is in this body; with the flag it is the 409, whose remedy is the other asset.
+     * Neither writes anything, and the subject is still live.
+     */
+    @Test
+    fun theGuardsRefusalComesBeforePreServiceNeedsDates() = runBlocking<Unit> {
+        setUp()
+        h.asset("a1", name = "Generator", breakStart = "06-01", breakEnd = "06-30")
+        val schedule = h.schedule("s1", policy = ServicePolicy.PRE_SERVICE, offset = -14)
+        val subject = h.subject("h1", scheduleId = "s1")
+        val onto = h.commandOf(schedule).copy(targetAssetId = AssetId("a2"))
+
+        assertFailsWith<ScheduleDrivesHealthSubject> { h.saveSchedule.run(schedule.id, onto) }
+        assertFailsWith<PreServiceNeedsDates> {
+            h.saveSchedule.run(schedule.id, onto, unlinkHealthSubject = true)
+        }
+        assertEquals(schedule, h.storedSchedule("s1"))
+        assertEquals(subject, h.storedSubject("h1"), "still live")
+    }
+
+    /**
      * The flag with nothing to unlink changes nothing: a schedule no subject drives, and one whose only
      * subject is already archived, archive as they always did, and no subject row is touched.
      */
