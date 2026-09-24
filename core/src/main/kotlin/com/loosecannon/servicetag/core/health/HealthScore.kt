@@ -35,12 +35,14 @@ object HealthScore {
 
     /**
      * [t1], [t2] and [t3] are a subject's `nominal_until_days`, `warning_from_days` and
-     * `critical_from_days`. They satisfy `0 ≤ t1 < t2 < t3` by construction — the subject command
-     * refuses anything else and the format-8 content check refuses it on import — and a row that
-     * broke it would divide by zero, so it is refused here too rather than answered.
+     * `critical_from_days`. They satisfy [HealthSubjectShape.thresholdsValid] by construction — the
+     * subject command refuses anything else and the format-8 content check refuses it on import — and
+     * a row that broke the order would divide by zero, so it is refused here too rather than answered.
      */
     fun score(x: Long, t1: Int, t2: Int, t3: Int): Int {
-        require(t1 in 0 until t2 && t2 < t3) { "thresholds must satisfy 0 <= t1 < t2 < t3: $t1, $t2, $t3" }
+        require(HealthSubjectShape.thresholdsValid(t1, t2, t3)) {
+            "thresholds must satisfy 0 <= t1 < t2 < t3 <= ${HealthSubjectShape.MAX_THRESHOLD_DAYS}: $t1, $t2, $t3"
+        }
         val nominalUntil = t1.toLong()
         val warningFrom = t2.toLong()
         val criticalFrom = t3.toLong()

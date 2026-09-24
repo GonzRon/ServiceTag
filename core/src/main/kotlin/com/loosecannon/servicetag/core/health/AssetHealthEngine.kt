@@ -126,6 +126,10 @@ data class AssetHealthResult(
  * reaches it only as `P` inside [PolicyInputs], and the snooze — device-local delivery state — has
  * no way in at all (O-6, inv. 131). [profileExists] is a function rather than a repository for the
  * same reason: the caller answers it from the asset's profiles.
+ *
+ * **Malformed subjects are refused, not answered.** [evaluate] throws `IllegalArgumentException` when
+ * any non-archived subject of the asset has [HealthSubjectShape.problems]; no command or restore can
+ * store one, and a reader over merged data screens with that function before calling.
  */
 object AssetHealthEngine {
 
@@ -144,6 +148,10 @@ object AssetHealthEngine {
         val live = own
             .filter { it.archivedAt == null }
             .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+            .onEach { subject ->
+                val problems = HealthSubjectShape.problems(subject)
+                require(problems.isEmpty()) { "health subject ${subject.id.value} is malformed: $problems" }
+            }
             .map { subject ->
                 when (subject.driver) {
                     HealthDriver.AGE -> age(asset, subject, events, profileExists, today)
