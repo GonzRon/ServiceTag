@@ -2,21 +2,24 @@ package com.loosecannon.servicetag.core.merge
 
 import com.loosecannon.servicetag.core.backup.Backup
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
+import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
+import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import java.security.MessageDigest
 
 /**
- * The eleven canonical tables, **in the order a merge must write them**: every reference a row makes
+ * The fourteen canonical tables, **in the order a merge must write them**: every reference a row makes
  * points at a table declared before it (assets first, attachment rows last, when every owner is
  * in). The ordinal is also the first key conflicts are sorted by, which is what makes a report
  * deterministic.
@@ -27,12 +30,18 @@ import java.security.MessageDigest
  * schedule, so `CLOSURES` follows it; an event may reference a schedule, and `EVENTS` already sat
  * late enough to keep its place.
  *
- * 1.3's [REFERENCES] sits **last**, and any position after [ASSETS] would have been correct: a
- * reference points only at an asset, so last is the smaller diff and never the weaker order.
+ * 1.3's [REFERENCES] follows [ATTACHMENTS], and any position after [ASSETS] would have been
+ * correct: a reference points only at an asset, so that is the smaller diff and never the weaker
+ * order.
+ *
+ * 1.4's three follow [REFERENCES], each in dependency position: a season activation and a condition
+ * point only at an asset, and a health subject at an asset and — when it has one — a schedule, both
+ * decided long before. Their other links (an event, a baseline profile, the asset's primary subject)
+ * are soft and are never owners, so nothing here waits on them.
  */
 enum class MergeTable {
     ASSETS, GROUPS, DEFINITIONS, PROFILES, SCHEDULES, CLOSURES, LINKS, TAGS, EVENTS, ATTACHMENTS,
-    REFERENCES,
+    REFERENCES, SEASON_ACTIVATIONS, CONDITIONS, HEALTH_SUBJECTS,
 }
 
 /**
@@ -47,7 +56,9 @@ enum class MergeTable {
  * attachment folder (1.1.0). And a **reference** row whose `(asset_id, uri)` is already held here
  * by a row under a different id that differs from it (1.3.0, D-18 C): with no `UPDATE` verdict the
  * incoming name and description could never be adopted, so a conflict there could only refuse the
- * whole archive, and a skip leaves the local row exactly as it was.
+ * whole archive, and a skip leaves the local row exactly as it was. And a **health subject** that
+ * would drive a schedule a local non-archived subject under a different id already drives (1.4),
+ * for the same reason.
  */
 enum class MergeVerdict { INSERT, IDENTICAL, CONFLICT, SKIPPED }
 
@@ -215,6 +226,24 @@ enum class MergeReason {
      * count, and the same-id/different-content arm still blocks as [CONTENT_DIFFERS].
      */
     REFERENCE_HELD_BY_A_LOCAL_ROW,
+
+    /**
+     * 1.4. A local, non-archived health subject under a different row id already drives the
+     * schedule this incoming non-archived subject names. It rides on a **`SKIPPED`**, for
+     * [REFERENCE_HELD_BY_A_LOCAL_ROW]'s reason (D-18): a schedule drives at most one non-archived
+     * subject (inv. 120), there is no `UPDATE` verdict that could hand the schedule over, and a
+     * conflict could only refuse the whole archive. [MergeDecision.detail] is the local subject's id.
+     *
+     * An **archived** subject claims no schedule, on either side, so it never reaches this arm.
+     */
+    HEALTH_SUBJECT_SCHEDULE_HELD_BY_A_LOCAL_ROW,
+
+    /**
+     * 1.4. Two non-archived subjects of one archive claim one schedule, which inv. 120 forbids. A
+     * `CONFLICT`: the archive disagrees with itself, and no single row of it can be chosen.
+     * [MergeDecision.detail] is the id of the archive row that claimed the schedule first.
+     */
+    HEALTH_SUBJECT_SCHEDULE_DUPLICATED_IN_ARCHIVE,
 }
 
 /** A review hint (#44: "review hints only, never automatic identity"). It never blocks an apply. */
@@ -266,6 +295,9 @@ data class MergeWrites(
     val events: List<AssetEvent> = emptyList(),
     val attachments: List<Attachment> = emptyList(),
     val references: List<AssetReference> = emptyList(),
+    val seasonActivations: List<SeasonActivation> = emptyList(),
+    val conditions: List<AssetCondition> = emptyList(),
+    val healthSubjects: List<HealthSubject> = emptyList(),
 )
 
 /**
@@ -291,6 +323,9 @@ data class MergeSnapshot(
     val events: List<AssetEvent> = emptyList(),
     val attachments: List<Attachment> = emptyList(),
     val references: List<AssetReference> = emptyList(),
+    val seasonActivations: List<SeasonActivation> = emptyList(),
+    val conditions: List<AssetCondition> = emptyList(),
+    val healthSubjects: List<HealthSubject> = emptyList(),
     val storedBytes: Map<String, StoredBytes> = emptyMap(),
     val attachmentStoreConfigured: Boolean,
 )
@@ -300,8 +335,9 @@ data class MergeSnapshot(
  *
  * [applicable] is the only thing a client has to read to know whether an apply will do anything:
  * it is true exactly when [conflicts] is empty. [duplicateCandidates] never makes it false, and
- * neither does a `SKIPPED` row — an attachment whose bytes are absent, or a reference whose
- * `(asset_id, uri)` a diverged local row already holds (D-18 C).
+ * neither does a `SKIPPED` row — an attachment whose bytes are absent, a reference whose
+ * `(asset_id, uri)` a diverged local row already holds (D-18 C), or a health subject whose schedule
+ * a local subject already drives.
  */
 data class MergeReport(
     val formatVersion: Int,
@@ -318,6 +354,9 @@ data class MergeReport(
     val events: MergeTally,
     val attachments: MergeTally,
     val references: MergeTally,
+    val seasonActivations: MergeTally,
+    val conditions: MergeTally,
+    val healthSubjects: MergeTally,
     /** Deterministic: table order, then id. */
     val conflicts: List<MergeDecision>,
     val duplicateCandidates: List<DuplicateCandidate>,
@@ -385,6 +424,9 @@ class MergePlan internal constructor(
         events = tally(MergeTable.EVENTS),
         attachments = tally(MergeTable.ATTACHMENTS),
         references = tally(MergeTable.REFERENCES),
+        seasonActivations = tally(MergeTable.SEASON_ACTIVATIONS),
+        conditions = tally(MergeTable.CONDITIONS),
+        healthSubjects = tally(MergeTable.HEALTH_SUBJECTS),
         conflicts = conflicts,
         duplicateCandidates = duplicateCandidates,
     )

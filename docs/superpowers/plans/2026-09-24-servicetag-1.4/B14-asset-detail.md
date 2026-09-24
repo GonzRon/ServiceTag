@@ -99,3 +99,12 @@ The view model reads these once per load and on the repository flows the shipped
 ## Size
 
 Medium-large: three sections and two dialogs on one screen, most of the logic in JVM view-model tests. Split seam if needed: **B14a** Condition and Health; **B14b** Season and the list's phase.
+
+## Carry-forward from B04 (controller, 2026-09-24)
+
+- `SeasonView.activations` carries the full activation history in every season mode, but the phase reads it only in MANUAL. Asset detail shows the history (newest first, decision 41) only on a MANUAL asset; on CALENDAR and YEAR_ROUND assets the section is absent. A 422 body refusal wins over a 409 on the stored state when both apply.
+- `ScheduleEditViewModel.fieldOf` maps `PolicyOffsetInvalid` and `SeasonPolicyNeedsATimeRule` to `ScheduleField.SEASON` (B04's compile-through); B08 revisits the mapping when it owns the editor.
+
+## Carry-forward from B05's review (controller, 2026-09-24)
+
+- `HealthRow`, `HealthState`, `HealthAction` stay the reminder-health names in `ui.maintenance`; nothing on asset detail reuses them for asset health.

@@ -18,9 +18,9 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
-import com.loosecannon.servicetag.core.reminders.HealthFinding
+import com.loosecannon.servicetag.core.reminders.ReminderHealthFinding
+import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.reminders.RepairAction
-import com.loosecannon.servicetag.core.reminders.Severity
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.prefs.AppPrefs
@@ -242,7 +242,7 @@ class ReminderHealthCheckTest {
     fun notificationsOffAndAMutedChannelAreBothTheBlockedFinding() = runTest {
         platform.enabled = false
         val blocked = check().run().single { it.code == "NOTIFICATIONS_BLOCKED" }
-        assertEquals(Severity.ERROR, blocked.severity)
+        assertEquals(ReminderHealthSeverity.ERROR, blocked.severity)
         assertEquals(
             "Notifications are turned off, so maintenance reminders will not arrive.",
             blocked.message,
@@ -277,7 +277,7 @@ class ReminderHealthCheckTest {
     fun aCancelledAlarmIsTheFindingAndTheRepairReArmsItOnce() = runTest {
         alarm.cancel()
         val finding = check().run().single { it.code == "DIGEST_ALARM_MISSING" }
-        assertEquals(Severity.WARN, finding.severity)
+        assertEquals(ReminderHealthSeverity.WARN, finding.severity)
         assertEquals(
             "The daily reminder check is not scheduled, so today's maintenance may go unannounced.",
             finding.message,
@@ -321,7 +321,7 @@ class ReminderHealthCheckTest {
     fun noUniqueWorkIsTheFindingAndTheRepairEnqueuesExactlyOne() = runTest {
         backstop.drop()
         val finding = check().run().single { it.code == "BACKSTOP_WORK_MISSING" }
-        assertEquals(Severity.WARN, finding.severity)
+        assertEquals(ReminderHealthSeverity.WARN, finding.severity)
         assertEquals(
             "The background safety check is not running, so a missed reminder would not be caught.",
             finding.message,
@@ -354,7 +354,7 @@ class ReminderHealthCheckTest {
         listOf(AppRestriction.BATTERY_RESTRICTED, AppRestriction.STANDBY_RESTRICTED).forEach { state ->
             platform.restriction = state
             val finding = check().run().single { it.code == "APP_RESTRICTED" }
-            assertEquals("severity for $state", Severity.WARN, finding.severity)
+            assertEquals("severity for $state", ReminderHealthSeverity.WARN, finding.severity)
             assertEquals(
                 "This phone is holding ServiceTag back in the background, so reminders may arrive late or not at all.",
                 finding.message,
@@ -378,7 +378,7 @@ class ReminderHealthCheckTest {
     fun theGlobalSwitchOffIsAnInformationalFinding() = runTest {
         prefs.remindersEnabled = false
         val finding = check().run().single { it.code == "REMINDERS_GLOBALLY_OFF" }
-        assertEquals(Severity.INFO, finding.severity)
+        assertEquals(ReminderHealthSeverity.INFO, finding.severity)
         assertEquals("Reminders are turned off in ServiceTag.", finding.message)
         assertEquals(RepairAction.OpenInApp("TURN_REMINDERS_ON"), finding.repair)
     }
@@ -401,7 +401,7 @@ class ReminderHealthCheckTest {
             derivedState("s1"),
         )
         val finding = check().run().single { it.code == "SCHEDULE_NO_PROVIDER" }
-        assertEquals(Severity.WARN, finding.severity)
+        assertEquals(ReminderHealthSeverity.WARN, finding.severity)
         assertEquals("1 schedules have reminders switched on but no way to deliver them.", finding.message)
         assertEquals(RepairAction.OpenInApp("OPEN_SCHEDULE:s1"), finding.repair)
     }
@@ -463,7 +463,7 @@ class ReminderHealthCheckTest {
             derivedState("s1", effectiveDueOn = null),
         )
         val finding = check().run().single { it.code == "NO_DATA" }
-        assertEquals(Severity.WARN, finding.severity)
+        assertEquals(ReminderHealthSeverity.WARN, finding.severity)
         assertEquals("1 schedules need a meter reading before they can come due.", finding.message)
         assertEquals(RepairAction.OpenInApp("LOG_METER_READING:s1"), finding.repair)
     }
@@ -629,9 +629,9 @@ class ReminderHealthCheckTest {
         val check = check()
 
         listOf(
-            HealthFinding("APP_RESTRICTED", Severity.WARN, "m", RepairAction.OpenSystemSettings("OPEN_BATTERY_SETTINGS")),
-            HealthFinding("REMINDERS_GLOBALLY_OFF", Severity.INFO, "m", RepairAction.OpenInApp("TURN_REMINDERS_ON")),
-            HealthFinding("SOMETHING_ELSE", Severity.WARN, "m", null),
+            ReminderHealthFinding("APP_RESTRICTED", ReminderHealthSeverity.WARN, "m", RepairAction.OpenSystemSettings("OPEN_BATTERY_SETTINGS")),
+            ReminderHealthFinding("REMINDERS_GLOBALLY_OFF", ReminderHealthSeverity.INFO, "m", RepairAction.OpenInApp("TURN_REMINDERS_ON")),
+            ReminderHealthFinding("SOMETHING_ELSE", ReminderHealthSeverity.WARN, "m", null),
         ).forEach { check.repair(it) }
 
         assertFalse("the alarm was left alone", alarm.armed())
@@ -696,7 +696,7 @@ class ReminderHealthCheckTest {
             check().run().map { it.code },
         )
         assertEquals(
-            listOf(Severity.ERROR, Severity.WARN, Severity.INFO),
+            listOf(ReminderHealthSeverity.ERROR, ReminderHealthSeverity.WARN, ReminderHealthSeverity.INFO),
             check().run().map { it.severity },
         )
     }

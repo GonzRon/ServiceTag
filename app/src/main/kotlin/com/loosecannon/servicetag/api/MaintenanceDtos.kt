@@ -2,7 +2,6 @@ package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.backup.AssetEventDto
 import com.loosecannon.servicetag.core.backup.MaintenanceGroupDto
-import com.loosecannon.servicetag.core.backup.MaintenanceScheduleDto
 import com.loosecannon.servicetag.core.backup.OccurrenceClosureDto
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
@@ -29,10 +28,12 @@ import kotlinx.serialization.Serializable
  * The 1.2 maintenance shapes on the wire (master plan §9).
  *
  * The two rules `api/ApiDtos.kt:30`–`41` states hold here unchanged. **Responses reuse the backup
- * format's own row DTOs** — `MaintenanceGroupDto`, `MaintenanceScheduleDto`,
- * `OccurrenceClosureDto`, `AssetEventDto` — so a row read here and the same row inside `data.json`
- * are the same JSON object. **Requests are declared here and nowhere else**, with plain
- * `String`/`Int`/`Double?` fields, each converting to its domain command in exactly one place.
+ * format's own row DTOs** — `MaintenanceGroupDto`, `OccurrenceClosureDto`, `AssetEventDto` — so a
+ * row read here and the same row inside `data.json` are the same JSON object. The schedule is the
+ * one documented exception: every response that carries one carries a [ScheduleRowResponse], the
+ * format-8 row plus 1.3's season triple derived from its policy (master plan §11.3). **Requests
+ * are declared here and nowhere else**, with plain `String`/`Int`/`Double?` fields, each converting
+ * to its domain command in exactly one place.
  *
  * One shape is neither: [ScheduleStateDto] is a **derived read projection**. It is declared here
  * and deliberately **not** in `core.backup` — no command accepts one and no archive carries one,
@@ -49,10 +50,10 @@ internal data class GroupListResponse(val groups: List<MaintenanceGroupDto>)
 internal data class GroupResponse(val group: MaintenanceGroupDto)
 
 @Serializable
-internal data class ScheduleListResponse(val schedules: List<MaintenanceScheduleDto>)
+internal data class ScheduleListResponse(val schedules: List<ScheduleRowResponse>)
 
 @Serializable
-internal data class ScheduleResponse(val schedule: MaintenanceScheduleDto)
+internal data class ScheduleResponse(val schedule: ScheduleRowResponse)
 
 /**
  * `schedule_state`'s columns, as a client reads them — never as a command writes them.
@@ -103,7 +104,7 @@ internal fun ScheduleState.stateDto(): ScheduleStateDto = ScheduleStateDto(
  */
 @Serializable
 internal data class ScheduleDetailResponse(
-    val schedule: MaintenanceScheduleDto,
+    val schedule: ScheduleRowResponse,
     val state: ScheduleStateDto,
     val status: String,
     val computedForOn: String,
@@ -112,7 +113,7 @@ internal data class ScheduleDetailResponse(
 /** `POST /v1/schedules/{id}/postpone`: the row and what the engine now derives from it. */
 @Serializable
 internal data class ScheduleAndStateResponse(
-    val schedule: MaintenanceScheduleDto,
+    val schedule: ScheduleRowResponse,
     val state: ScheduleStateDto,
 )
 
@@ -120,7 +121,7 @@ internal data class ScheduleAndStateResponse(
 @Serializable
 internal data class CompletionResponse(
     val event: AssetEventDto,
-    val schedule: MaintenanceScheduleDto,
+    val schedule: ScheduleRowResponse,
     val state: ScheduleStateDto,
 )
 
@@ -128,7 +129,7 @@ internal data class CompletionResponse(
 @Serializable
 internal data class CloseRoundResponse(
     val closure: OccurrenceClosureDto,
-    val schedule: MaintenanceScheduleDto,
+    val schedule: ScheduleRowResponse,
     val state: ScheduleStateDto,
 )
 

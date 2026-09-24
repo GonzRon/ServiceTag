@@ -1,6 +1,6 @@
 package com.loosecannon.servicetag.ui.maintenance
 
-import com.loosecannon.servicetag.core.reminders.Severity
+import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * Declared here and **implemented by B10** (decision 28), so the badge can land and be tested
  * against a fake before the seven findings exist. The dependency points this way on purpose: B10
  * consumes this interface rather than B08 importing B10, which is what lets the shell — and with it
- * B10's own placement — ship first. [Severity] is B04's, on the reminder port: one three-member
+ * B10's own placement — ship first. [ReminderHealthSeverity] is B04's, on the reminder port: one three-member
  * enum in the repository, not two.
  *
  * Null means "nothing found", which is not the same as `INFO`: a phone with no findings and a phone
@@ -26,7 +26,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * `worstSeverity()` on every call would put decision 32 out of reach whatever its callers do.
  */
 interface HealthSummary {
-    suspend fun worstSeverity(): Severity?
+    suspend fun worstSeverity(): ReminderHealthSeverity?
 
     /**
      * A **change signal**, because the cache above makes this interface pull-only and both badge
@@ -55,7 +55,7 @@ private val NEVER_CHANGES: StateFlow<Int> = MutableStateFlow(0).asStateFlow()
  * set is deliberately below the line: `REMINDERS_GLOBALLY_OFF` is the owner's own choice and a
  * badge for it would be a nag that never clears.
  */
-fun Severity?.showsBadge(): Boolean = this != null && ordinal >= Severity.WARN.ordinal
+fun ReminderHealthSeverity?.showsBadge(): Boolean = this != null && ordinal >= ReminderHealthSeverity.WARN.ordinal
 
 /**
  * The word the health badge carries, in **one** place so the dashboard and the Maintenance
@@ -77,5 +77,5 @@ const val REMINDER_FAILED = "REMINDER FAILED"
  * it is asserting. Its [changes] never ticks, which is correct: nothing about it can move.
  */
 object NoHealthFindings : HealthSummary {
-    override suspend fun worstSeverity(): Severity? = null
+    override suspend fun worstSeverity(): ReminderHealthSeverity? = null
 }

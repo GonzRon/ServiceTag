@@ -151,7 +151,7 @@ internal class MaintenanceHandlers(
         return ok(
             ScheduleDetailResponse.serializer(),
             ScheduleDetailResponse(
-                schedule = schedule.toDto(),
+                schedule = schedule.rowResponse(),
                 state = state.stateDto(),
                 status = statusOf(schedule, state, t).name,
                 computedForOn = t.toString(),
@@ -162,7 +162,7 @@ internal class MaintenanceHandlers(
     suspend fun createSchedule(request: ApiRequest): ApiResponse {
         val body = request.decode(ScheduleCommandRequest.serializer())
         val saved = saveSchedule.run(null, body.toCommand())
-        return createdResponse(ScheduleResponse.serializer(), ScheduleResponse(saved.toDto()))
+        return createdResponse(ScheduleResponse.serializer(), ScheduleResponse(saved.rowResponse()))
     }
 
     /**
@@ -173,19 +173,19 @@ internal class MaintenanceHandlers(
     suspend fun updateSchedule(id: String, request: ApiRequest): ApiResponse {
         val body = request.decode(ScheduleCommandRequest.serializer())
         val saved = saveSchedule.run(ScheduleId(id), body.toCommand())
-        return ok(ScheduleResponse.serializer(), ScheduleResponse(saved.toDto()))
+        return ok(ScheduleResponse.serializer(), ScheduleResponse(saved.rowResponse()))
     }
 
     suspend fun pauseSchedule(id: String, request: ApiRequest): ApiResponse {
         val body = request.decode(PauseRequest.serializer())
         val saved = pauseSchedule.run(ScheduleId(id), body.paused)
-        return ok(ScheduleResponse.serializer(), ScheduleResponse(saved.toDto()))
+        return ok(ScheduleResponse.serializer(), ScheduleResponse(saved.rowResponse()))
     }
 
     suspend fun archiveSchedule(id: String, request: ApiRequest): ApiResponse {
         val body = request.decode(ArchiveRequest.serializer())
         val saved = archiveSchedule.run(ScheduleId(id), body.archived)
-        return ok(ScheduleResponse.serializer(), ScheduleResponse(saved.toDto()))
+        return ok(ScheduleResponse.serializer(), ScheduleResponse(saved.rowResponse()))
     }
 
     /** Changes no rule and creates no event; `null` clears the postponement. */
@@ -194,7 +194,7 @@ internal class MaintenanceHandlers(
         val saved = postponeSchedule.run(ScheduleId(id), body.postponedDueOn)
         return ok(
             ScheduleAndStateResponse.serializer(),
-            ScheduleAndStateResponse(saved.toDto(), stateOf(saved).stateDto()),
+            ScheduleAndStateResponse(saved.rowResponse(), stateOf(saved).stateDto()),
         )
     }
 
@@ -225,7 +225,7 @@ internal class MaintenanceHandlers(
         val after = schedule(id)
         return createdResponse(
             CompletionResponse.serializer(),
-            CompletionResponse(event.toDto(), after.toDto(), stateOf(after).stateDto()),
+            CompletionResponse(event.toDto(), after.rowResponse(), stateOf(after).stateDto()),
         )
     }
 
@@ -236,7 +236,7 @@ internal class MaintenanceHandlers(
         val after = schedule(id)
         return createdResponse(
             CloseRoundResponse.serializer(),
-            CloseRoundResponse(closure.toDto(), after.toDto(), stateOf(after).stateDto()),
+            CloseRoundResponse(closure.toDto(), after.rowResponse(), stateOf(after).stateDto()),
         )
     }
 
@@ -304,7 +304,7 @@ internal class MaintenanceHandlers(
     private suspend fun scheduleList(rows: List<MaintenanceSchedule>): ApiResponse = ok(
         ScheduleListResponse.serializer(),
         ScheduleListResponse(
-            rows.sortedWith(compareBy({ it.title.lowercase() }, { it.id.value })).map { it.toDto() },
+            rows.sortedWith(compareBy({ it.title.lowercase() }, { it.id.value })).map { it.rowResponse() },
         ),
     )
 

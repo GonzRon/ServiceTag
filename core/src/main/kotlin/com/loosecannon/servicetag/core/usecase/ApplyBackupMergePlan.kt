@@ -78,11 +78,7 @@ class ApplyBackupMergePlan(
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
     private val references: ReferenceRepository,
-    /**
-     * The three 1.4 stores — manual season activations, conditions and health subjects — held for
-     * the format-8 archive. Wired here in 1.4's first change so the constructor does not move
-     * again when the archive starts carrying them; format 7 reads and writes none of them.
-     */
+    /** The three 1.4 stores — manual season activations, conditions and health subjects. */
     private val seasonActivations: SeasonActivationRepository,
     private val conditions: ConditionRepository,
     private val healthSubjects: HealthSubjectRepository,
@@ -108,7 +104,8 @@ class ApplyBackupMergePlan(
                 plan.backup,
                 mergeSnapshotOf(
                     assets, groups, tags, links, definitions, profiles, schedules, closures,
-                    events, attachments, references, stored, configured,
+                    events, attachments, references, seasonActivations, conditions, healthSubjects,
+                    stored, configured,
                 ),
             )
             // Order matters — see the class KDoc.
@@ -127,6 +124,9 @@ class ApplyBackupMergePlan(
             fresh.writes.events.forEach { events.upsert(it) }
             fresh.writes.attachments.forEach { attachments.upsert(it) }
             fresh.writes.references.forEach { references.upsert(it) }
+            fresh.writes.seasonActivations.forEach { seasonActivations.insert(it) }
+            fresh.writes.conditions.forEach { conditions.insert(it) }
+            fresh.writes.healthSubjects.forEach { healthSubjects.upsert(it) }
 
             // After every write, inside the same transaction, once.
             rebuildAll()

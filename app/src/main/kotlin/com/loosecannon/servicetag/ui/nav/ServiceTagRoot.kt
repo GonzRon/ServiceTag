@@ -29,10 +29,10 @@ import com.loosecannon.servicetag.ui.journal.EventDetailScreen
 import com.loosecannon.servicetag.ui.journal.EventEntryScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupDetailScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupEditScreen
-import com.loosecannon.servicetag.ui.maintenance.HealthScreen
 import com.loosecannon.servicetag.ui.maintenance.LogMaintenancePicker
 import com.loosecannon.servicetag.ui.maintenance.MaintenanceScreen
 import com.loosecannon.servicetag.ui.maintenance.MaintenanceSheet
+import com.loosecannon.servicetag.ui.maintenance.ReminderHealthScreen
 import com.loosecannon.servicetag.ui.maintenance.ScheduleDetailScreen
 import com.loosecannon.servicetag.ui.maintenance.ScheduleEditScreen
 import com.loosecannon.servicetag.ui.nfc.ReaderMode
@@ -410,7 +410,7 @@ fun ServiceTagRoot(
                     )
                 }
                 entry<Route.ReminderHealth> {
-                    HealthScreen(
+                    ReminderHealthScreen(
                         graph = graph,
                         // Both in-app repairs land in the editor: the provider row ("Remind me
                         // through") and the meter baseline ("Last done at") are both fields on it,

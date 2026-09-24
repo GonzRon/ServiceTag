@@ -1,8 +1,8 @@
 package com.loosecannon.servicetag.core.testing
 
-import com.loosecannon.servicetag.core.reminders.HealthFinding
 import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.reminders.ReconcileReport
+import com.loosecannon.servicetag.core.reminders.ReminderHealthFinding
 import com.loosecannon.servicetag.core.reminders.ReminderProvider
 import com.loosecannon.servicetag.core.reminders.ReminderSubject
 import com.loosecannon.servicetag.core.reminders.RemoteChange
@@ -25,7 +25,7 @@ import com.loosecannon.servicetag.core.reminders.isCleared
  */
 class FakeReminderProvider(
     override val id: ProviderId = ProviderId.LOCAL,
-    private val findings: List<HealthFinding> = emptyList(),
+    private val findings: List<ReminderHealthFinding> = emptyList(),
 ) : ReminderProvider {
 
     val calls = mutableListOf<List<ReminderSubject>>()
@@ -54,5 +54,5 @@ class FakeReminderProvider(
     /** Nothing changes on this side but what [reconcile] put there. */
     override suspend fun pullChanges(): List<RemoteChange> = emptyList()
 
-    override suspend fun health(): List<HealthFinding> = findings
+    override suspend fun health(): List<ReminderHealthFinding> = findings
 }
