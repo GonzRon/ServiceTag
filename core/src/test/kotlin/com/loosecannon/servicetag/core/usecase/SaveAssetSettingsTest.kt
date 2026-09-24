@@ -41,8 +41,16 @@ class SaveAssetSettingsTest {
     )
 
     /** An asset with a boundary and a PRE_SERVICE schedule counting back from it. */
-    private fun withPreService(id: String, mode: SeasonMode, window: Pair<String, String>? = null, pause: Pair<String, String>? = null): Asset {
-        val asset = h.asset(id, name = "Generator $id", mode = mode, seasonStart = window?.first, seasonEnd = window?.second, breakStart = pause?.first, breakEnd = pause?.second)
+    private fun withPreService(
+        id: String,
+        mode: SeasonMode,
+        window: Pair<String, String>? = null,
+        pause: Pair<String, String>? = null,
+    ): Asset {
+        val asset = h.asset(
+            id, name = "Generator $id", mode = mode, seasonStart = window?.first, seasonEnd = window?.second,
+            breakStart = pause?.first, breakEnd = pause?.second,
+        )
         h.schedule("s-$id", assetId = id, policy = ServicePolicy.PRE_SERVICE, offset = -14, title = "Pre-season service $id")
         return asset
     }
@@ -60,7 +68,10 @@ class SaveAssetSettingsTest {
         val refused = assertFailsWith<BreakStrandsPolicy> {
             h.saveAssetSettings.run(
                 AssetId("a1"),
-                settings("Generator, north", SeasonMode.MANUAL, manualPhase = SeasonPhase.IN_SEASON, aggregation = HealthAggregation.TRACK_ONE, primary = "h1"),
+                settings(
+                    "Standby generator", SeasonMode.MANUAL, manualPhase = SeasonPhase.IN_SEASON,
+                    aggregation = HealthAggregation.TRACK_ONE, primary = "h1",
+                ),
             )
         }
         assertEquals(listOf(ScheduleId("s-a1")), refused.schedules.map { it.id })
@@ -72,12 +83,12 @@ class SaveAssetSettingsTest {
         val saved = h.saveAssetSettings.run(
             AssetId("a1"),
             settings(
-                "Generator, north", SeasonMode.MANUAL, manualPhase = SeasonPhase.IN_SEASON, pause = "06-01" to "06-30",
+                "Standby generator", SeasonMode.MANUAL, manualPhase = SeasonPhase.IN_SEASON, pause = "06-01" to "06-30",
                 aggregation = HealthAggregation.TRACK_ONE, primary = "h1",
             ),
         )
         val expected = before.copy(
-            name = "Generator, north", seasonMode = SeasonMode.MANUAL, healthAggregation = HealthAggregation.TRACK_ONE,
+            name = "Standby generator", seasonMode = SeasonMode.MANUAL, healthAggregation = HealthAggregation.TRACK_ONE,
             healthPrimarySubjectId = HealthSubjectId("h1"), updatedAt = h.now,
         )
         assertEquals(expected, saved)
@@ -111,12 +122,15 @@ class SaveAssetSettingsTest {
 
         withPreService("a5", SeasonMode.YEAR_ROUND)
         val repaired = h.saveAssetSettings.run(
-            AssetId("a5"), settings("Generator a5", SeasonMode.CALENDAR, window = "04-15" to "10-31", pause = "07-01" to "07-10"),
+            AssetId("a5"),
+            settings("Generator a5", SeasonMode.CALENDAR, window = "04-15" to "10-31", pause = "07-01" to "07-10"),
         )
-        assertEquals(SeasonMode.CALENDAR to ("07-01" to "07-10"), repaired.seasonMode to (repaired.blackoutStartMmdd to repaired.blackoutEndMmdd))
+        assertEquals(SeasonMode.CALENDAR, repaired.seasonMode)
+        assertEquals("07-01" to "07-10", repaired.blackoutStartMmdd to repaired.blackoutEndMmdd)
 
         val kept = h.saveAssetSettings.run(
-            AssetId("a2"), settings("Generator a2", SeasonMode.MANUAL, manualPhase = SeasonPhase.OUT_OF_SEASON, pause = "06-10" to "06-30"),
+            AssetId("a2"),
+            settings("Generator a2", SeasonMode.MANUAL, manualPhase = SeasonPhase.OUT_OF_SEASON, pause = "06-10" to "06-30"),
         )
         assertEquals(SeasonMode.MANUAL, kept.seasonMode, "the break is still the boundary: nothing is stranded")
     }

@@ -135,7 +135,9 @@ class BackupContentCheckTest {
     @Test
     fun aSubjectsNameThresholdsAndWeightAreChecked() {
         for (name in listOf("  ", "n".repeat(61))) {
-            assertRefused(data(subjects = listOf(subjectOf("h1", name = name))), "healthSubjects: subject h1", "NameRequired(limit=1..60)")
+            assertRefused(
+                data(subjects = listOf(subjectOf("h1", name = name))), "healthSubjects: subject h1", "NameRequired(limit=1..60)",
+            )
         }
         val sameTwice = subjectOf("h1").copy(nominalUntilDays = 5, warningFromDays = 5, criticalFromDays = 6)
         assertRefused(data(subjects = listOf(sameTwice)), "healthSubjects: subject h1", "ThresholdsInvalid")
@@ -175,7 +177,9 @@ class BackupContentCheckTest {
     fun whatACommandOrAMergeAllowsStillDecodes() {
         val edges = data(
             assets = listOf(
-                generator.copy(healthAggregation = HealthAggregation.TRACK_ONE, healthPrimarySubjectId = HealthSubjectId("h-gone")),
+                generator.copy(
+                    healthAggregation = HealthAggregation.TRACK_ONE, healthPrimarySubjectId = HealthSubjectId("h-gone"),
+                ),
             ),
             definitions = listOf(hours),
             schedules = listOf(
@@ -190,7 +194,10 @@ class BackupContentCheckTest {
                     .copy(nominalUntilDays = 0, warningFromDays = 1, criticalFromDays = 36_500),
                 subjectOf("h2", name = " Battery age ", weight = 1),
             ),
-            conditions = listOf(conditionOf("c1", occurredTime = null, reason = "r".repeat(500)), conditionOf("c2", reason = "")),
+            conditions = listOf(
+                conditionOf("c1", occurredTime = null, reason = "r".repeat(500)),
+                conditionOf("c2", reason = ""),
+            ),
             activations = listOf(activationOf("act-1", occurredOn = "2026-02-28")),
         )
         assertEquals(edges, BackupCodec.decode(archiveOf(edges)).data)

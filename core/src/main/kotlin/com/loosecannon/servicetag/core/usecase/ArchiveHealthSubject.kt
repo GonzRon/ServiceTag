@@ -38,7 +38,7 @@ class ArchiveHealthSubject(
         if ((existing.archivedAt != null) == archived) return@write existing
 
         if (archived) {
-            if (assets.get(existing.assetId)?.followsOnly(id) == true) throw HealthSubjectIsPrimary(id)
+            if (assets.get(existing.assetId)?.tracksOnly(id) == true) throw HealthSubjectIsPrimary(id)
         } else {
             val problems = linkProblems(
                 existing.assetId, existing.driver, existing.scheduleId, existing.baselineProfileId, schedules,

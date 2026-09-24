@@ -84,7 +84,11 @@ class SaveHealthSubject(
     }
 
     /** The trimmed command, or the 422 and then the 409; [self] is the subject being edited. */
-    private suspend fun checked(assetId: AssetId, self: HealthSubjectId?, cmd: HealthSubjectCommand): HealthSubjectCommand {
+    private suspend fun checked(
+        assetId: AssetId,
+        self: HealthSubjectId?,
+        cmd: HealthSubjectCommand,
+    ): HealthSubjectCommand {
         val clean = cmd.copy(name = cmd.name.trim())
         val problems = listOfNotNull(
             subjectNameProblem(clean.name),

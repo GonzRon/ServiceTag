@@ -52,7 +52,8 @@ class OperationalOfferTest {
             val current = conditionOf("c1", condition = condition, occurredOn = "2026-09-20")
             val impaired = condition == DOWN || condition == DEGRADED
             restoring.forEach { event ->
-                assertEquals(impaired, operationalOfferFor(current, event), "$condition after ${event.kind} ${event.scheduleId}")
+                val what = "$condition after ${event.kind} ${event.scheduleId}"
+                assertEquals(impaired, operationalOfferFor(current, event), what)
             }
             other.forEach { event ->
                 assertEquals(false, operationalOfferFor(current, event), "$condition after ${event.kind}")

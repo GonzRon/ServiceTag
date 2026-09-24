@@ -208,7 +208,8 @@ class FakeGraph(
         ArchiveHealthSubject(healthSubjects, assets, schedules, uow, clock)
     val setHealthPolicy: SetHealthPolicy = SetHealthPolicy(assets, healthSubjects, uow, clock)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
-        assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules, applyTemplate,
+        assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
+        applyTemplate,
     )
     val archiveAsset: ArchiveAsset =
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }

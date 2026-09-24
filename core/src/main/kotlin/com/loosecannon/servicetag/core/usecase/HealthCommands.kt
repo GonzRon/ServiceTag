@@ -211,8 +211,8 @@ internal suspend fun requireScheduleFree(
     if (holder != null) throw HealthScheduleTaken(scheduleId, holder.id)
 }
 
-/** Whether [subjectId] is the subject [asset]'s TRACK_ONE follows. */
-internal fun Asset.followsOnly(subjectId: HealthSubjectId): Boolean =
+/** Whether this asset's TRACK_ONE follows [subjectId] alone. */
+internal fun Asset.tracksOnly(subjectId: HealthSubjectId): Boolean =
     healthAggregation == HealthAggregation.TRACK_ONE && healthPrimarySubjectId == subjectId
 
 /**
@@ -268,7 +268,7 @@ internal suspend fun unlinkDriven(
     now: Long,
 ) {
     driven.forEach { subject ->
-        if (assets.get(subject.assetId)?.followsOnly(subject.id) == true) throw HealthSubjectIsPrimary(subject.id)
+        if (assets.get(subject.assetId)?.tracksOnly(subject.id) == true) throw HealthSubjectIsPrimary(subject.id)
     }
     driven.forEach { subjects.upsert(it.copy(archivedAt = now, updatedAt = now)) }
 }

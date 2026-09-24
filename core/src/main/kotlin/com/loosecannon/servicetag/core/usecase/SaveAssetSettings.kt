@@ -16,7 +16,10 @@ import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 
-/** Everything the asset editor saves in one tap (spec §10.4): the asset, its season, its break and its health policy. */
+/**
+ * Everything the asset editor saves in one tap (spec §10.4): the asset, its season, its break and its
+ * health policy.
+ */
 data class AssetSettingsCommand(
     val asset: AssetCommand,
     val seasonMode: SeasonModeCommand,
@@ -67,7 +70,8 @@ class SaveAssetSettings(
         // The 422s, each part by its own command's rule.
         val mode = cmd.seasonMode.trimmed()
         val pause = cmd.maintenanceBreak.trimmed()
-        val seasonProblems = seasonModeProblems(current?.seasonMode ?: SeasonMode.YEAR_ROUND, mode) + breakProblems(pause)
+        val modeBefore = current?.seasonMode ?: SeasonMode.YEAR_ROUND
+        val seasonProblems = seasonModeProblems(modeBefore, mode) + breakProblems(pause)
         if (seasonProblems.isNotEmpty()) throw SeasonValidation(seasonProblems)
         val policyProblems = healthPolicyProblems(current?.id, cmd.healthPolicy, subjects)
         if (policyProblems.isNotEmpty()) throw HealthValidation(policyProblems)
@@ -95,7 +99,8 @@ class SaveAssetSettings(
             // The 409: the kind before this save against the kind after both parts apply.
             val stranded = strandedBy(current, next, schedules.forAsset(current.id))
             if (stranded.isNotEmpty()) {
-                val calendarChanged = (current.seasonMode == SeasonMode.CALENDAR) != (next.seasonMode == SeasonMode.CALENDAR)
+                val calendarChanged =
+                    (current.seasonMode == SeasonMode.CALENDAR) != (next.seasonMode == SeasonMode.CALENDAR)
                 throw if (calendarChanged) {
                     SeasonModeStrandsPolicy(current.id, stranded)
                 } else {
@@ -105,7 +110,7 @@ class SaveAssetSettings(
         }
 
         assets.upsert(next)
-        if (next.seasonMode == SeasonMode.MANUAL && (current?.seasonMode ?: SeasonMode.YEAR_ROUND) != SeasonMode.MANUAL) {
+        if (next.seasonMode == SeasonMode.MANUAL && modeBefore != SeasonMode.MANUAL) {
             activations.insert(
                 SeasonActivation(
                     id = ids.newId(),

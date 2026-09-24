@@ -45,12 +45,17 @@ class HealthPolicyCommandTest {
         assertEquals(before, h.stored("a1"), "a refusal writes nothing")
         assertEquals(0, h.assets.upserts)
 
-        val tracked = h.setHealthPolicy.run(AssetId("a1"), HealthPolicyCommand(HealthAggregation.TRACK_ONE, HealthSubjectId("h-live")))
-        assertEquals(HealthAggregation.TRACK_ONE to HealthSubjectId("h-live"), tracked.healthAggregation to tracked.healthPrimarySubjectId)
-        assertEquals(before.copy(healthAggregation = HealthAggregation.TRACK_ONE, healthPrimarySubjectId = HealthSubjectId("h-live"), updatedAt = h.now), h.stored("a1"))
+        val live = HealthPolicyCommand(HealthAggregation.TRACK_ONE, HealthSubjectId("h-live"))
+        val tracked = h.setHealthPolicy.run(AssetId("a1"), live)
+        val expected = before.copy(
+            healthAggregation = HealthAggregation.TRACK_ONE, healthPrimarySubjectId = HealthSubjectId("h-live"),
+            updatedAt = h.now,
+        )
+        assertEquals(expected, tracked)
+        assertEquals(expected, h.stored("a1"))
         assertEquals(1, h.assets.upserts)
 
-        h.setHealthPolicy.run(AssetId("a1"), HealthPolicyCommand(HealthAggregation.TRACK_ONE, HealthSubjectId("h-live")))
+        h.setHealthPolicy.run(AssetId("a1"), live)
         assertEquals(1, h.assets.upserts, "an unchanged policy writes nothing")
 
         val averaged = h.setHealthPolicy.run(AssetId("a1"), HealthPolicyCommand(HealthAggregation.AVERAGE))

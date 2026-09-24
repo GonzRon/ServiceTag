@@ -20,8 +20,11 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  */
 fun operationalOfferFor(current: AssetCondition?, event: AssetEvent): Boolean {
     if (current == null || current.assetId != event.assetId) return false
-    val impaired = current.condition == OperationalCondition.DOWN || current.condition == OperationalCondition.DEGRADED
-    val restores = event.scheduleId != null || event.kind == EventKind.MAINTENANCE || event.kind == EventKind.REPLACEMENT
+    val impaired = current.condition == OperationalCondition.DOWN ||
+        current.condition == OperationalCondition.DEGRADED
+    val restores = event.scheduleId != null ||
+        event.kind == EventKind.MAINTENANCE ||
+        event.kind == EventKind.REPLACEMENT
     return impaired && restores
 }
 

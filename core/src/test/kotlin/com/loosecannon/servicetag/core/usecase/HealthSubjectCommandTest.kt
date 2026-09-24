@@ -146,7 +146,8 @@ class HealthSubjectCommandTest {
         for (id in listOf("p-pack", "p-gone", "p-test")) {
             assertEquals(listOf(HealthProblem.ProfileNotAReplacement(ProfileId(id))), refused(age(baselineProfileId = id)), id)
         }
-        assertEquals(ProfileId("p-own"), h.saveHealthSubject.create(AssetId("a1"), age(baselineProfileId = "p-own")).baselineProfileId)
+        val own = h.saveHealthSubject.create(AssetId("a1"), age(baselineProfileId = "p-own"))
+        assertEquals(ProfileId("p-own"), own.baselineProfileId)
     }
 
     /** `HEALTH_WEIGHT_OUT_OF_RANGE`, carrying the 1–10 limit. Every problem is collected, in spec §6.1's order. */
@@ -176,7 +177,9 @@ class HealthSubjectCommandTest {
         h.schedule("s-old", status = ScheduleStatus.ARCHIVED)
         val expected = listOf(HealthProblem.ForeignSchedule(ScheduleId("s-old"), archived = true))
 
-        val onCreate = assertFailsWith<HealthValidation> { h.saveHealthSubject.create(AssetId("a1"), overdue(scheduleId = "s-old")) }
+        val onCreate = assertFailsWith<HealthValidation> {
+            h.saveHealthSubject.create(AssetId("a1"), overdue(scheduleId = "s-old"))
+        }
         assertEquals(expected, onCreate.problems)
         assertTrue(onCreate.message!!.contains("archived=true"), onCreate.message)
 
@@ -253,7 +256,8 @@ class HealthSubjectCommandTest {
         assertFailsWith<HealthScheduleTaken> { h.saveHealthSubject.update(other.id, overdue(name = "Battery age")) }
         assertEquals(other, h.storedSubject(other.id.value))
 
-        assertEquals("Battery test, renamed", h.saveHealthSubject.update(first.id, overdue(name = "Battery test, renamed")).name)
+        val renamed = h.saveHealthSubject.update(first.id, overdue(name = "Battery test, renamed"))
+        assertEquals("Battery test, renamed", renamed.name, "a subject does not hold its own schedule against itself")
 
         h.archiveHealthSubject.run(first.id, archived = true)
         val successor = h.saveHealthSubject.create(AssetId("a1"), overdue(name = "Successor"))
@@ -277,11 +281,15 @@ class HealthSubjectCommandTest {
 
         assertEquals(
             listOf(HealthProblem.ForeignSchedule(ScheduleId("s-pack"))),
-            assertFailsWith<HealthValidation> { h.saveHealthSubject.update(subject.id, overdue(scheduleId = "s-pack")) }.problems,
+            assertFailsWith<HealthValidation> {
+                h.saveHealthSubject.update(subject.id, overdue(scheduleId = "s-pack"))
+            }.problems,
         )
         assertEquals(
             listOf(HealthProblem.ProfileNotAReplacement(ProfileId("p-pack"))),
-            assertFailsWith<HealthValidation> { h.saveHealthSubject.update(subject.id, age(baselineProfileId = "p-pack")) }.problems,
+            assertFailsWith<HealthValidation> {
+                h.saveHealthSubject.update(subject.id, age(baselineProfileId = "p-pack"))
+            }.problems,
         )
         val renamed = h.saveHealthSubject.update(subject.id, age(name = "Battery age, pack two"))
         assertEquals(AssetId("a1"), renamed.assetId)

@@ -186,7 +186,8 @@ class CrossConceptWriteTest {
                 anchorOn = "2026-01-15",
             ).also { scheduleRows.rows[id] = it }
         }
-        activationRows.rows["act-0"] = SeasonFixtures.activationOf("act-0", "a2", SeasonAction.END, "2026-05-01", dayMillis("2026-05-01"))
+        activationRows.rows["act-0"] =
+            SeasonFixtures.activationOf("act-0", "a2", SeasonAction.END, "2026-05-01", dayMillis("2026-05-01"))
         for ((id, scheduleId) in listOf("h1" to "s3", "h2" to "s4")) {
             subjectRows.rows[id] = HealthSubject(
                 id = HealthSubjectId(id), assetId = AssetId("a1"), name = "Battery $id", kind = HealthSubjectKind.PART,
@@ -265,7 +266,7 @@ class CrossConceptWriteTest {
                 saveAssetSettings.run(
                     AssetId("a1"),
                     AssetSettingsCommand(
-                        AssetCommand(name = "Generator a1, north"),
+                        AssetCommand(name = "Standby generator a1"),
                         SeasonModeCommand(SeasonMode.MANUAL, manualPhase = SeasonPhase.OUT_OF_SEASON),
                         BreakCommand("07-01", "07-10"),
                         HealthPolicyCommand(HealthAggregation.WORST),

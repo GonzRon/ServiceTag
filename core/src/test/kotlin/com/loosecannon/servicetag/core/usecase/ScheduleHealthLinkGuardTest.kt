@@ -141,8 +141,10 @@ class ScheduleHealthLinkGuardTest {
         val old = h.subject("h-old", scheduleId = "s-old", archivedAt = 5L)
         val subjects = h.healthSubjects.rows.toMap()
 
-        assertEquals(ScheduleStatus.ARCHIVED, h.archiveSchedule.run(ScheduleId("s-free"), archived = true, unlinkHealthSubject = true).status)
-        assertEquals(ScheduleStatus.ARCHIVED, h.archiveSchedule.run(ScheduleId("s-old"), archived = true, unlinkHealthSubject = true).status)
+        for (id in listOf("s-free", "s-old")) {
+            val archived = h.archiveSchedule.run(ScheduleId(id), archived = true, unlinkHealthSubject = true)
+            assertEquals(ScheduleStatus.ARCHIVED, archived.status, id)
+        }
         val retargeted = h.saveSchedule.run(
             ScheduleId("s-old"), h.commandOf(h.storedSchedule("s-old")).copy(targetAssetId = AssetId("a2")),
             unlinkHealthSubject = true,
