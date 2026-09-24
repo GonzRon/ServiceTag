@@ -519,8 +519,12 @@ class InMemoryScheduleStateRepository : ScheduleStateRepository, Rollbackable, W
 
     override suspend fun deleteAll() { rows.clear(); version.value += 1 }
 
+    /**
+     * The Room DAO's order, mirrored: `ORDER BY actionable_due_on, schedule_id`, a null date first
+     * as SQLite sorts it (1.4, B02's M5). `DueReadModelPolicyTest` holds the two to one order.
+     */
     override fun observeAll(): Flow<List<ScheduleState>> = version.map {
-        rows.values.sortedWith(compareBy({ it.effectiveDueOn ?: "" }, { it.scheduleId.value }))
+        rows.values.sortedWith(compareBy({ it.actionableDueOn ?: "" }, { it.scheduleId.value }))
     }
 
     internal fun cascadeFromSchedules() { rows.clear(); version.value += 1 }
