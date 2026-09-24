@@ -71,12 +71,12 @@ Each prints nothing, or the count stated.
 ## R7 in full
 
 Set `ANDROID_SERIAL` to the development phone for this step only; it is never written down.
-Before and after `adb install -r` of the verified APK: `adb shell pm list packages -U --show-versioncode com.loosecannon.servicetag` (UID and version code) and `adb shell pm dump com.loosecannon.servicetag | grep -m1 firstInstallTime` (the package manager's own record, not the screen). The UID and `firstInstallTime` must not change and the version code must be the new one. The table counts come from the Developer API before and after and must be identical. The production phone is never part of a proof.
+Before and after `adb install -r` of the verified APK: `adb shell pm list packages -U --show-versioncode com.loosecannon.servicetag` (UID and version code) and `adb shell pm dump com.loosecannon.servicetag | grep -m1 firstInstallTime` (the package manager's own record, not the screen). The UID and `firstInstallTime` must not change and the version code must be the new one. The table counts come from the Developer API's `GET /v1/status` (`counts`, `docs/api/v1.md`) before and after and must be identical. The development phone is told apart by its installed version code, never by its model. The production phone is never part of a proof.
 
 ## Environment notes that cost a day
 
 - **Pin the emulator.** A physical phone may be attached. `ANDROID_SERIAL=emulator-5554` must be
-  exported for every Gradle and `adb` command here, or `:share-test-sender:installDebug` and the
+  exported for every Gradle and `adb` command here except R7's, or `:share-test-sender:installDebug` and the
   connected suite reach every attached device. A fresh clone has no `local.properties`, so export
   `ANDROID_HOME` too.
 - **Gboard's stylus handwriting swallows text sent through adb.** The emulator's
@@ -108,7 +108,7 @@ Before and after `adb install -r` of the verified APK: `adb shell pm list packag
 
 ## The tripwire
 
-`ReleaseProofPolicyTest` (JVM, inside R1 and CI) fails if any tracked file under `tools/`,
+`ReleaseProofPolicyTest` (JVM, inside R1 and CI) fails if any file git tracks, or would not ignore, under `tools/`,
 `app/src/androidTest/`, `share-test-sender/` or `.github/` names a screen-driving tool, or if R4
 above stops being `ShareBoundaryTest` alone. `ShareBoundaryTest` fails any case that takes longer
 than 20 s. A future harness either edits those tests in the open or fails CI.
