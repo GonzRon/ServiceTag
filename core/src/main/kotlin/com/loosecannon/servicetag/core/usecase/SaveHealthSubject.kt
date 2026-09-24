@@ -25,8 +25,9 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * weight (1–10). Then the state, 409 [HealthScheduleTaken], when the schedule already drives another
  * non-archived subject.
  *
- * A create appends to the asset's list when no `sortOrder` is given; an edit keeps the stored one.
- * The check and the write share one `uow.write`.
+ * A create appends to the asset's list when no `sortOrder` is given; an edit keeps the stored one, and
+ * an edit that changes nothing — once validated — writes nothing and keeps `updatedAt`. The check and
+ * the write share one `uow.write`.
  */
 class SaveHealthSubject(
     private val subjects: HealthSubjectRepository,
@@ -79,6 +80,9 @@ class SaveHealthSubject(
             sortOrder = clean.sortOrder ?: existing.sortOrder,
             updatedAt = clock.nowMillis(),
         )
+        // An edit that changes nothing writes nothing: a stamped `updatedAt` alone would turn a later
+        // re-import of this very row from IDENTICAL into CONTENT_DIFFERS (the controller's ruling on B06-F4).
+        if (saved.copy(updatedAt = existing.updatedAt) == existing) return@write existing
         subjects.upsert(saved)
         saved
     }

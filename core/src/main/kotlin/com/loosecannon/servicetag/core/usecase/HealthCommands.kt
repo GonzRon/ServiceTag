@@ -159,6 +159,10 @@ internal fun MaintenanceSchedule.hasTimeRule(): Boolean = timeInterval != null &
  * update **and restore** all ask this, so no non-archived subject ever names an archived, retargeted
  * or rule-less schedule through a local write — the state the engine's NOT TRACKED covers is reached
  * only by a merge (plan decision 17).
+ *
+ * Every applicable problem is collected, and a named schedule's own problem comes **before**
+ * [HealthProblem.DriverMismatch]: fixing the driver cannot cure a bad link (the controller's ruling
+ * on B06-F5).
  */
 internal suspend fun linkProblems(
     assetId: AssetId,
@@ -166,12 +170,15 @@ internal suspend fun linkProblems(
     scheduleId: ScheduleId?,
     baselineProfileId: ProfileId?,
     schedules: ScheduleRepository,
-): List<HealthProblem> = when (driver) {
-    HealthDriver.AGE -> listOfNotNull(HealthProblem.DriverMismatch.takeIf { scheduleId != null })
-    HealthDriver.MAINTENANCE_OVERDUE -> when {
-        scheduleId == null || baselineProfileId != null -> listOf(HealthProblem.DriverMismatch)
-        else -> listOfNotNull(scheduleProblem(assetId, scheduleId, schedules))
+): List<HealthProblem> {
+    val mismatch = when (driver) {
+        HealthDriver.AGE -> scheduleId != null
+        HealthDriver.MAINTENANCE_OVERDUE -> scheduleId == null || baselineProfileId != null
     }
+    return listOfNotNull(
+        scheduleId?.let { scheduleProblem(assetId, it, schedules) },
+        HealthProblem.DriverMismatch.takeIf { mismatch },
+    )
 }
 
 private suspend fun scheduleProblem(assetId: AssetId, id: ScheduleId, schedules: ScheduleRepository): HealthProblem? {

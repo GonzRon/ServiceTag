@@ -113,6 +113,29 @@ class HealthSubjectCommandTest {
         assertEquals(listOf(HealthProblem.DriverMismatch), refused(overdue(baselineProfileId = "p-replace")))
     }
 
+    /**
+     * The controller's ruling on B06-F5: every applicable problem is collected, and a bad link comes
+     * before `DriverMismatch`, since fixing the driver cannot cure it — a baseline on a
+     * MAINTENANCE_OVERDUE subject whose schedule is another asset's, and an AGE subject naming an
+     * archived schedule, each report both on the first submit.
+     */
+    @Test
+    fun aBadLinkIsReportedBeforeADriverMismatch() = runBlocking<Unit> {
+        setUp()
+        h.profile("p-replace", EventKind.REPLACEMENT)
+        h.schedule("s-pack", assetId = "a2")
+        h.schedule("s-old", status = ScheduleStatus.ARCHIVED)
+
+        assertEquals(
+            listOf(HealthProblem.ForeignSchedule(ScheduleId("s-pack")), HealthProblem.DriverMismatch),
+            refused(overdue(scheduleId = "s-pack", baselineProfileId = "p-replace")),
+        )
+        assertEquals(
+            listOf(HealthProblem.ForeignSchedule(ScheduleId("s-old"), archived = true), HealthProblem.DriverMismatch),
+            refused(age(scheduleId = "s-old")),
+        )
+    }
+
     /** `FOREIGN_SCHEDULE`: absent, another asset's, or a group's. */
     @Test
     fun aForeignScheduleIsRefused() = runBlocking<Unit> {
@@ -266,6 +289,26 @@ class HealthSubjectCommandTest {
         val restore = assertFailsWith<HealthScheduleTaken> { h.archiveHealthSubject.run(first.id, archived = false) }
         assertEquals(successor.id, restore.heldBy)
         assertNotNull(h.storedSubject(first.id.value).archivedAt)
+    }
+
+    /**
+     * The controller's ruling on B06-F4: an edit that changes nothing is a no-op — no write and the
+     * stored `updatedAt` kept — so an unchanged subject can never later plan as a merge conflict. The
+     * command is still checked first; any real change is written and stamped.
+     */
+    @Test
+    fun anUnchangedEditWritesNothing() = runBlocking<Unit> {
+        setUp()
+        val created = h.saveHealthSubject.create(AssetId("a1"), overdue(name = "Battery test"))
+        h.now += 60_000L
+
+        val same = h.saveHealthSubject.update(created.id, overdue(name = "  Battery test  "))
+        assertEquals(created, same)
+        assertEquals(created, h.storedSubject(created.id.value), "updatedAt kept")
+
+        val renamed = h.saveHealthSubject.update(created.id, overdue(name = "Battery load test"))
+        assertEquals(created.copy(name = "Battery load test", updatedAt = h.now), h.storedSubject(created.id.value))
+        assertEquals(h.now, renamed.updatedAt)
     }
 
     /**
