@@ -3,12 +3,9 @@ package com.loosecannon.servicetag.core.health
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
-import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.Clock
-import com.loosecannon.servicetag.core.ports.ScheduleLocalDelivery
-import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.schedule.ScheduleRecompute
 import com.loosecannon.servicetag.core.schedule.SeasonContext
@@ -117,21 +114,14 @@ class PostponeSnoozeHealthTest {
         )
     }
 
-    /** The snooze is device-local delivery state: nothing the engine takes can carry it. */
+    /**
+     * The snooze is device-local delivery state (`schedule_local_delivery`), and nothing the engine or
+     * the clock takes can carry it: the whole shape of their inputs is walked and no field names a
+     * snooze or a delivery type. This is the structural half of inv. 131; the behavioural half, with
+     * the app's real snooze, is B07's.
+     */
     @Test
-    fun theEngineHasNoInputASnoozeCanReach() = runTest {
-        seed()
-        val critical = health()
-        assertEquals(HealthBand.CRITICAL, (critical.value as SubjectValue.Scored).band)
-        val delivery = MapDelivery()
-        delivery.upsert(
-            ScheduleLocalDelivery(
-                scheduleId = ScheduleId("s1"), snoozedUntilAt = dayMillis("2026-12-31"), lastNotifiedAt = null,
-                firstEntrySeen = true, actionNonce = null, nonceIssuedAt = null, updatedAt = dayMillis("2026-09-24"),
-            ),
-        )
-        assertEquals(critical, health(), "snoozing a CRITICAL item leaves its health unchanged")
-
+    fun theEngineHasNoInputASnoozeCanReach() {
         val reachable = reachableFrom(
             AssetHealthEngine::class.java.methods.single { it.name == "evaluate" }.genericParameterTypes.toList() +
                 HealthClock::class.java.methods.single { it.name == "countedDays" }.genericParameterTypes.toList(),
@@ -167,13 +157,5 @@ class PostponeSnoozeHealthTest {
             }
         }
         return found
-    }
-
-    private class MapDelivery : ScheduleLocalDeliveryRepository {
-        private val rows = mutableMapOf<ScheduleId, ScheduleLocalDelivery>()
-        override suspend fun get(id: ScheduleId): ScheduleLocalDelivery? = rows[id]
-        override suspend fun upsert(row: ScheduleLocalDelivery) { rows[row.scheduleId] = row }
-        override suspend fun all(): List<ScheduleLocalDelivery> = rows.values.toList()
-        override suspend fun deleteAll() = rows.clear()
     }
 }
