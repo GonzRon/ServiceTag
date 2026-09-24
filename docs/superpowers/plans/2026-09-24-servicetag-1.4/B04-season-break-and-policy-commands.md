@@ -110,3 +110,7 @@ Medium: four small use cases, two extended ones and one pure view; most of the w
 ## Carry-forward from B01's review (controller, 2026-09-24)
 
 - **M4:** B01 made the shipped fixtures that create a seasonal asset through `createAsset` set CALENDAR directly (a `FakeGraph.calendar` helper and one inline copy in `DashboardAttentionTest`). Once this brief's legacy-pair rule lands in the asset commands (an asset given a season window takes CALENDAR; inv. 88), remove that helper and the inline copy and add the create-path case to this brief's matrix: creating an asset with a window yields `seasonMode = CALENDAR` and its non-CONTINUOUS schedules read INACTIVE_SEASON out of season; RED mutation: leave `seasonMode` at its default.
+
+## Carry-forward from B02's review (controller, 2026-09-24)
+
+- **M3:** `BuildReminderSubjects` kept two unused constructor parameters (`states`, `assets`, marked `@Suppress("unused")`) because only the AppGraph owner may change its wiring. This brief owns `AppGraph` in wave 3: drop the two parameters and the suppression, and update the one wiring site. Mechanical; no test row.
