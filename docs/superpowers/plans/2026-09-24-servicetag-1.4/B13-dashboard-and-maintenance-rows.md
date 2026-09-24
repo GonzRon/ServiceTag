@@ -124,3 +124,7 @@ One line per schedule row, the first that applies: **DORMANT** — S89 "Out of s
 ## Size
 
 Medium: one view model's assembly, one filter model, one row addition and one pure function. No split expected.
+
+## Carry-forward from B07 (controller, 2026-09-25)
+
+- S22's "since" reads the attention item's `since` field (the start of the current run of the same condition), never `occurredOn`; the condition chips read the asset's current condition from the row the read model hands over. This brief computes neither.

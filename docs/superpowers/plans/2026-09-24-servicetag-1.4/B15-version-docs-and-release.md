@@ -106,3 +106,7 @@ None directly. It **asserts** that the numbers behind inv. 62–64 and 124 agree
 ## Size
 
 Small: one version block, five documents, one test class, one proof list. No split.
+
+## Carry-forward from B08 (controller, 2026-09-25)
+
+- Release grep: `grep -rnE '(^|[^.[:alnum:]_])assert\(' app/src/androidTest` → no output (Kotlin `assert` checks nothing on ART; the pattern also catches inline `runOnIdle { assert(` and leaves Compose's `.assert(` alone); listed beside the retired-token tripwire.
