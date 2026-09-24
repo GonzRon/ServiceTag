@@ -165,3 +165,10 @@ dependencies {
 tasks.withType<Test>().configureEach {
     dependsOn("processDebugManifest")
 }
+
+// #62: the boundary proofs need a sharer with another UID on the device before any connected class
+// runs, so the connected task installs the test-only sender first. Test wiring only: `:app` takes
+// no dependency on the sender and no release task reaches it.
+tasks.named { it == "connectedDebugAndroidTest" }.configureEach {
+    dependsOn(":share-test-sender:installDebug")
+}
