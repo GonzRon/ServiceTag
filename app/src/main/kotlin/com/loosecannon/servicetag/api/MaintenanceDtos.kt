@@ -31,8 +31,9 @@ import kotlinx.serialization.Serializable
  * format's own row DTOs** — `MaintenanceGroupDto`, `OccurrenceClosureDto`, `AssetEventDto` — so a
  * row read here and the same row inside `data.json` are the same JSON object. The schedule is the
  * one documented exception: every response that carries one carries a [ScheduleRowResponse], the
- * format-8 row plus 1.3's season triple derived from its policy (master plan §11.3). **Requests are declared here and nowhere else**, with plain
- * `String`/`Int`/`Double?` fields, each converting to its domain command in exactly one place.
+ * format-8 row plus 1.3's season triple derived from its policy (master plan §11.3). **Requests
+ * are declared here and nowhere else**, with plain `String`/`Int`/`Double?` fields, each converting
+ * to its domain command in exactly one place.
  *
  * One shape is neither: [ScheduleStateDto] is a **derived read projection**. It is declared here
  * and deliberately **not** in `core.backup` — no command accepts one and no archive carries one,

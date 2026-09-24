@@ -82,7 +82,7 @@ class StageABundleConformanceTest {
         val entries = readZipEntries(resourceBytes())
         val data = Json.parseToJsonElement(String(entries.getValue("data.json"))).jsonObject
 
-        // The root object itself: BackupData defaults eight of its eleven tables to emptyList(), so
+        // The root object itself: BackupData defaults eleven of its fourteen tables to emptyList(), so
         // a *new* table added there tomorrow would never be emitted by the generator and would
         // decode away silently unless the root's own key set is pinned here too. The fixture is a
         // **format-5** archive and the generator writes format 5, so the three format-6 tables, the
@@ -191,7 +191,8 @@ class StageABundleConformanceTest {
         /** What format 8 added, named for the same reason. */
         private val FORMAT_8_TABLES = setOf("seasonActivations", "assetConditions", "healthSubjects")
         private val FORMAT_8_ASSET_FIELDS = setOf(
-            "seasonMode", "blackoutStartMmdd", "blackoutEndMmdd", "healthAggregation", "healthPrimarySubjectId",
+            "seasonMode", "blackoutStartMmdd", "blackoutEndMmdd", "healthAggregation",
+            "healthPrimarySubjectId",
         )
     }
 }

@@ -626,8 +626,9 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
     }
 
     // --- references (1.3, D-18 C) -----------------------------------------------------------
-    // Last in write order: a reference's only foreign key is `asset_id`, so any position after
-    // ASSETS would do and last is the smaller diff. The arm order is the closure pass's, with one
+    // After ATTACHMENTS in write order: a reference's only foreign key is `asset_id`, so any
+    // position after ASSETS would do, and 1.3 appended it as the smaller diff; 1.4's three tables
+    // follow it. The arm order is the closure pass's, with one
     // difference that is the whole of D-18 C: the **diverged** second identity is a `SKIPPED` and
     // never a `CONFLICT`, because there is no UPDATE verdict for the incoming name and description
     // to be adopted by, so refusing the archive could not produce a better merged state.

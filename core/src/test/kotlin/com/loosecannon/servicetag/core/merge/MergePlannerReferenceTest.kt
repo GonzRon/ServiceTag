@@ -79,8 +79,9 @@ class MergePlannerReferenceTest {
     // --- write order --------------------------------------------------------------------------
 
     /**
-     * Hazard: merge order breaks a reference. `REFERENCES` is **last**, and an archive whose asset
-     * and reference arrive together writes the asset first — so the reference's owner is an
+     * Hazard: merge order breaks a reference. `REFERENCES` follows `ATTACHMENTS` — the last of the
+     * eleven shipped tables, with 1.4's three after it — and an archive whose asset and reference
+     * arrive together writes the asset first — so the reference's owner is an
      * `INSERT` of this same plan by the time it is decided.
      *
      * The inversion the order exists to prevent is pinned beside it: with the asset taken out of
@@ -88,7 +89,7 @@ class MergePlannerReferenceTest {
      * decided *before* `ASSETS` would answer for every row.
      */
     @Test
-    fun `references are decided last, after the asset that owns them`() {
+    fun `references are decided after the asset that owns them`() {
         // The last of the eleven shipped tables; 1.4's three follow it (`MergePlannerSeasonHealthTest`).
         assertEquals(MergeTable.REFERENCES, MergeTable.entries[10])
 
@@ -332,13 +333,13 @@ class MergePlannerReferenceTest {
      * dropped from the type stops compiling, one wired to the wrong table fails on its value, and
      * one left out of `report()` fails as an empty tally where a populated one belongs.
      *
-     * The archive is shaped so the eleven expectations are not all the same value: only
+     * The archive is shaped so the fourteen expectations are not all the same value: only
      * `references` and `assets` carry rows, so a report that read `attachments` where it meant
      * `references` — the drift a positional mirror invites — fails here rather than passing on a
      * row of zeroes.
      */
     @Test
-    fun `the report carries eleven tallies with references last`() {
+    fun `the report carries a tally per table in write order`() {
         val plan = mergePlanOf(
             backupOf(assets = listOf(asset("a1")), references = listOf(reference("r1"))),
             snapshotOf(),
@@ -364,7 +365,7 @@ class MergePlannerReferenceTest {
         assertEquals(MergeTable.entries.toList(), byName.map { it.first })
         assertEquals(MergeTable.entries.map { plan.tally(it) }, byName.map { it.second })
 
-        // and the two the archive actually populates, so the comparison above is not eleven zeroes
+        // and the two the archive actually populates, so the comparison above is not all zeroes
         assertEquals(MergeTally(1, 0, 0, 0), report.references)
         assertEquals(MergeTally(1, 0, 0, 0), report.assets)
         assertEquals(MergeTally(0, 0, 0, 0), report.attachments)
