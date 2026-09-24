@@ -52,7 +52,7 @@ class ScheduleHealthLinkGuardTest {
      * subject, and each writes nothing.
      */
     @Test
-    fun removingTheTimeRuleRetargetingOrArchivingIsRefused() = runBlocking {
+    fun removingTheTimeRuleRetargetingOrArchivingIsRefused() = runBlocking<Unit> {
         setUp()
         val schedule = h.schedule("s1")
         val subject = h.subject("h1", scheduleId = "s1", name = "Service interval")
@@ -74,7 +74,7 @@ class ScheduleHealthLinkGuardTest {
      * the schedule and the subject are both left exactly as they were.
      */
     @Test
-    fun theFlagArchivesTheSubjectInTheSameTransaction() = runBlocking {
+    fun theFlagArchivesTheSubjectInTheSameTransaction() = runBlocking<Unit> {
         setUp()
         val schedule = h.schedule("s1")
         val subject = h.subject("h1", scheduleId = "s1")
@@ -112,7 +112,7 @@ class ScheduleHealthLinkGuardTest {
      * follows, the whole write is 409 `HEALTH_SUBJECT_IS_PRIMARY`, and nothing is written.
      */
     @Test
-    fun theFlagOnThePrimaryIs409() = runBlocking {
+    fun theFlagOnThePrimaryIs409() = runBlocking<Unit> {
         setUp()
         val schedule = h.schedule("s1")
         val subject = h.subject("h1", scheduleId = "s1")
@@ -134,7 +134,7 @@ class ScheduleHealthLinkGuardTest {
      * subject is already archived, archive as they always did, and no subject row is touched.
      */
     @Test
-    fun theFlagWithNothingToUnlinkIsANoOp() = runBlocking {
+    fun theFlagWithNothingToUnlinkIsANoOp() = runBlocking<Unit> {
         setUp()
         h.schedule("s-free")
         h.schedule("s-old")
@@ -158,7 +158,7 @@ class ScheduleHealthLinkGuardTest {
      * archived schedule, and the subject is not touched by any of them.
      */
     @Test
-    fun aTitleOrPolicyEditIsNotGuarded() = runBlocking {
+    fun aTitleOrPolicyEditIsNotGuarded() = runBlocking<Unit> {
         setUp()
         val schedule = h.schedule("s1")
         val subject = h.subject("h1", scheduleId = "s1")

@@ -69,7 +69,7 @@ class HealthSubjectCommandTest {
 
     /** `HEALTH_SUBJECT_NAME_REQUIRED`, carrying the 1–60 limit its message states (plan decision 33). */
     @Test
-    fun aBlankOrOverLongNameIsNameRequired() = runBlocking {
+    fun aBlankOrOverLongNameIsNameRequired() = runBlocking<Unit> {
         setUp()
         for (name in listOf("", "   ", "n".repeat(61), " " + "n".repeat(61) + " ")) {
             assertEquals(listOf(HealthProblem.NameRequired(1..60)), refused(age(name = name)), "\"$name\"")
@@ -85,7 +85,7 @@ class HealthSubjectCommandTest {
      * any triple outside `0 ≤ t1 < t2 < t3 ≤ 36,500`; nothing is stored for any of them.
      */
     @Test
-    fun thresholdsAreRequiredWithNoDefault() = runBlocking {
+    fun thresholdsAreRequiredWithNoDefault() = runBlocking<Unit> {
         setUp()
         val missing = listOf(
             overdue(t1 = null), overdue(t2 = null), overdue(t3 = null), overdue(t1 = null, t2 = null, t3 = null),
@@ -105,7 +105,7 @@ class HealthSubjectCommandTest {
 
     /** `HEALTH_DRIVER_MISMATCH`: AGE with a schedule; MAINTENANCE_OVERDUE without one, or with a baseline. */
     @Test
-    fun aDriverAndItsLinkMustAgree() = runBlocking {
+    fun aDriverAndItsLinkMustAgree() = runBlocking<Unit> {
         setUp()
         h.profile("p-replace", EventKind.REPLACEMENT)
         assertEquals(listOf(HealthProblem.DriverMismatch), refused(age(scheduleId = "s1")))
@@ -115,7 +115,7 @@ class HealthSubjectCommandTest {
 
     /** `FOREIGN_SCHEDULE`: absent, another asset's, or a group's. */
     @Test
-    fun aForeignScheduleIsRefused() = runBlocking {
+    fun aForeignScheduleIsRefused() = runBlocking<Unit> {
         setUp()
         h.schedule("s-pack", assetId = "a2")
         h.groups.rows["g1"] = groupOf("g1")
@@ -127,7 +127,7 @@ class HealthSubjectCommandTest {
 
     /** `HEALTH_SCHEDULE_NEEDS_A_TIME_RULE`: a meter-only schedule drives no health (Q-2). */
     @Test
-    fun aMeterOnlyScheduleNeedsATimeRule() = runBlocking {
+    fun aMeterOnlyScheduleNeedsATimeRule() = runBlocking<Unit> {
         setUp()
         h.meter("d-hours")
         h.schedule("s-hours", timeRule = false, meterDefinitionId = "d-hours")
@@ -138,7 +138,7 @@ class HealthSubjectCommandTest {
 
     /** `PROFILE_NOT_A_REPLACEMENT`: another asset's, a missing one, or a quick action that is not a REPLACEMENT. */
     @Test
-    fun aBaselineThatIsNotThisAssetsReplacementIsRefused() = runBlocking {
+    fun aBaselineThatIsNotThisAssetsReplacementIsRefused() = runBlocking<Unit> {
         setUp()
         h.profile("p-own", EventKind.REPLACEMENT)
         h.profile("p-pack", EventKind.REPLACEMENT, assetId = "a2")
@@ -151,7 +151,7 @@ class HealthSubjectCommandTest {
 
     /** `HEALTH_WEIGHT_OUT_OF_RANGE`, carrying the 1–10 limit. Every problem is collected, in spec §6.1's order. */
     @Test
-    fun aWeightOutsideOneToTenIsRefusedAndEveryProblemIsCollected() = runBlocking {
+    fun aWeightOutsideOneToTenIsRefusedAndEveryProblemIsCollected() = runBlocking<Unit> {
         setUp()
         assertEquals(listOf(HealthProblem.WeightOutOfRange(1..10)), refused(age(weight = 0)))
         assertEquals(listOf(HealthProblem.WeightOutOfRange(1..10)), refused(age(weight = 11)))
@@ -164,7 +164,6 @@ class HealthSubjectCommandTest {
             refused(age(name = " ", t2 = null, scheduleId = "s1", weight = 12)),
         )
         assertFailsWith<NoSuchAsset> { h.saveHealthSubject.create(AssetId("a9"), age()) }
-        Unit
     }
 
     /**
@@ -172,7 +171,7 @@ class HealthSubjectCommandTest {
      * create or on update, and the refusal is `FOREIGN_SCHEDULE` saying "archived".
      */
     @Test
-    fun anArchivedScheduleCannotBeLinked() = runBlocking {
+    fun anArchivedScheduleCannotBeLinked() = runBlocking<Unit> {
         setUp()
         h.schedule("s-old", status = ScheduleStatus.ARCHIVED)
         val expected = listOf(HealthProblem.ForeignSchedule(ScheduleId("s-old"), archived = true))
@@ -193,7 +192,7 @@ class HealthSubjectCommandTest {
      * was retargeted or lost its time rule meanwhile.
      */
     @Test
-    fun restoreRechecksTheWholeLink() = runBlocking {
+    fun restoreRechecksTheWholeLink() = runBlocking<Unit> {
         setUp()
         h.meter("d-hours")
         val subject = h.saveHealthSubject.create(AssetId("a1"), overdue(scheduleId = "s1"))
@@ -241,7 +240,7 @@ class HealthSubjectCommandTest {
      * schedule against itself.
      */
     @Test
-    fun aScheduleDrivesAtMostOneNonArchivedSubject() = runBlocking {
+    fun aScheduleDrivesAtMostOneNonArchivedSubject() = runBlocking<Unit> {
         setUp()
         val first = h.saveHealthSubject.create(AssetId("a1"), overdue(scheduleId = "s1", name = "Battery test"))
         assertEquals(0, first.sortOrder)
@@ -270,7 +269,7 @@ class HealthSubjectCommandTest {
      * schedule or a baseline of another asset is refused rather than carrying the subject across.
      */
     @Test
-    fun anEditKeepsTheAsset() = runBlocking {
+    fun anEditKeepsTheAsset() = runBlocking<Unit> {
         setUp()
         h.schedule("s-pack", assetId = "a2")
         h.profile("p-pack", EventKind.REPLACEMENT, assetId = "a2")
@@ -288,6 +287,5 @@ class HealthSubjectCommandTest {
         assertEquals(AssetId("a1"), renamed.assetId)
         assertEquals(AssetId("a1"), h.storedSubject(subject.id.value).assetId)
         assertFailsWith<NoSuchHealthSubject> { h.saveHealthSubject.update(HealthSubjectId("h-gone"), age()) }
-        Unit
     }
 }

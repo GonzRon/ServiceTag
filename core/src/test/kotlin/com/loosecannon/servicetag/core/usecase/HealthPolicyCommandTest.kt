@@ -27,7 +27,7 @@ class HealthPolicyCommandTest {
      * aggregation. A valid change writes the asset row once; an unchanged policy writes nothing.
      */
     @Test
-    fun trackOneNeedsANonArchivedPrimaryOfThisAsset() = runBlocking {
+    fun trackOneNeedsANonArchivedPrimaryOfThisAsset() = runBlocking<Unit> {
         val before = h.asset("a1")
         h.asset("a2", name = "Battery pack")
         h.subject("h-live")
@@ -56,7 +56,6 @@ class HealthPolicyCommandTest {
         val averaged = h.setHealthPolicy.run(AssetId("a1"), HealthPolicyCommand(HealthAggregation.AVERAGE))
         assertEquals(HealthAggregation.AVERAGE to null, averaged.healthAggregation to averaged.healthPrimarySubjectId)
         assertFailsWith<NoSuchAsset> { h.setHealthPolicy.run(AssetId("a9"), HealthPolicyCommand(HealthAggregation.WORST)) }
-        Unit
     }
 
     /**
@@ -65,7 +64,7 @@ class HealthPolicyCommandTest {
      * other subject of the asset archives freely.
      */
     @Test
-    fun archivingThePrimaryIs409() = runBlocking {
+    fun archivingThePrimaryIs409() = runBlocking<Unit> {
         h.asset("a1")
         val primary = h.subject("h-primary")
         h.subject("h-other", sortOrder = 1)
@@ -80,6 +79,5 @@ class HealthPolicyCommandTest {
         h.setHealthPolicy.run(AssetId("a1"), HealthPolicyCommand(HealthAggregation.WORST))
         assertEquals(h.now, h.archiveHealthSubject.run(primary.id, archived = true).archivedAt)
         assertFailsWith<NoSuchHealthSubject> { h.archiveHealthSubject.run(HealthSubjectId("h-gone"), archived = true) }
-        Unit
     }
 }

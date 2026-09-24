@@ -53,7 +53,7 @@ class SaveAssetSettingsTest {
      * writes all four parts in one asset row, its activation and the recompute.
      */
     @Test
-    fun allFourPartsWriteInOneTransactionOrNone() = runBlocking {
+    fun allFourPartsWriteInOneTransactionOrNone() = runBlocking<Unit> {
         val before = withPreService("a1", SeasonMode.YEAR_ROUND, pause = "06-01" to "06-30")
         h.subject("h1")
 
@@ -94,7 +94,7 @@ class SaveAssetSettingsTest {
      * adding a boundary where there was none is a repair (plan decision 44).
      */
     @Test
-    fun strandsIsJudgedOnTheCombinedResult() = runBlocking {
+    fun strandsIsJudgedOnTheCombinedResult() = runBlocking<Unit> {
         withPreService("a2", SeasonMode.YEAR_ROUND, pause = "06-01" to "06-30")
         val breakGone = assertFailsWith<BreakStrandsPolicy> { h.saveAssetSettings.run(AssetId("a2"), settings("Generator a2")) }
         assertEquals(listOf(ScheduleId("s-a2")), breakGone.schedules.map { it.id })
@@ -127,7 +127,7 @@ class SaveAssetSettingsTest {
      * activation, and recomputes nothing.
      */
     @Test
-    fun anUnchangedSaveWritesNothing() = runBlocking {
+    fun anUnchangedSaveWritesNothing() = runBlocking<Unit> {
         val yearRound = h.asset("a1", name = "Generator", breakStart = "06-01", breakEnd = "06-30")
         h.schedule("s1")
         val manual = h.asset("a2", name = "Hot tub", mode = SeasonMode.MANUAL)
@@ -147,7 +147,7 @@ class SaveAssetSettingsTest {
      * refused with nothing written — no asset, no row, no seeded quick action.
      */
     @Test
-    fun aCreateWithManualWritesItsFirstRow() = runBlocking {
+    fun aCreateWithManualWritesItsFirstRow() = runBlocking<Unit> {
         assertEquals(
             listOf(SeasonProblem.ManualPhaseRequired),
             assertFailsWith<SeasonValidation> {

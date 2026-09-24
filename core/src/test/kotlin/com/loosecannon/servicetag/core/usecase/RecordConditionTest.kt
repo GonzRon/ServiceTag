@@ -41,7 +41,7 @@ class RecordConditionTest {
      * none), and no event, activation or subject.
      */
     @Test
-    fun writesOneRowAndNothingElse() = runBlocking {
+    fun writesOneRowAndNothingElse() = runBlocking<Unit> {
         h.asset("a1")
         h.schedules.rows["s1"] = scheduleOf(
             id = "s1", assetId = "a1", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR, anchorOn = "2026-01-01",
@@ -71,7 +71,7 @@ class RecordConditionTest {
      * compared whole, before and after, for each of the three values; its `updatedAt` must not move.
      */
     @Test
-    fun aConditionWriteLeavesTheAssetRowIdentical() = runBlocking {
+    fun aConditionWriteLeavesTheAssetRowIdentical() = runBlocking<Unit> {
         val before = h.asset("a1")
         for ((i, condition) in OperationalCondition.entries.withIndex()) {
             h.now += 60_000L
@@ -87,7 +87,7 @@ class RecordConditionTest {
      * malformed values keep the shipped `Bad…(field=…)` shape; a missing asset is the shipped 404.
      */
     @Test
-    fun aFutureDateTooLongAReasonAndAForeignEventAreRefused() = runBlocking {
+    fun aFutureDateTooLongAReasonAndAForeignEventAreRefused() = runBlocking<Unit> {
         h.asset("a1")
         h.asset("a2", name = "Battery pack")
         h.event("e-own", EventKind.MAINTENANCE, "2026-09-20", assetId = "a1")
@@ -135,7 +135,7 @@ class RecordConditionTest {
      * DOWN row that it ends stays in the history as it was written.
      */
     @Test
-    fun returningToOperationalInsertsOneRowAndLeavesEarlierRowsByteIdentical() = runBlocking {
+    fun returningToOperationalInsertsOneRowAndLeavesEarlierRowsByteIdentical() = runBlocking<Unit> {
         h.asset("a1")
         h.condition("c1", OPERATIONAL, "2026-09-01")
         h.condition("c2", DOWN, "2026-09-20", reason = "Battery failed — replacement pending")

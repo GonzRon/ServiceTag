@@ -68,7 +68,7 @@ class OperationalOfferTest {
      * it carries the later of the two known times, so a timed same-day DOWN cannot stay current.
      */
     @Test
-    fun acceptingDatesTheRowMaxOfEventAndCurrentAndLinksTheEvent() = runBlocking {
+    fun acceptingDatesTheRowMaxOfEventAndCurrentAndLinksTheEvent() = runBlocking<Unit> {
         h.asset("a1")
         val down = h.condition("c1", DOWN, "2026-09-20", reason = "Battery failed — replacement pending")
 
@@ -102,7 +102,7 @@ class OperationalOfferTest {
      * predicate, write no condition row; "Not yet" is the absence of a call, so nothing is written.
      */
     @Test
-    fun decliningWritesNothing() = runBlocking {
+    fun decliningWritesNothing() = runBlocking<Unit> {
         h.asset("a1")
         h.condition("c1", DOWN, "2026-09-20", reason = "Battery failed — replacement pending")
         val before = h.rows()

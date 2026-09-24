@@ -209,7 +209,7 @@ class CrossConceptWriteTest {
     }
 
     @Test
-    fun eachUseCaseWritesOnlyItsOwnTables() = runBlocking {
+    fun eachUseCaseWritesOnlyItsOwnTables() = runBlocking<Unit> {
         seed()
         val subject = HealthSubjectCommand(
             name = "Battery age", kind = HealthSubjectKind.PART, driver = HealthDriver.AGE,
