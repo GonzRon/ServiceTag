@@ -12,11 +12,9 @@ import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
-import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
-import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
@@ -67,7 +65,7 @@ class BuildReminderSubjectsTest {
         RecomputeSchedules(
             schedules, states, events, closures, groups, assets, InMemorySeasonActivationRepository(), todayPort, clock,
         ) { ZoneOffset.UTC }
-    private val build = BuildReminderSubjects(schedules, states, groups, assets, recompute)
+    private val build = BuildReminderSubjects(schedules, groups, recompute)
 
     private suspend fun seedAsset(
         id: String,
@@ -232,7 +230,7 @@ class BuildReminderSubjectsTest {
     private val activations = InMemorySeasonActivationRepository()
     private val seasonalRecompute =
         RecomputeSchedules(schedules, states, events, closures, groups, assets, activations, todayPort, clock) { ZoneOffset.UTC }
-    private val seasonalBuild = BuildReminderSubjects(schedules, states, groups, assets, seasonalRecompute)
+    private val seasonalBuild = BuildReminderSubjects(schedules, groups, seasonalRecompute)
 
     private suspend fun seasonalSubjects(): List<ReminderSubject> {
         seasonalRecompute.all()
@@ -721,9 +719,7 @@ class BuildReminderSubjectsTest {
         assertEquals(
             listOf(
                 ScheduleRepository::class.java,
-                ScheduleStateRepository::class.java,
                 GroupRepository::class.java,
-                AssetRepository::class.java,
                 RecomputeSchedules::class.java,
             ),
             BuildReminderSubjects::class.java.constructors.single().parameterTypes.toList(),

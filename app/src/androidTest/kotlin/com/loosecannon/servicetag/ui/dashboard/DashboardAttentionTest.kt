@@ -18,7 +18,6 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.ValueType
@@ -275,8 +274,6 @@ class DashboardAttentionTest {
     @Test fun theDrawnSectionOrderIsFixedEvenWhenCurrentHoldsOnlyAssetRows() {
         val graph = app.graph
         runBlocking {
-            // Schema 8 stores an asset with both bounds as CALENDAR, as the 7 -> 8 migration does;
-            // the asset command does not set the mode yet, so the fixture says it.
             val blower = graph.createAsset.run(
                 AssetCommand(
                     name = "Snowblower",
@@ -284,7 +281,7 @@ class DashboardAttentionTest {
                     seasonStartMmdd = "11-01",
                     seasonEndMmdd = "02-28",
                 ),
-            ).copy(seasonMode = SeasonMode.CALENDAR).also { graph.assets.upsert(it) }
+            )
             seed(
                 graph,
                 scheduleOf(

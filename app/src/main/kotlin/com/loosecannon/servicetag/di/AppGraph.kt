@@ -40,6 +40,7 @@ import com.loosecannon.servicetag.core.ports.UuidGenerator
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.references.StreamSourcePolicy
 import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
+import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.ApplyTemplate
@@ -62,6 +63,7 @@ import com.loosecannon.servicetag.core.usecase.DeleteDefinition
 import com.loosecannon.servicetag.core.usecase.DeleteEvent
 import com.loosecannon.servicetag.core.usecase.DeleteProfile
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
+import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LogEvent
@@ -69,6 +71,7 @@ import com.loosecannon.servicetag.core.usecase.PauseSchedule
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
+import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
 import com.loosecannon.servicetag.core.usecase.ReorderProfiles
@@ -79,6 +82,8 @@ import com.loosecannon.servicetag.core.usecase.SaveDefinition
 import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
+import com.loosecannon.servicetag.core.usecase.SetMaintenanceBreak
+import com.loosecannon.servicetag.core.usecase.SetSeasonMode
 import com.loosecannon.servicetag.core.usecase.StoreIsEmpty
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
@@ -221,9 +226,7 @@ class AppGraph(private val context: Context) {
      * one provider that delivers is [localReminderProvider] below; what is here is the question
      * every provider is asked.
      */
-    val buildReminderSubjects: BuildReminderSubjects = BuildReminderSubjects(
-        schedules, scheduleStates, groups, assets, recomputeSchedules,
-    )
+    val buildReminderSubjects: BuildReminderSubjects = BuildReminderSubjects(schedules, groups, recomputeSchedules)
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
 
     // #24 — the platform-ownership seams B06, B07, B10 and B14 compile against (master plan §12).
@@ -456,7 +459,22 @@ class AppGraph(private val context: Context) {
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)
 
     // Phase 1C — the asset form. Archive-first: no hard delete for an asset in Phase 1 (R-9).
-    val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
+    // 1.4: a changed season pair goes through the season-mode rules, which read the asset's schedules
+    // (the strands rule) and rebuild them (spec §3.2).
+    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules)
+
+    // 1.4 — the season model's commands (master plan §7.2). One use case per write, so the editors,
+    // the API and the offers refuse the same things; each season or break write rebuilds the asset's
+    // schedules, and an activation writes its row and no asset column.
+    val setSeasonMode: SetSeasonMode =
+        SetSeasonMode(assets, schedules, seasonActivations, uow, ids, clock, today, recomputeSchedules)
+    val setMaintenanceBreak: SetMaintenanceBreak =
+        SetMaintenanceBreak(assets, schedules, uow, clock, recomputeSchedules)
+    val recordSeasonActivation: RecordSeasonActivation =
+        RecordSeasonActivation(assets, events, seasonActivations, uow, ids, clock, today, recomputeSchedules)
+    val getAssetSeason: GetAssetSeason = GetAssetSeason(assets, seasonActivations, uow, today)
+    val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(seasonActivations, recordSeasonActivation, uow, today)
+
     val archiveAsset: ArchiveAsset =
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
 

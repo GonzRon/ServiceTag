@@ -25,6 +25,7 @@ import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.ApplyTemplate
 import com.loosecannon.servicetag.core.usecase.ApplyBackupMergePlan
@@ -44,6 +45,7 @@ import com.loosecannon.servicetag.core.usecase.DeleteDefinition
 import com.loosecannon.servicetag.core.usecase.DeleteEvent
 import com.loosecannon.servicetag.core.usecase.DeleteProfile
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
+import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LogEvent
@@ -51,6 +53,7 @@ import com.loosecannon.servicetag.core.usecase.PauseSchedule
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
+import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
 import com.loosecannon.servicetag.core.usecase.ReorderProfiles
 import com.loosecannon.servicetag.core.usecase.RestoreArtifacts
@@ -59,6 +62,8 @@ import com.loosecannon.servicetag.core.usecase.SaveDefinition
 import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
+import com.loosecannon.servicetag.core.usecase.SetMaintenanceBreak
+import com.loosecannon.servicetag.core.usecase.SetSeasonMode
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
@@ -176,7 +181,17 @@ class FakeGraph(
 
     val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)
-    val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
+    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules)
+
+    /** 1.4 — the season model's commands, mirroring `AppGraph`'s five fields by name (master plan §1). */
+    val setSeasonMode: SetSeasonMode =
+        SetSeasonMode(assets, schedules, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules)
+    val setMaintenanceBreak: SetMaintenanceBreak =
+        SetMaintenanceBreak(assets, schedules, uow, clock, recomputeSchedules)
+    val recordSeasonActivation: RecordSeasonActivation =
+        RecordSeasonActivation(assets, events, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules)
+    val getAssetSeason: GetAssetSeason = GetAssetSeason(assets, seasonActivations, uow, todayPort)
+    val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(seasonActivations, recordSeasonActivation, uow, todayPort)
     val archiveAsset: ArchiveAsset =
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
     val retireAsset: RetireAsset =
