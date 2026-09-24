@@ -297,6 +297,10 @@ class ScheduleEditorTest {
         rule.onNodeWithText("Before the season starts").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("When the season starts").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Whenever it is due").performScrollTo().assertIsDisplayed()
+        // In order of appearance, top to bottom, on the tree itself.
+        val tops = listOf("Before the season starts", "When the season starts", "Whenever it is due")
+            .map { rule.onNodeWithText(it).fetchSemanticsNode().boundsInRoot.top }
+        check(tops.zipWithNext().all { (upper, lower) -> upper < lower }) { "the answers are out of order: $tops" }
         val s78 = "A date in the season or the maintenance break becomes due on an allowed day before the season starts."
         val s80 = "This maintenance waits while the season is off and becomes active again when it starts."
         val s82 = "The season and the maintenance break never change when this is due."
@@ -482,6 +486,88 @@ class ScheduleEditorTest {
         switchTo(null to group.value)
         rule.awaitText("A maintenance group")
         retired.forEach(::gone)
+    }
+
+    /** The editor on a stored schedule the test can change, so one test can open several. */
+    private fun switchableScheduleEditor(graph: AppGraph, first: String): (String) -> Unit {
+        var scheduleId by mutableStateOf(first)
+        rule.setContent {
+            ServiceTagTheme {
+                ScheduleEditScreen(
+                    graph = graph,
+                    scheduleId = scheduleId,
+                    targetAssetId = null,
+                    targetGroupId = null,
+                    onDone = {},
+                    onBack = {},
+                )
+            }
+        }
+        return { next -> rule.runOnIdle { scheduleId = next } }
+    }
+
+    /** A stored schedule on [asset], every three months from [anchorOn], with the policy given. */
+    private fun aStoredSchedule(
+        graph: AppGraph,
+        asset: AssetId,
+        title: String,
+        anchorOn: String,
+        policy: ServicePolicy,
+        offset: Int?,
+    ): String = runBlocking {
+        graph.saveSchedule.run(
+            null,
+            ScheduleCommand(
+                targetAssetId = asset,
+                targetGroupId = null,
+                title = title,
+                timeInterval = 3,
+                timeUnit = RecurrenceUnit.MONTH,
+                anchorOn = anchorOn,
+                servicePolicy = policy,
+                policyOffsetDays = offset,
+            ),
+        ).id.value
+    }
+
+    /**
+     * The three warnings are drawn, not only computed (review F4). Built from stored rows, so no
+     * answer depends on the device's clock:
+     * - S76: a November–March season, S67 · S74 · 0, anchored in June, outside the window;
+     * - S84: the same season, S74 · 200, and 1 Nov + 200 passes 31 Mar in every year;
+     * - S77: a YEAR_ROUND asset without a break holding AT_START 0 (a migrated 1.3 row), with S68 as
+     *   its only answer.
+     */
+    @Test fun theThreeWarningsAreDrawn() {
+        val graph = app.graph
+        val snowblower = aSeasonalAsset(graph)
+        val mower = runBlocking { graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard")).id }
+        val outside = aStoredSchedule(graph, snowblower, "Belt check", "2026-06-01", ServicePolicy.IN_SERVICE_AT_START, 0)
+        val late = aStoredSchedule(graph, snowblower, "Auger check", "2026-12-01", ServicePolicy.IN_SERVICE_AT_START, 200)
+        val merged = aStoredSchedule(graph, mower, "Blade sharpen", "2026-06-01", ServicePolicy.IN_SERVICE_AT_START, 0)
+        val s76 = "The first due date is outside this asset's season, so it will wait for the season to start."
+        val s77 = "This asset has no season or maintenance break to be ready before, so this is due whenever its date comes."
+        val s84 = "That is after the season ends, so this would never become due."
+        val switchTo = switchableScheduleEditor(graph, outside)
+
+        rule.awaitText("Belt check")
+        rule.onNodeWithText(s76).performScrollTo().assertIsDisplayed()
+        gone(s84)
+        gone(s77)
+
+        switchTo(late)
+        rule.awaitText("Auger check")
+        rule.onNodeWithText(s84).performScrollTo().assertIsDisplayed()
+        gone(s76)
+        gone(s77)
+
+        switchTo(merged)
+        rule.awaitText("Blade sharpen")
+        rule.onNodeWithText(s77).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Whenever it is due").assertExists()
+        gone("When the season starts")
+        gone("Before the season starts")
+        rule.onNodeWithText("Save").assertIsNotEnabled()
     }
 
     private companion object {
