@@ -98,7 +98,7 @@ then finishes it and removes the asset in `@After`. Nothing is saved; no text is
 |---|---|---|
 | `anExternalTextShareFromAnotherUidReachesTheIntake` | Android delivered `ACTION_SEND + EXTRA_TEXT` from a foreign UID to the exported activity | title "Save to ServiceTag", the RECEIVED section shows the fixture URI, no dead-end sentence |
 | `anExternalStreamWithAGenuineGrantReachesTheByteForm` | a `content://` URI from another package's `FileProvider` with a real temporary read grant is readable by the intake | title, RECEIVED shows `mower-manual.pdf`, the TYPE control is drawn, and no "Could not read what was shared" |
-| `anExternalStreamWithoutAGrantIsRefusedNotCrashed` | the app survives an ungranted foreign URI exactly as the intake specifies | the ratified read-failure dead end "Could not read what was shared" with Close, and the activity is alive |
+| `anExternalStreamCarryingNoGrantIsRefusedNotCrashed (renamed by #63 so it sorts first)` | the app survives an ungranted foreign URI exactly as the intake specifies | the ratified read-failure dead end "Could not read what was shared" with Close, and the activity is alive |
 
 Each case carries a JUnit `Timeout` of 20 s — the tripwire lives in the test: a proof that takes
 longer than a screen-scraping journey fails on time alone.
