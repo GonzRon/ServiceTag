@@ -7,6 +7,9 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.SeasonInputs
+import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.ClosureRepository
@@ -14,11 +17,11 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
+import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 import com.loosecannon.servicetag.core.schedule.GroupOccurrences
 import com.loosecannon.servicetag.core.schedule.ScheduleRecompute
-import com.loosecannon.servicetag.core.schedule.SeasonWindow
 import java.time.ZoneId
 
 /**
@@ -47,6 +50,11 @@ class RecomputeSchedules(
     private val closures: ClosureRepository,
     private val groups: GroupRepository,
     private val assets: AssetRepository,
+    /**
+     * The manual season history. Read only for a MANUAL asset, the one mode that consults it, so
+     * every other asset's rebuild reads exactly what it read before.
+     */
+    private val activations: SeasonActivationRepository,
     private val today: Today,
     private val clock: Clock,
     /**
@@ -153,8 +161,9 @@ class RecomputeSchedules(
 
     /**
      * What one schedule's rebuild reads. An asset-targeted schedule reads its Asset's events and
-     * its Asset's season window; a group-targeted one reads every member's events and the group's
-     * membership rows, and no window at all, because a group target is `IGNORE` season only.
+     * its Asset's [SeasonInputs] — the activation rows only when the Asset is MANUAL; a
+     * group-targeted one reads every member's events and the group's membership rows, and no season
+     * at all, because a group target is CONTINUOUS only.
      *
      * A group's members are read here and **bounded by their Assets' lifecycles** here, and by
      * nothing else: which of the remaining windows the current occurrence *requires* is the engine's
@@ -170,7 +179,11 @@ class RecomputeSchedules(
                 RebuildInputs(
                     events = events.forAsset(target.assetId),
                     membership = emptyList(),
-                    season = asset?.let { SeasonWindow(it.seasonStartMmdd, it.seasonEndMmdd) },
+                    season = asset?.let {
+                        it.seasonInputs(
+                            if (it.seasonMode == SeasonMode.MANUAL) activations.forAsset(it.id) else emptyList(),
+                        )
+                    },
                 )
             }
             is ScheduleTarget.GroupTarget -> {
@@ -189,6 +202,6 @@ class RecomputeSchedules(
     private data class RebuildInputs(
         val events: List<AssetEvent>,
         val membership: List<GroupMember>,
-        val season: SeasonWindow?,
+        val season: SeasonInputs?,
     )
 }

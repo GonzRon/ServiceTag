@@ -34,7 +34,7 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
@@ -121,11 +121,11 @@ class MergePlannerMaintenanceTest {
         title = title, description = "", timeInterval = 3, timeUnit = RecurrenceUnit.MONTH,
         timeBasis = TimeBasis.COMPLETION, anchorOn = "2026-03-01", leadDays = 7,
         meterDefinitionId = meterDefinitionId?.let(::DefinitionId), meterInterval = null,
-        anchorMeter = null, meterLead = null, seasonBehavior = SeasonBehavior.IGNORE,
-        seasonReentry = null, seasonReentryOffsetDays = null,
+        anchorMeter = null, meterLead = null, servicePolicy = ServicePolicy.CONTINUOUS,
+        policyOffsetDays = null,
         completionMode = CompletionMode.QUICK, profileId = profileId?.let(::ProfileId),
         remindersEnabled = true, status = ScheduleStatus.ACTIVE, postponedDueOn = postponedDueOn,
-        createdAt = 30L, updatedAt = updatedAt, providers = providers,
+        createdAt = 30L, updatedAt = updatedAt, ruleChangedAt = updatedAt, providers = providers,
     )
 
     private fun closure(

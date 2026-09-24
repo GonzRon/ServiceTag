@@ -19,7 +19,9 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.SeasonInputs
+import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -27,9 +29,9 @@ import java.time.ZoneOffset
 /**
  * Fixture builders for the scheduling tests: a schedule, a completion, a standalone reading and a
  * closure, each with every field the engine reads exposed as a named argument and everything else
- * defaulted. Dates are the ISO strings the domain stores; the two instants a schedule carries are
- * given as dates too, because the D-27 pin's floor is `updated_at`'s date and a test that wants to
- * move the floor wants to say which day, not which millisecond.
+ * defaulted. Dates are the ISO strings the domain stores; the instants a schedule carries are
+ * given as dates too, because the D-27 pin's floor is `rule_changed_at`'s date and a test that
+ * wants to move the floor wants to say which day, not which millisecond.
  */
 
 /**
@@ -58,13 +60,16 @@ fun scheduleOf(
     meterInterval: Double? = null,
     anchorMeter: Double? = null,
     meterLead: Double? = null,
-    seasonBehavior: SeasonBehavior = SeasonBehavior.IGNORE,
+    servicePolicy: ServicePolicy = ServicePolicy.CONTINUOUS,
+    policyOffsetDays: Int? = null,
     completionMode: CompletionMode = CompletionMode.QUICK,
     profileId: String? = null,
     status: ScheduleStatus = ScheduleStatus.ACTIVE,
     postponedDueOn: String? = null,
     createdOn: String = "2026-01-01",
     updatedOn: String = createdOn,
+    /** The floor. Seeded from [updatedOn], as the 7 → 8 migration and the format-7 decoder seed it. */
+    ruleChangedOn: String = updatedOn,
 ): MaintenanceSchedule = MaintenanceSchedule(
     id = ScheduleId(id),
     target = groupId?.let { ScheduleTarget.GroupTarget(GroupId(it)) }
@@ -80,9 +85,8 @@ fun scheduleOf(
     meterInterval = meterInterval,
     anchorMeter = anchorMeter,
     meterLead = meterLead,
-    seasonBehavior = seasonBehavior,
-    seasonReentry = null,
-    seasonReentryOffsetDays = null,
+    servicePolicy = servicePolicy,
+    policyOffsetDays = policyOffsetDays,
     completionMode = completionMode,
     profileId = profileId?.let(::ProfileId),
     remindersEnabled = true,
@@ -90,7 +94,18 @@ fun scheduleOf(
     postponedDueOn = postponedDueOn,
     createdAt = dayMillis(createdOn),
     updatedAt = dayMillis(updatedOn),
+    ruleChangedAt = dayMillis(ruleChangedOn),
     providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
+)
+
+/** A CALENDAR asset's season, as the engine is handed it: the window, no break, no history. */
+fun calendarSeason(startMmdd: String, endMmdd: String): SeasonInputs = SeasonInputs(
+    mode = SeasonMode.CALENDAR,
+    seasonStartMmdd = startMmdd,
+    seasonEndMmdd = endMmdd,
+    blackoutStartMmdd = null,
+    blackoutEndMmdd = null,
+    activations = emptyList(),
 )
 
 /**

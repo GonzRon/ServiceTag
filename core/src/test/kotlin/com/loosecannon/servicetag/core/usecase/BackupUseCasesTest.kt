@@ -41,13 +41,16 @@ import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
+import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryHealthSubjectRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
+import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
 import java.io.ByteArrayInputStream
@@ -227,6 +230,7 @@ class BackupUseCasesTest {
         ExportBackupSet(
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
             f.closures, f.events, f.attachments, f.references,
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             f.uow, IdGenerator { "set-1" }, Clock { now }, appVersion = "2.0", schemaVersion = 1,
         ).run().data
     }
@@ -235,6 +239,7 @@ class BackupUseCasesTest {
         ImportBackupReplace(
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
             f.closures, f.events, f.attachments, f.references,
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             f.storage, f.uow, rebuildAll = { },
         ).run(bytes)
     }

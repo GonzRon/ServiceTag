@@ -1,10 +1,11 @@
 package com.loosecannon.servicetag.core.reminders
 
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
@@ -125,7 +126,7 @@ class BuildReminderSubjects(
     ): SubjectState = when {
         schedule.status == ScheduleStatus.ARCHIVED -> SubjectState.Withdrawn
         schedule.status == ScheduleStatus.PAUSED -> SubjectState.Parked(null)
-        !state.seasonActive -> SubjectState.Parked(seasonReentryOn(schedule, today))
+        state.policyPhase == PolicyPhase.DORMANT -> SubjectState.Parked(seasonReentryOn(schedule, today))
         else -> SubjectState.Active
     }
 
@@ -136,7 +137,7 @@ class BuildReminderSubjects(
      * engine reads it.
      */
     private suspend fun seasonReentryOn(schedule: MaintenanceSchedule, today: LocalDate): LocalDate? {
-        if (schedule.seasonBehavior != SeasonBehavior.FOLLOW_ASSET) return null
+        if (schedule.servicePolicy == ServicePolicy.CONTINUOUS) return null
         val target = schedule.target as? ScheduleTarget.AssetTarget ?: return null
         val start = assets.get(target.assetId)?.seasonStartMmdd ?: return null
         return nextOnOrAfter(start, today)
@@ -149,7 +150,7 @@ class BuildReminderSubjects(
             interval = schedule.timeInterval,
             unit = if (hasSeries) schedule.timeUnit else null,
             hasMeter = schedule.meterDefinitionId != null,
-            seasonal = schedule.seasonBehavior == SeasonBehavior.FOLLOW_ASSET,
+            seasonal = schedule.servicePolicy != ServicePolicy.CONTINUOUS,
         )
     }
 

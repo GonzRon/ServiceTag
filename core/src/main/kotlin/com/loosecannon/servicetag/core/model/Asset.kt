@@ -27,6 +27,14 @@ data class Asset(
     val parentAssetId: AssetId? = null,
     val seasonStartMmdd: String? = null,
     val seasonEndMmdd: String? = null,
+    /** CALENDAR exactly when both `MM-DD` bounds above are set (inv. 88, a use-case rule). */
+    val seasonMode: SeasonMode = SeasonMode.YEAR_ROUND,
+    /** The maintenance break, `MM-DD`: both set or both null. */
+    val blackoutStartMmdd: String? = null,
+    val blackoutEndMmdd: String? = null,
+    val healthAggregation: HealthAggregation = HealthAggregation.WORST,
+    /** A soft link to the subject `TRACK_ONE` reads; no foreign key. */
+    val healthPrimarySubjectId: HealthSubjectId? = null,
 )
 
 val Asset.isRetired: Boolean get() = retiredOn != null

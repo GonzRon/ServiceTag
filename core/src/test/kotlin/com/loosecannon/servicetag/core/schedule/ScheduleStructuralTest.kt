@@ -68,36 +68,6 @@ class ScheduleStructuralTest {
     }
 
     /**
-     * Invariant 26: `seasonReentry` and `seasonReentryOffsetDays` are **stored and never read** in
-     * 1.2. They exist in the model, the backup DTO, the entity, the mappers and the command, so the
-     * column never has to be added later; implementing the re-entry semantics early would put a
-     * read site inside the engine, which is what the first half looks for. The second half is the
-     * negative control: a "fix" that deleted the columns would pass the grep and fail the brief.
-     */
-    @Test
-    fun theDeferredReentryColumnsAreStoredAndNeverRead() {
-        assertEquals(
-            emptyList(),
-            kotlinFilesUnder("core/src/main/kotlin/com/loosecannon/servicetag/core/schedule")
-                .filter { "seasonReentry" in it.readText() }
-                .map { it.name },
-        )
-
-        listOf(
-            "core/src/main/kotlin/com/loosecannon/servicetag/core/model/Maintenance.kt",
-            "core/src/main/kotlin/com/loosecannon/servicetag/core/backup/BackupFormat.kt",
-            "core/src/main/kotlin/com/loosecannon/servicetag/core/usecase/ScheduleCommands.kt",
-            "app/src/main/kotlin/com/loosecannon/servicetag/data/room/entities/MaintenanceEntities.kt",
-            "app/src/main/kotlin/com/loosecannon/servicetag/data/room/MaintenanceMappers.kt",
-        ).forEach { path ->
-            assertTrue(
-                "seasonReentry" in sourceFile(path).readText(),
-                "$path must still carry the deferred columns",
-            )
-        }
-    }
-
-    /**
      * The engine reads no clock: `T` arrives as an argument and `Today` is a port its callers hold,
      * which is what makes `rebuild` idempotent and every date test deterministic.
      */

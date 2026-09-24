@@ -23,6 +23,7 @@ import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.GroupMember
+import com.loosecannon.servicetag.core.model.LegacySeasonMapping
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
@@ -42,6 +43,8 @@ import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.StorageProvider
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
@@ -401,6 +404,11 @@ fun Asset.toDto(): AssetDto = AssetDto(
     seasonEndMmdd = seasonEndMmdd,
 )
 
+/**
+ * Format 7 carries the season window and nothing else about the season, so the mode is derived from
+ * it exactly as the 7 → 8 migration derives it: CALENDAR when both `MM-DD` bounds are set, and
+ * YEAR_ROUND otherwise (inv. 88). No archive of this format carries a break or a health setting.
+ */
 fun AssetDto.toDomain(): Asset = Asset(
     id = AssetId(id),
     name = name,
@@ -426,6 +434,7 @@ fun AssetDto.toDomain(): Asset = Asset(
     parentAssetId = parentAssetId?.let(::AssetId),
     seasonStartMmdd = seasonStartMmdd,
     seasonEndMmdd = seasonEndMmdd,
+    seasonMode = if (seasonStartMmdd != null && seasonEndMmdd != null) SeasonMode.CALENDAR else SeasonMode.YEAR_ROUND,
 )
 
 fun TagBinding.toDto(): NfcTagDto = NfcTagDto(
@@ -780,44 +789,66 @@ fun ScheduleProviderDto.toDomain(): ScheduleProviderRow = ScheduleProviderRow(
     enabled = enabled,
 )
 
-fun MaintenanceSchedule.toDto(): MaintenanceScheduleDto = MaintenanceScheduleDto(
-    id = id.value,
-    assetId = (target as? ScheduleTarget.AssetTarget)?.assetId?.value,
-    groupId = (target as? ScheduleTarget.GroupTarget)?.groupId?.value,
-    title = title,
-    description = description,
-    timeInterval = timeInterval,
-    timeUnit = timeUnit?.name,
-    timeBasis = timeBasis.name,
-    anchorOn = anchorOn,
-    leadDays = leadDays,
-    meterDefinitionId = meterDefinitionId?.value,
-    meterInterval = meterInterval,
-    anchorMeter = anchorMeter,
-    meterLead = meterLead,
-    seasonBehavior = seasonBehavior.name,
-    seasonReentry = seasonReentry,
-    seasonReentryOffsetDays = seasonReentryOffsetDays,
-    completionMode = completionMode.name,
-    profileId = profileId?.value,
-    remindersEnabled = remindersEnabled,
-    status = status.name,
-    postponedDueOn = postponedDueOn,
-    createdAt = createdAt,
-    updatedAt = updatedAt,
-    providers = providers.map { it.toDto() },
-)
+/**
+ * Format 7 still spells the policy as the 1.3 triple, so the row is written through
+ * [LegacySeasonMapping.toLegacy]. `PRE_SERVICE` has no 1.3 spelling, and nothing in this release
+ * can store one yet, so meeting it here is a broken invariant rather than a value to encode.
+ */
+fun MaintenanceSchedule.toDto(): MaintenanceScheduleDto {
+    check(servicePolicy != ServicePolicy.PRE_SERVICE) {
+        "schedule ${id.value} is PRE_SERVICE, which format ${BackupCodec.FORMAT_VERSION} cannot carry"
+    }
+    val legacy = LegacySeasonMapping.toLegacy(servicePolicy, policyOffsetDays)
+    return MaintenanceScheduleDto(
+        id = id.value,
+        assetId = (target as? ScheduleTarget.AssetTarget)?.assetId?.value,
+        groupId = (target as? ScheduleTarget.GroupTarget)?.groupId?.value,
+        title = title,
+        description = description,
+        timeInterval = timeInterval,
+        timeUnit = timeUnit?.name,
+        timeBasis = timeBasis.name,
+        anchorOn = anchorOn,
+        leadDays = leadDays,
+        meterDefinitionId = meterDefinitionId?.value,
+        meterInterval = meterInterval,
+        anchorMeter = anchorMeter,
+        meterLead = meterLead,
+        seasonBehavior = checkNotNull(legacy.seasonBehavior).name,
+        seasonReentry = legacy.seasonReentry,
+        seasonReentryOffsetDays = legacy.seasonReentryOffsetDays,
+        completionMode = completionMode.name,
+        profileId = profileId?.value,
+        remindersEnabled = remindersEnabled,
+        status = status.name,
+        postponedDueOn = postponedDueOn,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        providers = providers.map { it.toDto() },
+    )
+}
 
 /**
  * The target is the one field the wire can spell in a way the domain cannot hold, so it is checked
  * here: a row naming both sides, or neither, is refused before any import begins. The merge planner
  * reads the DTO's two columns directly for the same reason — it must be able to *report*
  * `SCHEDULE_TARGET_INVALID` on a row this function would throw on.
+ *
+ * The 1.3 triple is read through [LegacySeasonMapping.toPolicy], the table the 7 → 8 migration
+ * uses, and `ruleChangedAt` is seeded from `updatedAt` exactly as the migration seeds it. An
+ * unknown `seasonBehavior` name is still corrupt: the table normalises re-entry values, never an
+ * enum it does not know.
  */
 fun MaintenanceScheduleDto.toDomain(): MaintenanceSchedule {
     if ((assetId == null) == (groupId == null)) {
         throw BackupCorrupt("schedule $id must name exactly one target, an asset or a group")
     }
+    val policy = LegacySeasonMapping.toPolicy(
+        behavior = enumOrCorrupt<SeasonBehavior>(seasonBehavior, "season behavior", "schedule $id"),
+        reentry = seasonReentry,
+        offsetDays = seasonReentryOffsetDays,
+        hasTimeRule = timeInterval != null,
+    )
     return MaintenanceSchedule(
         id = ScheduleId(id),
         target = assetId?.let { ScheduleTarget.AssetTarget(AssetId(it)) }
@@ -833,9 +864,8 @@ fun MaintenanceScheduleDto.toDomain(): MaintenanceSchedule {
         meterInterval = meterInterval,
         anchorMeter = anchorMeter,
         meterLead = meterLead,
-        seasonBehavior = enumOrCorrupt<SeasonBehavior>(seasonBehavior, "season behavior", "schedule $id"),
-        seasonReentry = seasonReentry,
-        seasonReentryOffsetDays = seasonReentryOffsetDays,
+        servicePolicy = policy.servicePolicy,
+        policyOffsetDays = policy.policyOffsetDays,
         completionMode = enumOrCorrupt<CompletionMode>(completionMode, "completion mode", "schedule $id"),
         profileId = profileId?.let(::ProfileId),
         remindersEnabled = remindersEnabled,
@@ -843,6 +873,7 @@ fun MaintenanceScheduleDto.toDomain(): MaintenanceSchedule {
         postponedDueOn = postponedDueOn,
         createdAt = createdAt,
         updatedAt = updatedAt,
+        ruleChangedAt = updatedAt,
         providers = providers.map { it.toDomain() },
     )
 }

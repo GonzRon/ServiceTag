@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.core.testing
 
 import com.loosecannon.servicetag.core.journal.EventChronology
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
@@ -14,6 +15,8 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.HealthSubject
+import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -25,20 +28,24 @@ import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.ClosureRepository
+import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
+import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
+import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import kotlinx.coroutines.flow.Flow
@@ -659,5 +666,116 @@ open class InMemoryReferenceRepository : ReferenceRepository, Rollbackable, Witn
         rows.values
             .filter { it.assetId == assetId }
             .sortedWith(compareBy({ it.displayName.lowercase() }, { it.id.value }))
+    }
+}
+
+/**
+ * Insert and query only, exactly as the port is: an activation row is an immutable fact. Every list
+ * orders by `(occurredOn, createdAt, id)`, the order the Room adapter's queries use.
+ */
+class InMemorySeasonActivationRepository : SeasonActivationRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, SeasonActivation>()
+    override var witness: TransactionWitness? = null
+    private val version = MutableStateFlow(0)
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun insert(row: SeasonActivation) {
+        // The primary key, as a fake: a second insert of one id is refused, never an overwrite.
+        if (row.id in rows) throw RiggedFailure("asset_season_activation already holds ${row.id}")
+        rows[row.id] = row
+        version.value += 1
+    }
+
+    override suspend fun forAsset(assetId: AssetId): List<SeasonActivation> =
+        rows.values.filter { it.assetId == assetId }.sortedWith(ORDER)
+
+    override suspend fun all(): List<SeasonActivation> {
+        witness?.observeAll()
+        return rows.values.sortedWith(ORDER)
+    }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<SeasonActivation>> =
+        version.map { rows.values.filter { it.assetId == assetId }.sortedWith(ORDER) }
+
+    private companion object {
+        val ORDER = compareBy<SeasonActivation>({ it.occurredOn }, { it.createdAt }, { it.id })
+    }
+}
+
+/**
+ * Insert and query only, exactly as the port is: a condition row is an immutable fact. Every list
+ * orders by `(occurredOn, occurredTime nulls first, createdAt, id)` — `compareBy` puts a null
+ * first, as SQLite's ascending order does.
+ */
+class InMemoryConditionRepository : ConditionRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, AssetCondition>()
+    override var witness: TransactionWitness? = null
+    private val version = MutableStateFlow(0)
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun insert(row: AssetCondition) {
+        if (row.id in rows) throw RiggedFailure("asset_condition already holds ${row.id}")
+        rows[row.id] = row
+        version.value += 1
+    }
+
+    override suspend fun forAsset(assetId: AssetId): List<AssetCondition> =
+        rows.values.filter { it.assetId == assetId }.sortedWith(ORDER)
+
+    override suspend fun all(): List<AssetCondition> {
+        witness?.observeAll()
+        return rows.values.sortedWith(ORDER)
+    }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<AssetCondition>> =
+        version.map { rows.values.filter { it.assetId == assetId }.sortedWith(ORDER) }
+
+    private companion object {
+        val ORDER = compareBy<AssetCondition>({ it.occurredOn }, { it.occurredTime }, { it.createdAt }, { it.id })
+    }
+}
+
+/** Configuration: upsert and query, and no delete, exactly as the port is. Lists order by `(sortOrder, id)`. */
+class InMemoryHealthSubjectRepository : HealthSubjectRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, HealthSubject>()
+    override var witness: TransactionWitness? = null
+    private val version = MutableStateFlow(0)
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun upsert(subject: HealthSubject) {
+        rows[subject.id.value] = subject
+        version.value += 1
+    }
+
+    override suspend fun get(id: HealthSubjectId): HealthSubject? = rows[id.value]
+
+    override suspend fun forAsset(assetId: AssetId): List<HealthSubject> =
+        rows.values.filter { it.assetId == assetId }.sortedWith(ORDER)
+
+    override suspend fun forSchedule(id: ScheduleId): List<HealthSubject> =
+        rows.values.filter { it.scheduleId == id }.sortedWith(ORDER)
+
+    override suspend fun all(): List<HealthSubject> {
+        witness?.observeAll()
+        return rows.values.sortedWith(ORDER)
+    }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<HealthSubject>> =
+        version.map { rows.values.filter { it.assetId == assetId }.sortedWith(ORDER) }
+
+    private companion object {
+        val ORDER = compareBy<HealthSubject>({ it.sortOrder }, { it.id.value })
     }
 }

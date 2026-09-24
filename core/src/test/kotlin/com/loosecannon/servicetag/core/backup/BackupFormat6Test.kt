@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.backup
 
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.testing.FakeAttachmentStorage
@@ -7,13 +8,16 @@ import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
+import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryHealthSubjectRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
+import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
@@ -177,12 +181,16 @@ class BackupFormat6Test {
         )
         val export = ExportBackupSet(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, references, uow, IdGenerator { "set-format-6" },
+            events, attachments, references,
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
+            uow, IdGenerator { "set-format-6" },
             Clock { 1_758_400_000_000L }, appVersion = "1.2.0", schemaVersion = 6,
         )
         val restore = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, references, storage, uow, rebuildAll = { },
+            events, attachments, references,
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
+            storage, uow, rebuildAll = { },
         )
     }
 
@@ -206,8 +214,9 @@ class BackupFormat6Test {
         val schedule = decoded.data.maintenanceSchedules.single { it.id == "s1" }.toDomain()
         assertEquals("2026-06-15", schedule.postponedDueOn)
         assertEquals(250.0, schedule.meterInterval)
-        assertEquals("AT_START", schedule.seasonReentry)
-        assertEquals(14, schedule.seasonReentryOffsetDays)
+        // FOLLOW_ASSET / AT_START / 14 on a schedule with a time rule, through the legacy mapping
+        assertEquals(ServicePolicy.IN_SERVICE_AT_START, schedule.servicePolicy)
+        assertEquals(14, schedule.policyOffsetDays)
         assertEquals(2, schedule.providers.size)
         val event = decoded.data.assetEvents.single().toDomain()
         assertEquals("s1", event.scheduleId?.value)

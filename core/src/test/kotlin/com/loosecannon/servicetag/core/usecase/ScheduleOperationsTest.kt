@@ -17,7 +17,7 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TerminationKind
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.ValueType
@@ -30,14 +30,17 @@ import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
+import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryHealthSubjectRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
+import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
 import com.loosecannon.servicetag.core.testing.dayMillis
@@ -94,7 +97,9 @@ class ScheduleOperationsTest {
     }
 
     private val recompute =
-        RecomputeSchedules(schedules, states, events, closures, groups, assets, todayPort, clock) { ZoneOffset.UTC }
+        RecomputeSchedules(
+            schedules, states, events, closures, groups, assets, InMemorySeasonActivationRepository(), todayPort, clock,
+        ) { ZoneOffset.UTC }
     private val save =
         SaveSchedule(countedSchedules, assets, groups, defs, profiles, uow, ids, clock, recompute)
     private val complete =
@@ -528,7 +533,7 @@ class ScheduleOperationsTest {
         )
         assertTrue(
             ScheduleProblem.SeasonFollowsAssetOnGroupTarget in problemsOf(
-                groupCmd.copy(seasonBehavior = SeasonBehavior.FOLLOW_ASSET),
+                groupCmd.copy(servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0),
             ),
             "FOLLOW_ASSET on a group target",
         )
@@ -743,12 +748,16 @@ class ScheduleOperationsTest {
 
         val bytes = ExportBackupSet(
             assets, groups, tags, links, defs, profiles, schedules, closures, events, attachments,
-            references, uow, IdGenerator { "set-1" }, clock, appVersion = "1.2.0", schemaVersion = 6,
+            references,
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
+            uow, IdGenerator { "set-1" }, clock, appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
 
         fun restore(rebuildAll: suspend () -> Unit) = ImportBackupReplace(
             assets, groups, tags, links, defs, profiles, schedules, closures, events, attachments,
-            references, storage, uow, rebuildAll = rebuildAll,
+            references,
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
+            storage, uow, rebuildAll = rebuildAll,
         )
 
         // Once, and after the last insert: everything the file carried was already in when it ran.
