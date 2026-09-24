@@ -110,3 +110,7 @@ data class AssetHealthResult(val subjects: List<SubjectHealth>,          // non-
 ## Size
 
 Medium: three engine files and a fixture file, plus a mechanical rename across about fifteen files. Split seam if the review cannot hold both: the rename alone as **B05b**, landing first.
+
+## Carry-forward from B02 (controller, 2026-09-24)
+
+- In `ReminderPort.kt` (this brief's file): the `dueOn` KDoc now says a reminder subject carries the **actionable** date for an active subject (B02's builder already does), and `SubjectState.Parked.reentryOn` is "the actionable date, or the first day after the break", no longer "the season's next start". No behaviour change here; the words must match what B02 ships.
