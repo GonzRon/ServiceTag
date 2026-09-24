@@ -21,3 +21,6 @@ keystore.properties
 
 # superpowers scratch
 .superpowers/
+
+# Android Studio "Generate Signed APK" output; release artifacts come from the tagged workflow, never the tree
+app/release/
