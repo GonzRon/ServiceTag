@@ -145,3 +145,7 @@ Large: fourteen rows, two forms, one document. Split seam if one review cannot h
 
 - `/v1/due`'s `rank` now follows `actionableDueOn` and the Deferred section; `docs/api/v1.md` says so.
 - `notTracked: UNSCORABLE` is a valid value in the health response (a subject the read model screened out); documented as unreachable through commands or restore, present for completeness.
+
+## Carry-forward from B07's review (controller, 2026-09-25)
+
+- `/v1/due` builds each item's nested state from the stored row (`MaintenanceHandlers.kt` ~280) and can disagree with the item's own fresh status; read it through `readState` like `/v1/schedules/{id}`; one route test with a stale stored row (RED: read the stored row).
