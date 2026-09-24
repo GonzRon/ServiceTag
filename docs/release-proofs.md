@@ -63,7 +63,7 @@ Each prints nothing, or the count stated.
 ## R7 in full
 
 Set `ANDROID_SERIAL` to the development phone for this step only; it is never written down.
-Before and after `adb install -r` of the verified APK: `adb shell pm list packages -U --show-versioncode com.loosecannon.servicetag` (UID and version code) and `adb shell dumpsys package com.loosecannon.servicetag | grep -m1 firstInstallTime` (package state, not the screen). The UID and `firstInstallTime` must not change and the version code must be the new one. The table counts come from the Developer API before and after and must be identical. The production phone is never part of a proof.
+Before and after `adb install -r` of the verified APK: `adb shell pm list packages -U --show-versioncode com.loosecannon.servicetag` (UID and version code) and `adb shell pm dump com.loosecannon.servicetag | grep -m1 firstInstallTime` (the package manager's own record, not the screen). The UID and `firstInstallTime` must not change and the version code must be the new one. The table counts come from the Developer API before and after and must be identical. The production phone is never part of a proof.
 
 ## Environment notes that cost a day
 
