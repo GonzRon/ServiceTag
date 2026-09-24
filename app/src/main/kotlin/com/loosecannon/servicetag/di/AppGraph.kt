@@ -40,6 +40,7 @@ import com.loosecannon.servicetag.core.ports.UuidGenerator
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.references.StreamSourcePolicy
 import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
+import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
 import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddReference
@@ -49,6 +50,7 @@ import com.loosecannon.servicetag.core.usecase.ArchiveAsset
 import com.loosecannon.servicetag.core.usecase.ArchiveDefinition
 import com.loosecannon.servicetag.core.usecase.ArchiveProfile
 import com.loosecannon.servicetag.core.usecase.ArchiveGroup
+import com.loosecannon.servicetag.core.usecase.ArchiveHealthSubject
 import com.loosecannon.servicetag.core.usecase.ArchiveSchedule
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.BuildBackupMergePlan
@@ -71,6 +73,7 @@ import com.loosecannon.servicetag.core.usecase.PauseSchedule
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
+import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
@@ -81,7 +84,10 @@ import com.loosecannon.servicetag.core.usecase.RetireAsset
 import com.loosecannon.servicetag.core.usecase.SaveDefinition
 import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.core.usecase.SaveGroup
+import com.loosecannon.servicetag.core.usecase.SaveAssetSettings
+import com.loosecannon.servicetag.core.usecase.SaveHealthSubject
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
+import com.loosecannon.servicetag.core.usecase.SetHealthPolicy
 import com.loosecannon.servicetag.core.usecase.SetMaintenanceBreak
 import com.loosecannon.servicetag.core.usecase.SetSeasonMode
 import com.loosecannon.servicetag.core.usecase.StoreIsEmpty
@@ -474,6 +480,21 @@ class AppGraph(private val context: Context) {
         RecordSeasonActivation(assets, events, seasonActivations, uow, ids, clock, today, recomputeSchedules)
     val getAssetSeason: GetAssetSeason = GetAssetSeason(assets, seasonActivations, uow, today)
     val acceptSeasonOffer: AcceptSeasonOffer = AcceptSeasonOffer(seasonActivations, recordSeasonActivation, uow, today)
+
+    // 1.4 — condition and health configuration (master plan §9, §10.1). A condition write inserts one
+    // immutable row and nothing else; the offer writes only when accepted. The subject and policy
+    // commands write configuration only — health is computed at read time. The settings save is the
+    // asset editor's one transaction over the asset, its season, its break and its policy.
+    val recordCondition: RecordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, today)
+    val acceptOperationalOffer: AcceptOperationalOffer = AcceptOperationalOffer(conditions, recordCondition, uow)
+    val saveHealthSubject: SaveHealthSubject =
+        SaveHealthSubject(healthSubjects, assets, schedules, profiles, uow, ids, clock)
+    val archiveHealthSubject: ArchiveHealthSubject =
+        ArchiveHealthSubject(healthSubjects, assets, schedules, uow, clock)
+    val setHealthPolicy: SetHealthPolicy = SetHealthPolicy(assets, healthSubjects, uow, clock)
+    val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
+        assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, today, recomputeSchedules, applyTemplate,
+    )
 
     val archiveAsset: ArchiveAsset =
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }

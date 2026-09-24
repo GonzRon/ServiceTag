@@ -100,6 +100,10 @@ internal class ConditionHealthHarness(today: String = "2026-09-24") {
         SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, healthSubjects)
     val archiveSchedule = ArchiveSchedule(schedules, uow, recompute, healthSubjects, assets, clock)
     val saveGroup = SaveGroup(groups, assets, uow, ids, clock)
+    val applyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
+    val saveAssetSettings = SaveAssetSettings(
+        assets, schedules, healthSubjects, activations, uow, ids, clock, todayPort, recompute, applyTemplate,
+    )
 
     /** An asset stored as it is, with no command in between — the state a test starts from. */
     fun asset(
