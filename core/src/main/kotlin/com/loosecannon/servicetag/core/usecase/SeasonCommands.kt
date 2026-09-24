@@ -11,6 +11,7 @@ import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.seasonInputs
+import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.schedule.BoundaryKind
 import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
@@ -171,6 +172,32 @@ internal fun seasonModeProblems(current: SeasonMode, cmd: SeasonModeCommand): Li
     if (intoManual && cmd.manualPhase == null) problems += SeasonProblem.ManualPhaseRequired
     if (!intoManual && cmd.manualPhase != null) problems += SeasonProblem.ManualPhaseForbidden
     return problems
+}
+
+/**
+ * **The switch into MANUAL** (spec §3.4; inv. 92): exactly one activation, dated [today] — START when
+ * [cmd] says the season is running now, END otherwise — whenever [cmd] moves the asset into MANUAL
+ * from [before], even when the latest historical row already says the same (END, END is valid
+ * history). Null for every other mode change, leaving MANUAL included. [SetSeasonMode] and
+ * [SaveAssetSettings] both write what this returns, so the two writers cannot drift.
+ */
+internal fun manualSwitchActivation(
+    assetId: AssetId,
+    before: SeasonMode,
+    cmd: SeasonModeCommand,
+    today: LocalDate,
+    now: Long,
+    ids: IdGenerator,
+): SeasonActivation? {
+    if (cmd.seasonMode != SeasonMode.MANUAL || before == SeasonMode.MANUAL) return null
+    return SeasonActivation(
+        id = ids.newId(),
+        assetId = assetId,
+        action = if (cmd.manualPhase == SeasonPhase.IN_SEASON) SeasonAction.START else SeasonAction.END,
+        occurredOn = today.toString(),
+        eventId = null,
+        createdAt = now,
+    )
 }
 
 /**

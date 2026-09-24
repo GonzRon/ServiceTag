@@ -20,6 +20,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryHealthSubjectRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
@@ -81,7 +82,10 @@ class CloseRoundTest {
         ) { ZoneOffset.UTC }
     private val saveGroup = SaveGroup(groups, assets, uow, ids, clock)
     private val saveSchedule =
-        SaveSchedule(countedSchedules, assets, groups, defs, profiles, uow, ids, clock, recompute)
+        SaveSchedule(
+            countedSchedules, assets, groups, defs, profiles, uow, ids, clock, recompute,
+            InMemoryHealthSubjectRepository(),
+        )
     private val postpone = PostponeSchedule(countedSchedules, uow, recompute)
     private val completeMembers = CompleteGroupMembers(
         countedSchedules, groups, events, closures, defs, profiles, uow, ids, clock, recompute,

@@ -237,6 +237,10 @@ object BackupCodec {
         // user's data already gone.
         validateGraph(data)
 
+        // And no row may be one a command would refuse: a restore lands nothing the app itself could
+        // not have written (B03's concern 3, ruled).
+        BackupContentCheck.check(data)
+
         return Backup(manifest, data)
     }
 

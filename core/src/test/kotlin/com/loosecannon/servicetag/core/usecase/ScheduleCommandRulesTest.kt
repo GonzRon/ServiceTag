@@ -22,6 +22,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryHealthSubjectRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
@@ -76,7 +77,10 @@ class ScheduleCommandRulesTest {
             schedules, states, events, closures, groups, assets, InMemorySeasonActivationRepository(), todayPort, clock,
         ) { ZoneOffset.UTC }
     private val save =
-        SaveSchedule(schedules, assets, groups, defs, profiles, uow, ids, clock, recompute)
+        SaveSchedule(
+            schedules, assets, groups, defs, profiles, uow, ids, clock, recompute,
+            InMemoryHealthSubjectRepository(),
+        )
     private val completeMembers = CompleteGroupMembers(
         schedules, groups, events, closures, defs, profiles, uow, ids, clock, recompute,
     )

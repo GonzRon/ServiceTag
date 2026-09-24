@@ -119,11 +119,16 @@ private fun validDate(occurredOn: String): Boolean =
             false
         }
 
-private fun validTime(occurredTime: String?): Boolean {
-    if (occurredTime == null) return true
-    if (!TIME_PATTERN.matches(occurredTime)) return false
-    val hour = occurredTime.substring(0, 2).toInt()
-    val minute = occurredTime.substring(3, 5).toInt()
+private fun validTime(occurredTime: String?): Boolean = occurredTime == null || isTimeOfDay(occurredTime)
+
+/**
+ * The one `HH:MM` rule: two digits, a colon, two digits, an hour below 24 and a minute below 60. An
+ * event's and a condition's `occurredTime` are both checked here, so the two can never disagree.
+ */
+internal fun isTimeOfDay(value: String): Boolean {
+    if (!TIME_PATTERN.matches(value)) return false
+    val hour = value.substring(0, 2).toInt()
+    val minute = value.substring(3, 5).toInt()
     return hour < 24 && minute < 60
 }
 

@@ -2,8 +2,6 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
-import com.loosecannon.servicetag.core.model.SeasonAction
-import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
@@ -12,7 +10,6 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
-import com.loosecannon.servicetag.core.schedule.SeasonPhase
 
 /**
  * Changes how an asset's season is decided (spec §3.2, §3.4; master plan §7.2): YEAR_ROUND, a
@@ -69,18 +66,8 @@ class SetSeasonMode(
         if (stranded.isNotEmpty()) throw SeasonModeStrandsPolicy(assetId, stranded)
 
         assets.upsert(next)
-        if (next.seasonMode == SeasonMode.MANUAL && current.seasonMode != SeasonMode.MANUAL) {
-            activations.insert(
-                SeasonActivation(
-                    id = ids.newId(),
-                    assetId = assetId,
-                    action = if (clean.manualPhase == SeasonPhase.IN_SEASON) SeasonAction.START else SeasonAction.END,
-                    occurredOn = today.localDate().toString(),
-                    eventId = null,
-                    createdAt = now,
-                ),
-            )
-        }
+        manualSwitchActivation(assetId, current.seasonMode, clean, today.localDate(), now, ids)
+            ?.let { activations.insert(it) }
         recompute.forAsset(assetId)
         next
     }
