@@ -33,8 +33,8 @@ internal fun maintenanceHandlersFor(graph: FakeGraph): MaintenanceHandlers = Mai
     completeGroupMembers = graph.completeGroupMembers,
     closeRound = graph.closeRound,
     due = DueReadModel(
-        graph.schedules, graph.scheduleStates, graph.assets, graph.groups, graph.definitions,
-        graph.recomputeSchedules, graph.todayPort,
+        graph.schedules, graph.assets, graph.groups, graph.definitions,
+        graph.recomputeSchedules, graph.todayPort, graph.assetHealthReadModel,
         snoozedUntilOf = { null },
     ),
     recompute = graph.recomputeSchedules,

@@ -41,12 +41,12 @@ class DueReadModelTest {
 
     private fun readModel(snoozes: Map<String, Long> = emptyMap()): DueReadModel = DueReadModel(
         schedules = graph.schedules,
-        states = graph.scheduleStates,
         assets = graph.assets,
         groups = graph.groups,
         definitions = graph.definitions,
         recompute = graph.recomputeSchedules,
         today = graph.todayPort,
+        health = graph.assetHealthReadModel,
         // B07 wires this to `schedule_local_delivery`'s own instant; a map stands in for the row
         // here, because what this projection owes its four surfaces is the value passed through
         // and not the table it came from.
@@ -354,11 +354,13 @@ class DueReadModelTest {
             persistence.filter { Regex("""\bDueStatus\b""").containsMatchIn(it.readText()) }.map { it.name },
         )
 
-        // And the read model reads derived state without ever writing it back.
+        // And the read model reads derived state without ever writing it back: it reads through
+        // `readState` and does not even hold the port that could upsert (1.4, invariant 105).
         val projection = sourceFile(
             "app/src/main/kotlin/com/loosecannon/servicetag/ui/maintenance/DueReadModel.kt",
         ).readText()
-        assertTrue("it has to hold the port to read it", "ScheduleStateRepository" in projection)
+        assertTrue("it reads state through the one read accessor", "recompute.readState(" in projection)
+        assertFalse("it holds no port with a write method", "ScheduleStateRepository" in projection)
         assertEquals(
             emptyList<String>(),
             Regex("""\bstates\.upsert\(""").findAll(projection).map { it.value }.toList(),

@@ -56,11 +56,12 @@ fun statusLabel(status: DueStatus): String = when (status) {
     DueStatus.DEFERRED -> "DEFERRED"
 }
 
-/** The RATIFIED dashboard section labels (D12 §10 `:706-707`). */
+/** The RATIFIED dashboard section labels (D12 §10 `:706-707`; 1.4 spec §10.7 S93 for Deferred). */
 fun sectionLabel(section: AttentionSection): String = when (section) {
     AttentionSection.ATTENTION -> "ATTENTION"
     AttentionSection.UPCOMING -> "UPCOMING"
     AttentionSection.CURRENT -> "CURRENT"
+    AttentionSection.DEFERRED -> "Deferred"
     AttentionSection.OUT_OF_SEASON -> "OUT OF SEASON"
 }
 

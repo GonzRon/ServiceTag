@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.journal.formatNumber
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -112,13 +113,14 @@ fun interface ScanRoundMembership {
 }
 
 /**
- * Whether a scan of this Asset has work the completion sheet would offer.
+ * Whether a scan of this Asset opens the sheet.
  *
- * The **routing** half of D-18a, asked by the scan path before it navigates: no actionable work
- * opens the asset exactly as today (#50 AC 1), and only a `Resolution.OpenAsset` that answers true
- * here reaches `Route.MaintenanceSheet` at all. It is one question with one answer because it is
- * [scanSheetItems] asked of the same projection the sheet itself reads — the routing decision and
- * the sheet's contents cannot disagree, which is the failure a second predicate would introduce.
+ * The **routing** half of spec §10.1, asked by the scan path before it navigates: a scan with
+ * nothing to open the sheet for opens the asset exactly as today (#50 AC 1), and only a
+ * `Resolution.OpenAsset` that answers true here reaches `Route.MaintenanceSheet` at all. The answer
+ * is exactly [ScanSheetContent.opens] of the content the sheet itself lists ([scanSheetContentFor]),
+ * so the routing decision and the sheet's contents cannot disagree (inv. 123) — the failure a
+ * second predicate would introduce.
  */
 fun interface ScanSheetOffer {
     suspend fun has(assetId: AssetId): Boolean
@@ -145,25 +147,23 @@ val DueItem.actionableOnScanSheet: Boolean
         (status == DueStatus.DUE || status == DueStatus.OVERDUE || isRepairableNoData)
 
 /**
- * D-18a applied to one Asset's projection: which of its rows the sheet offers, in the attention
- * order [DueReadModel] already put them in (master plan §11.1 — never a second ordering rule).
+ * D-18a applied to one in-service Asset's projection **with no condition in play**: which of its
+ * rows the sheet offers, in the attention order [DueReadModel] already put them in (master plan
+ * §11.1 — never a second ordering rule).
  *
- * The passenger rule is the whole reason this is a list operation and not a row predicate:
- * `DUE_SOON` joins **only** when the sheet is already open for another actionable item, and
- * **never alone** (D5 §7A `:208`). An empty answer means "open the asset as today", which is what
- * keeps a scan from becoming "a completion checklist for every future maintenance item"
- * (`issue-50.md:58`).
+ * It is [scanSheetContent]'s maintenance list and nothing else, so it cannot drift from the one
+ * predicate: `DUE_SOON` joins **only** when the sheet is already open, and **never alone** (D5 §7A
+ * `:208`). An empty answer means "no maintenance item opens the sheet".
  *
  * An **archived** schedule is already gone before this sees it: every due and projection query
  * starts from `listedForDue()`, inside `DueReadModel` (carry-forward (a)).
+ *
+ * `internal`, with its asset-level twin [scanSheetItemsFor]: a condition-blind subset of the
+ * predicate is not a routing answer, so main exposes none (review M3). Only the module's own tests
+ * ask it.
  */
-fun scanSheetItems(items: List<DueItem>): List<DueItem> {
-    if (items.none { it.actionableOnScanSheet }) return emptyList()
-    return items.filter {
-        it.actionableOnScanSheet ||
-            (it.status == DueStatus.DUE_SOON && !it.requiredSetEmpty && it.remindersEnabled)
-    }
-}
+internal fun scanSheetItems(items: List<DueItem>): List<DueItem> =
+    scanSheetContent(items, condition = null, components = emptyList(), health = null, inService = true).maintenance
 
 /**
  * What the scan sheet offers **this** Asset: the projection, narrowed to the rounds that actually
@@ -184,11 +184,15 @@ fun scanSheetItems(items: List<DueItem>): List<DueItem> {
  * time rule, and a group target carries no meter rule (invariant 2) — is not admitted: there is no
  * occurrence to oblige anybody.
  */
-suspend fun scanSheetItemsFor(
+internal suspend fun scanSheetItemsFor(
     assetId: AssetId,
     items: List<DueItem>,
     rounds: ScanRoundMembership,
-): List<DueItem> = scanSheetItems(items.filter { rounds.obliges(assetId, it) })
+): List<DueItem> = scanSheetItems(rounds.obliged(assetId, items))
+
+/** [items] narrowed to the rows whose round obliges [assetId]; every asset-targeted row does. */
+internal suspend fun ScanRoundMembership.obliged(assetId: AssetId, items: List<DueItem>): List<DueItem> =
+    items.filter { obliges(assetId, it) }
 
 private suspend fun ScanRoundMembership.obliges(assetId: AssetId, item: DueItem): Boolean =
     when (item.target) {
@@ -236,10 +240,10 @@ data class SheetItem(
  * The sheet's whole state: which asset was scanned, from which tag, what is actionable, and what
  * the owner has selected.
  *
- * [emptyOnArrival] is the no-work case surviving a restored back stack: the route is reached only
- * from a resolution that has actionable work, but a stack restored into an asset whose work has
- * since been done must still land on the ordinary asset screen rather than on an empty sheet
- * (#50 AC 1). It is decided on the **first** load alone, so completing the last item leaves the
+ * [emptyOnArrival] is the nothing-to-open case surviving a restored back stack: the route is reached
+ * only from a resolution whose [ScanSheetContent.opens] was true, but a stack restored into an asset
+ * whose work has since been done (and whose condition no longer opens the sheet) must still land on
+ * the ordinary asset screen rather than on an empty sheet (#50 AC 1). It is decided on the **first** load alone, so completing the last item leaves the
  * owner on the sheet with its two ways out rather than yanking the screen away.
  */
 data class MaintenanceSheetState(
@@ -251,6 +255,12 @@ data class MaintenanceSheetState(
     val busy: Boolean = false,
     val loaded: Boolean = false,
     val emptyOnArrival: Boolean = false,
+    /**
+     * The whole of [scanSheetContent]'s answer for this asset — the condition, the components, the
+     * critical subjects and the aggregate beside the maintenance [items] — for the sheet to draw.
+     * Null until the first load.
+     */
+    val content: ScanSheetContent? = null,
 ) {
     /** "Complete selected" acts on an explicit selection and never on "everything shown". */
     val canComplete: Boolean get() = selected.isNotEmpty()
@@ -278,6 +288,7 @@ data class MaintenanceSheetState(
  */
 class MaintenanceSheetViewModel(
     private val due: DueReadModel,
+    private val health: AssetHealthReadModel,
     private val assets: AssetRepository,
     private val tags: TagRepository,
     private val readings: LastCompletionReadings,
@@ -293,7 +304,7 @@ class MaintenanceSheetViewModel(
 ) : ViewModel() {
 
     constructor(graph: AppGraph, assetId: String, tagId: String?) : this(
-        graph.dueReadModel, graph.assets, graph.tags, graph.lastCompletionReadings,
+        graph.dueReadModel, graph.assetHealthReadModel, graph.assets, graph.tags, graph.lastCompletionReadings,
         graph.lastCompletionEventId, graph.scanRoundMembership, graph.scheduleSnooze,
         graph.postponeSchedule, graph.reminderReconcile, graph.clock, graph.completionFlow,
         AssetId(assetId), tagId?.let(::TagId),
@@ -331,7 +342,7 @@ class MaintenanceSheetViewModel(
      *
      * Every read is from the store and not from a list held across an action, which is what makes a
      * repeat scan after a completion refuse to re-offer that occurrence (#50 AC 12): the completed
-     * schedule is no longer `DUE`, so [scanSheetItems] does not admit it.
+     * schedule is no longer `DUE`, so [scanSheetContent] does not admit it.
      */
     fun refresh() {
         viewModelScope.launch {
@@ -344,7 +355,9 @@ class MaintenanceSheetViewModel(
     private suspend fun load() {
         val asset = assets.get(assetId)
         val placement = tagId?.let { tags.get(it) }?.label?.takeIf { it.isNotBlank() }
-        val rows = scanSheetItemsFor(assetId, due.forAsset(assetId), rounds).map { item(it) }
+        // The one predicate: what opened the scan here is what the sheet lists (inv. 123).
+        val content = scanSheetContentFor(assetId, due, rounds, health)
+        val rows = content.maintenance.map { item(it) }
         val shown = rows.map { it.scheduleId.value }.toSet()
         val first = !_state.value.loaded
         _state.update { previous ->
@@ -357,7 +370,8 @@ class MaintenanceSheetViewModel(
                 // with it, so "Complete selected" can never act on something that is not on screen.
                 selected = previous.selected.intersect(shown),
                 loaded = true,
-                emptyOnArrival = if (first) rows.isEmpty() else previous.emptyOnArrival,
+                emptyOnArrival = if (first) !content.opens else previous.emptyOnArrival,
+                content = content,
             )
         }
     }
@@ -482,7 +496,7 @@ class MaintenanceSheetViewModel(
     /**
      * Back from a form: carry on only if that form was actually saved.
      *
-     * A saved completion takes its schedule out of [scanSheetItems]' admission set, so "is it still
+     * A saved completion takes its schedule out of [scanSheetContent]'s admission set, so "is it still
      * offered" is the question, asked of canonical state. Still offered means the owner left the
      * form without saving — and then the run **stops**, which is what leaves the forms already
      * saved written and every later one absent rather than half-finished.
@@ -546,9 +560,13 @@ class MaintenanceSheetViewModel(
          * per-item forms of §17.1e. This brief drafts no sentence template: a row with neither a
          * date nor a meter side says nothing here, and its status word and its meter line carry
          * the answer instead.
+         *
+         * The date is the **actionable** one (1.4), the date the status word is measured against,
+         * so a row the policy pulled before its season says "Overdue since" the day it became late
+         * and never the later canonical date it would otherwise name.
          */
         fun whyNow(row: DueItem): String? {
-            val due = row.effectiveDueOn ?: return null
+            val due = row.actionableDueOn ?: return null
             return when (row.status) {
                 DueStatus.OVERDUE -> "Overdue since $due."
                 DueStatus.DUE, DueStatus.DUE_SOON -> "Due $due."

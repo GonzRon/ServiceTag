@@ -47,6 +47,16 @@ enum class NotTrackedReason {
 
     /** MAINTENANCE_OVERDUE: the linked schedule is archived (merge-only); there is no driver line for it. */
     SCHEDULE_ARCHIVED,
+
+    /**
+     * Either driver: the subject's own configuration is malformed (thresholds out of order or out of
+     * range, or a weight outside 1–10), so it cannot be scored at all. **Never produced by
+     * [AssetHealthEngine]**, which refuses such a subject outright: the read model screens each
+     * subject with [HealthSubjectShape.problems] first and reports the screened-out ones with this
+     * reason and no driver line (S98 alone). Commands and the format-8 content pass keep such rows
+     * out, so it is unreachable through either; it exists so that nothing claims a false reason.
+     */
+    UNSCORABLE,
 }
 
 /** One subject's value: a score in a band, or NOT TRACKED with its reason. */

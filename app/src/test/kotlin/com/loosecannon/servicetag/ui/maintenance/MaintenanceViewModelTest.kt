@@ -59,8 +59,8 @@ class MaintenanceViewModelTest {
         states = graph.scheduleStates,
         groups = graph.groups,
         due = DueReadModel(
-            graph.schedules, graph.scheduleStates, graph.assets, graph.groups,
-            graph.definitions, graph.recomputeSchedules, graph.todayPort, { null },
+            graph.schedules, graph.assets, graph.groups,
+            graph.definitions, graph.recomputeSchedules, graph.todayPort, graph.assetHealthReadModel, { null },
         ),
         health = health,
         notifications = object : NotificationPermission {

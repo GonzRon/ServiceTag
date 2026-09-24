@@ -130,7 +130,10 @@ object ReminderHealthDispatch {
  * **Derived state arrives through a read-only seam.** [ScheduleStateReader] has one method and no
  * writer, so "the health check cannot move a due date" is a property of the type (invariant 17) —
  * and B06's own structural test forbids every file under `reminders/` from so much as naming the
- * port that has a write method, this file included.
+ * port that has a write method, this file included. The app wires that seam to
+ * `RecomputeSchedules.readState` (1.4, master plan §8.6, plan decision 47): a stored row computed for
+ * today, and otherwise the state derived in memory, so every finding judges today's state and
+ * nothing it reads is ever written back (invariant 105).
  *
  * Every store query starts from `listedForDue()`: an archived schedule appears in no finding, for
  * the same reason it appears in no due total.
@@ -272,8 +275,13 @@ class ReminderHealthCheck(
      * not actionable at all (invariants 74, 77) — and keying off the status enum is the one mistake
      * that would tell the owner to log a reading for a group that obliges nobody.
      *
-     * A schedule with **no derived row at all** is skipped: the recompute has not run for it yet,
-     * and a finding derived from nothing would be a guess.
+     * The baseline is the **derived** state's, whatever the store holds: the seam derives a row the
+     * recompute has not written yet — every row, right after the 7 → 8 migration recreates
+     * `schedule_state` empty — so a schedule is never skipped for having no stored row, and never
+     * flagged for it either. An anchored meter schedule reads its `anchorMeter` as its baseline and
+     * is silent; only one with neither a completion nor `anchorMeter` is the finding (the
+     * controller's ruling on B07's concern 4). The `null` guard below is for a schedule deleted
+     * between the two reads, which the seam answers null.
      */
     private suspend fun scheduleFindings(): List<ReminderHealthFinding> = buildList {
         val listed = inService(schedules.all().listedForDue())

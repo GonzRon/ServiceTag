@@ -25,8 +25,11 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
+import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.groupOf
+import com.loosecannon.servicetag.testing.meterDefinitionOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import java.io.File
 import java.time.LocalDate
@@ -466,6 +469,54 @@ class ReminderHealthCheckTest {
         assertEquals(ReminderHealthSeverity.WARN, finding.severity)
         assertEquals("1 schedules need a meter reading before they can come due.", finding.message)
         assertEquals(RepairAction.OpenInApp("LOG_METER_READING:s1"), finding.repair)
+    }
+
+    /**
+     * The state right after the 7 → 8 migration, which recreates `schedule_state` empty (the
+     * controller's ruling on B07's concern 4). Over the graph's real seam, a meter schedule whose
+     * state can be derived — its `anchorMeter` is its baseline — raises no `NO_DATA`, and one with
+     * neither a completion nor an anchor is the finding. Nothing is written to judge either.
+     */
+    @Test
+    fun anEmptyStateTableRaisesNoDataOnlyForAScheduleWithNoBaseline() = runTest {
+        val graph = FakeGraph().also { it.today = TODAY }
+        try {
+            graph.assets.upsert(assetRow("a1", name = "Generator"))
+            graph.definitions.upsert(meterDefinitionOf("d1", assetId = "a1"))
+            val anchored = scheduleOf(
+                id = "s-anchored",
+                assetId = "a1",
+                timeInterval = null,
+                timeUnit = null,
+                anchorOn = null,
+                meterDefinitionId = "d1",
+                meterInterval = 100.0,
+                anchorMeter = 500.0,
+            )
+            graph.schedules.upsert(anchored)
+            val run = ReminderHealthCheck(
+                provider = provider(),
+                platform = platform,
+                backstop = backstop,
+                alarm = alarm,
+                schedules = graph.schedules,
+                states = graph.scheduleStateReader,
+                assets = graph.assets,
+                groups = graph.groups,
+                io = Dispatchers.Unconfined,
+            )
+            assertEquals("no stored row at all", emptyList<ScheduleState>(), graph.scheduleStates.all())
+
+            assertFalse("a derivable baseline is not NO_DATA", "NO_DATA" in run.run().map { it.code })
+
+            graph.schedules.upsert(anchored.copy(id = ScheduleId("s-bare"), anchorMeter = null))
+            val finding = run.run().single { it.code == "NO_DATA" }
+            assertEquals("1 schedules need a meter reading before they can come due.", finding.message)
+            assertEquals(RepairAction.OpenInApp("LOG_METER_READING:s-bare"), finding.repair)
+            assertEquals("judging wrote nothing", emptyList<ScheduleState>(), graph.scheduleStates.all())
+        } finally {
+            graph.close()
+        }
     }
 
     /** The control: the baseline supplied, so there is nothing left to log. */

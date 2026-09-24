@@ -1,0 +1,10 @@
+# One fixture, ordered twice: by the Room DAO's observeAll in :app (DueReadModelPolicyTest) and by
+# the shared in-memory fake in :core (InMemoryScheduleStateOrderTest). Both must produce the
+# "expected" order. Effective and actionable dates disagree, one actionable date is null (SQLite
+# sorts it first) and two actionable dates tie (the schedule id breaks the tie).
+# row,<scheduleId>,<effectiveDueOn>,<actionableDueOn>
+row,s-a,2026-11-01,2027-03-01
+row,s-b,2026-12-20,2026-11-01
+row,s-c,2026-10-01,
+row,s-d,2026-09-01,2026-11-01
+expected,s-c,s-b,s-d,s-a

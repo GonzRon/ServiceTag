@@ -2,8 +2,11 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.PolicyPhase
+import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.ui.theme.ServiceTagDarkSemanticColors
 import com.loosecannon.servicetag.ui.theme.ServiceTagLightSemanticColors
@@ -70,10 +73,13 @@ class StatusVocabularyTest {
         }
     }
 
-    /** The four RATIFIED section labels (pre-ratified with D12 §10 `:706-707`), in the drawn order. */
-    @Test fun theSectionLabelsAreTheRatifiedFour() {
+    /**
+     * The five RATIFIED section labels, in the drawn order: D12 §10's four (`:706-707`) and 1.4's
+     * S93 "Deferred" between CURRENT and OUT OF SEASON (spec §4.5), verbatim and in its own case.
+     */
+    @Test fun theSectionLabelsAreTheRatifiedFive() {
         assertEquals(
-            listOf("ATTENTION", "UPCOMING", "CURRENT", "OUT OF SEASON"),
+            listOf("ATTENTION", "UPCOMING", "CURRENT", "Deferred", "OUT OF SEASON"),
             AttentionSection.entries.map(::sectionLabel),
         )
     }
@@ -123,6 +129,12 @@ class StatusVocabularyTest {
         section = AttentionSection.ATTENTION,
         requiredSetEmpty = false,
         effectiveDueOn = LocalDate.parse("2026-05-30"),
+        actionableDueOn = LocalDate.parse("2026-05-30"),
+        policyReason = PolicyReason.NONE,
+        policyPhase = PolicyPhase.ACTIVE,
+        quiet = false,
+        seasonMode = SeasonMode.YEAR_ROUND,
+        dormantUntil = null,
         computedDueMeter = null,
         currentMeter = null,
         meterUnit = null,
@@ -132,6 +144,8 @@ class StatusVocabularyTest {
         membersRequired = null,
         membersComplete = null,
         snoozedUntil = snoozedUntil,
+        health = null,
+        assetCondition = null,
         rank = 0,
     )
 }
