@@ -2,6 +2,10 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.HealthAggregation
+import com.loosecannon.servicetag.core.model.HealthDriver
+import com.loosecannon.servicetag.core.model.HealthSubjectId
+import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
@@ -16,6 +20,8 @@ import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
+import com.loosecannon.servicetag.core.usecase.HealthPolicyCommand
+import com.loosecannon.servicetag.core.usecase.HealthSubjectCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.reminders.DeliveryInput
 import com.loosecannon.servicetag.reminders.DigestPolicy
@@ -42,6 +48,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -631,5 +638,80 @@ class ScheduleDetailViewModelTest {
         // recurrence edit too, which is the one action `SaveSchedule` would otherwise have accepted
         // from a screen that withholds every other one.
         assertFalse(archived.canSnooze)
+    }
+
+    /** A mower's oil change with a time rule, and the subject it drives. */
+    private suspend fun aDrivingSchedule(): Triple<AssetId, ScheduleId, HealthSubjectId> {
+        val (mower, schedule) = anAssetSchedule(title = "Oil change")
+        val subject = graph.saveHealthSubject.create(
+            mower,
+            HealthSubjectCommand(
+                name = "Engine oil",
+                kind = HealthSubjectKind.PART,
+                driver = HealthDriver.MAINTENANCE_OVERDUE,
+                scheduleId = schedule,
+                nominalUntilDays = 0,
+                warningFromDays = 7,
+                criticalFromDays = 30,
+            ),
+        )
+        return Triple(mower, schedule, subject.id)
+    }
+
+    /**
+     * Matrix row **"the guard, detail"**: archiving a schedule a health subject depends on asks S140
+     * first and archives nothing; Cancel writes nothing; "Archive both" archives the schedule **and**
+     * the subject, through the same archive with the unlink flag (spec §6.1, D-30; inv. 130).
+     */
+    @Test fun archivingADrivingScheduleAsksFirst() = runTest {
+        val (_, id, subjectId) = aDrivingSchedule()
+        val vm = viewModel(id)
+        vm.state.first { it.loaded }
+
+        vm.archive(true)
+        val asking = vm.state.first { !it.busy && it.linkGuard != null }
+        assertEquals(LinkGuardPrompt.Asks("Engine oil"), asking.linkGuard)
+        assertFalse("nothing is archived before the answer", asking.archived)
+        assertEquals(ScheduleStatus.ACTIVE, graph.schedules.get(id)!!.status)
+        assertNull(graph.healthSubjects.get(subjectId)!!.archivedAt)
+
+        // Cancel: the dialog closes and nothing is written.
+        vm.cancelLinkGuard()
+        assertNull(vm.state.value.linkGuard)
+        assertEquals(ScheduleStatus.ACTIVE, graph.schedules.get(id)!!.status)
+        assertNull(graph.healthSubjects.get(subjectId)!!.archivedAt)
+
+        // Asked again, and answered "Archive both".
+        vm.archive(true)
+        vm.state.first { !it.busy && it.linkGuard != null }
+        vm.archiveBoth()
+        val done = vm.state.first { !it.busy }
+        assertNull(done.linkGuard)
+        assertEquals(ScheduleStatus.ARCHIVED, graph.schedules.get(id)!!.status)
+        assertNotNull("the subject is archived with it", graph.healthSubjects.get(subjectId)!!.archivedAt)
+        assertTrue(done.archived)
+    }
+
+    /**
+     * Matrix row **"the guard, detail"**, the primary: "Archive both" on the subject its asset's health
+     * follows is refused whole and shows S137 — neither the schedule nor the subject is archived.
+     */
+    @Test fun thePrimaryAnswerShowsS137() = runTest {
+        val (assetId, id, subjectId) = aDrivingSchedule()
+        graph.setHealthPolicy.run(assetId, HealthPolicyCommand(HealthAggregation.TRACK_ONE, subjectId))
+        val vm = viewModel(id)
+        vm.state.first { it.loaded }
+
+        vm.archive(true)
+        vm.state.first { !it.busy && it.linkGuard != null }
+        vm.archiveBoth()
+        val refused = vm.state.first { !it.busy }
+        assertEquals(LinkGuardPrompt.Primary, refused.linkGuard)
+        assertEquals(ScheduleStatus.ACTIVE, graph.schedules.get(id)!!.status)
+        assertNull(graph.healthSubjects.get(subjectId)!!.archivedAt)
+
+        vm.cancelLinkGuard()
+        assertNull(vm.state.value.linkGuard)
+        assertEquals(ScheduleStatus.ACTIVE, graph.schedules.get(id)!!.status)
     }
 }
