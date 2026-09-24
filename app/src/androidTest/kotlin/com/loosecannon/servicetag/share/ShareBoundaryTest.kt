@@ -53,9 +53,26 @@ class ShareBoundaryTest {
         mower = runBlocking { graph.createAsset.run(name = "Mower").id }
     }
 
+    /** The asset goes whatever happened above, including an intake that would not finish. */
     @After fun finishTheIntakeAndRemoveTheAsset() {
-        intake?.let(TestSender::finish)
-        mower?.let { runBlocking { graph.deleteAsset.run(it) } }
+        try {
+            intake?.let(TestSender::finish)
+        } finally {
+            mower?.let(::deleteEvenIfInterrupted)
+        }
+    }
+
+    /**
+     * On a timeout JUnit interrupts this thread and moves on, and `runBlocking` on an interrupted
+     * thread throws before the delete has run. The flag is cleared for the delete and put back.
+     */
+    private fun deleteEvenIfInterrupted(asset: AssetId) {
+        val interrupted = Thread.interrupted()
+        try {
+            runBlocking { graph.deleteAsset.run(asset) }
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt()
+        }
     }
 
     /** Boundary: `ACTION_SEND` + `EXTRA_TEXT` from a foreign UID reaches the exported activity. */
