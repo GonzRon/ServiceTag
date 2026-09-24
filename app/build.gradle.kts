@@ -172,3 +172,19 @@ tasks.withType<Test>().configureEach {
 tasks.named { it == "connectedDebugAndroidTest" }.configureEach {
     dependsOn(":share-test-sender:installDebug")
 }
+
+// #62: ReleaseProofPolicyTest reads files outside this module (the scanned roots and the release
+// runbook). They are declared as inputs of every unit-test task here, so a harness planted under
+// one of them re-runs the test instead of being answered by an up-to-date or cached result.
+tasks.withType<Test>().configureEach {
+    val root = rootProject.layout.projectDirectory
+    inputs.files(
+        root.dir("tools").asFileTree.matching {
+            exclude("**/.venv/**", "**/__pycache__/**", "**/.pytest_cache/**", "**/build/**")
+        },
+        root.dir("share-test-sender").asFileTree.matching { exclude("build/**") },
+        root.dir(".github").asFileTree,
+        root.file("docs/release-proofs.md"),
+        layout.projectDirectory.dir("src/androidTest").asFileTree,
+    ).withPropertyName("releaseProofPolicyScope").withPathSensitivity(PathSensitivity.RELATIVE)
+}
