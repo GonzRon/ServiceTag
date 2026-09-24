@@ -224,7 +224,7 @@ A switch into MANUAL must state `manualPhase` (IN_SEASON or OUT_OF_SEASON); with
 
 **Time side only (D-20; B-1, RS-2).** The policy moves only the time side's date.
 
-A **meter-only schedule** is **phase-only** (O-7; 1.2 parity, `ScheduleCommands.kt:282-284`):
+A **meter-only schedule** is **phase-only** (O-7):
 - it may use IN_SERVICE_* for dormancy: INACTIVE_SEASON while the asset is out of season;
 - it may be `quiet` during the maintenance break;
 - neither moves a date, because there is no time-side due date;
@@ -1019,7 +1019,7 @@ Literal token values are design-token choices under the existing contrast requir
 | S142 | driver line | Not tracked: the linked schedule has no date rule or belongs to another asset. |
 | S143 | driver line, postponed occurrence (O-9) | <schedule> was postponed to <date> |
 
-The 142 ratified rows are 138 new plus 4 re-ratified (S29, S32, S33, S37); S123, S124, S128, S132 and S136 each ratify one set of words. The owner's notes are applied:
+The 143 ratified rows are 139 new plus 4 re-ratified (S29, S32, S33, S37); S123, S124, S128, S132 and S136 each ratify one set of words. The owner's notes are applied:
 - Nothing implies all maintenance stops (S38, S43, S45, S62, S80).
 - S43 says "becomes active again".
 - Nothing claims work "is done".
