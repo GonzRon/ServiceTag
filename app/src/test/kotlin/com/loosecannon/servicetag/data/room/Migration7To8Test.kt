@@ -100,6 +100,19 @@ class Migration7To8Test {
                             setOf("index_schedule_state_actionable_due_on"),
                             m.indexNamesOn("schedule_state").filterNot { it.startsWith("sqlite_autoindex") }.toSet(),
                         )
+                        // Inv. 109: the soft links carry no foreign key — not `health_primary_subject_id`
+                        // on the asset, not `baseline_profile_id` on a subject, not `event_id` on a fact.
+                        assertEquals(listOf("parent_asset_id -> asset(id) ON DELETE RESTRICT"), m.foreignKeysOf("asset"))
+                        assertEquals(
+                            listOf(
+                                "asset_id -> asset(id) ON DELETE CASCADE",
+                                "schedule_id -> maintenance_schedule(id) ON DELETE CASCADE",
+                            ),
+                            m.foreignKeysOf("health_subject"),
+                        )
+                        for (fact in listOf("asset_season_activation", "asset_condition")) {
+                            assertEquals(fact, listOf("asset_id -> asset(id) ON DELETE CASCADE"), m.foreignKeysOf(fact))
+                        }
                     }
                 }
             }
@@ -117,6 +130,7 @@ class Migration7To8Test {
                     mapOf(
                         "a-both" to "CALENDAR",
                         "a-start" to "YEAR_ROUND",
+                        "a-end" to "YEAR_ROUND",
                         "a-none" to "YEAR_ROUND",
                         "a-part" to "YEAR_ROUND",
                     ),
@@ -308,13 +322,11 @@ class Migration7To8Test {
         /** Room's own bookkeeping, which is not a table of the schema. */
         val ROOM_INTERNAL = setOf("room_master_table", "android_metadata", "sqlite_sequence")
 
-        val V7_SEASON_COLUMNS = setOf("season_behavior", "season_reentry", "season_reentry_offset_days")
-        val V8_SCHEDULE_COLUMNS = setOf("service_policy", "policy_offset_days", "rule_changed_at")
-
         /** Every row [seedV7] writes, as `(table, id, key column)`. */
         val SEEDED = listOf(
             Seeded("asset", "a-both"),
             Seeded("asset", "a-start"),
+            Seeded("asset", "a-end"),
             Seeded("asset", "a-none"),
             Seeded("asset", "a-part"),
             Seeded("measurement_definition", "d-hours"),
@@ -402,7 +414,7 @@ class Migration7To8Test {
         }
 
         /**
-         * What a 1.3 install can hold: a CALENDAR-shaped asset, a half-set one, one with no window
+         * What a 1.3 install can hold: a CALENDAR-shaped asset, two half-set ones, one with no window
          * and a component; a meter definition and a profile; a group with a member; schedules that
          * IGNORE and FOLLOW_ASSET with a null, an `AT_START`, a `RESUME_CLAMPED` and an `04-01`
          * re-entry, offsets 5, 400 and null, a meter-only one and a group one; providers, two
@@ -412,6 +424,7 @@ class Migration7To8Test {
         fun seedV7(c: SQLiteConnection) {
             insertAsset(c, "a-both", "Snowblower", "11-01", "03-31", 1_000, 1_100)
             insertAsset(c, "a-start", "Mower", "04-01", null, 2_000, 2_100)
+            insertAsset(c, "a-end", "Hot tub", null, "03-31", 2_500, 2_600)
             insertAsset(c, "a-none", "Generator", null, null, 3_000, 3_100)
             insertAsset(c, "a-part", "Battery pack", null, null, 4_000, 4_100, parent = "a-none")
             c.execSQL(

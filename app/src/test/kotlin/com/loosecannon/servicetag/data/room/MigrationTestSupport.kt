@@ -199,6 +199,12 @@ internal val V8_NEW_ASSET_COLUMNS = setOf(
     "health_primary_subject_id",
 )
 
+/** The three `maintenance_schedule` season columns schema v8 dropped. */
+internal val V7_SEASON_COLUMNS = setOf("season_behavior", "season_reentry", "season_reentry_offset_days")
+
+/** The three `maintenance_schedule` columns schema v8 added. */
+internal val V8_SCHEDULE_COLUMNS = setOf("service_policy", "policy_offset_days", "rule_changed_at")
+
 /** The three tables schema v8 added. */
 internal val V8_TABLES = setOf("asset_season_activation", "asset_condition", "health_subject")
 

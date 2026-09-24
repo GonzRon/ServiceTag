@@ -59,17 +59,24 @@ class ReferenceMigrationTest {
             }
 
             // Every seeded row, field for field, before and after. No pre-existing table gains a
-            // column in *this* migration, but the chain now runs on to v8, which appends asset
-            // columns and replaces the schedule's three season columns — `Migration7To8Test` owns
-            // those. So the comparison is every column the row has on both sides.
+            // column in *this* migration, but the chain now runs on to v8, so v8's known deltas —
+            // which `Migration7To8Test` owns — are taken out, and only those: the schedule's three
+            // season columns before, and the asset's five and the schedule's three new ones after.
             val after = withConnection(migrated) { c ->
                 SEEDED.associateWith { (t, id) -> c.rowOf(t, id) }
             }
-            fun names(row: List<String>) = row.map { it.substringBefore('=') }.toSet()
-            val shared = SEEDED.associateWith { key -> names(before.getValue(key)) intersect names(after.getValue(key)) }
+            fun List<String>.without(columns: Set<String>) = filterNot { it.substringBefore('=') in columns }
             assertEquals(
-                before.mapValues { (key, row) -> row.filter { it.substringBefore('=') in shared.getValue(key) } },
-                after.mapValues { (key, row) -> row.filter { it.substringBefore('=') in shared.getValue(key) } },
+                before.mapValues { (key, row) ->
+                    if (key.first == "maintenance_schedule") row.without(V7_SEASON_COLUMNS) else row
+                },
+                after.mapValues { (key, row) ->
+                    when (key.first) {
+                        "asset" -> row.without(V8_NEW_ASSET_COLUMNS)
+                        "maintenance_schedule" -> row.without(V8_SCHEDULE_COLUMNS)
+                        else -> row
+                    }
+                },
             )
 
             // and the shape, against what Room builds from the entities with no migration at all
