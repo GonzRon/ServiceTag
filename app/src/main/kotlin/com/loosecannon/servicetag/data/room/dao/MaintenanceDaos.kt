@@ -220,7 +220,8 @@ interface ScheduleStateDao {
     @Query("SELECT * FROM schedule_state ORDER BY schedule_id")
     suspend fun all(): List<ScheduleStateEntity>
 
-    @Query("SELECT * FROM schedule_state ORDER BY effective_due_on, schedule_id")
+    /** By the actionable date, the sort key since the policy can move it off the effective one. */
+    @Query("SELECT * FROM schedule_state ORDER BY actionable_due_on, schedule_id")
     fun observeAll(): Flow<List<ScheduleStateEntity>>
 
     @Query("DELETE FROM schedule_state")

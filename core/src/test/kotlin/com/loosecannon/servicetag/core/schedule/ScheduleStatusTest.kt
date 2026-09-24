@@ -3,17 +3,30 @@ package com.loosecannon.servicetag.core.schedule
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.SeasonInputs
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
+import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
+import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
+import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
+import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
+import com.loosecannon.servicetag.core.testing.SeasonFixtures
 import com.loosecannon.servicetag.core.testing.calendarSeason
 import com.loosecannon.servicetag.core.testing.readingOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
+import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.runTest
 
 /** The status function: the ladder, the two no-data shapes, the three "not due" words, monotonicity. */
 class ScheduleStatusTest {
@@ -139,8 +152,8 @@ class ScheduleStatusTest {
      * Invariant 23: status is **monotone in `T` between history changes** — as today advances with
      * no event, closure or edit, it never walks back from OVERDUE to OK. A due date recomputed as
      * "the first series date ≥ today" would do exactly that every quarter. A season boundary moving
-     * a schedule to `INACTIVE_SEASON` is asserted here as **not** a violation, which is the one
-     * exception D5 §12.10 names.
+     * a schedule to `INACTIVE_SEASON` is asserted here as **not** a violation: a season, activation
+     * or break boundary may change a status with no history change (1.4 restatement).
      */
     @Test
     fun statusIsMonotoneInTodayBetweenHistoryChanges() {
@@ -160,6 +173,37 @@ class ScheduleStatusTest {
         val window = calendarSeason("10-15", "04-15")
         assertEquals(DueStatus.OVERDUE, statusAt(winter, "2026-04-15", season = window))
         assertEquals(DueStatus.INACTIVE_SEASON, statusAt(winter, "2026-04-16", season = window))
+    }
+
+    /**
+     * Invariant 23, restated for 1.4: a boundary may change a status with no history change, and
+     * the between-rebuilds exception is gone. A row stored on the last day of the season (OVERDUE)
+     * and read the next day through `readState` reports the new phase — OUT OF SEASON — because the
+     * stale row is derived for today rather than trusted. Nothing was written in between.
+     */
+    @Test
+    fun aBoundaryMayChangeStatusWithNoHistoryChange() = runTest {
+        val assets = InMemoryAssetRepository()
+        val closures = InMemoryClosureRepository()
+        val states = InMemoryScheduleStateRepository()
+        val schedules = InMemoryScheduleRepository(closures, states)
+        var today = on("2026-04-15")
+        val recompute = RecomputeSchedules(
+            schedules, states, InMemoryEventRepository(), closures, InMemoryGroupRepository(), assets,
+            InMemorySeasonActivationRepository(), Today { today }, Clock { 0L },
+        ) { ZoneOffset.UTC }
+        assets.upsert(
+            SeasonFixtures.assetOf(id = "a1", name = "Pump", mode = SeasonMode.CALENDAR, seasonStart = "10-15", seasonEnd = "04-15"),
+        )
+        val winter = quarterly.copy(servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0)
+        schedules.upsert(winter)
+        recompute.all()
+        val stored = states.get(winter.id)!!
+        assertEquals(DueStatus.OVERDUE, statusOf(winter, recompute.readState(winter), today))
+
+        today = on("2026-04-16")
+        assertEquals(DueStatus.INACTIVE_SEASON, statusOf(winter, recompute.readState(winter), today))
+        assertEquals(stored, states.get(winter.id), "no history change and no write: only the day moved")
     }
 
     /** The worst-of order itself, asserted once so the two sides can be combined with confidence. */

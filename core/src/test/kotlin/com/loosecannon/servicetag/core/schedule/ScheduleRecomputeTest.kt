@@ -5,11 +5,19 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.Measurement
+import com.loosecannon.servicetag.core.model.PolicyPhase
+import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.SeasonAction
+import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TerminationKind
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.model.seasonInputs
+import com.loosecannon.servicetag.core.testing.SeasonFixtures
 import com.loosecannon.servicetag.core.testing.closureOf
 import com.loosecannon.servicetag.core.testing.completionOf
+import com.loosecannon.servicetag.core.testing.dayMillis
 import com.loosecannon.servicetag.core.testing.groupOf
 import com.loosecannon.servicetag.core.testing.readingOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
@@ -407,4 +415,83 @@ class ScheduleRecomputeTest {
         )
     }
 
+    /**
+     * `O` (master plan §8.1, D-28): the last termination's **effective** date, or — for a schedule
+     * that has never terminated — the date of `rule_changed_at` in the zone the caller names. Never
+     * `updated_at`, which a title edit moves: here it is a whole month later than the rule change and
+     * must not be what the opened-before guard reads.
+     */
+    @Test
+    fun openedIsTheLastTerminationElseTheRuleChangeDate() {
+        val schedule = quarterly(createdOn = "2026-01-10", ruleChangedOn = "2026-02-01")
+            .copy(updatedAt = dayMillis("2026-03-01"), servicePolicy = ServicePolicy.PRE_SERVICE, policyOffsetDays = -14)
+        val never = ScheduleRecompute.rebuild(schedule, emptyList(), emptyList(), emptyList(), on("2026-03-15"), ZoneOffset.UTC)
+        assertEquals(on("2026-02-01"), ScheduleRecompute.policyInputsOf(schedule, never, ZoneOffset.UTC).openedOn)
+        // Read in the owner's zone: 1 Feb 00:00 UTC is still 31 Jan five hours west.
+        assertEquals(on("2026-01-31"), ScheduleRecompute.policyInputsOf(schedule, never, ZoneId.of("Etc/GMT+5")).openedOn)
+
+        val events = listOf(completionOf("e1", occurredOn = "2026-04-10", occurrenceOn = "2026-04-01"))
+        val terminated = ScheduleRecompute.rebuild(schedule, events, emptyList(), emptyList(), on("2026-04-15"), ZoneOffset.UTC)
+        val inputs = ScheduleRecompute.policyInputsOf(schedule, terminated, ZoneOffset.UTC)
+        assertEquals(on("2026-04-10"), inputs.openedOn, "the termination's effective date, not its key")
+        assertEquals(on("2026-07-01"), inputs.rawDueOn)
+        assertEquals(ServicePolicy.PRE_SERVICE, inputs.policy)
+        assertEquals(-14, inputs.offsetDays)
+
+        // The guard reads it: the snowblower's R 20 Nov is pulled to 1 Nov only when O is before 1 Nov.
+        val snowSeason = SeasonFixtures.snowblowerAsset().seasonInputs(emptyList())
+        val snow = SeasonFixtures.snowblowerSchedule().copy(
+            anchorOn = "2026-11-20",
+            timeInterval = 1,
+            timeUnit = RecurrenceUnit.YEAR,
+            createdAt = dayMillis("2026-10-01"),
+            ruleChangedAt = dayMillis("2026-10-20"),
+            updatedAt = dayMillis("2026-11-05"),
+        )
+        val pulled = ScheduleRecompute.rebuild(snow, emptyList(), emptyList(), emptyList(), on("2026-10-25"), ZoneOffset.UTC, snowSeason)
+        assertEquals("2026-11-20", pulled.computedDueOn)
+        assertEquals("2026-11-01", pulled.actionableDueOn, "opened 20 Oct, before the 1 Nov point")
+        assertEquals(PolicyReason.BEFORE_SEASON, pulled.policyReason)
+    }
+
+    /**
+     * Invariant 16 with the season as an input: `rebuild` is a pure, idempotent function of its
+     * arguments including [SeasonInputs] and the zone. Two calls agree; the season's activation rows
+     * may arrive in any order; and the answer is the one for the `T` it is handed — a CALENDAR winter
+     * season read in January is in season, whatever day the machine running this thinks it is.
+     */
+    @Test
+    fun rebuildIsPureAndIdempotentWithSeasonInputs() {
+        val schedule = quarterly().copy(servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 5)
+        val winter = SeasonFixtures.seasonOf(
+            SeasonMode.CALENDAR, seasonStart = "11-15", seasonEnd = "03-31", breakStart = "12-20", breakEnd = "01-05",
+        )
+        val t = on("2027-01-10")
+        val first = ScheduleRecompute.rebuild(schedule, emptyList(), emptyList(), emptyList(), t, ZoneOffset.UTC, winter)
+        val second = ScheduleRecompute.rebuild(schedule, emptyList(), emptyList(), emptyList(), t, ZoneOffset.UTC, winter.copy())
+        assertEquals(first, second)
+        assertEquals(PolicyPhase.ACTIVE, first.policyPhase, "10 Jan 2027 is in the 11-15 → 03-31 season")
+        assertEquals("2026-11-20", first.actionableDueOn, "AT_START: the season's start plus five days")
+        assertEquals(PolicyReason.SEASON_START, first.policyReason)
+        assertEquals(false, first.quiet)
+        val summer = ScheduleRecompute.rebuild(schedule, emptyList(), emptyList(), emptyList(), on("2027-07-01"), ZoneOffset.UTC, winter)
+        assertEquals(PolicyPhase.DORMANT, summer.policyPhase)
+        assertEquals("2027-11-20", summer.actionableDueOn)
+        val christmas = ScheduleRecompute.rebuild(schedule, emptyList(), emptyList(), emptyList(), on("2026-12-25"), ZoneOffset.UTC, winter)
+        assertEquals(true, christmas.quiet)
+
+        val rows = listOf(
+            SeasonFixtures.activationOf("x1", "a1", SeasonAction.START, "2026-11-01"),
+            SeasonFixtures.activationOf("x2", "a1", SeasonAction.END, "2027-03-01"),
+            SeasonFixtures.activationOf("x3", "a1", SeasonAction.START, "2027-06-01"),
+        )
+        val manual = SeasonFixtures.seasonOf(SeasonMode.MANUAL, activations = rows)
+        val ordered = ScheduleRecompute.rebuild(schedule, emptyList(), emptyList(), emptyList(), on("2027-06-10"), ZoneOffset.UTC, manual)
+        val shuffled = ScheduleRecompute.rebuild(
+            schedule, emptyList(), emptyList(), emptyList(), on("2027-06-10"), ZoneOffset.UTC, manual.copy(activations = rows.reversed()),
+        )
+        assertEquals(ordered, shuffled)
+        assertEquals("2027-06-06", ordered.actionableDueOn, "the recorded START plus five days")
+        assertEquals(0L, ordered.computedAt, "no clock inside")
+    }
 }
