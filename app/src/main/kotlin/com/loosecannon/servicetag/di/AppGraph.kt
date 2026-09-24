@@ -146,6 +146,8 @@ import com.loosecannon.servicetag.reminders.ScheduleCompletion
 import com.loosecannon.servicetag.reminders.ScheduleDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.reminders.WorkManagerBackstop
+import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
+import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.HealthSummary
@@ -158,7 +160,7 @@ import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
 import com.loosecannon.servicetag.ui.maintenance.ScheduleClosures
 import com.loosecannon.servicetag.ui.maintenance.ScheduleCompletions
 import com.loosecannon.servicetag.ui.maintenance.ScheduleSnooze
-import com.loosecannon.servicetag.ui.maintenance.scanSheetItemsFor
+import com.loosecannon.servicetag.ui.maintenance.scanSheetContentFor
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
@@ -247,9 +249,13 @@ class AppGraph(private val context: Context) {
 
     /**
      * Derived state as a **read**, so the delivery path cannot reach the one write method the
-     * recompute owns (invariant 17).
+     * recompute owns (invariant 17) — and through `readState`, so a row left behind by a day
+     * boundary is derived for today in memory rather than trusted (master plan §8.6, plan decision
+     * 47). `ScheduleDeliveryFacts` and `ReminderHealthCheck` read fresh state even between sweeps.
      */
-    val scheduleStateReader: ScheduleStateReader = ScheduleStateReader { scheduleStates.get(it) }
+    val scheduleStateReader: ScheduleStateReader = ScheduleStateReader { id ->
+        schedules.get(id)?.let { recomputeSchedules.readState(it) }
+    }
 
     val digestAlarm: DigestAlarm = AndroidDigestAlarm(context.applicationContext, prefs, today, clock)
 
@@ -551,17 +557,33 @@ class AppGraph(private val context: Context) {
         CloseRound(schedules, closures, uow, ids, clock, today, recomputeSchedules)
 
     /**
+     * 1.4 — an asset's health beside its condition and its DOWN or DEGRADED components: the one
+     * source for `/v1/assets/{id}/health`, the scan sheet and asset detail (master plan §13.1,
+     * inv. 119). It reads states through `readState` and writes nothing (inv. 105); it reads no
+     * snooze (inv. 131). The zone is the recompute's, so the pin floor it reads is the same day.
+     */
+    val assetHealthReadModel: AssetHealthReadModel = AssetHealthReadModel(
+        assets, healthSubjects, schedules, events, profiles, seasonActivations, conditions,
+        recomputeSchedules, today, zone = { ZoneId.systemDefault() },
+    )
+
+    /** 1.4 — the asset-level attention rows (DOWN, DEGRADED, independent health), `/v1/attention`'s. */
+    val attentionReadModel: AttentionReadModel =
+        AttentionReadModel(assets, conditions, assetHealthReadModel, today)
+
+    /**
      * 1.2 — the one due projection behind the dashboard, the Maintenance destination, the scan
      * sheet and `/v1/due` (master plan decision 27). It **reads** derived state and never writes
-     * it: [recomputeSchedules] is here for its occurrence derivation and its pure `stateOf`, and
-     * `rebuild` stays the only writer of `schedule_state` (invariant 17).
+     * it: every state comes through `readState` (master plan §8.6), [recomputeSchedules] is here
+     * for that and its occurrence derivation, and `rebuild` stays the only writer of
+     * `schedule_state` (invariants 17, 105). [today] is the same port `readState` reads.
      *
      * The snooze source is B06's `schedule_local_delivery`, wired here by B07: the row's own
      * instant, read and never written, which is what makes the ratified "Snoozed until \<date\>"
      * true of the schedule the notification's "Snooze 1 day" acted on.
      */
     val dueReadModel: DueReadModel = DueReadModel(
-        schedules, scheduleStates, assets, groups, definitions, recomputeSchedules, today,
+        schedules, assets, groups, definitions, recomputeSchedules, today, assetHealthReadModel,
         snoozedUntilOf = { scheduleLocalDelivery.get(it)?.snoozedUntilAt },
     )
 
@@ -653,9 +675,9 @@ class AppGraph(private val context: Context) {
      * already offer. [reminderReconcile] is the sweep a completion runs so the standing notification
      * is quiesced **by canonical state** and never by deleting a notification (#50 AC 8).
      *
-     * [scanSheetOffer] is the routing half of D-18a: it asks `scanSheetItems` of the **same**
-     * projection the sheet reads, so "does this scan open the sheet" and "what does the sheet show"
-     * are one answer and cannot drift.
+     * [scanSheetOffer] is the routing half of spec §10.1: it is `scanSheetContent(...).opens` over
+     * the **same** projection and health view the sheet reads, so "does this scan open the sheet"
+     * and "what does the sheet show" are one answer and cannot drift (inv. 123).
      */
     val lastCompletionReadings: LastCompletionReadings = LastCompletionReadings { eventId ->
         events.get(eventId)?.measurements.orEmpty()
@@ -673,9 +695,9 @@ class AppGraph(private val context: Context) {
         schedules.get(scheduleId)?.let { recomputeSchedules.occurrenceOf(it) }
     }
     val scanSheetOffer: ScanSheetOffer = ScanSheetOffer { assetId ->
-        // The **same** narrowing the sheet itself applies, so "does this scan open the sheet" and
-        // "what does the sheet show" are one answer.
-        scanSheetItemsFor(assetId, dueReadModel.forAsset(assetId), scanRoundMembership).isNotEmpty()
+        // The **same** call the sheet itself makes, so "does this scan open the sheet" and "what
+        // does the sheet show" are one answer (the one predicate; O-8).
+        scanSheetContentFor(assetId, dueReadModel, scanRoundMembership, assetHealthReadModel).opens
     }
 
     internal companion object {

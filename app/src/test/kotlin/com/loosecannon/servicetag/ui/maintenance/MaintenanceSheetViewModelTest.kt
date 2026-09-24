@@ -11,6 +11,7 @@ import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
@@ -27,6 +28,7 @@ import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.routeForDeepLink
 import com.loosecannon.servicetag.routeForQuickCompletion
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.meterDefinitionOf
@@ -96,17 +98,18 @@ class MaintenanceSheetViewModelTest {
 
     private fun readModel() = DueReadModel(
         schedules = graph.schedules,
-        states = graph.scheduleStates,
         assets = graph.assets,
         groups = graph.groups,
         definitions = graph.definitions,
         recompute = graph.recomputeSchedules,
         today = graph.todayPort,
+        health = graph.assetHealthReadModel,
         snoozedUntilOf = { null },
     )
 
     private fun viewModel(assetId: AssetId, tagId: TagId? = null) = MaintenanceSheetViewModel(
         due = readModel(),
+        health = graph.assetHealthReadModel,
         assets = graph.assets,
         tags = graph.tags,
         readings = LastCompletionReadings { id -> graph.events.get(id)?.measurements.orEmpty() },
@@ -240,6 +243,37 @@ class MaintenanceSheetViewModelTest {
         val asset = mower()
         seed(scheduleOf("s-ok", assetId = asset.value, title = "Deep clean", anchorOn = "2026-12-01", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR, leadDays = 0))
         assertEquals(emptyList<String>(), offered(asset))
+    }
+
+    /**
+     * The carry-forward from B02's review: the sheet's why-line names the date its status word is
+     * measured against. A snowblower (spec F4: CALENDAR 15 Nov to 31 Mar, the winter break inside
+     * it, PRE_SERVICE with a 14-day margin) is pulled before its season to 1 Nov, so on 10 Nov it
+     * is "Overdue since" 1 Nov — never since its canonical 20 Dec, which is still the date a
+     * postponement would start from.
+     */
+    @Test fun aPulledItemsWhyLineNamesTheActionableDate() = runTest(scheduler) {
+        graph.today = LocalDate.parse("2026-11-10")
+        graph.assets.upsert(
+            assetRow(
+                "snow", name = "Snowblower", seasonMode = SeasonMode.CALENDAR, seasonStart = "11-15", seasonEnd = "03-31",
+                breakStart = "12-01", breakEnd = "02-28",
+            ),
+        )
+        seed(
+            scheduleOf(
+                "s-snow", assetId = "snow", title = "Engine oil service", timeInterval = 2, timeUnit = RecurrenceUnit.YEAR,
+                anchorOn = "2026-12-20", createdOn = "2026-06-01", servicePolicy = ServicePolicy.PRE_SERVICE, policyOffsetDays = -14,
+            ),
+        )
+
+        val model = viewModel(AssetId("snow"))
+        advanceUntilIdle()
+        val item = model.state.value.items.single()
+
+        assertEquals(DueStatus.OVERDUE, item.status)
+        assertEquals("Overdue since 2026-11-01.", item.whyNow)
+        assertEquals("the canonical date is unchanged", "2026-12-20", item.effectiveDueOn)
     }
 
     // ---------------------------------------------------------------- completion

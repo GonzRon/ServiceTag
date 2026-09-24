@@ -97,8 +97,14 @@ import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import com.loosecannon.servicetag.reminders.ReminderSnooze
+import com.loosecannon.servicetag.reminders.ScheduleStateReader
+import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
+import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
+import com.loosecannon.servicetag.ui.maintenance.ScanRoundMembership
+import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
 import com.loosecannon.servicetag.ui.maintenance.ScheduleSnooze
+import com.loosecannon.servicetag.ui.maintenance.scanSheetContentFor
 import java.io.File
 import java.time.ZoneOffset
 import kotlin.coroutines.CoroutineContext
@@ -161,14 +167,41 @@ class FakeGraph(
     )
 
     /**
+     * 1.4 — the asset health view and the asset-level attention rows, mirroring `AppGraph`'s two
+     * fields by name (master plan §1). UTC, as the recompute above, so the pin floor is stable.
+     */
+    val assetHealthReadModel: AssetHealthReadModel = AssetHealthReadModel(
+        assets, healthSubjects, schedules, events, profiles, seasonActivations, conditions,
+        recomputeSchedules, todayPort, zone = { ZoneOffset.UTC },
+    )
+    val attentionReadModel: AttentionReadModel =
+        AttentionReadModel(assets, conditions, assetHealthReadModel, todayPort)
+
+    /**
      * 1.2 — the one due projection, mirroring `AppGraph`'s field so a view-model test takes the
-     * same collaborator the app does. The snooze seam answers "no snooze", exactly as `AppGraph`
-     * does until B06's table lands.
+     * same collaborator the app does: states through `readState`, `DueItem.health` from
+     * [assetHealthReadModel], and the snooze from the device-local table, as `AppGraph` wires it.
      */
     val dueReadModel: DueReadModel = DueReadModel(
-        schedules, scheduleStates, assets, groups, definitions, recomputeSchedules, todayPort,
-        snoozedUntilOf = { null },
+        schedules, assets, groups, definitions, recomputeSchedules, todayPort, assetHealthReadModel,
+        snoozedUntilOf = { scheduleLocalDelivery.get(it)?.snoozedUntilAt },
     )
+
+    /**
+     * The delivery seam, mirroring `AppGraph`'s re-wiring (plan decision 47): derived state through
+     * `readState`, so a stale row is derived for today and nothing is written.
+     */
+    val scheduleStateReader: ScheduleStateReader = ScheduleStateReader { id ->
+        schedules.get(id)?.let { recomputeSchedules.readState(it) }
+    }
+
+    /** The scan's round seam and routing question, mirroring `AppGraph`'s two fields. */
+    val scanRoundMembership: ScanRoundMembership = ScanRoundMembership { scheduleId ->
+        schedules.get(scheduleId)?.let { recomputeSchedules.occurrenceOf(it) }
+    }
+    val scanSheetOffer: ScanSheetOffer = ScanSheetOffer { assetId ->
+        scanSheetContentFor(assetId, dueReadModel, scanRoundMembership, assetHealthReadModel).opens
+    }
 
     /**
      * The store a test drives by hand: `state` is a `var` and the bytes are a map, so a refusal
