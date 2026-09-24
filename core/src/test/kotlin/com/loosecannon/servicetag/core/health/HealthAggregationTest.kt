@@ -112,6 +112,15 @@ class HealthAggregationTest {
             assertEquals(emptyList(), result.critical)
             assertNull(health(aggregation, emptyList()).aggregate, "$aggregation over no subject")
         }
+        // A missing or archived primary with nothing for WORST to show: NOT TRACKED, and no S138,
+        // because there is no worst subject to show (controller ruling on B05's concern 2).
+        for (primary in listOf(null, "gone", "m2")) {
+            for (members in listOf(untracked, emptyList())) {
+                val result = health(HealthAggregation.TRACK_ONE, members, primary)
+                assertNull(result.aggregate, "primary $primary over ${members.size} subjects")
+                assertFalse(result.fallback, "primary $primary over ${members.size} subjects: nothing is shown, so no fallback")
+            }
+        }
     }
 
     /** #61 AC 23: nothing hides behind an aggregate. */

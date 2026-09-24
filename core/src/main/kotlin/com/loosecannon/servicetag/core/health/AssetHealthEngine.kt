@@ -106,8 +106,10 @@ data class SubjectHealth(val subject: HealthSubject, val value: SubjectValue, va
  *
  * [subjects] are the non-archived subjects in `(sortOrder, id)` order. [aggregate] is null when
  * nothing contributes — NOT TRACKED, never a 100. [fallback] is true when TRACK_ONE's primary is
- * missing or archived and WORST was taken instead (S138). [critical] lists **every** CRITICAL
- * contributor whatever the aggregation, so nothing hides behind an average (inv. 119).
+ * missing or archived and WORST was taken instead (S138), and **only when WORST found an aggregate**:
+ * with nothing to show there is no worst subject to name, so a NOT TRACKED result never carries it.
+ * [critical] lists **every** CRITICAL contributor whatever the aggregation, so nothing hides behind
+ * an average (inv. 119).
  */
 data class AssetHealthResult(
     val subjects: List<SubjectHealth>,
@@ -242,9 +244,10 @@ object AssetHealthEngine {
     /**
      * Spec §6.5, over the non-archived subjects **with a value** — an untracked subject is left out,
      * never counted as 100 (inv. 118). WORST is the minimum; TRACK_ONE the primary's value, or NOT
-     * TRACKED when the primary has none, or WORST with the fallback flag when the primary is missing
-     * or archived; AVERAGE and WEIGHTED are floored, so an aggregate is never rounded into a better
-     * band. No contributor is NOT TRACKED.
+     * TRACKED when the primary has none, or WORST when the primary is missing or archived — flagged
+     * as a fallback only when WORST found an aggregate, since S138 says the worst subject is shown;
+     * AVERAGE and WEIGHTED are floored, so an aggregate is never rounded into a better band. No
+     * contributor is NOT TRACKED, with no fallback.
      */
     private fun aggregate(
         asset: Asset,
@@ -260,7 +263,7 @@ object AssetHealthEngine {
                 val primaryId = asset.healthPrimarySubjectId
                 val primary = all.firstOrNull { it.id == primaryId }
                 if (primary == null || primary.archivedAt != null) {
-                    worst() to true
+                    worst().let { it to (it != null) }
                 } else {
                     val value = live.first { it.subject.id == primary.id }.value
                     (value as? SubjectValue.Scored)?.let { aggregateOf(it.score) } to false
