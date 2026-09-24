@@ -15,7 +15,7 @@ demonstrates, or it is not added.*
 |---|---|---|---|---|
 | R1 | unit gate from scratch | `./gradlew --rerun-tasks :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest` | JVM (includes `ReleaseProofPolicyTest`, the tripwire below) | — |
 | R2 | connected suite, which includes the boundary and contract classes; the preserved set is staged first (below) | `ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest` | instrumented Compose and framework contract (`ShareResolutionContractTest` among them) | zero skips |
-| R3 | the Python suites | `cd tools/servicetag-mcp && uv run --frozen pytest`, then the same in `tools/servicetag-bundle` and `tools/servicetag-schedules` | each tool's own pytest | — |
+| R3 | the Python suites | `root=$(git rev-parse --show-toplevel) && (cd "$root/tools/servicetag-mcp" && uv run --frozen pytest) && (cd "$root/tools/servicetag-bundle" && uv run --frozen pytest) && (cd "$root/tools/servicetag-schedules" && uv run --frozen pytest)` | each tool's own pytest | — |
 | R4 | external boundary | **is R2's `ShareBoundaryTest`** — three cases, 20 s each; nothing else may be added to this row without naming a new OS boundary | external-boundary smoke, from the `:share-test-sender` UID | ≤ 60 s |
 | R5 | structural | inside R1: `ManifestContractTest.kt`'s two classes — `ManifestContractTest` (the source manifest and the exported set) and `MergedManifestContractTest` (the merged-manifest permission set) — and `VersionAgreementTest`; plus the exported-set parser line below | JVM structural | — |
 | R6 | hygiene | the range greps below | the controller, over `<base>..HEAD` | — |
