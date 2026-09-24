@@ -438,7 +438,9 @@ data class ScheduleEditState(
  * Every rule is `SaveSchedule`'s, called: this view model constructs the command, sends it and maps
  * whatever comes back onto the control it belongs to. What it adds is the three target-dependent
  * hides that make an illegal group schedule unreachable through the UI, D-11's non-blocking warning
- * and — on the **first** schedule creation only — the notification permission request.
+ * and — on the **first** schedule creation only — the notification permission request. 1.4 adds the
+ * service-policy question (S65–S84, spec §10.4), whose filters and held Save keep every policy refusal
+ * unreachable, and the health link guard's dialog on a refused save (S140–S141, S137; inv. 130).
  *
  * The permission request lives here and nowhere else (master plan decision 23, #24 AC 1). "First"
  * is derived from the store rather than a remembered flag: a create is the first one when the store
