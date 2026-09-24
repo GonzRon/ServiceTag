@@ -15,10 +15,12 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.FixMethodOrder
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
 import org.junit.runner.RunWith
+import org.junit.runners.MethodSorters
 
 /**
  * The external boundary of share intake (#62, planning policy "Testing hierarchy", layer 4):
@@ -37,6 +39,9 @@ import org.junit.runner.RunWith
  * Emulator only (`emulator-5554`), never a phone.
  */
 @RunWith(AndroidJUnit4::class)
+// Load-bearing: the bad-grant case must run before any grant is made, and its name sorts first.
+// Its KDoc says why; a renamed or added case has to keep it first.
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class ShareBoundaryTest {
 
     @get:Rule(order = 0) val timeout: Timeout = Timeout.seconds(20)
@@ -104,19 +109,21 @@ class ShareBoundaryTest {
     }
 
     /**
-     * Boundary: the same foreign URI **without** a grant. The platform refuses the read; the app
-     * survives it and answers with the ratified read-failure dead end, and the activity is alive.
+     * Boundary: the same foreign URI **without** a grant, from a sharer that has never granted
+     * ServiceTag anything. The app survives it and answers with the ratified read-failure dead end,
+     * and the activity is alive. Nothing is shared first.
      *
-     * **Nothing is shared first, and either refusal lands here.** Under API 30+ package visibility
-     * a sender that has never granted ServiceTag a URI is invisible to it: the resolver reports
-     * "Failed to find provider info" and `query` answers null without throwing. #63 made that a
-     * read failure at read time, so run alone from a fresh install this case proves the dead end
-     * is the first thing drawn, never a byte form with an empty Received line. Once the sender has
-     * granted anything — in this class's default order the grant case runs first — the provider
-     * is visible and the platform denies the ungranted read outright, which is the same dead end.
-     * So the case holds whatever order the methods run in.
+     * **This case runs first, and the order is load-bearing** (`NAME_ASCENDING`; this name sorts
+     * before the other two). Under API 30+ package visibility a sender that has never granted
+     * ServiceTag a URI is invisible to it: the resolver reports "Failed to find provider info" and
+     * `query` answers null without throwing. #63 made that a read failure at read time, and only a
+     * case that runs before any grant, from the fresh install every connected run starts with,
+     * meets it: the dead end is the first thing drawn, never a byte form with an empty Received
+     * line. After the grant case the provider is visible and the platform denies the read
+     * outright ("Permission Denial") — the same dead end, but not the shape #63 fixed, so a run in
+     * any other order would pass without proving it.
      */
-    @Test fun anExternalStreamWithoutAGrantIsRefusedNotCrashed() {
+    @Test fun anExternalStreamCarryingNoGrantIsRefusedNotCrashed() {
         val refused = TestSender.share(Command.SEND_BAD_GRANT).also { intake = it }
         awaitTheReadToLand()
 
