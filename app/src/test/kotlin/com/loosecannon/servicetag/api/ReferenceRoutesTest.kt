@@ -48,6 +48,7 @@ class ReferenceRoutesTest {
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
             maintenanceHandlersFor(graph),
             referenceHandlersFor(graph),
+            seasonHealthHandlersFor(graph),
             appVersion = "1.3.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -467,6 +468,8 @@ class ReferenceRoutesTest {
             setOf(
                 "assets", "tags", "links", "definitions", "profiles", "events", "attachments",
                 "groups", "schedules", "closures", "assetReferences",
+                // 1.4's three, under the archive's own list names.
+                "seasonActivations", "assetConditions", "healthSubjects",
             ),
             counts.keys,
         )

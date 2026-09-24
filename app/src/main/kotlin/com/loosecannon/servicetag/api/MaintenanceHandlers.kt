@@ -11,7 +11,6 @@ import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
-import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.core.usecase.ArchiveGroup
@@ -38,8 +37,14 @@ import com.loosecannon.servicetag.ui.maintenance.DueReadModel
  * `SaveSchedule`'s, a completion is `CompleteSchedule`'s or `CompleteGroupMembers`', a closure is
  * `CloseRound`'s. Nothing here re-checks what one of them already checks, and nothing here upserts
  * a row a use case owns. The read methods call a repository or B08's `DueReadModel`, and **they
- * read derived state and never write it** (invariant 17) — `RecomputeSchedules` is here only for
- * its pure `stateOf`, which derives without upserting.
+ * read derived state and never write it** (invariants 17, 105) — `RecomputeSchedules` is here only
+ * for its `readState`, which answers the stored row when it was derived for today and derives it in
+ * memory otherwise, without upserting. This class holds no `ScheduleStateRepository` at all, so no
+ * route here can read a stale row or write one.
+ *
+ * 1.4: a schedule command arrives in one of **two forms** and is read by [ScheduleForms], the only
+ * place a deprecated season field is translated (spec §9.3); a PATCH and an archive carry the action
+ * flag `unlinkHealthSubject` to `SaveSchedule` and `ArchiveSchedule`, whose guard it answers.
  *
  * Three decisions carry the weight, because in each the route has to say something the use case
  * cannot:
@@ -63,7 +68,6 @@ import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 internal class MaintenanceHandlers(
     private val groups: GroupRepository,
     private val schedules: ScheduleRepository,
-    private val states: ScheduleStateRepository,
     private val closures: ClosureRepository,
     private val assets: AssetRepository,
     private val saveGroup: SaveGroup,
@@ -80,7 +84,7 @@ internal class MaintenanceHandlers(
     private val today: Today,
 ) {
     constructor(graph: AppGraph) : this(
-        graph.groups, graph.schedules, graph.scheduleStates, graph.closures, graph.assets,
+        graph.groups, graph.schedules, graph.closures, graph.assets,
         graph.saveGroup, graph.archiveGroup,
         graph.saveSchedule, graph.pauseSchedule, graph.archiveSchedule, graph.postponeSchedule,
         graph.completeSchedule, graph.completeGroupMembers, graph.closeRound,
@@ -159,20 +163,23 @@ internal class MaintenanceHandlers(
         )
     }
 
+    /** Either form; a create has nothing to unlink, so the action flag is an unknown field here. */
     suspend fun createSchedule(request: ApiRequest): ApiResponse {
-        val body = request.decode(ScheduleCommandRequest.serializer())
-        val saved = saveSchedule.run(null, body.toCommand())
+        val parsed = ScheduleForms.read(request, stored = null, acceptsFlags = false)
+        val saved = saveSchedule.run(null, parsed.body.toCommand(parsed.form))
         return createdResponse(ScheduleResponse.serializer(), ScheduleResponse(saved.rowResponse()))
     }
 
     /**
      * A **full replace**. A rule change clears the postponement, abandons an open partial
      * occurrence (D-9), moves the D-27 pin's floor to the edit date and rebuilds — all of it
-     * `SaveSchedule`'s, none of it re-stated here.
+     * `SaveSchedule`'s, none of it re-stated here. The stored row is read only so [ScheduleForms]
+     * can refuse a legacy body over a PRE_SERVICE schedule; `unlinkHealthSubject` goes to the
+     * guard, which decides whether there is anything to unlink.
      */
     suspend fun updateSchedule(id: String, request: ApiRequest): ApiResponse {
-        val body = request.decode(ScheduleCommandRequest.serializer())
-        val saved = saveSchedule.run(ScheduleId(id), body.toCommand())
+        val parsed = ScheduleForms.read(request, schedules.get(ScheduleId(id)), acceptsFlags = true)
+        val saved = saveSchedule.run(ScheduleId(id), parsed.body.toCommand(parsed.form), parsed.unlinkHealthSubject)
         return ok(ScheduleResponse.serializer(), ScheduleResponse(saved.rowResponse()))
     }
 
@@ -182,9 +189,10 @@ internal class MaintenanceHandlers(
         return ok(ScheduleResponse.serializer(), ScheduleResponse(saved.rowResponse()))
     }
 
+    /** Archive or restore; archiving a schedule a live health subject depends on needs the flag. */
     suspend fun archiveSchedule(id: String, request: ApiRequest): ApiResponse {
-        val body = request.decode(ArchiveRequest.serializer())
-        val saved = archiveSchedule.run(ScheduleId(id), body.archived)
+        val body = request.decode(ScheduleArchiveRequest.serializer())
+        val saved = archiveSchedule.run(ScheduleId(id), body.archived, body.unlinkHealthSubject)
         return ok(ScheduleResponse.serializer(), ScheduleResponse(saved.rowResponse()))
     }
 
@@ -264,27 +272,27 @@ internal class MaintenanceHandlers(
     /**
      * B08's projection, on the wire. **The same call the dashboard makes**, so the two orders and
      * the meaning of `rank` cannot drift; it starts from `listedForDue()`, so an ARCHIVED schedule
-     * appears here in no circumstance.
+     * appears here in no circumstance. Since 1.4 that order follows `actionableDueOn` and puts a
+     * DEFERRED row in its own section, so `rank` does too.
      *
-     * The two termination fields are read off `schedule_state`, which `DueItem` does not carry —
-     * a read of derived state, never a write.
+     * The two termination fields are read off the schedule's derived state, which `DueItem` does not
+     * carry — through [RecomputeSchedules.readState], exactly as the projection itself read it, so a
+     * row stored before a boundary cannot make an item disagree with its own fresh status. A read of
+     * derived state, never a write.
      *
      * That second read is **deliberate duplication**, not an oversight: `DueReadModel.project`
-     * already held the state row, but `DueItem` is B08's type and this brief may not add a field to
-     * it, so the alternative is either a wire shape missing two of §9.3's sixteen fields or a change
-     * to somebody else's file. Carrying `lastTerminationEffectiveOn`/`lastTerminationKind` on
-     * `DueItem` would retire this loop, and that is B08's to do if 1.3 wants it.
+     * already held the state, but `DueItem` is the read model's type and not this file's, so the
+     * alternative is either a wire shape missing two of §9.3's fields or a change to somebody else's
+     * file.
      */
     suspend fun listDue(): ApiResponse {
         val items = due.items()
-        val stored = states.all().associateBy { it.scheduleId.value }
         val rows = schedules.all().associateBy { it.id.value }
         return ok(
             DueListResponse.serializer(),
             DueListResponse(
                 items.map { item ->
-                    val state = stored[item.scheduleId.value]
-                        ?: rows[item.scheduleId.value]?.let { recompute.stateOf(it) }
+                    val state = rows[item.scheduleId.value]?.let { recompute.readState(it) }
                     item.dueDto(state?.stateDto())
                 },
             ),
@@ -316,12 +324,10 @@ internal class MaintenanceHandlers(
         schedules.get(ScheduleId(id)) ?: throw NoSuchSchedule(ScheduleId(id))
 
     /**
-     * The stored derived row, or the same derivation done here when there is none.
-     *
-     * The fallback is B08's, for B08's reason: `stateOf` is pure and `rebuild` stays the only
-     * writer. A row is missing only before anything has ever rebuilt this schedule, and answering
-     * with a derived-but-unstored state is strictly better than answering with nothing.
+     * The schedule's derived state **for today**: the stored row when it was derived today, and
+     * otherwise the same derivation done in memory — never a stored row from before a season or
+     * break boundary, and never a write (spec §4.7; invariant 105). `rebuild` stays the only writer.
      */
     private suspend fun stateOf(schedule: MaintenanceSchedule): ScheduleState =
-        states.get(schedule.id) ?: recompute.stateOf(schedule)
+        recompute.readState(schedule)
 }

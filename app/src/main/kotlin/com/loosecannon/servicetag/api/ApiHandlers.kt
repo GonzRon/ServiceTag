@@ -41,12 +41,19 @@ import com.loosecannon.servicetag.di.AppGraph
  * `ImportBackupMerge` call. There is deliberately no method for a wipe, a replace-import, an
  * export, an NFC write, an NFC bind or an attachment's bytes.
  *
- * **1.2's endpoints are [MaintenanceHandlers]', not this class's, and 1.3's three reference
- * endpoints are [ReferenceHandlers]'**; both hold the same rule: every write there is one use case
- * call too. This class keeps the shipped surface plus the four counts [status] gained, which it
- * asks those two collaborators for.
+ * **1.2's endpoints are [MaintenanceHandlers]', not this class's, 1.3's three reference
+ * endpoints are [ReferenceHandlers]', and 1.4's fourteen season, condition, health and attention
+ * rows are [SeasonHealthHandlers]'**; all three hold the same rule: every write there is one use
+ * case call too. This class keeps the shipped surface plus the seven counts [status] gained, which
+ * it asks those three collaborators for.
  *
- * **Twenty-one collaborators plus two values, named one by one, with a `constructor(graph)` beside
+ * The asset `PATCH` keeps 1.3's exact command (spec §9.3): its `MM-DD` pair is the one
+ * compatibility input, and `UpdateAsset` refuses what the pair cannot represent — a different pair
+ * on a MANUAL asset is 422 `LEGACY_WRITE_CANNOT_REPRESENT`, a change that strands a PRE_SERVICE
+ * schedule 409 `SEASON_MODE_STRANDS_POLICY` — which [mapDomainFailure] names. Condition is never in
+ * it (#61 AC 9).
+ *
+ * **Twenty-two collaborators plus two values, named one by one, with a `constructor(graph)` beside
  * them.** That is this app's pattern, stated at `AssetViewModels.kt:59`–`61`: *"Each takes the `AppGraph` members it
  * actually uses — the secondary constructor is what the Compose entry calls, the primary one is
  * what a test builds on a Room-backed fake graph."* It is the reason `ApiRouterTest` can drive the
@@ -104,6 +111,11 @@ internal class ApiHandlers(
      * the `assetReferences` count so this class needs no reference repository of its own.
      */
     internal val references: ReferenceHandlers,
+    /**
+     * 1.4's fourteen rows, on the same terms again: one collaborator, reached from the router as
+     * `handlers.seasonHealth.*`, and asked for the three counts `/v1/status` gained.
+     */
+    internal val seasonHealth: SeasonHealthHandlers,
     private val appVersion: String,
     private val schemaVersion: Int,
 ) {
@@ -115,6 +127,7 @@ internal class ApiHandlers(
         graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
         MaintenanceHandlers(graph),
         ReferenceHandlers(graph),
+        SeasonHealthHandlers(graph),
         BuildConfig.VERSION_NAME, AppGraph.SCHEMA_VERSION,
     )
 
@@ -137,7 +150,7 @@ internal class ApiHandlers(
                 "attachments" to attachments.count(),
                 // Format 7's own table, under the name the archive spells it with.
                 "assetReferences" to references.count(),
-            ) + maintenance.counts(),
+            ) + maintenance.counts() + seasonHealth.counts(),
         ),
     )
 

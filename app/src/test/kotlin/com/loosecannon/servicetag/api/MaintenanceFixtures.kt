@@ -20,7 +20,6 @@ import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 internal fun maintenanceHandlersFor(graph: FakeGraph): MaintenanceHandlers = MaintenanceHandlers(
     groups = graph.groups,
     schedules = graph.schedules,
-    states = graph.scheduleStates,
     closures = graph.closures,
     assets = graph.assets,
     saveGroup = graph.saveGroup,
@@ -62,3 +61,25 @@ internal fun referenceHandlersFor(graph: FakeGraph): ReferenceHandlers {
         updateReference = UpdateReference(graph.references, graph.uow, graph.clock),
     )
 }
+
+/**
+ * The 1.4 handlers over a [FakeGraph], for the reason above: `ApiHandlers` grew one collaborator in
+ * 1.4 too, and every call site gains this one line. Every member is read off the fake graph, which
+ * mirrors `AppGraph`'s fields by name (master plan §1), so this is the production wiring exactly.
+ */
+internal fun seasonHealthHandlersFor(graph: FakeGraph): SeasonHealthHandlers = SeasonHealthHandlers(
+    assets = graph.assets,
+    activations = graph.seasonActivations,
+    conditions = graph.conditions,
+    healthSubjects = graph.healthSubjects,
+    setSeasonMode = graph.setSeasonMode,
+    setMaintenanceBreak = graph.setMaintenanceBreak,
+    recordSeasonActivation = graph.recordSeasonActivation,
+    getAssetSeason = graph.getAssetSeason,
+    recordCondition = graph.recordCondition,
+    saveHealthSubject = graph.saveHealthSubject,
+    archiveHealthSubject = graph.archiveHealthSubject,
+    setHealthPolicy = graph.setHealthPolicy,
+    health = graph.assetHealthReadModel,
+    attention = graph.attentionReadModel,
+)
