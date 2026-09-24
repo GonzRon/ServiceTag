@@ -226,9 +226,7 @@ class AppGraph(private val context: Context) {
      * one provider that delivers is [localReminderProvider] below; what is here is the question
      * every provider is asked.
      */
-    val buildReminderSubjects: BuildReminderSubjects = BuildReminderSubjects(
-        schedules, scheduleStates, groups, assets, recomputeSchedules,
-    )
+    val buildReminderSubjects: BuildReminderSubjects = BuildReminderSubjects(schedules, groups, recomputeSchedules)
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
 
     // #24 — the platform-ownership seams B06, B07, B10 and B14 compile against (master plan §12).

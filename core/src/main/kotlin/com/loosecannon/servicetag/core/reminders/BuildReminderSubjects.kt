@@ -6,10 +6,8 @@ import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.ServicePolicy
-import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
-import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
@@ -33,18 +31,13 @@ import java.time.LocalDate
  */
 class BuildReminderSubjects(
     private val schedules: ScheduleRepository,
-    /**
-     * Held for the graph's constructor shape only. State is read through
-     * [RecomputeSchedules.readState], which derives a stale or missing row instead of skipping it,
-     * so this class never reads the table directly.
-     */
-    @Suppress("unused") private val states: ScheduleStateRepository,
     private val groups: GroupRepository,
     /**
-     * Held for the graph's constructor shape only: nothing about an Asset is read here any more.
-     * Where a parked subject comes back is the policy's answer, carried on the state.
+     * State is read through [RecomputeSchedules.readState], which derives a stale or missing row
+     * instead of skipping it, so this class never reads the state table directly; and nothing about
+     * an Asset is read here at all — where a parked subject comes back is the policy's answer,
+     * carried on the state.
      */
-    @Suppress("unused") private val assets: AssetRepository,
     private val occurrences: RecomputeSchedules,
 ) {
 
