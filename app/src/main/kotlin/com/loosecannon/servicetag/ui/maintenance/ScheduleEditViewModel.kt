@@ -84,6 +84,8 @@ fun fieldOf(problem: ScheduleProblem): String = when (problem) {
     is ScheduleProblem.ForeignMeterDefinition -> ScheduleField.METER
     is ScheduleProblem.MeterDefinitionNotAMeter -> ScheduleField.METER
     ScheduleProblem.SeasonFollowsAssetOnGroupTarget -> ScheduleField.SEASON
+    ScheduleProblem.PolicyOffsetInvalid -> ScheduleField.SEASON
+    ScheduleProblem.SeasonPolicyNeedsATimeRule -> ScheduleField.SEASON
     ScheduleProblem.FormCompletionOnGroupTarget -> ScheduleField.COMPLETION_MODE
     ScheduleProblem.ProfileOnGroupTarget -> ScheduleField.PROFILE
     is ScheduleProblem.ForeignProfile -> ScheduleField.PROFILE

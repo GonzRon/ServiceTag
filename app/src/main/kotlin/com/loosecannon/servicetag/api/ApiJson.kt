@@ -433,6 +433,8 @@ private fun scheduleProblemCode(problem: ScheduleProblem): String = when (proble
     ScheduleProblem.NoRuleSide -> "SCHEDULE_NO_RULE_SIDE"
     ScheduleProblem.MeterRuleOnGroupTarget -> "METER_RULE_ON_GROUP_TARGET"
     ScheduleProblem.SeasonFollowsAssetOnGroupTarget -> "SEASON_FOLLOWS_ASSET_ON_GROUP_TARGET"
+    ScheduleProblem.PolicyOffsetInvalid -> "POLICY_OFFSET_INVALID"
+    ScheduleProblem.SeasonPolicyNeedsATimeRule -> "SEASON_POLICY_NEEDS_A_TIME_RULE"
     ScheduleProblem.ProfileOnGroupTarget -> "PROFILE_ON_GROUP_TARGET"
     // D-12: a group target is QUICK-only, so `FORM` names a form with nothing to collect.
     ScheduleProblem.FormCompletionOnGroupTarget -> "FORM_COMPLETION_ON_GROUP_TARGET"

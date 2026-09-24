@@ -1,11 +1,14 @@
 package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.testing.groupOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -14,9 +17,9 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
 /**
- * `SaveSchedule`'s service-policy rules (spec §4.1–§4.3, §4.6; master plan §7.2): a group target is
- * CONTINUOUS only, PRE_SERVICE needs a boundary on its asset, and the policy is not a rule field.
- * Today is 2026-06-10.
+ * `SaveSchedule`'s service-policy rules (spec §4.1–§4.3, §4.6; master plan §7.2): the offset ranges, a
+ * meter-only schedule is phase-only, a group target is CONTINUOUS only, PRE_SERVICE needs a boundary
+ * on its asset, and the policy is not a rule field. Today is 2026-06-10.
  */
 class SchedulePolicyValidationTest {
 
@@ -36,6 +39,84 @@ class SchedulePolicyValidationTest {
         policyOffsetDays = offset,
         providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
     )
+
+    /** The policy's own problems, or nothing when the save goes through (and the row is then removed). */
+    private suspend fun SeasonCommandHarness.problemsOf(cmd: ScheduleCommand): List<ScheduleProblem> =
+        try {
+            saveSchedule.run(null, cmd).also { schedules.rows.remove(it.id.value) }
+            emptyList()
+        } catch (refusal: ScheduleValidation) {
+            refusal.problems
+        }
+
+    /** Spec §4.2: AT_START 0–365, PRE_SERVICE −365…−1 and present, every other policy none. All 422. */
+    @Test
+    fun offsetRangesPerPolicy() = runTest {
+        val h = SeasonCommandHarness()
+        h.asset(breakStart = "12-01", breakEnd = "02-28")
+        val bad = listOf(ScheduleProblem.PolicyOffsetInvalid)
+
+        for ((case, expected) in listOf(
+            (ServicePolicy.IN_SERVICE_AT_START to -1) to bad,
+            (ServicePolicy.IN_SERVICE_AT_START to 0) to emptyList(),
+            (ServicePolicy.IN_SERVICE_AT_START to 365) to emptyList(),
+            (ServicePolicy.IN_SERVICE_AT_START to 366) to bad,
+            (ServicePolicy.IN_SERVICE_AT_START to null) to bad,
+            (ServicePolicy.PRE_SERVICE to 0) to bad,
+            (ServicePolicy.PRE_SERVICE to -1) to emptyList(),
+            (ServicePolicy.PRE_SERVICE to -365) to emptyList(),
+            (ServicePolicy.PRE_SERVICE to -366) to bad,
+            (ServicePolicy.PRE_SERVICE to null) to bad,
+            (ServicePolicy.IN_SERVICE_RESUME_CLAMPED to null) to emptyList(),
+            (ServicePolicy.IN_SERVICE_RESUME_CLAMPED to 0) to bad,
+            (ServicePolicy.CONTINUOUS to null) to emptyList(),
+            (ServicePolicy.CONTINUOUS to 0) to bad,
+        )) {
+            val (policy, offset) = case
+            assertEquals(expected, h.problemsOf(command(policy, offset)), "$policy / $offset")
+        }
+        assertEquals(emptyMap(), h.schedules.rows.toMap(), "a refusal writes nothing")
+
+        // Collected with the shipped problems, not instead of them.
+        assertEquals(
+            listOf(ScheduleProblem.NegativeLeadDays, ScheduleProblem.PolicyOffsetInvalid),
+            h.problemsOf(command(ServicePolicy.PRE_SERVICE, 14).copy(leadDays = -1)),
+        )
+        // The one validator a restore reuses gives the same answer as the command.
+        assertEquals(bad, policyProblems(ServicePolicy.PRE_SERVICE, null, hasTimeRule = true, groupTarget = false))
+    }
+
+    /**
+     * O-7, inv. 95: a meter-only schedule is phase-only. PRE_SERVICE, or an IN_SERVICE offset other than
+     * 0, has no date to move and is `SeasonPolicyNeedsATimeRule` — ahead of `PolicyOffsetInvalid`.
+     */
+    @Test
+    fun meterOnlyIsPhaseOnly() = runTest {
+        val h = SeasonCommandHarness()
+        h.asset(mode = SeasonMode.CALENDAR, seasonStart = "04-15", seasonEnd = "10-31")
+        h.definitions.upsert(
+            MeasurementDefinition(
+                id = DefinitionId("hours"), assetId = AssetId("a1"), key = "hours", label = "Hours", unit = "h",
+                valueType = ValueType.NUMBER, decimals = 1, rangeLow = null, rangeHigh = null, isMeter = true,
+                sortOrder = 0, archivedAt = null, createdAt = 1L, updatedAt = 1L,
+            ),
+        )
+        fun meterOnly(policy: ServicePolicy, offset: Int?) = command(policy, offset).copy(
+            timeInterval = null, timeUnit = null, anchorOn = null,
+            meterDefinitionId = DefinitionId("hours"), meterInterval = 50.0,
+        )
+        val needsTime = listOf(ScheduleProblem.SeasonPolicyNeedsATimeRule)
+
+        assertEquals(needsTime, h.problemsOf(meterOnly(ServicePolicy.PRE_SERVICE, -14)))
+        assertEquals(needsTime, h.problemsOf(meterOnly(ServicePolicy.PRE_SERVICE, null)), "ahead of the offset problem")
+        assertEquals(needsTime, h.problemsOf(meterOnly(ServicePolicy.IN_SERVICE_AT_START, 5)))
+        assertEquals(needsTime, h.problemsOf(meterOnly(ServicePolicy.IN_SERVICE_AT_START, 400)), "ahead of the offset problem")
+        assertEquals(emptyMap(), h.schedules.rows.toMap())
+
+        assertEquals(emptyList(), h.problemsOf(meterOnly(ServicePolicy.IN_SERVICE_AT_START, 0)), "dormancy with offset 0")
+        assertEquals(emptyList(), h.problemsOf(meterOnly(ServicePolicy.IN_SERVICE_RESUME_CLAMPED, null)))
+        assertEquals(emptyList(), h.problemsOf(meterOnly(ServicePolicy.CONTINUOUS, null)))
+    }
 
     /** Inv. 106: a season and a break live on one asset; a group target is CONTINUOUS only. */
     @Test
