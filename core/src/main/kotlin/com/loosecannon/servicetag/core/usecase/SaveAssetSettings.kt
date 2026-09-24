@@ -3,8 +3,6 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
-import com.loosecannon.servicetag.core.model.SeasonAction
-import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
@@ -14,7 +12,6 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
-import com.loosecannon.servicetag.core.schedule.SeasonPhase
 
 /**
  * Everything the asset editor saves in one tap (spec §10.4): the asset, its season, its break and its
@@ -110,18 +107,8 @@ class SaveAssetSettings(
         }
 
         assets.upsert(next)
-        if (next.seasonMode == SeasonMode.MANUAL && modeBefore != SeasonMode.MANUAL) {
-            activations.insert(
-                SeasonActivation(
-                    id = ids.newId(),
-                    assetId = next.id,
-                    action = if (mode.manualPhase == SeasonPhase.IN_SEASON) SeasonAction.START else SeasonAction.END,
-                    occurredOn = today.localDate().toString(),
-                    eventId = null,
-                    createdAt = now,
-                ),
-            )
-        }
+        manualSwitchActivation(next.id, modeBefore, mode, today.localDate(), now, ids)
+            ?.let { activations.insert(it) }
         if (current == null) {
             templateKey?.let { key ->
                 applyTemplate.applyInTransaction(next.id, SeedTemplates.byKey(key) ?: throw UnknownTemplate(key))
