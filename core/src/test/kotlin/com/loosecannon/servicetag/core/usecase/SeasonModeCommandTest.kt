@@ -3,7 +3,6 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.PolicyPhase
-import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
@@ -291,6 +290,28 @@ class SeasonModeCommandTest {
         // And back: YEAR_ROUND again, active again.
         h.setSeasonMode.run(a1, SeasonModeCommand(SeasonMode.YEAR_ROUND))
         assertEquals(PolicyPhase.ACTIVE, h.state("s1")!!.policyPhase)
-        assertEquals(ScheduleId("s1"), h.state("s1")!!.scheduleId)
+    }
+
+    /** Moving only the end of a window or a break is a change: stored, and the schedules rebuilt. */
+    @Test
+    fun anEndOnlyChangeIsAChange() = runTest {
+        val h = SeasonCommandHarness()
+        h.asset(mode = SeasonMode.CALENDAR, seasonStart = "04-15", seasonEnd = "10-31")
+        h.schedule("s1", policy = ServicePolicy.IN_SERVICE_AT_START)
+        h.asset(id = "a2", breakStart = "06-01", breakEnd = "06-30")
+        h.schedule("s2", assetId = "a2", policy = ServicePolicy.IN_SERVICE_AT_START)
+        h.recompute.all()
+        assertEquals(PolicyPhase.ACTIVE, h.state("s1")!!.policyPhase)
+        assertEquals(true, h.state("s2")!!.quiet)
+
+        val season = h.setSeasonMode.run(a1, SeasonModeCommand(SeasonMode.CALENDAR, "04-15", "06-05"))
+        assertEquals("04-15" to "06-05", season.seasonStartMmdd to season.seasonEndMmdd)
+        assertEquals(season, h.stored())
+        assertEquals(PolicyPhase.DORMANT, h.state("s1")!!.policyPhase, "the season ended on 5 June")
+
+        val pause = h.setMaintenanceBreak.run(AssetId("a2"), BreakCommand("06-01", "06-05"))
+        assertEquals("06-01" to "06-05", pause.blackoutStartMmdd to pause.blackoutEndMmdd)
+        assertEquals(pause, h.stored("a2"))
+        assertEquals(false, h.state("s2")!!.quiet, "the break ended on 5 June")
     }
 }

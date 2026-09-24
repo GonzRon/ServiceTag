@@ -81,6 +81,23 @@ class LegacyAssetPairTest {
         assertEquals(PolicyPhase.ACTIVE, h.state("s1")!!.policyPhase)
     }
 
+    /** A pair that moves only its end is a different pair: translated, stored and recomputed. */
+    @Test
+    fun anEndOnlyPairChangeIsTranslated() = runTest {
+        val h = SeasonCommandHarness()
+        h.asset(mode = SeasonMode.CALENDAR, seasonStart = "04-15", seasonEnd = "10-31")
+        h.schedule("s1", policy = ServicePolicy.IN_SERVICE_AT_START)
+        h.recompute.all()
+        assertEquals(PolicyPhase.ACTIVE, h.state("s1")!!.policyPhase)
+
+        val saved = h.updateAsset.run(a1, AssetCommand(name = "Mower", seasonStartMmdd = "04-15", seasonEndMmdd = "06-05"))
+
+        assertEquals(SeasonMode.CALENDAR, saved.seasonMode)
+        assertEquals("04-15" to "06-05", saved.seasonStartMmdd to saved.seasonEndMmdd)
+        assertEquals(saved, h.stored())
+        assertEquals(PolicyPhase.DORMANT, h.state("s1")!!.policyPhase, "recomputed: the season ended on 5 June")
+    }
+
     /** Inv. 128: the legacy pair obeys the strands rule exactly as the season-mode command does. */
     @Test
     fun thePairObeysTheStrandsRule() = runTest {
