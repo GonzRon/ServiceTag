@@ -295,8 +295,8 @@ class ScheduleEditorTest {
         gone("Before the season starts")
         rule.onNodeWithText("Every N").performTextInput("3")
         rule.onNodeWithText("Before the season starts").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithText("When the season starts").assertIsDisplayed()
-        rule.onNodeWithText("Whenever it is due").assertIsDisplayed()
+        rule.onNodeWithText("When the season starts").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Whenever it is due").performScrollTo().assertIsDisplayed()
         val s78 = "A date in the season or the maintenance break becomes due on an allowed day before the season starts."
         val s80 = "This maintenance waits while the season is off and becomes active again when it starts."
         val s82 = "The season and the maintenance break never change when this is due."
