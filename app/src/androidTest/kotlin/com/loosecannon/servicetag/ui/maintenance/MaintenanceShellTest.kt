@@ -20,7 +20,7 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
@@ -72,7 +72,7 @@ class MaintenanceShellTest {
             )
             // This row has to be **due today** or there is no Due work section to find, and the
             // anchor alone does not settle that: the D-27 pin floors the first occurrence at the
-            // row's own `updated_at`, so a series date on today survives only while the floor is
+            // row's own `rule_changed_at`, so a series date on today survives only while the floor is
             // today or earlier. `ScheduleRecompute` now reads that floor in the owner's zone rather
             // than at UTC, which is what makes the anchor above mean today at every hour — but a
             // fixture that depends on a floor rule it does not state is how this test came to be
@@ -80,7 +80,7 @@ class MaintenanceShellTest {
             // same "a genuinely older row" device `DashboardAttentionTest` uses for its overdue
             // row, and it holds whatever the pin later decides about the current day.
             graph.schedules.upsert(
-                graph.schedules.get(due.id)!!.copy(updatedAt = floorBeforeToday()),
+                graph.schedules.get(due.id)!!.copy(ruleChangedAt = floorBeforeToday()),
             )
             graph.recomputeSchedules.forSchedule(due.id)
             // A paused schedule: the shell lists it under Schedules and Due work omits it, which
@@ -198,9 +198,8 @@ class MaintenanceShellTest {
                 meterInterval = null,
                 anchorMeter = null,
                 meterLead = null,
-                seasonBehavior = SeasonBehavior.IGNORE,
-                seasonReentry = null,
-                seasonReentryOffsetDays = null,
+                servicePolicy = ServicePolicy.CONTINUOUS,
+                policyOffsetDays = null,
                 completionMode = CompletionMode.QUICK,
                 profileId = null,
                 remindersEnabled = true,
@@ -208,6 +207,7 @@ class MaintenanceShellTest {
                 postponedDueOn = null,
                 createdAt = 1_000L,
                 updatedAt = 1_000L,
+                ruleChangedAt = 1_000L,
                 providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
             )
             graph.schedules.upsert(schedule)

@@ -18,7 +18,8 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.reminders.Severity
@@ -139,7 +140,7 @@ class DashboardAttentionTest {
             )
             // The round has to be **due today** for this store to mean what its name says, and the
             // anchor alone does not settle that: the D-27 pin floors the first occurrence at the
-            // row's own `updated_at`. `ScheduleRecompute` now reads that floor in the owner's zone
+            // row's own `rule_changed_at`. `ScheduleRecompute` now reads that floor in the owner's zone
             // rather than at UTC, which is what makes the anchor above mean today at every hour —
             // but a fixture that leans on a floor rule it never states is how this store came to
             // read OK instead of DUE for the last four hours of every day. Stamping the floor a
@@ -151,7 +152,7 @@ class DashboardAttentionTest {
             // stamped before the completion, so the completion lands on today's round.
             graph.schedules.upsert(
                 graph.schedules.get(groupSchedule.id)!!
-                    .copy(updatedAt = dayMillis(LocalDate.now().minusDays(1).toString())),
+                    .copy(ruleChangedAt = dayMillis(LocalDate.now().minusDays(1).toString())),
             )
             graph.recomputeSchedules.forSchedule(groupSchedule.id)
             graph.completeGroupMembers.run(
@@ -274,6 +275,8 @@ class DashboardAttentionTest {
     @Test fun theDrawnSectionOrderIsFixedEvenWhenCurrentHoldsOnlyAssetRows() {
         val graph = app.graph
         runBlocking {
+            // Schema 8 stores an asset with both bounds as CALENDAR, as the 7 -> 8 migration does;
+            // the asset command does not set the mode yet, so the fixture says it.
             val blower = graph.createAsset.run(
                 AssetCommand(
                     name = "Snowblower",
@@ -281,7 +284,7 @@ class DashboardAttentionTest {
                     seasonStartMmdd = "11-01",
                     seasonEndMmdd = "02-28",
                 ),
-            )
+            ).copy(seasonMode = SeasonMode.CALENDAR).also { graph.assets.upsert(it) }
             seed(
                 graph,
                 scheduleOf(
@@ -292,7 +295,8 @@ class DashboardAttentionTest {
                     timeUnit = RecurrenceUnit.MONTH,
                     anchorOn = "2026-01-01",
                     createdOn = "2026-01-01",
-                    seasonBehavior = SeasonBehavior.FOLLOW_ASSET,
+                    servicePolicy = ServicePolicy.IN_SERVICE_AT_START,
+                    policyOffsetDays = 0,
                 ),
             )
             graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
@@ -356,7 +360,8 @@ class DashboardAttentionTest {
             meterDefinitionId: String? = null,
             meterInterval: Double? = null,
             anchorMeter: Double? = null,
-            seasonBehavior: SeasonBehavior = SeasonBehavior.IGNORE,
+            servicePolicy: ServicePolicy = ServicePolicy.CONTINUOUS,
+            policyOffsetDays: Int? = null,
         ): MaintenanceSchedule = MaintenanceSchedule(
             id = ScheduleId(id),
             target = ScheduleTarget.AssetTarget(AssetId(assetId)),
@@ -371,9 +376,8 @@ class DashboardAttentionTest {
             meterInterval = meterInterval,
             anchorMeter = anchorMeter,
             meterLead = null,
-            seasonBehavior = seasonBehavior,
-            seasonReentry = null,
-            seasonReentryOffsetDays = null,
+            servicePolicy = servicePolicy,
+            policyOffsetDays = policyOffsetDays,
             completionMode = CompletionMode.QUICK,
             profileId = null,
             remindersEnabled = true,
@@ -381,6 +385,7 @@ class DashboardAttentionTest {
             postponedDueOn = null,
             createdAt = dayMillis(createdOn),
             updatedAt = dayMillis(createdOn),
+            ruleChangedAt = dayMillis(createdOn),
             providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
         )
 

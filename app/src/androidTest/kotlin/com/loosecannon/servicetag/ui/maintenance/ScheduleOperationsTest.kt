@@ -15,7 +15,7 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
@@ -78,9 +78,8 @@ class ScheduleOperationsTest {
         meterInterval = null,
         anchorMeter = null,
         meterLead = null,
-        seasonBehavior = SeasonBehavior.IGNORE,
-        seasonReentry = null,
-        seasonReentryOffsetDays = null,
+        servicePolicy = ServicePolicy.CONTINUOUS,
+        policyOffsetDays = null,
         completionMode = CompletionMode.QUICK,
         profileId = null,
         remindersEnabled = true,
@@ -88,6 +87,7 @@ class ScheduleOperationsTest {
         postponedDueOn = null,
         createdAt = dayMillis(createdOn),
         updatedAt = dayMillis(createdOn),
+        ruleChangedAt = dayMillis(createdOn),
         providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
     )
 

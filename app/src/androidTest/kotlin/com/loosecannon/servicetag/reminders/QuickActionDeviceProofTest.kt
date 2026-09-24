@@ -16,7 +16,7 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.schedule.DueStatus
@@ -205,9 +205,8 @@ class QuickActionDeviceProofTest {
             meterInterval = null,
             anchorMeter = null,
             meterLead = null,
-            seasonBehavior = SeasonBehavior.IGNORE,
-            seasonReentry = null,
-            seasonReentryOffsetDays = null,
+            servicePolicy = ServicePolicy.CONTINUOUS,
+            policyOffsetDays = null,
             completionMode = CompletionMode.QUICK,
             profileId = null,
             remindersEnabled = true,
@@ -215,6 +214,7 @@ class QuickActionDeviceProofTest {
             postponedDueOn = null,
             createdAt = createdAt,
             updatedAt = createdAt,
+            ruleChangedAt = createdAt,
             providers = listOf(ScheduleProviderRow(ProviderId.LOCAL.name, true)),
         )
         graph.schedules.upsert(schedule)

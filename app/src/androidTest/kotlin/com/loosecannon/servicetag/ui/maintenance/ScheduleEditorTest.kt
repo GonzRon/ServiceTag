@@ -11,7 +11,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.DefinitionCommand
@@ -197,8 +197,8 @@ class ScheduleEditorTest {
         assert(stored.completionMode == CompletionMode.QUICK) {
             "a group target is QUICK-only: ${stored.completionMode}"
         }
-        assert(stored.seasonBehavior == SeasonBehavior.IGNORE) {
-            "a group target is IGNORE season only: ${stored.seasonBehavior}"
+        assert(stored.servicePolicy == ServicePolicy.CONTINUOUS) {
+            "a group target is CONTINUOUS only: ${stored.servicePolicy}"
         }
     }
 }
