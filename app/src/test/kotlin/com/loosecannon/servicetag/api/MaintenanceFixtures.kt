@@ -3,8 +3,11 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.UpdateReference
+import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
+import kotlinx.serialization.KSerializer
+import java.io.File
 
 /**
  * The 1.2 handlers over a [FakeGraph], built in one place because four suites need them.
@@ -83,3 +86,62 @@ internal fun seasonHealthHandlersFor(graph: FakeGraph): SeasonHealthHandlers = S
     health = graph.assetHealthReadModel,
     attention = graph.attentionReadModel,
 )
+
+/**
+ * 1.4 (B09): one `/v1` client over a [FakeGraph] for the new suites — the production router, the
+ * production handlers (every collaborator above) and the production serializers, exactly as
+ * `ApiRouterTest` builds them, written once rather than six times.
+ */
+internal class V1Client(val graph: FakeGraph, private val token: String = "ABCD2345") {
+
+    fun router(): ApiRouter = ApiRouter(
+        ApiHandlers(
+            graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles,
+            graph.events, graph.attachments,
+            graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
+            graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
+            graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
+            maintenanceHandlersFor(graph),
+            referenceHandlersFor(graph),
+            seasonHealthHandlersFor(graph),
+            appVersion = "1.4.0",
+            schemaVersion = AppGraph.SCHEMA_VERSION,
+        ),
+        token,
+    )
+
+    fun call(method: String, path: String, body: String = "", contentType: String = "application/json"): ApiResponse {
+        val headers = buildMap {
+            put("host", "127.0.0.1")
+            put("authorization", "Bearer $token")
+            if (body.isNotEmpty()) put("content-type", contentType)
+        }
+        return router().handle(ApiRequest(method, path, headers, body.toByteArray()))
+    }
+
+    /** [call], then the 2xx body decoded — failing with the whole answer when the status is not [status]. */
+    fun <T> ok(serializer: KSerializer<T>, method: String, path: String, body: String = "", status: Int = 200): T {
+        val response = call(method, path, body)
+        check(response.status == status) { "$method $path answered ${response.status}: ${response.bodyText()}" }
+        return ApiJson.decodeFromString(serializer, response.bodyText())
+    }
+
+    /** One asset through the API, returned as its id. */
+    fun asset(name: String): String =
+        ok(AssetResponse.serializer(), "POST", "/v1/assets", """{"name":"$name"}""", status = 201).asset.id
+}
+
+internal fun ApiResponse.bodyText(): String = body.decodeToString()
+
+/** The error envelope of a refusal. */
+internal fun ApiResponse.errorDetail(): ApiErrorDetail =
+    ApiJson.decodeFromString(ApiErrorBody.serializer(), bodyText()).error
+
+/** A file of the repository, found by walking up from the test's working directory. */
+internal fun repoFile(path: String): File {
+    var dir = File(".").absoluteFile
+    while (!File(dir, "settings.gradle.kts").isFile) {
+        dir = dir.parentFile ?: error("cannot find the repository root from ${File(".").absolutePath}")
+    }
+    return File(dir, path)
+}
