@@ -184,6 +184,17 @@ shown, prefilled with `AttachmentKinds.inferFrom`, because it yields only `PHOTO
   so a refused URI is never opened. I-2 differs because a *reference's* scheme is a plain string on a
   `:core` command, so its refusal genuinely does live in the use case and closes the API and MCP paths
   too; a stream has no API path at all, the loopback API carrying no bytes.
+- **I-11** (#63, added 2026-09-24) A stream whose facts cannot be read — **no cursor or no row** from
+  the provider query — is `UNREADABLE` at read time, after I-9 and before any open: the intake's
+  first loaded frame is "Could not read what was shared", and nothing is opened or staged. A row
+  buys the byte form whatever columns it lacks: a row with no name, no type or no size still gets
+  the byte form, and an absent size is probed when Save copies the bytes, as 1.3.0 ships. A null
+  cursor covers a provider that does not exist, one package visibility hides (a sharer that has
+  never granted ServiceTag a URI), one whose own `query` answers null, and one that dies mid-call.
+  **Accepted consequence**, within the owner's 2026-09-24 ruling: a provider that answers null to
+  `query` but would still serve `openInputStream` used to get a nameless byte form, and is now
+  refused. A provider that cannot describe a stream is refused even if it could have served its
+  bytes.
 
 ### 3.4 The 2.6 tombstone rule
 
