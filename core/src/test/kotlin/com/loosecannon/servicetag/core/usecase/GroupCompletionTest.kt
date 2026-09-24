@@ -23,6 +23,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryHealthSubjectRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
@@ -84,7 +85,10 @@ class GroupCompletionTest {
         ) { ZoneOffset.UTC }
     private val saveGroup = SaveGroup(groups, assets, uow, ids, clock)
     private val saveSchedule =
-        SaveSchedule(countedSchedules, assets, groups, defs, profiles, uow, ids, clock, recompute)
+        SaveSchedule(
+            countedSchedules, assets, groups, defs, profiles, uow, ids, clock, recompute,
+            InMemoryHealthSubjectRepository(),
+        )
     private val postpone = PostponeSchedule(countedSchedules, uow, recompute)
     private val completeMembers = CompleteGroupMembers(
         countedSchedules, groups, events, closures, defs, profiles, uow, ids, clock, recompute,
@@ -478,7 +482,9 @@ class GroupCompletionTest {
     fun completingAnArchivedGroupScheduleIsRefused() = runTest {
         val a1 = seedAsset("a1")
         val schedule = seedSchedule(seedGroup(listOf(a1)))
-        val archive = ArchiveSchedule(countedSchedules, uow, recompute)
+        val archive = ArchiveSchedule(
+            countedSchedules, uow, recompute, InMemoryHealthSubjectRepository(), assets, clock,
+        )
         archive.run(schedule.id, archived = true)
 
         assertFailsWith<ScheduleArchived> {

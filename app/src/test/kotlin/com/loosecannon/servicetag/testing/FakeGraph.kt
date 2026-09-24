@@ -292,13 +292,15 @@ class FakeGraph(
      * it. `saveGroup` is here for the same reason: a group-targeted schedule needs a real group
      * with real membership windows behind it.
      */
-    val saveSchedule: SaveSchedule =
-        SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recomputeSchedules)
+    val saveSchedule: SaveSchedule = SaveSchedule(
+        schedules, assets, groups, definitions, profiles, uow, ids, clock, recomputeSchedules, healthSubjects,
+    )
     val completeSchedule: CompleteSchedule =
         CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recomputeSchedules)
     val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)
     val pauseSchedule: PauseSchedule = PauseSchedule(schedules, uow, recomputeSchedules)
-    val archiveSchedule: ArchiveSchedule = ArchiveSchedule(schedules, uow, recomputeSchedules)
+    val archiveSchedule: ArchiveSchedule =
+        ArchiveSchedule(schedules, uow, recomputeSchedules, healthSubjects, assets, clock)
     val closeRound: CloseRound =
         CloseRound(schedules, closures, uow, ids, clock, todayPort, recomputeSchedules)
     val saveGroup: SaveGroup = SaveGroup(groups, assets, uow, ids, clock)

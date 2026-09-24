@@ -508,13 +508,16 @@ class AppGraph(private val context: Context) {
     // 1.2 — the schedule operations. Each does exactly what it says and no two of them collapse
     // into a generic reschedule: only `saveSchedule` writes a rule column, only it moves the pin's
     // floor, and a completion touches the schedule row only to clear a postponement.
-    val saveSchedule: SaveSchedule =
-        SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recomputeSchedules)
+    // 1.4: the save and the archive guard a health subject the schedule drives (inv. 130).
+    val saveSchedule: SaveSchedule = SaveSchedule(
+        schedules, assets, groups, definitions, profiles, uow, ids, clock, recomputeSchedules, healthSubjects,
+    )
     val completeSchedule: CompleteSchedule =
         CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recomputeSchedules)
     val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)
     val pauseSchedule: PauseSchedule = PauseSchedule(schedules, uow, recomputeSchedules)
-    val archiveSchedule: ArchiveSchedule = ArchiveSchedule(schedules, uow, recomputeSchedules)
+    val archiveSchedule: ArchiveSchedule =
+        ArchiveSchedule(schedules, uow, recomputeSchedules, healthSubjects, assets, clock)
 
     // 1.2 — the group operations. `saveGroup` is the only writer of a membership window, and the
     // only place `removed_at` is ever stamped; nothing anywhere clears one.

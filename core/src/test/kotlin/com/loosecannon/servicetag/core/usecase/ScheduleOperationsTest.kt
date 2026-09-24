@@ -101,12 +101,17 @@ class ScheduleOperationsTest {
             schedules, states, events, closures, groups, assets, InMemorySeasonActivationRepository(), todayPort, clock,
         ) { ZoneOffset.UTC }
     private val save =
-        SaveSchedule(countedSchedules, assets, groups, defs, profiles, uow, ids, clock, recompute)
+        SaveSchedule(
+            countedSchedules, assets, groups, defs, profiles, uow, ids, clock, recompute,
+            InMemoryHealthSubjectRepository(),
+        )
     private val complete =
         CompleteSchedule(countedSchedules, events, defs, profiles, uow, ids, clock, recompute)
     private val postpone = PostponeSchedule(countedSchedules, uow, recompute)
     private val pause = PauseSchedule(countedSchedules, uow, recompute)
-    private val archive = ArchiveSchedule(countedSchedules, uow, recompute)
+    private val archive = ArchiveSchedule(
+        countedSchedules, uow, recompute, InMemoryHealthSubjectRepository(), assets, clock,
+    )
     private val logEvent = LogEvent(events, defs, profiles, assets, uow, ids, clock, recompute)
     private val updateEvent = UpdateEvent(events, defs, profiles, uow, ids, clock, recompute)
     private val deleteEvent = DeleteEvent(events, attachments, storage, uow, recompute)
@@ -749,14 +754,16 @@ class ScheduleOperationsTest {
         val bytes = ExportBackupSet(
             assets, groups, tags, links, defs, profiles, schedules, closures, events, attachments,
             references,
-            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(),
+            InMemoryHealthSubjectRepository(),
             uow, IdGenerator { "set-1" }, clock, appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
 
         fun restore(rebuildAll: suspend () -> Unit) = ImportBackupReplace(
             assets, groups, tags, links, defs, profiles, schedules, closures, events, attachments,
             references,
-            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(),
+            InMemoryHealthSubjectRepository(),
             storage, uow, rebuildAll = rebuildAll,
         )
 

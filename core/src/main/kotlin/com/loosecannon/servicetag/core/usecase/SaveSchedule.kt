@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
+import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
@@ -52,7 +53,17 @@ import com.loosecannon.servicetag.core.schedule.BoundaryKind
  * with neither a calendar season nor a break: 409 [PreServiceNeedsDates], whose remedy is the asset.
  * The policy and its offset are not rule fields (see [ruleChanged]).
  *
- * One `uow.write`: the row and the recompute commit together or not at all.
+ * **The health link guard** (spec §6.1, D-30; inv. 130). While a non-archived health subject depends
+ * on the schedule, an edit that removes its time rule or changes its target — to another asset or to
+ * a group — is 422 [ScheduleDrivesHealthSubject], naming the subject, unless [run]'s
+ * `unlinkHealthSubject` is set: then the subject is archived in the same transaction, or the whole
+ * write is 409 [HealthSubjectIsPrimary] when that subject is the one its asset's TRACK_ONE follows
+ * (plan decision 14). Any other edit — a title, a lead, a policy, a new cadence — is not guarded, and
+ * the flag with nothing to unlink changes nothing. The guard's 422 comes after every bad-rule problem
+ * and the target's 404, and before the 409s.
+ *
+ * One `uow.write`: the guard's read of the subjects, the row, any unlinked subject and the recompute
+ * commit together or not at all.
  */
 class SaveSchedule(
     private val schedules: ScheduleRepository,
@@ -64,8 +75,9 @@ class SaveSchedule(
     private val ids: IdGenerator,
     private val clock: Clock,
     private val recompute: RecomputeSchedules,
+    private val healthSubjects: HealthSubjectRepository,
 ) {
-    suspend fun run(id: ScheduleId?, cmd: ScheduleCommand): MaintenanceSchedule {
+    suspend fun run(id: ScheduleId?, cmd: ScheduleCommand, unlinkHealthSubject: Boolean = false): MaintenanceSchedule {
         val existing = id?.let { schedules.get(it) ?: throw NoSuchSchedule(it) }
 
         val profileAssetId = cmd.profileId?.let { profiles.get(it)?.assetId }
@@ -109,16 +121,12 @@ class SaveSchedule(
         val problems = scheduleProblems(cmd, profileAssetId, meter, obliged)
         if (problems.isNotEmpty()) throw ScheduleValidation(problems)
 
-        when (val target = cmd.target()!!) {
-            is ScheduleTarget.AssetTarget -> {
-                val asset = assets.get(target.assetId) ?: throw NoSuchAsset(target.assetId)
-                // A 409, after every 422: the body is well formed, and the remedy is the asset — give
-                // it a season or a break for PRE_SERVICE to count back from (spec §4.3, §9.2; inv. 99).
-                if (cmd.servicePolicy == ServicePolicy.PRE_SERVICE && asset.boundaryKind() == BoundaryKind.NONE) {
-                    throw PreServiceNeedsDates(asset.id)
-                }
+        val targetAsset = when (val target = cmd.target()!!) {
+            is ScheduleTarget.AssetTarget -> assets.get(target.assetId) ?: throw NoSuchAsset(target.assetId)
+            is ScheduleTarget.GroupTarget -> {
+                group ?: throw NoSuchGroup(target.groupId)
+                null
             }
-            is ScheduleTarget.GroupTarget -> group ?: throw NoSuchGroup(target.groupId)
         }
 
         val candidate = MaintenanceSchedule(
@@ -155,12 +163,33 @@ class SaveSchedule(
             candidate
         }
 
-        uow.write {
+        return uow.write {
+            // The guard's 422: its remedy is the flag in this very body.
+            val driven = if (existing != null && breaksHealthLink(existing, saved)) {
+                guardDriven(existing.id, unlinkHealthSubject, healthSubjects)
+            } else {
+                emptyList()
+            }
+            // A 409, after every 422: the body is well formed, and the remedy is the asset — give it a
+            // season or a break for PRE_SERVICE to count back from (spec §4.3, §9.2; inv. 99).
+            if (targetAsset != null && cmd.servicePolicy == ServicePolicy.PRE_SERVICE &&
+                targetAsset.boundaryKind() == BoundaryKind.NONE
+            ) {
+                throw PreServiceNeedsDates(targetAsset.id)
+            }
+            unlinkDriven(driven, assets, healthSubjects, now)
             schedules.upsert(saved)
             recompute.forSchedule(saved.id)
+            saved
         }
-        return saved
     }
+
+    /**
+     * Whether this edit would strand a subject the schedule drives (spec §6.1): it removes the time
+     * rule the subject's clock counts from, or moves the schedule to another asset or to a group.
+     */
+    private fun breaksHealthLink(before: MaintenanceSchedule, after: MaintenanceSchedule): Boolean =
+        (before.hasTimeRule() && !after.hasTimeRule()) || before.target != after.target
 
     /**
      * Whether this edit touched the recurrence itself. The lead is deliberately **not** a rule

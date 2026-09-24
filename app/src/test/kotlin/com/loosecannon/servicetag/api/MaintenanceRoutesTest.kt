@@ -1208,7 +1208,7 @@ class MaintenanceRoutesTest {
             val saveGroup = SaveGroup(donor.groups, donor.assets, donor.uow, disjoint, donor.clock)
             val saveSchedule = SaveSchedule(
                 donor.schedules, donor.assets, donor.groups, donor.definitions, donor.profiles,
-                donor.uow, disjoint, donor.clock, donor.recomputeSchedules,
+                donor.uow, disjoint, donor.clock, donor.recomputeSchedules, donor.healthSubjects,
             )
             runBlocking {
                 val asset = createAsset.run(

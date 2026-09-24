@@ -20,6 +20,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryHealthSubjectRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
@@ -56,8 +57,9 @@ internal class SeasonCommandHarness(today: String = "2026-06-10") {
     val groups = InMemoryGroupRepository()
     val definitions = InMemoryDefinitionRepository()
     val profiles = InMemoryProfileRepository()
+    val healthSubjects = InMemoryHealthSubjectRepository()
     val uow = FakeUnitOfWork(
-        assets, events, activations, closures, states, schedules, groups, definitions, profiles,
+        assets, events, activations, closures, states, schedules, groups, definitions, profiles, healthSubjects,
     )
 
     private var seq = 0
@@ -79,7 +81,8 @@ internal class SeasonCommandHarness(today: String = "2026-06-10") {
     val acceptSeasonOffer = AcceptSeasonOffer(activations, recordSeasonActivation, uow, todayPort)
     val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute)
     val createAsset = CreateAsset(assets, uow, ids, clock, ApplyTemplate(definitions, profiles, assets, uow, ids, clock))
-    val saveSchedule = SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute)
+    val saveSchedule =
+        SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, healthSubjects)
     val logEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock, recompute)
 
     /** An asset stored as it is, with no command in between — the state a test starts from. */
