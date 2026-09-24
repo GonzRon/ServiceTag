@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthDriver
+import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
@@ -602,7 +603,7 @@ class ScheduleEditViewModelTest {
     }
 
     /** A generator whose oil change has a time rule and a meter rule, and a subject that the oil drives. */
-    private suspend fun aDrivingSchedule(): Triple<AssetId, ScheduleId, com.loosecannon.servicetag.core.model.HealthSubjectId> {
+    private suspend fun aDrivingSchedule(): Triple<AssetId, ScheduleId, HealthSubjectId> {
         val generator = graph.createAsset.run(AssetCommand(name = "Generator", category = "Power"))
         val hours = meterDefinitionOf("d-hours", generator.id.value)
         graph.definitions.upsert(hours)
@@ -658,10 +659,14 @@ class ScheduleEditViewModelTest {
         assertEquals("nothing written yet", 6, graph.schedules.get(scheduleId)!!.timeInterval)
         assertNull(graph.healthSubjects.get(subjectId)!!.archivedAt)
 
+        // The form behind the dialog changes; "Archive both" must still repeat the command S140 asked
+        // about, not one rebuilt from the form.
+        vm.onTitle("Renamed")
         vm.archiveBoth()
         val done = vm.state.first { !it.saving }
         assertNull(done.linkGuard)
         val stored = graph.schedules.get(scheduleId)!!
+        assertEquals("the same command, with the flag and nothing else", "Oil change", stored.title)
         assertNull("the time rule is gone", stored.timeInterval)
         assertEquals("and the meter rule stays", 100.0, stored.meterInterval)
         assertNotNull("and the subject is archived with it", graph.healthSubjects.get(subjectId)!!.archivedAt)

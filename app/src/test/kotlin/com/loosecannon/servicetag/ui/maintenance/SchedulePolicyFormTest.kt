@@ -11,10 +11,13 @@ import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.BreakCommand
+import com.loosecannon.servicetag.core.usecase.GroupCommand
+import com.loosecannon.servicetag.core.usecase.GroupMemberInput
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.meterDefinitionOf
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -188,10 +191,7 @@ class SchedulePolicyFormTest {
         assertEquals(ServicePolicy.CONTINUOUS, onPlain.servicePolicy)
         val group = graph.saveGroup.run(
             null,
-            com.loosecannon.servicetag.core.usecase.GroupCommand(
-                name = "Yard run",
-                members = listOf(com.loosecannon.servicetag.core.usecase.GroupMemberInput(assetId = plain)),
-            ),
+            GroupCommand(name = "Yard run", members = listOf(GroupMemberInput(assetId = plain))),
         )
         val onGroup = viewModel(targetGroupId = group.id).state.first { it.loaded }
         assertFalse(onGroup.questionDrawn)
@@ -447,6 +447,8 @@ class SchedulePolicyFormTest {
             assertEquals(what, case.daysBefore, opened.daysBefore)
             assertEquals(what, case.daysAfter, opened.daysAfter)
             assertFalse(what, opened.noBoundary)
+            // Save must be open, or the round trip below would pass by never saving.
+            assertTrue(what, opened.canSave)
 
             vm.save()
             vm.state.first { !it.saving }
@@ -615,5 +617,33 @@ class SchedulePolicyFormTest {
         assertEquals(listOf(PolicyOption.WHENEVER_DUE), raced.policyOptions)
         assertNull(raced.policyOption)
         assertTrue("nothing was written", graph.schedules.all().none { it.target == ScheduleTarget.AssetTarget(snowblower) })
+    }
+
+    /**
+     * Inv. 87, observed at the editor (review F2): a policy-only edit keeps the postponement and the
+     * pin's floor. The rule fields go back exactly as loaded, so `SaveSchedule` sees no rule change, and
+     * the editor adds no side effect of its own.
+     */
+    @Test fun aPolicyOnlyEditKeepsThePostponement() = runTest {
+        graph.now = dayMillis("2026-02-10")
+        val snowblower = anAsset("Snowblower", SeasonMode.CALENDAR, "11-01", "03-31")
+        val id = aStoredSchedule(snowblower, ServicePolicy.CONTINUOUS, null)
+        graph.postponeSchedule.run(id, "2026-06-01")
+        val before = graph.schedules.get(id)!!
+        assertEquals("2026-06-01", before.postponedDueOn)
+
+        graph.now = dayMillis("2026-04-15")
+        val vm = viewModel(scheduleId = id)
+        vm.state.first { it.loaded }
+        vm.onPolicy(PolicyOption.WHEN_SEASON_STARTS)
+        assertTrue(vm.state.value.canSave)
+        vm.save()
+        vm.state.first { !it.saving }
+
+        val after = graph.schedules.get(id)!!
+        assertEquals("the policy changed", ServicePolicy.IN_SERVICE_AT_START, after.servicePolicy)
+        assertEquals("the postponement stays", "2026-06-01", after.postponedDueOn)
+        assertEquals("the pin's floor stays", before.ruleChangedAt, after.ruleChangedAt)
+        assertEquals("and the rule fields went back as loaded", before.anchorOn, after.anchorOn)
     }
 }
