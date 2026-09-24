@@ -375,6 +375,24 @@ class BuildReminderSubjectsTest {
     }
 
     /**
+     * An Active subject carries the **actionable** date, the one its status word is measured against
+     * (controller ruling on concern 1). F4's snowblower on 2 Nov 2026 is OVERDUE against 1 Nov, the
+     * pre-service point; its own date, 20 Dec, is not what a provider should say it is overdue since.
+     */
+    @Test
+    fun anActiveSubjectCarriesTheActionableDate() = runTest {
+        today = LocalDate.parse("2026-11-02")
+        assets.upsert(SeasonFixtures.snowblowerAsset())
+        schedules.upsert(SeasonFixtures.snowblowerSchedule())
+        events.upsert(SeasonFixtures.snowblowerLastDone())
+
+        val subject = seasonalSubjects().single()
+        assertEquals(SubjectState.Active, subject.state)
+        assertEquals("OVERDUE", subject.body)
+        assertEquals(LocalDate.parse("2026-11-01"), subject.dueOn)
+    }
+
+    /**
      * The park date is part of the hash (`ContentHash` renders a parked state with its date), so it
      * has to be the same on every day of one break: two builds, on 10 Dec and on 20 Jan, hash alike,
      * and the provider is not told of a change that is not one.

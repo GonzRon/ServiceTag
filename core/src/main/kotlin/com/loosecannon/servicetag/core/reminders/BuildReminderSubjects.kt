@@ -87,6 +87,10 @@ class BuildReminderSubjects(
      * derived in memory and never written (invariant 105). A missing or stale row is therefore
      * **derived, never skipped** — skipping it would drop a real obligation from the provider's list
      * for as long as the table lagged, and trusting a stale one would report yesterday's season.
+     *
+     * An **Active** subject's date is the **actionable** date, the one its status word is measured
+     * against, so a provider never says "overdue since" a date the status was not judged by. A
+     * withdrawn subject keeps the effective date it was last shown with; a parked one has none.
      */
     private suspend fun subjectOf(schedule: MaintenanceSchedule, today: LocalDate): ReminderSubject? {
         if (targetGroupIsArchived(schedule)) return null
@@ -97,8 +101,8 @@ class BuildReminderSubjects(
         val subjectState = subjectStateOf(schedule, state, status)
         val dueOn = when (subjectState) {
             is SubjectState.Parked -> null
-            SubjectState.Active, SubjectState.Completed, SubjectState.Withdrawn ->
-                state.effectiveDueOn?.let(LocalDate::parse)
+            SubjectState.Active -> state.actionableDueOn?.let(LocalDate::parse)
+            SubjectState.Completed, SubjectState.Withdrawn -> state.effectiveDueOn?.let(LocalDate::parse)
         }
         val rule = ruleFactsOf(schedule)
         val body = bodyOf(schedule, state, status, subjectState)
