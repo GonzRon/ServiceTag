@@ -19,11 +19,14 @@ import androidx.test.runner.lifecycle.Stage
  */
 internal object TestSender {
 
-    const val PACKAGE = "com.loosecannon.servicetag.testsender"
+    private const val PACKAGE = "com.loosecannon.servicetag.testsender"
     private const val ACTIVITY = "$PACKAGE.SenderActivity"
     private const val INSTALL_TASK = ":share-test-sender:installDebug"
 
-    /** How long Android may take to deliver the share and bring the intake up to RESUMED. */
+    /**
+     * How long Android may take to deliver the share and bring the intake up to RESUMED, and how
+     * long [finish] waits for the intake to be destroyed.
+     */
     private const val DELIVERY_TIMEOUT_MS = 10_000L
     private const val POLL_MS = 50L
 
@@ -35,11 +38,16 @@ internal object TestSender {
     }
 
     /**
-     * Asks the sender for one share and waits for a **new** [ShareIntakeActivity] in `RESUMED`.
-     * An intake left over from an earlier case is never mistaken for this one's.
+     * Asks the sender for one share and waits for the [ShareIntakeActivity] it reaches, in
+     * `RESUMED`. The Compose rule sees every root in the process, so an intake left alive by an
+     * earlier case is a named failure here rather than a two-match error in an assertion.
      */
     fun share(command: Command, text: String? = null): ShareIntakeActivity {
         val before = onMain { intakes(Stage.entries.filter { it != Stage.DESTROYED }) }
+        check(before.isEmpty()) {
+            "An earlier ShareIntakeActivity is still alive (${before.size}); a previous case did " +
+                "not finish its intake, so this case's assertions could read the wrong screen."
+        }
         val request = Intent()
             .setClassName(PACKAGE, ACTIVITY)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -60,7 +68,7 @@ internal object TestSender {
         return awaitMain(
             "a ShareIntakeActivity in RESUMED within ${DELIVERY_TIMEOUT_MS / 1000} s of the " +
                 "sender's ${command.wire}: Android did not deliver the share from the sender's UID",
-        ) { intakes(listOf(Stage.RESUMED)).firstOrNull { it !in before } }
+        ) { intakes(listOf(Stage.RESUMED)).firstOrNull() }
     }
 
     /** True while [activity] is resumed and not on its way out. */
