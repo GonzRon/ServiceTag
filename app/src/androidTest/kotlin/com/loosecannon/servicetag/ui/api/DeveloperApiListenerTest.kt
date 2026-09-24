@@ -54,7 +54,8 @@ private const val SETTLE_MILLIS = 5_000L
  * `viewModel(key = "developer-api")` returns the stored instance rather than calling its
  * initializer. So `model.pairingCode` is the screen's own code, and the test both types it at the
  * socket and asserts it is on screen. No seam is added to production code. (Task 6's end-to-end
- * proof does it the other way round, off a `uiautomator` dump, which is the workstation's path.)
+ * proof did it the other way round, reading the code off the screen from the workstation, a path
+ * #62 retired.)
  *
  * The production port is used deliberately: it is what the workstation forwards to, and an
  * emulator running one instrumented suite has nothing else on it.
