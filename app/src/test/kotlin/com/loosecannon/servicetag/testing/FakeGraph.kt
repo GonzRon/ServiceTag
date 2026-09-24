@@ -9,9 +9,11 @@ import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.ClosureRepository
+import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
+import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
@@ -19,6 +21,7 @@ import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
+import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
@@ -63,15 +66,18 @@ import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomClosureRepository
+import com.loosecannon.servicetag.data.room.RoomConditionRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
+import com.loosecannon.servicetag.data.room.RoomHealthSubjectRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
 import com.loosecannon.servicetag.data.room.RoomReferenceRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
+import com.loosecannon.servicetag.data.room.RoomSeasonActivationRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
@@ -127,6 +133,10 @@ class FakeGraph(
     val schedules: ScheduleRepository = RoomScheduleRepository(db.maintenanceScheduleDao())
     val closures: ClosureRepository = RoomClosureRepository(db.occurrenceClosureDao())
     val references: ReferenceRepository = RoomReferenceRepository(db.assetReferenceDao())
+    // 1.4's three data ports, mirroring `AppGraph`'s fields by name.
+    val seasonActivations: SeasonActivationRepository = RoomSeasonActivationRepository(db.seasonActivationDao())
+    val conditions: ConditionRepository = RoomConditionRepository(db.assetConditionDao())
+    val healthSubjects: HealthSubjectRepository = RoomHealthSubjectRepository(db.healthSubjectDao())
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
 
     /** `T`, injected: a test says which day it is and the engine answers the same way every run. */
@@ -135,7 +145,7 @@ class FakeGraph(
 
     /** The real recompute over the real tables, so an event write in a test rebuilds for real. */
     val recomputeSchedules: RecomputeSchedules = RecomputeSchedules(
-        schedules, scheduleStates, events, closures, groups, assets, todayPort, clock,
+        schedules, scheduleStates, events, closures, groups, assets, seasonActivations, todayPort, clock,
         zone = { ZoneOffset.UTC },
     )
 
@@ -226,18 +236,19 @@ class FakeGraph(
     /** Both halves of a set: `run().data` for the data archive, `run().plan` for the other one. */
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
+        attachments, references, seasonActivations, conditions, healthSubjects,
+        uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
     )
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
         // The real engine: "once, inside the transaction, after the last insert" is proved against
         // the seam in `:core`, so there is no counter to keep here.
         rebuildAll = { recomputeSchedules.all() },
     )
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
     )
 
     /** How many times an apply asked for the total recompute. Mirrors `AppGraph`'s no-op seam. */
@@ -245,7 +256,7 @@ class FakeGraph(
 
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
         rebuildAll = { rebuilds += 1 },
     )
     val importBackupMerge: ImportBackupMerge =

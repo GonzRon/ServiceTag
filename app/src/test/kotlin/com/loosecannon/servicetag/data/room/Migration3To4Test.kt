@@ -83,9 +83,10 @@ class Migration3To4Test {
                     c.tableNames().containsAll(JOURNAL_TABLES),
                 )
                 assertTrue("the scaffolding table must be gone", "_new_asset" !in c.tableNames())
+                // The chain now runs on to v8, whose five asset columns `Migration7To8Test` owns.
                 assertEquals(
                     V4_NEW_ASSET_COLUMNS,
-                    c.columnNamesOf("asset") - V3_ASSET_COLUMNS,
+                    c.columnNamesOf("asset") - V3_ASSET_COLUMNS - V8_NEW_ASSET_COLUMNS,
                 )
                 assertTrue(
                     "v4's indexes must exist on the new table, found ${c.indexNamesOn("asset")}",

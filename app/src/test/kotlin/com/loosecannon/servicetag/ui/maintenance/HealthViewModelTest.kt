@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import com.loosecannon.servicetag.core.model.PolicyPhase
+import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.TerminationKind
@@ -307,7 +309,10 @@ class HealthViewModelTest {
             lastTerminationKind = TerminationKind.NONE,
             computedDueOn = null,
             effectiveDueOn = null,
-            seasonActive = true,
+            policyPhase = PolicyPhase.ACTIVE,
+            actionableDueOn = null,
+            policyReason = PolicyReason.NONE,
+            quiet = false,
             computedForOn = "2026-09-22",
             computedAt = dayMillis("2026-09-22"),
         )

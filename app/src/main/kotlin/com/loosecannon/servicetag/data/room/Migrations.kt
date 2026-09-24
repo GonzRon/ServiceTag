@@ -3,6 +3,8 @@ package com.loosecannon.servicetag.data.room
 import androidx.room3.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
+import com.loosecannon.servicetag.core.model.LegacySeasonMapping
+import com.loosecannon.servicetag.core.model.SeasonBehavior
 
 /**
  * Schema v1 -> v2: the journal (spec 8). `asset` gains `template_key`, and the seven journal
@@ -372,5 +374,173 @@ val MIGRATION_6_7: Migration = object : Migration(6, 7) {
             "CREATE INDEX IF NOT EXISTS `index_asset_reference_asset_id` " +
                 "ON `asset_reference` (`asset_id`)",
         )
+    }
+}
+
+/**
+ * Schema v7 -> v8: the 1.4 data contract (spec §8.1, §8.2; master plan §3). Four steps, in this
+ * order, and nothing else:
+ *
+ *  1. `asset` gains five columns by `ADD COLUMN` — the season mode, the break's two `MM-DD` bounds,
+ *     the health aggregation and the primary health subject — each spelled as `8.json` spells it, so
+ *     the altered table and a fresh one are one schema. An asset becomes CALENDAR exactly when both
+ *     of its `MM-DD` bounds were set (S-9); no asset gets a break.
+ *  2. `maintenance_schedule` is **recreated** (the 12-step shape of [MIGRATION_2_3] and
+ *     [MIGRATION_3_4]): the three 1.3 season columns go, `service_policy`, `policy_offset_days` and
+ *     `rule_changed_at` arrive. Every row is **read, mapped through [LegacySeasonMapping.toPolicy]
+ *     and inserted** — the one table the decoder and the API also use, so there is no SQL copy of
+ *     it to drift — with `rule_changed_at` seeded from the row's own `updated_at`. Every other
+ *     column is copied as it was. The four foreign keys and the four indices come back as `8.json`
+ *     declares them.
+ *  3. `schedule_state` is dropped and recreated **empty**: it is derived, and it fills on the next
+ *     recompute. Its sort index moves from `effective_due_on` to `actionable_due_on`.
+ *  4. The three new tables, `health_subject` last because it references the recreated schedule
+ *     table.
+ *
+ * **No `updated_at` anywhere is written.** The asset UPDATE sets only `season_mode`, and the
+ * schedule copy writes each row's `updated_at` back unchanged.
+ *
+ * The recreate is safe for the reasons [MIGRATION_3_4] states: Room turns `PRAGMA foreign_keys` off
+ * for `migrate` and runs `foreign_key_check` after it, so dropping `maintenance_schedule` while
+ * `schedule_provider`, `occurrence_closure`, `schedule_local_delivery` and `asset_event.schedule_id`
+ * name it is not an error, and those clauses keep naming the table by name across the RENAME.
+ */
+val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        // 1. asset
+        connection.execSQL("ALTER TABLE `asset` ADD COLUMN `season_mode` TEXT NOT NULL DEFAULT 'YEAR_ROUND'")
+        connection.execSQL("ALTER TABLE `asset` ADD COLUMN `blackout_start_mmdd` TEXT")
+        connection.execSQL("ALTER TABLE `asset` ADD COLUMN `blackout_end_mmdd` TEXT")
+        connection.execSQL("ALTER TABLE `asset` ADD COLUMN `health_aggregation` TEXT NOT NULL DEFAULT 'WORST'")
+        connection.execSQL("ALTER TABLE `asset` ADD COLUMN `health_primary_subject_id` TEXT")
+        connection.execSQL(
+            "UPDATE `asset` SET `season_mode` = 'CALENDAR' " +
+                "WHERE `season_start_mmdd` IS NOT NULL AND `season_end_mmdd` IS NOT NULL",
+        )
+
+        // 2. maintenance_schedule, row by row through the legacy mapping
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `_new_maintenance_schedule` (`id` TEXT NOT NULL, `asset_id` TEXT, `group_id` TEXT, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `time_interval` INTEGER, `time_unit` TEXT, `time_basis` TEXT NOT NULL, `anchor_on` TEXT, `lead_days` INTEGER NOT NULL, `meter_definition_id` TEXT, `meter_interval` REAL, `anchor_meter` REAL, `meter_lead` REAL, `service_policy` TEXT NOT NULL, `policy_offset_days` INTEGER, `completion_mode` TEXT NOT NULL, `profile_id` TEXT, `reminders_enabled` INTEGER NOT NULL, `status` TEXT NOT NULL, `postponed_due_on` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `rule_changed_at` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`group_id`) REFERENCES `maintenance_group`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`meter_definition_id`) REFERENCES `measurement_definition`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`profile_id`) REFERENCES `event_profile`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        )
+        copySchedulesThroughTheLegacyMapping(connection)
+        connection.execSQL("DROP TABLE `maintenance_schedule`")
+        connection.execSQL("ALTER TABLE `_new_maintenance_schedule` RENAME TO `maintenance_schedule`")
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_maintenance_schedule_asset_id_status` ON `maintenance_schedule` (`asset_id`, `status`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_maintenance_schedule_group_id_status` ON `maintenance_schedule` (`group_id`, `status`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_maintenance_schedule_meter_definition_id` ON `maintenance_schedule` (`meter_definition_id`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_maintenance_schedule_profile_id` ON `maintenance_schedule` (`profile_id`)",
+        )
+
+        // 3. schedule_state, recreated empty
+        connection.execSQL("DROP TABLE `schedule_state`")
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `schedule_state` (`schedule_id` TEXT NOT NULL, `last_completed_on` TEXT, `last_completion_event_id` TEXT, `last_completed_meter` REAL, `current_meter` REAL, `computed_due_meter` REAL, `last_termination_effective_on` TEXT, `last_termination_kind` TEXT NOT NULL, `computed_due_on` TEXT, `effective_due_on` TEXT, `policy_phase` TEXT NOT NULL, `actionable_due_on` TEXT, `policy_reason` TEXT NOT NULL, `quiet` INTEGER NOT NULL, `computed_for_on` TEXT NOT NULL, `computed_at` INTEGER NOT NULL, PRIMARY KEY(`schedule_id`), FOREIGN KEY(`schedule_id`) REFERENCES `maintenance_schedule`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_schedule_state_actionable_due_on` ON `schedule_state` (`actionable_due_on`)",
+        )
+
+        // 4. the three new tables
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `asset_season_activation` (`id` TEXT NOT NULL, `asset_id` TEXT NOT NULL, `action` TEXT NOT NULL, `occurred_on` TEXT NOT NULL, `event_id` TEXT, `created_at` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_asset_season_activation_asset_id_occurred_on` ON `asset_season_activation` (`asset_id`, `occurred_on`)",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `asset_condition` (`id` TEXT NOT NULL, `asset_id` TEXT NOT NULL, `condition` TEXT NOT NULL, `occurred_on` TEXT NOT NULL, `occurred_time` TEXT, `tz_id` TEXT NOT NULL, `reason` TEXT NOT NULL, `event_id` TEXT, `created_at` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_asset_condition_asset_id_occurred_on` ON `asset_condition` (`asset_id`, `occurred_on`)",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `health_subject` (`id` TEXT NOT NULL, `asset_id` TEXT NOT NULL, `name` TEXT NOT NULL, `kind` TEXT NOT NULL, `driver` TEXT NOT NULL, `schedule_id` TEXT, `baseline_profile_id` TEXT, `nominal_until_days` INTEGER NOT NULL, `warning_from_days` INTEGER NOT NULL, `critical_from_days` INTEGER NOT NULL, `weight` INTEGER NOT NULL DEFAULT 1, `sort_order` INTEGER NOT NULL, `archived_at` INTEGER, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`schedule_id`) REFERENCES `maintenance_schedule`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_health_subject_asset_id` ON `health_subject` (`asset_id`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_health_subject_schedule_id` ON `health_subject` (`schedule_id`)",
+        )
+    }
+}
+
+/** A column `MIGRATION_7_8` copies unchanged, and the storage class it is read and bound as. */
+private enum class Kept { TEXT, INTEGER, REAL }
+
+/** The schedule columns v7 and v8 share, in `8.json`'s order. The three season columns are not here. */
+private val KEPT_SCHEDULE_COLUMNS: List<Pair<String, Kept>> = listOf(
+    "id" to Kept.TEXT,
+    "asset_id" to Kept.TEXT,
+    "group_id" to Kept.TEXT,
+    "title" to Kept.TEXT,
+    "description" to Kept.TEXT,
+    "time_interval" to Kept.INTEGER,
+    "time_unit" to Kept.TEXT,
+    "time_basis" to Kept.TEXT,
+    "anchor_on" to Kept.TEXT,
+    "lead_days" to Kept.INTEGER,
+    "meter_definition_id" to Kept.TEXT,
+    "meter_interval" to Kept.REAL,
+    "anchor_meter" to Kept.REAL,
+    "meter_lead" to Kept.REAL,
+    "completion_mode" to Kept.TEXT,
+    "profile_id" to Kept.TEXT,
+    "reminders_enabled" to Kept.INTEGER,
+    "status" to Kept.TEXT,
+    "postponed_due_on" to Kept.TEXT,
+    "created_at" to Kept.INTEGER,
+    "updated_at" to Kept.INTEGER,
+)
+
+/**
+ * Step 2's copy: each v7 row is read, its season triple mapped through [LegacySeasonMapping.toPolicy]
+ * with `hasTimeRule = time_interval IS NOT NULL`, and the row inserted into `_new_maintenance_schedule`
+ * with every kept column as it was and `rule_changed_at = updated_at`. A `season_behavior` outside
+ * the enum cannot be here — the column was written from it — and would throw, as a corrupt row does.
+ */
+private fun copySchedulesThroughTheLegacyMapping(connection: SQLiteConnection) {
+    val kept = KEPT_SCHEDULE_COLUMNS.joinToString(", ") { "`${it.first}`" }
+    val insert = "INSERT INTO `_new_maintenance_schedule` ($kept, `service_policy`, `policy_offset_days`, " +
+        "`rule_changed_at`) VALUES (${KEPT_SCHEDULE_COLUMNS.joinToString(", ") { "?" }}, ?, ?, ?)"
+    val select = "SELECT $kept, `season_behavior`, `season_reentry`, `season_reentry_offset_days` " +
+        "FROM `maintenance_schedule`"
+    connection.prepare(select).use { read ->
+        connection.prepare(insert).use { write ->
+            while (read.step()) {
+                write.clearBindings()
+                KEPT_SCHEDULE_COLUMNS.forEachIndexed { i, (_, kind) ->
+                    val at = i + 1
+                    when {
+                        read.isNull(i) -> write.bindNull(at)
+                        kind == Kept.TEXT -> write.bindText(at, read.getText(i))
+                        kind == Kept.INTEGER -> write.bindLong(at, read.getLong(i))
+                        else -> write.bindDouble(at, read.getDouble(i))
+                    }
+                }
+                val base = KEPT_SCHEDULE_COLUMNS.size
+                val timeInterval = KEPT_SCHEDULE_COLUMNS.indexOfFirst { it.first == "time_interval" }
+                val updatedAt = KEPT_SCHEDULE_COLUMNS.indexOfFirst { it.first == "updated_at" }
+                val policy = LegacySeasonMapping.toPolicy(
+                    behavior = SeasonBehavior.valueOf(read.getText(base)),
+                    reentry = if (read.isNull(base + 1)) null else read.getText(base + 1),
+                    offsetDays = if (read.isNull(base + 2)) null else read.getLong(base + 2).toInt(),
+                    hasTimeRule = !read.isNull(timeInterval),
+                )
+                write.bindText(base + 1, policy.servicePolicy.name)
+                val offset = policy.policyOffsetDays
+                if (offset == null) write.bindNull(base + 2) else write.bindLong(base + 2, offset.toLong())
+                write.bindLong(base + 3, read.getLong(updatedAt))
+                write.step()
+                write.reset()
+            }
+        }
     }
 }

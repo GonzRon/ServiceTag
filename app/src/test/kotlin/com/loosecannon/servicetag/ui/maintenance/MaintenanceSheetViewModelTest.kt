@@ -11,7 +11,7 @@ import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
@@ -27,6 +27,7 @@ import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.routeForDeepLink
 import com.loosecannon.servicetag.routeForQuickCompletion
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.calendar
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.meterDefinitionOf
@@ -139,7 +140,7 @@ class MaintenanceSheetViewModelTest {
             seasonStartMmdd = seasonStartMmdd,
             seasonEndMmdd = seasonEndMmdd,
         ),
-    ).id
+    ).let { if (seasonStartMmdd != null) graph.calendar(it) else it }.id
 
     private fun roundMembership() = ScanRoundMembership { scheduleId ->
         graph.schedules.get(scheduleId)?.let { graph.recomputeSchedules.occurrenceOf(it) }
@@ -180,7 +181,7 @@ class MaintenanceSheetViewModelTest {
         seed(scheduleOf("s-soon", assetId = asset.value, title = "Belt check", anchorOn = "2026-04-20", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR, leadDays = 14))
         seed(scheduleOf("s-ok", assetId = asset.value, title = "Deep clean", anchorOn = "2026-12-01", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR, leadDays = 0))
         seed(scheduleOf("s-paused", assetId = asset.value, title = "Winter store", status = ScheduleStatus.PAUSED))
-        seed(scheduleOf("s-season", assetId = asset.value, title = "Season job", anchorOn = "2026-01-01", seasonBehavior = SeasonBehavior.FOLLOW_ASSET))
+        seed(scheduleOf("s-season", assetId = asset.value, title = "Season job", anchorOn = "2026-01-01", servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0))
         seed(scheduleOf("s-archived", assetId = asset.value, title = "Retired job", anchorOn = "2026-01-01", leadDays = 0, status = ScheduleStatus.ARCHIVED))
         // The other half of the same D-18a row: DUE, but its reminders are off (blocking 3).
         seed(

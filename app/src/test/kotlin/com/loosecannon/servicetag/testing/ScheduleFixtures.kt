@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.testing
 
+import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionId
@@ -18,9 +19,10 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.SeasonMode
 import java.time.LocalDate
 import java.time.ZoneOffset
 
@@ -45,6 +47,16 @@ import java.time.ZoneOffset
 fun dayMillis(date: String): Long =
     LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
 
+/**
+ * [asset], stored as CALENDAR: the mode schema 8 gives an asset with both `MM-DD` bounds, as the
+ * 7 -> 8 migration and the format-7 decoder do. The asset command does not set the mode yet, so a
+ * fixture that created a seasonal asset through `createAsset` says CALENDAR here.
+ */
+suspend fun FakeGraph.calendar(asset: Asset): Asset {
+    check(asset.seasonStartMmdd != null && asset.seasonEndMmdd != null) { "a CALENDAR asset has both bounds" }
+    return asset.copy(seasonMode = SeasonMode.CALENDAR).also { assets.upsert(it) }
+}
+
 fun scheduleOf(
     id: String,
     assetId: String? = null,
@@ -59,7 +71,8 @@ fun scheduleOf(
     meterInterval: Double? = null,
     anchorMeter: Double? = null,
     meterLead: Double? = null,
-    seasonBehavior: SeasonBehavior = SeasonBehavior.IGNORE,
+    servicePolicy: ServicePolicy = ServicePolicy.CONTINUOUS,
+    policyOffsetDays: Int? = null,
     completionMode: CompletionMode = CompletionMode.QUICK,
     status: ScheduleStatus = ScheduleStatus.ACTIVE,
     postponedDueOn: String? = null,
@@ -79,9 +92,8 @@ fun scheduleOf(
     meterInterval = meterInterval,
     anchorMeter = anchorMeter,
     meterLead = meterLead,
-    seasonBehavior = seasonBehavior,
-    seasonReentry = null,
-    seasonReentryOffsetDays = null,
+    servicePolicy = servicePolicy,
+    policyOffsetDays = policyOffsetDays,
     completionMode = completionMode,
     profileId = null,
     remindersEnabled = true,
@@ -89,6 +101,7 @@ fun scheduleOf(
     postponedDueOn = postponedDueOn,
     createdAt = dayMillis(createdOn),
     updatedAt = dayMillis(createdOn),
+    ruleChangedAt = dayMillis(createdOn),
     providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
 )
 

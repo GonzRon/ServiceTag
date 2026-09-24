@@ -35,14 +35,17 @@ import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomClosureRepository
+import com.loosecannon.servicetag.data.room.RoomConditionRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
+import com.loosecannon.servicetag.data.room.RoomHealthSubjectRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
 import com.loosecannon.servicetag.data.room.RoomReferenceRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
+import com.loosecannon.servicetag.data.room.RoomSeasonActivationRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
@@ -80,23 +83,27 @@ class RestoreProofTest {
         val closures = RoomClosureRepository(db.occurrenceClosureDao())
         val references = RoomReferenceRepository(db.assetReferenceDao())
         val scheduleStates = RoomScheduleStateRepository(db.scheduleStateDao())
+        val seasonActivations = RoomSeasonActivationRepository(db.seasonActivationDao())
+        val conditions = RoomConditionRepository(db.assetConditionDao())
+        val healthSubjects = RoomHealthSubjectRepository(db.healthSubjectDao())
         val uow = RoomUnitOfWork(db)
         // The restore's rebuild seam, wired to the real engine over the same database: the proof
         // is about the canonical rows, and derived state is rebuilt after any import.
         val recompute = RecomputeSchedules(
-            schedules, scheduleStates, events, closures, groups, assets,
+            schedules, scheduleStates, events, closures, groups, assets, seasonActivations,
             Today { LocalDate.parse("2026-02-10") }, Clock { FIXED_NOW }, zone = { ZoneOffset.UTC },
         )
         // This proof is about the data archive. The set's artifacts half carries bytes, and
         // bytes are what `BackupViewModelTest` and `ArtifactsCodecTest` prove.
         val export = ExportBackupSet(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, references, uow,
+            attachments, references, seasonActivations, conditions, healthSubjects, uow,
             IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
         )
         val import = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, references, FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
+            attachments, references, seasonActivations, conditions, healthSubjects,
+            FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
             rebuildAll = { recompute.all() },
         )
     }

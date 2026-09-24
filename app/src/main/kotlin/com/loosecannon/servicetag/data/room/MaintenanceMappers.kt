@@ -9,6 +9,8 @@ import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
+import com.loosecannon.servicetag.core.model.PolicyPhase
+import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
@@ -16,7 +18,7 @@ import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TerminationKind
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.data.room.dao.GroupWithMembers
@@ -93,9 +95,8 @@ fun ScheduleWithProviders.toDomain(): MaintenanceSchedule = MaintenanceSchedule(
     meterInterval = schedule.meterInterval,
     anchorMeter = schedule.anchorMeter,
     meterLead = schedule.meterLead,
-    seasonBehavior = enumValueOf<SeasonBehavior>(schedule.seasonBehavior),
-    seasonReentry = schedule.seasonReentry,
-    seasonReentryOffsetDays = schedule.seasonReentryOffsetDays,
+    servicePolicy = enumValueOf<ServicePolicy>(schedule.servicePolicy),
+    policyOffsetDays = schedule.policyOffsetDays,
     completionMode = enumValueOf<CompletionMode>(schedule.completionMode),
     profileId = schedule.profileId?.let(::ProfileId),
     remindersEnabled = schedule.remindersEnabled,
@@ -103,6 +104,7 @@ fun ScheduleWithProviders.toDomain(): MaintenanceSchedule = MaintenanceSchedule(
     postponedDueOn = schedule.postponedDueOn,
     createdAt = schedule.createdAt,
     updatedAt = schedule.updatedAt,
+    ruleChangedAt = schedule.ruleChangedAt,
     providers = providers.sortedBy { it.provider }.map { it.toDomain() },
 )
 
@@ -134,9 +136,8 @@ fun MaintenanceSchedule.toEntity(): MaintenanceScheduleEntity = MaintenanceSched
     meterInterval = meterInterval,
     anchorMeter = anchorMeter,
     meterLead = meterLead,
-    seasonBehavior = seasonBehavior.name,
-    seasonReentry = seasonReentry,
-    seasonReentryOffsetDays = seasonReentryOffsetDays,
+    servicePolicy = servicePolicy.name,
+    policyOffsetDays = policyOffsetDays,
     completionMode = completionMode.name,
     profileId = profileId?.value,
     remindersEnabled = remindersEnabled,
@@ -144,6 +145,7 @@ fun MaintenanceSchedule.toEntity(): MaintenanceScheduleEntity = MaintenanceSched
     postponedDueOn = postponedDueOn,
     createdAt = createdAt,
     updatedAt = updatedAt,
+    ruleChangedAt = ruleChangedAt,
 )
 
 fun ScheduleProviderRow.toEntity(scheduleId: ScheduleId): ScheduleProviderEntity =
@@ -180,7 +182,10 @@ fun ScheduleStateEntity.toDomain(): ScheduleState = ScheduleState(
     lastTerminationKind = enumValueOf<TerminationKind>(lastTerminationKind),
     computedDueOn = computedDueOn,
     effectiveDueOn = effectiveDueOn,
-    seasonActive = seasonActive,
+    policyPhase = enumValueOf<PolicyPhase>(policyPhase),
+    actionableDueOn = actionableDueOn,
+    policyReason = enumValueOf<PolicyReason>(policyReason),
+    quiet = quiet,
     computedForOn = computedForOn,
     computedAt = computedAt,
 )
@@ -196,7 +201,10 @@ fun ScheduleState.toEntity(): ScheduleStateEntity = ScheduleStateEntity(
     lastTerminationKind = lastTerminationKind.name,
     computedDueOn = computedDueOn,
     effectiveDueOn = effectiveDueOn,
-    seasonActive = seasonActive,
+    policyPhase = policyPhase.name,
+    actionableDueOn = actionableDueOn,
+    policyReason = policyReason.name,
+    quiet = quiet,
     computedForOn = computedForOn,
     computedAt = computedAt,
 )

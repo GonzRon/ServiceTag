@@ -59,11 +59,18 @@ class ReferenceMigrationTest {
             }
 
             // Every seeded row, field for field, before and after. No pre-existing table gains a
-            // column here, so the comparison is the whole row on both sides.
+            // column in *this* migration, but the chain now runs on to v8, which appends asset
+            // columns and replaces the schedule's three season columns — `Migration7To8Test` owns
+            // those. So the comparison is every column the row has on both sides.
             val after = withConnection(migrated) { c ->
                 SEEDED.associateWith { (t, id) -> c.rowOf(t, id) }
             }
-            assertEquals(before, after)
+            fun names(row: List<String>) = row.map { it.substringBefore('=') }.toSet()
+            val shared = SEEDED.associateWith { key -> names(before.getValue(key)) intersect names(after.getValue(key)) }
+            assertEquals(
+                before.mapValues { (key, row) -> row.filter { it.substringBefore('=') in shared.getValue(key) } },
+                after.mapValues { (key, row) -> row.filter { it.substringBefore('=') in shared.getValue(key) } },
+            )
 
             // and the shape, against what Room builds from the entities with no migration at all
             val new = openFresh(fresh)
@@ -85,7 +92,7 @@ class ReferenceMigrationTest {
                     // A v7 table added later without a line in the loop below fails here first.
                     assertEquals(
                         "UNTOUCHED must name every table the migration found",
-                        m.tableNames() - REFERENCE - ROOM_INTERNAL,
+                        m.tableNames() - REFERENCE - ROOM_INTERNAL - V8_TABLES,
                         UNTOUCHED,
                     )
                     assertEquals("asset_reference columns", f.columnsOf(REFERENCE), m.columnsOf(REFERENCE))

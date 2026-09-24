@@ -8,7 +8,7 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.usecase.AssetCommand
@@ -223,11 +223,11 @@ class ScheduleEditViewModelTest {
 
         // The three offers a group target does not get. Each setter is a no-op for one.
         vm.onMeterDefinition(meter.id)
-        vm.onSeason(SeasonBehavior.FOLLOW_ASSET)
+        vm.onSeason(ServicePolicy.IN_SERVICE_AT_START)
         vm.onCompletionMode(CompletionMode.FORM)
         val form = vm.state.value
         assertNull("no meter rule on a group target", form.meterDefinitionId)
-        assertEquals(SeasonBehavior.IGNORE, form.seasonBehavior)
+        assertEquals(ServicePolicy.CONTINUOUS, form.servicePolicy)
         assertEquals(CompletionMode.QUICK, form.completionMode)
         assertNull("and so no profile", form.profileId)
         assertFalse(form.hasMeterRule)
@@ -239,7 +239,7 @@ class ScheduleEditViewModelTest {
         val stored = graph.schedules.get(saved.await())!!
         assertNull(stored.meterDefinitionId)
         assertNull(stored.profileId)
-        assertEquals(SeasonBehavior.IGNORE, stored.seasonBehavior)
+        assertEquals(ServicePolicy.CONTINUOUS, stored.servicePolicy)
         assertEquals(CompletionMode.QUICK, stored.completionMode)
 
         // The same command constructed by hand is refused, so the rule is not the UI's alone.
@@ -255,7 +255,8 @@ class ScheduleEditViewModelTest {
                     anchorOn = "2026-01-01",
                     meterDefinitionId = meter.id,
                     meterInterval = 100.0,
-                    seasonBehavior = SeasonBehavior.FOLLOW_ASSET,
+                    servicePolicy = ServicePolicy.IN_SERVICE_AT_START,
+                    policyOffsetDays = 0,
                     completionMode = CompletionMode.FORM,
                 ),
             )
@@ -561,8 +562,8 @@ class ScheduleEditViewModelTest {
         val vm = viewModel(targetGroupId = group.id.value)
         vm.state.first { it.loaded }
 
-        vm.onSeason(SeasonBehavior.FOLLOW_ASSET)
-        assertEquals("SEASON is unreachable: the setter refuses it", SeasonBehavior.IGNORE, vm.state.value.seasonBehavior)
+        vm.onSeason(ServicePolicy.IN_SERVICE_AT_START)
+        assertEquals("SEASON is unreachable: the setter refuses it", ServicePolicy.CONTINUOUS, vm.state.value.servicePolicy)
         vm.onCompletionMode(CompletionMode.FORM)
         assertEquals("COMPLETION_MODE likewise", CompletionMode.QUICK, vm.state.value.completionMode)
         // PROVIDER: not settable from the screen at all, and the only value it can hold is legal.

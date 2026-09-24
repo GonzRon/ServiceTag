@@ -14,7 +14,7 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
@@ -101,7 +101,7 @@ fun fieldOf(problem: ScheduleProblem): String = when (problem) {
  * that opened the editor — and an edit keeps the stored target, so it is never editable afterwards.
  *
  * The three [isGroup] hides are the D-12 and D-28 rules made structural: a group target draws no
- * meter block, no profile picker and no `FOLLOW_ASSET` option at all.
+ * meter block, no profile picker and no season choice but CONTINUOUS.
  */
 data class ScheduleEditState(
     val target: ScheduleTarget? = null,
@@ -117,7 +117,12 @@ data class ScheduleEditState(
     val meterInterval: String = "",
     val anchorMeter: String = "",
     val meterLead: String = "",
-    val seasonBehavior: SeasonBehavior = SeasonBehavior.IGNORE,
+    /**
+     * One of the two policies the shipped question offers: IN_SERVICE_AT_START (offset 0) for
+     * "pause with the season" and CONTINUOUS for "year round". A stored row with any other
+     * non-CONTINUOUS policy opens as the first, as 1.3 opened every FOLLOW_ASSET row.
+     */
+    val servicePolicy: ServicePolicy = ServicePolicy.CONTINUOUS,
     val completionMode: CompletionMode = CompletionMode.QUICK,
     val profileId: ProfileId? = null,
     val remindersEnabled: Boolean = true,
@@ -253,7 +258,11 @@ class ScheduleEditViewModel(
         meterInterval = row.meterInterval?.let(::plainNumber).orEmpty(),
         anchorMeter = row.anchorMeter?.let(::plainNumber).orEmpty(),
         meterLead = row.meterLead?.let(::plainNumber).orEmpty(),
-        seasonBehavior = row.seasonBehavior,
+        servicePolicy = if (row.servicePolicy == ServicePolicy.CONTINUOUS) {
+            ServicePolicy.CONTINUOUS
+        } else {
+            ServicePolicy.IN_SERVICE_AT_START
+        },
         completionMode = row.completionMode,
         profileId = row.profileId,
         remindersEnabled = row.remindersEnabled,
@@ -313,9 +322,9 @@ class ScheduleEditViewModel(
 
     fun onMeterLead(value: String) = clearing(ScheduleField.METER_LEAD) { it.copy(meterLead = value) }
 
-    /** `FOLLOW_ASSET` is unreachable for a group target (D-28): a group has no season window. */
-    fun onSeason(value: SeasonBehavior) = clearing(ScheduleField.SEASON) { form ->
-        if (form.isGroup && value == SeasonBehavior.FOLLOW_ASSET) form else form.copy(seasonBehavior = value)
+    /** Only CONTINUOUS is reachable for a group target (D-28): a group has no season. */
+    fun onSeason(value: ServicePolicy) = clearing(ScheduleField.SEASON) { form ->
+        if (form.isGroup && value != ServicePolicy.CONTINUOUS) form else form.copy(servicePolicy = value)
     }
 
     /**
@@ -461,7 +470,9 @@ class ScheduleEditViewModel(
             // form marks the field (carry-forward (c): non-negative in the editor, now by refusal
             // rather than by erasure).
             meterLead = meterLead.trim().toDoubleOrNull().takeIf { meter != null },
-            seasonBehavior = if (group != null) SeasonBehavior.IGNORE else seasonBehavior,
+            servicePolicy = if (group != null) ServicePolicy.CONTINUOUS else servicePolicy,
+            // "Pause with the asset's season" is AT_START at the start itself.
+            policyOffsetDays = if (group == null && servicePolicy == ServicePolicy.IN_SERVICE_AT_START) 0 else null,
             completionMode = if (group != null) CompletionMode.QUICK else completionMode,
             profileId = profileId.takeIf { group == null && completionMode == CompletionMode.FORM },
             remindersEnabled = remindersEnabled,
