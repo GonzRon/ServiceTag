@@ -153,10 +153,28 @@ class BackupContentCheckTest {
         val cases = listOf(
             conditionOf("c1", occurredOn = "2026-02-30") to "BadDate(field=occurredOn)",
             conditionOf("c1", occurredTime = "7:45") to "BadTime(field=occurredTime)",
-            conditionOf("c1", tzId = "Nowhere/Here") to "BadTimeZone(field=tzId)",
+            conditionOf("c1", tzId = "not a zone") to "BadTimeZone(field=tzId)",
             conditionOf("c1", reason = "r".repeat(501)) to "ReasonTooLong(limit=500)",
         )
         for ((row, problem) in cases) assertRefused(data(conditions = listOf(row)), "assetConditions: condition c1", problem)
+    }
+
+    /**
+     * The controller's ruling on B06-F7: a condition's zone is judged within the archive's own contents,
+     * never against the importing device's zone data. A well-formed region id that no zone data here
+     * knows — one only the archive holds — restores, row for row; only a malformed id is refused.
+     */
+    @Test
+    fun aConditionsZoneIsJudgedByTheArchiveNotThisDevice() {
+        val elsewhere = conditionOf("c1", tzId = "Mars/Olympus_Mons")
+        val archive = data(conditions = listOf(elsewhere))
+
+        val restored = BackupCodec.decode(archiveOf(archive)).data.assetConditions.map { it.toDomain() }
+        assertEquals(listOf(elsewhere), restored)
+        assertRefused(
+            data(conditions = listOf(conditionOf("c1", tzId = "UTC+99"))), "assetConditions: condition c1",
+            "BadTimeZone(field=tzId)",
+        )
     }
 
     /** An activation's date is an ISO date, as `RecordSeasonActivation` requires. */

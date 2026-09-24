@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.usecase.policyProblems
 import com.loosecannon.servicetag.core.usecase.subjectNameProblem
 import com.loosecannon.servicetag.core.usecase.thresholdsProblem
 import com.loosecannon.servicetag.core.usecase.weightProblem
+import com.loosecannon.servicetag.core.usecase.wellFormedZone
 
 /**
  * **The format-8 content check**: one pass over a decoded archive, after the strict decode and the
@@ -22,7 +23,8 @@ import com.loosecannon.servicetag.core.usecase.weightProblem
  *   schedule, a non-CONTINUOUS policy on a group target — B04's `policyProblems`, and nothing of its own;
  * - an asset's break covering every day of some year (`breakProblems`; its shape is the graph check's);
  * - a health subject's name, thresholds and weight;
- * - a condition's date, time, zone and reason; an activation's date.
+ * - a condition's date, time, zone and reason — the zone by its form alone, never by this device's zone
+ *   data (the controller's ruling on B06-F7); an activation's date.
  *
  * What depends on **other rows or on today** is deliberately not asked: a subject naming an archived
  * or retargeted schedule (NOT TRACKED, which a merge may bring — plan decision 17), a TRACK_ONE
@@ -68,7 +70,9 @@ internal object BackupContentCheck {
             val row = dto.toDomain()
             refuse(
                 "assetConditions", "condition", row.id,
-                conditionFactProblems(row.occurredOn, row.occurredTime, row.tzId, row.reason),
+                conditionFactProblems(
+                    row.occurredOn, row.occurredTime, row.tzId, row.reason, zone = ::wellFormedZone,
+                ),
             )
         }
         data.seasonActivations.forEach { dto ->

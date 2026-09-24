@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import java.time.DateTimeException
 import java.time.ZoneId
+import java.time.zone.ZoneRulesException
 
 /**
  * One condition to record (spec §5; master plan §9). [occurredOn] defaults to today and may not be
@@ -41,7 +42,10 @@ sealed interface ConditionProblem {
     /** Not an `HH:MM` time of day. */
     data class BadTime(val field: String) : ConditionProblem
 
-    /** Not a zone id the platform can resolve. */
+    /**
+     * Not a zone id: malformed, or — for a condition recorded here — one this device's time-zone
+     * data does not know. A restored row is judged by the id's form alone ([wellFormedZone]).
+     */
     data class BadTimeZone(val field: String) : ConditionProblem
 }
 
@@ -52,34 +56,47 @@ class ConditionValidation(val problems: List<ConditionProblem>) :
 /** The most characters a condition's reason may hold (spec §5.1). */
 const val MAX_CONDITION_REASON = 500
 
-private val TIME = Regex("^\\d{2}:\\d{2}$")
-
 /**
- * The shape of one condition fact, whatever wrote it: an ISO date, an `HH:MM` time or none, a zone
- * the platform resolves, and a reason of at most [MAX_CONDITION_REASON] characters. [RecordCondition]
- * asks this for the command it was sent, and the format-8 content check asks it for every restored
- * row, so a restore refuses exactly the shapes the command refuses (master plan §5, B03's concern 3).
- * Whether the date is in the future is [RecordCondition]'s alone: it needs a today.
+ * The shape of one condition fact, whatever wrote it: an ISO date, an `HH:MM` time or none, a zone id
+ * [zone] accepts, and a reason of at most [MAX_CONDITION_REASON] characters. [RecordCondition] asks
+ * this for the command it was sent, with [resolvesHere]; the format-8 content check asks it for every
+ * restored row, with [wellFormedZone], so a restore refuses the shapes the command refuses (master
+ * plan §5, B03's concern 3) but never judges a row by the importing device's zone data. Whether the
+ * date is in the future is [RecordCondition]'s alone: it needs a today.
  */
 internal fun conditionFactProblems(
     occurredOn: String,
     occurredTime: String?,
     tzId: String,
     reason: String,
+    zone: (String) -> Boolean,
 ): List<ConditionProblem> {
     val problems = mutableListOf<ConditionProblem>()
     if (parseDate(occurredOn) == null) problems += ConditionProblem.BadDate("occurredOn")
     if (occurredTime != null && !isTimeOfDay(occurredTime)) problems += ConditionProblem.BadTime("occurredTime")
-    if (!isZoneId(tzId)) problems += ConditionProblem.BadTimeZone("tzId")
+    if (!zone(tzId)) problems += ConditionProblem.BadTimeZone("tzId")
     if (reason.length > MAX_CONDITION_REASON) problems += ConditionProblem.ReasonTooLong()
     return problems
 }
 
-private fun isTimeOfDay(value: String): Boolean =
-    TIME.matches(value) && value.substring(0, 2).toInt() < 24 && value.substring(3, 5).toInt() < 60
-
-private fun isZoneId(value: String): Boolean = try {
+/** A zone this device resolves: the rule for a condition recorded here, in the zone it is recorded in. */
+internal fun resolvesHere(value: String): Boolean = try {
     ZoneId.of(value)
+    true
+} catch (e: DateTimeException) {
+    false
+}
+
+/**
+ * A well-formed zone id, whether or not this device's time-zone data knows the region: the rule for a
+ * restored row (the controller's ruling on B06-F7). The archive is judged by its own contents — a
+ * region added by newer zone data than this device carries is still the zone the row was recorded
+ * in, and nothing computes with it — so only an id no zone data could ever hold is refused.
+ */
+internal fun wellFormedZone(value: String): Boolean = try {
+    ZoneId.of(value)
+    true
+} catch (e: ZoneRulesException) {
     true
 } catch (e: DateTimeException) {
     false

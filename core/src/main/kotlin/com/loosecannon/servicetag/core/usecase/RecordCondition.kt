@@ -46,7 +46,8 @@ class RecordCondition(
         val tzId = cmd.tzId.trim()
         val reason = cmd.reason.trim()
 
-        val problems = conditionFactProblems(occurredOn, occurredTime, tzId, reason).toMutableList()
+        val problems =
+            conditionFactProblems(occurredOn, occurredTime, tzId, reason, ::resolvesHere).toMutableList()
         val on = parseDate(occurredOn)
         if (on != null && on > today.localDate()) problems.add(0, ConditionProblem.DateInFuture)
         cmd.eventId?.let { id ->
