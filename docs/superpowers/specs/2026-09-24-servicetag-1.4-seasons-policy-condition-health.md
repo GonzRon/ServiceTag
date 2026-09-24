@@ -2,7 +2,7 @@
 
 ## 0. Status and the owner's record
 
-**Status: revision 2.2, 2026-09-24 — RATIFIED FOR PLANNING.** The owner approved the architecture, ratified strings S1–S142 as written, and ruled every gate item. Nothing in this document is open for the owner: the single proposed string, S143, is optional, and S103 is shown without it.
+**Status: revision 2.2, 2026-09-24 — RATIFIED FOR PLANNING.** The owner approved the architecture, ratified strings S1–S142 as written, and ruled every gate item. Nothing in this document is open for the owner; S143 was ratified as written later the same day (O-9).
 
 The programme covers three issues:
 - **#14:** operating seasons, with calendar and manual activation.
@@ -38,6 +38,7 @@ Next step: the 1.4.0 master plan and briefs (versionCode 16, schema 8, format 8,
 | O-6 | Snooze delays the reminder and never improves health; Postpone reassesses this occurrence's canonical actionable due date and may restart maintenance-overdue health; no postponement journal in 1.4 | §7.1, §9.1, §10.1, inv. 131 |
 | O-7 | Meter-only schedules: phase-only IN_SERVICE and quiet, no date effect, no PRE_SERVICE, no non-zero offset, a crossed threshold stays genuinely DUE | §4.1, inv. 95 |
 | O-8 | CRITICAL health alone never opens the scan sheet; it rides along; DOWN/DEGRADED on the asset or a component may open it | §10.1, inv. 123 |
+| O-9 | S143 ratified as written: the driver line of a postponed occurrence | §10.1, §10.7 |
 
 Of the archaeology's 29 §I recommendations:
 - 27 are **RATIFIED (I-n, 2026-09-24)** where they are used.
@@ -45,7 +46,7 @@ Of the archaeology's 29 §I recommendations:
 - I-23 is replaced by Q-9.
 
 **Owner rulings at the gate (closed record, 2026-09-24).**
-1. Strings S1–S142 — RATIFIED as written (O-1).
+1. Strings S1–S143 — RATIFIED as written (O-1; S143 under O-9).
 2. D12 colour families — APPROVED (O-2).
 3. YEAR_ROUND with a break, and RS-4 as 409 — CONFIRMED (O-3).
 4. A break that fills the whole pre-season gap — CONFIRMED as the no-window-left case only (O-4).
@@ -790,7 +791,7 @@ The aggregate never decides visibility (B-3).
 - DOWN or DEGRADED on the asset or a component may open it, because condition is an at-the-unit concern (O-8).
 - Otherwise the scan opens asset detail, which shows the same lines.
 
-**Snooze and Postpone** keep their 1.2 meanings on the sheet and on schedule detail (O-6). Snooze delays the reminder and never improves health. Postpone moves the canonical due date and may restart maintenance-overdue health; while an occurrence is postponed and not yet late against the new date, its driver line is S143 (proposed), else S103.
+**Snooze and Postpone** keep their 1.2 meanings on the sheet and on schedule detail (O-6). Snooze delays the reminder and never improves health. Postpone moves the canonical due date and may restart maintenance-overdue health; while an occurrence is postponed and not yet late against the new date, its driver line is S143, else S103.
 
 The scan writes nothing (spec 1.2 inv. 57). "Change condition" offers the three options, "What is wrong? (optional)" and "When did this change?" (today by default, past dates allowed). Cancel writes nothing.
 
@@ -868,9 +869,9 @@ The three semantic families are approved (O-2): normal/operational/nominal in th
 
 Literal token values are design-token choices under the existing contrast requirements, not new product-state meanings (O-2).
 
-### 10.7 Strings ledger (S1–S142 RATIFIED, 2026-09-24)
+### 10.7 Strings ledger (S1–S143 RATIFIED, 2026-09-24)
 
-**Every row S1–S142 is RATIFIED as written (O-1, 2026-09-24).** S143 is the one proposal, arising from O-6, and is marked to ratify; without it the UI shows S103. `<…>` marks a substitution, and "(re)" marks a shipped word re-ratified in a new role. Shipped words reused unchanged (Name, Cancel, Not now, Maintenance, Open asset) are not listed.
+**Every row S1–S143 is RATIFIED as written (O-1 and O-9, 2026-09-24).** S143 arose from O-6 and is drawn while an occurrence is postponed and not yet late against its new date; otherwise the UI shows S103. `<…>` marks a substitution, and "(re)" marks a shipped word re-ratified in a new role. Shipped words reused unchanged (Name, Cancel, Not now, Maintenance, Open asset) are not listed.
 
 | # | Surface | String |
 |---|---|---|
@@ -1016,7 +1017,7 @@ Literal token values are design-token choices under the existing contrast requir
 | S140 | link-guard dialog | This schedule drives the health subject <name>. Archive that subject as well? |
 | S141 | link-guard confirm | Archive both |
 | S142 | driver line | Not tracked: the linked schedule has no date rule or belongs to another asset. |
-| S143 | driver line (PROPOSED, to ratify) | <schedule> was postponed to <date> |
+| S143 | driver line, postponed occurrence (O-9) | <schedule> was postponed to <date> |
 
 The 142 ratified rows are 138 new plus 4 re-ratified (S29, S32, S33, S37); S123, S124, S128, S132 and S136 each ratify one set of words. The owner's notes are applied:
 - Nothing implies all maintenance stops (S38, S43, S45, S62, S80).
