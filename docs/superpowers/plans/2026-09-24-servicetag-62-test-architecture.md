@@ -166,3 +166,10 @@ either edits this test in the open or fails CI.
 Add a fourth boundary case. Type text through adb. Touch a phone. Drive DocumentsUI, Gboard or
 MediaStore. Change any sentence the app shows. Add the sender to any release artifact. Rebuild a
 counts helper or a Developer API re-pairing loop. Expand into 1.4 product work.
+
+## Corrections found in implementation (2026-09-24)
+
+- **The `FileProvider` authority.** The brief named `com.loosecannon.servicetag.testsender.fixtures` and claimed I-9 did not apply. It does: `StreamSourcePolicy` treats each own authority as a **namespace** (`host == it || host.startsWith("$it.")`, fed with `BuildConfig.APPLICATION_ID`), so everything under `com.loosecannon.servicetag.` is refused with "That file cannot be accepted from the app that shared it." — proven on the emulator. Corrected: the authority is **`com.loosecannon.sharetestsender.fixtures`**; the applicationId `com.loosecannon.servicetag.testsender` stays.
+- **`send_bad_grant`.** "No grant flag and no ClipData" cannot be refused on this platform: with no ClipData, `Intent.migrateExtraStreamToClipData` (from `Instrumentation.execStartActivity`) copies `EXTRA_STREAM` into ClipData and sets `FLAG_GRANT_READ_URI_PERMISSION` itself (logcat: "Implicit URI grant for android.intent.action.SEND action will be discontinued from Android 18 onwards"; the start shows `flg=0x10000001`). Corrected: `send_bad_grant` = `send_file` **without the flag and with ClipData kept**, which stops the migration (`flg=0x10000000`) and yields the ratified "Could not read what was shared". The runbook's environment notes record the platform behaviour.
+- **R5** names `ManifestContractTest` (the merged-manifest assertions live there); the brief's `MergedManifestContractTest` name was stale.
+- **The tripwire's inputs.** The files `ReleaseProofPolicyTest` scans are declared inputs of the unit-test task, or Gradle's up-to-date check skips the test after a green run and a planted token is never seen. Accepted as part of Task 3.
