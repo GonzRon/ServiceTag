@@ -118,3 +118,7 @@ The new rows and shapes; the codes table for 1.4 with the tie-break stated once;
 ## Size
 
 Large: fourteen rows, two forms, one document. Split seam if one review cannot hold it: **B09a** the schedule forms, the widened schedule/due/status shapes and the agreement test; **B09b** the season, condition, health and attention routes; the document is edited by whichever lands second.
+
+## Carry-forward from B03 (controller, 2026-09-24)
+
+- `MergeReport`'s three new tallies (tables 12–14) must reach the wire: `MergeReportResponse` mirrors them in write order and `/v1/status` gains their count keys; `theMergeReportWireMirrorCarriesEveryTallyInWriteOrder` pins fourteen, not eleven (RED: leave one out).
