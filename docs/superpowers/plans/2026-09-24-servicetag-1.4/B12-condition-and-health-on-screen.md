@@ -143,3 +143,7 @@ Large. Split seam: **B12a** tokens, icons, words, badges and the scan sheet; **B
 
 - The "Mark operational?" offer (decision 12) is not made for an event dated after today (the command would refuse it with `CONDITION_DATE_IN_FUTURE`; no clamp exists). One Compose case (RED: offer it anyway).
 - The offer is made once: the button disables on tap and the offer is never shown again for the same event, so a double tap cannot write a second OPERATIONAL row. One view-model case (RED: leave the button enabled).
+
+## Carry-forward from B06's review (controller, 2026-09-25)
+
+- The "Mark operational?" offer is never made for an event whose zone does not resolve on this asset (the command would refuse it); one view-model case (RED: offer it).
