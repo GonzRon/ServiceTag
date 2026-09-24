@@ -65,9 +65,11 @@ class SeasonContextTest {
     @Test
     fun manualPhaseIsTheLatestRowOnOrBeforeTheDay() {
         val sameDay = listOf(
-            // handed over newest first, to show the order is the context's own
-            activationOf("b", "tub", SeasonAction.END, "2026-04-16", createdAt = dayMillis("2026-04-16") + 60_000),
-            activationOf("a", "tub", SeasonAction.START, "2026-04-16", createdAt = dayMillis("2026-04-16")),
+            // Handed over newest first, to show the order is the context's own. The END was written
+            // later but carries the smaller id, so only `createdAt` puts it last: an `(occurredOn, id)`
+            // order would read the START as the latest row.
+            activationOf("a", "tub", SeasonAction.END, "2026-04-16", createdAt = dayMillis("2026-04-16") + 60_000),
+            activationOf("b", "tub", SeasonAction.START, "2026-04-16", createdAt = dayMillis("2026-04-16")),
         )
         val manual = SeasonContext.of(seasonOf(SeasonMode.MANUAL, activations = sameDay))
         assertEquals(SeasonPhase.OUT_OF_SEASON, manual.phaseAt(on("2026-04-15")), "before any row")
