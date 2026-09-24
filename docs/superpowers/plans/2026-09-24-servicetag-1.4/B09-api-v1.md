@@ -130,3 +130,9 @@ Large: fourteen rows, two forms, one document. Split seam if one review cannot h
 ## Carry-forward from B05 (controller, 2026-09-24)
 
 - In the `/health` response the aggregate's `trackedDays` is null (subjects carry a number); the shape test pins it.
+
+## Carry-forward from B04 (controller, 2026-09-24)
+
+- The 1.4 form turns an omitted or explicit-null `policyOffsetDays` on IN_SERVICE_AT_START into 0 BEFORE building the command (decision 31); the use case itself rejects a null offset as `POLICY_OFFSET_INVALID`. One route test: null → 200 with 0 stored (RED: pass null through).
+- Refusal order on `POST …/season/activations`: a 422 on the request body wins over a 409 on the stored state when both apply; the route tests expect that order.
+- `ApiJson.scheduleProblemCode` already carries `POLICY_OFFSET_INVALID` and `SEASON_POLICY_NEEDS_A_TIME_RULE` (B04's compile-through lines); this brief documents both in `docs/api/v1.md`.

@@ -123,3 +123,7 @@ Medium: seven small use cases, one pure history, two guarded edits, one composit
 ## Carry-forward from B03's review (controller, 2026-09-24)
 
 - **Inv. 126, production half:** a condition write (`RecordCondition`) never changes the asset row itself; one matrix row compares the asset row before and after (apart from nothing: the asset's `updated_at` must not move). RED mutation: touch the asset's `updated_at` in the command. B04 carries the same row for activation, season, break and policy writes.
+
+## Carry-forward from B04 (controller, 2026-09-24)
+
+- The format-8 content pass reuses `:core`'s `internal fun policyProblems(policy, offsetDays, hasTimeRule, groupTarget)` (B04) for the three schedule rules; it adds nothing of its own for them.
