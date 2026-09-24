@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.Money
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.isCode
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
@@ -34,6 +35,13 @@ data class AssetCommand(
     val warrantyExpiresOn: String? = null,
     val warrantyNotes: String = "",
     val parentAssetId: AssetId? = null,
+    /**
+     * The 1.3 season pair, kept as a **compatibility input** (spec §3.2, §9.3). A create reads it as
+     * the season: a window is CALENDAR, none is YEAR_ROUND. An edit reads it only when it differs from
+     * the stored pair, and then through the season-mode rules — so a MANUAL asset's null pair
+     * round-trips untouched, and a different pair on a MANUAL asset is refused
+     * ([LegacyWriteCannotRepresent]). The break and the mode proper have their own commands.
+     */
     val seasonStartMmdd: String? = null,
     val seasonEndMmdd: String? = null,
 )
@@ -142,8 +150,18 @@ private fun AssetCommand.trimmed(): AssetCommand = copy(
 private fun String?.blankToNull(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
 
 /**
+ * The season mode the legacy pair names on its own (spec §3.2; inv. 88): a window is a CALENDAR
+ * season, no window is YEAR_ROUND. Only ever applied to a validated command, whose pair is both or
+ * neither.
+ */
+internal fun AssetCommand.legacyPairMode(): SeasonMode =
+    if (seasonStartMmdd != null && seasonEndMmdd != null) SeasonMode.CALENDAR else SeasonMode.YEAR_ROUND
+
+/**
  * Lays an already-validated command over a stored row. Identity and lifecycle come from the row,
- * never from the form: `id`, `createdAt`, `status`, `retiredOn` and `templateKey` survive.
+ * never from the form: `id`, `createdAt`, `status`, `retiredOn` and `templateKey` survive, and so does
+ * every 1.4-only field — the season mode, the break and the health policy are never reset here. The
+ * pair is laid over as sent; which mode it means is [CreateAsset]'s and [UpdateAsset]'s decision.
  */
 internal fun Asset.applying(cmd: AssetCommand, now: Long): Asset = copy(
     name = cmd.name,

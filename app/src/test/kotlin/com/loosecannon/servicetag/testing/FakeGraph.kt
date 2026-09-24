@@ -176,7 +176,7 @@ class FakeGraph(
 
     val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)
-    val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
+    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules)
     val archiveAsset: ArchiveAsset =
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
     val retireAsset: RetireAsset =

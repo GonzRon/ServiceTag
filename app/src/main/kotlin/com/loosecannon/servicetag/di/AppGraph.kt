@@ -456,7 +456,9 @@ class AppGraph(private val context: Context) {
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)
 
     // Phase 1C — the asset form. Archive-first: no hard delete for an asset in Phase 1 (R-9).
-    val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
+    // 1.4: a changed season pair goes through the season-mode rules, which read the asset's schedules
+    // (the strands rule) and rebuild them (spec §3.2).
+    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules)
     val archiveAsset: ArchiveAsset =
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
 

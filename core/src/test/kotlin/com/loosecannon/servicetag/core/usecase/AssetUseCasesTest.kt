@@ -5,8 +5,17 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.Season
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
+import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
+import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
+import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
+import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
+import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
+import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -23,7 +32,16 @@ class AssetUseCasesTest {
     private val uow = FakeUnitOfWork(assets)
     private var now = 1_000L
     private val clock = Clock { now }
-    private val update = UpdateAsset(assets, uow, clock)
+    // 1.4: an edit whose season pair changed checks the asset's schedules and rebuilds them, so the
+    // use case takes both; none of these tests stores a schedule.
+    private val closures = InMemoryClosureRepository()
+    private val states = InMemoryScheduleStateRepository()
+    private val schedules = InMemoryScheduleRepository(closures, states)
+    private val recompute = RecomputeSchedules(
+        schedules, states, InMemoryEventRepository(), closures, InMemoryGroupRepository(), assets,
+        InMemorySeasonActivationRepository(), Today { LocalDate.parse("2026-01-01") }, clock,
+    ) { ZoneOffset.UTC }
+    private val update = UpdateAsset(assets, schedules, uow, clock, recompute)
     // No scheduling fakes here, so the lifecycle rebuild is explicitly nothing: the seam has
     // no default, so a graph that forgot to wire it would not compile.
     private val archive = ArchiveAsset(assets, uow, clock) { }

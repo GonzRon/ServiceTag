@@ -14,6 +14,11 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * seeds the asset's definitions and profiles from one of [SeedTemplates] in the same transaction
  * as the create (§7); an asset made without one can still be set up later through [ApplyTemplate]
  * directly.
+ *
+ * The command's `MM-DD` pair is the new asset's season (spec §3.2; inv. 88): a window makes it
+ * CALENDAR, none makes it YEAR_ROUND. A component is created here too, so the same holds for it. A
+ * new asset has no schedule for a season to strand and none to recompute, and it starts with no
+ * break and no activation: those have their own commands.
  */
 class CreateAsset(
     private val assets: AssetRepository,
@@ -32,7 +37,7 @@ class CreateAsset(
             name = clean.name,
             createdAt = now,
             updatedAt = now,
-        ).applying(clean, now)
+        ).applying(clean, now).copy(seasonMode = clean.legacyPairMode())
         uow.write {
             assets.upsert(asset)
             templateKey?.let { key ->
