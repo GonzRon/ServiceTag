@@ -177,6 +177,20 @@ class SharedItemLiftTest {
         )
     }
 
+    /**
+     * I-11 (#63) on the real resolver: an authority no provider answers to, which from here is
+     * also what a sharer hidden by package visibility looks like. `query` returns null without
+     * throwing, and that is the read failure at read time, with no byte source built.
+     */
+    @Test fun aStreamNoProviderAnswersForIsUnreadable() {
+        val nowhere = Uri.parse("content://org.example.nosuch.files/x.pdf")
+
+        val share = read(sendIntent("application/pdf", stream = nowhere))
+
+        assertEquals(SharedItem.Refused(IntakeRefusal.UNREADABLE), share.asSharedItem())
+        assertNull(share.bytes)
+    }
+
     /** No stream at all: the text arm, through the same real `Intent`. */
     @Test fun aTextOnlyShareTakesTheTextArm() {
         val share = read(
