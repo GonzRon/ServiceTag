@@ -32,7 +32,9 @@ Compose semantics. Its three cases are the whole of the external proof for share
 
 1. an external `EXTRA_TEXT` share from another UID reaches the intake;
 2. an external `content://` stream with a genuine temporary read grant reaches the byte form;
-3. the same stream without a grant is refused with "Could not read what was shared", not a crash.
+3. the same stream without a grant (after one granted share has made the sender's provider
+   visible, see the environment notes) is refused with "Could not read what was shared", not a
+   crash.
 
 They choose no asset, type nothing, press nothing and count nothing. Choosing, naming, Save,
 Cancel, every refusal sentence, the uri-list arm, the caps and process death are proved in process
@@ -81,6 +83,15 @@ Before and after `adb install -r` of the verified APK: `adb shell pm list packag
   android.intent.action.SEND action will be discontinued from Android 18 onwards. Please set the
   grant explicitly in the app." So the sender's `send_file` sets the flag explicitly, and
   `send_bad_grant` carries `ClipData` without the flag so that it genuinely arrives ungranted.
+- **ServiceTag cannot see a sharer's provider until that sharer has granted it a URI.** API 30+
+  package visibility hides the sender's package from ServiceTag (`AppsFilter ... BLOCKED`). An
+  ungranted stream from a sharer ServiceTag cannot see is not refused: the resolver logs "Failed to
+  find provider info", `query` returns null without throwing, and the intake draws a byte form
+  with an empty Received line (Save then fails with "Could not read what was shared" and writes
+  nothing). Once the sharer has granted one URI, the provider is visible and an ungranted read is
+  denied by the platform ("Permission Denial"), which the intake answers with the dead end. So
+  `ShareBoundaryTest`'s bad-grant case sends one granted share first; the fresh-sharer behaviour
+  is a product gap, not something these proofs paper over.
 - **The sender's authority is outside ServiceTag's namespace.** `StreamSourcePolicy` refuses
   ServiceTag's application id and every authority under it, so the sender serves its fixtures as
   `com.loosecannon.sharetestsender.fixtures`, not under `com.loosecannon.servicetag.`

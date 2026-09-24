@@ -59,6 +59,15 @@ and `send_bad_grant` sets `ClipData` from the URI without the flag: a share that
 `ClipData` is not migrated, so it really arrives ungranted. A "no flag, no `ClipData`" share would
 carry a real grant and could never be refused.
 
+### Why the bad-grant case shares with a grant first
+
+ServiceTag cannot see this package (API 30+ package visibility) until this package has granted it
+a URI. Until then an ungranted stream is not refused at all: the resolver cannot find the provider,
+`query` answers null, and the intake draws a byte form with an empty Received line. So
+`ShareBoundaryTest`'s bad-grant case runs `send_file` once, finishes that intake, and then runs
+`send_bad_grant`, which the platform now denies ("Permission Denial") and the intake answers with
+"Could not read what was shared".
+
 To fire one by hand on the emulator:
 
 ```sh

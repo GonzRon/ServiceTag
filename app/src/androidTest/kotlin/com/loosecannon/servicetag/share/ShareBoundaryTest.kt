@@ -89,8 +89,17 @@ class ShareBoundaryTest {
     /**
      * Boundary: the same foreign URI **without** a grant. The platform refuses the read; the app
      * survives it and answers with the ratified read-failure dead end, and the activity is alive.
+     *
+     * **One granted share goes first, and it is load-bearing.** Under API 30+ package visibility
+     * ServiceTag cannot see the sender's package until the sender has granted it a URI. Before
+     * that, the resolver reports "Failed to find provider info", `query` answers null without
+     * throwing, and the intake draws a byte form with an empty Received line instead of refusing
+     * (recorded in `docs/release-proofs.md`). After it, the provider is found and the platform
+     * denies the ungranted read — the refusal this case exists to prove. Doing it here, rather than
+     * relying on the grant case having run first, keeps the case independent of method order.
      */
     @Test fun anExternalStreamWithoutAGrantIsRefusedNotCrashed() {
+        TestSender.finish(TestSender.share(Command.SEND_FILE))
         val refused = TestSender.share(Command.SEND_BAD_GRANT).also { intake = it }
         awaitTheReadToLand()
 
