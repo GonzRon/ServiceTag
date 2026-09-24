@@ -19,6 +19,8 @@ dependencyResolutionManagement {
 
 rootProject.name = "ServiceTag"
 include(":app", ":core")
+// #62: the test-only foreign-UID sharer. Never a dependency of :app and never released.
+include(":share-test-sender")
 
 // ---- NEW (O15): the pinned shared library, as ordinary subprojects of THIS build ----
 require(file("libs/nfc-tag-core/nfc-core/build.gradle.kts").isFile) {

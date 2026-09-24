@@ -1,0 +1,54 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- The sender holds no permission at all. androidx.core merges in a signature permission for
+         its own runtime-registered receivers; this app registers none, so both lines go. -->
+    <permission
+        android:name="${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        tools:node="remove" />
+    <uses-permission
+        android:name="${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        tools:node="remove" />
+
+    <!-- No icon and no launcher entry: nothing here is for a person to open. -->
+    <application
+        android:allowBackup="false"
+        android:label="ServiceTag test sender"
+        tools:ignore="MissingApplicationIcon">
+
+        <!-- exported="true" is required, not a choice: the test that drives this activity runs in
+             ServiceTag's process, under ServiceTag's UID, and a non-exported activity cannot be
+             started from another UID. It has no intent filter, so only an explicit intent that
+             names it can reach it. It draws nothing: it copies a fixture, fires one share at
+             ServiceTag's share target and finishes. -->
+        <activity
+            android:name=".SenderActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Serves the fixtures under this package's own authority, so a share arrives from a
+             provider ServiceTag does not own. Not exported: the only way in is the temporary
+             read grant a share carries. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.loosecannon.servicetag.testsender.fixtures"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/fixtures" />
+        </provider>
+
+        <!-- androidx.core also brings the profile installer's start-up provider and its exported
+             receiver. The sender is never profiled, so its one exported component stays the
+             activity above. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            tools:node="remove" />
+        <receiver
+            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            tools:node="remove" />
+    </application>
+</manifest>

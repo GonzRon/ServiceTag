@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The one directory the sender's FileProvider serves: the fixtures it copied out of assets/. -->
+<paths>
+    <files-path name="fixtures" path="fixtures/" />
+</paths>
