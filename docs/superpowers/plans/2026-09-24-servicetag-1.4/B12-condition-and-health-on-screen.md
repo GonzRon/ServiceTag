@@ -138,3 +138,8 @@ Large. Split seam: **B12a** tokens, icons, words, badges and the scan sheet; **B
 
 - A baseline dated after today reads as age 0 in the engine (B05's fix round), so S99 never shows a negative age; no wording is needed. One Compose case: a future-dated replacement draws "0 days ago" through the plurals resource (RED: pass the raw negative through).
 - `HealthRow`, `HealthState`, `HealthAction` stay the reminder-health names in `ui.maintenance`; asset-health presentation types take other names.
+
+## Carry-forward from B06 (controller, 2026-09-25)
+
+- The "Mark operational?" offer (decision 12) is not made for an event dated after today (the command would refuse it with `CONDITION_DATE_IN_FUTURE`; no clamp exists). One Compose case (RED: offer it anyway).
+- The offer is made once: the button disables on tap and the offer is never shown again for the same event, so a double tap cannot write a second OPERATIONAL row. One view-model case (RED: leave the button enabled).
