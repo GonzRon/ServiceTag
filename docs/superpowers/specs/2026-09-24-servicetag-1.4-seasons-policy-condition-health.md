@@ -39,6 +39,7 @@ Next step: the 1.4.0 master plan and briefs (versionCode 16, schema 8, format 8,
 | O-7 | Meter-only schedules: phase-only IN_SERVICE and quiet, no date effect, no PRE_SERVICE, no non-zero offset, a crossed threshold stays genuinely DUE | §4.1, inv. 95 |
 | O-8 | CRITICAL health alone never opens the scan sheet; it rides along; DOWN/DEGRADED on the asset or a component may open it | §10.1, inv. 123 |
 | O-9 | S143 ratified as written: the driver line of a postponed occurrence | §10.1, §10.7 |
+| O-10 | Counted-days range is an evaluation bound only; no day before the postponed actionable date contributes to health | inv. 116, §7.1 |
 
 Of the archaeology's 29 §I recommendations:
 - 27 are **RATIFIED (I-n, 2026-09-24)** where they are used.
@@ -296,7 +297,7 @@ policyDue(p, R: LocalDate?, O, ctx, T): Pair<LocalDate?, Reason> {
       val w = ctx.windowBefore(s)                                // allowed run ending s − 1, or empty
       val point = w.lastOnOrBefore(dl) ?: w.firstOrNull() ?: ctx.lastAllowedBeforeBreakAt(s - 1)
       if (point > R) return point to AFTER_BREAK                 // R sat in the break
-      return if (O < point) point to (if (point in w && ctx.seasonBoundary) BEFORE_SEASON else BEFORE_BREAK)
+      return if (O < point) point to (if (point in w && ctx.seasonBoundary) BEFORE_SEASON else BEFORE_BREAK) The reason is NONE whenever the actionable date equals the raw date; BEFORE_SEASON and BEFORE_BREAK describe a move (controller ruling, 2026-09-24).
              else if (ctx.allowed(R)) R to NONE                  // opened too late to pull (RN-10)
              else ctx.firstAllowedAfter(R) to AFTER_BREAK
     }

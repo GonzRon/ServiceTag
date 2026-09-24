@@ -13,9 +13,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
-import java.time.DateTimeException
 import java.time.LocalDate
-import java.time.Year
 
 /**
  * The desired state of every provider's list, derived from schedule state and **nothing a provider
@@ -35,9 +33,18 @@ import java.time.Year
  */
 class BuildReminderSubjects(
     private val schedules: ScheduleRepository,
-    private val states: ScheduleStateRepository,
+    /**
+     * Held for the graph's constructor shape only. State is read through
+     * [RecomputeSchedules.readState], which derives a stale or missing row instead of skipping it,
+     * so this class never reads the table directly.
+     */
+    @Suppress("unused") private val states: ScheduleStateRepository,
     private val groups: GroupRepository,
-    private val assets: AssetRepository,
+    /**
+     * Held for the graph's constructor shape only: nothing about an Asset is read here any more.
+     * Where a parked subject comes back is the policy's answer, carried on the state.
+     */
+    @Suppress("unused") private val assets: AssetRepository,
     private val occurrences: RecomputeSchedules,
 ) {
 
@@ -71,26 +78,34 @@ class BuildReminderSubjects(
     /**
      * One subject, or none.
      *
-     * None in two cases, both of which mean "there is nothing here to hold". A schedule whose group
-     * has been archived is hidden with its group, and that filter is answered here because
-     * `archived_at` is not an input to derived state and archiving deliberately recomputes nothing —
-     * which view hides an archived group is the view's own question. And a schedule with no derived
-     * state row has nothing to project from: the recompute runs after every write that could create
-     * one, so a consistent store never has one, and deriving a due date here instead would make this
-     * a second recurrence engine.
+     * None in exactly one case: a schedule whose group has been archived is hidden with its group,
+     * and that filter is answered here because `archived_at` is not an input to derived state and
+     * archiving deliberately recomputes nothing — which view hides an archived group is the view's
+     * own question.
+     *
+     * State comes from [RecomputeSchedules.readState]: the stored row when it is today's, otherwise
+     * derived in memory and never written (invariant 105). A missing or stale row is therefore
+     * **derived, never skipped** — skipping it would drop a real obligation from the provider's list
+     * for as long as the table lagged, and trusting a stale one would report yesterday's season.
+     *
+     * An **Active** subject's date is the **actionable** date, the one its status word is measured
+     * against, so a provider never says "overdue since" a date the status was not judged by. A
+     * withdrawn subject keeps the effective date it was last shown with; a parked one has none.
      */
     private suspend fun subjectOf(schedule: MaintenanceSchedule, today: LocalDate): ReminderSubject? {
         if (targetGroupIsArchived(schedule)) return null
-        val state = states.get(schedule.id) ?: return null
+        val state = occurrences.readState(schedule)
+        // The fail-safe PAUSED an archived row folds to is never asked for: withdrawal comes first.
+        val status = statusOf(schedule, state, today)
 
-        val subjectState = subjectStateOf(schedule, state, today)
+        val subjectState = subjectStateOf(schedule, state, status)
         val dueOn = when (subjectState) {
             is SubjectState.Parked -> null
-            SubjectState.Active, SubjectState.Completed, SubjectState.Withdrawn ->
-                state.effectiveDueOn?.let(LocalDate::parse)
+            SubjectState.Active -> state.actionableDueOn?.let(LocalDate::parse)
+            SubjectState.Completed, SubjectState.Withdrawn -> state.effectiveDueOn?.let(LocalDate::parse)
         }
         val rule = ruleFactsOf(schedule)
-        val body = bodyOf(schedule, state, subjectState, today)
+        val body = bodyOf(schedule, state, status, subjectState)
         return ReminderSubject(
             key = SubjectKey.Schedule(schedule.id),
             title = schedule.title,
@@ -109,38 +124,36 @@ class BuildReminderSubjects(
     }
 
     /**
-     * Parked, not absent.
+     * Parked, not absent — spec §4.7's table, row by row, mapped from what the engine already
+     * derived and nothing this class works out for itself.
      *
-     * A paused schedule and a seasonally inactive one are both obligations that have not gone away,
-     * and filtering either out of the list is how a provider comes to keep something standing with
-     * nothing left to clear it. The order of the season and pause questions is the order [statusOf]
-     * asks them in, so the state and the status word can never disagree about which one applies.
+     * A paused schedule, a dormant one, a deferred one and a quiet one with something to say are all
+     * obligations that have not gone away, and filtering any of them out of the list is how a
+     * provider comes to keep something standing with nothing left to clear it (invariant 47). The
+     * order of the pause and season questions is the order [statusOf] asks them in, so the state and
+     * the status word can never disagree about which one applies.
      *
-     * Withdrawal is asked **first**, so a retired obligation is never reported parked and never
-     * reported active — a schedule the owner has archived has no season and no pause worth naming.
+     * - ARCHIVED → [SubjectState.Withdrawn], asked **first**, so a retired obligation is never
+     *   reported parked and never reported active.
+     * - PAUSED → parked with no date: a pause has none.
+     * - DORMANT → parked until the actionable date, the day the season lets it back in — none for
+     *   a MANUAL asset, whose next START is never predicted.
+     * - DEFERRED → parked until the actionable date the break is holding it for.
+     * - quiet with a status that would notify → parked until the first day after the break, which
+     *   the recompute evaluates on request and stores nowhere (invariants 22, 102).
+     * - otherwise [SubjectState.Active].
      */
     private suspend fun subjectStateOf(
         schedule: MaintenanceSchedule,
         state: ScheduleState,
-        today: LocalDate,
+        status: DueStatus,
     ): SubjectState = when {
         schedule.status == ScheduleStatus.ARCHIVED -> SubjectState.Withdrawn
         schedule.status == ScheduleStatus.PAUSED -> SubjectState.Parked(null)
-        state.policyPhase == PolicyPhase.DORMANT -> SubjectState.Parked(seasonReentryOn(schedule, today))
+        state.policyPhase == PolicyPhase.DORMANT -> SubjectState.Parked(state.actionableDueOn?.let(LocalDate::parse))
+        status == DueStatus.DEFERRED -> SubjectState.Parked(state.actionableDueOn?.let(LocalDate::parse))
+        state.quiet && status.notifies -> SubjectState.Parked(occurrences.quietUntil(schedule))
         else -> SubjectState.Active
-    }
-
-    /**
-     * The season's next start date, so a provider can say when a parked subject comes back without
-     * knowing what a season is. Null when there is no window to read — a schedule that follows no
-     * season is never parked this way, and a half-set window is read as year-round exactly as the
-     * engine reads it.
-     */
-    private suspend fun seasonReentryOn(schedule: MaintenanceSchedule, today: LocalDate): LocalDate? {
-        if (schedule.servicePolicy == ServicePolicy.CONTINUOUS) return null
-        val target = schedule.target as? ScheduleTarget.AssetTarget ?: return null
-        val start = assets.get(target.assetId)?.seasonStartMmdd ?: return null
-        return nextOnOrAfter(start, today)
     }
 
     private fun ruleFactsOf(schedule: MaintenanceSchedule): RuleFacts {
@@ -166,15 +179,15 @@ class BuildReminderSubjects(
     private suspend fun bodyOf(
         schedule: MaintenanceSchedule,
         state: ScheduleState,
+        status: DueStatus,
         subjectState: SubjectState,
-        today: LocalDate,
     ): String {
         // A subject the provider is being told to let go of has nothing to show, and there is no
-        // ratified word for "withdrawn" to show it with. The derived status word is not asked for
+        // ratified word for "withdrawn" to show it with. The derived status word is not shown
         // either: for an archived row it is the fail-safe `PAUSED`, which would be a lie here.
         if (subjectState.isCleared) return ""
         return listOfNotNull(
-            statusTerm(statusOf(schedule, state, today), schedule, state),
+            statusTerm(status, schedule, state),
             progressOf(schedule),
         ).joinToString(SEPARATOR)
     }
@@ -200,6 +213,7 @@ class BuildReminderSubjects(
         DueStatus.PAUSED -> "PAUSED"
         DueStatus.NO_DATA ->
             if (schedule.meterDefinitionId != null && state.computedDueMeter == null) "NO BASELINE" else null
+        DueStatus.DEFERRED -> "DEFERRED"
     }
 
     /**
@@ -216,26 +230,6 @@ class BuildReminderSubjects(
         if (!occurrence.isActionable) return null
         val (done, total) = occurrence.progress
         return "$done of $total complete"
-    }
-
-    /**
-     * The first [mmdd] on or after [today], this year or next. A February 29 window behaves as
-     * February 28 in a common year, exactly as the season check reads it.
-     */
-    private fun nextOnOrAfter(mmdd: String, today: LocalDate): LocalDate? {
-        if (mmdd.length != 5) return null
-        val month = mmdd.substring(0, 2).toIntOrNull() ?: return null
-        val day = mmdd.substring(3, 5).toIntOrNull() ?: return null
-        return listOf(today.year, today.year + 1)
-            .mapNotNull { year -> dayIn(year, month, day) }
-            .firstOrNull { !it.isBefore(today) }
-    }
-
-    private fun dayIn(year: Int, month: Int, day: Int): LocalDate? = try {
-        val clamped = if (month == 2 && day == 29 && !Year.isLeap(year.toLong())) 28 else day
-        LocalDate.of(year, month, clamped)
-    } catch (e: DateTimeException) {
-        null
     }
 
     private companion object {

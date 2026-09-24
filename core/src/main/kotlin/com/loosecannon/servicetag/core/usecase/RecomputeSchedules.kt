@@ -22,6 +22,9 @@ import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 import com.loosecannon.servicetag.core.schedule.GroupOccurrences
 import com.loosecannon.servicetag.core.schedule.ScheduleRecompute
+import com.loosecannon.servicetag.core.schedule.SeasonContext
+import com.loosecannon.servicetag.core.schedule.ServicePolicyEngine
+import java.time.LocalDate
 import java.time.ZoneId
 
 /**
@@ -155,6 +158,38 @@ class RecomputeSchedules(
         return state.copy(computedAt = clock.nowMillis())
     }
 
+    /**
+     * The one accessor every **read** path asks for a schedule's state (master plan §8.6, plan
+     * decision; spec §4.7, invariant 105): the stored row when it was computed for today, and
+     * otherwise — a row left behind by a day boundary, or no row at all — [stateOf], derived in
+     * memory. **It never writes.** Only the daily job, a recompute after a write and an explicit
+     * rebuild persist state; a read that persisted what it derived would be a second writer, and a
+     * read that trusted a stale row would report yesterday's season, break and policy as today's
+     * (invariant 23: a boundary may change a status with no history change).
+     */
+    suspend fun readState(schedule: MaintenanceSchedule): ScheduleState {
+        val stored = states.get(schedule.id)
+        if (stored != null && stored.computedForOn == today.localDate().toString()) return stored
+        return stateOf(schedule)
+    }
+
+    /**
+     * The first allowed day after the maintenance break [schedule] is quiet in today, or null when it
+     * is not quiet (master plan §8.5, plan decision 50). Evaluated in memory from the policy for today
+     * and **stored nowhere**: the reminder builder parks a quiet notifying subject until this day, so
+     * it asks here rather than reading a season or a break itself (invariant 104), and the day it
+     * gets is the same on every day of one break, which keeps the subject's hash still.
+     */
+    suspend fun quietUntil(schedule: MaintenanceSchedule): LocalDate? {
+        val state = readState(schedule)
+        val season = seasonFor(schedule)
+        return ServicePolicyEngine.evaluate(
+            inputs = ScheduleRecompute.policyInputsOf(schedule, state, zone()),
+            season = season?.let(SeasonContext::of),
+            at = today.localDate(),
+        ).quietUntil
+    }
+
     private suspend fun rebuild(schedule: MaintenanceSchedule) {
         states.upsert(stateOf(schedule))
     }
@@ -174,18 +209,11 @@ class RecomputeSchedules(
      */
     private suspend fun inputsFor(schedule: MaintenanceSchedule): RebuildInputs =
         when (val target = schedule.target) {
-            is ScheduleTarget.AssetTarget -> {
-                val asset = assets.get(target.assetId)
-                RebuildInputs(
-                    events = events.forAsset(target.assetId),
-                    membership = emptyList(),
-                    season = asset?.let {
-                        it.seasonInputs(
-                            if (it.seasonMode == SeasonMode.MANUAL) activations.forAsset(it.id) else emptyList(),
-                        )
-                    },
-                )
-            }
+            is ScheduleTarget.AssetTarget -> RebuildInputs(
+                events = events.forAsset(target.assetId),
+                membership = emptyList(),
+                season = seasonFor(schedule),
+            )
             is ScheduleTarget.GroupTarget -> {
                 val group = groups.get(target.groupId)
                 val members = group?.members.orEmpty()
@@ -198,6 +226,19 @@ class RecomputeSchedules(
                 )
             }
         }
+
+    /**
+     * The target Asset's [SeasonInputs] — its activation rows read only when it is MANUAL, the one
+     * mode that consults them (invariant 90) — or null for a group target and for an asset that is
+     * gone, which the engine reads as no season and no break.
+     */
+    private suspend fun seasonFor(schedule: MaintenanceSchedule): SeasonInputs? {
+        val target = schedule.target as? ScheduleTarget.AssetTarget ?: return null
+        val asset = assets.get(target.assetId) ?: return null
+        return asset.seasonInputs(
+            if (asset.seasonMode == SeasonMode.MANUAL) activations.forAsset(asset.id) else emptyList(),
+        )
+    }
 
     private data class RebuildInputs(
         val events: List<AssetEvent>,

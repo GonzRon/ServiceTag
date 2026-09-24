@@ -5,6 +5,8 @@ import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.schedule.DueStatus
+import com.loosecannon.servicetag.ui.theme.ServiceTagDarkSemanticColors
+import com.loosecannon.servicetag.ui.theme.ServiceTagLightSemanticColors
 import java.time.LocalDate
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
@@ -14,7 +16,7 @@ import org.junit.Test
 /**
  * D12 §5's acceptance, asserted where it can be: **every** status carries its own word and its own
  * glyph, so with colour removed the wording plus the glyph plus the row's position still tell the
- * seven states apart (#5 AC 2, D12 §5 `:274-296`).
+ * eight states apart (#5 AC 2, D12 §5 `:274-296`; 1.4 spec §10.6 for DEFERRED).
  *
  * Colour is the fourth channel and the one that may be lost; a duplicated word or glyph would
  * quietly reduce four channels to two, and a device test over a seeded store can only ever show the
@@ -22,10 +24,13 @@ import org.junit.Test
  */
 class StatusVocabularyTest {
 
-    /** The seven RATIFIED words (spec §9.1), in the enum's own order, each one distinct. */
+    /**
+     * The eight RATIFIED words (spec §9.1; DEFERRED is 1.4's S92), in the enum's own order, each one
+     * distinct.
+     */
     @Test fun everyStatusHasItsOwnRatifiedWord() {
         assertEquals(
-            listOf("OK", "DUE SOON", "DUE", "OVERDUE", "OUT OF SEASON", "PAUSED", "NO BASELINE"),
+            listOf("OK", "DUE SOON", "DUE", "OVERDUE", "OUT OF SEASON", "PAUSED", "NO BASELINE", "DEFERRED"),
             DueStatus.entries.map(::statusLabel),
         )
         assertEquals(
@@ -36,9 +41,10 @@ class StatusVocabularyTest {
     }
 
     /**
-     * And its own glyph. `INACTIVE_SEASON`, `PAUSED` and `NO_DATA` must each read differently from
-     * `OVERDUE`, which the distinctness covers and these three assertions name, because those are
-     * the three the brief calls out.
+     * And its own glyph. `INACTIVE_SEASON`, `PAUSED`, `NO_DATA` and `DEFERRED` must each read
+     * differently from `OVERDUE`, which the distinctness covers and these assertions name. DEFERRED
+     * is the hourglass (1.4 spec §10.6), and in particular not the pause glyph: held by the break is
+     * not paused.
      */
     @Test fun everyStatusHasItsOwnGlyph() {
         assertEquals(
@@ -46,13 +52,21 @@ class StatusVocabularyTest {
             DueStatus.entries.size,
             DueStatus.entries.map(::statusGlyph).distinct().size,
         )
+        assertEquals(StatusGlyph.HOURGLASS, statusGlyph(DueStatus.DEFERRED))
         val overdue = statusGlyph(DueStatus.OVERDUE)
-        for (quiet in listOf(DueStatus.INACTIVE_SEASON, DueStatus.PAUSED, DueStatus.NO_DATA)) {
+        for (quiet in listOf(DueStatus.INACTIVE_SEASON, DueStatus.PAUSED, DueStatus.NO_DATA, DueStatus.DEFERRED)) {
             assertEquals(
                 "$quiet must not look like OVERDUE",
                 false,
                 statusGlyph(quiet) == overdue,
             )
+        }
+    }
+
+    /** DEFERRED is drawn in season-inactive grey (1.4 spec §10.6), in both palettes. */
+    @Test fun deferredTakesTheSeasonInactiveColours() {
+        for (palette in listOf(ServiceTagLightSemanticColors, ServiceTagDarkSemanticColors)) {
+            assertEquals(palette.seasonInactive, statusColors(DueStatus.DEFERRED, palette))
         }
     }
 

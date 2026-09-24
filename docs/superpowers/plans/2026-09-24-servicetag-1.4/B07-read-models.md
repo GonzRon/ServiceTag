@@ -130,3 +130,11 @@ fun scanSheetContent(items: List<DueItem>, condition: ConditionView?,
 ## Size
 
 Medium: three new read models and one predicate over shipped projections, all JVM-tested. No split expected.
+
+## Carry-forward from B02 (controller, 2026-09-24)
+
+- `InMemoryScheduleStateRepository.observeAll` (the shared test fake) must mirror the Room DAO's `actionable_due_on` order that B02 introduced; add the fake to this brief's Files and one assertion in the read-model test that the fake and the DAO agree on order. Where convenient, take "today" for `DueReadModel` from the same `Today` port `readState` uses, so the two never disagree.
+
+## Carry-forward from B02's review (controller, 2026-09-24)
+
+- The maintenance sheet's `whyNow` still reads `effectiveDueOn` through `DueReadModel`. With B02, a reminder carries the actionable date; the sheet's why-line must agree with the status word the same way. Read the actionable date here too (this brief already routes `DueReadModel` through `readState`); one test row: an item pulled before its season shows the actionable date in the why-line (RED: read `effectiveDueOn`).
