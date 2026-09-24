@@ -93,7 +93,7 @@ fun conditionOf(
     condition: OperationalCondition = OperationalCondition.DEGRADED,
     occurredOn: String = "2026-02-01",
     occurredTime: String? = "07:45",
-    tzId: String = "America/Chicago",
+    tzId: String = "Etc/GMT-2",
     reason: String = "auger belt slipping",
     eventId: String? = null,
     createdAt: Long = 400L,
