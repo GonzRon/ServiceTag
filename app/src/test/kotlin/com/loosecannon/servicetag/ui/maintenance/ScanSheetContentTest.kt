@@ -67,7 +67,7 @@ class ScanSheetContentTest {
             health = null,
         )
 
-        assertTrue(content.opens)
+        assertTrue("a DOWN asset opens the sheet with nothing due", content.opens)
         assertTrue("DOWN offers Mark operational", content.offersMarkOperational)
         assertEquals(OperationalCondition.DOWN, content.condition?.condition)
     }
@@ -81,7 +81,7 @@ class ScanSheetContentTest {
             health = null,
         )
 
-        assertTrue(content.opens)
+        assertTrue("a DEGRADED component opens the sheet", content.opens)
         assertFalse("the unit itself is operational", content.offersMarkOperational)
         assertEquals(listOf(pack), content.components)
     }
@@ -94,7 +94,7 @@ class ScanSheetContentTest {
             health = null,
         )
 
-        assertTrue(content.opens)
+        assertTrue("an OVERDUE item opens the sheet", content.opens)
         assertFalse("no condition recorded offers nothing", content.offersMarkOperational)
         assertEquals(listOf("s-overdue"), content.maintenance.map { it.scheduleId.value })
     }
@@ -108,7 +108,7 @@ class ScanSheetContentTest {
             health = health(critical = listOf(battery), aggregate = SubjectValue.Scored(15, HealthBand.CRITICAL, null)),
         )
 
-        assertTrue(content.opens)
+        assertTrue("a DUE item opens the sheet", content.opens)
         assertEquals(listOf(battery), content.critical)
         assertEquals(HealthBand.CRITICAL, content.aggregate?.band)
     }
@@ -147,7 +147,7 @@ class ScanSheetContentTest {
         val items = listOf(item("s-soon", DueStatus.DUE_SOON), item("s-ok", DueStatus.OK))
 
         val degraded = scanSheetContent(items, view(OperationalCondition.DEGRADED), emptyList(), null)
-        assertTrue(degraded.opens)
+        assertTrue("DEGRADED opens the sheet", degraded.opens)
         assertEquals(listOf("s-soon"), degraded.maintenance.map { it.scheduleId.value })
 
         val operational = scanSheetContent(items, view(OperationalCondition.OPERATIONAL), emptyList(), null)
@@ -164,7 +164,7 @@ class ScanSheetContentTest {
             health = null,
         )
 
-        assertTrue(content.opens)
+        assertTrue("DOWN opens the sheet with nothing due", content.opens)
         assertEquals(emptyList<DueItem>(), content.maintenance)
     }
 
