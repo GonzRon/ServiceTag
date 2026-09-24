@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.GroupMemberDto
 import com.loosecannon.servicetag.core.backup.MaintenanceGroupDto
+import com.loosecannon.servicetag.core.backup.MaintenanceScheduleDto
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -144,6 +145,20 @@ class MaintenanceCommandShapeTest {
                 }
             }
         assertEquals(fromRow.toSet(), ScheduleCommandRequest.serializer().descriptor.names.toSet())
+    }
+
+    /**
+     * 1.4 (B03): the `/v1` schedule row is **the archive row plus the derived triple**, in that
+     * order, and nothing else. Pinned against `MaintenanceScheduleDto`'s own names rather than a
+     * list written twice, so a field later added to the archive row cannot go missing from `/v1` —
+     * nor, through the case above, from the command check that reads this row.
+     */
+    @Test fun theScheduleRowIsTheArchiveRowPlusTheDerivedTriple() {
+        assertEquals(
+            MaintenanceScheduleDto.serializer().descriptor.names +
+                listOf("seasonBehavior", "seasonReentry", "seasonReentryOffsetDays"),
+            ScheduleRowResponse.serializer().descriptor.names,
+        )
     }
 
     // --- a row sent straight back is refused ------------------------------------------------------
