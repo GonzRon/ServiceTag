@@ -98,6 +98,7 @@ android {
         unitTests.isReturnDefaultValues = true
         unitTests.all { it.jvmArgs("--enable-native-access=ALL-UNNAMED") }
     }
+    sourceSets.getByName("androidTest").assets.srcDir("../core/src/test/resources/golden")
 }
 
 room3 {

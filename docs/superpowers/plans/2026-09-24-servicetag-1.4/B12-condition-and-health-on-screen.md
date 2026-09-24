@@ -133,3 +133,8 @@ Snooze and Postpone keep their 1.2 behaviour on the sheet. The sheet opens only 
 ## Size
 
 Large. Split seam: **B12a** tokens, icons, words, badges and the scan sheet; **B12b** Change condition, Mark operational and the offers. B12a lands first; B13 and B14 need only B12a plus the Change condition composable.
+
+## Carry-forward from B05's review (controller, 2026-09-24)
+
+- A baseline dated after today reads as age 0 in the engine (B05's fix round), so S99 never shows a negative age; no wording is needed. One Compose case: a future-dated replacement draws "0 days ago" through the plurals resource (RED: pass the raw negative through).
+- `HealthRow`, `HealthState`, `HealthAction` stay the reminder-health names in `ui.maintenance`; asset-health presentation types take other names.

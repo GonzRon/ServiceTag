@@ -119,3 +119,11 @@ Medium: seven small use cases, one pure history, two guarded edits, one composit
 ## Carry-forward from B03 (controller, 2026-09-24)
 
 - **Format-8 content validation (ownership added):** this brief adds one validation pass over a decoded format-8 tree in `:core/backup` (a new file beside the codec; the codec calls it after the strict decode) that refuses what a command would refuse, with the same code: policy offset ranges, PRE_SERVICE on a meter-only schedule, a non-CONTINUOUS policy on a group target (reuse B04's validators), and subject thresholds, weight and name plus fact date shapes (this brief's own). Invariant: a restore never lands a row that `SaveSchedule`, `SetSeasonMode`, `SaveHealthSubject` or `RecordCondition` would refuse. Test rows: one refused archive per rule (RED: remove that rule from the pass), and the golden format-7 archive plus the format-8 round trip still IDENTICAL (RED: none — shape only).
+
+## Carry-forward from B03's review (controller, 2026-09-24)
+
+- **Inv. 126, production half:** a condition write (`RecordCondition`) never changes the asset row itself; one matrix row compares the asset row before and after (apart from nothing: the asset's `updated_at` must not move). RED mutation: touch the asset's `updated_at` in the command. B04 carries the same row for activation, season, break and policy writes.
+
+## Carry-forward from B04 (controller, 2026-09-24)
+
+- The format-8 content pass reuses `:core`'s `internal fun policyProblems(policy, offsetDays, hasTimeRule, groupTarget)` (B04) for the three schedule rules; it adds nothing of its own for them.

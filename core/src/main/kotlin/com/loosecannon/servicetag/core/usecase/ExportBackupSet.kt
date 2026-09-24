@@ -54,11 +54,7 @@ class ExportBackupSet(
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
     private val references: ReferenceRepository,
-    /**
-     * The three 1.4 stores — manual season activations, conditions and health subjects — held for
-     * the format-8 archive. Wired here in 1.4's first change so the constructor does not move
-     * again when the archive starts carrying them; format 7 reads and writes none of them.
-     */
+    /** The three 1.4 stores — manual season activations, conditions and health subjects. */
     private val seasonActivations: SeasonActivationRepository,
     private val conditions: ConditionRepository,
     private val healthSubjects: HealthSubjectRepository,
@@ -81,13 +77,18 @@ class ExportBackupSet(
                 eventProfiles = profiles.all().map { it.toDto() },
                 assetEvents = events.all().map { it.toDto() },
                 attachments = rows.map { it.toDto() },
-                // Schema 7's other two tables are deliberately not read here: the first is
+                // Schema 8's other two tables are deliberately not read here: the first is
                 // derived and is rebuilt after any import, the second is device-local delivery
                 // bookkeeping. Neither has a port on this use case that could reach it.
                 maintenanceGroups = groups.all().map { it.toDto() },
                 maintenanceSchedules = schedules.all().map { it.toDto() },
                 occurrenceClosures = closures.all().map { it.toDto() },
                 assetReferences = references.all().map { it.toDto() },
+                // Format 8: two fact tables and the subjects' configuration. No health value is
+                // read here, because none is stored (inv. 111).
+                seasonActivations = seasonActivations.all().map { it.toDto() },
+                assetConditions = conditions.all().map { it.toDto() },
+                healthSubjects = healthSubjects.all().map { it.toDto() },
             ) to rows
         }
         val plan = ArtifactsPlan(

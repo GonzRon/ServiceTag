@@ -243,7 +243,7 @@ class MergePlannerMaintenanceTest {
     // --- write order ------------------------------------------------------------------------
 
     /**
-     * Hazard: merge order breaks a reference. The eleven members are asserted **as a list**, and a
+     * Hazard: merge order breaks a reference. The fourteen members are asserted **as a list**, and a
      * plan over an archive whose group, schedule, closure and event all arrive together writes them
      * in that order.
      *
@@ -252,12 +252,14 @@ class MergePlannerMaintenanceTest {
      * verdict would invert from INSERT to `OWNER_NOT_AVAILABLE`, which the last assertion pins.
      */
     @Test
-    fun `the eleven tables are in dependency order and a whole estate merges in it`() {
+    fun `the tables are in dependency order and a whole estate merges in it`() {
         assertEquals(
             listOf(
                 MergeTable.ASSETS, MergeTable.GROUPS, MergeTable.DEFINITIONS, MergeTable.PROFILES,
                 MergeTable.SCHEDULES, MergeTable.CLOSURES, MergeTable.LINKS, MergeTable.TAGS,
                 MergeTable.EVENTS, MergeTable.ATTACHMENTS, MergeTable.REFERENCES,
+                // 1.4's three, after REFERENCES (format 8; `MergePlannerSeasonHealthTest`).
+                MergeTable.SEASON_ACTIVATIONS, MergeTable.CONDITIONS, MergeTable.HEALTH_SUBJECTS,
             ),
             MergeTable.entries.toList(),
         )
