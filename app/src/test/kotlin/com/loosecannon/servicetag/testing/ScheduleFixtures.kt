@@ -1,6 +1,5 @@
 package com.loosecannon.servicetag.testing
 
-import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionId
@@ -22,7 +21,6 @@ import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.AssetId
-import com.loosecannon.servicetag.core.model.SeasonMode
 import java.time.LocalDate
 import java.time.ZoneOffset
 
@@ -46,16 +44,6 @@ import java.time.ZoneOffset
  */
 fun dayMillis(date: String): Long =
     LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-
-/**
- * [asset], stored as CALENDAR: the mode schema 8 gives an asset with both `MM-DD` bounds, as the
- * 7 -> 8 migration and the format-7 decoder do. The asset command does not set the mode yet, so a
- * fixture that created a seasonal asset through `createAsset` says CALENDAR here.
- */
-suspend fun FakeGraph.calendar(asset: Asset): Asset {
-    check(asset.seasonStartMmdd != null && asset.seasonEndMmdd != null) { "a CALENDAR asset has both bounds" }
-    return asset.copy(seasonMode = SeasonMode.CALENDAR).also { assets.upsert(it) }
-}
 
 fun scheduleOf(
     id: String,

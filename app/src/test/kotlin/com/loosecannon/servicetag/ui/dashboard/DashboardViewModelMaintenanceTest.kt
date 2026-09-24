@@ -10,7 +10,6 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.testing.FakeGraph
-import com.loosecannon.servicetag.testing.calendar
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.ui.maintenance.AttentionSection
@@ -87,10 +86,8 @@ class DashboardViewModelMaintenanceTest {
      * empty header, is exactly what D12 §10 forbids (`:706-707`).
      */
     @Test fun sectionsComeOutInTheFixedOrderAndEmptyOnesAreOmitted() = runTest {
-        val blower = graph.calendar(
-            graph.createAsset.run(
-                AssetCommand(name = "Snowblower", category = "Yard", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
-            ),
+        val blower = graph.createAsset.run(
+            AssetCommand(name = "Snowblower", category = "Yard", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
         )
         val mower = asset("Mower")
         seed(scheduleOf("s-overdue", assetId = mower.id.value, title = "Blade sharpen", anchorOn = "2026-01-01", leadDays = 0))
@@ -194,10 +191,8 @@ class DashboardViewModelMaintenanceTest {
      * shows the total (invariants 22, 74, D-15).
      */
     @Test fun theDueTotalCountsAGroupOnceAndCountsNeitherPausedNorParkedNorEmpty() = runTest {
-        val blower = graph.calendar(
-            graph.createAsset.run(
-                AssetCommand(name = "Snowblower", category = "Yard", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
-            ),
+        val blower = graph.createAsset.run(
+            AssetCommand(name = "Snowblower", category = "Yard", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
         )
         val members = (1..5).map { asset("Sprinkler $it", category = "Irrigation") }
         graph.groups.upsert(groupOf("g1", members = members.map { Triple(it.id.value, "2026-01-01", null) }))
