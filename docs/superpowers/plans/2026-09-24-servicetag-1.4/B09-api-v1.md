@@ -140,3 +140,8 @@ Large: fourteen rows, two forms, one document. Split seam if one review cannot h
 ## Carry-forward from B06 (controller, 2026-09-25)
 
 - Map every refusal B04 and B06 introduced to its §9.2 code and status, so none answers 500: `SCHEDULE_DRIVES_HEALTH_SUBJECT` (422), `HEALTH_SUBJECT_IS_PRIMARY` (409), `FOREIGN_SCHEDULE` for an archived link, `HEALTH_SCHEDULE_TAKEN`, `HEALTH_SCHEDULE_NEEDS_A_TIME_RULE`, `HEALTH_SUBJECT_NAME_REQUIRED` (with `field: "name"` and the 1–60 limit in the message), `PROFILE_NOT_A_REPLACEMENT`, `CONDITION_DATE_IN_FUTURE`, `FOREIGN_EVENT`, `SEASON_MODE_STRANDS_POLICY` / `BREAK_STRANDS_POLICY` (409), `POLICY_OFFSET_INVALID`, `SEASON_POLICY_NEEDS_A_TIME_RULE`, `BLACKOUT_COVERS_THE_YEAR`, `SEASON_ALREADY_ENDED` and the activation-order codes. One route test per code (RED: drop the mapping → 500). B06's report lists the problem types by name.
+
+## Carry-forward from B07 (controller, 2026-09-25)
+
+- `/v1/due`'s `rank` now follows `actionableDueOn` and the Deferred section; `docs/api/v1.md` says so.
+- `notTracked: UNSCORABLE` is a valid value in the health response (a subject the read model screened out); documented as unreachable through commands or restore, present for completeness.
