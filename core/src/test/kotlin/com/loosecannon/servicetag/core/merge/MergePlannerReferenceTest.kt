@@ -89,7 +89,8 @@ class MergePlannerReferenceTest {
      */
     @Test
     fun `references are decided last, after the asset that owns them`() {
-        assertEquals(MergeTable.REFERENCES, MergeTable.entries.last())
+        // The last of the eleven shipped tables; 1.4's three follow it (`MergePlannerSeasonHealthTest`).
+        assertEquals(MergeTable.REFERENCES, MergeTable.entries[10])
 
         val plan = mergePlanOf(
             backupOf(assets = listOf(asset("a1")), references = listOf(reference("r1"))),
@@ -356,6 +357,9 @@ class MergePlannerReferenceTest {
             MergeTable.EVENTS to report.events,
             MergeTable.ATTACHMENTS to report.attachments,
             MergeTable.REFERENCES to report.references,
+            MergeTable.SEASON_ACTIVATIONS to report.seasonActivations,
+            MergeTable.CONDITIONS to report.conditions,
+            MergeTable.HEALTH_SUBJECTS to report.healthSubjects,
         )
         assertEquals(MergeTable.entries.toList(), byName.map { it.first })
         assertEquals(MergeTable.entries.map { plan.tally(it) }, byName.map { it.second })
@@ -364,7 +368,8 @@ class MergePlannerReferenceTest {
         assertEquals(MergeTally(1, 0, 0, 0), report.references)
         assertEquals(MergeTally(1, 0, 0, 0), report.assets)
         assertEquals(MergeTally(0, 0, 0, 0), report.attachments)
-        assertEquals(MergeTable.REFERENCES, MergeTable.entries.last())
+        // The last of the eleven shipped tables; 1.4's three follow it (`MergePlannerSeasonHealthTest`).
+        assertEquals(MergeTable.REFERENCES, MergeTable.entries[10])
     }
 
     /**

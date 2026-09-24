@@ -420,6 +420,8 @@ class BackupUseCasesTest {
                 "maintenanceSchedules" to 0, "scheduleProviders" to 0,
                 "occurrenceClosures" to 0,
                 "assetReferences" to 0,
+                // Format 8's three keys, at zero here because this class pins the whole map.
+                "seasonActivations" to 0, "assetConditions" to 0, "healthSubjects" to 0,
             ),
             decoded.manifest.counts,
         )

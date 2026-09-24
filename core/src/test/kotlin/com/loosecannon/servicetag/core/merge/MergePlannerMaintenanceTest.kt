@@ -258,6 +258,8 @@ class MergePlannerMaintenanceTest {
                 MergeTable.ASSETS, MergeTable.GROUPS, MergeTable.DEFINITIONS, MergeTable.PROFILES,
                 MergeTable.SCHEDULES, MergeTable.CLOSURES, MergeTable.LINKS, MergeTable.TAGS,
                 MergeTable.EVENTS, MergeTable.ATTACHMENTS, MergeTable.REFERENCES,
+                // 1.4's three, after REFERENCES (format 8; `MergePlannerSeasonHealthTest`).
+                MergeTable.SEASON_ACTIVATIONS, MergeTable.CONDITIONS, MergeTable.HEALTH_SUBJECTS,
             ),
             MergeTable.entries.toList(),
         )

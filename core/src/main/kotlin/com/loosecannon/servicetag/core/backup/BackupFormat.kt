@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.backup
 
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
@@ -23,7 +24,11 @@ import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.GroupMember
-import com.loosecannon.servicetag.core.model.LegacySeasonMapping
+import com.loosecannon.servicetag.core.model.HealthAggregation
+import com.loosecannon.servicetag.core.model.HealthDriver
+import com.loosecannon.servicetag.core.model.HealthSubject
+import com.loosecannon.servicetag.core.model.HealthSubjectId
+import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
@@ -31,6 +36,7 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileField
@@ -42,7 +48,8 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
+import com.loosecannon.servicetag.core.model.SeasonAction
+import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.StorageProvider
@@ -77,6 +84,12 @@ data class BackupManifest(
     val artifactBytes: Long = 0L,
 )
 
+/**
+ * The last five fields are format 8's, and they carry **no defaults**: a format-8 archive that omits
+ * one is corrupt. A format ≤7 file never had them; [LegacyArchive] writes them into its tree —
+ * CALENDAR exactly when both `MM-DD` bounds are set, no break, `WORST`, no primary — before this
+ * DTO decodes it.
+ */
 @Serializable
 data class AssetDto(
     val id: String,
@@ -103,6 +116,15 @@ data class AssetDto(
     val parentAssetId: String? = null,
     val seasonStartMmdd: String? = null,
     val seasonEndMmdd: String? = null,
+    /** `YEAR_ROUND`, `CALENDAR` or `MANUAL`; the window above is set exactly when this is CALENDAR. */
+    val seasonMode: String,
+    /** The maintenance break, `MM-DD`: both set or both null. */
+    val blackoutStartMmdd: String?,
+    val blackoutEndMmdd: String?,
+    /** How this asset composes its subjects' health: configuration, never a value. */
+    val healthAggregation: String,
+    /** A soft link to the subject `TRACK_ONE` reads: never validated, never a merge owner. */
+    val healthPrimarySubjectId: String?,
 )
 
 @Serializable
@@ -267,6 +289,11 @@ data class ScheduleProviderDto(
 /**
  * Format 6. Exactly one of [assetId] and [groupId] is set — a rule `toDomain` enforces, since
  * neither Room nor the wire format can.
+ *
+ * Format 8 replaced 1.3's three season fields with [servicePolicy] and [policyOffsetDays], and added
+ * [ruleChangedAt]; none of the three carries a default, so a format-8 row that omits one is corrupt,
+ * and a 1.3 season field in a format-8 row is an unknown key and corrupt too (inv. 124). A format ≤7
+ * row reaches this DTO only after [LegacyArchive] has translated its tree.
  */
 @Serializable
 data class MaintenanceScheduleDto(
@@ -284,9 +311,8 @@ data class MaintenanceScheduleDto(
     val meterInterval: Double?,
     val anchorMeter: Double?,
     val meterLead: Double?,
-    val seasonBehavior: String,
-    val seasonReentry: String?,
-    val seasonReentryOffsetDays: Int?,
+    val servicePolicy: String,
+    val policyOffsetDays: Int?,
     val completionMode: String,
     val profileId: String?,
     val remindersEnabled: Boolean,
@@ -294,6 +320,8 @@ data class MaintenanceScheduleDto(
     val postponedDueOn: String?,
     val createdAt: Long,
     val updatedAt: Long,
+    /** The pin's floor: it moves only on a rule change (inv. 87), so it travels as it is. */
+    val ruleChangedAt: Long,
     val providers: List<ScheduleProviderDto>,
 )
 
@@ -348,6 +376,62 @@ data class AssetReferenceDto(
     val updatedAt: Long,
 )
 
+/**
+ * Format 8. One manual season activation: an immutable fact, so there is no `updatedAt`. [eventId]
+ * is a soft link — never validated, never a merge owner (inv. 109).
+ */
+@Serializable
+data class SeasonActivationDto(
+    val id: String,
+    val assetId: String,
+    val action: String,
+    val occurredOn: String,
+    val eventId: String?,
+    val createdAt: Long,
+)
+
+/**
+ * Format 8. One condition fact: immutable, so there is no `updatedAt`. [eventId] is a soft link,
+ * as [SeasonActivationDto]'s is. No column anywhere holds the *current* condition.
+ */
+@Serializable
+data class AssetConditionDto(
+    val id: String,
+    val assetId: String,
+    val condition: String,
+    val occurredOn: String,
+    val occurredTime: String?,
+    val tzId: String,
+    val reason: String,
+    val eventId: String?,
+    val createdAt: Long,
+)
+
+/**
+ * Format 8. One health subject: **configuration only**. No score, band or aggregate travels here or
+ * anywhere in the format, because health is computed at read time and never stored (inv. 111).
+ * [scheduleId] is a real reference and must resolve inside the file; [baselineProfileId] is a soft
+ * link and is never checked.
+ */
+@Serializable
+data class HealthSubjectDto(
+    val id: String,
+    val assetId: String,
+    val name: String,
+    val kind: String,
+    val driver: String,
+    val scheduleId: String?,
+    val baselineProfileId: String?,
+    val nominalUntilDays: Int,
+    val warningFromDays: Int,
+    val criticalFromDays: Int,
+    val weight: Int,
+    val sortOrder: Int,
+    val archivedAt: Long?,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
 /** The canonical tables. Everything derived is rebuilt after an import. */
 @Serializable
 data class BackupData(
@@ -366,6 +450,12 @@ data class BackupData(
     val occurrenceClosures: List<OccurrenceClosureDto> = emptyList(),
     /** Format 7; their own rows, never nested. Empty on every format ≤6 archive. */
     val assetReferences: List<AssetReferenceDto> = emptyList(),
+    /** Format 8; immutable facts. Empty on every format ≤7 archive. */
+    val seasonActivations: List<SeasonActivationDto> = emptyList(),
+    /** Format 8; immutable facts. Empty on every format ≤7 archive. */
+    val assetConditions: List<AssetConditionDto> = emptyList(),
+    /** Format 8; configuration only. Empty on every format ≤7 archive. */
+    val healthSubjects: List<HealthSubjectDto> = emptyList(),
 )
 
 /** A decoded archive: what it claims about itself, and what it holds. */
@@ -402,13 +492,13 @@ fun Asset.toDto(): AssetDto = AssetDto(
     parentAssetId = parentAssetId?.value,
     seasonStartMmdd = seasonStartMmdd,
     seasonEndMmdd = seasonEndMmdd,
+    seasonMode = seasonMode.name,
+    blackoutStartMmdd = blackoutStartMmdd,
+    blackoutEndMmdd = blackoutEndMmdd,
+    healthAggregation = healthAggregation.name,
+    healthPrimarySubjectId = healthPrimarySubjectId?.value,
 )
 
-/**
- * Format 7 carries the season window and nothing else about the season, so the mode is derived from
- * it exactly as the 7 → 8 migration derives it: CALENDAR when both `MM-DD` bounds are set, and
- * YEAR_ROUND otherwise (inv. 88). No archive of this format carries a break or a health setting.
- */
 fun AssetDto.toDomain(): Asset = Asset(
     id = AssetId(id),
     name = name,
@@ -434,7 +524,11 @@ fun AssetDto.toDomain(): Asset = Asset(
     parentAssetId = parentAssetId?.let(::AssetId),
     seasonStartMmdd = seasonStartMmdd,
     seasonEndMmdd = seasonEndMmdd,
-    seasonMode = if (seasonStartMmdd != null && seasonEndMmdd != null) SeasonMode.CALENDAR else SeasonMode.YEAR_ROUND,
+    seasonMode = enumOrCorrupt<SeasonMode>(seasonMode, "season mode", "asset $id"),
+    blackoutStartMmdd = blackoutStartMmdd,
+    blackoutEndMmdd = blackoutEndMmdd,
+    healthAggregation = enumOrCorrupt<HealthAggregation>(healthAggregation, "health aggregation", "asset $id"),
+    healthPrimarySubjectId = healthPrimarySubjectId?.let(::HealthSubjectId),
 )
 
 fun TagBinding.toDto(): NfcTagDto = NfcTagDto(
@@ -789,17 +883,7 @@ fun ScheduleProviderDto.toDomain(): ScheduleProviderRow = ScheduleProviderRow(
     enabled = enabled,
 )
 
-/**
- * Format 7 still spells the policy as the 1.3 triple, so the row is written through
- * [LegacySeasonMapping.toLegacy]. `PRE_SERVICE` has no 1.3 spelling, and nothing in this release
- * can store one yet, so meeting it here is a broken invariant rather than a value to encode.
- */
-fun MaintenanceSchedule.toDto(): MaintenanceScheduleDto {
-    check(servicePolicy != ServicePolicy.PRE_SERVICE) {
-        "schedule ${id.value} is PRE_SERVICE, which format ${BackupCodec.FORMAT_VERSION} cannot carry"
-    }
-    val legacy = LegacySeasonMapping.toLegacy(servicePolicy, policyOffsetDays)
-    return MaintenanceScheduleDto(
+fun MaintenanceSchedule.toDto(): MaintenanceScheduleDto = MaintenanceScheduleDto(
         id = id.value,
         assetId = (target as? ScheduleTarget.AssetTarget)?.assetId?.value,
         groupId = (target as? ScheduleTarget.GroupTarget)?.groupId?.value,
@@ -814,9 +898,8 @@ fun MaintenanceSchedule.toDto(): MaintenanceScheduleDto {
         meterInterval = meterInterval,
         anchorMeter = anchorMeter,
         meterLead = meterLead,
-        seasonBehavior = checkNotNull(legacy.seasonBehavior).name,
-        seasonReentry = legacy.seasonReentry,
-        seasonReentryOffsetDays = legacy.seasonReentryOffsetDays,
+        servicePolicy = servicePolicy.name,
+        policyOffsetDays = policyOffsetDays,
         completionMode = completionMode.name,
         profileId = profileId?.value,
         remindersEnabled = remindersEnabled,
@@ -824,9 +907,9 @@ fun MaintenanceSchedule.toDto(): MaintenanceScheduleDto {
         postponedDueOn = postponedDueOn,
         createdAt = createdAt,
         updatedAt = updatedAt,
+        ruleChangedAt = ruleChangedAt,
         providers = providers.map { it.toDto() },
     )
-}
 
 /**
  * The target is the one field the wire can spell in a way the domain cannot hold, so it is checked
@@ -834,21 +917,14 @@ fun MaintenanceSchedule.toDto(): MaintenanceScheduleDto {
  * reads the DTO's two columns directly for the same reason — it must be able to *report*
  * `SCHEDULE_TARGET_INVALID` on a row this function would throw on.
  *
- * The 1.3 triple is read through [LegacySeasonMapping.toPolicy], the table the 7 → 8 migration
- * uses, and `ruleChangedAt` is seeded from `updatedAt` exactly as the migration seeds it. An
- * unknown `seasonBehavior` name is still corrupt: the table normalises re-entry values, never an
- * enum it does not know.
+ * [MaintenanceScheduleDto.ruleChangedAt] is read as it is and never re-seeded from `updatedAt`: a
+ * backup round trip must not move the pin's floor (inv. 87). Only a format ≤7 file, which cannot
+ * carry the field, has it seeded — on its tree, by [LegacyArchive].
  */
 fun MaintenanceScheduleDto.toDomain(): MaintenanceSchedule {
     if ((assetId == null) == (groupId == null)) {
         throw BackupCorrupt("schedule $id must name exactly one target, an asset or a group")
     }
-    val policy = LegacySeasonMapping.toPolicy(
-        behavior = enumOrCorrupt<SeasonBehavior>(seasonBehavior, "season behavior", "schedule $id"),
-        reentry = seasonReentry,
-        offsetDays = seasonReentryOffsetDays,
-        hasTimeRule = timeInterval != null,
-    )
     return MaintenanceSchedule(
         id = ScheduleId(id),
         target = assetId?.let { ScheduleTarget.AssetTarget(AssetId(it)) }
@@ -864,8 +940,8 @@ fun MaintenanceScheduleDto.toDomain(): MaintenanceSchedule {
         meterInterval = meterInterval,
         anchorMeter = anchorMeter,
         meterLead = meterLead,
-        servicePolicy = policy.servicePolicy,
-        policyOffsetDays = policy.policyOffsetDays,
+        servicePolicy = enumOrCorrupt<ServicePolicy>(servicePolicy, "service policy", "schedule $id"),
+        policyOffsetDays = policyOffsetDays,
         completionMode = enumOrCorrupt<CompletionMode>(completionMode, "completion mode", "schedule $id"),
         profileId = profileId?.let(::ProfileId),
         remindersEnabled = remindersEnabled,
@@ -873,7 +949,7 @@ fun MaintenanceScheduleDto.toDomain(): MaintenanceSchedule {
         postponedDueOn = postponedDueOn,
         createdAt = createdAt,
         updatedAt = updatedAt,
-        ruleChangedAt = updatedAt,
+        ruleChangedAt = ruleChangedAt,
         providers = providers.map { it.toDomain() },
     )
 }
@@ -914,6 +990,86 @@ fun AssetReferenceDto.toDomain(): AssetReference = AssetReference(
     displayName = displayName,
     description = description,
     scheme = scheme,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+// --- format 8: season activations, conditions and health subjects ---------------------------------
+
+fun SeasonActivation.toDto(): SeasonActivationDto = SeasonActivationDto(
+    id = id,
+    assetId = assetId.value,
+    action = action.name,
+    occurredOn = occurredOn,
+    eventId = eventId?.value,
+    createdAt = createdAt,
+)
+
+fun SeasonActivationDto.toDomain(): SeasonActivation = SeasonActivation(
+    id = id,
+    assetId = AssetId(assetId),
+    action = enumOrCorrupt<SeasonAction>(action, "season action", "activation $id"),
+    occurredOn = occurredOn,
+    eventId = eventId?.let(::EventId),
+    createdAt = createdAt,
+)
+
+fun AssetCondition.toDto(): AssetConditionDto = AssetConditionDto(
+    id = id,
+    assetId = assetId.value,
+    condition = condition.name,
+    occurredOn = occurredOn,
+    occurredTime = occurredTime,
+    tzId = tzId,
+    reason = reason,
+    eventId = eventId?.value,
+    createdAt = createdAt,
+)
+
+fun AssetConditionDto.toDomain(): AssetCondition = AssetCondition(
+    id = id,
+    assetId = AssetId(assetId),
+    condition = enumOrCorrupt<OperationalCondition>(condition, "condition", "condition $id"),
+    occurredOn = occurredOn,
+    occurredTime = occurredTime,
+    tzId = tzId,
+    reason = reason,
+    eventId = eventId?.let(::EventId),
+    createdAt = createdAt,
+)
+
+fun HealthSubject.toDto(): HealthSubjectDto = HealthSubjectDto(
+    id = id.value,
+    assetId = assetId.value,
+    name = name,
+    kind = kind.name,
+    driver = driver.name,
+    scheduleId = scheduleId?.value,
+    baselineProfileId = baselineProfileId?.value,
+    nominalUntilDays = nominalUntilDays,
+    warningFromDays = warningFromDays,
+    criticalFromDays = criticalFromDays,
+    weight = weight,
+    sortOrder = sortOrder,
+    archivedAt = archivedAt,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+fun HealthSubjectDto.toDomain(): HealthSubject = HealthSubject(
+    id = HealthSubjectId(id),
+    assetId = AssetId(assetId),
+    name = name,
+    kind = enumOrCorrupt<HealthSubjectKind>(kind, "health subject kind", "subject $id"),
+    driver = enumOrCorrupt<HealthDriver>(driver, "health driver", "subject $id"),
+    scheduleId = scheduleId?.let(::ScheduleId),
+    baselineProfileId = baselineProfileId?.let(::ProfileId),
+    nominalUntilDays = nominalUntilDays,
+    warningFromDays = warningFromDays,
+    criticalFromDays = criticalFromDays,
+    weight = weight,
+    sortOrder = sortOrder,
+    archivedAt = archivedAt,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )

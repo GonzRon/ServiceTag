@@ -48,7 +48,11 @@ class BackupFormat6Test {
 
     // --- fixture ---------------------------------------------------------------------------------
 
-    private fun asset() = AssetDto("a1", "Orchard Pump", "east row", "pumps", "", "ACTIVE", 100L, 200L)
+    private fun asset() = AssetDto(
+        "a1", "Orchard Pump", "east row", "pumps", "", "ACTIVE", 100L, 200L,
+        seasonMode = "YEAR_ROUND", blackoutStartMmdd = null, blackoutEndMmdd = null,
+        healthAggregation = "WORST", healthPrimarySubjectId = null,
+    )
 
     private fun meterDefinition() = MeasurementDefinitionDto(
         id = "d1", assetId = "a1", key = "runtime_hours", label = "Runtime", unit = "h",
@@ -84,9 +88,9 @@ class BackupFormat6Test {
         description = "quarterly, or on runtime", timeInterval = 3, timeUnit = "MONTH",
         timeBasis = "COMPLETION", anchorOn = "2026-03-01", leadDays = 7,
         meterDefinitionId = "d1", meterInterval = 250.0, anchorMeter = 100.0, meterLead = 25.0,
-        seasonBehavior = "FOLLOW_ASSET", seasonReentry = "AT_START", seasonReentryOffsetDays = 14,
+        servicePolicy = "IN_SERVICE_AT_START", policyOffsetDays = 14,
         completionMode = "FORM", profileId = "p1", remindersEnabled = true, status = "PAUSED",
-        postponedDueOn = "2026-06-15", createdAt = 30L, updatedAt = 40L,
+        postponedDueOn = "2026-06-15", createdAt = 30L, updatedAt = 40L, ruleChangedAt = 35L,
         providers = listOf(
             ScheduleProviderDto("ALMANAC", enabled = false),
             ScheduleProviderDto("LOCAL", enabled = true),
@@ -98,10 +102,10 @@ class BackupFormat6Test {
         id = "s2", assetId = null, groupId = "g1", title = "Top up feeders", description = "",
         timeInterval = 1, timeUnit = "WEEK", timeBasis = "FIXED", anchorOn = "2026-04-06",
         leadDays = 1, meterDefinitionId = null, meterInterval = null, anchorMeter = null,
-        meterLead = null, seasonBehavior = "IGNORE", seasonReentry = null,
-        seasonReentryOffsetDays = null, completionMode = "QUICK", profileId = null,
+        meterLead = null, servicePolicy = "CONTINUOUS", policyOffsetDays = null,
+        completionMode = "QUICK", profileId = null,
         remindersEnabled = false, status = "ACTIVE", postponedDueOn = null,
-        createdAt = 50L, updatedAt = 60L,
+        createdAt = 50L, updatedAt = 60L, ruleChangedAt = 60L,
         providers = listOf(ScheduleProviderDto("LOCAL", enabled = true)),
     )
 
@@ -227,10 +231,13 @@ class BackupFormat6Test {
     }
 
     /**
-     * Hazard: DTO field-set drift. Each of the five new DTOs is pinned to its contracted element
-     * names — count *and* names — so a field added later, or misnamed, fails here rather than
-     * drifting past a generator or a client. `AssetEventDto` and `BackupData` are pinned to their
-     * new members for the same reason.
+     * Hazard: DTO field-set drift. Four of the five format-6 DTOs are pinned to their contracted
+     * element names — count *and* names — so a field added later, or misnamed, fails here rather
+     * than drifting past a generator or a client. `AssetEventDto` and `BackupData` are pinned to
+     * their format-6 members for the same reason.
+     *
+     * `MaintenanceScheduleDto` is no longer pinned here: format 8 changed its field set, so the pin
+     * lives with that contract, in `BackupFormat8Test.theDtoFieldSetsAreTheMasterPlansLists`.
      */
     @Test
     fun `each new DTO's field set is exactly the contract`() {
@@ -243,16 +250,6 @@ class BackupFormat6Test {
             GroupMemberDto.serializer().descriptor.elementNames.toList(),
         )
         assertEquals(
-            listOf(
-                "id", "assetId", "groupId", "title", "description", "timeInterval", "timeUnit",
-                "timeBasis", "anchorOn", "leadDays", "meterDefinitionId", "meterInterval",
-                "anchorMeter", "meterLead", "seasonBehavior", "seasonReentry",
-                "seasonReentryOffsetDays", "completionMode", "profileId", "remindersEnabled",
-                "status", "postponedDueOn", "createdAt", "updatedAt", "providers",
-            ),
-            MaintenanceScheduleDto.serializer().descriptor.elementNames.toList(),
-        )
-        assertEquals(
             listOf("provider", "enabled"),
             ScheduleProviderDto.serializer().descriptor.elementNames.toList(),
         )
@@ -263,7 +260,6 @@ class BackupFormat6Test {
         // the counts the contract states, so a silent addition cannot hide inside a long list
         assertEquals(7, MaintenanceGroupDto.serializer().descriptor.elementsCount)
         assertEquals(5, GroupMemberDto.serializer().descriptor.elementsCount)
-        assertEquals(25, MaintenanceScheduleDto.serializer().descriptor.elementsCount)
         assertEquals(2, ScheduleProviderDto.serializer().descriptor.elementsCount)
         assertEquals(5, OccurrenceClosureDto.serializer().descriptor.elementsCount)
         // a closure has no `updatedAt`, because the row is immutable
@@ -273,13 +269,13 @@ class BackupFormat6Test {
         assertEquals(listOf("scheduleId", "occurrenceOn", "detailsPending"), eventFields.takeLast(3))
         assertEquals(18, eventFields.size)
         val tables = BackupData.serializer().descriptor.elementNames.toList()
-        // By position, not `takeLast`: format 7 appends `assetReferences` after these three, and
+        // By position, not `takeLast`: formats 7 and 8 append their tables after these three, and
         // where format 6's tables sit is the claim this line makes.
         assertEquals(
             listOf("maintenanceGroups", "maintenanceSchedules", "occurrenceClosures"),
             tables.subList(7, 10),
         )
-        assertEquals(11, tables.size)
+        assertEquals(14, tables.size)
         // and neither derived nor delivery state is a table of this format
         assertTrue(tables.none { it.startsWith("scheduleState") || it.startsWith("scheduleLocal") })
     }
@@ -349,8 +345,8 @@ class BackupFormat6Test {
         // That is what makes the assertion above a statement about ordering and not about the row.
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(unreadable)) }
 
-        // What a 1.1.x build sees: 7 is greater than the 5 it supported, so its gate fires too.
-        assertEquals(7, BackupCodec.FORMAT_VERSION)
+        // What a 1.1.x build sees: 8 is greater than the 5 it supported, so its gate fires too.
+        assertEquals(8, BackupCodec.FORMAT_VERSION)
         assertTrue(BackupCodec.FORMAT_VERSION > LAST_1_1_X_FORMAT)
     }
 
@@ -379,10 +375,12 @@ class BackupFormat6Test {
                 "occurrenceClosures" to 1,
                 // Format 7's own key, counted here because this class pins the whole map.
                 "assetReferences" to 0,
+                // Format 8's three keys, at zero here because this class pins the whole map.
+                "seasonActivations" to 0, "assetConditions" to 0, "healthSubjects" to 0,
             ),
             manifest.counts,
         )
-        assertEquals(17, manifest.counts.size)
+        assertEquals(20, manifest.counts.size)
     }
 
     // --- determinism -----------------------------------------------------------------------------

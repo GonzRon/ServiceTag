@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.backup.MaintenanceScheduleDto
 import com.loosecannon.servicetag.core.backup.toDomain
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetTree
@@ -15,22 +16,27 @@ import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
+import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
+import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStore
 import com.loosecannon.servicetag.core.ports.ClosureRepository
+import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
+import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.ports.TagRepository
 import java.io.IOException
@@ -54,7 +60,9 @@ import java.security.MessageDigest
  *    field for field → `IDENTICAL`; bound elsewhere or diverged → `CONFLICT`, **except for a
  *    reference, which is `SKIPPED` instead** (D-18 C — see
  *    [MergeReason.REFERENCE_HELD_BY_A_LOCAL_ROW] for why a conflict there could only refuse the
- *    whole archive). Nothing is coalesced and nothing is remapped; that is #44's later slice.
+ *    whole archive). A non-archived health subject's schedule is its second identity too, and it
+ *    declines the same way (1.4). Nothing is coalesced and nothing is remapped; that is #44's later
+ *    slice.
  * 3. **Every uniqueness constraint the schema has** — the unique indices *and* the aggregate
  *    child-row primary keys — each checked against the destination and against the archive's own
  *    accepted rows, because a constraint does not care which side a duplicate came from. Three of
@@ -112,6 +120,9 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
     // The reference's **second identity**, id-independent exactly as the closure's pair map is.
     val localReferencesByPair = snapshot.references
         .associateBy { it.assetId.value to it.uri }
+    val localActivations = snapshot.seasonActivations.associateBy { it.id }
+    val localConditions = snapshot.conditions.associateBy { it.id }
+    val localSubjects = snapshot.healthSubjects.associateBy { it.id.value }
 
     // The claim maps unify the two halves of every uniqueness check: each starts with what this
     // install holds and gains what this plan accepts, so a duplicate inside the archive is caught by
@@ -163,6 +174,12 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
     // identity is independent of its row id, and two phones reach the same URL by construction.
     val claimedReferencePairs = snapshot.references
         .associateTo(mutableMapOf()) { (it.assetId.value to it.uri) to it.id.value }
+    // A schedule drives at most one non-archived subject (inv. 120). Seeded from the destination's
+    // non-archived subjects; an archived subject, local or incoming, claims nothing.
+    val localSubjectsBySchedule = snapshot.healthSubjects
+        .filter { it.archivedAt == null && it.scheduleId != null }
+        .associate { it.scheduleId!!.value to it.id.value }
+    val claimedSubjectSchedules = localSubjectsBySchedule.toMutableMap()
     val claimedOccurrences = snapshot.events
         .filter { it.scheduleId != null && it.occurrenceOn != null }
         .associateTo(mutableMapOf()) {
@@ -656,6 +673,100 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
         }
     }
 
+    // --- season activations and conditions (1.4) --------------------------------------------
+    // Immutable facts: identity is the row id and nothing else, a re-import is IDENTICAL, and two
+    // phones' rows are two inserts. The only owner is the asset. `eventId` is a soft link and is
+    // **never** an owner (inv. 109): a row naming an event that exists nowhere still inserts. Neither
+    // pass touches the asset row, so recording START, END or a condition never makes an asset
+    // re-import as anything but IDENTICAL (inv. 126).
+    val activationWrites = mutableListOf<SeasonActivation>()
+    for (dto in data.seasonActivations) {
+        val id = dto.id
+        val local = localActivations[id]
+        decisions += when {
+            local != null && dto == local.toDto() ->
+                MergeDecision(MergeTable.SEASON_ACTIVATIONS, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.SEASON_ACTIVATIONS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            !assetAvailable(dto.assetId) ->
+                MergeDecision(
+                    MergeTable.SEASON_ACTIVATIONS, id, MergeVerdict.CONFLICT,
+                    MergeReason.OWNER_NOT_AVAILABLE, dto.assetId,
+                )
+            else -> {
+                activationWrites += dto.toDomain()
+                MergeDecision(MergeTable.SEASON_ACTIVATIONS, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
+    val conditionWrites = mutableListOf<AssetCondition>()
+    for (dto in data.assetConditions) {
+        val id = dto.id
+        val local = localConditions[id]
+        decisions += when {
+            local != null && dto == local.toDto() ->
+                MergeDecision(MergeTable.CONDITIONS, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.CONDITIONS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            !assetAvailable(dto.assetId) ->
+                MergeDecision(MergeTable.CONDITIONS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.assetId)
+            else -> {
+                conditionWrites += dto.toDomain()
+                MergeDecision(MergeTable.CONDITIONS, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
+    // --- health subjects (1.4) --------------------------------------------------------------
+    // Configuration, with a **second identity**: a non-archived subject's schedule, which one
+    // non-archived subject at most may drive (inv. 120). The arm order is the reference pass's. A
+    // local non-archived subject under another id already driving the schedule makes this row
+    // `SKIPPED` (D-18, as a reference declines); another non-archived row of this archive having
+    // claimed it first is a `CONFLICT`. An archived subject claims no schedule at all. The owners
+    // are the asset and, when set, the schedule; `baselineProfileId` and the asset's
+    // `healthPrimarySubjectId` are soft and never owners.
+    //
+    // A SKIPPED row claims nothing and writes nothing, which is why `claimedSubjectSchedules` is
+    // only ever written in the INSERT arm.
+    val subjectWrites = mutableListOf<HealthSubject>()
+    for (dto in data.healthSubjects) {
+        val id = dto.id
+        val local = localSubjects[id]
+        val drives = dto.scheduleId?.takeIf { dto.archivedAt == null }
+        val localDriver = drives?.let { localSubjectsBySchedule[it] }?.takeIf { it != id }
+        val claimHolder = drives?.let { claimedSubjectSchedules[it] }?.takeIf { it != id }
+        decisions += when {
+            local != null && dto == local.toDto() ->
+                MergeDecision(MergeTable.HEALTH_SUBJECTS, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.HEALTH_SUBJECTS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            localDriver != null ->
+                MergeDecision(
+                    MergeTable.HEALTH_SUBJECTS, id, MergeVerdict.SKIPPED,
+                    MergeReason.HEALTH_SUBJECT_SCHEDULE_HELD_BY_A_LOCAL_ROW, localDriver,
+                )
+            // No local row drives it, so any holder left is another row of this archive.
+            claimHolder != null ->
+                MergeDecision(
+                    MergeTable.HEALTH_SUBJECTS, id, MergeVerdict.CONFLICT,
+                    MergeReason.HEALTH_SUBJECT_SCHEDULE_DUPLICATED_IN_ARCHIVE, claimHolder,
+                )
+            !assetAvailable(dto.assetId) ->
+                MergeDecision(MergeTable.HEALTH_SUBJECTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.assetId)
+            dto.scheduleId != null && !scheduleAvailable(dto.scheduleId) ->
+                MergeDecision(
+                    MergeTable.HEALTH_SUBJECTS, id, MergeVerdict.CONFLICT,
+                    MergeReason.OWNER_NOT_AVAILABLE, dto.scheduleId,
+                )
+            else -> {
+                subjectWrites += dto.toDomain()
+                drives?.let { claimedSubjectSchedules[it] = id }
+                MergeDecision(MergeTable.HEALTH_SUBJECTS, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
     // --- review hints, which change nothing (#44 identity 3) --------------------------------
     val localBySignature = snapshot.assets
         .filter { it.manufacturer.isNotBlank() && it.model.isNotBlank() && it.serialNumber.isNotBlank() }
@@ -690,6 +801,9 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
                 events = eventWrites,
                 attachments = attachmentWrites,
                 references = referenceWrites,
+                seasonActivations = activationWrites,
+                conditions = conditionWrites,
+                healthSubjects = subjectWrites,
             )
         },
         duplicateCandidates = candidates,
@@ -813,11 +927,11 @@ internal suspend fun storedBytesOf(
 }
 
 /**
- * Eleven reads. **The caller owns the transaction** — see each use case for which one.
+ * Fourteen reads. **The caller owns the transaction** — see each use case for which one.
  *
- * Schema 7's other two tables are deliberately not among them, and are named nowhere in this
+ * Schema 8's other two tables are deliberately not among them, and are named nowhere in this
  * package: derived due state never appears in a plan, and device-local delivery state is never
- * merged.
+ * merged. Nor does any health value, because none is stored.
  */
 internal suspend fun mergeSnapshotOf(
     assets: AssetRepository,
@@ -831,6 +945,9 @@ internal suspend fun mergeSnapshotOf(
     events: EventRepository,
     attachments: AttachmentRepository,
     references: ReferenceRepository,
+    seasonActivations: SeasonActivationRepository,
+    conditions: ConditionRepository,
+    healthSubjects: HealthSubjectRepository,
     storedBytes: Map<String, StoredBytes>,
     attachmentStoreConfigured: Boolean,
 ): MergeSnapshot = MergeSnapshot(
@@ -845,6 +962,9 @@ internal suspend fun mergeSnapshotOf(
     events = events.all(),
     attachments = attachments.all(),
     references = references.all(),
+    seasonActivations = seasonActivations.all(),
+    conditions = conditions.all(),
+    healthSubjects = healthSubjects.all(),
     storedBytes = storedBytes,
     attachmentStoreConfigured = attachmentStoreConfigured,
 )

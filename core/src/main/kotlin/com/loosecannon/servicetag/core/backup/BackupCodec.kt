@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.Season
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.isCode
 import com.loosecannon.servicetag.core.model.shapeMatches
 import com.loosecannon.servicetag.core.usecase.isIsoDate
@@ -20,9 +21,10 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 /**
- * Backup format v7: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
+ * Backup format v8: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
  * backup set pairs it with an artifacts archive, and `backupSetId` is what ties the two together.
  *
  * ```
@@ -31,7 +33,8 @@ import kotlinx.serialization.json.Json
  * data.json       { assets: [...], nfcTags: [...], externalLinks: [...],
  *                    measurementDefinitions: [...], eventProfiles: [...], assetEvents: [...],
  *                    attachments: [...], maintenanceGroups: [...], maintenanceSchedules: [...],
- *                    occurrenceClosures: [...], assetReferences: [...] }
+ *                    occurrenceClosures: [...], assetReferences: [...],
+ *                    seasonActivations: [...], assetConditions: [...], healthSubjects: [...] }
  * ```
  *
  * IDs are written verbatim, lists are sorted by id (children by sortOrder within their parent),
@@ -46,13 +49,20 @@ import kotlinx.serialization.json.Json
  * field at its default, and to an empty reference list, respectively. **Restoring one never invents a schedule.** JDK ZIP + JDK
  * SHA-256 + kotlinx-serialization only; no Android types anywhere in here.
  *
- * Two of schema 7's tables are deliberately absent from this format, and are named nowhere in this
+ * **Formats 1–7 are read through one upgrade.** Format 8 dropped 1.3's season triple from the
+ * schedule row and gave the asset five fields with no defaults, so a format ≤7 `data.json` is
+ * parsed as a tree, rewritten by [LegacyArchive], and then decoded by the **same** strict decode as
+ * a native format-8 file: one DTO set, and one place that reads a legacy season field. Format 8
+ * itself is decoded as it stands, so a legacy field in it is an unknown key and corrupt (inv. 124).
+ *
+ * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
- * ever merged.
+ * ever merged. Nor is any health value: a subject travels as configuration, and health is computed
+ * at read time (inv. 111).
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 7
+    const val FORMAT_VERSION = 8
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -114,6 +124,9 @@ object BackupCodec {
             },
             occurrenceClosures = data.occurrenceClosures.sortedBy { it.id },
             assetReferences = data.assetReferences.sortedBy { it.id },
+            seasonActivations = data.seasonActivations.sortedBy { it.id },
+            assetConditions = data.assetConditions.sortedBy { it.id },
+            healthSubjects = data.healthSubjects.sortedBy { it.id },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
         // The artifact tallies are derived here, in one place, from the rows themselves: a MANAGED
@@ -142,6 +155,9 @@ object BackupCodec {
                 "scheduleProviders" to sorted.maintenanceSchedules.sumOf { it.providers.size },
                 "occurrenceClosures" to sorted.occurrenceClosures.size,
                 "assetReferences" to sorted.assetReferences.size,
+                "seasonActivations" to sorted.seasonActivations.size,
+                "assetConditions" to sorted.assetConditions.size,
+                "healthSubjects" to sorted.healthSubjects.size,
             ),
             dataSha256 = sha256Hex(dataBytes),
             backupSetId = backupSetId,
@@ -160,7 +176,15 @@ object BackupCodec {
         return out.toByteArray()
     }
 
-    fun decode(bytes: ByteArray): Backup {
+    fun decode(bytes: ByteArray): Backup = decode(bytes, FORMAT_VERSION)
+
+    /**
+     * [supportedFormat] escape hatch, the decode-side twin of `encode`'s: it exists only so a test
+     * can hold this build's gate at an older number and watch it refuse a newer archive the way that
+     * older build does (inv. 63). Production callers use the one-arg overload above, which always
+     * supports [FORMAT_VERSION].
+     */
+    internal fun decode(bytes: ByteArray, supportedFormat: Int): Backup {
         val entries = readEntries(bytes)
 
         val manifestBytes = entries[MANIFEST_ENTRY]
@@ -172,8 +196,8 @@ object BackupCodec {
         }
 
         // Refuse a newer file before touching its contents: we cannot know what we would drop.
-        if (manifest.formatVersion > FORMAT_VERSION) {
-            throw BackupNewerFormat(manifest.formatVersion, FORMAT_VERSION)
+        if (manifest.formatVersion > supportedFormat) {
+            throw BackupNewerFormat(manifest.formatVersion, supportedFormat)
         }
 
         // A format-5 file without a set id could never be paired with its artifacts archive.
@@ -188,11 +212,7 @@ object BackupCodec {
             throw BackupCorrupt("$DATA_ENTRY sha256 $actual does not match manifest ${manifest.dataSha256}")
         }
 
-        val data = try {
-            json.decodeFromString(BackupData.serializer(), String(dataBytes, Charsets.UTF_8))
-        } catch (e: SerializationException) {
-            throw BackupCorrupt("$DATA_ENTRY is not readable: ${e.message}")
-        }
+        val data = readData(String(dataBytes, Charsets.UTF_8), manifest.formatVersion)
 
         // Every row must be nameable in the domain, otherwise the caller would only find out
         // halfway through a destructive import. Result discarded; this is a validation pass.
@@ -207,6 +227,9 @@ object BackupCodec {
         data.maintenanceSchedules.forEach { it.toDomain() }
         data.occurrenceClosures.forEach { it.toDomain() }
         data.assetReferences.forEach { it.toDomain() }
+        data.seasonActivations.forEach { it.toDomain() }
+        data.assetConditions.forEach { it.toDomain() }
+        data.healthSubjects.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
         // replays the insert loops in one transaction: a duplicate id or a reference to a row
@@ -215,6 +238,24 @@ object BackupCodec {
         validateGraph(data)
 
         return Backup(manifest, data)
+    }
+
+    /**
+     * The version dispatch: format 8 decodes strictly as it stands; formats 1–7 are rewritten as a
+     * tree by [LegacyArchive] first and then go through the very same strict decode.
+     * `SerializationException` is an `IllegalArgumentException`, and so is the malformed-number
+     * failure a tree decode can raise, so one catch covers both.
+     */
+    private fun readData(text: String, formatVersion: Int): BackupData = try {
+        if (formatVersion > LegacyArchive.LAST_LEGACY_FORMAT) {
+            json.decodeFromString(BackupData.serializer(), text)
+        } else {
+            val tree = json.parseToJsonElement(text) as? JsonObject
+                ?: throw BackupCorrupt("$DATA_ENTRY is not a JSON object")
+            json.decodeFromJsonElement(BackupData.serializer(), LegacyArchive.upgrade(tree, formatVersion))
+        }
+    } catch (e: IllegalArgumentException) {
+        throw BackupCorrupt("$DATA_ENTRY is not readable: ${e.message}")
     }
 
     /** Ids unique within each table, and every non-null reference resolvable inside the file. */
@@ -269,6 +310,21 @@ object BackupCodec {
             if (seasonProblems.isNotEmpty()) {
                 throw BackupCorrupt(
                     "assets: asset ${asset.id} has an invalid season window: ${seasonProblems.first()}",
+                )
+            }
+            // Inv. 88, the decoder's half: the window is set exactly when the mode is CALENDAR. The
+            // check above already made the pair both-or-neither, so one bound speaks for both.
+            val calendar = asset.seasonMode == SeasonMode.CALENDAR.name
+            if (calendar != (asset.seasonStartMmdd != null)) {
+                throw BackupCorrupt(
+                    "assets: asset ${asset.id} is ${asset.seasonMode} " +
+                        (if (calendar) "with no season window" else "with a season window"),
+                )
+            }
+            val breakProblems = Season.validate(asset.blackoutStartMmdd, asset.blackoutEndMmdd)
+            if (breakProblems.isNotEmpty()) {
+                throw BackupCorrupt(
+                    "assets: asset ${asset.id} has an invalid maintenance break: ${breakProblems.first()}",
                 )
             }
         }
@@ -432,6 +488,47 @@ object BackupCodec {
                 throw BackupCorrupt(
                     "assetReferences: reference ${reference.id} points at asset ${reference.assetId}, " +
                         "which is not in assets",
+                )
+            }
+        }
+
+        // --- seasons, conditions and health (format 8) --------------------------------------------
+        // Each row's asset must be in the file, and so must a subject's schedule: those are real
+        // foreign keys. The soft links — `eventId` on both fact tables, `baselineProfileId` on a
+        // subject, `healthPrimarySubjectId` on an asset — are deliberately **not** checked (inv. 109).
+        // Nor is the subject's second identity: two non-archived subjects on one schedule are left
+        // for the planner to name, exactly as `assetReferences` leaves its pair above.
+
+        uniqueIds("seasonActivations", data.seasonActivations.map { it.id })
+        data.seasonActivations.forEach { activation ->
+            if (activation.assetId !in assetIds) {
+                throw BackupCorrupt(
+                    "seasonActivations: activation ${activation.id} points at asset " +
+                        "${activation.assetId}, which is not in assets",
+                )
+            }
+        }
+        uniqueIds("assetConditions", data.assetConditions.map { it.id })
+        data.assetConditions.forEach { condition ->
+            if (condition.assetId !in assetIds) {
+                throw BackupCorrupt(
+                    "assetConditions: condition ${condition.id} points at asset " +
+                        "${condition.assetId}, which is not in assets",
+                )
+            }
+        }
+        uniqueIds("healthSubjects", data.healthSubjects.map { it.id })
+        data.healthSubjects.forEach { subject ->
+            if (subject.assetId !in assetIds) {
+                throw BackupCorrupt(
+                    "healthSubjects: subject ${subject.id} points at asset ${subject.assetId}, " +
+                        "which is not in assets",
+                )
+            }
+            if (subject.scheduleId != null && subject.scheduleId !in scheduleIds) {
+                throw BackupCorrupt(
+                    "healthSubjects: subject ${subject.id} points at schedule ${subject.scheduleId}, " +
+                        "which is not in maintenanceSchedules",
                 )
             }
         }

@@ -3,7 +3,6 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.GroupMemberDto
 import com.loosecannon.servicetag.core.backup.MaintenanceGroupDto
-import com.loosecannon.servicetag.core.backup.MaintenanceScheduleDto
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -125,10 +124,18 @@ class MaintenanceCommandShapeTest {
      * §9.2 fixes and as `ScheduleCommand` itself is named. That rename is the schedule's equivalent
      * of the event's `measurements`/`values` gap the shipped page already documents, and it is on
      * `docs/api/v1.md`.
+     *
+     * 1.4: the row is the `/v1` schedule row, [ScheduleRowResponse] — the format-8 row plus the
+     * derived season triple, which the command still accepts as its deprecated input.
+     * `ruleChangedAt` is response-only, so it is subtracted with the identity keys; and
+     * `servicePolicy`/`policyOffsetDays` are subtracted **only until B09** adds them to the command,
+     * which removes that last subtraction.
      */
     @Test fun theScheduleCommandIsTheScheduleRowMinusIdentityBookkeepingAndThePostponement() {
-        val fromRow = MaintenanceScheduleDto.serializer().descriptor.names
-            .filterNot { it in setOf("id", "status", "createdAt", "updatedAt", "postponedDueOn") }
+        val fromRow = ScheduleRowResponse.serializer().descriptor.names
+            .filterNot { it in setOf("id", "status", "createdAt", "updatedAt", "postponedDueOn", "ruleChangedAt") }
+            // Until B09 (wave 6) adds the two to the command.
+            .filterNot { it in setOf("servicePolicy", "policyOffsetDays") }
             .map {
                 when (it) {
                     "assetId" -> "targetAssetId"
@@ -189,7 +196,7 @@ class MaintenanceCommandShapeTest {
                    "timeUnit":"MONTH","anchorOn":"2026-02-01"}""",
             ).text(),
         ).schedule
-        val scheduleRow = ApiJson.encodeToString(MaintenanceScheduleDto.serializer(), schedule)
+        val scheduleRow = ApiJson.encodeToString(ScheduleRowResponse.serializer(), schedule)
         assertEquals(400, call("PATCH", "/v1/schedules/${schedule.id}", scheduleRow).status)
         assertEquals(
             200,
