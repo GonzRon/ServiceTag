@@ -87,7 +87,10 @@ sealed interface ScheduleProblem {
     /** A meter is a reading of one Asset's definition, so a group target can carry no meter rule. */
     data object MeterRuleOnGroupTarget : ScheduleProblem
 
-    /** A season lives on an Asset, so a group target is CONTINUOUS only. */
+    /**
+     * A non-CONTINUOUS policy on a group target. A season and a break live on one Asset, and a group
+     * has neither, so a group target is CONTINUOUS only (spec §4.6, inv. 106).
+     */
     data object SeasonFollowsAssetOnGroupTarget : ScheduleProblem
 
     /** A profile is one Asset's quick action, so a group target carries no `profileId`. */

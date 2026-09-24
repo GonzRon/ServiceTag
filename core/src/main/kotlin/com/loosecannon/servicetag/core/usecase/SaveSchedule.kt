@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
@@ -12,6 +13,7 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.schedule.BoundaryKind
 
 /**
  * Creates or edits one schedule: **the recurrence edit** of the operations table, and the only
@@ -45,6 +47,10 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * the round this command is about opened — now for a create, the open round's own instant for an
  * edit — so an edit of a schedule whose round is live is never refused for a member who left after
  * that round opened and is still required for it.
+ *
+ * **The service policy** is refused, after every bad-rule problem, when it is PRE_SERVICE on an asset
+ * with neither a calendar season nor a break: 409 [PreServiceNeedsDates], whose remedy is the asset.
+ * The policy and its offset are not rule fields (see [ruleChanged]).
  *
  * One `uow.write`: the row and the recompute commit together or not at all.
  */
@@ -104,7 +110,14 @@ class SaveSchedule(
         if (problems.isNotEmpty()) throw ScheduleValidation(problems)
 
         when (val target = cmd.target()!!) {
-            is ScheduleTarget.AssetTarget -> assets.get(target.assetId) ?: throw NoSuchAsset(target.assetId)
+            is ScheduleTarget.AssetTarget -> {
+                val asset = assets.get(target.assetId) ?: throw NoSuchAsset(target.assetId)
+                // A 409, after every 422: the body is well formed, and the remedy is the asset — give
+                // it a season or a break for PRE_SERVICE to count back from (spec §4.3, §9.2; inv. 99).
+                if (cmd.servicePolicy == ServicePolicy.PRE_SERVICE && asset.boundaryKind() == BoundaryKind.NONE) {
+                    throw PreServiceNeedsDates(asset.id)
+                }
+            }
             is ScheduleTarget.GroupTarget -> group ?: throw NoSuchGroup(target.groupId)
         }
 
