@@ -22,7 +22,7 @@ import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.ValueType
-import com.loosecannon.servicetag.core.reminders.Severity
+import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.DefinitionCommand
@@ -168,7 +168,7 @@ class DashboardAttentionTest {
      * The summary is passed to the screen rather than assigned on the graph: a view model captures
      * it when it is built, so a field mutated afterwards would be silently ignored.
      */
-    private fun draw(graph: AppGraph, severity: Severity? = null) {
+    private fun draw(graph: AppGraph, severity: ReminderHealthSeverity? = null) {
         rule.setContent {
             ServiceTagTheme {
                 DashboardScreen(
@@ -320,7 +320,7 @@ class DashboardAttentionTest {
 
     /** An `INFO`-only set leaves the badge off: a badge that never clears says nothing (#27). */
     @Test fun anInfoOnlyFindingLeavesTheBadgeOff() {
-        draw(aStoreWithAttentionWork(), severity = Severity.INFO)
+        draw(aStoreWithAttentionWork(), severity = ReminderHealthSeverity.INFO)
 
         rule.awaitText("ATTENTION")
         rule.onAllNodesWithText("REMINDER FAILED").assertCountEquals(0)
@@ -328,7 +328,7 @@ class DashboardAttentionTest {
 
     /** At `WARN` it appears (#27, D3 §7.3). */
     @Test fun aWarnFindingShowsTheBadge() {
-        draw(aStoreWithAttentionWork(), severity = Severity.WARN)
+        draw(aStoreWithAttentionWork(), severity = ReminderHealthSeverity.WARN)
 
         rule.awaitText("REMINDER FAILED")
     }
@@ -336,8 +336,8 @@ class DashboardAttentionTest {
     private companion object {
         fun today(): String = LocalDate.now().toString()
 
-        fun summary(severity: Severity?): HealthSummary = object : HealthSummary {
-            override suspend fun worstSeverity(): Severity? = severity
+        fun summary(severity: ReminderHealthSeverity?): HealthSummary = object : HealthSummary {
+            override suspend fun worstSeverity(): ReminderHealthSeverity? = severity
         }
 
         suspend fun seed(graph: AppGraph, schedule: MaintenanceSchedule) {

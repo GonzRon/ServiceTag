@@ -13,14 +13,14 @@ import com.loosecannon.servicetag.core.ports.ScheduleLocalDelivery
 import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.Today
-import com.loosecannon.servicetag.core.reminders.HealthFinding
 import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.reminders.ReconcileReport
+import com.loosecannon.servicetag.core.reminders.ReminderHealthFinding
+import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.reminders.ReminderProvider
 import com.loosecannon.servicetag.core.reminders.ReminderSubject
 import com.loosecannon.servicetag.core.reminders.RemoteChange
 import com.loosecannon.servicetag.core.reminders.RepairAction
-import com.loosecannon.servicetag.core.reminders.Severity
 import com.loosecannon.servicetag.core.reminders.SubjectKey
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.statusOf
@@ -245,12 +245,12 @@ class LocalReminderProvider(
      * rather than re-deriving them. The repair **labels** are B10's to draw, so only the
      * repair's code appears here, from the one list of codes in [ReminderRepair].
      */
-    override suspend fun health(): List<HealthFinding> = buildList {
+    override suspend fun health(): List<ReminderHealthFinding> = buildList {
         if (!notificationsAvailable()) {
             add(
-                HealthFinding(
+                ReminderHealthFinding(
                     code = "NOTIFICATIONS_BLOCKED",
-                    severity = Severity.ERROR,
+                    severity = ReminderHealthSeverity.ERROR,
                     message = "Notifications are turned off, so maintenance reminders will not arrive.",
                     repair = RepairAction.OpenSystemSettings(ReminderRepair.OPEN_NOTIFICATION_SETTINGS),
                 ),
@@ -258,9 +258,9 @@ class LocalReminderProvider(
         }
         if (!prefs.remindersEnabled) {
             add(
-                HealthFinding(
+                ReminderHealthFinding(
                     code = "REMINDERS_GLOBALLY_OFF",
-                    severity = Severity.INFO,
+                    severity = ReminderHealthSeverity.INFO,
                     message = "Reminders are turned off in ServiceTag.",
                     repair = RepairAction.OpenInApp(ReminderRepair.TURN_REMINDERS_ON),
                 ),
@@ -273,9 +273,9 @@ class LocalReminderProvider(
         // still re-armed by `reconcile` above, whatever the switch says (D-22, invariant 61).
         if (prefs.remindersEnabled && !alarm.armed()) {
             add(
-                HealthFinding(
+                ReminderHealthFinding(
                     code = "DIGEST_ALARM_MISSING",
-                    severity = Severity.WARN,
+                    severity = ReminderHealthSeverity.WARN,
                     message = "The daily reminder check is not scheduled, so today's maintenance may go unannounced.",
                     // Unambiguous and idempotent, which is the whole test for an automatic repair.
                     repair = RepairAction.Automatic(ReminderRepair.ARM_DIGEST_ALARM),

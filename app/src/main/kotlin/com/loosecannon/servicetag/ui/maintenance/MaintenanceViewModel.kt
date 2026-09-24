@@ -6,7 +6,7 @@ import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
-import com.loosecannon.servicetag.core.reminders.Severity
+import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,7 +55,7 @@ data class MaintenanceState(
     val dueWork: List<DueItem> = emptyList(),
     val schedules: List<DueItem> = emptyList(),
     val groups: List<MaintenanceGroupRow> = emptyList(),
-    val worstSeverity: Severity? = null,
+    val worstSeverity: ReminderHealthSeverity? = null,
     /** Whether notifications are denied at the OS level, which D-22's one line explains. */
     val notificationsBlocked: Boolean = false,
     val loaded: Boolean = false,

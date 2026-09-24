@@ -158,7 +158,7 @@ data class ReconcileReport(
 data class RemoteChange(val key: SubjectKey, val effectiveOn: LocalDate?)
 
 /** How loudly a finding should be shown. The badge threshold is `>= WARN`, which the order gives. */
-enum class Severity { INFO, WARN, ERROR }
+enum class ReminderHealthSeverity { INFO, WARN, ERROR }
 
 /**
  * What can be done about a finding, in the three kinds that make the repair policy visible in the
@@ -182,9 +182,9 @@ sealed interface RepairAction {
  * [repair] null when there is nothing honest to offer. A finding with no repair is still worth
  * showing: explaining a platform reality is better than hiding it behind a button that cannot help.
  */
-data class HealthFinding(
+data class ReminderHealthFinding(
     val code: String,
-    val severity: Severity,
+    val severity: ReminderHealthSeverity,
     val message: String,
     val repair: RepairAction?,
 )
@@ -209,5 +209,5 @@ interface ReminderProvider {
      * was told.
      */
     suspend fun pullChanges(): List<RemoteChange>
-    suspend fun health(): List<HealthFinding>
+    suspend fun health(): List<ReminderHealthFinding>
 }

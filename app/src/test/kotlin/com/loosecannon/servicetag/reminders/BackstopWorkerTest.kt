@@ -1,9 +1,9 @@
 package com.loosecannon.servicetag.reminders
 
 import com.loosecannon.servicetag.core.ports.Today
-import com.loosecannon.servicetag.core.reminders.HealthFinding
 import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.reminders.ReconcileReport
+import com.loosecannon.servicetag.core.reminders.ReminderHealthFinding
 import com.loosecannon.servicetag.core.reminders.ReminderProvider
 import com.loosecannon.servicetag.core.reminders.ReminderSubject
 import com.loosecannon.servicetag.core.reminders.RemoteChange
@@ -45,7 +45,7 @@ internal class RecordingDigestAlarm(private var isArmed: Boolean = false) : Dige
 /** A provider that records the lists it was handed. The semantics of the counters are the port's. */
 internal class RecordingProvider(
     override val id: ProviderId = ProviderId.LOCAL,
-    private val findings: List<HealthFinding> = emptyList(),
+    private val findings: List<ReminderHealthFinding> = emptyList(),
 ) : ReminderProvider {
     val calls = mutableListOf<List<ReminderSubject>>()
 
@@ -55,7 +55,7 @@ internal class RecordingProvider(
     }
 
     override suspend fun pullChanges(): List<RemoteChange> = emptyList()
-    override suspend fun health(): List<HealthFinding> = findings
+    override suspend fun health(): List<ReminderHealthFinding> = findings
 }
 
 /**
@@ -206,7 +206,7 @@ class BackstopWorkerTest {
                 return ReconcileReport(0, 0, 0, emptyList())
             }
             override suspend fun pullChanges(): List<RemoteChange> = emptyList()
-            override suspend fun health(): List<HealthFinding> = emptyList()
+            override suspend fun health(): List<ReminderHealthFinding> = emptyList()
         }
         val alarm = RecordingDigestAlarm()
 
@@ -254,7 +254,7 @@ class BackstopWorkerTest {
                 return ReconcileReport(0, 0, 0, emptyList())
             }
             override suspend fun pullChanges(): List<RemoteChange> = emptyList()
-            override suspend fun health(): List<HealthFinding> = emptyList()
+            override suspend fun health(): List<ReminderHealthFinding> = emptyList()
         }
         val runs = ReminderRuns(
             rebuildAll = {

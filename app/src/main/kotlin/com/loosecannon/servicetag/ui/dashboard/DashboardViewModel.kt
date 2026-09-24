@@ -9,7 +9,7 @@ import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
-import com.loosecannon.servicetag.core.reminders.Severity
+import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
@@ -88,7 +88,7 @@ data class DashboardState(
     val lastBackupAt: Long? = null,
     val filters: DashboardFilters = DashboardFilters(),
     /** The worst reminder-health finding, or null for none. The badge shows at >= WARN (#27). */
-    val worstSeverity: Severity? = null,
+    val worstSeverity: ReminderHealthSeverity? = null,
 )
 
 /**
@@ -148,7 +148,7 @@ class DashboardViewModel(
     private data class StoreView(
         val rows: List<Asset>,
         val items: List<DueItem>,
-        val worstSeverity: Severity?,
+        val worstSeverity: ReminderHealthSeverity?,
         val lastBackupAt: Long?,
     )
 

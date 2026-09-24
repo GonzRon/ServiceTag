@@ -40,7 +40,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.loosecannon.servicetag.core.reminders.Severity
+import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.theme.LocalServiceTagSemanticColors
@@ -78,12 +78,12 @@ fun healthIconTag(code: String): String = "health-icon-$code"
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HealthScreen(
+fun ReminderHealthScreen(
     graph: AppGraph,
     onOpenSchedule: (String) -> Unit,
     onLogMeterReading: (String) -> Unit,
     onBack: () -> Unit,
-    model: HealthViewModel = viewModel(key = "reminder-health") { HealthViewModel(graph) },
+    model: ReminderHealthViewModel = viewModel(key = "reminder-health") { ReminderHealthViewModel(graph) },
 ) {
     val state by model.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -181,20 +181,20 @@ private fun FindingRow(row: HealthRow, onRepair: () -> Unit) {
 
 /** Three severities, three glyphs, so the distinction survives with colour removed (D12 §5). */
 @Composable
-private fun severityIcon(severity: Severity): ImageVector = when (severity) {
-    Severity.ERROR -> ServiceTagIcons.NotificationsOff
-    Severity.WARN -> Icons.Outlined.Warning
-    Severity.INFO -> Icons.Outlined.Info
+private fun severityIcon(severity: ReminderHealthSeverity): ImageVector = when (severity) {
+    ReminderHealthSeverity.ERROR -> ServiceTagIcons.NotificationsOff
+    ReminderHealthSeverity.WARN -> Icons.Outlined.Warning
+    ReminderHealthSeverity.INFO -> Icons.Outlined.Info
 }
 
 /** The tint is the *second* signal, never the only one. */
 @Composable
-private fun severityTint(severity: Severity): Color {
+private fun severityTint(severity: ReminderHealthSeverity): Color {
     val semantic = LocalServiceTagSemanticColors.current
     return when (severity) {
-        Severity.ERROR -> semantic.reminderFailure.foreground
-        Severity.WARN -> semantic.dueSoon.foreground
-        Severity.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
+        ReminderHealthSeverity.ERROR -> semantic.reminderFailure.foreground
+        ReminderHealthSeverity.WARN -> semantic.dueSoon.foreground
+        ReminderHealthSeverity.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 }
 

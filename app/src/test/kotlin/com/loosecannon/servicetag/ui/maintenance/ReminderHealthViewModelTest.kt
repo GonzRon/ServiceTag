@@ -7,7 +7,7 @@ import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.TerminationKind
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
-import com.loosecannon.servicetag.core.reminders.Severity
+import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import com.loosecannon.servicetag.reminders.AppRestriction
@@ -68,7 +68,7 @@ private class HealthPrefsStore : KeyValueStore {
  * rather than depending on a colour.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class HealthViewModelTest {
+class ReminderHealthViewModelTest {
 
     private val platform = MutablePlatformState()
     private val permission = GrantablePermission()
@@ -131,7 +131,7 @@ class HealthViewModelTest {
      * deliberately does not run the check from its constructor.
      */
     private fun viewModel(health: ReminderHealth = health()) =
-        HealthViewModel(health, prefs) { deliveryResumed++ }.also { it.refresh() }
+        ReminderHealthViewModel(health, prefs) { deliveryResumed++ }.also { it.refresh() }
 
     /**
      * The badge threshold, over the real summary: **≥ WARN** shows it, and an INFO-only set does
@@ -150,18 +150,18 @@ class HealthViewModelTest {
 
         prefs.remindersEnabled = false
         health.refresh()
-        assertEquals(Severity.INFO, health.worstSeverity())
+        assertEquals(ReminderHealthSeverity.INFO, health.worstSeverity())
         assertFalse("INFO is deliberately below the line", health.worstSeverity().showsBadge())
 
         prefs.remindersEnabled = true
         backstop.drop()
         health.refresh()
-        assertEquals(Severity.WARN, health.worstSeverity())
+        assertEquals(ReminderHealthSeverity.WARN, health.worstSeverity())
         assertTrue(health.worstSeverity().showsBadge())
 
         platform.enabled = false
         health.refresh()
-        assertEquals(Severity.ERROR, health.worstSeverity())
+        assertEquals(ReminderHealthSeverity.ERROR, health.worstSeverity())
         assertTrue(health.worstSeverity().showsBadge())
     }
 
@@ -181,7 +181,7 @@ class HealthViewModelTest {
         assertNull("still the cached answer", health.worstSeverity())
 
         health.refresh()
-        assertEquals(Severity.ERROR, health.worstSeverity())
+        assertEquals(ReminderHealthSeverity.ERROR, health.worstSeverity())
     }
 
     /** The seven RATIFIED repair labels (§17.1a), verbatim, including the two that carry a target. */
@@ -210,10 +210,10 @@ class HealthViewModelTest {
 
         val state = viewModel().state.first { it.loaded }
         assertEquals(
-            listOf(Severity.ERROR, Severity.WARN, Severity.INFO),
+            listOf(ReminderHealthSeverity.ERROR, ReminderHealthSeverity.WARN, ReminderHealthSeverity.INFO),
             state.rows.map { it.severity },
         )
-        assertEquals("and the section's own worst, for the badge", Severity.ERROR, state.worstSeverity)
+        assertEquals("and the section's own worst, for the badge", ReminderHealthSeverity.ERROR, state.worstSeverity)
         val rows = state.rows
         rows.forEach { row ->
             assertTrue("${row.code} has a sentence", row.message.endsWith("."))
@@ -384,7 +384,7 @@ class HealthViewModelTest {
             health.refresh()
 
             val lit = shell.state.first { it.worstSeverity.showsBadge() }
-            assertEquals(Severity.WARN, lit.worstSeverity)
+            assertEquals(ReminderHealthSeverity.WARN, lit.worstSeverity)
         } finally {
             graph.close()
         }
