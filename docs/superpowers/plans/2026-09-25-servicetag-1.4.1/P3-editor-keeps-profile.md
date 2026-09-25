@@ -2,7 +2,7 @@
 
 **Read first:** plan.md §1, §2, §4 (P141-3, P141-4), §5; `rulings.md` "#81"; #81's body (the acceptance list).
 **Lane:** B, wave 1, branched from `<base>` = master after the pre-wave reconciliation (the controller names the commit); it runs beside P1 and, later, P2, and shares no file with either. Its connected class runs when the controller schedules it; connected classes never overlap on `emulator-5554` (plan.md §2).
-**Blocked on:** P141-3 and P141-4 ratified (plan.md §4).
+**Blocked on:** nothing. (P141-3 `Quick action` and P141-4 `None` were ratified on 2026-09-25.)
 
 ## Goal
 

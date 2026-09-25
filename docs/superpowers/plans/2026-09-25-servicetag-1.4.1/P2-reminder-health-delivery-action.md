@@ -2,7 +2,7 @@
 
 **Read first:** plan.md §3–§6; `rulings.md` R1–R3 and the architecture ruling; #80's body ("Reminder Health UX", acceptance 7, 8, 11).
 **Lane:** A, wave 2, branched from `<base>` = the master commit that merged P1 (it calls P1's use case through `graph.repairScheduleProviders`). It may run beside P3 only once P3's connected gate has run; connected classes never overlap on `emulator-5554` (plan.md §2).
-**Blocked on:** P1 merged; P141-1a, P141-1b and P141-2 ratified (plan.md §4).
+**Blocked on:** P1 merged. (P141-1a, P141-1b and P141-2 were ratified on 2026-09-25.)
 
 ## Goal
 
@@ -58,7 +58,7 @@ class ReminderHealthViewModel(health: ReminderHealth, prefs: AppPrefs,
 
 - `./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin --console=plain`: zero failures, zero skips.
 - Connected, on `emulator-5554` only, one class, scheduled by the controller: `com.loosecannon.servicetag.ui.maintenance.ReminderHealthScreenTest`.
-- Anchored `git grep -nE` over `app/src/main/kotlin/com/loosecannon/servicetag/ui app/src/main/kotlin/com/loosecannon/servicetag/reminders` (a `[^"/]*` prefix keeps a comment from matching): `'^\s*ReminderRepair\.RESTORE_REMINDER_DELIVERY -> "Fix reminder delivery"$'` → 1; `'^\s*[^"/]*"\$\{[a-zA-Z.]+\} schedules have reminders turned on, but reminder delivery isn.t configured\."'` → 1; `'^\s*[^"/]*"1 schedule has reminders turned on, but reminder delivery isn.t configured\."'` → 1; `'^\s*[^"/]*"\$\{[a-zA-Z.]+\} schedules have reminders switched on but no way to deliver them\."'` → 1 (kept, one literal); `'^\s*code = "SCHEDULE_PROVIDER_DISABLED",?$'` → 1; `'RepairAction\.Automatic\('` → the same lines as at `<base>`; `'"[^"]*([Pp]rovider|LOCAL)[^"]*"'` → the same lines as at `<base>` (no new user-visible string names a reminder provider, local or otherwise).
+- Anchored `git grep -nE` over `app/src/main/kotlin/com/loosecannon/servicetag/ui app/src/main/kotlin/com/loosecannon/servicetag/reminders` (the `^[^/*]*` prefix keeps a line comment or a KDoc line from matching): `'^\s*ReminderRepair\.RESTORE_REMINDER_DELIVERY -> "Fix reminder delivery"$'` → 1; `'^[^/*]*"\$\{[a-zA-Z.]+\} schedules have reminders turned on, but reminder delivery isn.t configured\."'` → 1; `'^[^/*]*"1 schedule has reminders turned on, but reminder delivery isn.t configured\."'` → 1; `'^[^/*]*"\$\{[a-zA-Z.]+\} schedules have reminders switched on but no way to deliver them\."'` → 1 (kept, one literal); `'^\s*code = "SCHEDULE_PROVIDER_DISABLED",?$'` → 1; `'RepairAction\.Automatic\('` → the same lines as at `<base>`; `'"[^"]*([Pp]rovider|LOCAL)[^"]*"'` → the same lines as at `<base>` (no new user-visible string names a reminder provider, local or otherwise).
 - `git diff <base> -- core tools docs app/src/main/kotlin/com/loosecannon/servicetag/di app/src/main/kotlin/com/loosecannon/servicetag/api app/src/main/AndroidManifest.xml` → empty.
 - Hygiene; gitlink `7e0377a`; `git status` clean.
 

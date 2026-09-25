@@ -115,3 +115,12 @@ that owner stop.
 
 The explicit immediate order stays **#80 → #81 → Phase 1A → #78 → remaining Phase 1B → the rest of
 the roadmap** (reconciled in #76's body on 2026-09-25).
+
+## Owner adjudication of the reviewed plan (2026-09-25, later)
+
+- **RATIFIED** P141-1a `<n> schedules have reminders turned on, but reminder delivery isn't configured.`; P141-1b `1 schedule has reminders turned on, but reminder delivery isn't configured.`; P141-2 `Fix reminder delivery`; P141-3 `Quick action`; P141-4 `None`. ("Can't send notifications" rejected: confusable with the Android-notifications condition P2 keeps separate; "Log it as" rejected: reads as choosing an event type.)
+- **Step 12: option (iii).** On each real phone the MCP plan comes first, the owner's `Fix reminder delivery` tap is the apply (it also reconciles at once), the MCP re-plan follows. The emulator still proves the API/MCP apply path, so both adapters are proven.
+- **README:** keep the rewritten README and the re-anchored `VersionAgreementTest` cases; do not restore the old phrases. Documentation as declared test inputs stands.
+- **Wave 1 APPROVED:** P1 (lane A) and P3 (lane B) dispatch under the plan; connected emulator runs stay serialized; P2 only after P1 merges; P4 last. No string gate remains on P3.
+- Before P2 dispatch: the sentence greps take the reviewer's comment-proof prefix `^[^/*]*` (mechanical; done in the brief at the same commit as this section).
+- Everything else as written: PATCH `"providers": null` stays a 400; explicit `providers: []` stays the exceptional way to store no provider; the provider table stays through this patch; 1.4.1 / build 17 carries only #80 + #81. **Neither real phone is touched during implementation.**
