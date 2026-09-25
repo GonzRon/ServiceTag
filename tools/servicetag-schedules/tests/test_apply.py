@@ -212,12 +212,12 @@ def test_apply_sends_the_local_provider_derived_from_reminders_enabled(fake_clie
     it sends carries the app editor's own row — one LOCAL provider, enabled exactly when the
     manifest's `remindersEnabled` is — for an asset target and a group target alike."""
     shed_id = fake_client.add_asset(name="Garden shed")
-    fake_client.add_group(name="Sheds", member_asset_ids=[shed_id])
+    fake_client.add_group(name="Greenhouse misting nozzles", member_asset_ids=[shed_id])
     manifest = mk_manifest(
-        groups=[mk_group("g1", "Sheds", ("Garden shed",))],
+        groups=[mk_group("g1", "Greenhouse misting nozzles", ("Garden shed",))],
         schedules=[
             mk_schedule("s1", "Inspect roof", target_asset="Garden shed", reminders_enabled=reminders_enabled),
-            mk_schedule("s2", "Sweep out", target_group="g1", reminders_enabled=reminders_enabled),
+            mk_schedule("s2", "Rinse the mister nozzles", target_group="g1", reminders_enabled=reminders_enabled),
         ],
     )
     result = _run(_plan_against(manifest, fake_client))
@@ -227,7 +227,7 @@ def test_apply_sends_the_local_provider_derived_from_reminders_enabled(fake_clie
 
     local = [{"provider": "LOCAL", "enabled": reminders_enabled}]
     sent = [arguments for name, arguments in fake_client.calls if name == "create_schedule"]
-    assert [args["title"] for args in sent] == ["Inspect roof", "Sweep out"]
+    assert [args["title"] for args in sent] == ["Inspect roof", "Rinse the mister nozzles"]
     for args in sent:
         assert args["reminders_enabled"] is reminders_enabled
         assert args["providers"] == local

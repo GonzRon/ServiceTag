@@ -112,12 +112,12 @@ class RepairScheduleProvidersTest {
     @Test
     fun applyChangesOnlyProvidersAndUpdatedAt() = runTest {
         val before = scheduleOf(
-            id = "s1", title = "Filter change", timeInterval = 3, timeUnit = RecurrenceUnit.MONTH,
+            id = "s1", title = "Belt check", timeInterval = 3, timeUnit = RecurrenceUnit.MONTH,
             anchorOn = "2026-01-15", leadDays = 7, servicePolicy = ServicePolicy.IN_SERVICE_AT_START,
             policyOffsetDays = 5, completionMode = CompletionMode.QUICK, profileId = "p-1",
             postponedDueOn = "2026-10-01", createdOn = "2026-01-01", updatedOn = "2026-03-01",
             ruleChangedOn = "2026-02-01",
-        ).copy(description = "Rinse the cartridge first", providers = emptyList())
+        ).copy(description = "Grease the bearings first", providers = emptyList())
         seed(before)
         now = dayMillis("2026-09-25") + 1_234L
 
@@ -208,10 +208,10 @@ class RepairScheduleProvidersTest {
     @Test
     fun entriesAreOrderedByTitleThenId() = runTest {
         seed(
-            row("s3", title = "Backwash"),
-            row("s1", title = "Rinse"),
-            row("s2", title = "Backwash"),
-            row("s0", title = "Anode check", status = ScheduleStatus.PAUSED),
+            row("s3", title = "Belt check"),
+            row("s1", title = "Seal check"),
+            row("s2", title = "Belt check"),
+            row("s0", title = "Alignment check", status = ScheduleStatus.PAUSED),
         )
 
         assertEquals(ids("s0", "s2", "s3", "s1"), repair.plan().entries.map { it.scheduleId })

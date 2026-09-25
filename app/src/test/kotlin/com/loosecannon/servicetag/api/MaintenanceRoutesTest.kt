@@ -1545,7 +1545,7 @@ class MaintenanceRoutesTest {
      * default.
      */
     @Test fun createWithoutProvidersStoresLocalFromRemindersEnabled() {
-        val asset = createAsset("Hot tub")
+        val asset = createAsset("Pump A")
         assertEquals(listOf(localOn), storedProviders(created(scheduleBody(asset, title = "Default"))))
         assertEquals(listOf(localOn), storedProviders(created(scheduleBody(asset, ""","remindersEnabled":true""", "On"))))
         assertEquals(listOf(localOff), storedProviders(created(scheduleBody(asset, ""","remindersEnabled":false""", "Off"))))
@@ -1553,7 +1553,7 @@ class MaintenanceRoutesTest {
 
     /** The decoder cannot tell an absent key from a `null` on a create, and a create need not: same row. */
     @Test fun createWithNullProvidersDoesTheSame() {
-        val asset = createAsset("Hot tub")
+        val asset = createAsset("Pump A")
         assertEquals(listOf(localOn), storedProviders(created(scheduleBody(asset, ""","providers":null""", "On"))))
         assertEquals(
             listOf(localOff),
@@ -1563,13 +1563,13 @@ class MaintenanceRoutesTest {
 
     /** #80 AC 3: an explicit empty list is the one way to store no provider, and it is kept. */
     @Test fun createWithEmptyProvidersStoresNone() {
-        val asset = createAsset("Hot tub")
+        val asset = createAsset("Pump A")
         assertEquals(emptyList<ScheduleProviderRow>(), storedProviders(created(scheduleBody(asset, ""","providers":[]"""))))
     }
 
     /** An explicit list is stored as sent and validated as today: an unknown name is still refused. */
     @Test fun createWithAListKeepsIt() {
-        val asset = createAsset("Hot tub")
+        val asset = createAsset("Pump A")
         assertEquals(
             listOf(localOff),
             storedProviders(created(scheduleBody(asset, ""","providers":[{"provider":"LOCAL","enabled":false}]"""))),
@@ -1581,7 +1581,7 @@ class MaintenanceRoutesTest {
 
     /** R4: a PATCH is a full replace, so an omitted `providers` still replaces the set with none. */
     @Test fun patchWithoutProvidersStillReplacesWithNone() {
-        val asset = createAsset("Hot tub")
+        val asset = createAsset("Pump A")
         val id = created(scheduleBody(asset, ""","providers":[{"provider":"LOCAL","enabled":true}]"""))
         assertEquals(listOf(localOn), storedProviders(id))
 
@@ -1592,7 +1592,7 @@ class MaintenanceRoutesTest {
 
     /** R4 and Q2: a PATCH naming `providers` as `null` is refused as it was before 1.4.1, and writes nothing. */
     @Test fun patchWithNullProvidersIsStillA400() {
-        val asset = createAsset("Hot tub")
+        val asset = createAsset("Pump A")
         val id = created(scheduleBody(asset, ""","providers":[{"provider":"LOCAL","enabled":true}]"""))
         val before = runBlocking { graph.schedules.get(ScheduleId(id)) }
 
@@ -1625,14 +1625,14 @@ class MaintenanceRoutesTest {
      * ordinary LOCAL one. Returns the ids by shape.
      */
     private fun seedRepairShapes(): Map<String, String> {
-        val asset = createAsset("Hot tub")
-        val repairable = created(scheduleBody(asset, ""","providers":[]""", "Backwash"))
-        val paused = created(scheduleBody(asset, ""","providers":[]""", "Drain"))
+        val asset = createAsset("Pump A")
+        val repairable = created(scheduleBody(asset, ""","providers":[]""", "Belt check"))
+        val paused = created(scheduleBody(asset, ""","providers":[]""", "Drive check"))
         assertEquals(200, call("POST", "/v1/schedules/$paused/pause", """{"paused":true}""").status)
-        val disabled = created(scheduleBody(asset, ""","providers":[{"provider":"LOCAL","enabled":false}]""", "Cover"))
-        val archived = created(scheduleBody(asset, ""","providers":[]""", "Anode"))
+        val disabled = created(scheduleBody(asset, ""","providers":[{"provider":"LOCAL","enabled":false}]""", "Coupling check"))
+        val archived = created(scheduleBody(asset, ""","providers":[]""", "Alignment check"))
         assertEquals(200, call("POST", "/v1/schedules/$archived/archive", """{"archived":true}""").status)
-        val delivered = created(scheduleBody(asset, title = "Filter"))
+        val delivered = created(scheduleBody(asset, title = "Filter change"))
         return mapOf(
             "repairable" to repairable, "paused" to paused, "disabled" to disabled,
             "archived" to archived, "delivered" to delivered,
@@ -1669,9 +1669,9 @@ class MaintenanceRoutesTest {
         assertEquals(0, plan.repaired)
         assertEquals(
             listOf(
-                ProviderRepairRowResponse(ids.getValue("repairable"), "Backwash", "REPAIR", null),
-                ProviderRepairRowResponse(ids.getValue("disabled"), "Cover", "SKIPPED", "PROVIDERS_DISABLED"),
-                ProviderRepairRowResponse(ids.getValue("paused"), "Drain", "SKIPPED", "PAUSED"),
+                ProviderRepairRowResponse(ids.getValue("repairable"), "Belt check", "REPAIR", null),
+                ProviderRepairRowResponse(ids.getValue("disabled"), "Coupling check", "SKIPPED", "PROVIDERS_DISABLED"),
+                ProviderRepairRowResponse(ids.getValue("paused"), "Drive check", "SKIPPED", "PAUSED"),
             ),
             plan.schedules,
         )

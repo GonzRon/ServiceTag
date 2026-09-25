@@ -565,9 +565,9 @@ def test_a_providerless_row_and_a_repaired_one_both_replan_identical(fake_client
     `updatedAt`: providers are not identity (invariant 4), and `updatedAt` is never read at all —
     here it is absent on one row and not even a number on the other."""
     shed = fake_client.add_asset(name="Garden shed")
-    loft = fake_client.add_asset(name="Loft")
+    mister = fake_client.add_asset(name="Greenhouse mister north")
     fake_client.add_schedule(title="Inspect roof", target_asset_id=shed)
-    fake_client.add_schedule(title="Inspect roof", target_asset_id=loft)
+    fake_client.add_schedule(title="Inspect roof", target_asset_id=mister)
     providerless, repaired = fake_client.schedules
     providerless.update(providers=[], remindersEnabled=True)
     providerless.pop("updatedAt", None)
@@ -575,7 +575,7 @@ def test_a_providerless_row_and_a_repaired_one_both_replan_identical(fake_client
     manifest = mk_manifest(
         schedules=[
             mk_schedule("s1", "Inspect roof", target_asset="Garden shed", reminders_enabled=True),
-            mk_schedule("s2", "Inspect roof", target_asset="Loft", reminders_enabled=True),
+            mk_schedule("s2", "Inspect roof", target_asset="Greenhouse mister north", reminders_enabled=True),
         ]
     )
 

@@ -189,8 +189,8 @@ REPAIR_APPLY = "/v1/repairs/schedule-providers/apply"
 _REPORT = {
     "matched": 2, "repairable": 1, "skipped": 1, "repaired": 0,
     "schedules": [
-        {"id": "s1", "title": "Backwash", "outcome": "REPAIR", "reason": None},
-        {"id": "s2", "title": "Drain", "outcome": "SKIPPED", "reason": "PAUSED"},
+        {"id": "s1", "title": "Belt check", "outcome": "REPAIR", "reason": None},
+        {"id": "s2", "title": "Drive check", "outcome": "SKIPPED", "reason": "PAUSED"},
     ],
 }
 
