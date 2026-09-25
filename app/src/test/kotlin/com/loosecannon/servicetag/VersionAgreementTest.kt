@@ -386,6 +386,29 @@ class VersionAgreementTest {
     }
 
     /**
+     * The README's capability line for 1.4. Anchored at the bullet, so a mention of seasons or
+     * health anywhere else in the file can never satisfy it; the link is to the spec's path, not to
+     * a section anchor, so a later revision of the spec cannot break it.
+     */
+    @Test fun theReadmeNamesSeasonsConditionAndHealthAndLinksTheSpec() {
+        val readme = repoFile("README.md").readText()
+        assertTrue(
+            "the README must carry a capability bullet for seasons, service policy, condition and health",
+            Regex(
+                """^- \*\*Operating seasons, maintenance service policy, operational condition and derived """ +
+                    """health\*\* —""",
+                RegexOption.MULTILINE,
+            ).containsMatchIn(readme),
+        )
+        assertTrue(
+            "that bullet must link the committed 1.4 spec",
+            readme.contains(
+                "](docs/superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md)",
+            ),
+        )
+    }
+
+    /**
      * D9's Attachments row claimed two controls this app has never had: sniffing the type on
      * import, and a configurable size cap. Spec §4.3 retires both. A stated control that does not
      * exist is worse than an absent one, so the claims go and the row says instead why trusting

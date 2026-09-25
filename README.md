@@ -106,6 +106,16 @@ is what hands NFC back — the ambient tap still opens a bound tag straight away
   not recognise is saved only after you say so, and a scheme it refuses is neither saved nor opened.
   The design contract is
   [`docs/superpowers/specs/2026-09-23-servicetag-share-intake.md`](docs/superpowers/specs/2026-09-23-servicetag-share-intake.md).
+- **Operating seasons, maintenance service policy, operational condition and derived health** — an
+  asset can be in use all year, between two calendar dates or for a season started and ended by
+  hand, and can have a yearly maintenance break; each schedule says whether its work is done
+  whenever it is due, when the season starts or before it starts, so seasonal work waits out of
+  season, or deferred past the break, instead of turning overdue; an asset keeps a dated history of
+  whether it is operational, degraded or down; and its health — nominal, warning or critical, with
+  the reasons — is derived when it is read, from the age of what it tracks and from how overdue its
+  linked maintenance is, never stored and never changing the condition, as the design contract
+  [`docs/superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md`](docs/superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md)
+  sets out.
 - **Settings** — appearance (system / light / dark), the palette's name, the attachment folder and
   the provider behind it, Read / inspect tag, Developer API, the build's version and a link to the
   project.
