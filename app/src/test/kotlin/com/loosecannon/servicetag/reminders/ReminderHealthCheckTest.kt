@@ -535,9 +535,9 @@ class ReminderHealthCheckTest {
 
         val found = check(recording).runAndRepair()
 
-        assertEquals(listOf("SCHEDULE_NO_PROVIDER"), found.map { it.code })
         assertEquals("no schedule was written", 0, recording.upserts)
-        assertEquals("and the row is as it was", providerless, schedules.rows["s1"])
+        assertEquals("the row is as it was", providerless, schedules.rows["s1"])
+        assertEquals("and the finding is still there for the owner", listOf("SCHEDULE_NO_PROVIDER"), found.map { it.code })
     }
 
     /** The two unrouted shapes the lifecycle controls run over, named for the failure message. */
