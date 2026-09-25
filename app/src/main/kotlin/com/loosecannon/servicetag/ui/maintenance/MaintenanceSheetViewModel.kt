@@ -20,6 +20,7 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.condition.OfferBatch
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.health.ComponentCondition
 import com.loosecannon.servicetag.ui.health.ConditionView
@@ -410,6 +411,13 @@ class MaintenanceSheetViewModel(
     private var queue: List<ScheduleId> = emptyList()
     private var awaiting: ScheduleId? = null
 
+    /**
+     * The offers already asked during this run (the controller's ruling on B12's review, M-1): one
+     * "Complete selected" asks each asset each offer at most once, so "Not yet" on the first item done
+     * on a DOWN asset is remembered for the rest of the selection.
+     */
+    private var batch = OfferBatch()
+
     init {
         refresh()
     }
@@ -519,6 +527,7 @@ class MaintenanceSheetViewModel(
         if (_state.value.busy) return
         queue = ids
         awaiting = null
+        batch = OfferBatch()
         _state.update { it.copy(busy = true) }
         viewModelScope.launch {
             runCatching { pump() }
@@ -542,8 +551,11 @@ class MaintenanceSheetViewModel(
             // Exhaustive, with **no `else ->`** (review blocking 2): a refusal that fell into a
             // catch-all was how `NotARequiredMember` and the idempotence index became "the queue
             // emptied and nothing happened".
-            when (val outcome = completion.complete(head, assetId)) {
-                is CompletionOutcome.Completed -> reconcile.run()
+            // The reconcile runs right after the completion is written, **before** any offer is asked
+            // (the controller's ruling on B12's review, R-2): leaving the sheet with an offer open
+            // skips only that offer's write, never quiescing the notification.
+            when (val outcome = completion.complete(head, assetId, batch) { reconcile.run() }) {
+                is CompletionOutcome.Completed -> Unit
                 is CompletionOutcome.NeedsForm -> {
                     awaiting = head
                     _needsForm.tryEmit(outcome)

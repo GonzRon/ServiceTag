@@ -33,11 +33,12 @@ import com.loosecannon.servicetag.core.usecase.CompleteSchedule
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.GroupCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
-import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.asset.DateField
+import com.loosecannon.servicetag.ui.condition.EventOffer
 import com.loosecannon.servicetag.ui.condition.EventOfferDialog
-import com.loosecannon.servicetag.ui.condition.OperationalOfferPrompt
-import com.loosecannon.servicetag.ui.condition.OperationalOffers
+import com.loosecannon.servicetag.ui.condition.EventOffers
+import com.loosecannon.servicetag.ui.condition.OfferBatch
+import com.loosecannon.servicetag.ui.condition.tapped
 import java.time.ZoneId
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -124,13 +125,20 @@ data class CompletionAnswer(
  * clear and the recompute are all the use cases'; what is here is the affordance, the optional
  * time, the meter demand and the routing of a `FORM` schedule into its own form.
  *
- * **1.4 — the operational offer** (spec §5.4; master plan §9, decision 12). After a completion, each
- * completed asset that is DOWN or DEGRADED is asked "Mark operational?" — **one at a time**, one
- * offer per completed member of a group round, in the order the events were written — and the call
- * returns once every offer is answered. Declining one leaves the others to be asked. Only the
- * accept writes, through [OperationalOffers]; the completion itself never touches a condition
- * (inv. 81). The notification's one-tap completion does not come through this flow at all, so it
- * offers nothing: there is no screen to ask on.
+ * **1.4 — the offers after a completion** (spec §3.3, §5.4; master plan §9, decision 12). After a
+ * completion, each completed asset is asked what its event asks ([EventOffers]): "Mark operational?"
+ * when it is DOWN or DEGRADED, and "Start the season now?" or "End the season now?" when the event
+ * took a season kind from its profile on a MANUAL asset in the opposite phase. They are asked **one at
+ * a time** — one event after another in the order they were written, and the operational offer
+ * before the season offer — and the call returns once every offer is answered. Declining one leaves
+ * the others to be asked. Only an accept writes; the completion itself never touches a condition or
+ * an activation (inv. 81, 93). The notification's one-tap completion does not come through this flow
+ * at all, so it offers nothing: there is no screen to ask on.
+ *
+ * A caller that must act on the written completion before anyone answers an offer — the scan sheet's
+ * reminder reconcile — passes `afterWrite`, which runs right after the write and before the first
+ * offer (the controller's ruling on B12's review, R-2). A caller completing several items at once
+ * passes one [OfferBatch], so each asset is asked each offer at most once in the batch (M-1).
  */
 class CompletionFlow(
     private val schedules: ScheduleRepository,
@@ -138,18 +146,9 @@ class CompletionFlow(
     private val completeSchedule: CompleteSchedule,
     private val completeGroupMembers: CompleteGroupMembers,
     private val today: Today,
-    private val offers: OperationalOffers,
+    private val offers: EventOffers,
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) {
-
-    constructor(graph: AppGraph) : this(
-        graph.schedules,
-        graph.definitions,
-        graph.completeSchedule,
-        graph.completeGroupMembers,
-        graph.today,
-        OperationalOffers(graph.assets, graph.conditions, graph.acceptOperationalOffer, graph.today),
-    )
 
     private val _prompt = MutableStateFlow<CompletionPrompt?>(null)
 
@@ -158,10 +157,10 @@ class CompletionFlow(
 
     private var pending: CompletableDeferred<CompletionAnswer?>? = null
 
-    private val _offer = MutableStateFlow<OperationalOfferPrompt?>(null)
+    private val _offer = MutableStateFlow<EventOffer?>(null)
 
-    /** The open "Mark operational?" offer, or null. [CompletionFlowHost] renders it too. */
-    val offer: StateFlow<OperationalOfferPrompt?> = _offer.asStateFlow()
+    /** The open offer after a completion, or null. [CompletionFlowHost] renders it too. */
+    val offer: StateFlow<EventOffer?> = _offer.asStateFlow()
 
     private var offerAnswer: CompletableDeferred<Boolean>? = null
 
@@ -172,8 +171,16 @@ class CompletionFlow(
      * whose member is its own Asset. A group target with no member named is refused rather than
      * guessed at: picking one would write a maintenance record onto somebody else's equipment
      * (invariants 28, 29).
+     *
+     * [afterWrite] runs once the completion is written and before any offer is asked; [batch]
+     * remembers, across several calls, which asset was already asked which offer.
      */
-    suspend fun complete(scheduleId: ScheduleId, assetId: AssetId? = null): CompletionOutcome {
+    suspend fun complete(
+        scheduleId: ScheduleId,
+        assetId: AssetId? = null,
+        batch: OfferBatch? = null,
+        afterWrite: suspend () -> Unit = {},
+    ): CompletionOutcome {
         val schedule = schedules.get(scheduleId)
             ?: return CompletionOutcome.Refused(NoSuchSchedule(scheduleId))
         return when (val target = schedule.target) {
@@ -186,23 +193,31 @@ class CompletionFlow(
                     CompletionOutcome.NeedsForm(scheduleId, target.assetId, schedule.profileId)
                 } else {
                     val answer = ask(schedule) ?: return CompletionOutcome.Cancelled
-                    attempt { listOf(completeSchedule.run(scheduleId, answer.command(schedule))) }
+                    attempt(batch, afterWrite) { listOf(completeSchedule.run(scheduleId, answer.command(schedule))) }
                 }
             is ScheduleTarget.GroupTarget -> {
                 if (assetId == null) {
                     return CompletionOutcome.Refused(GroupCompletionNotSupported(scheduleId))
                 }
-                completeSelected(scheduleId, listOf(assetId))
+                completeMembers(scheduleId, listOf(assetId), batch, afterWrite)
             }
         }
     }
 
     /** "Complete selected": the named members of a group round, in one write. */
-    suspend fun completeSelected(scheduleId: ScheduleId, assetIds: List<AssetId>): CompletionOutcome {
+    suspend fun completeSelected(scheduleId: ScheduleId, assetIds: List<AssetId>): CompletionOutcome =
+        completeMembers(scheduleId, assetIds, batch = null, afterWrite = {})
+
+    private suspend fun completeMembers(
+        scheduleId: ScheduleId,
+        assetIds: List<AssetId>,
+        batch: OfferBatch?,
+        afterWrite: suspend () -> Unit,
+    ): CompletionOutcome {
         val schedule = schedules.get(scheduleId)
             ?: return CompletionOutcome.Refused(NoSuchSchedule(scheduleId))
         val answer = ask(schedule) ?: return CompletionOutcome.Cancelled
-        return attempt { completeGroupMembers.run(scheduleId, assetIds, answer.command(schedule)) }
+        return attempt(batch, afterWrite) { completeGroupMembers.run(scheduleId, assetIds, answer.command(schedule)) }
     }
 
     /** "Complete all": every required member of a group round that is not yet done. */
@@ -210,7 +225,7 @@ class CompletionFlow(
         val schedule = schedules.get(scheduleId)
             ?: return CompletionOutcome.Refused(NoSuchSchedule(scheduleId))
         val answer = ask(schedule) ?: return CompletionOutcome.Cancelled
-        return attempt { completeGroupMembers.all(scheduleId, answer.command(schedule)) }
+        return attempt(batch = null, afterWrite = {}) { completeGroupMembers.all(scheduleId, answer.command(schedule)) }
     }
 
     /**
@@ -231,18 +246,19 @@ class CompletionFlow(
     }
 
     /**
-     * **"Mark operational"** on the open offer. The offer is marked as tapped **before** anything
-     * else, which disables its buttons, and a second tap finds it tapped and does nothing — so a double
-     * tap can never write a second OPERATIONAL row. False when there was nothing to accept.
+     * The open offer's accept — "Mark operational", "Start season" or "End season". The offer is
+     * marked as tapped **before** anything else, which disables its buttons, and a second tap finds it
+     * tapped and does nothing — so a double tap can never write a second row. False when there was
+     * nothing to accept.
      */
     fun acceptOffer(): Boolean {
         val open = _offer.value ?: return false
         if (open.accepting) return false
-        _offer.value = open.copy(accepting = true)
+        _offer.value = open.tapped()
         return offerAnswer?.complete(true) ?: false
     }
 
-    /** **"Not yet"**: nothing is written, and the next offer, if any, is asked. */
+    /** **"Not yet"** or **"Not now"**: nothing is written, and the next offer, if any, is asked. */
     fun declineOffer() {
         val open = _offer.value ?: return
         if (open.accepting) return
@@ -281,43 +297,51 @@ class CompletionFlow(
 
     /**
      * A refusal is an outcome rather than an exception crossing a view model. A completion that was
-     * written is followed by its offers before the outcome is returned.
+     * written runs [afterWrite] at once, and is then followed by its offers before the outcome is
+     * returned — so leaving mid-offer skips only an offer's write, never the caller's own step.
      */
-    private suspend fun attempt(block: suspend () -> List<AssetEvent>): CompletionOutcome {
+    private suspend fun attempt(
+        batch: OfferBatch?,
+        afterWrite: suspend () -> Unit,
+        block: suspend () -> List<AssetEvent>,
+    ): CompletionOutcome {
         val events = try {
             block()
         } catch (failure: Throwable) {
             return CompletionOutcome.Refused(failure)
         }
-        offerAfter(events)
+        afterWrite()
+        offerAfter(events, batch)
         return CompletionOutcome.Completed(events)
     }
 
     /**
-     * One "Mark operational?" per completed asset that qualifies, **one at a time**: each is read
-     * fresh when its turn comes, asked, and answered before the next is read. A refused accept is
-     * logged and the next offer still asked — §10.7 ratifies no sentence for it, and the asset's
-     * condition simply stays as recorded.
+     * Every offer each written event makes, **one at a time**: each event's offers are read fresh
+     * when its turn comes, and each is answered before the next is asked. An offer this [batch] has
+     * already asked of that asset is not asked again. A refused accept is logged and the next offer
+     * still asked — §10.7 ratifies no sentence for it, and the fact simply stays as recorded.
      */
-    private suspend fun offerAfter(events: List<AssetEvent>) {
+    private suspend fun offerAfter(events: List<AssetEvent>, batch: OfferBatch?) {
         for (event in events) {
-            val prompt = offers.offerFor(event) ?: continue
-            val answer = CompletableDeferred<Boolean>()
-            offerAnswer = answer
-            _offer.value = prompt
-            try {
-                if (answer.await()) {
-                    try {
-                        offers.accept(prompt)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (refused: Exception) {
-                        Log.w(TAG, "an accepted operational offer was refused", refused)
+            for (offer in offers.offersAfter(event)) {
+                if (batch != null && !batch.firstTime(offer)) continue
+                val answer = CompletableDeferred<Boolean>()
+                offerAnswer = answer
+                _offer.value = offer
+                try {
+                    if (answer.await()) {
+                        try {
+                            offers.accept(offer)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (refused: Exception) {
+                            Log.w(TAG, "an accepted offer was refused", refused)
+                        }
                     }
+                } finally {
+                    offerAnswer = null
+                    _offer.value = null
                 }
-            } finally {
-                offerAnswer = null
-                _offer.value = null
             }
         }
     }
@@ -354,7 +378,7 @@ class CompletionFlow(
 fun CompletionFlowHost(flow: CompletionFlow) {
     val prompt by flow.prompt.collectAsStateWithLifecycle()
     val offer by flow.offer.collectAsStateWithLifecycle()
-    // The operational offer after a completion (1.4), on every surface that drives the flow.
+    // The offers after a completion (1.4), on every surface that drives the flow.
     offer?.let { EventOfferDialog(it, onAccept = { flow.acceptOffer() }, onDecline = flow::declineOffer) }
     val open = prompt ?: return
 

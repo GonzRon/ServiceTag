@@ -146,7 +146,9 @@ import com.loosecannon.servicetag.reminders.ScheduleCompletion
 import com.loosecannon.servicetag.reminders.ScheduleDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.reminders.WorkManagerBackstop
+import com.loosecannon.servicetag.ui.condition.EventOffers
 import com.loosecannon.servicetag.ui.condition.OperationalOffers
+import com.loosecannon.servicetag.ui.condition.SeasonOffers
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
@@ -630,6 +632,16 @@ class AppGraph(private val context: Context) {
     val healthSummary: HealthSummary = reminderHealth
 
     /**
+     * 1.4 — the offers an event makes (spec §3.3, §5.4): "Mark operational?" and the season offer,
+     * each written only by its accept (B06's `AcceptOperationalOffer`, B04's `AcceptSeasonOffer`).
+     * Built here once; the completion flow and the journal entry both ask through it.
+     */
+    val eventOffers: EventOffers = EventOffers(
+        OperationalOffers(assets, conditions, acceptOperationalOffer, today),
+        SeasonOffers(assets, seasonActivations, acceptSeasonOffer, today),
+    )
+
+    /**
      * 1.2 — **the only completion mechanism** (master plan decision 36, #50). The schedule detail
      * screen, the scan completion sheet and the Maintenance destination's "Log maintenance" quick
      * action all drive this one instance, so the three cannot ask "when was this done" in three
@@ -640,8 +652,7 @@ class AppGraph(private val context: Context) {
      */
     val completionFlow: CompletionFlow = CompletionFlow(
         schedules, definitions, completeSchedule, completeGroupMembers, today,
-        // 1.4: the "Mark operational?" offer after a completion (spec §5.4, plan decision 12).
-        OperationalOffers(assets, conditions, acceptOperationalOffer, today),
+        eventOffers,
     )
 
     /**

@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
+import com.loosecannon.servicetag.core.usecase.ProfileCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
@@ -87,16 +88,28 @@ class OffersTest {
 
     private suspend fun current(assetId: AssetId) = ConditionHistory.of(graph.conditions.forAsset(assetId)).current
 
-    private fun offers() = EventOffers(
-        OperationalOffers(graph.assets, graph.conditions, graph.acceptOperationalOffer, graph.todayPort),
-        SeasonOffers(graph.assets, graph.seasonActivations, graph.acceptSeasonOffer, graph.todayPort),
-    )
+    /**
+     * A QUICK task whose profile logs [kind], so its completion takes that kind (`CompleteSchedule`):
+     * a season-start task completed is a SEASON_START event (spec §3.3).
+     */
+    private suspend fun taskLogging(assetId: AssetId, kind: EventKind, title: String) = graph.saveSchedule.run(
+        null,
+        quarterly(assetId, title).copy(
+            profileId = graph.saveProfile.run(
+                null,
+                ProfileCommand(
+                    assetId = assetId, name = title, eventKind = kind, defaultTitle = title,
+                    fields = emptyList(), consumables = emptyList(),
+                ),
+            ).id,
+        ),
+    ).id
 
     /** A new, profile-less entry of [kind], as the journal's preset kinds open it. */
     private fun entry(assetId: AssetId, kind: EventKind) = EventEntryViewModel(
         graph.assets, graph.definitions, graph.profiles, graph.events,
         graph.logEvent, graph.updateEvent, graph.clock,
-        assetId, null, null, kind, offers(),
+        assetId, null, null, kind, graph.eventOffers,
     )
 
     /** Logs one entry and returns its model once the save has settled, with its `saved` shots counted. */
@@ -181,7 +194,7 @@ class OffersTest {
         val asked = mutableListOf<String>()
         repeat(3) { turn ->
             advanceUntilIdle()
-            val offer = flow.offer.value
+            val offer = flow.offer.value as? OperationalOfferPrompt
             assertNotNull("member ${turn + 1} of 3 is asked", offer)
             assertFalse("each member is asked once", offer!!.assetName in asked)
             asked += offer.assetName
@@ -286,7 +299,7 @@ class OffersTest {
     @Test fun anEventInAZoneThisDeviceCannotResolveIsNeverOffered() = runTest(scheduler) {
         graph.assets.upsert(assetRow("gen", name = "Generator"))
         down(AssetId("gen"))
-        val operational = OperationalOffers(graph.assets, graph.conditions, graph.acceptOperationalOffer, graph.todayPort)
+        val offers = graph.eventOffers
         val event = AssetEvent(
             id = EventId("e-far"), assetId = AssetId("gen"), kind = EventKind.MAINTENANCE, title = "Starter rebuilt",
             profileId = null, occurredOn = "2026-04-15", occurredTime = null, tzId = "Mars/Olympus_Mons", notes = "",
@@ -294,8 +307,11 @@ class OffersTest {
             measurements = emptyList(), consumables = emptyList(),
         )
 
-        assertNull(operational.offerFor(event))
-        assertTrue("the same event in a zone that resolves is offered", operational.offerFor(event.copy(tzId = "UTC")) != null)
+        assertEquals(emptyList<EventOffer>(), offers.offersAfter(event))
+        assertTrue(
+            "the same event in a zone that resolves is offered",
+            offers.offersAfter(event.copy(tzId = "UTC")).single() is OperationalOfferPrompt,
+        )
     }
 
     /**
@@ -361,6 +377,79 @@ class OffersTest {
         val (calendar, _) = logged(AssetId("snow"), EventKind.SEASON_START, "Season opened")
         assertNull(calendar.state.value.offer)
         assertEquals(1, graph.seasonActivations.all().size)
+    }
+
+    /**
+     * The ruling on B12's review, I-1: a **completion** that takes a season kind from its profile
+     * asks the season offer too — S51 with S40 on a MANUAL asset that is out of season. "Not now"
+     * writes nothing; accepting writes one activation, dated the event's day and linked to it.
+     */
+    @Test fun aSeasonStartCompletionAsksToStartTheSeason() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("tub", name = "Hot tub", seasonMode = SeasonMode.MANUAL))
+        val tub = AssetId("tub")
+        val cover = taskLogging(tub, EventKind.SEASON_START, "Cover off")
+        val fill = taskLogging(tub, EventKind.SEASON_START, "Fill and heat")
+        val flow = graph.completionFlow
+
+        val declined = async { flow.complete(cover) }
+        flow.prompt.first { it != null }
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-15")))
+        advanceUntilIdle()
+        val first = flow.offer.value as SeasonOfferPrompt
+        assertEquals(SeasonAction.START, first.action)
+        assertEquals("Start the season now?", first.title)
+        assertEquals("You logged Cover off.", first.body)
+        assertEquals("Start season", first.acceptLabel)
+        assertEquals("Not now", first.declineLabel)
+        flow.declineOffer()
+        assertTrue(declined.await() is CompletionOutcome.Completed)
+        assertEquals(emptyList<SeasonActivation>(), graph.seasonActivations.all())
+
+        val accepted = async { flow.complete(fill) }
+        flow.prompt.first { it != null }
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-14")))
+        advanceUntilIdle()
+        assertTrue(flow.offer.value is SeasonOfferPrompt)
+        assertTrue(flow.acceptOffer())
+        val event = (accepted.await() as CompletionOutcome.Completed).events.single()
+
+        val started = graph.seasonActivations.all().single()
+        assertEquals(SeasonAction.START, started.action)
+        assertEquals("2026-04-14", started.occurredOn)
+        assertEquals(event.id, started.eventId)
+        assertEquals(EventKind.SEASON_START, event.kind)
+    }
+
+    /**
+     * A season-kind completion on a DOWN MANUAL asset makes **both** offers, one at a time:
+     * "Mark operational?" first, then the season offer — declining the first does not lose the
+     * second (the ruling on B12's review, I-1).
+     */
+    @Test fun aSeasonCompletionOnADownManualAssetAsksBothInTurn() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("tub", name = "Hot tub", seasonMode = SeasonMode.MANUAL))
+        val tub = AssetId("tub")
+        down(tub, reason = "Heater fault")
+        val task = taskLogging(tub, EventKind.SEASON_START, "Cover off")
+        val flow = graph.completionFlow
+
+        val outcome = async { flow.complete(task) }
+        flow.prompt.first { it != null }
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-15")))
+        advanceUntilIdle()
+        val first = flow.offer.value
+        assertTrue("$first", first is OperationalOfferPrompt)
+        assertEquals("You logged Cover off. Is Hot tub working normally again?", first!!.body)
+        flow.declineOffer()
+        advanceUntilIdle()
+        val second = flow.offer.value
+        assertTrue("$second", second is SeasonOfferPrompt)
+        assertFalse("still waiting on the second answer", outcome.isCompleted)
+        flow.acceptOffer()
+        assertTrue(outcome.await() is CompletionOutcome.Completed)
+
+        assertEquals(OperationalCondition.DOWN, current(tub)!!.condition)
+        assertEquals(1, graph.conditions.all().size)
+        assertEquals(SeasonAction.START, graph.seasonActivations.all().single().action)
     }
 
     /** "Not now" writes nothing: the entry stands, and the phase is what it was. */

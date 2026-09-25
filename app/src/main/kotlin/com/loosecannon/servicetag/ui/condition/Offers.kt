@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import com.loosecannon.servicetag.core.condition.ConditionHistory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -83,6 +84,25 @@ data class SeasonOfferPrompt(
     override val body: String get() = seasonOfferBody(event.title)
     override val acceptLabel: String get() = if (action == SeasonAction.START) START_SEASON else END_SEASON
     override val declineLabel: String get() = NOT_NOW
+}
+
+/**
+ * The offers already asked within one batch of completions — one "Complete selected" on the scan
+ * sheet (the controller's ruling on B12's review, M-1). Each asset is asked each offer **at most once
+ * per batch**: after "Not yet" on the first of several items done on one DOWN asset, the later items
+ * do not ask it again. A batch lives only as long as the run that made it.
+ */
+class OfferBatch {
+    private val asked = mutableSetOf<Pair<AssetId, String>>()
+
+    /** True the first time [offer]'s asset is asked this offer in the batch, and false ever after. */
+    fun firstTime(offer: EventOffer): Boolean = asked.add(offer.event.assetId to offer.kind)
+
+    private val EventOffer.kind: String
+        get() = when (this) {
+            is OperationalOfferPrompt -> "operational"
+            is SeasonOfferPrompt -> "season-${action.name}"
+        }
 }
 
 fun EventOffer.tapped(): EventOffer = when (this) {
@@ -163,12 +183,18 @@ class SeasonOffers(
 }
 
 /**
- * What a saved journal entry may offer: the operational offer after a MAINTENANCE or REPLACEMENT
- * event, the season offer after a season event. The kinds do not overlap, so an event offers at
- * most one.
+ * Every offer an event makes, in the order they are asked: "Mark operational?" first, then the
+ * season offer. A journal entry makes at most one — its kind is either a MAINTENANCE or REPLACEMENT
+ * or a season kind — but a **completion** can make both: it counts for the operational offer whatever
+ * its kind, and it takes its profile's kind (`CompleteSchedule`), so a season-start task completed on
+ * a DOWN MANUAL asset that is out of season is asked both, one after the other (spec §3.3, §5.4).
+ *
+ * Built once, in the graph, and shared by the completion flow and the journal entry.
  */
 class EventOffers(private val operational: OperationalOffers, private val season: SeasonOffers) {
-    suspend fun after(event: AssetEvent): EventOffer? = operational.offerFor(event) ?: season.offerFor(event)
+    /** What [event] asks, read now. The two offers touch different facts, so neither answer changes the other. */
+    suspend fun offersAfter(event: AssetEvent): List<EventOffer> =
+        listOfNotNull(operational.offerFor(event), season.offerFor(event))
 
     suspend fun accept(offer: EventOffer) {
         when (offer) {

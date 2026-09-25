@@ -54,6 +54,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -410,6 +411,69 @@ class MaintenanceSheetViewModelTest {
             OperationalCondition.DEGRADED,
             model.state.value.blocks.filterIsInstance<SheetBlock.ConditionActions>().single().markOperational,
         )
+    }
+
+    /** A DOWN UPS (F1) with [titles] each overdue, and the sheet open on it with every row selected. */
+    private suspend fun TestScope.downUpsWithEverythingSelected(vararg titles: String): MaintenanceSheetViewModel {
+        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        graph.conditions.insert(conditionRow("c-ups", "ups", OperationalCondition.DOWN, "2026-04-01", reason = "Alarm on"))
+        titles.forEachIndexed { index, title ->
+            seed(scheduleOf("s-ups-$index", assetId = "ups", title = title, anchorOn = "2026-01-01", leadDays = 0))
+        }
+        val model = viewModel(AssetId("ups"))
+        advanceUntilIdle()
+        model.state.value.items.forEach { model.toggle(it.scheduleId) }
+        return model
+    }
+
+    /**
+     * The ruling on B12's review, R-2: the completion's reminder reconcile runs **as soon as the
+     * completion is written**, while "Mark operational?" is still open — so leaving the sheet with the
+     * offer open skips only the offer's write. "Not yet" then writes nothing.
+     */
+    @Test fun theReconcileRunsBeforeTheOfferIsAnswered() = runTest(scheduler) {
+        val model = downUpsWithEverythingSelected("Battery self-test")
+
+        model.completeSelected()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+
+        assertNotNull("the offer is open", graph.completionFlow.offer.value)
+        assertEquals(1, graph.events.all().size)
+        assertEquals("reconciled before the offer is answered", 1, reconciles)
+
+        graph.completionFlow.declineOffer()
+        advanceUntilIdle()
+        assertEquals(1, reconciles)
+        assertEquals(1, graph.conditions.all().size)
+    }
+
+    /**
+     * The ruling on B12's review, M-1: one "Complete selected" asks each asset "Mark operational?" at
+     * most once. After "Not yet" on the first item, the second item done on the same DOWN asset does
+     * not ask again; both completions are written and reconciled.
+     */
+    @Test fun aSelectionAsksEachAssetOnce() = runTest(scheduler) {
+        val model = downUpsWithEverythingSelected("Battery self-test", "Fan clean")
+
+        model.completeSelected()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+        assertNotNull("the first item asks", graph.completionFlow.offer.value)
+        graph.completionFlow.declineOffer()
+        advanceUntilIdle()
+
+        assertNotNull("the second item's question is open", graph.completionFlow.prompt.value)
+        answerToday()
+        advanceUntilIdle()
+
+        assertNull("the same asset is not asked again in this selection", graph.completionFlow.offer.value)
+        assertEquals(2, graph.events.all().size)
+        assertEquals(2, reconciles)
+        assertEquals(1, graph.conditions.all().size)
+        assertFalse(model.state.value.busy)
     }
 
     // ---------------------------------------------------------------- completion
