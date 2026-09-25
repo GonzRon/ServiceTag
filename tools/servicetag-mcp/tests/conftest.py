@@ -18,6 +18,18 @@ from servicetag_mcp import client as client_module
 from servicetag_mcp import server as server_module
 
 
+STATUS_1_4: dict = {
+    "appVersion": "1.4.0",
+    "apiVersion": 1,
+    "schemaVersion": 8,
+    "backupFormatVersion": 8,
+    "counts": {},
+}
+"""What the fake answers `GET /v1/status` with unless a test says otherwise: a ServiceTag 1.4.0 app.
+Every write tool reads `schemaVersion` once per pairing and refuses below 8, and that read is
+recorded like any other request."""
+
+
 @dataclass
 class Recorded:
     method: str
@@ -75,6 +87,7 @@ def api(monkeypatch: pytest.MonkeyPatch):
 
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     fake = FakeApi(url=f"http://127.0.0.1:{httpd.server_address[1]}")
+    fake.reply("GET", "/v1/status", 200, STATUS_1_4)
     state["api"] = fake
     # `serve_forever`'s default `poll_interval` is 0.5s, and `shutdown()` blocks for up to one
     # poll before returning — across ~50 fixture teardowns that is most of the suite's wall time

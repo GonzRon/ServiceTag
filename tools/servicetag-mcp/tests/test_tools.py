@@ -60,6 +60,20 @@ EXPECTED_TOOLS = (
     "list_references",
     "add_reference",
     "update_reference",
+    "get_season",
+    "start_season",
+    "end_season",
+    "set_season_mode",
+    "set_maintenance_break",
+    "list_conditions",
+    "record_condition",
+    "get_health",
+    "set_health_policy",
+    "list_health_subjects",
+    "create_health_subject",
+    "update_health_subject",
+    "archive_health_subject",
+    "list_attention",
 )
 
 
@@ -69,9 +83,18 @@ def body_of(recorded) -> dict:
 
 def test_every_tool_the_design_names_is_registered() -> None:
     assert server_module.TOOL_NAMES == EXPECTED_TOOLS
-    assert len(EXPECTED_TOOLS) == 41
     for name in EXPECTED_TOOLS:
         assert callable(getattr(server_module, name)), f"{name} is missing"
+
+
+def test_tool_names_are_fifty_five() -> None:
+    """Spec §9.4: fourteen new tools take the 1.3 server's forty-one to fifty-five, and `TOOL_NAMES`,
+    the registered tools and the guard's `expected_count` all agree."""
+    assert len(EXPECTED_TOOLS) == 55
+    assert len(server_module.TOOL_NAMES) == 55
+    registered = {tool.name for tool in server_module.mcp._tool_manager.list_tools()}
+    assert registered == set(server_module.TOOL_NAMES)
+    assert len(registered) == 55
 
 
 def test_pair_stores_the_code_upper_cased(api) -> None:
@@ -224,6 +247,8 @@ def test_update_asset_preserves_everything_it_was_not_told_to_change(paired) -> 
         "parentAssetId": current["parentAssetId"],
         "seasonStartMmdd": current["seasonStartMmdd"],
         "seasonEndMmdd": current["seasonEndMmdd"],
+        # 1.4: every key of the asset command goes back, the ignored-on-edit `templateKey` included.
+        "templateKey": current["templateKey"],
     }
 
 
@@ -604,11 +629,14 @@ def test_import_merge_plans_first_and_applies_when_the_plan_is_clean(paired, tmp
 
     result = server_module.import_merge(archive_path=str(archive))
 
+    # The plan writes nothing, so it is asked of any app; the apply is a write, so the schema check
+    # reads `/v1/status` between the two (1.4).
     assert [r.path for r in paired.requests] == [
         "/v1/import-merge/plan",
+        "/v1/status",
         "/v1/import-merge/apply",
     ]
-    for sent in paired.requests:
+    for sent in (r for r in paired.requests if r.path != "/v1/status"):
         assert sent.method == "POST"
         assert sent.headers["Content-Type"] == "application/zip"
         assert sent.body == archive.read_bytes()
@@ -660,6 +688,7 @@ def test_import_merge_returns_the_report_when_the_apply_answers_409(paired, tmp_
 
     assert [r.path for r in paired.requests] == [
         "/v1/import-merge/plan",
+        "/v1/status",
         "/v1/import-merge/apply",
     ]
     assert result["applicable"] is False

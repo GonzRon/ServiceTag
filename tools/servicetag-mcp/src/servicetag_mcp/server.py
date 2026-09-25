@@ -25,6 +25,7 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import ValidationError
 
+from . import command_shapes
 from .client import ApiError, Device, MAX_IMPORT_BYTES, NotPaired
 
 
@@ -111,6 +112,21 @@ TOOL_NAMES: tuple[str, ...] = (
     "list_references",
     "add_reference",
     "update_reference",
+    # 1.4 — seasons, condition and health (spec §9.4). Fourteen, taking the total to 55.
+    "get_season",
+    "start_season",
+    "end_season",
+    "set_season_mode",
+    "set_maintenance_break",
+    "list_conditions",
+    "record_condition",
+    "get_health",
+    "set_health_policy",
+    "list_health_subjects",
+    "create_health_subject",
+    "update_health_subject",
+    "archive_health_subject",
+    "list_attention",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -121,11 +137,63 @@ plausible ceiling to hit on a very full archive, so the two import calls get a l
 than everything else (finding 12)."""
 
 
+_MIN_SCHEMA_VERSION = 8
+"""The Room schema ServiceTag 1.4.0 ships. This server's writes speak 1.4's commands — the schedule's
+`servicePolicy`, the season, condition and health routes — so it writes only to an app at least that
+new (master plan §20, dec. 25). Reads keep working against an older app."""
+
+_POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset({"/v1/import-merge/plan"})
+"""The one non-`GET` route that writes nothing, ever: an old app may still be asked for a plan."""
+
+
+def _require_schema_8() -> None:
+    """Refuse to write to an app older than 1.4.0 — a `ToolError` carrying `APP_SCHEMA_TOO_OLD`, and
+    nothing sent.
+
+    `/v1/status` is read **once per pairing** and the answer kept on the `Device`, beside the code it
+    was read under: a later write under the same code asks nothing, and a new code (a new pairing,
+    perhaps another phone) reads it again. An answer with no usable `schemaVersion` is not kept, so
+    the next write asks again.
+    """
+    cached = device.schema_version
+    if cached is not None and cached[0] == device.token:
+        version = cached[1]
+    else:
+        answer = _call("GET", "/v1/status")
+        version = answer.get("schemaVersion") if isinstance(answer, dict) else None
+        if not isinstance(version, int) or isinstance(version, bool):
+            raise ToolError(
+                "APP_SCHEMA_TOO_OLD: the phone's /v1/status reports no schemaVersion, so this "
+                f"server cannot confirm ServiceTag 1.4.0 (schema {_MIN_SCHEMA_VERSION}) and writes "
+                "nothing — check SERVICETAG_API_BASE_URL and the app version"
+            )
+        device.schema_version = (device.token or "", version)
+    if version < _MIN_SCHEMA_VERSION:
+        raise ToolError(
+            f"APP_SCHEMA_TOO_OLD: the phone's app reports schema {version}; this server writes only "
+            f"to ServiceTag 1.4.0 or later (schema {_MIN_SCHEMA_VERSION}), so nothing was sent. "
+            "Reads still work — update the app to write from here."
+        )
+
+
+def _read_for_write(path: str) -> dict[str, Any]:
+    """The row an overlay tool is about to write back over, read only once the app is confirmed new
+    enough to take the write — so an old app is refused by name, before the read, rather than by
+    whichever field of an old row the overlay found missing."""
+    _require_schema_8()
+    return _call("GET", path)
+
+
 def _call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
     """Every tool's one HTTP call, with `client.py`'s exceptions turned into a message the SDK will
     actually deliver (see the module docstring). `client.py` stays free of any SDK import; this is
     the one seam where that conversion happens.
+
+    It is also the seam every write passes: **any** non-`GET` call but the read-only merge plan runs
+    `_require_schema_8` first, whichever tool makes it.
     """
+    if method != "GET" and path not in _POSTS_THAT_WRITE_NOTHING:
+        _require_schema_8()
     try:
         return device.request(method, path, **kwargs)
     except NotPaired as exc:
@@ -265,6 +333,58 @@ def _find_by_id(rows: Any, row_id: str, *, field: str, of: str) -> dict[str, Any
     raise ToolError(f"no {field} {row_id!r} among that asset's rows")
 
 
+def _wire(name: str) -> str:
+    """An argument's wire key: the shipped naming convention, `service_policy` ↔ `servicePolicy`."""
+    head, *rest = name.split("_")
+    return head + "".join(part.capitalize() for part in rest)
+
+
+def _arguments(given: dict[str, Any], *, besides: tuple[str, ...]) -> dict[str, Any]:
+    """An overlay tool's field arguments by name, taken from its own `locals()` as its first
+    statement — so the tool never restates its field list to know what it was given. `besides` names
+    the arguments that are not fields of the command (the id, `clear_fields`, an action flag)."""
+    return {name: value for name, value in given.items() if name not in besides}
+
+
+def _overlay_command(
+    row: Any,
+    keys: tuple[str, ...],
+    arguments: dict[str, Any],
+    to_clear: set[str],
+    *,
+    text_fields: frozenset[str] = frozenset(),
+    list_fields: frozenset[str] = frozenset(),
+    renames: Any = None,
+    of: str,
+) -> dict[str, Any]:
+    """The body an overlay tool submits: **every** command key in `keys` — the vendored list
+    (`command_shapes`), not a list of this tool's own — read off `row` (under its row name, per
+    `renames`, row name → command key), then the supplied non-null arguments over it, then
+    `clear_fields`: a cleared text field is `""`, a cleared list `[]`, anything else `null`.
+
+    A key the row does not report is a `ToolError`, never a guess (a malformed read must never
+    become a write). An argument or a cleared name whose wire key is not one of `keys` is refused
+    too, rather than dropped: a value a caller gave must never vanish on its way to the phone.
+    """
+    row_key = {command: row_name for row_name, command in (renames or {}).items()}
+    given = {_wire(name): value for name, value in arguments.items() if value is not None}
+    cleared: dict[str, Any] = {}
+    for name in to_clear:
+        cleared[_wire(name)] = "" if name in text_fields else ([] if name in list_fields else None)
+    stray = sorted((set(given) | set(cleared)) - set(keys))
+    if stray:
+        raise ToolError(f"{stray} are not in the command this server sends for {of}")
+    body: dict[str, Any] = {}
+    for key in keys:
+        if key in cleared:
+            body[key] = cleared[key]
+        elif key in given:
+            body[key] = given[key]
+        else:
+            body[key] = _field(row, row_key.get(key, key), of=of)
+    return body
+
+
 @mcp.tool()
 def pair(code: str) -> str:
     """Hand over the pairing code shown on the phone's Settings > Utilities > Developer API screen.
@@ -277,7 +397,10 @@ def pair(code: str) -> str:
 
 @mcp.tool()
 def status() -> dict[str, Any]:
-    """The app's version, the contract version, and a row count per table."""
+    """The app's version, the contract version, its `schemaVersion` and `backupFormatVersion`, and a
+    row count per table (since 1.4 also `seasonActivations`, `assetConditions` and
+    `healthSubjects`). Every write tool reads `schemaVersion` once per pairing and refuses with
+    `APP_SCHEMA_TOO_OLD` below 8 (ServiceTag 1.4.0)."""
     return _call("GET", "/v1/status")
 
 
@@ -417,58 +540,25 @@ def update_asset(
     does not check it locally). Clear both together to go back to year-round.
 
     `template_key` is not a parameter here because the app ignores it on an edit — it only seeds a
-    *new* asset (`create_asset`, `create_component`).
+    *new* asset (`create_asset`, `create_component`). The body still carries the row's own
+    `templateKey` back, because it sends **every key of the asset command** (the vendored
+    `command_shapes.ASSET_KEYS`), not a list of this tool's own.
+
+    1.4: the season pair is the asset command's one compatibility input. The pair the asset already
+    reports is always accepted; a **different** pair on a `MANUAL` asset is the app's
+    `LEGACY_WRITE_CANNOT_REPRESENT`, and one that would strand a `PRE_SERVICE` schedule is
+    `SEASON_MODE_STRANDS_POLICY` — change the mode with `set_season_mode`. Condition, the break and
+    the health policy are in no asset command; each has its own tool.
     """
-    supplied = {
-        "category": category,
-        "description": description,
-        "notes": notes,
-        "manufacturer": manufacturer,
-        "model": model,
-        "serial_number": serial_number,
-        "purchase_on": purchase_on,
-        "in_service_on": in_service_on,
-        "purchase_price_minor": purchase_price_minor,
-        "currency": currency,
-        "vendor": vendor,
-        "location": location,
-        "warranty_expires_on": warranty_expires_on,
-        "warranty_notes": warranty_notes,
-        "parent_asset_id": parent_asset_id,
-        "season_start_mmdd": season_start_mmdd,
-        "season_end_mmdd": season_end_mmdd,
-    }
-    to_clear = _validate_clear_fields(clear_fields, _ASSET_CLEARABLE_FIELDS, supplied)
+    arguments = _arguments(locals(), besides=("asset_id", "clear_fields"))
+    to_clear = _validate_clear_fields(clear_fields, _ASSET_CLEARABLE_FIELDS, arguments)
 
     path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}"
-    current = _field(_call("GET", path), "asset", of="the asset lookup")
-
-    def text(key: str, given: str | None, name: str) -> str:
-        return _overlay_or_clear(_field(current, key, of="the asset"), given, name, to_clear, when_cleared="")
-
-    def nullable(key: str, given: Any, name: str) -> Any:
-        return _overlay_or_clear(_field(current, key, of="the asset"), given, name, to_clear, when_cleared=None)
-
-    body = {
-        "name": _overlay(_field(current, "name", of="the asset"), name),
-        "category": text("category", category, "category"),
-        "description": text("description", description, "description"),
-        "notes": text("notes", notes, "notes"),
-        "manufacturer": text("manufacturer", manufacturer, "manufacturer"),
-        "model": text("model", model, "model"),
-        "serialNumber": text("serialNumber", serial_number, "serial_number"),
-        "purchaseOn": nullable("purchaseOn", purchase_on, "purchase_on"),
-        "inServiceOn": nullable("inServiceOn", in_service_on, "in_service_on"),
-        "purchasePriceMinor": nullable("purchasePriceMinor", purchase_price_minor, "purchase_price_minor"),
-        "currency": nullable("currency", currency, "currency"),
-        "vendor": text("vendor", vendor, "vendor"),
-        "location": text("location", location, "location"),
-        "warrantyExpiresOn": nullable("warrantyExpiresOn", warranty_expires_on, "warranty_expires_on"),
-        "warrantyNotes": text("warrantyNotes", warranty_notes, "warranty_notes"),
-        "parentAssetId": nullable("parentAssetId", parent_asset_id, "parent_asset_id"),
-        "seasonStartMmdd": nullable("seasonStartMmdd", season_start_mmdd, "season_start_mmdd"),
-        "seasonEndMmdd": nullable("seasonEndMmdd", season_end_mmdd, "season_end_mmdd"),
-    }
+    current = _field(_read_for_write(path), "asset", of="the asset lookup")
+    body = _overlay_command(
+        current, command_shapes.ASSET_KEYS, arguments, to_clear,
+        text_fields=_ASSET_TEXT_CLEARABLE, of="the asset",
+    )
     return _call("PATCH", path, json_body=body, content_type="application/json")
 
 
@@ -647,7 +737,7 @@ def save_definition(
         to_clear = _validate_clear_fields(clear_fields, _DEFINITION_CLEARABLE_FIELDS, supplied)
 
         rows = _list_field(
-            _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/definitions"),
+            _read_for_write(f"/v1/assets/{_path_id(asset_id, field='asset_id')}/definitions"),
             "definitions",
             of="the definitions list",
         )
@@ -742,7 +832,7 @@ def save_profile(
         )
     else:
         rows = _field(
-            _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/profiles"),
+            _read_for_write(f"/v1/assets/{_path_id(asset_id, field='asset_id')}/profiles"),
             "profiles",
             of="the profiles list",
         )
@@ -1099,7 +1189,7 @@ def update_group(
     to_clear = _validate_clear_fields(clear_fields, _GROUP_CLEARABLE_FIELDS, supplied)
 
     path = f"/v1/groups/{_path_id(group_id, field='group_id')}"
-    current = _field(_call("GET", path), "group", of="the group lookup")
+    current = _field(_read_for_write(path), "group", of="the group lookup")
 
     def kept_members() -> list[dict[str, Any]]:
         rows = _list_field(current, "members", of="the group")
@@ -1165,11 +1255,47 @@ def get_schedule(schedule_id: str) -> dict[str, Any]:
 
     Answers `{schedule, state, status, computedForOn}`. `state` is the derived row — due date, due
     meter, current meter, last completion, last termination — and `status` is one of `OK`,
-    `DUE_SOON`, `DUE`, `OVERDUE`, `INACTIVE_SEASON`, `PAUSED`, `NO_DATA`, **computed at read time
-    and never stored**. `computedForOn` is the local date it was computed for, so you always know
-    which day the answer is about.
+    `DUE_SOON`, `DUE`, `OVERDUE`, `INACTIVE_SEASON`, `PAUSED`, `NO_DATA` or (1.4) `DEFERRED`,
+    **computed at read time and never stored**. `computedForOn` is the local date it was computed
+    for, so you always know which day the answer is about.
+
+    1.4: `schedule` carries `servicePolicy` and `policyOffsetDays`, plus 1.3's `seasonBehavior`,
+    `seasonReentry` and `seasonReentryOffsetDays` as a **derived** compatibility triple (all three
+    `null` for `PRE_SERVICE`). `state` adds `actionableDueOn` — the day the work is actionable under
+    the policy, the season and the break, beside `effectiveDueOn`, whose meaning is unchanged —
+    `policyReason`, `policyPhase` and `quiet`; `seasonActive` is `policyPhase == ACTIVE`.
     """
     return _call("GET", f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}")
+
+
+_DEPRECATED_SEASON_ARGUMENTS: frozenset[str] = frozenset({
+    "season_behavior", "season_reentry", "season_reentry_offset_days",
+})
+"""1.3's three season fields, kept on `create_schedule` and `update_schedule` as deprecated arguments
+(spec §9.3, RS-1). Any one of them makes the body the **legacy form**, which the app — never this
+server — translates through its one legacy mapping."""
+
+_CURRENT_POLICY_ARGUMENTS: frozenset[str] = frozenset({"service_policy", "policy_offset_days"})
+"""The two arguments whose wire keys make a body the **1.4 form** (spec §9.3's presence rule)."""
+
+
+def _refuse_mixed_forms(arguments: dict[str, Any], to_clear: set[str]) -> bool:
+    """Which form a schedule write sends — `True` for the legacy form — or a `ToolError` carrying
+    `LEGACY_AND_CURRENT_FIELDS_MIXED` **before any request**, when a deprecated argument and a 1.4
+    one are both given. Naming a field in `clear_fields` counts as giving it: clearing
+    `season_reentry` is a legacy-form write just as setting it is.
+
+    The app refuses the same mix with the same code; this refusal exists so that a mixed call never
+    reaches the phone at all."""
+    named = {name for name, value in arguments.items() if value is not None} | to_clear
+    legacy = sorted(named & _DEPRECATED_SEASON_ARGUMENTS)
+    current = sorted(named & _CURRENT_POLICY_ARGUMENTS)
+    if legacy and current:
+        raise ToolError(
+            f"LEGACY_AND_CURRENT_FIELDS_MIXED: {legacy} are deprecated season arguments and "
+            f"{current} are the 1.4 policy — send one form, not both. Nothing was sent."
+        )
+    return bool(legacy)
 
 
 @mcp.tool()
@@ -1187,6 +1313,8 @@ def create_schedule(
     meter_interval: float | None = None,
     anchor_meter: float | None = None,
     meter_lead: float | None = None,
+    service_policy: str | None = None,
+    policy_offset_days: int | None = None,
     season_behavior: str | None = None,
     season_reentry: str | None = None,
     season_reentry_offset_days: int | None = None,
@@ -1204,18 +1332,31 @@ def create_schedule(
     `time_unit` is `DAY`｜`WEEK`｜`MONTH`｜`YEAR`. `time_basis` is `FIXED` (the series runs from
     `anchor_on` whenever the work is actually done) or `COMPLETION` (the next one is an interval
     after the last one was finished); it defaults to `FIXED`. `lead_days` is how many days early the
-    schedule starts reading DUE SOON. `anchor_on` is ISO `YYYY-MM-DD`; `season_reentry` is `MM-DD`.
+    schedule starts reading DUE SOON. `anchor_on` is ISO `YYYY-MM-DD`.
 
     `completion_mode` is `QUICK` (one tap) or `FORM`, which collects a quick action's readings —
-    pass `profile_id` for that. `season_behavior` is `IGNORE` or `FOLLOW_ASSET`. `providers` is
-    `[{"provider": "LOCAL", "enabled": true}]`; `LOCAL` is the only provider in 1.2.
+    pass `profile_id` for that. `providers` is `[{"provider": "LOCAL", "enabled": true}]`; `LOCAL` is
+    the only provider.
+
+    **The service policy (1.4)** says when the work is actionable relative to its asset's season and
+    maintenance break, and moves only the time side's date: `service_policy` is `CONTINUOUS` (the
+    default — whenever it is due), `IN_SERVICE_AT_START` (`policy_offset_days` 0–365 after the season
+    starts; omitted is 0), `IN_SERVICE_RESUME_CLAMPED` (no offset) or `PRE_SERVICE`
+    (`policy_offset_days` −365 to −1, required — nothing suggests one).
+
+    **Deprecated arguments.** `season_behavior` (`IGNORE`｜`FOLLOW_ASSET`), `season_reentry` and
+    `season_reentry_offset_days` are 1.3's season fields, still accepted. Any one of them makes this
+    call send 1.3's **legacy form** — those keys only, exactly as given — and **the app translates
+    it** through its one legacy mapping (this tool never does), refusing with the same codes it gives
+    any client. A deprecated argument **and** `service_policy`/`policy_offset_days` together is
+    refused here, before any request, as `LEGACY_AND_CURRENT_FIELDS_MIXED`. Neither sends neither
+    key, which the app reads as `CONTINUOUS`.
 
     **A group target is narrower**, and the app enforces all of it: no meter rule, no `profile_id`,
-    `completion_mode` `QUICK` only, `season_behavior` `IGNORE` only — and the group must already
+    `completion_mode` `QUICK` only, `CONTINUOUS` only in either form — and the group must already
     have a member, or the schedule's first round would oblige nobody.
-
-    `season_reentry` and `season_reentry_offset_days` are stored and not read in 1.2.
     """
+    _refuse_mixed_forms(_arguments(locals(), besides=()), set())
     return _call(
         "POST",
         "/v1/schedules",
@@ -1233,6 +1374,8 @@ def create_schedule(
             meterInterval=meter_interval,
             anchorMeter=anchor_meter,
             meterLead=meter_lead,
+            servicePolicy=service_policy,
+            policyOffsetDays=policy_offset_days,
             seasonBehavior=season_behavior,
             seasonReentry=season_reentry,
             seasonReentryOffsetDays=season_reentry_offset_days,
@@ -1251,6 +1394,7 @@ _SCHEDULE_NULLABLE_CLEARABLE: frozenset[str] = frozenset({
     "target_asset_id", "target_group_id",
     "time_interval", "time_unit", "anchor_on",
     "meter_definition_id", "meter_interval", "anchor_meter", "meter_lead",
+    "policy_offset_days",
     "season_reentry", "season_reentry_offset_days", "profile_id",
 })
 _SCHEDULE_CLEARABLE_FIELDS: frozenset[str] = (
@@ -1258,15 +1402,35 @@ _SCHEDULE_CLEARABLE_FIELDS: frozenset[str] = (
 )
 """Every nullable field of the command, and nothing else.
 
-`title` is required. `time_basis`, `season_behavior` and `completion_mode` are enums the app would
-refuse blank — change one by *passing* the new value. `lead_days` and `reminders_enabled` are not
-nullable at all, so `0` and `false` already say what "cleared" would mean. `postponed_due_on` and
-`status` are not in this command: they have their own tools (`postpone_schedule`, `pause_schedule`,
-`archive_schedule`).
+`title` is required. `time_basis`, `service_policy`, `season_behavior` and `completion_mode` are
+enums the app would refuse blank — change one by *passing* the new value. `lead_days` and
+`reminders_enabled` are not nullable at all, so `0` and `false` already say what "cleared" would
+mean. `postponed_due_on` and `status` are not in this command: they have their own tools
+(`postpone_schedule`, `pause_schedule`, `archive_schedule`).
 
 **The two target ids are here for one reason**: exactly one of them may be set, so moving a schedule
 from an asset to a group means supplying the new one *and* clearing the old — an overlay would
-otherwise keep both and the app would refuse the pair."""
+otherwise keep both and the app would refuse the pair.
+
+`policy_offset_days` cleared is `null`, which the app reads as 0 on `IN_SERVICE_AT_START` and as no
+offset on the other policies. `season_reentry` and `season_reentry_offset_days` are the two
+deprecated members: clearing one is a deprecated argument, so it sends the legacy form."""
+
+_UNLINK_HEALTH_SUBJECT = "unlinkHealthSubject"
+"""The schedule command's one action flag (`command_shapes.SCHEDULE_ACTION_FLAGS`): an action, not a
+field, sent only when asked for."""
+
+
+def _schedule_command_keys(legacy: bool) -> tuple[str, ...]:
+    """The keys a schedule body carries, from the vendored command: the 1.4 form is every key of
+    `SCHEDULE_KEYS`; the legacy form swaps the two policy keys for the three deprecated ones, so a
+    body is only ever one form."""
+    if not legacy:
+        return command_shapes.SCHEDULE_KEYS
+    current = {_wire(name) for name in _CURRENT_POLICY_ARGUMENTS}
+    return tuple(k for k in command_shapes.SCHEDULE_KEYS if k not in current) + tuple(
+        command_shapes.SCHEDULE_LEGACY_KEYS
+    )
 
 
 @mcp.tool()
@@ -1285,6 +1449,8 @@ def update_schedule(
     meter_interval: float | None = None,
     anchor_meter: float | None = None,
     meter_lead: float | None = None,
+    service_policy: str | None = None,
+    policy_offset_days: int | None = None,
     season_behavior: str | None = None,
     season_reentry: str | None = None,
     season_reentry_offset_days: int | None = None,
@@ -1293,18 +1459,37 @@ def update_schedule(
     reminders_enabled: bool | None = None,
     providers: list[dict[str, Any]] | None = None,
     clear_fields: list[str] | None = None,
+    unlink_health_subject: bool | None = None,
 ) -> dict[str, Any]:
     """Edit a schedule's rule.
 
-    Reads the schedule first and overlays only what you supplied, so nothing about calling this
-    requires stating all twenty fields. An omitted argument and one sent as `null` both leave the
-    current value alone; a supplied non-null value replaces it.
+    Reads the schedule first and overlays only what you supplied onto **every key of the schedule
+    command** (the vendored `command_shapes`), so nothing about calling this requires stating every
+    field. An omitted argument and one sent as `null` both leave the current value alone; a supplied
+    non-null value replaces it. Called with nothing at all, it sends back exactly what the row
+    already has — an edit that changes no rule, moves no date and clears no postponement.
 
     Clearing is by name: `clear_fields=["meter_definition_id", "meter_interval"]` takes the meter
     rule off, `clear_fields=["profile_id"]` unlinks the quick action. `title` can never be cleared,
-    and `time_basis`, `season_behavior` and `completion_mode` are changed by passing the new value
-    rather than by clearing. `lead_days=0` and `reminders_enabled=false` say themselves what
-    clearing them would mean.
+    and `time_basis`, `service_policy`, `season_behavior` and `completion_mode` are changed by
+    passing the new value rather than by clearing. `lead_days=0` and `reminders_enabled=false` say
+    themselves what clearing them would mean.
+
+    **Two forms (1.4).** With no deprecated argument, the body is the **1.4 form**: the row's
+    `servicePolicy`/`policyOffsetDays` with yours laid over them, and none of 1.3's season keys. A
+    **deprecated argument** — `season_behavior`, `season_reentry`, `season_reentry_offset_days`, or
+    `clear_fields` naming one of the last two — makes it the **legacy form**, overlaid on the row's
+    derived triple, and **the app translates it** (this tool never does). The app refuses a legacy
+    edit of a `PRE_SERVICE` schedule, whose triple reads all `null`, as
+    `LEGACY_WRITE_CANNOT_REPRESENT`; send `service_policy` instead. A deprecated argument and
+    `service_policy`/`policy_offset_days` together — `clear_fields` included — is refused here,
+    before any request, as `LEGACY_AND_CURRENT_FIELDS_MIXED`.
+
+    **`unlink_health_subject=True`** is an action, not a field: while a live health subject is driven
+    by this schedule, an edit that takes its time rule away or moves it to another asset or a group
+    is refused as `SCHEDULE_DRIVES_HEALTH_SUBJECT` unless this is set, and with it the subject is
+    archived in the same write (or refused as `HEALTH_SUBJECT_IS_PRIMARY` when its asset's
+    `TRACK_ONE` health follows it). `None` and `False` send no flag.
 
     **Moving the target takes two arguments, not one.** Exactly one of `target_asset_id` and
     `target_group_id` may be set, and the overlay keeps whichever the schedule already has — so
@@ -1318,81 +1503,19 @@ def update_schedule(
     immediately overdue. Pausing, archiving and postponing are **not** here: each is its own tool,
     so an edit can never quietly do one of them.
     """
-    supplied = {
-        "description": description,
-        "target_asset_id": target_asset_id,
-        "target_group_id": target_group_id,
-        "time_interval": time_interval,
-        "time_unit": time_unit,
-        "anchor_on": anchor_on,
-        "meter_definition_id": meter_definition_id,
-        "meter_interval": meter_interval,
-        "anchor_meter": anchor_meter,
-        "meter_lead": meter_lead,
-        "season_reentry": season_reentry,
-        "season_reentry_offset_days": season_reentry_offset_days,
-        "profile_id": profile_id,
-        "providers": providers,
-    }
-    to_clear = _validate_clear_fields(clear_fields, _SCHEDULE_CLEARABLE_FIELDS, supplied)
+    arguments = _arguments(locals(), besides=("schedule_id", "clear_fields", "unlink_health_subject"))
+    to_clear = _validate_clear_fields(clear_fields, _SCHEDULE_CLEARABLE_FIELDS, arguments)
+    legacy = _refuse_mixed_forms(arguments, to_clear)
 
     path = f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}"
-    current = _field(_call("GET", path), "schedule", of="the schedule lookup")
-
-    def nullable(key: str, given: Any, name: str) -> Any:
-        return _overlay_or_clear(
-            _field(current, key, of="the schedule"), given, name, to_clear, when_cleared=None,
-        )
-
-    def kept_providers() -> list[dict[str, Any]]:
-        rows = _list_field(current, "providers", of="the schedule")
-        kept: list[dict[str, Any]] = []
-        for index in range(len(rows)):
-            entry = _entry(rows, index, of="the schedule's providers")
-            entry_of = f"the schedule's providers[{index}]"
-            kept.append({
-                "provider": _field(entry, "provider", of=entry_of),
-                "enabled": _field(entry, "enabled", of=entry_of),
-            })
-        return kept
-
-    body = {
-        "title": _overlay(_field(current, "title", of="the schedule"), title),
-        # The row reports `assetId`/`groupId`; the command takes `targetAssetId`/`targetGroupId`,
-        # because the pair is a choice of target and not two fields of a row (`docs/api/v1.md`).
-        "targetAssetId": nullable("assetId", target_asset_id, "target_asset_id"),
-        "targetGroupId": nullable("groupId", target_group_id, "target_group_id"),
-        "description": _overlay_or_clear(
-            _field(current, "description", of="the schedule"), description, "description",
-            to_clear, when_cleared="",
-        ),
-        "timeInterval": nullable("timeInterval", time_interval, "time_interval"),
-        "timeUnit": nullable("timeUnit", time_unit, "time_unit"),
-        "timeBasis": _overlay(_field(current, "timeBasis", of="the schedule"), time_basis),
-        "anchorOn": nullable("anchorOn", anchor_on, "anchor_on"),
-        "leadDays": _overlay(_field(current, "leadDays", of="the schedule"), lead_days),
-        "meterDefinitionId": nullable("meterDefinitionId", meter_definition_id, "meter_definition_id"),
-        "meterInterval": nullable("meterInterval", meter_interval, "meter_interval"),
-        "anchorMeter": nullable("anchorMeter", anchor_meter, "anchor_meter"),
-        "meterLead": nullable("meterLead", meter_lead, "meter_lead"),
-        "seasonBehavior": _overlay(
-            _field(current, "seasonBehavior", of="the schedule"), season_behavior,
-        ),
-        "seasonReentry": nullable("seasonReentry", season_reentry, "season_reentry"),
-        "seasonReentryOffsetDays": nullable(
-            "seasonReentryOffsetDays", season_reentry_offset_days, "season_reentry_offset_days",
-        ),
-        "completionMode": _overlay(
-            _field(current, "completionMode", of="the schedule"), completion_mode,
-        ),
-        "profileId": nullable("profileId", profile_id, "profile_id"),
-        "remindersEnabled": _overlay(
-            _field(current, "remindersEnabled", of="the schedule"), reminders_enabled,
-        ),
-        "providers": [] if "providers" in to_clear else (
-            kept_providers() if providers is None else providers
-        ),
-    }
+    current = _field(_read_for_write(path), "schedule", of="the schedule lookup")
+    body = _overlay_command(
+        current, _schedule_command_keys(legacy), arguments, to_clear,
+        text_fields=_SCHEDULE_TEXT_CLEARABLE, list_fields=_SCHEDULE_LIST_CLEARABLE,
+        renames=command_shapes.SCHEDULE_ROW_TO_COMMAND, of="the schedule",
+    )
+    if unlink_health_subject:
+        body[_UNLINK_HEALTH_SUBJECT] = True
     return _call("PATCH", path, json_body=body, content_type="application/json")
 
 
@@ -1409,13 +1532,23 @@ def pause_schedule(schedule_id: str, paused: bool = True) -> dict[str, Any]:
 
 
 @mcp.tool()
-def archive_schedule(schedule_id: str, archived: bool = True) -> dict[str, Any]:
+def archive_schedule(
+    schedule_id: str, archived: bool = True, unlink_health_subject: bool | None = None,
+) -> dict[str, Any]:
     """Archive or unarchive a schedule. Archive is not delete: it disappears from every due list and
-    its completions and closures are kept. There is deliberately no tool that deletes one."""
+    its completions and closures are kept. There is deliberately no tool that deletes one.
+
+    1.4: archiving a schedule that drives a live health subject is refused as
+    `SCHEDULE_DRIVES_HEALTH_SUBJECT` unless `unlink_health_subject=True`, which archives that subject
+    in the same write (or is refused as `HEALTH_SUBJECT_IS_PRIMARY` when its asset's `TRACK_ONE`
+    health follows it). `None` and `False` send no flag."""
+    body: dict[str, Any] = {"archived": archived}
+    if unlink_health_subject:
+        body[_UNLINK_HEALTH_SUBJECT] = True
     return _call(
         "POST",
         f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/archive",
-        json_body={"archived": archived},
+        json_body=body,
         content_type="application/json",
     )
 
@@ -1452,7 +1585,7 @@ def postpone_schedule(
     elif postponed_due_on is not None:
         value = postponed_due_on
     else:
-        current = _field(_call("GET", path), "schedule", of="the schedule lookup")
+        current = _field(_read_for_write(path), "schedule", of="the schedule lookup")
         value = _field(current, "postponedDueOn", of="the schedule")
     return _call(
         "POST", f"{path}/postpone",
@@ -1570,6 +1703,12 @@ def list_due() -> dict[str, Any]:
     counted **once**, however many members are outstanding. `rank` is its 0-based position in that
     order, so the app's ordering can be reproduced without re-deriving it. Archived schedules never
     appear.
+
+    1.4: each item also carries `actionableDueOn` (the day the work is actionable under its service
+    policy, season and break), `policyReason` and `quiet`, and `status` may be `DEFERRED` — work the
+    policy holds back, which never notifies and sits in its own Deferred section after the current
+    items. The order and `rank` follow `actionableDueOn`. Asset-level condition and age-driven health
+    rows are not here: they are `list_attention`.
     """
     return _call("GET", "/v1/due")
 
@@ -1668,6 +1807,346 @@ def update_reference(
         json_body=_body(displayName=display_name, description=description),
         content_type="application/json",
     )
+
+
+# --- 1.4, seasons, condition and health ------------------------------------------------------------
+#
+# Fourteen tools over `docs/api/v1.md`'s "Seasons, condition and health (1.4.0)" routes. Everything
+# above holds unchanged: an unknown argument is refused before the body runs, `null` means "leave
+# alone", clearing is by name through `clear_fields`, and every refusal is a `ToolError` carrying
+# the app's code.
+#
+# Three tools record a **new fact** and have **no overlay** — `start_season`, `end_season` and
+# `record_condition` — for `close_round`'s reason: every argument is required, nothing is read
+# first, and nothing about a new fact is inherited from a row.
+#
+# Nothing here amends or deletes a condition or an activation, deletes a health subject, or writes
+# a health value: the API has no route for any of them, and health is computed at read time and
+# stored nowhere.
+
+
+@mcp.tool()
+def get_season(asset_id: str) -> dict[str, Any]:
+    """One asset's season, computed for today.
+
+    Answers `{seasonMode, seasonStartMmdd, seasonEndMmdd, seasonPhase, nextBoundaryOn,
+    blackoutStartMmdd, blackoutEndMmdd, inBreak, activations, computedForOn}`. `seasonMode` is
+    `YEAR_ROUND` (always in season), `CALENDAR` (in season between the two `MM-DD` dates, wrapping)
+    or `MANUAL` (in season from a recorded `START` to the next `END`). `seasonPhase` is `IN_SEASON`
+    or `OUT_OF_SEASON`, `nextBoundaryOn` is a `CALENDAR` season's next end or start (`null` for the
+    other two, whose next boundary is never predicted), and `inBreak` says whether today falls in
+    the maintenance break. `activations` is every `START`/`END` ever recorded, oldest first.
+    """
+    return _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/season")
+
+
+def _activation(asset_id: str, action: str, occurred_on: str | None, event_id: str | None) -> dict[str, Any]:
+    return _call(
+        "POST",
+        f"/v1/assets/{_path_id(asset_id, field='asset_id')}/season",
+        json_body={"action": action, "occurredOn": occurred_on, "eventId": event_id},
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def start_season(asset_id: str, occurred_on: str | None, event_id: str | None) -> dict[str, Any]:
+    """Record that a `MANUAL` asset's season started. **A new fact: no overlay, no defaults.**
+
+    Writes one immutable `START` activation and no asset field. **The row can never be amended or
+    deleted** — there is no tool and no route that edits or removes an activation — so a mistaken one
+    is corrected by recording what happened next, never by rewriting the past.
+
+    Every argument is required. `occurred_on` is ISO `YYYY-MM-DD`, or `None` for today; it may be
+    neither later than today nor earlier than the asset's latest `START` or `END`
+    (`SEASON_DATE_OUT_OF_RANGE`). `event_id` names an event of this asset the start came with, or
+    `None` (`FOREIGN_EVENT` when it is another asset's). On an asset that is not `MANUAL` the app
+    answers `SEASON_NOT_MANUAL`, and on one already in season `SEASON_ALREADY_STARTED` — this tool
+    does not pre-check either. Answers `{activation, season}`.
+    """
+    return _activation(asset_id, "START", occurred_on, event_id)
+
+
+@mcp.tool()
+def end_season(asset_id: str, occurred_on: str | None, event_id: str | None) -> dict[str, Any]:
+    """Record that a `MANUAL` asset's season ended. **A new fact: no overlay, no defaults.**
+
+    Writes one immutable `END` activation and no asset field. **The row can never be amended or
+    deleted** — there is no tool and no route that edits or removes an activation.
+
+    Every argument is required, exactly as `start_season`: `occurred_on` (`YYYY-MM-DD`, or `None`
+    for today, never later than today nor earlier than the latest `START`/`END`) and `event_id`
+    (`None`, or an event of this asset). An asset that is not `MANUAL` is `SEASON_NOT_MANUAL`; one
+    already out of season — including a `MANUAL` asset with no activation yet — is
+    `SEASON_ALREADY_ENDED`. Answers `{activation, season}`.
+    """
+    return _activation(asset_id, "END", occurred_on, event_id)
+
+
+@mcp.tool()
+def set_season_mode(
+    asset_id: str,
+    season_mode: str,
+    season_start_mmdd: str | None = None,
+    season_end_mmdd: str | None = None,
+    manual_phase: str | None = None,
+) -> dict[str, Any]:
+    """Set how an asset's season works. A command: the whole mode is stated, nothing is read first.
+
+    `season_mode` is `YEAR_ROUND`, `CALENDAR` or `MANUAL`. `CALENDAR` takes both `MM-DD` dates (e.g.
+    `"04-01"`, `"10-31"`, wrapping over the new year is fine) and nothing else does
+    (`SEASON_WINDOW_REQUIRED` / `SEASON_WINDOW_FORBIDDEN`). `manual_phase` (`IN_SEASON` or
+    `OUT_OF_SEASON`) is taken **exactly** on a switch into `MANUAL` from another mode — the switch
+    records one `START` or `END` dated today — and refused everywhere else (`MANUAL_PHASE_REQUIRED`
+    / `MANUAL_PHASE_FORBIDDEN`). A change that would remove or re-kind the boundary a `PRE_SERVICE`
+    schedule counts back from is `SEASON_MODE_STRANDS_POLICY`, naming those schedules. The same mode
+    and window as stored writes nothing. Answers `{asset, season}`.
+    """
+    return _call(
+        "POST",
+        f"/v1/assets/{_path_id(asset_id, field='asset_id')}/season-mode",
+        json_body={
+            "seasonMode": season_mode,
+            "seasonStartMmdd": season_start_mmdd,
+            "seasonEndMmdd": season_end_mmdd,
+            "manualPhase": manual_phase,
+        },
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def set_maintenance_break(
+    asset_id: str, blackout_start_mmdd: str | None, blackout_end_mmdd: str | None,
+) -> dict[str, Any]:
+    """Set or clear an asset's maintenance break — the stretch of the year no work should land in.
+
+    Both arguments are required: two `MM-DD` dates (wrapping is fine) set the break, and **both
+    `None` clears it**; one without the other is refused by the app. Nothing ever fills a break in
+    for you, and one covering every day of a year is `BLACKOUT_COVERS_THE_YEAR`. A change that would
+    strand a `PRE_SERVICE` schedule is `BREAK_STRANDS_POLICY`, naming those schedules. Answers
+    `{asset, season}`.
+    """
+    return _call(
+        "POST",
+        f"/v1/assets/{_path_id(asset_id, field='asset_id')}/maintenance-break",
+        json_body={"blackoutStartMmdd": blackout_start_mmdd, "blackoutEndMmdd": blackout_end_mmdd},
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def list_conditions(asset_id: str) -> dict[str, Any]:
+    """One asset's operational condition history: `{conditions, current}`.
+
+    `conditions` is every recorded row, **oldest first by its ordering key** — `(occurredOn,
+    occurredTime with none first, createdAt, id)`, not arrival order — and `current` is the last of
+    them, or `null` when nothing has been recorded (which is not the same as `OPERATIONAL`).
+    """
+    return _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/conditions")
+
+
+@mcp.tool()
+def record_condition(
+    asset_id: str,
+    condition: str,
+    occurred_on: str | None,
+    occurred_time: str | None,
+    tz_id: str,
+    reason: str,
+    event_id: str | None,
+) -> dict[str, Any]:
+    """Record an asset's operational condition. **A new fact: no overlay, no defaults.**
+
+    Writes one immutable row and nothing else — no asset field, no schedule. **The row can never be
+    amended or deleted**: there is no tool and no route that edits or removes a condition, so a
+    change is recorded as a new row (returning to `OPERATIONAL` included) and the earlier ones stay
+    exactly as they were. Condition is recorded, never inferred, and is in no asset command.
+
+    Every argument is required. `condition` is `OPERATIONAL`, `DEGRADED` or `DOWN`. `occurred_on` is
+    ISO `YYYY-MM-DD` or `None` for today, and never later than today (`CONDITION_DATE_IN_FUTURE`);
+    `occurred_time` is `HH:MM` or `None`; `tz_id` is an IANA zone id such as `"Etc/UTC"`;
+    `reason` is up to 500 characters, `""` for none (`CONDITION_REASON_TOO_LONG`); `event_id` names
+    an event of this asset, or `None` (`FOREIGN_EVENT`). Answers `{condition, current}` — `current`
+    read after the write, so a backdated row is never claimed as current.
+    """
+    return _call(
+        "POST",
+        f"/v1/assets/{_path_id(asset_id, field='asset_id')}/conditions",
+        json_body={
+            "condition": condition,
+            "occurredOn": occurred_on,
+            "occurredTime": occurred_time,
+            "tzId": tz_id,
+            "reason": reason,
+            "eventId": event_id,
+        },
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def get_health(asset_id: str) -> dict[str, Any]:
+    """One asset's derived health, **computed at read time and stored nowhere**.
+
+    Answers `{assetId, computedForOn, condition, aggregation, aggregate, subjects, critical,
+    components}`. `condition` is the current condition (`{condition, since, reason, occurredOn,
+    eventId}`) or `null`. `aggregate` is `{score, band, trackedDays, fallback}` — `band` one of
+    `NOMINAL`, `WARNING`, `CRITICAL` — or `null` when nothing contributes: NOT TRACKED, never a 100.
+    Each of `subjects` is a score and band with the `trackedDays` behind it, or `notTracked` with its
+    reason. `critical` lists **every** subject scoring `CRITICAL`, whatever the aggregate says, and
+    `components` every `DOWN` or `DEGRADED` in-service component at any depth — so no average can
+    hide a critical subject or a broken component.
+    """
+    return _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/health")
+
+
+@mcp.tool()
+def set_health_policy(
+    asset_id: str, health_aggregation: str, health_primary_subject_id: str | None = None,
+) -> dict[str, Any]:
+    """Say how an asset combines its health subjects. Configuration only: it writes the asset row
+    alone and never a health value.
+
+    `health_aggregation` is `TRACK_ONE`, `AVERAGE`, `WEIGHTED` or `WORST`. `TRACK_ONE` needs
+    `health_primary_subject_id`, a live subject of this asset, and no other aggregation takes one
+    (`HEALTH_PRIMARY_INVALID`). Answers `{asset}`.
+    """
+    return _call(
+        "POST",
+        f"/v1/assets/{_path_id(asset_id, field='asset_id')}/health-policy",
+        json_body={
+            "healthAggregation": health_aggregation,
+            "healthPrimarySubjectId": health_primary_subject_id,
+        },
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def list_health_subjects(asset_id: str) -> dict[str, Any]:
+    """One asset's health subjects, archived ones included, by `(sortOrder, id)`: `{subjects}`.
+    Each is configuration — what is tracked and its thresholds — never a value."""
+    return _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/health-subjects")
+
+
+@mcp.tool()
+def create_health_subject(
+    asset_id: str,
+    name: str,
+    kind: str,
+    driver: str,
+    nominal_until_days: int,
+    warning_from_days: int,
+    critical_from_days: int,
+    schedule_id: str | None = None,
+    baseline_profile_id: str | None = None,
+    weight: int | None = None,
+    sort_order: int | None = None,
+) -> dict[str, Any]:
+    """Create a health subject: something on an asset whose health is tracked by age or by overdue
+    maintenance. Configuration only — no tool writes a health value.
+
+    `name` is 1–60 characters after trimming. `kind` is `ASSET`, `PART` or `MEDIUM`; `driver` is
+    `AGE` or `MAINTENANCE_OVERDUE`. The three thresholds are **required, with no default** —
+    `0 ≤ nominal_until_days < warning_from_days < critical_from_days ≤ 36500`
+    (`HEALTH_THRESHOLDS_INVALID`). An `AGE` subject names no schedule and may name a `REPLACEMENT`
+    quick action of its own asset as `baseline_profile_id`; a `MAINTENANCE_OVERDUE` subject names
+    no baseline and one live, time-ruled `schedule_id` aimed at its own asset that no other live
+    subject drives. `weight` is 1–10 (omitted is 1); `sort_order` omitted appends. Answers
+    `{subject}`.
+    """
+    return _call(
+        "POST",
+        "/v1/health-subjects",
+        json_body=_body(
+            assetId=asset_id,
+            name=name,
+            kind=kind,
+            driver=driver,
+            scheduleId=schedule_id,
+            baselineProfileId=baseline_profile_id,
+            nominalUntilDays=nominal_until_days,
+            warningFromDays=warning_from_days,
+            criticalFromDays=critical_from_days,
+            weight=weight,
+            sortOrder=sort_order,
+        ),
+        content_type="application/json",
+    )
+
+
+_HEALTH_SUBJECT_NULLABLE_CLEARABLE: frozenset[str] = frozenset({"schedule_id", "baseline_profile_id"})
+"""The subject's two links, each cleared to `null`. Everything else is required or an enum — change
+it by passing the new value."""
+
+
+@mcp.tool()
+def update_health_subject(
+    subject_id: str,
+    name: str | None = None,
+    kind: str | None = None,
+    driver: str | None = None,
+    schedule_id: str | None = None,
+    baseline_profile_id: str | None = None,
+    nominal_until_days: int | None = None,
+    warning_from_days: int | None = None,
+    critical_from_days: int | None = None,
+    weight: int | None = None,
+    sort_order: int | None = None,
+    clear_fields: list[str] | None = None,
+) -> dict[str, Any]:
+    """Edit a health subject.
+
+    `PATCH /v1/health-subjects/{id}` is a full replacement; this tool reads the subject first and
+    overlays only what you supplied onto **every key of the subject command but `assetId`** (the
+    vendored `command_shapes`) — a subject never changes asset. An omitted argument and one sent as
+    `null` both leave the current value alone.
+
+    Clearing is by name: `clear_fields=["schedule_id"]` or `["baseline_profile_id"]` sends that link
+    as `null`. Nothing else is clearable — `name`, `kind`, `driver` and the thresholds are required,
+    and `weight`/`sort_order` are changed by passing a value. The app checks the whole subject again
+    (the same refusals as `create_health_subject`). Archiving is `archive_health_subject`; nothing
+    deletes a subject. Answers `{subject}`.
+    """
+    arguments = _arguments(locals(), besides=("subject_id", "clear_fields"))
+    to_clear = _validate_clear_fields(clear_fields, _HEALTH_SUBJECT_NULLABLE_CLEARABLE, arguments)
+
+    path = f"/v1/health-subjects/{_path_id(subject_id, field='subject_id')}"
+    current = _field(_read_for_write(path), "subject", of="the health subject lookup")
+    keys = tuple(k for k in command_shapes.HEALTH_SUBJECT_KEYS if k != "assetId")
+    body = _overlay_command(current, keys, arguments, to_clear, of="the health subject")
+    return _call("PATCH", path, json_body=body, content_type="application/json")
+
+
+@mcp.tool()
+def archive_health_subject(subject_id: str, archived: bool = True) -> dict[str, Any]:
+    """Archive or restore a health subject — **the only way one leaves**: nothing deletes a subject.
+
+    Archiving the subject its asset's `TRACK_ONE` health follows is `HEALTH_SUBJECT_IS_PRIMARY`;
+    restoring one checks its whole link again. Answers `{subject}`.
+    """
+    return _call(
+        "POST",
+        f"/v1/health-subjects/{_path_id(subject_id, field='subject_id')}/archive",
+        json_body={"archived": archived},
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def list_attention() -> dict[str, Any]:
+    """The asset-level rows no schedule stands behind, in the dashboard's order: `{items}`.
+
+    Every in-service asset or component that is `DOWN` or `DEGRADED` (`kind` `CONDITION`), and every
+    age-driven subject scoring `CRITICAL` or `WARNING` (`kind` `HEALTH`); an overdue-driven subject
+    rides its schedule's row in `list_due` instead. Each item is `{kind, section, assetId,
+    parentAssetId, condition, reason, occurredOn, healthSubjectId, subjectName, band, score, rank}`,
+    every field present, `null` when absent. `section` is `ATTENTION` for conditions and `CRITICAL`,
+    `UPCOMING` for `WARNING`; `rank` is dense from 0 in the order `DOWN`, `DEGRADED`, `CRITICAL`,
+    `WARNING`, then asset name and id.
+    """
+    return _call("GET", "/v1/attention")
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"
