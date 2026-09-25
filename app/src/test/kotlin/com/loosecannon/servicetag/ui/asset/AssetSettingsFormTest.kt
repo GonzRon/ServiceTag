@@ -473,10 +473,9 @@ class AssetSettingsFormTest {
         vm.onBreak(false); vm.onSeasonMode(SeasonMode.CALENDAR); vm.onSeasonStart("11-01"); vm.onSeasonEnd("03-31"); refused()
         vm.onSeasonMode(SeasonMode.YEAR_ROUND); vm.onBreak(true); vm.onBreakStart("12-01"); vm.onBreakEnd("02-28")
         vm.onName(""); refused()
+        assertTrue("every line is ratified or shipped: ${seen - allowed}", allowed.containsAll(seen))
         assertTrue("every refusal was reached", seen.containsAll(refusals) && "Give the asset a name" in seen)
         assertTrue(written.upserts.isEmpty())
-
-        assertTrue("every line is ratified or shipped: ${seen - allowed}", allowed.containsAll(seen))
         assertTrue("the asterisk was drawn", "$SEASON_ENDS *" in seen && "$BREAK_STARTS *" in seen)
         assertFalse(seen.any { it.contains("equired") })
         assertEquals("the mark is an asterisk on the ratified label", "$SEASON_STARTS *", requiredMark(SEASON_STARTS))
