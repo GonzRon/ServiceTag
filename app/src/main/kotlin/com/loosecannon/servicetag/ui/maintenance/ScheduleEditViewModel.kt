@@ -272,7 +272,7 @@ data class ScheduleEditState(
     /** The link-guard dialog, when a save was refused for a health subject it would strand. */
     val linkGuard: LinkGuardPrompt? = null,
     /** The day S84 measures the season from: its current span, or the next one. */
-    val todayOn: LocalDate = LocalDate.EPOCH,
+    val todayOn: LocalDate = LocalDate.of(1970, 1, 1),
     val completionMode: CompletionMode = CompletionMode.QUICK,
     val profileId: ProfileId? = null,
     val remindersEnabled: Boolean = true,
