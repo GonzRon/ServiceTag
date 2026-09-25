@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.ui.condition
 import com.loosecannon.servicetag.core.condition.ConditionHistory
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventSource
@@ -312,6 +313,43 @@ class OffersTest {
             "the same event in a zone that resolves is offered",
             offers.offersAfter(event.copy(tzId = "UTC")).single() is OperationalOfferPrompt,
         )
+    }
+
+    /** A hand-made event of [kind] on [assetId], dated today, in a zone that resolves. */
+    private fun eventOn(assetId: String, kind: EventKind) = AssetEvent(
+        id = EventId("e-$assetId"), assetId = AssetId(assetId), kind = kind, title = "Starter rebuilt",
+        profileId = null, occurredOn = "2026-04-15", occurredTime = null, tzId = "UTC", notes = "",
+        source = EventSource.MANUAL, sourceRef = null, createdAt = 0L, updatedAt = 0L,
+        measurements = emptyList(), consumables = emptyList(),
+    )
+
+    /**
+     * The whole-branch review, M1: an archived or retired asset is never asked "Mark operational?" —
+     * the in-service rule the scan sheet and asset detail apply — however DOWN it is.
+     */
+    @Test fun anOutOfServiceAssetIsNeverAskedMarkOperational() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.assets.upsert(assetRow("old", name = "Old generator", status = AssetStatus.ARCHIVED))
+        graph.assets.upsert(assetRow("gone", name = "Retired generator", retiredOn = "2026-03-01"))
+        listOf("gen", "old", "gone").forEach { down(AssetId(it)) }
+
+        assertTrue(graph.eventOffers.offersAfter(eventOn("gen", EventKind.MAINTENANCE)).single() is OperationalOfferPrompt)
+        assertEquals(emptyList<EventOffer>(), graph.eventOffers.offersAfter(eventOn("old", EventKind.MAINTENANCE)))
+        assertEquals(emptyList<EventOffer>(), graph.eventOffers.offersAfter(eventOn("gone", EventKind.MAINTENANCE)))
+    }
+
+    /**
+     * The whole-branch review, M1: an archived or retired MANUAL asset is never asked to start its
+     * season, whatever its phase.
+     */
+    @Test fun anOutOfServiceAssetIsNeverAskedTheSeason() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("tub", name = "Hot tub", seasonMode = SeasonMode.MANUAL))
+        graph.assets.upsert(assetRow("old", name = "Old hot tub", seasonMode = SeasonMode.MANUAL, status = AssetStatus.ARCHIVED))
+        graph.assets.upsert(assetRow("gone", name = "Retired hot tub", seasonMode = SeasonMode.MANUAL, retiredOn = "2026-03-01"))
+
+        assertTrue(graph.eventOffers.offersAfter(eventOn("tub", EventKind.SEASON_START)).single() is SeasonOfferPrompt)
+        assertEquals(emptyList<EventOffer>(), graph.eventOffers.offersAfter(eventOn("old", EventKind.SEASON_START)))
+        assertEquals(emptyList<EventOffer>(), graph.eventOffers.offersAfter(eventOn("gone", EventKind.SEASON_START)))
     }
 
     /**

@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
 import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
 import com.loosecannon.servicetag.core.usecase.operationalOfferFor
 import com.loosecannon.servicetag.core.usecase.seasonOfferFor
+import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.maintenance.NOT_NOW
 import java.time.DateTimeException
 import java.time.LocalDate
@@ -152,11 +153,14 @@ class OperationalOffers(
     private val accept: AcceptOperationalOffer,
     private val today: Today,
 ) {
-    /** The offer to make after [event], or null when none is due. Reads only. */
+    /**
+     * The offer to make after [event], or null when none is due. Reads only. An archived or retired
+     * asset is never asked — the same in-service rule the scan sheet and asset detail apply.
+     */
     suspend fun offerFor(event: AssetEvent): OperationalOfferPrompt? {
         val current = ConditionHistory.of(conditions.forAsset(event.assetId)).current
         if (!operationalOfferShown(current, event, today.localDate())) return null
-        val asset = assets.get(event.assetId) ?: return null
+        val asset = assets.get(event.assetId)?.takeIf { it.inService } ?: return null
         return OperationalOfferPrompt(event, asset.name)
     }
 
@@ -175,8 +179,9 @@ class SeasonOffers(
     private val accept: AcceptSeasonOffer,
     private val today: Today,
 ) {
+    /** The offer to make after [event], or null. An archived or retired asset is never asked. */
     suspend fun offerFor(event: AssetEvent): SeasonOfferPrompt? {
-        val asset = assets.get(event.assetId) ?: return null
+        val asset = assets.get(event.assetId)?.takeIf { it.inService } ?: return null
         val action = seasonOfferFor(asset, activations.forAsset(asset.id), event, today.localDate()) ?: return null
         return SeasonOfferPrompt(event, action)
     }
