@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.links.DeepLinkRoute
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
@@ -7,6 +8,7 @@ import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
@@ -23,16 +25,22 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
-import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.core.usecase.Resolution
+import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.routeForDeepLink
 import com.loosecannon.servicetag.routeForQuickCompletion
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.meterDefinitionOf
+import com.loosecannon.servicetag.testing.replacementOf
 import com.loosecannon.servicetag.testing.scheduleOf
+import com.loosecannon.servicetag.testing.subjectRow
+import com.loosecannon.servicetag.ui.condition.componentLine
+import com.loosecannon.servicetag.ui.health.aggregateLine
+import com.loosecannon.servicetag.ui.health.criticalLine
 import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.nav.TopLevelRoutes
 import com.loosecannon.servicetag.ui.nav.readsTags
@@ -274,6 +282,134 @@ class MaintenanceSheetViewModelTest {
         assertEquals(DueStatus.OVERDUE, item.status)
         assertEquals("Overdue since 2026-11-01.", item.whyNow)
         assertEquals("the canonical date is unchanged", "2026-12-20", item.effectiveDueOn)
+    }
+
+    // ---------------------------------------------------------------- 1.4: the seven blocks
+
+    /**
+     * A DOWN generator (F3) with a DOWN component, a CRITICAL subject and overdue work: everything
+     * spec §10.1 can draw at once. The starter battery was replaced on 25 January, 80 days before
+     * 15 April, so with the fixture thresholds 0 / 40 / 75 it scores 22 — CRITICAL — and under WORST
+     * the aggregate is that same 22.
+     */
+    private suspend fun generatorWithEverything() {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.assets.upsert(assetRow("fan", name = "Cooling fan", parent = "gen"))
+        graph.conditions.insert(
+            conditionRow("c-gen", "gen", OperationalCondition.DOWN, "2026-04-01", reason = "Will not start"),
+        )
+        graph.conditions.insert(conditionRow("c-fan", "fan", OperationalCondition.DOWN, "2026-04-02"))
+        graph.events.upsert(replacementOf("e-battery", "gen", "2026-01-25"))
+        graph.healthSubjects.upsert(subjectRow("h-battery", "gen", name = "Starter battery"))
+        seed(scheduleOf("s-gen", assetId = "gen", title = "Load test", anchorOn = "2026-01-01", leadDays = 0))
+    }
+
+    /**
+     * Spec §10.1's seven blocks, **in order**: the asset, its condition, the condition actions, the
+     * DOWN or DEGRADED components, the CRITICAL subjects and the aggregate, "Maintenance" with its
+     * items, and the way out — each filled from the one `scanSheetContent`.
+     */
+    @Test fun theSevenBlocksInOrder() = runTest(scheduler) {
+        generatorWithEverything()
+
+        val model = viewModel(AssetId("gen"))
+        advanceUntilIdle()
+        val state = model.state.value
+        val blocks = state.blocks
+
+        assertEquals(
+            listOf("Identity", "Condition", "ConditionActions", "Components", "Health", "Maintenance", "OpenAsset"),
+            blocks.map { it::class.simpleName },
+        )
+        assertEquals("Generator", state.assetName)
+        val condition = (blocks[1] as SheetBlock.Condition).view!!
+        assertEquals(OperationalCondition.DOWN, condition.condition)
+        assertEquals("Will not start", condition.reason)
+        assertEquals(LocalDate.parse("2026-04-01"), condition.since)
+        assertEquals(OperationalCondition.DOWN, (blocks[2] as SheetBlock.ConditionActions).markOperational)
+        assertEquals(
+            listOf("Cooling fan DOWN — No reason given"),
+            (blocks[3] as SheetBlock.Components).components.map(::componentLine),
+        )
+        val health = blocks[4] as SheetBlock.Health
+        assertEquals(listOf("Critical: Starter battery 22"), health.critical.map(::criticalLine))
+        assertEquals(HealthBand.CRITICAL, health.aggregate!!.band)
+        assertEquals("22 — Starter battery 22", aggregateLine(health.aggregate!!.score, health.contributors))
+        assertFalse((blocks[5] as SheetBlock.Maintenance).nothingDue)
+        assertEquals(listOf("Load test"), state.items.map { it.title })
+    }
+
+    /**
+     * S7 is offered beside S6 for a DOWN or DEGRADED asset, and S6 alone otherwise — including an
+     * asset with nothing recorded, whose block reads S4.
+     */
+    @Test fun markOperationalOnlyForDownOrDegraded() = runTest(scheduler) {
+        val cases = listOf(
+            OperationalCondition.DOWN, OperationalCondition.DEGRADED, OperationalCondition.OPERATIONAL, null,
+        )
+        cases.forEachIndexed { index, condition ->
+            val id = "ups-$index"
+            graph.assets.upsert(assetRow(id, name = "UPS $index"))
+            condition?.let { graph.conditions.insert(conditionRow("c-$id", id, it, "2026-04-01")) }
+            // Due work, so the sheet opens whatever the condition says.
+            seed(scheduleOf("s-$id", assetId = id, title = "Battery self-test", anchorOn = "2026-01-01", leadDays = 0))
+        }
+
+        val offered = cases.indices.map { index ->
+            val model = viewModel(AssetId("ups-$index"))
+            advanceUntilIdle()
+            val blocks = model.state.value.blocks
+            blocks.filterIsInstance<SheetBlock.ConditionActions>().single().markOperational
+        }
+
+        assertEquals(listOf(OperationalCondition.DOWN, OperationalCondition.DEGRADED, null, null), offered)
+    }
+
+    /**
+     * A DOWN asset with nothing due still opens the sheet — condition is an at-the-unit concern
+     * (O-8) — and its maintenance block reads S139 with no item and no "Complete selected" to act on.
+     */
+    @Test fun nothingDueWhenNoItem() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("pack", name = "Battery pack"))
+        graph.conditions.insert(conditionRow("c-pack", "pack", OperationalCondition.DOWN, "2026-04-10", reason = "Cells swollen"))
+
+        val model = viewModel(AssetId("pack"))
+        advanceUntilIdle()
+        val state = model.state.value
+
+        assertTrue("condition opens the sheet", state.content!!.opens)
+        assertFalse(state.emptyOnArrival)
+        assertEquals(emptyList<SheetItem>(), state.items)
+        assertTrue(state.blocks.filterIsInstance<SheetBlock.Maintenance>().single().nothingDue)
+        assertEquals("Nothing due", NOTHING_DUE)
+        assertEquals(0, graph.events.all().size)
+    }
+
+    /**
+     * The carry-forward from B06's follow-up: a restored condition may name a zone this device cannot
+     * resolve. The sheet draws the row as it is — its word, its reason and its "since" — and nothing
+     * resolves the zone, so nothing crashes and nothing hides.
+     */
+    @Test fun aRestoredConditionInAZoneThisDeviceCannotResolveIsStillDrawn() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("tub", name = "Hot tub"))
+        graph.conditions.insert(
+            conditionRow(
+                "c-tub", "tub", OperationalCondition.DEGRADED, "2026-04-03",
+                reason = "Heater slow", tzId = "Mars/Olympus_Mons",
+            ),
+        )
+
+        val model = viewModel(AssetId("tub"))
+        advanceUntilIdle()
+        val view = model.state.value.blocks.filterIsInstance<SheetBlock.Condition>().single().view!!
+
+        assertEquals(OperationalCondition.DEGRADED, view.condition)
+        assertEquals("Heater slow", view.reason)
+        assertEquals(LocalDate.parse("2026-04-03"), view.since)
+        assertEquals(
+            OperationalCondition.DEGRADED,
+            model.state.value.blocks.filterIsInstance<SheetBlock.ConditionActions>().single().markOperational,
+        )
     }
 
     // ---------------------------------------------------------------- completion

@@ -8,12 +8,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -32,10 +34,28 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.core.health.HealthBand
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.StatusBadge
+import com.loosecannon.servicetag.ui.condition.CHANGE_CONDITION
+import com.loosecannon.servicetag.ui.condition.ChangeConditionSheet
+import com.loosecannon.servicetag.ui.condition.ConditionBadge
+import com.loosecannon.servicetag.ui.condition.MARK_OPERATIONAL
+import com.loosecannon.servicetag.ui.condition.MarkOperationalDialog
+import com.loosecannon.servicetag.ui.condition.componentLine
+import com.loosecannon.servicetag.ui.condition.conditionColors
+import com.loosecannon.servicetag.ui.condition.conditionGlyph
+import com.loosecannon.servicetag.ui.condition.reasonLine
+import com.loosecannon.servicetag.ui.health.ComponentCondition
+import com.loosecannon.servicetag.ui.health.ConditionView
+import com.loosecannon.servicetag.ui.health.HealthBadge
+import com.loosecannon.servicetag.ui.health.aggregateLine
+import com.loosecannon.servicetag.ui.health.criticalLine
+import com.loosecannon.servicetag.ui.health.healthColors
+import com.loosecannon.servicetag.ui.health.healthGlyph
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.LocalServiceTagSemanticColors
 
@@ -56,6 +76,12 @@ import com.loosecannon.servicetag.ui.theme.LocalServiceTagSemanticColors
  * Nothing here is a second completion path. Every completion goes through B14's [CompletionFlow]
  * and its ratified **"When was this done?"**, so a backdated completion is first class and a `FORM`
  * schedule leaves through [onLogForm] with nothing fabricated.
+ *
+ * **1.4 (spec §10.1).** The sheet draws [SheetBlock]'s seven blocks in order: the asset, its
+ * condition, the condition actions, the DOWN or DEGRADED components, the CRITICAL subjects and a
+ * WARNING or CRITICAL aggregate, "Maintenance" with its items or S139, and the ways out. The only
+ * writes besides the shipped completion, Snooze and Postpone are Change condition's Save, the Mark
+ * operational confirm and an accepted offer after a completion — each after its own explicit tap.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,6 +99,10 @@ fun MaintenanceSheet(
     }
     val state by model.state.collectAsStateWithLifecycle()
     var postponing by remember { mutableStateOf<ScheduleId?>(null) }
+    // 1.4: the two condition actions (spec §10.1). Each writes only after its own explicit tap, and
+    // the sheet re-reads the store when either closes.
+    var changingCondition by remember { mutableStateOf(false) }
+    var markingOperational by remember { mutableStateOf<OperationalCondition?>(null) }
 
     // Coming back from a profile form is how the sequential run advances, so the sheet re-derives
     // on every resume rather than trusting the list it drew before it left — but not on the
@@ -107,38 +137,74 @@ fun MaintenanceSheet(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(text = state.assetName, style = MaterialTheme.typography.titleLarge)
-            // #49 AC 3: which scan point this is, when the owner labelled it — and a second tag on
-            // the same Asset shows the same work under its **own** label.
-            state.tagPlacement?.let { TagPlacementLine(it) }
-
-            state.items.forEach { item ->
-                HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
-                SheetItemRow(
-                    item = item,
-                    checked = item.scheduleId.value in state.selected,
-                    busy = state.busy,
-                    onCheck = { model.toggle(item.scheduleId) },
-                    onReview = { onReviewSchedule(item.scheduleId.value) },
-                    onSnooze = { model.snooze(item.scheduleId) },
-                    onPostpone = { postponing = item.scheduleId },
-                    onRepair = { model.repair(item.scheduleId) },
-                )
+            // Spec §10.1's seven blocks, in the order the view model lists them.
+            state.blocks.forEach { block ->
+                when (block) {
+                    SheetBlock.Identity -> {
+                        Text(text = state.assetName, style = MaterialTheme.typography.titleLarge)
+                        // #49 AC 3: which scan point this is, when the owner labelled it — and a
+                        // second tag on the same Asset shows the same work under its **own** label.
+                        state.tagPlacement?.let { TagPlacementLine(it) }
+                    }
+                    is SheetBlock.Condition -> ConditionBlock(block.view)
+                    is SheetBlock.ConditionActions -> ConditionActions(
+                        markOperational = block.markOperational,
+                        busy = state.busy,
+                        onMarkOperational = { markingOperational = it },
+                        onChangeCondition = { changingCondition = true },
+                    )
+                    is SheetBlock.Components -> block.components.forEach { ComponentRow(it) }
+                    is SheetBlock.Health -> HealthBlock(block)
+                    is SheetBlock.Maintenance -> {
+                        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                        Text(MAINTENANCE_SHEET_TITLE, style = MaterialTheme.typography.titleMedium)
+                        if (block.nothingDue) QuietLine(NOTHING_DUE)
+                        state.items.forEach { item ->
+                            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                            SheetItemRow(
+                                item = item,
+                                checked = item.scheduleId.value in state.selected,
+                                busy = state.busy,
+                                onCheck = { model.toggle(item.scheduleId) },
+                                onReview = { onReviewSchedule(item.scheduleId.value) },
+                                onSnooze = { model.snooze(item.scheduleId) },
+                                onPostpone = { postponing = item.scheduleId },
+                                onRepair = { model.repair(item.scheduleId) },
+                            )
+                        }
+                        if (!block.nothingDue) {
+                            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                            Button(
+                                onClick = model::completeSelected,
+                                enabled = state.canComplete && !state.busy,
+                                shape = ControlShape,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text(COMPLETE_SELECTED) }
+                        }
+                    }
+                    SheetBlock.OpenAsset -> {
+                        OutlinedButton(
+                            onClick = { onOpenAsset(assetId) },
+                            shape = ControlShape,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(SHEET_OPEN_ASSET) }
+                        TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text(NOT_NOW) }
+                    }
+                }
             }
+        }
+    }
 
-            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
-            Button(
-                onClick = model::completeSelected,
-                enabled = state.canComplete && !state.busy,
-                shape = ControlShape,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(COMPLETE_SELECTED) }
-            OutlinedButton(
-                onClick = { onOpenAsset(assetId) },
-                shape = ControlShape,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(SHEET_OPEN_ASSET) }
-            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text(NOT_NOW) }
+    if (changingCondition) {
+        ChangeConditionSheet(graph = graph, assetId = assetId) {
+            changingCondition = false
+            model.refresh()
+        }
+    }
+    markingOperational?.let { current ->
+        MarkOperationalDialog(graph = graph, assetId = assetId, current = current) {
+            markingOperational = null
+            model.refresh()
         }
     }
 
@@ -152,6 +218,83 @@ fun MaintenanceSheet(
                 model.postpone(scheduleId, dueOn)
             },
         )
+    }
+}
+
+/**
+ * Block 2: the condition badge — word, glyph and S22 "since" — with the reason under it, or S23 when
+ * the reason is empty; S4 alone when nothing is recorded.
+ */
+@Composable
+private fun ConditionBlock(view: ConditionView?) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        ConditionBadge(view)
+        view?.let { QuietLine(reasonLine(it.reason)) }
+    }
+}
+
+/**
+ * Block 3: S7 and S6 for a DOWN or DEGRADED asset, S6 alone otherwise. Each only **opens** its
+ * surface; nothing is written until that surface's own confirm.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ConditionActions(
+    markOperational: OperationalCondition?,
+    busy: Boolean,
+    onMarkOperational: (OperationalCondition) -> Unit,
+    onChangeCondition: () -> Unit,
+) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        markOperational?.let { current ->
+            Button(onClick = { onMarkOperational(current) }, enabled = !busy, shape = ControlShape) {
+                Text(MARK_OPERATIONAL)
+            }
+        }
+        OutlinedButton(onClick = onChangeCondition, enabled = !busy, shape = ControlShape) { Text(CHANGE_CONDITION) }
+    }
+}
+
+/** Block 4: one DOWN or DEGRADED component, as S27, beside its condition glyph. */
+@Composable
+private fun ComponentRow(component: ComponentCondition) {
+    val colors = conditionColors(component.condition, LocalServiceTagSemanticColors.current)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Icon(
+            imageVector = conditionGlyph(component.condition).icon,
+            contentDescription = null,
+            tint = colors.foreground,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(componentLine(component), style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/**
+ * Block 5: every CRITICAL subject as S109 beside the one-bar glyph, then — when it is WARNING or
+ * CRITICAL — the aggregate's badge and S108. Health rides along here; it never opened the sheet.
+ */
+@Composable
+private fun HealthBlock(block: SheetBlock.Health) {
+    val critical = healthColors(HealthBand.CRITICAL, LocalServiceTagSemanticColors.current)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        block.critical.forEach { subject ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(
+                    imageVector = healthGlyph(HealthBand.CRITICAL).icon,
+                    contentDescription = null,
+                    tint = critical.foreground,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(criticalLine(subject), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        block.aggregate?.let { aggregate ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                HealthBadge(band = aggregate.band, score = null)
+                Text(aggregateLine(aggregate.score, block.contributors), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
     }
 }
 

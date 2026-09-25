@@ -3,10 +3,13 @@ package com.loosecannon.servicetag.ui.maintenance
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.core.health.SubjectHealth
+import com.loosecannon.servicetag.core.health.SubjectValue
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.Measurement
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.TagId
@@ -18,6 +21,8 @@ import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
+import com.loosecannon.servicetag.ui.health.ComponentCondition
+import com.loosecannon.servicetag.ui.health.ConditionView
 import com.loosecannon.servicetag.ui.journal.formatNumber
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +59,75 @@ const val REVIEW_MAINTENANCE = "Review maintenance"
 
 /** RATIFIED (§17, #49 AC 3): the caption over the scanned tag's placement label. */
 const val TAG_PLACEMENT = "Tag placement"
+
+/** S139: the maintenance block when the sheet opened for condition and nothing is due. */
+const val NOTHING_DUE = "Nothing due"
+
+/**
+ * One of the scan sheet's **seven blocks**, top to bottom (spec §10.1; master plan §13.3). The order
+ * is decided here, in one list, and the sheet draws the list as it comes — so "condition before
+ * maintenance" is a fact a JVM test can hold, not a layout accident.
+ *
+ * Every block is filled from the one [ScanSheetContent] (inv. 123): the sheet draws nothing the
+ * predicate did not decide. A block with nothing to show — no DOWN or DEGRADED component, no
+ * CRITICAL subject and no WARNING or CRITICAL aggregate — is left out rather than drawn empty.
+ */
+sealed interface SheetBlock {
+    /** 1. The asset's name and #49's placement caption (shipped). */
+    data object Identity : SheetBlock
+
+    /** 2. The condition: word, glyph, reason (or S23) and S22 "since" — or S4 when none is recorded. */
+    data class Condition(val view: ConditionView?) : SheetBlock
+
+    /**
+     * 3. S7 "Mark operational" and S6 "Change condition" for a DOWN or DEGRADED asset — [markOperational]
+     * is then that condition, for S18 — otherwise S6 alone.
+     */
+    data class ConditionActions(val markOperational: OperationalCondition?) : SheetBlock
+
+    /** 4. Every DOWN or DEGRADED in-service component, as S27. */
+    data class Components(val components: List<ComponentCondition>) : SheetBlock
+
+    /**
+     * 5. Every CRITICAL subject as S109, then the aggregate as S108 when it is WARNING or CRITICAL —
+     * [contributors] are the subjects S108 names. A CRITICAL subject is listed whatever the aggregate
+     * says (inv. 119), and a NOMINAL or NOT TRACKED aggregate is not drawn.
+     */
+    data class Health(
+        val critical: List<SubjectHealth>,
+        val aggregate: SubjectValue.Scored?,
+        val contributors: List<SubjectHealth>,
+    ) : SheetBlock
+
+    /** 6. "Maintenance" with the items, or S139 when [nothingDue]. */
+    data class Maintenance(val nothingDue: Boolean) : SheetBlock
+
+    /** 7. "Open asset" (and the shipped "Not now"). */
+    data object OpenAsset : SheetBlock
+}
+
+/**
+ * Spec §10.1's order over one [content]; [hasItems] is whether the maintenance block has rows. Before
+ * the first load there is no content, and only the asset's name and the way out are drawn.
+ */
+fun sheetBlocks(content: ScanSheetContent?, hasItems: Boolean): List<SheetBlock> {
+    if (content == null) return listOf(SheetBlock.Identity, SheetBlock.OpenAsset)
+    return buildList {
+        add(SheetBlock.Identity)
+        add(SheetBlock.Condition(content.condition))
+        add(
+            SheetBlock.ConditionActions(
+                markOperational = content.condition?.condition?.takeIf { content.offersMarkOperational },
+            ),
+        )
+        if (content.components.isNotEmpty()) add(SheetBlock.Components(content.components))
+        if (content.critical.isNotEmpty() || content.aggregate != null) {
+            add(SheetBlock.Health(content.critical, content.aggregate, content.subjects))
+        }
+        add(SheetBlock.Maintenance(nothingDue = !hasItems))
+        add(SheetBlock.OpenAsset)
+    }
+}
 
 /**
  * The last completion's measurements, **read**.
@@ -264,6 +338,9 @@ data class MaintenanceSheetState(
 ) {
     /** "Complete selected" acts on an explicit selection and never on "everything shown". */
     val canComplete: Boolean get() = selected.isNotEmpty()
+
+    /** The seven blocks, in spec §10.1's order, for the sheet to draw as they come. */
+    val blocks: List<SheetBlock> get() = sheetBlocks(content, hasItems = items.isNotEmpty())
 }
 
 /**
