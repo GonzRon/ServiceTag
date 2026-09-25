@@ -25,6 +25,7 @@ import com.loosecannon.servicetag.ui.asset.AssetEditScreen
 import com.loosecannon.servicetag.ui.asset.AssetsScreen
 import com.loosecannon.servicetag.ui.backup.BackupScreen
 import com.loosecannon.servicetag.ui.dashboard.DashboardScreen
+import com.loosecannon.servicetag.ui.health.HealthSubjectEditScreen
 import com.loosecannon.servicetag.ui.journal.EventDetailScreen
 import com.loosecannon.servicetag.ui.journal.EventEntryScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupDetailScreen
@@ -210,6 +211,18 @@ fun ServiceTagRoot(
                             backStack.removeLastOrNull()
                             if (key.id == null) backStack.add(Route.AssetDetail(id))
                         },
+                        onBack = { backStack.removeLastOrNull() },
+                        onAddSubject = { asset -> backStack.add(Route.HealthSubjectEdit(asset)) },
+                        onOpenSubject = { asset, subject -> backStack.add(Route.HealthSubjectEdit(asset, subject)) },
+                    )
+                }
+                entry<Route.HealthSubjectEdit> { key ->
+                    HealthSubjectEditScreen(
+                        graph = graph,
+                        assetId = key.assetId,
+                        subjectId = key.subjectId,
+                        // Saved, the editor is done: whatever opened it is already watching the rows.
+                        onDone = { backStack.removeLastOrNull() },
                         onBack = { backStack.removeLastOrNull() },
                     )
                 }
