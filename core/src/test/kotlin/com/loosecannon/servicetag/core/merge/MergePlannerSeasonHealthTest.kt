@@ -397,7 +397,7 @@ class MergePlannerSeasonHealthTest {
      * IDENTICAL, with the new local facts simply not in the archive.
      */
     @Test
-    fun recordingStartEndAndAConditionLeavesTheAssetIdentical() = runBlocking {
+    fun recordingStartEndAndAConditionLeavesTheAssetIdentical() = runBlocking<Unit> {
         val manual = plainAssetOf("a1").copy(seasonMode = SeasonMode.MANUAL)
         val archive = data(assets = listOf(manual), activations = listOf(activationOf("act-0")))
         val assets = InMemoryAssetRepository().apply { upsert(manual) }
@@ -472,7 +472,7 @@ class MergePlannerSeasonHealthTest {
      * transaction, and rebuilds every schedule **once**, after the last of them.
      */
     @Test
-    fun applyWritesTheThreeTablesInOrderThenRebuildsOnce() = runBlocking {
+    fun applyWritesTheThreeTablesInOrderThenRebuildsOnce() = runBlocking<Unit> {
         val log = mutableListOf<String>()
         val assets = InMemoryAssetRepository()
         val groups = InMemoryGroupRepository()

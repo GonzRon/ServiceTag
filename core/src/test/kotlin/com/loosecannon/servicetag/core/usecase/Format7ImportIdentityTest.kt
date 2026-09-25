@@ -136,7 +136,7 @@ class Format7ImportIdentityTest {
     // --- the upgrade identity --------------------------------------------------------------------
 
     @Test
-    fun theGoldenFormat7ArchiveMergesIdentical() = runBlocking {
+    fun theGoldenFormat7ArchiveMergesIdentical() = runBlocking<Unit> {
         val bytes = resourceBytes(GOLDEN_FORMAT_7)
         val expected = Json.parseToJsonElement(resourceBytes(GOLDEN_FORMAT_7_EXPECTED).decodeToString()).jsonObject
         val expectedAssets = expected.getValue("assets").jsonObject
@@ -198,7 +198,7 @@ class Format7ImportIdentityTest {
      * the floor included (B01 review, M6).
      */
     @Test
-    fun aReplaceRestoreOfFormat8KeepsFactsAndSubjects() = runBlocking {
+    fun aReplaceRestoreOfFormat8KeepsFactsAndSubjects() = runBlocking<Unit> {
         val source = Install()
         source.assets.upsert(seasonalAssetOf())
         source.assets.upsert(plainAssetOf("a2").copy(seasonMode = SeasonMode.MANUAL))
