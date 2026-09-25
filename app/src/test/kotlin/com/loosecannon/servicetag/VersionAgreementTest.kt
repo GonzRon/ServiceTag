@@ -49,10 +49,10 @@ class VersionAgreementTest {
      * `BuildConfig`, and the tag the release workflow checks the APK against is built from the
      * first of them.
      */
-    @Test fun theReleaseIdentityIs140AndCode16() {
-        assertEquals("1.4.0", BuildConfig.VERSION_NAME)
-        assertEquals(16, BuildConfig.VERSION_CODE)
-        assertEquals("servicetag-v1.4.0", "servicetag-v${BuildConfig.VERSION_NAME}")
+    @Test fun theReleaseIdentityIs141AndCode17() {
+        assertEquals("1.4.1", BuildConfig.VERSION_NAME)
+        assertEquals(17, BuildConfig.VERSION_CODE)
+        assertEquals("servicetag-v1.4.1", "servicetag-v${BuildConfig.VERSION_NAME}")
     }
 
     /**
@@ -130,7 +130,7 @@ class VersionAgreementTest {
         val status = ApiJson.decodeFromString(
             StatusResponse.serializer(), response.body.decodeToString(),
         )
-        assertEquals("1.4.0", status.appVersion)
+        assertEquals("1.4.1", status.appVersion)
         assertEquals(8, status.schemaVersion)
         assertEquals(8, status.backupFormatVersion)
     }
@@ -238,6 +238,32 @@ class VersionAgreementTest {
             "no other row, and no reservation, may claim versionCode 16",
             1,
             Regex("""^\|[^\n]*\|\s*16\s*\|""", RegexOption.MULTILINE).findAll(text).count(),
+        )
+    }
+
+    /**
+     * The 1.4.1 / 17 row: a PATCH, so it names its two fixes by issue, says the schema and the
+     * format are unchanged, and names the contract. Anchored at the start of the row, as the 1.4.0
+     * case is; `versionCode` 17 is claimed by this row and by nothing else.
+     */
+    @Test fun versioningRecords141() {
+        val text = repoFile("docs/versioning.md").readText()
+        val rows = Regex("""^\|\s*1\.4\.1\s*\|\s*17\s*\|.*$""", RegexOption.MULTILINE).findAll(text)
+            .map { it.value }.toList()
+        assertEquals("the supported release history must carry exactly one 1.4.1 / 17 row", 1, rows.size)
+        val row = rows.single()
+        assertTrue("the row must say it is a PATCH", row.contains("PATCH"))
+        assertTrue(
+            "the row must name the schema and the format, unchanged",
+            Regex("""schema \*\*8\*\*.*format \*\*8\*\*""").containsMatchIn(row) && row.contains("unchanged"),
+        )
+        assertTrue("the row must name both fixes by issue", row.contains("#80") && row.contains("#81"))
+        assertTrue("the row must name the contract", row.contains("`docs/api/v1.md`"))
+        assertFalse("the row's gate counts are measured, so no placeholder ships", row.contains("PLACEHOLDER"))
+        assertEquals(
+            "no other row, and no reservation, may claim versionCode 17",
+            1,
+            Regex("""^\|[^\n]*\|\s*17\s*\|""", RegexOption.MULTILINE).findAll(text).count(),
         )
     }
 

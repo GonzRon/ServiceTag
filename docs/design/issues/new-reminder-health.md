@@ -26,7 +26,7 @@ Local findings ship in Phase 3; the Todoist findings arrive with Phase 5 (#9, #1
 | `BACKSTOP_WORK_MISSING` | `getWorkInfosForUniqueWork` empty | automatic re-enqueue |
 | `APP_RESTRICTED` | standby bucket RESTRICTED or battery optimisation "restricted" | explain and open settings |
 | `REMINDERS_GLOBALLY_OFF` | preference | one tap to enable |
-| `SCHEDULE_NO_PROVIDER` | an active schedule with `reminders_enabled` but no enabled `schedule_provider` row | open the editor |
+| `SCHEDULE_NO_PROVIDER` | an active schedule with `reminders_enabled` but no enabled `schedule_provider` row | open the editor — **superseded in 1.4.1:** the providerless shape offers "Fix reminder delivery" (the canonical `RepairScheduleProviders`); "open the editor" remains only for a non-empty set with nothing enabled, now `SCHEDULE_PROVIDER_DISABLED` |
 | `NO_DATA` schedules | meter baseline missing | open the completion / anchor form |
 
 ### Phase 5 (Todoist, arrives with #9 and #10)

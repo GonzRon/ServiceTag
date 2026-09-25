@@ -256,7 +256,7 @@ repair action:
 | `BACKSTOP_WORK_MISSING` | `WorkManager.getWorkInfosForUniqueWork` empty | automatic re-enqueue |
 | `APP_RESTRICTED` | standby bucket RESTRICTED / battery optimisation "restricted" | explain + open settings |
 | `REMINDERS_GLOBALLY_OFF` | preference | one tap to enable |
-| `SCHEDULE_NO_PROVIDER` | active schedule with `reminders_enabled` but no enabled `schedule_provider` row | open editor |
+| `SCHEDULE_NO_PROVIDER` | active schedule with `reminders_enabled` but no enabled `schedule_provider` row | open editor — **superseded in 1.4.1:** the providerless shape offers "Fix reminder delivery" (the canonical `RepairScheduleProviders`); "open editor" remains only for a non-empty set with nothing enabled, now `SCHEDULE_PROVIDER_DISABLED` |
 | `NO_DATA` schedules | meter baseline missing | open completion/anchor form |
 | `TODOIST_DISCONNECTED`, `PROJECTION_MISSING`, `PROJECTION_CONFLICT`, `PROJECTION_DUE_DRIFT` (native task's date ≠ canonical after verification), `SYNC_STALE` (> 48 h), `OUTBOX_FAILING` | Phase 5, from `integration_account`, `reminder_projection`, `provider_op` | recreate only when the remote task is confirmed absent; due drift is corrected automatically (canonical wins); conflicts are never auto-repaired |
 
