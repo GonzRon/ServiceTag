@@ -212,10 +212,10 @@ class LegacyFormTest {
             AssetSeasonResponse.serializer(), "POST", "/v1/assets/$tub/season-mode",
             """{"seasonMode":"MANUAL","manualPhase":"IN_SEASON"}""",
         )
-        val edited = api.call("PATCH", "/v1/assets/$tub", """{"name":"Hot tub (deck)","seasonStartMmdd":null,"seasonEndMmdd":null}""")
+        val edited = api.call("PATCH", "/v1/assets/$tub", """{"name":"Hot tub, renamed","seasonStartMmdd":null,"seasonEndMmdd":null}""")
         assertEquals(edited.bodyText(), 200, edited.status)
         val after = runBlocking { graph.assets.get(AssetId(tub))!! }
-        assertEquals("Hot tub (deck)", after.name)
+        assertEquals("Hot tub, renamed", after.name)
         assertEquals(SeasonMode.MANUAL, after.seasonMode)
         assertEquals(1, runBlocking { graph.seasonActivations.all() }.size)
     }
