@@ -412,14 +412,26 @@ class MaintenanceSheetViewModel(
     private var awaiting: ScheduleId? = null
 
     /**
-     * The offers already asked during this run (the controller's ruling on B12's review, M-1): one
-     * "Complete selected" asks each asset each offer at most once, so "Not yet" on the first item done
-     * on a DOWN asset is remembered for the rest of the selection.
+     * The offers already asked during this run (the controller's rulings on B12's review, M-1, RS-2):
+     * one "Complete selected" asks each asset each offer at most once — the quick items the flow
+     * completes and the form items saved in the journal entry alike — so "Not yet" on the first item
+     * done on a DOWN asset is remembered for the rest of the selection. A **new** batch every run, so
+     * nothing leaks into the next selection; it is open on the flow from the run's start until the run
+     * ends ([settle]).
      */
     private var batch = OfferBatch()
 
     init {
         refresh()
+    }
+
+    override fun onCleared() {
+        completion.closeSelection(batch)
+    }
+
+    /** The run is over unless a form is still being filled in: its selection closes. */
+    private fun settle() {
+        if (awaiting == null) completion.closeSelection(batch)
     }
 
     /**
@@ -528,9 +540,11 @@ class MaintenanceSheetViewModel(
         queue = ids
         awaiting = null
         batch = OfferBatch()
+        completion.openSelection(batch)
         _state.update { it.copy(busy = true) }
         viewModelScope.launch {
             runCatching { pump() }
+            settle()
             load()
             _state.update { it.copy(busy = false) }
         }
@@ -554,7 +568,7 @@ class MaintenanceSheetViewModel(
             // The reconcile runs right after the completion is written, **before** any offer is asked
             // (the controller's ruling on B12's review, R-2): leaving the sheet with an offer open
             // skips only that offer's write, never quiescing the notification.
-            when (val outcome = completion.complete(head, assetId, batch) { reconcile.run() }) {
+            when (val outcome = completion.complete(head, assetId) { reconcile.run() }) {
                 is CompletionOutcome.Completed -> Unit
                 is CompletionOutcome.NeedsForm -> {
                     awaiting = head
@@ -597,6 +611,7 @@ class MaintenanceSheetViewModel(
             // Still offered, so the owner left the form without saving: the run stops, which is
             // what leaves the forms already saved written and every later one absent.
             queue = emptyList()
+            settle()
             return
         }
         // The form **was** saved, and the journal screen that wrote the event reconciles nothing —
@@ -604,9 +619,13 @@ class MaintenanceSheetViewModel(
         // by canonical state rather than left up until the next digest or backstop sweep (#50 AC 8,
         // review should-fix 4). It runs whether or not there is more queue to walk.
         reconcile.run()
-        if (queue.isEmpty()) return
+        if (queue.isEmpty()) {
+            settle()
+            return
+        }
         _state.update { it.copy(busy = true) }
         runCatching { pump() }
+        settle()
         load()
         _state.update { it.copy(busy = false) }
     }

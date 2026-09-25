@@ -138,7 +138,9 @@ data class CompletionAnswer(
  * A caller that must act on the written completion before anyone answers an offer — the scan sheet's
  * reminder reconcile — passes `afterWrite`, which runs right after the write and before the first
  * offer (the controller's ruling on B12's review, R-2). A caller completing several items at once
- * passes one [OfferBatch], so each asset is asked each offer at most once in the batch (M-1).
+ * opens one [OfferBatch] with [openSelection] and closes it with [closeSelection], so each asset is
+ * asked each offer at most once in the whole selection — form items saved in the journal entry
+ * included (M-1, RS-2).
  */
 class CompletionFlow(
     private val schedules: ScheduleRepository,
@@ -172,13 +174,11 @@ class CompletionFlow(
      * guessed at: picking one would write a maintenance record onto somebody else's equipment
      * (invariants 28, 29).
      *
-     * [afterWrite] runs once the completion is written and before any offer is asked; [batch]
-     * remembers, across several calls, which asset was already asked which offer.
+     * [afterWrite] runs once the completion is written and before any offer is asked.
      */
     suspend fun complete(
         scheduleId: ScheduleId,
         assetId: AssetId? = null,
-        batch: OfferBatch? = null,
         afterWrite: suspend () -> Unit = {},
     ): CompletionOutcome {
         val schedule = schedules.get(scheduleId)
@@ -193,31 +193,30 @@ class CompletionFlow(
                     CompletionOutcome.NeedsForm(scheduleId, target.assetId, schedule.profileId)
                 } else {
                     val answer = ask(schedule) ?: return CompletionOutcome.Cancelled
-                    attempt(batch, afterWrite) { listOf(completeSchedule.run(scheduleId, answer.command(schedule))) }
+                    attempt(afterWrite) { listOf(completeSchedule.run(scheduleId, answer.command(schedule))) }
                 }
             is ScheduleTarget.GroupTarget -> {
                 if (assetId == null) {
                     return CompletionOutcome.Refused(GroupCompletionNotSupported(scheduleId))
                 }
-                completeMembers(scheduleId, listOf(assetId), batch, afterWrite)
+                completeMembers(scheduleId, listOf(assetId), afterWrite)
             }
         }
     }
 
     /** "Complete selected": the named members of a group round, in one write. */
     suspend fun completeSelected(scheduleId: ScheduleId, assetIds: List<AssetId>): CompletionOutcome =
-        completeMembers(scheduleId, assetIds, batch = null, afterWrite = {})
+        completeMembers(scheduleId, assetIds, afterWrite = {})
 
     private suspend fun completeMembers(
         scheduleId: ScheduleId,
         assetIds: List<AssetId>,
-        batch: OfferBatch?,
         afterWrite: suspend () -> Unit,
     ): CompletionOutcome {
         val schedule = schedules.get(scheduleId)
             ?: return CompletionOutcome.Refused(NoSuchSchedule(scheduleId))
         val answer = ask(schedule) ?: return CompletionOutcome.Cancelled
-        return attempt(batch, afterWrite) { completeGroupMembers.run(scheduleId, assetIds, answer.command(schedule)) }
+        return attempt(afterWrite) { completeGroupMembers.run(scheduleId, assetIds, answer.command(schedule)) }
     }
 
     /** "Complete all": every required member of a group round that is not yet done. */
@@ -225,7 +224,7 @@ class CompletionFlow(
         val schedule = schedules.get(scheduleId)
             ?: return CompletionOutcome.Refused(NoSuchSchedule(scheduleId))
         val answer = ask(schedule) ?: return CompletionOutcome.Cancelled
-        return attempt(batch = null, afterWrite = {}) { completeGroupMembers.all(scheduleId, answer.command(schedule)) }
+        return attempt(afterWrite = {}) { completeGroupMembers.all(scheduleId, answer.command(schedule)) }
     }
 
     /**
@@ -239,6 +238,15 @@ class CompletionFlow(
         if (open.needsMeterReading && answer.meterValue?.trim().isNullOrEmpty()) return false
         return pending?.complete(answer) ?: false
     }
+
+    /**
+     * Opens [batch] as the memory of one selection of completions: until [closeSelection], each asset
+     * is asked each offer at most once, by this flow and by the journal entry a form item opens.
+     */
+    fun openSelection(batch: OfferBatch) = offers.open(batch)
+
+    /** Closes [batch]; a later call for a batch that is no longer open does nothing. */
+    fun closeSelection(batch: OfferBatch) = offers.close(batch)
 
     /** The owner backed out. Nothing is written, which is the affordance's whole promise. */
     fun cancel() {
@@ -301,7 +309,6 @@ class CompletionFlow(
      * returned — so leaving mid-offer skips only an offer's write, never the caller's own step.
      */
     private suspend fun attempt(
-        batch: OfferBatch?,
         afterWrite: suspend () -> Unit,
         block: suspend () -> List<AssetEvent>,
     ): CompletionOutcome {
@@ -311,20 +318,19 @@ class CompletionFlow(
             return CompletionOutcome.Refused(failure)
         }
         afterWrite()
-        offerAfter(events, batch)
+        offerAfter(events)
         return CompletionOutcome.Completed(events)
     }
 
     /**
      * Every offer each written event makes, **one at a time**: each event's offers are read fresh
-     * when its turn comes, and each is answered before the next is asked. An offer this [batch] has
-     * already asked of that asset is not asked again. A refused accept is logged and the next offer
+     * when its turn comes, and each is answered before the next is asked. An offer the open
+     * selection has already asked of that asset is not asked again ([EventOffers.offersAfter]). A refused accept is logged and the next offer
      * still asked — §10.7 ratifies no sentence for it, and the fact simply stays as recorded.
      */
-    private suspend fun offerAfter(events: List<AssetEvent>, batch: OfferBatch?) {
+    private suspend fun offerAfter(events: List<AssetEvent>) {
         for (event in events) {
             for (offer in offers.offersAfter(event)) {
-                if (batch != null && !batch.firstTime(offer)) continue
                 val answer = CompletableDeferred<Boolean>()
                 offerAnswer = answer
                 _offer.value = offer

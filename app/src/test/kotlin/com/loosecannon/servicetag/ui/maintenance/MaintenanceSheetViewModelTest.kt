@@ -4,12 +4,14 @@ import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.links.DeepLinkRoute
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.PayloadFormat
+import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
@@ -25,6 +27,7 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
+import com.loosecannon.servicetag.core.usecase.ProfileCommand
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.routeForDeepLink
@@ -38,9 +41,11 @@ import com.loosecannon.servicetag.testing.meterDefinitionOf
 import com.loosecannon.servicetag.testing.replacementOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.testing.subjectRow
+import com.loosecannon.servicetag.ui.condition.OperationalOfferPrompt
 import com.loosecannon.servicetag.ui.condition.componentLine
 import com.loosecannon.servicetag.ui.health.aggregateLine
 import com.loosecannon.servicetag.ui.health.criticalLine
+import com.loosecannon.servicetag.ui.journal.EventEntryViewModel
 import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.nav.TopLevelRoutes
 import com.loosecannon.servicetag.ui.nav.readsTags
@@ -51,6 +56,7 @@ import com.loosecannon.servicetag.ui.scan.asTagResult
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -474,6 +480,114 @@ class MaintenanceSheetViewModelTest {
         assertEquals(2, reconciles)
         assertEquals(1, graph.conditions.all().size)
         assertFalse(model.state.value.busy)
+    }
+
+    /**
+     * The ruling on B12's review, RS-1: the batch is **per selection**. "Not yet" in one "Complete
+     * selected" is not carried into the next one on the same DOWN asset: that one asks again.
+     */
+    @Test fun aNewSelectionAsksAgain() = runTest(scheduler) {
+        val model = downUpsWithEverythingSelected("Battery self-test", "Fan clean")
+        val second = model.state.value.items[1].scheduleId
+        model.toggle(second)
+
+        model.completeSelected()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+        assertNotNull("the first selection asks", graph.completionFlow.offer.value)
+        graph.completionFlow.declineOffer()
+        advanceUntilIdle()
+
+        model.toggle(second)
+        model.completeSelected()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+
+        assertNotNull("a new selection asks again", graph.completionFlow.offer.value)
+        graph.completionFlow.declineOffer()
+        advanceUntilIdle()
+        assertEquals(2, graph.events.all().size)
+        assertEquals(1, graph.conditions.all().size)
+    }
+
+    /** A MAINTENANCE profile on [assetId], as a form item's journal entry logs it. */
+    private suspend fun maintenanceForm(assetId: String) = graph.saveProfile.run(
+        null,
+        ProfileCommand(
+            assetId = AssetId(assetId), name = "Annual service", eventKind = EventKind.MAINTENANCE,
+            defaultTitle = "Annual service", fields = emptyList(), consumables = emptyList(),
+        ),
+    ).id
+
+    /** The journal entry a form item opens, saved as it opens; its offer (or none) is returned. */
+    private suspend fun TestScope.saveTheForm(assetId: String, profileId: ProfileId): EventEntryViewModel {
+        val entry = EventEntryViewModel(
+            graph.assets, graph.definitions, graph.profiles, graph.events,
+            graph.logEvent, graph.updateEvent, graph.clock,
+            AssetId(assetId), profileId, null, offers = graph.eventOffers,
+        )
+        entry.state.first { it.loaded }
+        entry.save()
+        advanceUntilIdle()
+        return entry
+    }
+
+    /**
+     * The ruling on B12's review, RS-2: a selection holding a **form** item and a **quick** item for
+     * one DOWN asset asks "Mark operational?" once — once per asset per batch, whatever the item kinds
+     * and whichever comes first. The form's journal entry asks through the same open batch the flow
+     * does.
+     */
+    @Test fun aFormItemAndAQuickItemOnOneAssetAskOnce() = runTest(scheduler) {
+        // Form first: the journal entry asks, and the quick item after it does not.
+        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        graph.conditions.insert(conditionRow("c-ups", "ups", OperationalCondition.DOWN, "2026-04-01"))
+        val upsForm = maintenanceForm("ups")
+        seed(scheduleOf("f-ups", assetId = "ups", title = "Annual service", anchorOn = "2026-01-01", leadDays = 0, completionMode = CompletionMode.FORM))
+        seed(scheduleOf("q-ups", assetId = "ups", title = "Fan clean", anchorOn = "2026-01-02", leadDays = 0))
+        val ups = viewModel(AssetId("ups"))
+        advanceUntilIdle()
+        assertEquals(listOf("f-ups", "q-ups"), ups.state.value.items.map { it.scheduleId.value })
+        ups.state.value.items.forEach { ups.toggle(it.scheduleId) }
+        ups.completeSelected()
+        advanceUntilIdle()
+
+        val entry = saveTheForm("ups", upsForm)
+        assertTrue("the form's entry asks", entry.state.value.offer is OperationalOfferPrompt)
+        entry.declineOffer()
+        // The owner's form completes its occurrence, as in the shipped form tests.
+        graph.completeSchedule.run(ScheduleId("f-ups"), CompletionCommand(occurredOn = graph.today.toString(), tzId = "UTC"))
+        ups.refresh()
+        advanceUntilIdle()
+        assertNotNull("the quick item's question is open", graph.completionFlow.prompt.value)
+        answerToday()
+        advanceUntilIdle()
+        assertNull("the quick item does not ask again", graph.completionFlow.offer.value)
+        assertFalse(ups.state.value.busy)
+
+        // Quick first: the flow asks, and the form's journal entry after it does not.
+        graph.assets.upsert(assetRow("pack", name = "Battery pack"))
+        graph.conditions.insert(conditionRow("c-pack", "pack", OperationalCondition.DOWN, "2026-04-01"))
+        val packForm = maintenanceForm("pack")
+        seed(scheduleOf("q-pack", assetId = "pack", title = "Cell check", anchorOn = "2026-01-01", leadDays = 0))
+        seed(scheduleOf("f-pack", assetId = "pack", title = "Annual service", anchorOn = "2026-01-02", leadDays = 0, completionMode = CompletionMode.FORM))
+        val pack = viewModel(AssetId("pack"))
+        advanceUntilIdle()
+        assertEquals(listOf("q-pack", "f-pack"), pack.state.value.items.map { it.scheduleId.value })
+        pack.state.value.items.forEach { pack.toggle(it.scheduleId) }
+        pack.completeSelected()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+        assertNotNull("the quick item asks", graph.completionFlow.offer.value)
+        graph.completionFlow.declineOffer()
+        advanceUntilIdle()
+
+        val packEntry = saveTheForm("pack", packForm)
+        assertNull("the form's entry does not ask again", packEntry.state.value.offer)
+        assertEquals(2, graph.conditions.all().size)
     }
 
     // ---------------------------------------------------------------- completion

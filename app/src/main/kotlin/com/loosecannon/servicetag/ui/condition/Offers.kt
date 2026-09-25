@@ -88,9 +88,12 @@ data class SeasonOfferPrompt(
 
 /**
  * The offers already asked within one batch of completions — one "Complete selected" on the scan
- * sheet (the controller's ruling on B12's review, M-1). Each asset is asked each offer **at most once
- * per batch**: after "Not yet" on the first of several items done on one DOWN asset, the later items
- * do not ask it again. A batch lives only as long as the run that made it.
+ * sheet (the controller's rulings on B12's review, M-1 and RS-2). Each **asset** is asked each offer
+ * **at most once per batch, whatever the item kinds**: after "Not yet" on the first of several items
+ * done on one DOWN asset, the later items do not ask it again — a quick item done by the flow and a
+ * form item saved in the journal entry alike, because the memory is keyed by the asset, never by the
+ * item. A batch lives only as long as the run that made it, which opens it on [EventOffers] and
+ * closes it when the run ends.
  */
 class OfferBatch {
     private val asked = mutableSetOf<Pair<AssetId, String>>()
@@ -192,9 +195,34 @@ class SeasonOffers(
  * Built once, in the graph, and shared by the completion flow and the journal entry.
  */
 class EventOffers(private val operational: OperationalOffers, private val season: SeasonOffers) {
-    /** What [event] asks, read now. The two offers touch different facts, so neither answer changes the other. */
-    suspend fun offersAfter(event: AssetEvent): List<EventOffer> =
-        listOfNotNull(operational.offerFor(event), season.offerFor(event))
+
+    /**
+     * The batch a scan-sheet selection is running, from [open] to [close], or null. While it is open,
+     * every offer asked goes through it — the completion flow's and the journal entry's that one of
+     * its form items opens — so an asset is asked each offer once in the whole selection.
+     */
+    @Volatile private var selection: OfferBatch? = null
+
+    /** Opens [batch] as the running selection's memory. */
+    fun open(batch: OfferBatch) {
+        selection = batch
+    }
+
+    /** Closes [batch] if it is still the running one; nothing else is closed by a late call. */
+    fun close(batch: OfferBatch) {
+        if (selection === batch) selection = null
+    }
+
+    /**
+     * What [event] asks, read now — less any offer the open selection has already asked of that
+     * asset, which this call then counts as asked. The two offers touch different facts, so neither
+     * answer changes the other.
+     */
+    suspend fun offersAfter(event: AssetEvent): List<EventOffer> {
+        val asked = listOfNotNull(operational.offerFor(event), season.offerFor(event))
+        val open = selection ?: return asked
+        return asked.filter(open::firstTime)
+    }
 
     suspend fun accept(offer: EventOffer) {
         when (offer) {
