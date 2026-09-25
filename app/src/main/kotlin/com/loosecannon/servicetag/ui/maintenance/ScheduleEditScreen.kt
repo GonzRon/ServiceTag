@@ -78,6 +78,12 @@ const val COMPLETING_THIS_TAKES = "Completing this takes"
 const val ONE_TAP = "One tap"
 const val THE_FULL_FORM = "The full form"
 const val USE_THIS_FORM = "Use this form"
+
+/** P141-3, ratified 2026-09-25: the profile picker's label under One tap (#81). */
+const val QUICK_ACTION = "Quick action"
+
+/** P141-4, ratified 2026-09-25: the picker's first row, clearing a chosen profile (#81). */
+const val NONE = "None"
 const val REMIND_ME_THROUGH = "Remind me through"
 
 /** D-11's non-blocking line, RATIFIED (§17). Shown, dismissible by fixing the title, never a gate. */
@@ -407,14 +413,16 @@ fun ScheduleEditScreen(
                     selected = state.completionMode,
                     onSelect = model::onCompletionMode,
                 )
-                if (state.completionMode == CompletionMode.FORM) {
-                    ProfilePicker(
-                        profiles = state.profiles.map { it.id to it.name },
-                        selected = state.profileId,
-                        onSelect = model::onProfile,
-                        problem = ScheduleField.PROFILE in state.marks,
-                    )
-                }
+                // The picker is drawn for an asset target in **both** modes (#81): a profile is
+                // one Asset's quick action, valid whichever way this schedule is completed, so it
+                // is offered — and shown, and clearable — regardless of the mode.
+                ProfilePicker(
+                    label = if (state.completionMode == CompletionMode.FORM) USE_THIS_FORM else QUICK_ACTION,
+                    profiles = state.profiles.map { it.id to it.name },
+                    selected = state.profileId,
+                    onSelect = model::onProfile,
+                    problem = ScheduleField.PROFILE in state.marks,
+                )
             } else {
                 // Inv. 106: a group target is CONTINUOUS only and is asked no question at all — a
                 // group has no season and no break for one to be about.
@@ -678,10 +686,16 @@ private fun MeterPicker(
     }
 }
 
-/** The asset's quick actions, for a `FORM` completion. Offered for an asset target alone (D-12). */
+/**
+ * The asset's quick actions. Offered for an asset target alone (D-12), in either completion mode
+ * (#81): [label] is [QUICK_ACTION] under One tap and [USE_THIS_FORM] under The full form. `None`
+ * is always the first row and is the only way left to clear a chosen profile explicitly, now that
+ * the mode switch no longer does.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProfilePicker(
+    label: String,
     profiles: List<Pair<ProfileId, String>>,
     selected: ProfileId?,
     onSelect: (ProfileId?) -> Unit,
@@ -693,7 +707,7 @@ private fun ProfilePicker(
             value = profiles.firstOrNull { it.first == selected }?.second.orEmpty(),
             onValueChange = {},
             readOnly = true,
-            label = { Text(USE_THIS_FORM) },
+            label = { Text(label) },
             isError = problem,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
             shape = ControlShape,
@@ -702,6 +716,10 @@ private fun ProfilePicker(
                 .fillMaxWidth(),
         )
         ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(NONE) },
+                onClick = { open = false; onSelect(null) },
+            )
             profiles.forEach { (id, name) ->
                 DropdownMenuItem(text = { Text(name) }, onClick = { open = false; onSelect(id) })
             }

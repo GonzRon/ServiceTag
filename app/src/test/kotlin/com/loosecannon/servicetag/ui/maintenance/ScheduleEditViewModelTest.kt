@@ -3,6 +3,8 @@ package com.loosecannon.servicetag.ui.maintenance
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionId
+import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthDriver
@@ -11,6 +13,7 @@ import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
@@ -27,6 +30,7 @@ import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.meterDefinitionOf
+import com.loosecannon.servicetag.testing.scheduleOf
 import java.time.LocalDate
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
@@ -129,6 +133,22 @@ class ScheduleEditViewModelTest {
     private suspend fun aGroupOf(assetIds: List<AssetId>) = graph.saveGroup.run(
         null,
         GroupCommand(name = "North run", members = assetIds.map { GroupMemberInput(assetId = it) }),
+    )
+
+    /** A quick action on [assetId], for the profile-preservation matrix (#81). */
+    private fun profileOf(id: String, assetId: String, name: String) = EventProfile(
+        id = ProfileId(id),
+        assetId = AssetId(assetId),
+        name = name,
+        eventKind = EventKind.MAINTENANCE,
+        defaultTitle = name,
+        templateKey = null,
+        sortOrder = 0,
+        archivedAt = null,
+        createdAt = 1L,
+        updatedAt = 1L,
+        fields = emptyList(),
+        consumables = emptyList(),
     )
 
     /**
@@ -239,6 +259,11 @@ class ScheduleEditViewModelTest {
         assertEquals(CompletionMode.QUICK, form.completionMode)
         assertNull("and so no profile", form.profileId)
         assertFalse(form.hasMeterRule)
+
+        // Under One tap — the group's only completion mode — the guard is still not FORM-conditioned:
+        // onProfile stays a no-op for a group target (#81).
+        vm.onProfile(ProfileId("p-forbidden"))
+        assertNull("a group ignores onProfile under One tap too", vm.state.value.profileId)
 
         vm.onTitle("Head check")
         vm.onInterval("3")
@@ -391,6 +416,155 @@ class ScheduleEditViewModelTest {
         unrelated.state.first { it.loaded }
         unrelated.onTitle("Head check")
         assertFalse("an unrelated asset warns nobody", unrelated.state.value.duplicateWarning)
+    }
+
+    /**
+     * The 23-row shape (#81): a QUICK asset schedule with a stored `profileId` is loaded, saved
+     * with nothing changed, and the profile — and everything else — comes back exactly as stored.
+     * Before this brief `command()` dropped `profileId` for any QUICK save (`:839`).
+     */
+    @Test fun aQuickAssetScheduleWithAProfileSavesItUnchanged() = runTest {
+        val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+        val profile = profileOf("p-quick", mower.id.value, "Blade check")
+        graph.profiles.upsert(profile)
+        val row = scheduleOf("s-quick", assetId = mower.id.value, completionMode = CompletionMode.QUICK)
+            .copy(
+                profileId = profile.id,
+                remindersEnabled = true,
+                providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
+            )
+        graph.schedules.upsert(row)
+
+        val vm = viewModel(scheduleId = row.id.value)
+        vm.state.first { it.loaded }
+        assertEquals("the profile loads into state", profile.id, vm.state.value.profileId)
+        val saved = savedId(vm)
+        vm.save()
+        val stored = graph.schedules.get(saved.await())!!
+
+        assertEquals(row.target, stored.target)
+        assertEquals(row.title, stored.title)
+        assertEquals(row.description, stored.description)
+        assertEquals(row.timeInterval, stored.timeInterval)
+        assertEquals(row.timeUnit, stored.timeUnit)
+        assertEquals(row.timeBasis, stored.timeBasis)
+        assertEquals(row.anchorOn, stored.anchorOn)
+        assertEquals(row.leadDays, stored.leadDays)
+        assertEquals(row.meterDefinitionId, stored.meterDefinitionId)
+        assertEquals(row.meterInterval, stored.meterInterval)
+        assertEquals(row.anchorMeter, stored.anchorMeter)
+        assertEquals(row.meterLead, stored.meterLead)
+        assertEquals(row.servicePolicy, stored.servicePolicy)
+        assertEquals(row.policyOffsetDays, stored.policyOffsetDays)
+        assertEquals(row.completionMode, stored.completionMode)
+        assertEquals("the profile survives an unchanged save", profile.id, stored.profileId)
+        assertEquals(row.remindersEnabled, stored.remindersEnabled)
+        assertEquals(row.providers, stored.providers)
+    }
+
+    /**
+     * The phones' shape today (#81): the same 23-row schedule, but with an empty `providers` list —
+     * what both phones hold until #80's repair runs. The editor loads it as LOCAL (`:549-552`), and
+     * the profile still survives the save.
+     */
+    @Test fun aProviderlessQuickAssetScheduleWithAProfileKeepsItOnSave() = runTest {
+        val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+        val profile = profileOf("p-quick2", mower.id.value, "Blade check")
+        graph.profiles.upsert(profile)
+        val row = scheduleOf("s-quick2", assetId = mower.id.value, completionMode = CompletionMode.QUICK)
+            .copy(profileId = profile.id, remindersEnabled = true, providers = emptyList())
+        graph.schedules.upsert(row)
+
+        val vm = viewModel(scheduleId = row.id.value)
+        vm.state.first { it.loaded }
+        assertEquals(ProviderId.LOCAL, vm.state.value.provider)
+        val saved = savedId(vm)
+        vm.save()
+        val stored = graph.schedules.get(saved.await())!!
+
+        assertEquals(row.target, stored.target)
+        assertEquals(row.title, stored.title)
+        assertEquals(row.timeInterval, stored.timeInterval)
+        assertEquals(row.timeUnit, stored.timeUnit)
+        assertEquals(row.anchorOn, stored.anchorOn)
+        assertEquals(row.leadDays, stored.leadDays)
+        assertEquals(row.servicePolicy, stored.servicePolicy)
+        assertEquals(row.completionMode, stored.completionMode)
+        assertEquals("the profile survives even a providerless load", profile.id, stored.profileId)
+        assertEquals(row.remindersEnabled, stored.remindersEnabled)
+        assertEquals(
+            "the phones' shape loads and saves as LOCAL",
+            listOf(ScheduleProviderRow("LOCAL", enabled = true)),
+            stored.providers,
+        )
+    }
+
+    /** An unrelated edit (#81): editing the description of a QUICK schedule keeps its profile. */
+    @Test fun editingTheDescriptionKeepsTheProfile() = runTest {
+        val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+        val profile = profileOf("p-desc", mower.id.value, "Blade check")
+        graph.profiles.upsert(profile)
+        val row = scheduleOf("s-desc", assetId = mower.id.value, completionMode = CompletionMode.QUICK)
+            .copy(profileId = profile.id)
+        graph.schedules.upsert(row)
+
+        val vm = viewModel(scheduleId = row.id.value)
+        vm.state.first { it.loaded }
+        vm.onDescription("Sharpen and balance")
+        val saved = savedId(vm)
+        vm.save()
+        val stored = graph.schedules.get(saved.await())!!
+        assertEquals("Sharpen and balance", stored.description)
+        assertEquals("an unrelated field edit does not cost the profile", profile.id, stored.profileId)
+    }
+
+    /**
+     * The mode switch (#81): FORM → QUICK → FORM never nulls `profileId`, and a QUICK save still
+     * carries it. Before this brief, `onCompletionMode(QUICK)` nulled it (`:643`).
+     */
+    @Test fun switchingModesKeepsTheProfile() = runTest {
+        val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+        val profile = profileOf("p-mode", mower.id.value, "Blade check")
+        graph.profiles.upsert(profile)
+        val row = scheduleOf("s-mode", assetId = mower.id.value, completionMode = CompletionMode.FORM)
+            .copy(profileId = profile.id)
+        graph.schedules.upsert(row)
+
+        val vm = viewModel(scheduleId = row.id.value)
+        vm.state.first { it.loaded }
+        assertEquals(profile.id, vm.state.value.profileId)
+
+        vm.onCompletionMode(CompletionMode.QUICK)
+        assertEquals("QUICK does not null the profile", profile.id, vm.state.value.profileId)
+
+        vm.onCompletionMode(CompletionMode.FORM)
+        assertEquals("back to FORM, still there", profile.id, vm.state.value.profileId)
+
+        vm.onCompletionMode(CompletionMode.QUICK)
+        val saved = savedId(vm)
+        vm.save()
+        val stored = graph.schedules.get(saved.await())!!
+        assertEquals(CompletionMode.QUICK, stored.completionMode)
+        assertEquals("a QUICK save still carries it", profile.id, stored.profileId)
+    }
+
+    /** No way to clear (#81): `onProfile(null)` — the `None` row's action — clears it explicitly. */
+    @Test fun noneClearsTheProfileExplicitly() = runTest {
+        val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+        val profile = profileOf("p-clear", mower.id.value, "Blade check")
+        graph.profiles.upsert(profile)
+        val row = scheduleOf("s-clear", assetId = mower.id.value, completionMode = CompletionMode.QUICK)
+            .copy(profileId = profile.id)
+        graph.schedules.upsert(row)
+
+        val vm = viewModel(scheduleId = row.id.value)
+        vm.state.first { it.loaded }
+        vm.onProfile(null)
+        assertNull(vm.state.value.profileId)
+        val saved = savedId(vm)
+        vm.save()
+        val stored = graph.schedules.get(saved.await())!!
+        assertNull("None clears it explicitly", stored.profileId)
     }
 
     /**

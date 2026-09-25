@@ -5,11 +5,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -24,8 +26,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionKind
+import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
+import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonMode
@@ -123,6 +128,29 @@ class ScheduleEditorTest {
     }
 
     /**
+     * A read-only picker's anchor — the same kind of field as [saveAndSettle]'s "Save", with no
+     * `SetText` action: tapping it is what opens the `ExposedDropdownMenu` behind it (#81).
+     */
+    private fun choice(label: String): SemanticsNodeInteraction =
+        rule.onNode(!hasSetTextAction() and hasClickAction() and hasText(label))
+
+    /** A quick action on [assetId], for the profile-picker matrix (#81). */
+    private fun profileFixture(id: String, assetId: AssetId, name: String) = EventProfile(
+        id = ProfileId(id),
+        assetId = assetId,
+        name = name,
+        eventKind = EventKind.MAINTENANCE,
+        defaultTitle = name,
+        templateKey = null,
+        sortOrder = 0,
+        archivedAt = null,
+        createdAt = 1L,
+        updatedAt = 1L,
+        fields = emptyList(),
+        consumables = emptyList(),
+    )
+
+    /**
      * Matrix row **"a schedule cannot be created at all"**, the asset half — and every ratified
      * label of the time rule, verbatim.
      *
@@ -204,6 +232,9 @@ class ScheduleEditorTest {
         // The three controls a group target does not get.
         rule.onAllNodesWithText("Also due by use").assertCountEquals(0)
         rule.onAllNodesWithText("Use this form").assertCountEquals(0)
+        // A group that wrongly drew the picker under One tap would be labelled "Quick action" (#81):
+        // every existing assertion here stays green, so this is what would actually catch it.
+        rule.onAllNodesWithText("Quick action").assertCountEquals(0)
         rule.onAllNodesWithText(QUESTION).assertCountEquals(0)
         rule.onAllNodesWithText("The full form").assertCountEquals(0)
         // And the one completion mode it does have, stated rather than silently defaulted.
@@ -223,6 +254,67 @@ class ScheduleEditorTest {
         check(stored.servicePolicy == ServicePolicy.CONTINUOUS) {
             "a group target is CONTINUOUS only: ${stored.servicePolicy}"
         }
+    }
+
+    /**
+     * Matrix row **"the picker under One tap"** (#81): the profile picker is drawn under One tap,
+     * labelled `Quick action`, and under The full form the very same field is labelled
+     * `Use this form` — listing the asset's quick actions and its `None` row either way.
+     */
+    @Test fun oneTapDrawsTheQuickActionPicker() {
+        val graph = app.graph
+        val mower = runBlocking {
+            val asset = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+            graph.profiles.upsert(profileFixture("p-blade", asset.id, "Blade check"))
+            asset
+        }
+        editorFor(graph, targetAssetId = mower.id.value)
+
+        rule.awaitText("One asset")
+        rule.onNodeWithText("Quick action").assertIsDisplayed()
+        rule.onAllNodesWithText("Use this form").assertCountEquals(0)
+        choice("Quick action").performClick()
+        rule.onNodeWithText("None").assertExists()
+        rule.onNodeWithText("Blade check").assertExists()
+        // Close the menu without picking, so the field is still empty for the mode switch below.
+        rule.onNodeWithText("None").performClick()
+
+        rule.onNodeWithText("The full form").performScrollTo().performClick()
+        rule.onNodeWithText("Use this form").assertIsDisplayed()
+        rule.onAllNodesWithText("Quick action").assertCountEquals(0)
+        choice("Use this form").performClick()
+        rule.onNodeWithText("Blade check").assertExists()
+    }
+
+    /**
+     * Matrix row **"the row"** (#81): the picker's first row is `None`; choosing a profile, then
+     * reopening and tapping `None`, empties the field and the saved schedule carries no profile.
+     */
+    @Test fun noneIsTheFirstRowAndClearsTheChoice() {
+        val graph = app.graph
+        val mower = runBlocking {
+            val asset = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+            graph.profiles.upsert(profileFixture("p-blade", asset.id, "Blade check"))
+            asset
+        }
+        val saved = editorFor(graph, targetAssetId = mower.id.value)
+
+        rule.awaitText("One asset")
+        choice("Quick action").performClick()
+        rule.onNodeWithText("Blade check").performClick()
+        rule.onNodeWithText("Blade check").assertIsDisplayed()
+
+        choice("Blade check").performClick()
+        rule.onNodeWithText("None").performClick()
+        rule.onNodeWithText("Quick action").assertIsDisplayed()
+        rule.onAllNodesWithText("Blade check").assertCountEquals(0)
+
+        rule.onNodeWithText("Name").performTextInput("Blade sharpen")
+        rule.onNodeWithText("Every N").performTextInput("3")
+        saveAndSettle(saved)
+
+        val stored = runBlocking { graph.schedules.all().single() }
+        check(stored.profileId == null) { "None did not clear the profile: $stored" }
     }
 
     /** An asset in a calendar season, November through March, made through the shipped commands. */
