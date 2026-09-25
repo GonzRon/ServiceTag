@@ -17,6 +17,8 @@ never product vocabulary. The owner's candidates:
 | A | `<n> schedules have reminders turned on, but reminder delivery isn't configured.` | `Fix all <n> reminders` |
 | B | `<n> schedules have reminders turned on, but they can't send notifications.` | `Fix reminder delivery` |
 
+Planner alternatives recorded for the owner's choice: pair B's sentence with pair A's label; `Log it as` in place of `Quick action` for the editor's One-tap picker label (plan.md §4).
+
 An optional detail line was offered for a detailed screen: `ServiceTag will restore local
 notification delivery for these schedules.` The plan proposes the exact strings in plan.md §4; they
 ship only once ratified. `NOTIFICATIONS_BLOCKED` stays entirely separate.

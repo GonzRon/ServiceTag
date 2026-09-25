@@ -1,7 +1,7 @@
 # P3 — the editor keeps a QUICK schedule's quick action (#81)
 
 **Read first:** plan.md §1, §2, §4 (P141-3, P141-4), §5; `rulings.md` "#81"; #81's body (the acceptance list).
-**Lane:** B, wave 1, branched from master `a8717c2`; it runs beside P1 and, later, P2, and shares no file with either.
+**Lane:** B, wave 1, branched from `<base>` = master after the pre-wave reconciliation (the controller names the commit); it runs beside P1 and, later, P2, and shares no file with either. Its connected class runs when the controller schedules it; connected classes never overlap on `emulator-5554` (plan.md §2).
 **Blocked on:** P141-3 and P141-4 ratified (plan.md §4).
 
 ## Goal
@@ -38,20 +38,21 @@ private fun ProfilePicker(label: String, profiles: List<Pair<ProfileId, String>>
 | hazard | test (class · case) | RED mutation |
 |---|---|---|
 | the 23-row shape | `ScheduleEditViewModelTest` · `aQuickAssetScheduleWithAProfileSavesItUnchanged`: load a row (QUICK, asset target, `profileId = P`, `remindersEnabled = true`, `[LOCAL enabled]`, a time rule) → `save()` → the command equals the row on every field, `profileId == P` | restore `:839` |
+| the phones' shape today | `ScheduleEditViewModelTest` · `aProviderlessQuickAssetScheduleWithAProfileKeepsItOnSave`: the same row with `providers = []` (what both phones hold until #80's repair runs; the editor loads it as LOCAL through `:549-552`) → `save()` → the command equals the row except `providers == [LOCAL enabled]`, and `profileId == P` | restore `:839` |
 | an unrelated edit | `ScheduleEditViewModelTest` · `editingTheDescriptionKeepsTheProfile` | — |
 | the mode switch | `ScheduleEditViewModelTest` · `switchingModesKeepsTheProfile`: FORM → QUICK → FORM, `profileId` never null, and a QUICK save still carries it | restore `:643` |
 | no way to clear | `ScheduleEditViewModelTest` · `noneClearsTheProfileExplicitly`: `onProfile(null)` → the command's `profileId == null` | — |
-| the group | existing `aGroupTargetOffersNoMeterNoProfileAndNoFollowAssetSeason` (`:222`) green; read `:234-249` (a null profile after `onCompletionMode(FORM)` in the group context stays true because a group has none) | — |
+| the group | existing `aGroupTargetOffersNoMeterNoProfileAndNoFollowAssetSeason` (`:222`) green and extended: under One tap on a group, `onProfile(someId)` leaves `profileId` null and the saved row has no profile; read `:234-249` (a null profile after `onCompletionMode(FORM)` in the group context stays true because a group has none) | drop the group guard in `onProfile` |
 | the provider row | existing `theEditorWritesExactlyOneProviderRowAndNeverLosesIt` (`:406`) green | — |
 | the picker under One tap | `ScheduleEditorTest` · `oneTapDrawsTheQuickActionPicker`: under One tap the field labelled `Quick action` is displayed, under The full form `Use this form`; both list the asset's profiles | keep the gate |
 | the row | `ScheduleEditorTest` · `noneIsTheFirstRowAndClearsTheChoice`: choose a profile, open, tap `None`, the field is empty and the saved command has no profile | — |
-| the group screen | existing `aGroupScheduleIsCreatedAndOffersNoneOfItsThreeForbiddenControls` (`:174`) green; `aScheduleIsCreatedAgainstAnAssetWithEveryRatifiedLabelVerbatim` (`:133`) adapted only if it asserts the picker's absence under One tap | — |
+| the group screen | existing `aGroupScheduleIsCreatedAndOffersNoneOfItsThreeForbiddenControls` (`:174`) green and extended with `onAllNodesWithText(QUICK_ACTION).assertCountEquals(0)` beside its `Use this form` check at `:206` (a group that wrongly drew the picker under One tap would be labelled `Quick action` and every existing test would stay green); `aScheduleIsCreatedAgainstAnAssetWithEveryRatifiedLabelVerbatim` (`:133`) adapted only if it asserts the picker's absence under One tap | gate on the asset target removed |
 
 ## Gate
 
 - `./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin --console=plain`: zero failures, zero skips.
-- Connected, on `emulator-5554` only, one class: `com.loosecannon.servicetag.ui.maintenance.ScheduleEditorTest`.
-- Anchored `git grep -nE` over `app/src/main`: `'"Quick action"'` → 1; `'"None"'` → 1 more than at the base (report the base count); `'"Use this form"'` → 1, unchanged; `'profileId = null'` in `ScheduleEditViewModel.kt` → 0; `'completionMode == CompletionMode\.FORM'` in `ScheduleEditViewModel.kt` → the base's lines minus `:839`.
+- Connected, on `emulator-5554` only, one class, scheduled by the controller: `com.loosecannon.servicetag.ui.maintenance.ScheduleEditorTest`.
+- Anchored `git grep -nE` over `app/src/main`: `'^const val QUICK_ACTION = "Quick action"$'` → 1; `'^const val NONE = "None"$'` → 1; `'^const val USE_THIS_FORM = "Use this form"$'` → 1, unchanged; `'profileId = null'` in `ScheduleEditViewModel.kt` → 0; `'completionMode == CompletionMode\.FORM'` in `ScheduleEditViewModel.kt` → the `<base>` lines minus `:839`.
 - `git diff <base> -- core tools docs app/src/main/kotlin/com/loosecannon/servicetag/api app/src/main/kotlin/com/loosecannon/servicetag/reminders app/src/main/kotlin/com/loosecannon/servicetag/di` → empty.
 - Hygiene; gitlink `7e0377a`; `git status` clean.
 
