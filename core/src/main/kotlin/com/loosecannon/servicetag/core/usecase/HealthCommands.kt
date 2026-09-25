@@ -149,8 +149,11 @@ internal fun thresholdsProblem(t1: Int?, t2: Int?, t3: Int?): HealthProblem? =
 internal fun weightProblem(weight: Int): HealthProblem? =
     if (HealthSubjectShape.weightValid(weight)) null else HealthProblem.WeightOutOfRange()
 
-/** Whether [this] schedule has a time side: an interval, a unit and an anchor, as the engine reads it. */
-internal fun MaintenanceSchedule.hasTimeRule(): Boolean = timeInterval != null && timeUnit != null && anchorOn != null
+/**
+ * Whether [this] schedule has a time side: an interval, a unit and an anchor, as the engine reads it.
+ * Public because the editors read it too: the health subject editor's S122 offers only schedules it accepts.
+ */
+fun MaintenanceSchedule.hasTimeRule(): Boolean = timeInterval != null && timeUnit != null && anchorOn != null
 
 /**
  * **The whole link validation** (spec §6.1; master plan §10.1, plan decision 45): a MAINTENANCE_OVERDUE

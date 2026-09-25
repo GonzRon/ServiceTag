@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.core.usecase.HealthSubjectIsPrimary
 import com.loosecannon.servicetag.core.usecase.HealthValidation
 import com.loosecannon.servicetag.core.usecase.SUBJECT_NAME_LENGTH
 import com.loosecannon.servicetag.core.usecase.SaveHealthSubject
+import com.loosecannon.servicetag.core.usecase.hasTimeRule
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.asset.ratifiedParts
 import com.loosecannon.servicetag.ui.asset.requiredMark
@@ -464,14 +465,10 @@ class HealthSubjectEditViewModel(
         }
 
     /**
-     * A time side, read as the engine and B06's link check read it: an interval, a unit and an anchor.
-     *
-     * This restates `:core`'s `MaintenanceSchedule.hasTimeRule()` (`usecase/HealthCommands.kt`), which is
-     * `internal` to `:core`, and B10 may not touch `:core`. **Carry-forward (B10 review M5):** a later
-     * `:core` brief makes `hasTimeRule` public, and this becomes a call to it, so S122's filter and
-     * B06's `HEALTH_SCHEDULE_NEEDS_A_TIME_RULE` can never read a schedule differently.
+     * A time side, by `:core`'s own [hasTimeRule] — the rule B06's link check refuses by — so S122's filter
+     * and `HEALTH_SCHEDULE_NEEDS_A_TIME_RULE` can never read a schedule differently.
      */
-    private fun MaintenanceSchedule.timed(): Boolean = timeInterval != null && timeUnit != null && anchorOn != null
+    private fun MaintenanceSchedule.timed(): Boolean = hasTimeRule()
 
     private data class Links(val actions: List<PickRow<ProfileId>>, val schedules: List<PickRow<ScheduleId>>)
 }
