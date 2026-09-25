@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.di.AppGraph
 import java.io.File
 import java.io.InputStream
 import java.time.LocalDate
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -98,6 +99,11 @@ class AttachmentsSectionViewModel(
     private val viewUris: (String) -> Uri? = { null },
     /** Today, as the ISO date a picked file's `capturedOn` defaults to (spec §8.1). */
     private val today: () -> String = { LocalDate.now().toString() },
+    /**
+     * Where the scan, the writes and the folder re-read run: `Dispatchers.IO` in the app, and the
+     * test's own scheduler in a JVM test, so none of that work outlives the test that started it.
+     */
+    private val io: CoroutineContext = Dispatchers.IO,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, owner: AttachmentOwner) : this(
@@ -136,7 +142,7 @@ class AttachmentsSectionViewModel(
      * learn that the person did what the status block asked ([refreshStore] is the other).
      */
     private val storeReads: Flow<StoreState> = storeState
-        .onStart { withContext(Dispatchers.IO) { storeState.value = storage.state() } }
+        .onStart { withContext(io) { storeState.value = storage.state() } }
 
     /** Pure mapping: everything expensive has already happened by the time a value gets here. */
     val state: StateFlow<AttachmentsSectionState> =
@@ -160,8 +166,11 @@ class AttachmentsSectionViewModel(
      * The id of an attachment whose edit sheet may close: the save landed, or it changed nothing.
      * A refusal is deliberately absent — the sheet stays open holding what the person typed, so
      * the line the snackbar just showed is something they can act on.
+     *
+     * Room for two: a double tap on Save puts two saves in flight, and the second one's signal
+     * must not be dropped because the screen has not yet taken the first.
      */
-    private val _saved = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
+    private val _saved = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 2)
     val saved: SharedFlow<String> = _saved.asSharedFlow()
 
     /** The id of an attachment that is gone — row and bytes. A failed delete emits nothing. */
@@ -171,9 +180,10 @@ class AttachmentsSectionViewModel(
     init {
         // `collectLatest` drops a pass whose row list is already stale, so a delete or a rename
         // mid-scan restarts the checks rather than finishing the old ones.
-        // The whole pass lives on `Dispatchers.IO`: nothing in it touches the UI, and a job that
-        // runs for the life of the screen should not be bouncing off the main thread to do it.
-        viewModelScope.launch(Dispatchers.IO) {
+        // The whole pass lives on [io] (`Dispatchers.IO` in the app): nothing in it touches the
+        // UI, and a job that runs for the life of the screen should not be bouncing off the main
+        // thread to do it.
+        viewModelScope.launch(io) {
             try {
                 combine(rows, refresh) { attachmentRows, _ -> attachmentRows }
                     .collectLatest { guardedScan(it) }
@@ -203,13 +213,13 @@ class AttachmentsSectionViewModel(
     /**
      * Sequential, so a failure names its file and the rest still land (spec §8.1).
      *
-     * On `Dispatchers.IO`, like [save] and [delete]: the first thing every one of these use cases
-     * does is ask the storage whether there is a folder, which is a handful of provider round
-     * trips before any of them reaches a suspension point of its own.
+     * On [io] (`Dispatchers.IO` in the app), like [save] and [delete]: the first thing every one
+     * of these use cases does is ask the storage whether there is a folder, which is a handful of
+     * provider round trips before any of them reaches a suspension point of its own.
      */
     fun add(files: List<PickedFile>) {
         if (files.isEmpty()) return
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(io) {
             val capturedOn = today()
             files.forEachIndexed { index, file ->
                 // One file on its own is not a batch: nothing to count, so nothing to say.
@@ -223,7 +233,7 @@ class AttachmentsSectionViewModel(
     }
 
     fun save(id: String, cmd: UpdateAttachmentCommand) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(io) {
             val outcome = try {
                 updateAttachment.run(AttachmentId(id), cmd)
             } catch (e: CancellationException) {
@@ -247,7 +257,7 @@ class AttachmentsSectionViewModel(
     }
 
     fun delete(id: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(io) {
             try {
                 deleteAttachment.run(AttachmentId(id))
                 _deleted.tryEmit(id)
@@ -298,9 +308,9 @@ class AttachmentsSectionViewModel(
     }
 
     /**
-     * The store state, then existence, then thumbnails: on `Dispatchers.IO` and one row at a time
-     * (spec §8.2). The store is resolved once for the whole pass — a `state()` per row would be a
-     * binder call per row.
+     * The store state, then existence, then thumbnails: on [io] (`Dispatchers.IO` in the app) and
+     * one row at a time (spec §8.2). The store is resolved once for the whole pass — a `state()`
+     * per row would be a binder call per row.
      */
     private suspend fun scan(attachmentRows: List<Attachment>) {
         storeState.value = storage.state()
