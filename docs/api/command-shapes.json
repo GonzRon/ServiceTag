@@ -1,0 +1,29 @@
+{
+  "asset": {
+    "keys": ["name", "category", "description", "notes", "manufacturer", "model", "serialNumber", "purchaseOn", "inServiceOn", "purchasePriceMinor", "currency", "vendor", "location", "warrantyExpiresOn", "warrantyNotes", "parentAssetId", "seasonStartMmdd", "seasonEndMmdd", "templateKey"]
+  },
+  "schedule": {
+    "keys": ["targetAssetId", "targetGroupId", "title", "description", "timeInterval", "timeUnit", "timeBasis", "anchorOn", "leadDays", "meterDefinitionId", "meterInterval", "anchorMeter", "meterLead", "servicePolicy", "policyOffsetDays", "completionMode", "profileId", "remindersEnabled", "providers"],
+    "legacyKeys": ["seasonBehavior", "seasonReentry", "seasonReentryOffsetDays"],
+    "actionFlags": ["unlinkHealthSubject"],
+    "rowToCommand": {"assetId": "targetAssetId", "groupId": "targetGroupId"}
+  },
+  "healthSubject": {
+    "keys": ["assetId", "name", "kind", "driver", "scheduleId", "baselineProfileId", "nominalUntilDays", "warningFromDays", "criticalFromDays", "weight", "sortOrder"]
+  },
+  "seasonMode": {
+    "keys": ["seasonMode", "seasonStartMmdd", "seasonEndMmdd", "manualPhase"]
+  },
+  "maintenanceBreak": {
+    "keys": ["blackoutStartMmdd", "blackoutEndMmdd"]
+  },
+  "healthPolicy": {
+    "keys": ["healthAggregation", "healthPrimarySubjectId"]
+  },
+  "condition": {
+    "keys": ["condition", "occurredOn", "occurredTime", "tzId", "reason", "eventId"]
+  },
+  "activation": {
+    "keys": ["action", "occurredOn", "eventId"]
+  }
+}
