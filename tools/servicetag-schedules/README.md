@@ -51,6 +51,21 @@ schedules loads without complaint — that is one of `plan.plan`'s invariants (b
 `ERROR`), not a load-time failure, because a load-time error would stop before a caller could see
 which entries the problem touches.
 
+**ServiceTag 1.4 changes the comparison, not the contract.** The manifest still says
+`seasonBehavior`, and `apply` still writes it through the MCP's deprecated `season_behavior`
+argument, which the app translates. A 1.4 phone stores a **service policy** instead and reports 1.3's
+`seasonBehavior` only as a derived projection, so the re-plan reads each row's `servicePolicy` and
+`policyOffsetDays` and compares them with the manifest's value mapped by spec §4.1
+(`legacy_mapping.to_policy`: `IGNORE` is `CONTINUOUS`, `FOLLOW_ASSET` is `IN_SERVICE_AT_START` at 0)
+— which keeps a loaded manifest re-planning `IDENTICAL`. A row whose policy no manifest value maps to
+(`PRE_SERVICE`, a non-zero offset, `IN_SERVICE_RESUME_CLAMPED`) is a `CONFLICT` whose reason names
+both policies, and this tool never changes it. The mapping is held to the repository's golden
+`docs/api/legacy-season-mapping.json` by `tests/test_legacy_mapping.py`. It needs the lockstep
+`servicetag-mcp`, which writes only to ServiceTag 1.4.0 or later — and the loader checks the same
+thing first: `phone.snapshot` reads the MCP's `status` before anything else and refuses a phone whose
+`schemaVersion` is missing or below 8, so `plan` and `apply` both print that one line and exit `2`
+without reading a row.
+
 ## The CLI
 
 Installed as `servicetag-schedules` (`uv run servicetag-schedules ...` from this directory).

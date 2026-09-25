@@ -312,8 +312,11 @@ def test_the_estate_fixture_plans_applies_and_reapplies_clean(fake_client) -> No
     # Q2: apply -- across planning, applying and re-planning, twice over -- only ever calls the
     # read tools plus create_group/create_schedule. Never update_*, archive_*, delete_* -- the
     # "never edits, archives or deletes an existing row" constraint, pinned as a test rather than
-    # left to inspection.
-    allowed_tools = {"list_assets", "list_profiles", "list_groups", "list_schedules", "create_group", "create_schedule"}
+    # left to inspection. (1.4: `status` is one of the reads -- the snapshot's schema check.)
+    allowed_tools = {
+        "status", "list_assets", "list_profiles", "list_groups", "list_schedules",
+        "create_group", "create_schedule",
+    }
     tool_names = {name for name, _ in fake_client.calls}
     assert tool_names <= allowed_tools
     assert not any(name.startswith(("update_", "archive_", "delete_")) for name in tool_names)

@@ -38,8 +38,9 @@ MAINTENANCE_TOOLS = (
 )
 """Master plan §10's seventeen, named exactly as it names them. `list_schedules` covers all three
 schedule listings — every schedule, one asset's, one group's — because §10 names one tool and the
-three are one question asked of three scopes. The registered total was 21 + 17 = **38** at 1.2 and
-is **41** since 1.3's three reference tools, which `test_argument_guard.py` pins."""
+three are one question asked of three scopes. The registered total was 21 + 17 = **38** at 1.2,
+**41** after 1.3's three reference tools and is **55** since 1.4's fourteen, which
+`test_argument_guard.py` pins."""
 
 
 def body_of(recorded) -> dict:
@@ -276,9 +277,8 @@ def _schedule_row(**overrides) -> dict:
         "meterInterval": None,
         "anchorMeter": None,
         "meterLead": None,
-        "seasonBehavior": "IGNORE",
-        "seasonReentry": None,
-        "seasonReentryOffsetDays": None,
+        "servicePolicy": "CONTINUOUS",
+        "policyOffsetDays": None,
         "completionMode": "QUICK",
         "profileId": "p1",
         "remindersEnabled": True,
@@ -286,7 +286,12 @@ def _schedule_row(**overrides) -> dict:
         "postponedDueOn": "2026-02-20",
         "createdAt": 1,
         "updatedAt": 2,
+        "ruleChangedAt": 2,
         "providers": [{"provider": "LOCAL", "enabled": True}],
+        # 1.4's row: the format-8 row plus 1.3's triple, derived from the policy (`docs/api/v1.md`).
+        "seasonBehavior": "IGNORE",
+        "seasonReentry": None,
+        "seasonReentryOffsetDays": None,
     }
     row.update(overrides)
     return {"schedule": row, "state": {}, "status": "DUE", "computedForOn": "2026-02-10"}
@@ -364,6 +369,7 @@ def test_update_schedule_leaves_every_field_alone_for_an_explicit_none(paired) -
         ("meter_interval", "meterInterval", None, {}),
         ("anchor_meter", "anchorMeter", None, {}),
         ("meter_lead", "meterLead", None, {}),
+        ("policy_offset_days", "policyOffsetDays", None, {}),
         ("season_reentry", "seasonReentry", None, {}),
         ("season_reentry_offset_days", "seasonReentryOffsetDays", None, {}),
         ("profile_id", "profileId", None, {}),
@@ -371,7 +377,7 @@ def test_update_schedule_leaves_every_field_alone_for_an_explicit_none(paired) -
     ],
 )
 def test_every_clearable_schedule_field_clears_by_name(paired, name, wire, cleared, row) -> None:
-    """The audit, one row per clearable argument — all fourteen of
+    """The audit, one row per clearable argument — all fifteen of
     `_SCHEDULE_CLEARABLE_FIELDS`: `None` left each of them alone in the test above, and the
     documented `clear_fields` name is what empties it.
 
@@ -381,6 +387,7 @@ def test_every_clearable_schedule_field_clears_by_name(paired, name, wire, clear
     seeded = {
         "meterDefinitionId": "d1", "meterInterval": 100.0, "anchorMeter": 0.0, "meterLead": 10.0,
         "seasonReentry": "04-01", "seasonReentryOffsetDays": 7,
+        "servicePolicy": "IN_SERVICE_AT_START", "policyOffsetDays": 5,
     }
     seeded.update(row)
     paired.reply("GET", "/v1/schedules/s1", 200, _schedule_row(**seeded))
@@ -406,10 +413,37 @@ def test_moving_a_schedule_to_a_group_target_needs_the_old_target_cleared(paired
     assert body["targetGroupId"] == "g1"
 
 
+def test_policy_offset_days_is_clearable_and_none_leaves_it(paired) -> None:
+    """1.4's one new nullable schedule field. `None` is "leave alone", like every other argument
+    here, so an `IN_SERVICE_AT_START` offset of 5 survives `policy_offset_days=None`; only the name
+    in `clear_fields` sends `null` (which the app reads as 0 on that policy). Either way the body is
+    the 1.4 form: none of 1.3's season keys rides along."""
+    paired.reply(
+        "GET", "/v1/schedules/s1", 200,
+        _schedule_row(servicePolicy="IN_SERVICE_AT_START", policyOffsetDays=5,
+                      seasonBehavior="FOLLOW_ASSET", seasonReentry="AT_START",
+                      seasonReentryOffsetDays=5),
+    )
+
+    server_module.update_schedule(schedule_id="s1", policy_offset_days=None)
+    kept = body_of(paired.last())
+    assert kept["servicePolicy"] == "IN_SERVICE_AT_START"
+    assert kept["policyOffsetDays"] == 5
+
+    server_module.update_schedule(schedule_id="s1", clear_fields=["policy_offset_days"])
+    cleared = body_of(paired.last())
+    assert "policyOffsetDays" in cleared and cleared["policyOffsetDays"] is None
+    assert cleared["servicePolicy"] == "IN_SERVICE_AT_START"
+
+    for body in (kept, cleared):
+        for legacy in ("seasonBehavior", "seasonReentry", "seasonReentryOffsetDays"):
+            assert legacy not in body, legacy
+
+
 def test_the_schedule_fields_that_cannot_be_cleared_are_refused_by_name(paired) -> None:
     paired.reply("GET", "/v1/schedules/s1", 200, _schedule_row())
-    for field in ("title", "time_basis", "season_behavior", "completion_mode", "lead_days",
-                  "reminders_enabled", "postponed_due_on", "status"):
+    for field in ("title", "time_basis", "service_policy", "season_behavior", "completion_mode",
+                  "lead_days", "reminders_enabled", "postponed_due_on", "status"):
         with pytest.raises(ToolError, match="cannot be cleared"):
             server_module.update_schedule(schedule_id="s1", clear_fields=[field])
     assert paired.requests == []
@@ -462,7 +496,10 @@ def test_complete_schedule_sends_every_argument_and_reads_nothing_back(paired) -
         values={"d1": "3.2"},
         consumables=[{"name": "Cartridge", "quantity": "1", "unit": "ea"}],
     )
-    assert len(paired.requests) == 1, "a new fact is never overlaid onto a row it read back"
+    # 1.4: the one read is the schema check's `/v1/status`; nothing of the schedule is read back.
+    assert [(r.method, r.path) for r in paired.requests] == [
+        ("GET", "/v1/status"), ("POST", "/v1/schedules/s1/complete"),
+    ], "a new fact is never overlaid onto a row it read back"
     assert paired.last().method == "POST"
     assert paired.last().path == "/v1/schedules/s1/complete"
     assert body_of(paired.last()) == {
@@ -478,7 +515,9 @@ def test_complete_schedule_sends_every_argument_and_reads_nothing_back(paired) -
 
 def test_close_round_sends_every_argument_and_reads_nothing_back(paired) -> None:
     server_module.close_round(schedule_id="s1", closed_on="2026-02-08")
-    assert len(paired.requests) == 1
+    assert [(r.method, r.path) for r in paired.requests] == [
+        ("GET", "/v1/status"), ("POST", "/v1/schedules/s1/close-round"),
+    ]
     assert paired.last().method == "POST"
     assert paired.last().path == "/v1/schedules/s1/close-round"
     assert body_of(paired.last()) == {"closedOn": "2026-02-08"}
@@ -579,7 +618,9 @@ def test_a_malformed_schedule_read_never_becomes_a_write(paired) -> None:
     paired.reply("GET", "/v1/schedules/s1", 200, {"nope": 1})
     with pytest.raises(ToolError, match="schedule"):
         server_module.update_schedule(schedule_id="s1", title="x")
-    assert len(paired.requests) == 1, "only the read happened"
+    assert [r.path for r in paired.requests] == ["/v1/status", "/v1/schedules/s1"], (
+        "only the schema check and the read happened"
+    )
 
     paired.reply("GET", "/v1/groups/g1", 200, {"group": {"name": "x", "description": "", "members": 7}})
     with pytest.raises(ToolError, match="members"):

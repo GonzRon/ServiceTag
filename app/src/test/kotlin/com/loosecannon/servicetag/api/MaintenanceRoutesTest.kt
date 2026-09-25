@@ -1,13 +1,23 @@
 package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.HealthDriver
+import com.loosecannon.servicetag.core.model.HealthSubject
+import com.loosecannon.servicetag.core.model.HealthSubjectId
+import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
+import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.SeasonAction
+import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.model.TerminationKind
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.usecase.AssetMembershipReferenced
 import com.loosecannon.servicetag.core.usecase.CreateAsset
@@ -76,6 +86,7 @@ class MaintenanceRoutesTest {
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
             maintenanceHandlersFor(graph),
             referenceHandlersFor(graph),
+            seasonHealthHandlersFor(graph),
             appVersion = "1.2.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -1169,6 +1180,8 @@ class MaintenanceRoutesTest {
                 "formatVersion", "backupSetId", "applicable",
                 "assets", "groups", "definitions", "profiles", "schedules", "closures",
                 "links", "tags", "events", "attachments", "references",
+                // 1.4 (B09): tables 12–14, in write order after the references.
+                "seasonActivations", "conditions", "healthSubjects",
                 "conflicts", "duplicateCandidates",
             ),
             MergeReportResponse.serializer().descriptor.elementNames.toList(),
@@ -1185,16 +1198,212 @@ class MaintenanceRoutesTest {
         // The key is really on the wire, not merely on the Kotlin type: read it out of the JSON
         // before decoding, so a mirror that stopped emitting it fails here.
         assertTrue(planned.text(), "\"references\"" in planned.text())
+        for (key in listOf("seasonActivations", "conditions", "healthSubjects")) {
+            assertTrue("$key is on the wire: ${planned.text()}", "\"$key\"" in planned.text())
+        }
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.references)
+        assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.healthSubjects)
+    }
+
+    // --- 1.4 (B09): derived state, status and the fourteen-table merge ---------------------------
+
+    /**
+     * Spec §9.1: `ScheduleStateDto` gains `actionableDueOn`, `policyReason`, `policyPhase` and
+     * `quiet`; `/v1/due` items gain `actionableDueOn`, `policyReason` and `quiet`, and `status` may
+     * be `DEFERRED`. A YEAR_ROUND asset with a February break holds an IN_SERVICE_AT_START job due on
+     * 5 February until the day after the break: inside its lead, before its actionable date, so
+     * DEFERRED, and quiet because today is in the break under a non-CONTINUOUS policy.
+     * `effectiveDueOn` keeps its 1.2 meaning. A CONTINUOUS job on the same asset is the control.
+     */
+    @Test fun stateAndDueCarryTheActionableFieldsAndDeferred() {
+        val asset = createAsset("Generator")
+        val brk = call(
+            "POST", "/v1/assets/$asset/maintenance-break",
+            """{"blackoutStartMmdd":"02-01","blackoutEndMmdd":"02-28"}""",
+        )
+        assertEquals(brk.text(), 200, brk.status)
+        val held = call(
+            "POST", "/v1/schedules",
+            """{"title":"Load bank test","targetAssetId":"$asset","timeInterval":1,"timeUnit":"MONTH",
+               "timeBasis":"FIXED","anchorOn":"2026-02-05","leadDays":7,"servicePolicy":"IN_SERVICE_AT_START"}""",
+        )
+        assertEquals(held.text(), 201, held.status)
+        val heldId = scheduleIn(held).id
+        val plainId = scheduleIn(
+            call(
+                "POST", "/v1/schedules",
+                """{"title":"Oil change","targetAssetId":"$asset","timeInterval":1,"timeUnit":"MONTH",
+                   "timeBasis":"FIXED","anchorOn":"2026-02-05","leadDays":7}""",
+            ),
+        ).id
+
+        val detailText = call("GET", "/v1/schedules/$heldId").text()
+        val detail = ApiJson.decodeFromString(ScheduleDetailResponse.serializer(), detailText)
+        assertEquals("2026-02-05", detail.state.effectiveDueOn)
+        assertEquals("2026-03-01", detail.state.actionableDueOn)
+        assertEquals("AFTER_BREAK", detail.state.policyReason)
+        assertEquals("ACTIVE", detail.state.policyPhase)
+        assertTrue("inside the break under a non-CONTINUOUS policy", detail.state.quiet)
+        assertEquals("DEFERRED", detail.status)
+        for (key in listOf("actionableDueOn", "policyReason", "policyPhase", "quiet", "seasonActive", "effectiveDueOn")) {
+            assertTrue(key, "\"$key\":" in detailText)
+        }
+
+        val dueText = call("GET", "/v1/due").text()
+        val items = ApiJson.decodeFromString(DueListResponse.serializer(), dueText).items
+        val deferred = items.single { it.scheduleId == heldId }
+        assertEquals("DEFERRED", deferred.status)
+        assertEquals("2026-02-05", deferred.effectiveDueOn)
+        assertEquals("2026-03-01", deferred.actionableDueOn)
+        assertEquals("AFTER_BREAK", deferred.policyReason)
+        assertTrue(deferred.quiet)
+        for (key in listOf("actionableDueOn", "policyReason", "quiet")) assertTrue(key, "\"$key\":" in dueText)
+
+        val plain = items.single { it.scheduleId == plainId }
+        assertEquals("OVERDUE", plain.status)
+        assertEquals(plain.effectiveDueOn, plain.actionableDueOn)
+        assertEquals("NONE", plain.policyReason)
+        assertFalse("CONTINUOUS is never quiet", plain.quiet)
+        // The order follows the actionable date: the overdue job ranks ahead of the held one.
+        assertTrue(plain.rank < deferred.rank)
+    }
+
+    /**
+     * `seasonActive` is 1.3's field answered from the phase (`policyPhase == ACTIVE`), never a
+     * stored column: on a CALENDAR mower out of its season, the IN_SERVICE job is DORMANT and reads
+     * false, while a CONTINUOUS job on the same asset is ACTIVE and reads true.
+     */
+    @Test fun seasonActiveIsDerivedFromThePhase() {
+        val mower = createAsset("Mower")
+        val season = call(
+            "POST", "/v1/assets/$mower/season-mode",
+            """{"seasonMode":"CALENDAR","seasonStartMmdd":"04-01","seasonEndMmdd":"10-31"}""",
+        )
+        assertEquals(season.text(), 200, season.status)
+        val dormant = scheduleIn(
+            call(
+                "POST", "/v1/schedules",
+                """{"title":"Blade sharpening","targetAssetId":"$mower","timeInterval":1,"timeUnit":"MONTH",
+                   "anchorOn":"2026-02-01","servicePolicy":"IN_SERVICE_AT_START"}""",
+            ),
+        ).id
+        val continuous = createAssetSchedule(mower, "Battery check")
+
+        fun state(id: String) = ApiJson.decodeFromString(
+            ScheduleDetailResponse.serializer(), call("GET", "/v1/schedules/$id").text(),
+        ).state
+        assertEquals("DORMANT", state(dormant).policyPhase)
+        assertFalse(state(dormant).seasonActive)
+        assertEquals("ACTIVE", state(continuous).policyPhase)
+        assertTrue(state(continuous).seasonActive)
+    }
+
+    /**
+     * B07's review (O2): `GET /v1/schedules/{id}` and `/v1/due` read derived state through
+     * `readState`, so a row stored on an earlier day — here one that says the round was completed
+     * and the job is DORMANT until June — is derived afresh for today and never believed, and is
+     * still what is stored afterwards: the read wrote nothing.
+     */
+    @Test fun theDetailAndDueReadAStaleStoredRowThroughReadState() {
+        val asset = createAsset("Hot tub")
+        val id = createAssetSchedule(asset)
+        val stale = runBlocking {
+            graph.scheduleStates.get(ScheduleId(id))!!.copy(
+                computedForOn = "2026-02-09",
+                lastTerminationKind = TerminationKind.COMPLETED,
+                lastTerminationEffectiveOn = "2026-02-09",
+                policyPhase = PolicyPhase.DORMANT,
+                actionableDueOn = "2026-06-01",
+            ).also { graph.scheduleStates.upsert(it) }
+        }
+
+        val detail = ApiJson.decodeFromString(
+            ScheduleDetailResponse.serializer(), call("GET", "/v1/schedules/$id").text(),
+        )
+        assertEquals("NONE", detail.state.lastTerminationKind)
+        assertEquals("ACTIVE", detail.state.policyPhase)
+        assertEquals("2026-02-01", detail.state.actionableDueOn)
+        assertEquals(TODAY.toString(), detail.state.computedForOn)
+        assertEquals("OVERDUE", detail.status)
+
+        val item = ApiJson.decodeFromString(DueListResponse.serializer(), call("GET", "/v1/due").text())
+            .items.single { it.scheduleId == id }
+        assertEquals("NONE", item.lastTerminationKind)
+        assertNull(item.lastTerminationEffectiveOn)
+        assertEquals("OVERDUE", item.status)
+
+        assertEquals(stale, runBlocking { graph.scheduleStates.get(ScheduleId(id)) })
+    }
+
+    /**
+     * Master plan §11.3: `/v1/status` reports schema 8 and format 8, and counts the three 1.4 tables
+     * under the archive's own list names beside every shipped key.
+     */
+    @Test fun statusReports8And8AndThreeNewCounts() {
+        val tub = createAsset("Hot tub")
+        assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
+        assertEquals(
+            200,
+            call("POST", "/v1/assets/$tub/season-mode", """{"seasonMode":"MANUAL","manualPhase":"IN_SEASON"}""").status,
+        )
+        assertEquals(
+            201,
+            call(
+                "POST", "/v1/health-subjects",
+                """{"assetId":"$tub","name":"Heater element","kind":"PART","driver":"AGE",
+                   "nominalUntilDays":0,"warningFromDays":300,"criticalFromDays":600}""",
+            ).status,
+        )
+
+        val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
+        assertEquals(8, status.schemaVersion)
+        assertEquals(8, status.backupFormatVersion)
+        assertEquals(1, status.counts["seasonActivations"])
+        assertEquals(1, status.counts["assetConditions"])
+        assertEquals(1, status.counts["healthSubjects"])
+        assertEquals(1, status.counts["assets"])
+    }
+
+    /**
+     * Import-merge reads a **format-8** archive and reports **fourteen** tables: the donor's
+     * activation, condition and health subject each tally one INSERT on the wire, and the apply
+     * writes each of them — an INSERT, never an update (spec §8.4).
+     */
+    @Test fun importMergeReadsFormat8AndReportsFourteenTables() {
+        val archive = donorArchive()
+        fun post(path: String) = router().handle(
+            ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
+        )
+
+        val planned = post(IMPORT_MERGE_PLAN_PATH)
+        assertEquals(planned.text(), 200, planned.status)
+        val wire = ApiJson.parseToJsonElement(planned.text()).jsonObject
+        val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
+        assertEquals(14, tallies.size)
+        val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
+        assertEquals(8, report.formatVersion)
+        assertTrue(report.text(), report.applicable)
+        val one = MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0)
+        assertEquals(one, report.seasonActivations)
+        assertEquals(one, report.conditions)
+        assertEquals(one, report.healthSubjects)
+
+        assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
+        runBlocking {
+            assertEquals(1, graph.seasonActivations.all().size)
+            assertEquals(1, graph.conditions.all().size)
+            assertEquals(1, graph.healthSubjects.all().size)
+        }
     }
 
     private fun MergeReportResponse.text(): String = conflicts.toString()
 
     /**
      * A donor phone carrying one group, one group-targeted schedule, one closure and one
-     * reference. The reference is there so the `references` tally has a non-zero value to be wrong
-     * about — an empty tally would pass against any table the mirror happened to read.
+     * reference — and, since 1.4, one activation, one condition and one health subject. Each is
+     * there so its tally has a non-zero value to be wrong about — an empty tally would pass against
+     * any table the mirror happened to read.
      */
     private fun donorArchive(): ByteArray {
         val donor = FakeGraph().apply {
@@ -1252,6 +1461,50 @@ class MaintenanceRoutesTest {
                         displayName = "Donor manual",
                         description = "",
                         scheme = "https",
+                        createdAt = dayMillis("2026-01-01"),
+                        updatedAt = dayMillis("2026-01-01"),
+                    ),
+                )
+                // 1.4: one row in each of tables 12–14, so their tallies have a value to be wrong
+                // about. Inserted as a merge would deliver them — facts and configuration, no health.
+                donor.seasonActivations.insert(
+                    SeasonActivation(
+                        id = "00000000-0000-4000-8000-900000007777",
+                        assetId = asset.id,
+                        action = SeasonAction.START,
+                        occurredOn = "2026-01-10",
+                        eventId = null,
+                        createdAt = dayMillis("2026-01-10"),
+                    ),
+                )
+                donor.conditions.insert(
+                    AssetCondition(
+                        id = "00000000-0000-4000-8000-900000006666",
+                        assetId = asset.id,
+                        condition = OperationalCondition.DEGRADED,
+                        occurredOn = "2026-01-12",
+                        occurredTime = null,
+                        tzId = "UTC",
+                        reason = "Seal weeping",
+                        eventId = null,
+                        createdAt = dayMillis("2026-01-12"),
+                    ),
+                )
+                donor.healthSubjects.upsert(
+                    HealthSubject(
+                        id = HealthSubjectId("00000000-0000-4000-8000-900000005555"),
+                        assetId = asset.id,
+                        name = "Pump seal",
+                        kind = HealthSubjectKind.PART,
+                        driver = HealthDriver.AGE,
+                        scheduleId = null,
+                        baselineProfileId = null,
+                        nominalUntilDays = 0,
+                        warningFromDays = 300,
+                        criticalFromDays = 600,
+                        weight = 1,
+                        sortOrder = 0,
+                        archivedAt = null,
                         createdAt = dayMillis("2026-01-01"),
                         updatedAt = dayMillis("2026-01-01"),
                     ),

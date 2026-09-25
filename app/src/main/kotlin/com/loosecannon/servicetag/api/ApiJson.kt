@@ -8,8 +8,11 @@ import com.loosecannon.servicetag.core.usecase.AssetHasChildren
 import com.loosecannon.servicetag.core.usecase.AssetMembershipReferenced
 import com.loosecannon.servicetag.core.usecase.AssetValidation
 import com.loosecannon.servicetag.core.usecase.BadScheduleDate
+import com.loosecannon.servicetag.core.usecase.BreakStrandsPolicy
 import com.loosecannon.servicetag.core.usecase.CloseNotSupported
 import com.loosecannon.servicetag.core.usecase.ClosedOnOutOfRange
+import com.loosecannon.servicetag.core.usecase.ConditionProblem
+import com.loosecannon.servicetag.core.usecase.ConditionValidation
 import com.loosecannon.servicetag.core.usecase.DefinitionInUse
 import com.loosecannon.servicetag.core.usecase.DefinitionValidation
 import com.loosecannon.servicetag.core.usecase.DefinitionWouldBreakDerived
@@ -19,6 +22,11 @@ import com.loosecannon.servicetag.core.usecase.EventValidation
 import com.loosecannon.servicetag.core.usecase.GroupCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.GroupProblem
 import com.loosecannon.servicetag.core.usecase.GroupValidation
+import com.loosecannon.servicetag.core.usecase.HealthProblem
+import com.loosecannon.servicetag.core.usecase.HealthScheduleTaken
+import com.loosecannon.servicetag.core.usecase.HealthSubjectIsPrimary
+import com.loosecannon.servicetag.core.usecase.HealthValidation
+import com.loosecannon.servicetag.core.usecase.LegacyWriteCannotRepresent
 import com.loosecannon.servicetag.core.usecase.MemberCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.MergePlanStale
 import com.loosecannon.servicetag.core.usecase.MergeRefused
@@ -26,6 +34,7 @@ import com.loosecannon.servicetag.core.usecase.NoSuchAsset
 import com.loosecannon.servicetag.core.usecase.NoSuchDefinition
 import com.loosecannon.servicetag.core.usecase.NoSuchEvent
 import com.loosecannon.servicetag.core.usecase.NoSuchGroup
+import com.loosecannon.servicetag.core.usecase.NoSuchHealthSubject
 import com.loosecannon.servicetag.core.usecase.NoSuchProfile
 import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
 import com.loosecannon.servicetag.core.usecase.NotAGroupMember
@@ -36,11 +45,20 @@ import com.loosecannon.servicetag.core.usecase.OccurrenceClosed
 import com.loosecannon.servicetag.core.usecase.OccurrenceNotActionable
 import com.loosecannon.servicetag.core.usecase.OccurrenceNotCloseable
 import com.loosecannon.servicetag.core.usecase.OccurrenceNotYetOpen
+import com.loosecannon.servicetag.core.usecase.PreServiceNeedsDates
 import com.loosecannon.servicetag.core.usecase.ProfileValidation
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
 import com.loosecannon.servicetag.core.usecase.ScheduleArchived
+import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
 import com.loosecannon.servicetag.core.usecase.ScheduleValidation
+import com.loosecannon.servicetag.core.usecase.SeasonAlreadyEnded
+import com.loosecannon.servicetag.core.usecase.SeasonAlreadyStarted
+import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
+import com.loosecannon.servicetag.core.usecase.SeasonNotManual
+import com.loosecannon.servicetag.core.usecase.SeasonProblem
+import com.loosecannon.servicetag.core.usecase.SeasonValidation
+import com.loosecannon.servicetag.core.usecase.StrandedSchedule
 import com.loosecannon.servicetag.core.usecase.UnknownTemplate
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.Serializable
@@ -69,12 +87,20 @@ internal val ApiJson: Json = Json {
 @Serializable
 internal data class ApiErrorBody(val error: ApiErrorDetail)
 
-/** [code] is stable and machine-readable; [message] is for a person; [problems] names bad fields. */
+/**
+ * [code] is stable and machine-readable; [message] is for a person; [problems] names bad fields.
+ *
+ * [field] (1.4, spec §9.2) is the one body key a 1.4 refusal is about, for the codes master plan
+ * §11.3 names — `POLICY_OFFSET_INVALID` is `policyOffsetDays`, `HEALTH_SUBJECT_NAME_REQUIRED` is
+ * `name`, and so on — and null on every other answer, the shipped ones included. It is encoded like
+ * every other field, so a client reads `null` rather than an absent key.
+ */
 @Serializable
 internal data class ApiErrorDetail(
     val code: String,
     val message: String,
     val problems: List<String> = emptyList(),
+    val field: String? = null,
 )
 
 /**
@@ -97,6 +123,8 @@ internal class ApiFailure(
     val code: String,
     message: String,
     val problems: List<String> = emptyList(),
+    /** The body key the refusal is about, when there is exactly one (see [ApiErrorDetail.field]). */
+    val field: String? = null,
 ) : Exception(message) {
     companion object {
         fun badRequest(message: String) = ApiFailure(400, "Bad Request", "bad_request", message)
@@ -120,11 +148,12 @@ internal fun errorResponse(
     code: String,
     message: String,
     problems: List<String> = emptyList(),
+    field: String? = null,
 ): ApiResponse = ApiResponse.json(
     status, reason,
     ApiJson.encodeToString(
         ApiErrorBody.serializer(),
-        ApiErrorBody(ApiErrorDetail(code, message, problems)),
+        ApiErrorBody(ApiErrorDetail(code, message, problems, field)),
     ),
 )
 
@@ -160,11 +189,14 @@ internal fun <T> conflictResponse(serializer: SerializationStrategy<T>, value: T
 internal fun <T> ApiRequest.decode(serializer: DeserializationStrategy<T>): T {
     val type = mediaType()
     if (type != JSON_MEDIA_TYPE) throw ApiFailure.unsupportedMediaType(JSON_MEDIA_TYPE, type)
-    return try {
-        ApiJson.decodeFromString(serializer, body.decodeToString())
-    } catch (e: SerializationException) {
-        throw ApiFailure.badRequest(e.message ?: "that is not the JSON this endpoint wants")
-    }
+    return decodeOr400(serializer, body.decodeToString())
+}
+
+/** [text] as [serializer]'s value, or the shipped 400 carrying the decoder's own message. */
+internal fun <T> decodeOr400(serializer: DeserializationStrategy<T>, text: String): T = try {
+    ApiJson.decodeFromString(serializer, text)
+} catch (e: SerializationException) {
+    throw ApiFailure.badRequest(e.message ?: "that is not the JSON this endpoint wants")
 }
 
 /**
@@ -214,6 +246,8 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
         e.problems.firstOrNull()?.let(::scheduleProblemCode) ?: "SCHEDULE_INVALID",
         "the schedule was refused",
         e.problems.map { it.toString() },
+        // 1.4: the one schedule problem master plan §11.3 names a key for.
+        field = if (e.problems.firstOrNull() == ScheduleProblem.PolicyOffsetInvalid) "policyOffsetDays" else null,
     )
     is GroupValidation -> errorResponse(
         422, "Unprocessable Content",
@@ -379,8 +413,189 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
         ReferenceProblem.Unchanged ->
             referenceError(409, "Conflict", problem, "this reference already says that")
     }
+    // --- 1.4, seasons, policy, condition and health (spec §9.2; master plan §11.5) -----------
+    //
+    // **The 422/409 tie-break (RN-8):** a 422 means the remedy is to change *this body*, whatever
+    // the stored state; a 409 means the remedy is to change *another row first*. So a strands
+    // refusal is a 409 (the remedy is the schedule's policy), `SCHEDULE_DRIVES_HEALTH_SUBJECT` a 422
+    // (the remedy is the `unlinkHealthSubject` flag in this very body), and a legacy write that
+    // cannot be represented a 422 (the remedy is sending the 1.4 form).
+    //
+    // A validation failure's code is its **first** problem's, as 1.2's are, and `problems` still
+    // carries every problem by the domain's own name. The three problem-to-code functions below are
+    // exhaustive over their sealed types, so a problem added later is a compile error here rather
+    // than a refusal with a code nobody documented.
+    //
+    // Each falls back to its family's lower-snake validation code for a refusal that named no problem,
+    // as 1.2's `SCHEDULE_INVALID` does. It is unreachable — every throw site collects at least one — but
+    // `mapDomainFailure` runs inside the router's `catch`, so a throw here would escape `handle`.
+    is SeasonValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::seasonRefusal) ?: Refusal(SEASON_VALIDATION, "the season command was refused"),
+        e.problems.map { it.toString() },
+    )
+    is ConditionValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::conditionRefusal) ?: Refusal(CONDITION_VALIDATION, "the condition was refused"),
+        e.problems.map { it.toString() },
+    )
+    is HealthValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::healthRefusal) ?: Refusal(HEALTH_VALIDATION, "the health configuration was refused"),
+        e.problems.map { it.toString() },
+    )
+    is LegacyWriteCannotRepresent -> errorResponse(
+        422, "Unprocessable Content", "LEGACY_WRITE_CANNOT_REPRESENT",
+        "this asset's season is MANUAL, which a seasonStartMmdd/seasonEndMmdd pair cannot represent; " +
+            "send the pair the asset already reports, and change the season through POST /v1/assets/{id}/season-mode",
+    )
+    is ScheduleDrivesHealthSubject -> errorResponse(
+        422, "Unprocessable Content", "SCHEDULE_DRIVES_HEALTH_SUBJECT",
+        "a health subject depends on this schedule; send unlinkHealthSubject: true to archive the subject with this change",
+        listOf("ScheduleDrivesHealthSubject(subjectId=${e.subjectId.value}, name=${e.name})"),
+    )
+    is SeasonModeStrandsPolicy -> errorResponse(
+        409, "Conflict", "SEASON_MODE_STRANDS_POLICY",
+        "a PRE_SERVICE schedule counts back from this season's start; change those schedules' policy first",
+        e.schedules.map(::strandedName),
+    )
+    is BreakStrandsPolicy -> errorResponse(
+        409, "Conflict", "BREAK_STRANDS_POLICY",
+        "a PRE_SERVICE schedule counts back from this break's start; change those schedules' policy first",
+        e.schedules.map(::strandedName),
+    )
+    is SeasonNotManual -> errorResponse(
+        409, "Conflict", "SEASON_NOT_MANUAL", "this asset's season is not MANUAL, so it takes no start or end",
+    )
+    is SeasonAlreadyStarted -> errorResponse(
+        409, "Conflict", "SEASON_ALREADY_STARTED", "this asset's season has already started",
+    )
+    is SeasonAlreadyEnded -> errorResponse(
+        409, "Conflict", "SEASON_ALREADY_ENDED", "this asset's season has already ended",
+    )
+    is PreServiceNeedsDates -> errorResponse(
+        409, "Conflict", "PRE_SERVICE_NEEDS_DATES",
+        "this asset has neither a calendar season nor a maintenance break for PRE_SERVICE to count back from",
+    )
+    is HealthScheduleTaken -> errorResponse(
+        409, "Conflict", "HEALTH_SCHEDULE_TAKEN", "that schedule already drives another health subject",
+        listOf("HealthScheduleTaken(scheduleId=${e.scheduleId.value}, heldBy=${e.heldBy.value})"),
+    )
+    is HealthSubjectIsPrimary -> errorResponse(
+        409, "Conflict", "HEALTH_SUBJECT_IS_PRIMARY",
+        "this subject is the one its asset's TRACK_ONE health follows; change the health policy first",
+    )
+    is NoSuchHealthSubject -> errorResponse(404, "Not Found", "NO_SUCH_HEALTH_SUBJECT", "no such health subject")
     else -> errorResponse(
         500, "Internal Server Error", "internal", e.javaClass.simpleName,
+    )
+}
+
+// --- 1.4 ------------------------------------------------------------------------------------------
+
+/** One 1.4 validation problem on its way to the wire: its code, a sentence, and its body key. */
+internal data class Refusal(val code: String, val message: String, val field: String? = null)
+
+private fun unprocessable(refusal: Refusal, problems: List<String>): ApiResponse =
+    errorResponse(422, "Unprocessable Content", refusal.code, refusal.message, problems, refusal.field)
+
+/** A stranded schedule as a refusal names it: the id to fix, and the title a person recognises. */
+private fun strandedName(schedule: StrandedSchedule): String =
+    "StrandedSchedule(id=${schedule.id.value}, title=${schedule.title})"
+
+/**
+ * The code a malformed value answers with: **the shipped validation shape** (spec §9.2) — 1.1.0's
+ * `…_validation` family, whose `problems` name the field (`BadDate(field=seasonStartMmdd)`,
+ * `BadTime(field=occurredTime)`, `BadTimeZone(field=tzId)`). Spec §9.2 gives these no code of their
+ * own and its 1.4 set is closed, so none is invented for them.
+ */
+internal const val SEASON_VALIDATION: String = "season_validation"
+internal const val CONDITION_VALIDATION: String = "condition_validation"
+
+/** A health refusal that named no problem: the same unreachable fallback, never a malformed-value code. */
+internal const val HEALTH_VALIDATION: String = "health_validation"
+
+/** Every [SeasonProblem] — the season-mode, break and activation commands' — as spec §9.2 codes it. */
+internal fun seasonRefusal(problem: SeasonProblem): Refusal = when (problem) {
+    SeasonProblem.SeasonWindowRequired -> Refusal(
+        "SEASON_WINDOW_REQUIRED", "a CALENDAR season needs both seasonStartMmdd and seasonEndMmdd", "seasonStartMmdd",
+    )
+    SeasonProblem.SeasonWindowForbidden -> Refusal(
+        "SEASON_WINDOW_FORBIDDEN", "only a CALENDAR season takes a window", "seasonStartMmdd",
+    )
+    SeasonProblem.ManualPhaseRequired -> Refusal(
+        "MANUAL_PHASE_REQUIRED", "a switch into MANUAL must say whether the season is running now", "manualPhase",
+    )
+    SeasonProblem.ManualPhaseForbidden -> Refusal(
+        "MANUAL_PHASE_FORBIDDEN", "manualPhase is taken only on a switch into MANUAL from another mode", "manualPhase",
+    )
+    is SeasonProblem.BadDate -> Refusal(SEASON_VALIDATION, "the season command was refused")
+    SeasonProblem.BothOrNeither -> Refusal(SEASON_VALIDATION, "the season command was refused")
+    SeasonProblem.BlackoutCoversTheYear -> Refusal(
+        "BLACKOUT_COVERS_THE_YEAR", "that break leaves some year, common or leap, with no day outside it",
+    )
+    SeasonProblem.SeasonDateOutOfRange -> Refusal(
+        "SEASON_DATE_OUT_OF_RANGE",
+        "occurredOn must be no later than today, and on a MANUAL asset no earlier than its latest start or end",
+        "occurredOn",
+    )
+    is SeasonProblem.ForeignEvent -> Refusal("FOREIGN_EVENT", "eventId must name an event of this asset", "eventId")
+}
+
+/** Every [ConditionProblem] as spec §9.2 codes it. */
+internal fun conditionRefusal(problem: ConditionProblem): Refusal = when (problem) {
+    ConditionProblem.DateInFuture -> Refusal(
+        "CONDITION_DATE_IN_FUTURE", "occurredOn may not be later than today", "occurredOn",
+    )
+    is ConditionProblem.ReasonTooLong -> Refusal(
+        "CONDITION_REASON_TOO_LONG", "reason may hold at most ${problem.limit} characters", "reason",
+    )
+    is ConditionProblem.ForeignEvent -> Refusal("FOREIGN_EVENT", "eventId must name an event of this asset", "eventId")
+    is ConditionProblem.BadDate -> Refusal(CONDITION_VALIDATION, "the condition was refused")
+    is ConditionProblem.BadTime -> Refusal(CONDITION_VALIDATION, "the condition was refused")
+    is ConditionProblem.BadTimeZone -> Refusal(CONDITION_VALIDATION, "the condition was refused")
+}
+
+/**
+ * Every [HealthProblem] as spec §9.2 codes it. Where a problem carries a bound, the sentence states
+ * it: an over-long subject name is `HEALTH_SUBJECT_NAME_REQUIRED` too (the spec has one name code,
+ * plan decision 33), so the message says the limit rather than "missing". An archived schedule is
+ * `FOREIGN_SCHEDULE` (the code set is closed, plan decision 45), and its message says archived.
+ */
+internal fun healthRefusal(problem: HealthProblem): Refusal = when (problem) {
+    is HealthProblem.NameRequired -> Refusal(
+        "HEALTH_SUBJECT_NAME_REQUIRED",
+        "a health subject's name must be ${problem.limit.first}–${problem.limit.last} characters after trimming",
+        "name",
+    )
+    is HealthProblem.ThresholdsInvalid -> Refusal(
+        "HEALTH_THRESHOLDS_INVALID",
+        "nominalUntilDays, warningFromDays and criticalFromDays are all required, with " +
+            "${problem.limit.first} ≤ nominalUntilDays < warningFromDays < criticalFromDays ≤ ${problem.limit.last}",
+        "criticalFromDays",
+    )
+    HealthProblem.DriverMismatch -> Refusal(
+        "HEALTH_DRIVER_MISMATCH",
+        "an AGE subject names no schedule; a MAINTENANCE_OVERDUE subject names one and no baselineProfileId",
+    )
+    is HealthProblem.ForeignSchedule -> Refusal(
+        "FOREIGN_SCHEDULE",
+        if (problem.archived) {
+            "that schedule is archived, so it cannot drive a health subject"
+        } else {
+            "scheduleId must name a schedule aimed at this asset itself"
+        },
+    )
+    is HealthProblem.ScheduleNeedsATimeRule -> Refusal(
+        "HEALTH_SCHEDULE_NEEDS_A_TIME_RULE", "that schedule has no time rule, and a meter drives no health",
+    )
+    is HealthProblem.ProfileNotAReplacement -> Refusal(
+        "PROFILE_NOT_A_REPLACEMENT", "baselineProfileId must name a REPLACEMENT quick action of this asset",
+    )
+    is HealthProblem.WeightOutOfRange -> Refusal(
+        "HEALTH_WEIGHT_OUT_OF_RANGE", "weight must be ${problem.limit.first}–${problem.limit.last}", "weight",
+    )
+    HealthProblem.PrimaryInvalid -> Refusal(
+        "HEALTH_PRIMARY_INVALID",
+        "TRACK_ONE needs a healthPrimarySubjectId naming a live subject of this asset, and no other aggregation takes one",
+        "healthPrimarySubjectId",
     )
 }
 

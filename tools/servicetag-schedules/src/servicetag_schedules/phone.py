@@ -66,6 +66,13 @@ async def call_tool(
 
 # ---- the snapshot ------------------------------------------------------------------------------
 
+REQUIRED_SCHEMA_VERSION = 8
+"""ServiceTag 1.4.0's Room schema. The loader ships in lockstep with that app (spec §9.3): its
+re-plan compares a manifest with each row's `servicePolicy`, which an older app does not report,
+and the lockstep MCP writes only to schema 8 or later. So `snapshot` confirms it first — the same
+check the MCP makes before a write — rather than planning every existing schedule as a CONFLICT
+against rows it cannot read."""
+
 @dataclass(frozen=True)
 class Asset:
     id: str
@@ -104,15 +111,19 @@ class Schedule:
     lead_days: int | None
     completion_mode: str | None
     profile_id: str | None
-    season_behavior: str | None
+    service_policy: str | None
+    """The row's own `servicePolicy` (ServiceTag 1.4). 1.3's `seasonBehavior` is only a derived
+    projection of it on a 1.4 row and is deliberately not read: `FOLLOW_ASSET` names three policies
+    and `null` a fourth, so it cannot say what the phone holds."""
+    policy_offset_days: int | None
     archived: bool
 
 
 @dataclass(frozen=True)
 class Inventory:
     """A plain snapshot: assets (id, name, archived/retired, parent), profiles by asset id, groups
-    (id, name, archived, open member asset ids), schedules (id, title, target, rule fields,
-    archived). `plan.plan` reads this and nothing else of the phone."""
+    (id, name, archived, open member asset ids), schedules (id, title, target, rule fields, service
+    policy and offset, archived). `plan.plan` reads this and nothing else of the phone."""
 
     assets: tuple[Asset, ...] = ()
     profiles: tuple[Profile, ...] = ()
@@ -164,15 +175,37 @@ def _schedule_from(row: dict[str, Any]) -> Schedule:
         lead_days=row.get("leadDays"),
         completion_mode=row.get("completionMode"),
         profile_id=row.get("profileId"),
-        season_behavior=row.get("seasonBehavior"),
+        service_policy=row.get("servicePolicy"),
+        policy_offset_days=row.get("policyOffsetDays"),
         archived=row.get("status") == "ARCHIVED",
     )
 
 
+async def _require_schema_8(client: ToolClient) -> None:
+    status = await call_tool(client, "status", {})
+    version = status.get("schemaVersion") if isinstance(status, dict) else None
+    if not isinstance(version, int) or isinstance(version, bool):
+        reported = "no schemaVersion" if version is None else f"schemaVersion {version!r}"
+        raise PhoneError(
+            f"the phone's status reports {reported}; this loader needs "
+            f"ServiceTag 1.4.0 (schema {REQUIRED_SCHEMA_VERSION}) — nothing was read"
+        )
+    if version < REQUIRED_SCHEMA_VERSION:
+        raise PhoneError(
+            f"the phone's app reports schema {version}; this loader needs "
+            f"ServiceTag 1.4.0 (schema {REQUIRED_SCHEMA_VERSION}) — update the app first, nothing was read"
+        )
+
+
 async def snapshot(client: ToolClient) -> Inventory:
-    """Fill an `Inventory` from the phone through `client`'s MCP tools: `list_assets`,
-    `list_profiles` (one call per asset), `list_groups`, `list_schedules`. Never `pair` — a caller
-    pairs once, before taking any snapshot."""
+    """Fill an `Inventory` from the phone through `client`'s MCP tools: `status` first, then
+    `list_assets`, `list_profiles` (one call per asset), `list_groups`, `list_schedules`. Never
+    `pair` — a caller pairs once, before taking any snapshot.
+
+    A phone whose `schemaVersion` is missing, not an integer, or below `REQUIRED_SCHEMA_VERSION` is a
+    `PhoneError` before anything else is read. `apply` snapshots too, so both `plan` and `apply`
+    refuse such a phone, and the CLI prints the one line and exits 2."""
+    await _require_schema_8(client)
     assets_payload = await call_tool(client, "list_assets", {})
     assets: list[Asset] = [_asset_from(row, None) for row in assets_payload.get("topLevel", [])]
     for parent_id, rows in (assets_payload.get("components") or {}).items():
