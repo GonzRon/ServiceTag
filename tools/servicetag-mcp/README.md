@@ -13,8 +13,14 @@ codes and the limits; this file is about running the thing.
   on. The serial comes from `SERVICETAG_ADB_SERIAL`; nothing in this repository names a device.
 - ServiceTag 1.1.0 or later on the phone, with **Settings > Utilities > Developer API** open. The
   listener exists only while that screen is open, and the pairing code is new every time it opens.
-  The seventeen maintenance tools need **1.2.0 or later** and the three reference tools need
-  **1.3.0 or later**; on an older build their routes are not there and every call answers 404.
+  The seventeen maintenance tools need **1.2.0 or later**, the three reference tools need
+  **1.3.0 or later** and the fourteen season, condition and health tools need **1.4.0 or later**;
+  on an older build their routes are not there and every call answers 404.
+- **Every write needs ServiceTag 1.4.0.** Before its first write under a pairing, the server reads
+  `/v1/status` once and refuses to write to an app whose `schemaVersion` is below 8 — a `ToolError`
+  carrying `APP_SCHEMA_TOO_OLD`, with nothing sent. The answer is kept for that pairing, and a new
+  code reads it again. Reads keep working against an older app, and so does `import_merge` with
+  `plan_only=True` (the plan writes nothing).
 
 ## Using it
 
@@ -57,7 +63,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Forty-one: `pair` plus one per API operation.
+Fifty-five: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -75,18 +81,71 @@ A reference is a URI on an asset — a manual on the web, a note in Joplin — w
 own. `kind` is derived from the URI's scheme and returned read-only, so neither write tool takes
 one; nothing **deletes** a reference, because the API adds and amends and the phone removes.
 
+**Seasons, condition and health (needs ServiceTag 1.4.0)** — `get_season`, `start_season`,
+`end_season`, `set_season_mode`, `set_maintenance_break`, `list_conditions`, `record_condition`,
+`get_health`, `set_health_policy`, `list_health_subjects`, `create_health_subject`,
+`update_health_subject`, `archive_health_subject`, `list_attention`. A season is `YEAR_ROUND`,
+`CALENDAR` or `MANUAL`, and a `MANUAL` one moves only by a recorded `START` or `END`; the maintenance
+break is a stretch of the year no work should land in. Condition (`OPERATIONAL`, `DEGRADED`, `DOWN`)
+is recorded, never inferred. Health is **computed at read time and stored nowhere**: the subject
+and policy tools write configuration, never a value. `start_season`, `end_season` and
+`record_condition` each record a new, immutable fact, so like `close_round` they have no overlay —
+every argument is required. Nothing here amends or deletes a condition or an activation, deletes a
+health subject, or writes a health value; a subject leaves only by `archive_health_subject`.
+
+### The schedule's two forms, and the deprecated season arguments
+
+1.4 gives a schedule a **service policy** — `service_policy` (`CONTINUOUS`, `IN_SERVICE_AT_START`,
+`IN_SERVICE_RESUME_CLAMPED`, `PRE_SERVICE`) and `policy_offset_days` — on `create_schedule` and
+`update_schedule`. Both keep 1.3's `season_behavior`, `season_reentry` and
+`season_reentry_offset_days` as **deprecated arguments**:
+
+- **A deprecated argument** makes the call send the API's **legacy form**: those keys only, exactly
+  as given (`update_schedule` lays them over the row's derived 1.3 triple), and never
+  `servicePolicy`/`policyOffsetDays`. **This server never translates them** — the app does, through
+  its one legacy mapping, and refuses with the same codes it gives any client (for example
+  `LEGACY_WRITE_CANNOT_REPRESENT` on a legacy edit of a `PRE_SERVICE` schedule), each arriving as a
+  `ToolError` carrying the code. `clear_fields` naming `season_reentry` or
+  `season_reentry_offset_days` counts as a deprecated argument.
+- **No deprecated argument** sends the **1.4 form**: `update_schedule` lays your arguments over the
+  row's `servicePolicy` and `policyOffsetDays` and sends no 1.3 key. `create_schedule` with neither
+  sends neither, which the app reads as `CONTINUOUS`.
+- **Both together** — a deprecated argument and `service_policy`/`policy_offset_days`, `clear_fields`
+  included — is refused **here, before any request**, as a `ToolError` carrying
+  `LEGACY_AND_CURRENT_FIELDS_MIXED`.
+
+**Changing the policy may take two arguments**, as moving the target does. `update_schedule` keeps
+the row's `policyOffsetDays`, and each policy takes only its own range, so moving a schedule that has
+an offset to a policy that does not take it (`IN_SERVICE_AT_START` 5 to `CONTINUOUS`, say) needs the
+new `policy_offset_days` or `clear_fields=["policy_offset_days"]` in the same call — `service_policy`
+alone is refused as `POLICY_OFFSET_INVALID`. A policy change is **not a rule change**: it clears no
+postponement and abandons no round. `PRE_SERVICE` needs a time rule and an asset with a calendar
+season or a maintenance break to count back from (`PRE_SERVICE_NEEDS_DATES`).
+
+`update_schedule` and `archive_schedule` also take `unlink_health_subject=True`, the API's action
+flag: while a live health subject is driven by the schedule, an edit that takes away its time rule or
+moves it, or archiving it, is refused as `SCHEDULE_DRIVES_HEALTH_SUBJECT` unless the flag is set.
+
 An unknown argument to any tool is rejected before the tool body runs — never silently ignored —
 so a mistyped field name can't be read as absent and quietly change what the call does.
 
 ### Editing an existing row: two layers, and they are not the same thing
 
 The Android API's own writes (`PATCH /v1/assets/{id}`, `POST /v1/definitions`,
-`POST /v1/profiles`, `PATCH /v1/groups/{id}`, `PATCH /v1/schedules/{id}`) are each a **full
-replacement** — every field on the wire is what the row ends up with. `update_asset`,
-`save_definition`/`save_profile` on an edit, `update_group`, `update_schedule` and
-`postpone_schedule` add **partial-edit convenience** on top of that: the tool reads the row's
-current fields first, overlays only the arguments you actually supplied, and submits the complete
-replacement for you. Nothing about calling these tools requires stating every field.
+`POST /v1/profiles`, `PATCH /v1/groups/{id}`, `PATCH /v1/schedules/{id}`,
+`PATCH /v1/health-subjects/{id}`) are each a **full replacement** — every field on the wire is what
+the row ends up with. `update_asset`, `save_definition`/`save_profile` on an edit, `update_group`,
+`update_schedule`, `postpone_schedule` and `update_health_subject` add **partial-edit convenience**
+on top of that: the tool reads the row's current fields first, overlays only the arguments you
+actually supplied, and submits the complete replacement for you. Nothing about calling these tools
+requires stating every field.
+
+`update_asset`, `update_schedule` and `update_health_subject` do not keep a field list of their
+own: they send **every key of the command** as `src/servicetag_mcp/command_shapes.py` lists it —
+read off the row, with the schedule's `assetId`/`groupId` renamed to `targetAssetId`/`targetGroupId`
+— and lay your arguments over it. That module is a vendored copy of three entries of the
+repository's `docs/api/command-shapes.json`; nothing reads that file at runtime, and
+`tests/test_command_shapes.py` fails the moment the two differ.
 
 An **omitted** argument and one sent explicitly as **`null`** both leave the current value alone —
 the same thing, on purpose: an MCP client that bridges to strict function calling sends `null` for
@@ -101,9 +160,10 @@ docstring for which fields are clearable and what "cleared" means for each (`""`
 readings as typed measurements, not as the definition-id-to-text map `update_event` writes, so
 reconstructing one from the other would risk silently reformatting a value. Every one of its
 arguments is required — the call always replaces the whole event, and there is no default that
-could clear something by omission. `complete_schedule` and `close_round` are the same, for a
-sharper reason: each records a **new fact**, and there is nothing about a new fact to inherit from
-a row, so overlaying one would invent provenance.
+could clear something by omission. `complete_schedule`, `close_round`, `start_season`,
+`end_season` and `record_condition` are the same, for a sharper reason: each records a **new
+fact**, and there is nothing about a new fact to inherit from a row, so overlaying one would invent
+provenance.
 
 #### What each overlay tool can clear, and what "cleared" means
 
@@ -116,10 +176,13 @@ a row, so overlaying one would invent provenance.
 | `save_profile` | — (its fields are text or lists, where `""` and `[]` already clear) | | |
 | `update_group` | `description` | `""` | `name` |
 | | `members` | `[]` — **every open membership is closed** | |
-| `update_schedule` | `description` | `""` | `title`; `time_basis`, `season_behavior`, `completion_mode` (pass the new value); `lead_days`, `reminders_enabled` (pass `0`/`false`); `postponed_due_on` and `status`, which have their own tools |
+| `update_schedule` | `description` | `""` | `title`; `time_basis`, `service_policy`, `season_behavior`, `completion_mode` (pass the new value); `lead_days`, `reminders_enabled` (pass `0`/`false`); `postponed_due_on` and `status`, which have their own tools |
 | | `providers` | `[]` | |
-| | `target_asset_id`, `target_group_id`, `time_interval`, `time_unit`, `anchor_on`, `meter_definition_id`, `meter_interval`, `anchor_meter`, `meter_lead`, `season_reentry`, `season_reentry_offset_days`, `profile_id` | `null` | |
+| | `target_asset_id`, `target_group_id`, `time_interval`, `time_unit`, `anchor_on`, `meter_definition_id`, `meter_interval`, `anchor_meter`, `meter_lead`, `profile_id` | `null` | |
+| | `policy_offset_days` (1.4) | `null` — `0` on `IN_SERVICE_AT_START`, no offset otherwise | |
+| | `season_reentry`, `season_reentry_offset_days` (deprecated) | `null`, in the legacy form | |
 | `postpone_schedule` | `postponed_due_on` | `null` — the occurrence goes back to what the rule says | |
+| `update_health_subject` | `schedule_id`, `baseline_profile_id` | `null` | `name`, `kind`, `driver`, the three thresholds (required); `weight`, `sort_order` (pass a value) |
 
 Three of those rows are worth reading twice.
 
@@ -141,9 +204,10 @@ the new target **and** clearing the old one in the same call.
 
 ### `import_merge`
 
-Takes a local path to a `ServiceTag-data-*.zip` of format **1–6** and merges it into the phone. A
-format-6 archive carries the maintenance groups, the schedules and the occurrence closures as well;
-an older one simply has none of them. **It plans before it writes**, and it never overwrites or
+Takes a local path to a `ServiceTag-data-*.zip` of format **1–8** and merges it into the phone. A
+format-6 archive adds the maintenance groups, the schedules and the occurrence closures, format 7 the
+references, and format 8 the season activations, the conditions and the health subjects; an older
+archive simply has none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
 - a row whose id is not on the phone is **inserted**, with its UUID preserved exactly;
@@ -157,9 +221,10 @@ deletes anything:
   that closed the same round on the same day merge cleanly and a genuine disagreement about *when*
   a round was closed is a conflict for a person.
 
-The report carries a `{insert, identical, conflict, skipped}` tally for each of **ten** tables —
-`assets`, `groups`, `definitions`, `profiles`, `schedules`, `closures`, `links`, `tags`, `events`,
-`attachments`.
+The report carries a `{insert, identical, conflict, skipped}` tally for each of **fourteen**
+tables — `assets`, `groups`, `definitions`, `profiles`, `schedules`, `closures`, `links`, `tags`,
+`events`, `attachments`, `references`, `seasonActivations`, `conditions`, `healthSubjects`. A season
+activation and a condition are immutable facts: each is only ever inserted or found identical.
 
 The tool asks for the plan and applies it only when the plan has no conflicts. Pass
 `plan_only=True` to stop after the plan. Either way the result has `applicable` and, when it is
@@ -173,7 +238,10 @@ a schedule, a group, a membership row or a closure**, or that **amends a closure
 immutable exported history, and one that could be rewritten could rewrite a schedule's past. There
 is no **snooze** tool either: the snooze is device-local delivery state, not canonical data, and it
 has no route. And `log_event` cannot record a completion — `complete_schedule` is the only path,
-because two completion paths would let reminder state and history diverge.
+because two completion paths would let reminder state and history diverge. Since 1.4 there is also
+no tool that **amends or deletes a condition or an activation**, **deletes a health subject** or
+**writes a health value**: facts are appended and never rewritten, a subject leaves only by
+archiving, and health is computed at read time.
 
 ## Tests
 

@@ -85,6 +85,10 @@ class Device:
     """True when this `Device` is the one that runs `adb forward` — i.e. no `SERVICETAG_API_BASE_URL`
     override. Only then does a dropped forward get re-established (fix 5): someone else's forward, or
     the test fixture's fake server, is not this client's to repair."""
+    schema_version: tuple[str, int] | None = None
+    """`/v1/status.schemaVersion` as last read, beside the pairing code it was read under.
+    `server.py`'s write check reads it once per pairing and keeps it here, on the connection it
+    describes, so a new code — a new pairing, perhaps with another phone — reads it again."""
 
     @classmethod
     def from_env(cls) -> Device:

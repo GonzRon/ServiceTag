@@ -18,6 +18,48 @@ from servicetag_mcp import client as client_module
 from servicetag_mcp import server as server_module
 
 
+STATUS_1_4: dict = {
+    "appVersion": "1.4.0",
+    "apiVersion": 1,
+    "schemaVersion": 8,
+    "backupFormatVersion": 8,
+    "counts": {},
+}
+"""What the fake answers `GET /v1/status` with unless a test says otherwise: a ServiceTag 1.4.0 app.
+Every write tool reads `schemaVersion` once per pairing and refuses below 8, and that read is
+recorded like any other request."""
+
+
+def schedule_row(**overrides) -> dict:
+    """`GET /v1/schedules/{id}` from a 1.4 app: the format-8 row plus 1.3's triple, **derived** from
+    the policy (all three `null` for `PRE_SERVICE`), inside the detail wrapper. A `CONTINUOUS`,
+    asset-targeted, yearly time rule unless `overrides` says otherwise."""
+    row = {
+        "id": "s1", "assetId": "a1", "groupId": None, "title": "Tune-up", "description": "",
+        "timeInterval": 1, "timeUnit": "YEAR", "timeBasis": "FIXED", "anchorOn": "2026-03-01",
+        "leadDays": 14, "meterDefinitionId": None, "meterInterval": None, "anchorMeter": None,
+        "meterLead": None, "servicePolicy": "CONTINUOUS", "policyOffsetDays": None,
+        "completionMode": "QUICK", "profileId": None, "remindersEnabled": True, "status": "ACTIVE",
+        "postponedDueOn": None, "createdAt": 1, "updatedAt": 1, "ruleChangedAt": 1,
+        "providers": [{"provider": "LOCAL", "enabled": True}],
+        "seasonBehavior": "IGNORE", "seasonReentry": None, "seasonReentryOffsetDays": None,
+    }
+    row.update(overrides)
+    return {"schedule": row, "state": {}, "status": "OK", "computedForOn": "2026-02-01"}
+
+
+def subject_row(**overrides) -> dict:
+    """`GET /v1/health-subjects/{id}` from a 1.4 app: an `AGE` subject with a baseline."""
+    row = {
+        "id": "h1", "assetId": "a1", "name": "Battery", "kind": "PART", "driver": "AGE",
+        "scheduleId": None, "baselineProfileId": "p1", "nominalUntilDays": 700,
+        "warningFromDays": 900, "criticalFromDays": 1100, "weight": 2, "sortOrder": 0,
+        "archivedAt": None, "createdAt": 1, "updatedAt": 1,
+    }
+    row.update(overrides)
+    return {"subject": row}
+
+
 @dataclass
 class Recorded:
     method: str
@@ -75,6 +117,7 @@ def api(monkeypatch: pytest.MonkeyPatch):
 
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     fake = FakeApi(url=f"http://127.0.0.1:{httpd.server_address[1]}")
+    fake.reply("GET", "/v1/status", 200, STATUS_1_4)
     state["api"] = fake
     # `serve_forever`'s default `poll_interval` is 0.5s, and `shutdown()` blocks for up to one
     # poll before returning — across ~50 fixture teardowns that is most of the suite's wall time

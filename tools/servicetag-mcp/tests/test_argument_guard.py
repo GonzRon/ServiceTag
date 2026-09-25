@@ -5,7 +5,7 @@ model silently dropped `id`, read `definition_id` as absent, and the tool CREATE
 instead of editing the one the caller meant. A typo must never turn one mutation into another.
 
 `_StrictMCPServer.call_tool` and `_forbid_unknown_arguments` (both in `server.py`) close that,
-centrally, for all 41 tools at once — see their docstrings for the two-layer why. This file proves
+centrally, for all 55 tools at once — see their docstrings for the two-layer why. This file proves
 the six hard acceptance conditions the owner named, one section per condition, plus the fix's own
 `(a)`-`(e)` test list.
 """
@@ -43,12 +43,12 @@ def _assert_value_absent(exc: BaseException, value: str) -> None:
     assert not any(value in text for text in seen), seen
 
 
-# --- condition 1: every one of the 41 tools publishes additionalProperties: false -----------------
+# --- condition 1: every one of the 55 tools publishes additionalProperties: false -----------------
 
 
 def test_every_tool_publishes_additional_properties_false() -> None:
     tools = server_module.mcp._tool_manager.list_tools()
-    assert len(tools) == 41
+    assert len(tools) == 55
     for tool in tools:
         assert tool.parameters.get("additionalProperties") is False, tool.name
 
@@ -179,7 +179,7 @@ def test_a_parameter_that_shadows_a_basemodel_attribute_is_listed_by_its_real_na
     builds it from `info.alias or name` instead, so accepted and listed always agree.
 
     Registered on a throwaway `_StrictMCPServer`, never on the real `mcp` — the published tool count
-    must stay 41 (asserted at the end, the same way condition 5 pins it elsewhere)."""
+    must stay 55 (asserted at the end, the same way condition 5 pins it elsewhere)."""
     throwaway = server_module._StrictMCPServer("throwaway-guard-probe")
 
     @throwaway.tool()
@@ -200,11 +200,11 @@ def test_a_parameter_that_shadows_a_basemodel_attribute_is_listed_by_its_real_na
     assert "json" in text
     assert "field_json" not in text
 
-    assert len(server_module.TOOL_NAMES) == 41
-    assert len(server_module.mcp._tool_manager.list_tools()) == 41
+    assert len(server_module.TOOL_NAMES) == 55
+    assert len(server_module.mcp._tool_manager.list_tools()) == 55
 
 
-# --- fix spec 4(c): parametrised over every one of the 41 registered tools ------------------------
+# --- fix spec 4(c): parametrised over every one of the 55 registered tools ------------------------
 
 
 @pytest.mark.parametrize("tool_name", server_module.TOOL_NAMES)
@@ -217,6 +217,33 @@ def test_every_tool_refuses_one_bogus_key_with_zero_requests(tool_name, paired) 
     assert paired.requests == []
 
 
+SEASON_HEALTH_TOOLS = (
+    "get_season", "start_season", "end_season", "set_season_mode", "set_maintenance_break",
+    "list_conditions", "record_condition", "get_health", "set_health_policy",
+    "list_health_subjects", "create_health_subject", "update_health_subject",
+    "archive_health_subject", "list_attention",
+)
+"""The fourteen 1.4 tools (spec §9.4), written out here rather than read from `TOOL_NAMES`, so a new
+tool dropped from that list — and so from the parametrisation above — still fails by name here."""
+
+
+@pytest.mark.parametrize("tool_name", SEASON_HEALTH_TOOLS)
+def test_every_new_tool_rejects_an_unknown_argument_before_the_body_runs(tool_name, paired) -> None:
+    """Each with every required argument present and valid, plus one misspelt field, so nothing but
+    the guard can be what refuses it — and it refuses before the schema check's `/v1/status` read,
+    before any `adb` forward and before the tool body."""
+    assert tool_name in server_module.TOOL_NAMES, tool_name
+    tool = server_module.mcp._tool_manager.get_tool(tool_name)
+    assert tool is not None, tool_name
+    required = tool.parameters.get("required", [])
+    arguments = {name: "x" for name in required}
+    arguments["reasn"] = "typo"
+    with pytest.raises(ToolError, match="does not accept") as raised:
+        _call_tool(tool_name, arguments)
+    assert "reasn" in str(raised.value)
+    assert paired.requests == []
+
+
 # --- condition 5 / fix spec 4(d)-(e): a correct call still works; the tool count is unchanged -----
 
 
@@ -226,9 +253,9 @@ def test_a_correct_call_still_works(paired) -> None:
     assert result.is_error is False
 
 
-def test_the_tool_count_is_still_41() -> None:
-    assert len(server_module.TOOL_NAMES) == 41
-    assert len(server_module.mcp._tool_manager.list_tools()) == 41
+def test_the_tool_count_is_55() -> None:
+    assert len(server_module.TOOL_NAMES) == 55
+    assert len(server_module.mcp._tool_manager.list_tools()) == 55
 
 
 # --- condition 6: the guard fails loudly, never silently, on an internals shape it does not -------
@@ -296,7 +323,7 @@ def test_the_guard_raises_when_a_genuine_arg_models_rebuild_does_not_change_vali
     this reproduces the real failure mode instead of a hand-made one: a genuine pydantic arg model,
     built by the SDK itself for a throwaway tool, whose `model_rebuild` is turned into a no-op
     afterwards — patched on this one generated class only, never on the shared `ArgModelBase`, so no
-    other test and none of the real server's 41 already-guarded tools are affected. The guard must
+    other test and none of the real server's 55 already-guarded tools are affected. The guard must
     still raise, because the *effect check* (validating a probe payload) catches what the schema
     check cannot."""
     throwaway = server_module._StrictMCPServer("throwaway-guard-probe-g3-round-2")
@@ -311,8 +338,8 @@ def test_the_guard_raises_when_a_genuine_arg_models_rebuild_does_not_change_vali
     with pytest.raises(RuntimeError, match="demo_tool"):
         server_module._forbid_unknown_arguments([tool])
 
-    assert len(server_module.TOOL_NAMES) == 41
-    assert len(server_module.mcp._tool_manager.list_tools()) == 41
+    assert len(server_module.TOOL_NAMES) == 55
+    assert len(server_module.mcp._tool_manager.list_tools()) == 55
 
 
 # --- G5: a tool registered (or dropped) around the guard's call site must not go unnoticed ---------
