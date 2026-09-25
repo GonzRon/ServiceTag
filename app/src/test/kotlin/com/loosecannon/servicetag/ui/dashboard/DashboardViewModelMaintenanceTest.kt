@@ -611,4 +611,24 @@ class DashboardViewModelMaintenanceTest {
         assertEquals(emptyList<AttentionSection>(), narrowed.sections.map { it.section })
         assertEquals("the generator is hidden, not re-listed", listOf("Mower"), narrowed.assets.map { it.asset.name })
     }
+
+    /**
+     * Inv. 119: a DOWN asset's health is never drawn without its condition. The DOWN row leads
+     * ATTENTION and the CRITICAL subject follows in its own group; a chip or a category that keeps
+     * one keeps the other, because both read the same asset's condition and category.
+     */
+    @Test fun aDownAssetsHealthIsNeverDrawnWithoutItsCondition() = runTest {
+        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        graph.conditions.insert(conditionRow("c1", "ups", OperationalCondition.DOWN, "2026-04-10"))
+        ageSubject("h-crit", "ups", daysAgo = 90, name = "Battery age")
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        assertEquals(listOf("DOWN:UPS", "CRITICAL:Battery age"), vm.state.first { it.anyInService }.sections.flatMap { it.drawn() })
+
+        vm.onConditionToggle(ConditionChip.DOWN)
+        val down = vm.state.first { it.filters.conditions.isNotEmpty() }
+        assertEquals(listOf("DOWN:UPS", "CRITICAL:Battery age"), down.sections.flatMap { it.drawn() })
+    }
 }
