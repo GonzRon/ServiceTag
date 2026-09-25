@@ -3,7 +3,9 @@ package com.loosecannon.servicetag.ui.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -13,6 +15,10 @@ import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
+import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
+import com.loosecannon.servicetag.ui.maintenance.AttentionItem
+import com.loosecannon.servicetag.ui.maintenance.AttentionKind
+import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.AttentionSection
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
@@ -48,10 +54,39 @@ data class DashboardRow(
 )
 
 /**
- * One drawn section: its identity and the rows in it, already in `rank` order. A section with no
- * rows is not here at all — D12 §10 omits empty sections (`:706-707`).
+ * One row of a dashboard section: a **schedule** row from the due projection, or an **asset-level**
+ * row — a DOWN or DEGRADED unit, or an independent health subject — from the attention projection
+ * (spec §10.2). Both are drawn from the projections' own rows; nothing here is derived.
  */
-data class AttentionGroup(val section: AttentionSection, val items: List<DueItem>)
+sealed interface SectionEntry {
+    /** The Asset the row is about, or null for a group row: what "an asset appears once" keys on. */
+    val assetId: String?
+
+    data class Schedule(val item: DueItem) : SectionEntry {
+        override val assetId: String? get() = (item.target as? ScheduleTarget.AssetTarget)?.assetId?.value
+    }
+
+    /**
+     * [category] is the row's Asset's, looked up from the asset rows the dashboard already reads,
+     * so the category filter applies to this kind as it does to a schedule row.
+     */
+    data class AssetLevel(val item: AttentionItem, val category: String?) : SectionEntry {
+        override val assetId: String get() = item.assetId.value
+    }
+}
+
+/**
+ * One drawn section: its identity and its rows in the order they are drawn. A section with no rows
+ * is not here at all — D12 §10 omits empty sections (`:706-707`), and the Deferred header likewise
+ * appears only when a row does.
+ *
+ * [items] and [assetRows] are the two kinds read apart, each still in its projection's order.
+ */
+data class AttentionGroup(val section: AttentionSection, val entries: List<SectionEntry>) {
+    val items: List<DueItem> get() = entries.mapNotNull { (it as? SectionEntry.Schedule)?.item }
+
+    val assetRows: List<AttentionItem> get() = entries.mapNotNull { (it as? SectionEntry.AssetLevel)?.item }
+}
 
 /**
  * What the dashboard draws. [needsBackup] is deliberately not `lastBackupAt == null` at the call
@@ -67,10 +102,17 @@ data class AttentionGroup(val section: AttentionSection, val items: List<DueItem
  * OUT OF SEASON, in that order, empty ones omitted — drawn from the shared due projection, so the
  * order this screen shows is the order B09's sheet and `/v1/due` use.
  *
- * **An asset appears exactly once** (controller ruling, fix round 1): in its schedule's section
- * when any of its schedules is drawn there, and in [assets] otherwise. So an asset whose only
- * schedule is `PAUSED`, or whose only round obliges nobody, is still on the landing screen — the
- * dashboard omits those *sections*, never the asset.
+ * **1.4 adds the asset-level rows and the quiet Deferred section** (spec §10.2, §4.5). ATTENTION is
+ * DOWN units ▸ the schedule rows ▸ DEGRADED units ▸ independent CRITICAL health; UPCOMING is the DUE
+ * SOON rows ▸ independent WARNING health; Deferred sits between CURRENT and OUT OF SEASON. Each group
+ * keeps its projection's own `rank` order: the view model concatenates and never re-sorts.
+ *
+ * **An asset appears exactly once** (controller ruling, fix round 1; extended by plan decision
+ * 40): as its rows in the sections when the dashboard draws any — a schedule, condition or health
+ * row — and in [assets] otherwise. So an asset whose only schedule is `PAUSED`, or whose only round
+ * obliges nobody, is still on the landing screen — the dashboard omits those *sections*, never the
+ * asset. The exclusion is decided **before** the filters: a filter narrows the rows and never moves
+ * an asset from a section into the plain list.
  *
  * There is deliberately **no due total** here. "How many are due" is one rule — `DueItem.countsAsDue`
  * — and nothing on this screen draws a number: §17 ratifies no wording for one, and a field no
@@ -120,6 +162,8 @@ class DashboardViewModel(
     schedules: ScheduleRepository,
     states: ScheduleStateRepository,
     private val due: DueReadModel,
+    private val attention: AttentionReadModel,
+    private val assetHealth: AssetHealthReadModel,
     private val health: HealthSummary,
     private val prefs: AppPrefs,
 ) : ViewModel() {
@@ -134,6 +178,8 @@ class DashboardViewModel(
         graph.schedules,
         graph.scheduleStates,
         graph.dueReadModel,
+        graph.attentionReadModel,
+        graph.assetHealthReadModel,
         health,
         graph.prefs,
     )
@@ -148,6 +194,8 @@ class DashboardViewModel(
     private data class StoreView(
         val rows: List<Asset>,
         val items: List<DueItem>,
+        val attention: List<AttentionItem>,
+        val conditions: Map<AssetId, OperationalCondition>,
         val worstSeverity: ReminderHealthSeverity?,
         val lastBackupAt: Long?,
     )
@@ -169,6 +217,8 @@ class DashboardViewModel(
                 StoreView(
                     rows = rows,
                     items = due.items(),
+                    attention = attention.items(),
+                    conditions = currentConditions(),
                     worstSeverity = health.worstSeverity(),
                     lastBackupAt = prefs.lastBackupAt,
                 )
@@ -179,8 +229,19 @@ class DashboardViewModel(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), DashboardState())
 
     /**
-     * The screen's half: lifecycle, then §11.1's promotion exception, then F2 — over a list the
-     * projection has already ranked. Pure, and no repository or platform read in it.
+     * The plain asset list's conditions, for the condition chips: an asset with no row drawn in a
+     * section carries no projection row to read one off, so it is read from the one condition read
+     * every health surface uses (`AssetHealthReadModel`), never from the table here.
+     */
+    private suspend fun currentConditions(): Map<AssetId, OperationalCondition> =
+        assetHealth.conditionHistories()
+            .mapNotNull { (id, history) -> history.current?.let { id to it.condition } }
+            .toMap()
+
+    /**
+     * The screen's half: lifecycle, then §11.1's promotion exception, then the sections, then F2
+     * and the condition chips — over lists the projections have already ranked. Pure, and no
+     * repository or platform read in it.
      */
     private fun build(view: StoreView, chosen: DashboardFilters): DashboardState {
         val active = view.rows.filter { it.status == AssetStatus.ACTIVE }
@@ -195,18 +256,23 @@ class DashboardViewModel(
         // empty-required-set form has no section, so it is not in this set (invariant 74).
         val promoted = items.filter { it.isPromotable }.mapNotNull { it.targetAssetId }.toSet()
 
-        // F2 is applied here — after the lifecycle, over rows the projection has already ranked.
-        // A filter narrows what is listed and never re-derives an order.
-        val listedDue = items
-            .filter { it.section != null }
-            .filter { !it.isComponent || it.isPromotable }
-            .filter { chosen.admits(it) }
+        // Every row the dashboard draws, before any filter: the schedule rows with a section (a
+        // component's only when promoted) and the attention projection's asset-level rows, which
+        // are in-service units only and name a component's parent themselves (inv. 122).
+        val drawnRows = assembleSections(
+            schedules = items
+                .filter { it.section != null }
+                .filter { !it.isComponent || it.isPromotable },
+            attention = view.attention,
+            categoryOf = { id -> byId[id]?.category },
+        )
 
-        // The asset appears exactly once (controller ruling, fix round 1). The exclusion is the set
-        // of assets whose schedule is **actually drawn** above — not every asset with a schedule:
-        // a `PAUSED` one, or a round that obliges nobody, is in no section, so excluding its asset
-        // would leave it represented by nothing at all.
-        val drawn = listedDue.mapNotNull { it.targetAssetId }.toSet()
+        // The asset appears exactly once (controller ruling, fix round 1; plan decision 40). The
+        // exclusion is every asset **drawn** in a section — by a schedule, condition or health
+        // row — and it is decided before the filters, so a filter can hide an asset's rows but
+        // never move the asset into the plain list. A `PAUSED` schedule, or a round that obliges
+        // nobody, is in no section, so its asset is not excluded and stays represented.
+        val drawn = drawnRows.flatMap { it.entries }.mapNotNull { it.assetId }.toSet()
         // Whether an asset has any listed schedule at all, which is a different question and only
         // decides whether "No schedule yet" would be a lie.
         val anySchedule = items.mapNotNull { it.targetAssetId }.toSet()
@@ -219,7 +285,9 @@ class DashboardViewModel(
         val shown = inService.filter { it.parentAssetId == null || it.id.value in promoted }
         val assetRows = shown
             .filterNot { it.id.value in drawn }
-            .filter { chosen.admitsAsset(it) }
+            // A plain row is an asset row: the chips select it by its condition, and a status
+            // alone hides it (plan decision 26).
+            .filter { chosen.admitsAssetRow(it.category, view.conditions[it.id]) }
             .map { row ->
                 DashboardRow(
                     asset = row,
@@ -230,11 +298,8 @@ class DashboardViewModel(
 
         return DashboardState(
             assets = assetRows,
-            sections = AttentionSection.entries.mapNotNull { section ->
-                listedDue.filter { it.section == section }
-                    .takeIf { it.isNotEmpty() }
-                    ?.let { AttentionGroup(section, it) }
-            },
+            // F2 and the chips narrow what is drawn; neither re-derives an order or a section.
+            sections = chosen.narrow(drawnRows),
             anyInService = inService.isNotEmpty(),
             hiddenComponents = inService.count { it.parentAssetId != null },
             // An empty install has nothing to lose, and a nudge over an empty dashboard is
@@ -266,7 +331,46 @@ class DashboardViewModel(
     fun onStatusChange(status: DueStatus?) {
         filterChoices.update { it.copy(status = status) }
     }
+
+    /** A condition chip is multi-select: a tap adds it, a second tap takes it away. */
+    fun onConditionToggle(chip: ConditionChip) {
+        filterChoices.update { chosen ->
+            chosen.copy(conditions = if (chip in chosen.conditions) chosen.conditions - chip else chosen.conditions + chip)
+        }
+    }
 }
+
+/**
+ * The drawn sections (spec §10.2; master plan §13.2), from the two projections as they come:
+ *
+ * - **ATTENTION** — DOWN units ▸ the schedule rows of ATTENTION ▸ DEGRADED units ▸ independent
+ *   CRITICAL health;
+ * - **UPCOMING** — the DUE SOON rows ▸ independent WARNING health;
+ * - **CURRENT**, **Deferred** and **OUT OF SEASON** — their schedule rows.
+ *
+ * Each group is a filter of its projection's list, so it keeps that projection's own order: the
+ * schedule rows their decision-30 rank, the asset-level rows their decision-36 rank. This
+ * concatenates; it never sorts. An empty section is omitted. [categoryOf] names an asset-level
+ * row's category for the filter.
+ */
+internal fun assembleSections(
+    schedules: List<DueItem>,
+    attention: List<AttentionItem>,
+    categoryOf: (AssetId) -> String?,
+): List<AttentionGroup> = AttentionSection.entries.mapNotNull { section ->
+    val (leading, trailing) = attention.filter { it.section == section }.partition { it.leadsItsSection }
+    val entries = leading.map { it.entry(categoryOf) } +
+        schedules.filter { it.section == section }.map(SectionEntry::Schedule) +
+        trailing.map { it.entry(categoryOf) }
+    entries.takeIf { it.isNotEmpty() }?.let { AttentionGroup(section, it) }
+}
+
+/** A DOWN unit is drawn first in ATTENTION, before the schedule rows (#61 AC 6). */
+private val AttentionItem.leadsItsSection: Boolean
+    get() = kind == AttentionKind.CONDITION && condition == OperationalCondition.DOWN
+
+private fun AttentionItem.entry(categoryOf: (AssetId) -> String?): SectionEntry =
+    SectionEntry.AssetLevel(this, categoryOf(assetId)?.takeIf { it.isNotBlank() })
 
 /** The Asset a row targets, or null for a group row: a group is not an Asset (invariant 4). */
 private val DueItem.targetAssetId: String?
@@ -280,14 +384,3 @@ private val DueItem.targetAssetId: String?
  */
 private val DueItem.isPromotable: Boolean
     get() = section == AttentionSection.ATTENTION || section == AttentionSection.UPCOMING
-
-/** F2 over a due row: both controls narrow, neither reorders. */
-private fun DashboardFilters.admits(item: DueItem): Boolean =
-    (category == null || item.category == category) && (status == null || item.status == status)
-
-/**
- * F2 over an asset row. A row with no schedule has no maintenance status, so choosing one narrows
- * the list to the rows that carry one rather than quietly keeping the rows that cannot.
- */
-private fun DashboardFilters.admitsAsset(asset: Asset): Boolean =
-    (category == null || asset.category == category) && status == null
