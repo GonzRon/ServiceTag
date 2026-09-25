@@ -62,12 +62,14 @@ class RepairScheduleProviders(
     suspend fun apply(): ProviderRepairReport = uow.write {
         val rows = schedules.all().associateBy { it.id }
         val plan = planOf(rows.values)
+        // One repair act, one instant: every row this apply touches carries the same stamp.
+        val now = clock.nowMillis()
         val repaired = plan.repairable.map { entry ->
             val row = rows.getValue(entry.scheduleId)
             schedules.upsert(
                 row.copy(
                     providers = listOf(ScheduleProviderRow(ProviderId.LOCAL.name, enabled = true)),
-                    updatedAt = clock.nowMillis(),
+                    updatedAt = now,
                 ),
             )
             entry.scheduleId
