@@ -180,6 +180,9 @@ class FakeClient:
             "profileId": fields.get("profile_id"),
             "remindersEnabled": bool(fields.get("reminders_enabled") or False),
             "status": "ACTIVE",
+            # Stored exactly as sent, and an absent list as none — what a 1.4.0 app did (#80). The
+            # loader must never lean on the app's default, so this fake does not supply one.
+            "providers": list(fields.get("providers") or []),
             **_derived_triple(policy, offset),
         }
         self.schedules.append(row)

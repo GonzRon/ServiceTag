@@ -5,6 +5,7 @@ docstring or name.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from servicetag_schedules import manifest as M
@@ -553,6 +554,36 @@ def test_plan_summary_counts_each_decision() -> None:
     result = PL.plan(manifest, P.Inventory(assets=(a,), schedules=(existing,)))
     counts = result.summary()
     assert counts == {"CREATE": 1, "IDENTICAL": 1, "CONFLICT": 0, "ERROR": 1}
+
+
+# ---- 1.4.1 (#80): the re-plan is blind to providers and to updatedAt --------------------------------
+
+
+def test_a_providerless_row_and_a_repaired_one_both_replan_identical(fake_client) -> None:
+    """A loaded schedule re-plans IDENTICAL whether the phone still holds it providerless (loaded by a
+    1.3/1.4.0 loader) or `repair_schedule_providers` has since given it LOCAL and moved its
+    `updatedAt`: providers are not identity (invariant 4), and `updatedAt` is never read at all —
+    here it is absent on one row and not even a number on the other."""
+    shed = fake_client.add_asset(name="Garden shed")
+    loft = fake_client.add_asset(name="Loft")
+    fake_client.add_schedule(title="Inspect roof", target_asset_id=shed)
+    fake_client.add_schedule(title="Inspect roof", target_asset_id=loft)
+    providerless, repaired = fake_client.schedules
+    providerless.update(providers=[], remindersEnabled=True)
+    providerless.pop("updatedAt", None)
+    repaired.update(providers=[{"provider": "LOCAL", "enabled": True}], remindersEnabled=True, updatedAt="never read")
+    manifest = mk_manifest(
+        schedules=[
+            mk_schedule("s1", "Inspect roof", target_asset="Garden shed", reminders_enabled=True),
+            mk_schedule("s2", "Inspect roof", target_asset="Loft", reminders_enabled=True),
+        ]
+    )
+
+    result = PL.plan(manifest, asyncio.run(P.snapshot(fake_client)))
+
+    assert entry(result, "schedule", "s1").decision == "IDENTICAL"
+    assert entry(result, "schedule", "s2").decision == "IDENTICAL"
+    assert result.summary() == {"CREATE": 0, "IDENTICAL": 2, "CONFLICT": 0, "ERROR": 0}
 
 
 # ---- 1.4: the re-plan compares through spec §4.1 (lockstep) -------------------------------------
