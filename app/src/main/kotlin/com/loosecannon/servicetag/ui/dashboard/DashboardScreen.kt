@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
@@ -42,6 +44,7 @@ import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.condition.ConditionBadge
 import com.loosecannon.servicetag.ui.condition.conditionColors
 import com.loosecannon.servicetag.ui.condition.conditionGlyph
+import com.loosecannon.servicetag.ui.condition.conditionWord
 import com.loosecannon.servicetag.ui.condition.reasonLine
 import com.loosecannon.servicetag.ui.health.ConditionView
 import com.loosecannon.servicetag.ui.health.HealthBadge
@@ -55,6 +58,8 @@ import com.loosecannon.servicetag.ui.maintenance.AttentionSection
 import com.loosecannon.servicetag.ui.maintenance.DueItemRow
 import com.loosecannon.servicetag.ui.maintenance.HealthSummary
 import com.loosecannon.servicetag.ui.maintenance.MaintenanceSectionTitle
+import com.loosecannon.servicetag.ui.maintenance.partOfLine
+import com.loosecannon.servicetag.ui.maintenance.promotedSubtitle
 import com.loosecannon.servicetag.ui.maintenance.REMINDER_FAILED
 import com.loosecannon.servicetag.ui.maintenance.sectionLabel
 import com.loosecannon.servicetag.ui.maintenance.showsBadge
@@ -246,7 +251,7 @@ private val SectionEntry.key: String
         is SectionEntry.Schedule -> item.scheduleId.value
         is SectionEntry.AssetLevel -> when (item.kind) {
             AttentionKind.CONDITION -> "condition-${item.assetId.value}"
-            AttentionKind.HEALTH -> "health-${item.healthSubjectId?.value}"
+            AttentionKind.HEALTH -> "health-${item.healthSubjectId?.value ?: "${item.assetId.value}-${item.rank}"}"
         }
     }
 
@@ -255,14 +260,26 @@ private val SectionEntry.key: String
  * in the condition's token, the unit's name with the condition badge (S3 or S2, and S22 "since
  * \<date\>" read from the row's `since`, never recomputed), then the reason or S23, and for a
  * component the parent it belongs to in the shipped promoted-row form (inv. 122).
+ *
+ * **It never fails silently** (the review's M-5): a row missing a field draws what it has. With no
+ * `since` the badge is the word and glyph alone; with no word at all the unit is still named with
+ * its reason and parent. A DOWN unit never leaves an empty row behind.
  */
 @Composable
-private fun ConditionRow(item: AttentionItem, onClick: () -> Unit) {
-    val view = item.conditionView() ?: return
-    val condition = view.condition
+internal fun ConditionRow(item: AttentionItem, onClick: () -> Unit) {
+    // The row's own word; on a condition row it is the asset's current condition, so that is the
+    // truthful fallback.
+    val condition = item.condition ?: item.assetCondition
     val colors = conditionColors(condition, ServiceTagTheme.semanticColors)
+    val view = condition?.let { item.conditionView(it) }
     AttentionRowFrame(
-        glyph = { Icon(conditionGlyph(condition).icon, contentDescription = null, tint = colors.foreground, modifier = Modifier.size(28.dp)) },
+        glyph = {
+            if (condition != null) {
+                Icon(conditionGlyph(condition).icon, contentDescription = null, tint = colors.foreground, modifier = Modifier.size(28.dp))
+            } else {
+                Spacer(modifier = Modifier.size(28.dp))
+            }
+        },
         onClick = onClick,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -272,20 +289,24 @@ private fun ConditionRow(item: AttentionItem, onClick: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f, fill = false),
             )
-            ConditionBadge(view)
+            when {
+                view != null -> ConditionBadge(view)
+                // S2 and S3 are ratified in upper case, so the shipped badge's upper-casing changes
+                // nothing; only S4 would suffer it, and a condition row never draws S4.
+                condition != null -> StatusBadge(label = conditionWord(condition), colors = colors, icon = conditionGlyph(condition).icon)
+            }
         }
         QuietLine(reasonLine(item.reason.orEmpty()))
-        item.parentName?.let { QuietLine("Part of $it") }
+        item.parentName?.let { QuietLine(partOfLine(it)) }
     }
 }
 
 /**
  * The badge's view of a condition row: the row's own word and `since`, which are all the badge
- * reads. The row carries no event link, so none is claimed. Null only for a row that is not a
- * condition row, which is then not drawn as one.
+ * reads. The row carries no event link, so none is claimed. Null when the row has no `since`, and
+ * the row then draws its word without S22.
  */
-private fun AttentionItem.conditionView(): ConditionView? {
-    val condition = condition ?: return null
+private fun AttentionItem.conditionView(condition: OperationalCondition): ConditionView? {
     val sinceOn = since?.let(LocalDate::parse) ?: return null
     return ConditionView(
         condition = condition,
@@ -303,25 +324,39 @@ private fun AttentionItem.conditionView(): ConditionView? {
  * bar glyph in its token, S110 "\<subject\> \<BAND\>" with the band badge beside it, and the
  * asset it is on — with its parent, for a component. Overdue-driven health is never a row of its
  * own: it rides its schedule's row.
+ *
+ * **It never fails silently** (the review's M-5): with a field missing, the title falls back to the
+ * subject's name (or the asset's), the badge is drawn whenever the band is known, and the asset line
+ * is always there.
  */
 @Composable
-private fun HealthRow(item: AttentionItem, onClick: () -> Unit) {
-    val fact = item.bandFact() ?: return
-    val colors = healthColors(fact.band, ServiceTagTheme.semanticColors)
+internal fun HealthRow(item: AttentionItem, onClick: () -> Unit) {
+    val band = item.band
     AttentionRowFrame(
-        glyph = { Icon(healthGlyph(fact.band).icon, contentDescription = null, tint = colors.foreground, modifier = Modifier.size(28.dp)) },
+        glyph = {
+            if (band != null) {
+                Icon(
+                    healthGlyph(band).icon,
+                    contentDescription = null,
+                    tint = healthColors(band, ServiceTagTheme.semanticColors).foreground,
+                    modifier = Modifier.size(28.dp),
+                )
+            } else {
+                Spacer(modifier = Modifier.size(28.dp))
+            }
+        },
         onClick = onClick,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                text = dashboardHealthRow(fact),
+                text = item.bandFact()?.let(::dashboardHealthRow) ?: item.subjectName ?: item.assetName,
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f, fill = false),
             )
-            HealthBadge(band = fact.band, score = fact.score)
+            band?.let { HealthBadge(band = it, score = item.score) }
         }
-        QuietLine(item.parentName?.let { parent -> "${item.assetName} · Part of $parent" } ?: item.assetName)
+        QuietLine(promotedSubtitle(item.assetName, item.parentName))
     }
 }
 
@@ -456,7 +491,7 @@ private fun CurrentRow(row: DashboardRow, onClick: () -> Unit) {
             // round that obliges nobody — says neither: "No schedule yet" would be false, and §17
             // has no line for the true thing, so the subtitle is omitted rather than drafted.
             if (row.parentName != null) {
-                QuietLine("Part of ${row.parentName}")
+                QuietLine(partOfLine(row.parentName))
             } else if (!row.hasSchedule) {
                 QuietLine("No schedule yet")
             }

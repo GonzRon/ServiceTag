@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.dashboard
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
@@ -15,7 +16,9 @@ import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.model.HealthDriver
+import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.OperationalCondition
@@ -42,6 +45,9 @@ import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.condition.displayDate
+import com.loosecannon.servicetag.ui.maintenance.AttentionItem
+import com.loosecannon.servicetag.ui.maintenance.AttentionKind
+import com.loosecannon.servicetag.ui.maintenance.AttentionSection
 import com.loosecannon.servicetag.ui.maintenance.HealthSummary
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.LocalDate
@@ -351,6 +357,10 @@ class DashboardAttentionTest {
      * Spec §10.2 on a real tree: ATTENTION draws the DOWN unit, then the schedule row, then the
      * DEGRADED component naming its parent, then the independent CRITICAL subject (S110); UPCOMING
      * then draws the independent WARNING subject. The condition rows carry S22 and the reason or S23.
+     *
+     * The generator is recorded DOWN twice, on different days, with a new reason the second time:
+     * S22 is the start of the run — the first day — and the reason is the latest row's (the brief's
+     * carry-forward; the review's M-3).
      */
     @Test fun sectionOrderWithConditionAndHealthRows() {
         val graph = app.graph
@@ -360,6 +370,10 @@ class DashboardAttentionTest {
             graph.recordCondition.run(
                 generator,
                 ConditionCommand(OperationalCondition.DOWN, occurredOn = today.minusDays(3).toString(), tzId = zone(), reason = "Won't start"),
+            )
+            graph.recordCondition.run(
+                generator,
+                ConditionCommand(OperationalCondition.DOWN, occurredOn = today.minusDays(1).toString(), tzId = zone(), reason = "Fuel line cracked"),
             )
             val pack = graph.createAsset.run(AssetCommand(name = "Battery pack", category = "Power", parentAssetId = generator)).id
             graph.recordCondition.run(
@@ -380,8 +394,10 @@ class DashboardAttentionTest {
         draw(graph)
 
         rule.awaitText("Belt age WARNING")
-        rule.awaitText("Won't start")
+        rule.awaitText("Fuel line cracked")
         rule.awaitText("since ${displayDate(today.minusDays(3))}")
+        rule.onAllNodesWithText("since ${displayDate(today.minusDays(1))}").assertCountEquals(0)
+        rule.onAllNodesWithText("Won't start").assertCountEquals(0)
         rule.awaitText("No reason given")
         rule.awaitText("Part of Generator")
 
@@ -490,6 +506,45 @@ class DashboardAttentionTest {
         rule.onNode(hasText("Not recorded") and hasClickAction()).performClick()
         rule.waitUntil(5_000) { rule.onAllNodesWithText("Won't start").fetchSemanticsNodes().isEmpty() }
         rule.awaitText("Blade sharpen")
+    }
+
+    /**
+     * The review's M-5: a condition or health row missing a field draws what it has and never an
+     * empty row. The two items are built by hand, as B07 would never hand them over: a DOWN unit with
+     * no `since` is still named, with its word (no S22), reason and parent; a CRITICAL subject with no
+     * score keeps its name, its band's badge and its asset.
+     */
+    @Test fun aConditionOrHealthRowMissingAFieldStillDrawsItsUnit() {
+        val down = AttentionItem(
+            kind = AttentionKind.CONDITION, section = AttentionSection.ATTENTION,
+            assetId = AssetId("gen"), assetName = "Generator", parentAssetId = AssetId("ups"), parentName = "UPS",
+            assetCondition = OperationalCondition.DOWN, condition = OperationalCondition.DOWN, reason = "Won't start",
+            occurredOn = null, since = null,
+            healthSubjectId = null, subjectName = null, band = null, score = null, rank = 0,
+        )
+        val critical = AttentionItem(
+            kind = AttentionKind.HEALTH, section = AttentionSection.ATTENTION,
+            assetId = AssetId("tub"), assetName = "Hot tub", parentAssetId = null, parentName = null,
+            assetCondition = null, condition = null, reason = null, occurredOn = null, since = null,
+            healthSubjectId = HealthSubjectId("h-filter"), subjectName = "Filter age", band = HealthBand.CRITICAL, score = null,
+            rank = 1,
+        )
+        rule.setContent {
+            ServiceTagTheme {
+                Column {
+                    ConditionRow(down, onClick = {})
+                    HealthRow(critical, onClick = {})
+                }
+            }
+        }
+
+        rule.awaitText("Generator")
+        rule.onNodeWithText("DOWN").assertIsDisplayed()
+        rule.onNodeWithText("Won't start").assertIsDisplayed()
+        rule.onNodeWithText("Part of UPS").assertIsDisplayed()
+        rule.onNodeWithText("Filter age").assertIsDisplayed()
+        rule.onNodeWithText("CRITICAL").assertIsDisplayed()
+        rule.onNodeWithText("Hot tub").assertIsDisplayed()
     }
 
     /** An AGE subject on a new asset named [assetName], replaced [daysAgo] days ago (0 / 40 / 75). */

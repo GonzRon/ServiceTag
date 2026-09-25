@@ -322,5 +322,15 @@ private fun HealthPassenger(fact: SubjectBandFact) {
  * part of — the same "Part of <parent>" the dashboard's asset rows use, so a promoted part reads
  * the same way whichever list it came from.
  */
-private fun subtitleOf(item: DueItem): String =
-    item.parentName?.let { parent -> "${item.assetName} · Part of $parent" } ?: item.assetName
+private fun subtitleOf(item: DueItem): String = promotedSubtitle(item.assetName, item.parentName)
+
+/**
+ * The shipped promoted-row form's "Part of \<parent\>" (spec 1.2 inv. 75): the one copy every row
+ * that names a component's parent draws — the dashboard's plain and condition rows through this, the
+ * schedule and health rows through [promotedSubtitle].
+ */
+internal fun partOfLine(parentName: String): String = "Part of $parentName"
+
+/** "\<asset\> · Part of \<parent\>" for a component, and the asset alone otherwise. */
+internal fun promotedSubtitle(assetName: String, parentName: String?): String =
+    parentName?.let { "$assetName · ${partOfLine(it)}" } ?: assetName
