@@ -556,6 +556,10 @@ class SeasonHealthRoutesTest {
         val battery = subject(ups, "Battery")
         for ((method, path, status) in listOf(
             Triple("PATCH", "/v1/assets/$ups/season", 404),
+            Triple("DELETE", "/v1/assets/$ups/season", 404),
+            Triple("DELETE", "/v1/assets/$ups/conditions", 404),
+            Triple("DELETE", "/v1/assets/$ups/health-subjects", 404),
+            Triple("DELETE", "/v1/health-subjects/$battery/archive", 404),
             Triple("GET", "/v1/assets/$ups/season-mode", 404),
             Triple("GET", "/v1/assets/$ups/maintenance-break", 404),
             Triple("GET", "/v1/assets/$ups/health-policy", 404),
@@ -567,6 +571,8 @@ class SeasonHealthRoutesTest {
             Triple("GET", "/v1/health-subjects", 405),
             Triple("PATCH", "/v1/health-subjects", 405),
             Triple("POST", "/v1/health-subjects/$battery", 405),
+            Triple("DELETE", "/v1/health-subjects/$battery", 405),
+            Triple("DELETE", "/v1/attention", 405),
             Triple("POST", "/v1/attention", 405),
             Triple("PATCH", "/v1/attention", 405),
         )) {
