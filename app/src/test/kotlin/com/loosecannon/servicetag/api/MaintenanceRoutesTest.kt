@@ -1601,6 +1601,12 @@ class MaintenanceRoutesTest {
         assertEquals("bad_request", refused.code())
         assertTrue(refused.text(), "providers" in refused.errorDetail().message)
         assertEquals(before, runBlocking { graph.schedules.get(ScheduleId(id)) })
+
+        // Keyed on the PATCH, not on the stored row: a PATCH naming no schedule is the same 400 it
+        // always was, never a 404 that only a well-formed body could earn.
+        val nowhere = call("PATCH", "/v1/schedules/00000000-0000-4000-8000-999999999999", scheduleBody(asset, ""","providers":null"""))
+        assertEquals(nowhere.text(), 400, nowhere.status)
+        assertEquals("bad_request", nowhere.code())
     }
 
     // --- 1.4.1 (#80, R2): the provider repair's two routes ------------------------------------
