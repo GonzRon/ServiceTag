@@ -26,6 +26,11 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.StatusBadge
+import com.loosecannon.servicetag.ui.condition.displayDate
+import com.loosecannon.servicetag.ui.health.SubjectBandFact
+import com.loosecannon.servicetag.ui.health.dashboardHealthRow
+import com.loosecannon.servicetag.ui.health.healthColors
+import com.loosecannon.servicetag.ui.health.healthGlyph
 import com.loosecannon.servicetag.ui.journal.formatNumber
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.LocalServiceTagSemanticColors
@@ -222,6 +227,12 @@ fun progressLine(complete: Int, required: Int): String? =
  *
  * [onRepair] is offered **only** where the caller has a repairable row to repair; it is ignored on
  * any other row, so a caller cannot reintroduce the label by forgetting the gate.
+ *
+ * **1.4 adds two lines, both read off the row** (spec §10.2, §10.5), so every call site gets them
+ * with the signature unchanged: the **why-line** (S85–S91, [whyLine]) saying why the row's date is
+ * what it is, and — when the schedule drives a tracked health subject — that subject's band as a
+ * passenger (S110 with its bar glyph): overdue-driven health rides its schedule's row and is never
+ * a row of its own.
  */
 @Composable
 fun DueItemRow(
@@ -271,6 +282,8 @@ fun DueItemRow(
                 }
             }
             QuietLine(subtitleOf(item))
+            whyLine(item, ::displayDate)?.let { QuietLine(it) }
+            item.health?.let { HealthPassenger(it) }
             meterLine(item)?.let { QuietLine(it) }
             progressLine(item)?.let { QuietLine(it) }
             // Beside the status badge, never instead of it: the obligation has not moved (D-13).
@@ -288,9 +301,36 @@ fun DueItemRow(
 }
 
 /**
+ * The band of the subject this schedule drives, riding the row (spec §10.2): its bar glyph in the
+ * band's token and S110, "\<subject\> \<BAND\>" — word and glyph each tell the band without colour.
+ */
+@Composable
+private fun HealthPassenger(fact: SubjectBandFact) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Icon(
+            imageVector = healthGlyph(fact.band).icon,
+            contentDescription = null,
+            tint = healthColors(fact.band, LocalServiceTagSemanticColors.current).foreground,
+            modifier = Modifier.size(16.dp),
+        )
+        QuietLine(dashboardHealthRow(fact))
+    }
+}
+
+/**
  * What the row says under its title: the thing the work is on, and for a component the system it is
  * part of — the same "Part of <parent>" the dashboard's asset rows use, so a promoted part reads
  * the same way whichever list it came from.
  */
-private fun subtitleOf(item: DueItem): String =
-    item.parentName?.let { parent -> "${item.assetName} · Part of $parent" } ?: item.assetName
+private fun subtitleOf(item: DueItem): String = promotedSubtitle(item.assetName, item.parentName)
+
+/**
+ * The shipped promoted-row form's "Part of \<parent\>" (spec 1.2 inv. 75): the one copy every row
+ * that names a component's parent draws — the dashboard's plain and condition rows through this, the
+ * schedule and health rows through [promotedSubtitle].
+ */
+internal fun partOfLine(parentName: String): String = "Part of $parentName"
+
+/** "\<asset\> · Part of \<parent\>" for a component, and the asset alone otherwise. */
+internal fun promotedSubtitle(assetName: String, parentName: String?): String =
+    parentName?.let { "$assetName · ${partOfLine(it)}" } ?: assetName

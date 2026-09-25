@@ -1,17 +1,27 @@
 package com.loosecannon.servicetag.ui.dashboard
 
+import com.loosecannon.servicetag.core.health.HealthBand
+import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.groupOf
+import com.loosecannon.servicetag.testing.replacementOf
 import com.loosecannon.servicetag.testing.scheduleOf
+import com.loosecannon.servicetag.testing.subjectRow
+import com.loosecannon.servicetag.ui.maintenance.AttentionKind
 import com.loosecannon.servicetag.ui.maintenance.AttentionSection
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.HealthSummary
@@ -33,6 +43,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -68,6 +79,8 @@ class DashboardViewModelMaintenanceTest {
             graph.schedules, graph.assets, graph.groups,
             graph.definitions, graph.recomputeSchedules, graph.todayPort, graph.assetHealthReadModel, { null },
         ),
+        attention = graph.attentionReadModel,
+        assetHealth = graph.assetHealthReadModel,
         health = health,
         prefs = graph.prefs,
     )
@@ -369,5 +382,253 @@ class DashboardViewModelMaintenanceTest {
         // The due row is exactly what the projection ranked — an asset with a different name and
         // category does not narrow it away.
         assertEquals(listOf("Blade sharpen"), state.sections.flatMap { it.items }.map { it.title })
+    }
+
+    // ------------------------------------------------------------ 1.4: condition and health rows
+
+    /** An AGE subject on [assetId] whose only replacement was [daysAgo] days before `T` (0 / 40 / 75). */
+    private suspend fun ageSubject(id: String, assetId: String, daysAgo: Long, name: String) {
+        graph.events.upsert(replacementOf("e-$id", assetId, graph.today.minusDays(daysAgo).toString()))
+        graph.healthSubjects.upsert(subjectRow(id, assetId, name = name))
+    }
+
+    /** A section's rows as tokens: `schedule:<title>`, `<CONDITION>:<asset>`, `<BAND>:<subject>`. */
+    private fun AttentionGroup.drawn(): List<String> = entries.map { entry ->
+        when (entry) {
+            is SectionEntry.Schedule -> "schedule:${entry.item.title}"
+            is SectionEntry.AssetLevel -> when (entry.item.kind) {
+                AttentionKind.CONDITION -> "${entry.item.condition}:${entry.item.assetName}"
+                AttentionKind.HEALTH -> "${entry.item.band}:${entry.item.subjectName}"
+            }
+        }
+    }
+
+    /**
+     * Spec §10.2's ATTENTION: DOWN units ▸ the schedule rows ▸ DEGRADED units ▸ independent CRITICAL
+     * health. A DOWN asset that also has due work shows its condition row first and its schedule
+     * row among the schedules, and is not in the plain list.
+     */
+    @Test fun downThenSchedulesThenDegradedThenCritical() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.conditions.insert(conditionRow("c1", "gen", OperationalCondition.DOWN, "2026-04-10", reason = "Won't start"))
+        graph.assets.upsert(assetRow("tub", name = "Hot tub"))
+        graph.conditions.insert(conditionRow("c2", "tub", OperationalCondition.DEGRADED, "2026-04-12"))
+        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        ageSubject("h-crit", "ups", daysAgo = 90, name = "Battery age")
+        graph.assets.upsert(assetRow("mow", name = "Mower"))
+        seed(scheduleOf("s-mow", assetId = "mow", title = "Blade sharpen", leadDays = 0))
+        seed(scheduleOf("s-gen", assetId = "gen", title = "Engine oil service", leadDays = 0))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.anyInService }
+        assertEquals(listOf(AttentionSection.ATTENTION), state.sections.map { it.section })
+        assertEquals(
+            listOf("DOWN:Generator", "schedule:Blade sharpen", "schedule:Engine oil service", "DEGRADED:Hot tub", "CRITICAL:Battery age"),
+            state.sections.single().drawn(),
+        )
+        // S22 reads the row's `since`; the badge's word is the row's own condition.
+        assertEquals("2026-04-10", state.sections.single().assetRows.first().since)
+        assertEquals(emptyList<String>(), state.assets.map { it.asset.name })
+    }
+
+    /** UPCOMING: the DUE SOON rows, then independent WARNING health after them. */
+    @Test fun warningHealthFollowsDueSoon() = runTest {
+        graph.assets.upsert(assetRow("mow", name = "Mower"))
+        seed(scheduleOf("s-soon", assetId = "mow", title = "Blade sharpen", anchorOn = "2026-04-20", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR, leadDays = 14))
+        // Named to sort first by name: the group order, not the name, puts it after the schedule.
+        graph.assets.upsert(assetRow("ups", name = "Alpha UPS"))
+        ageSubject("h-warn", "ups", daysAgo = 50, name = "Battery age")
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.anyInService }
+        assertEquals(listOf(AttentionSection.UPCOMING), state.sections.map { it.section })
+        assertEquals(listOf("schedule:Blade sharpen", "WARNING:Battery age"), state.sections.single().drawn())
+    }
+
+    /**
+     * Spec §4.5, inv. 103: a row the break holds is in its own quiet section between CURRENT and
+     * OUT OF SEASON, counts for nothing, and answers the DEFERRED status option — never OVERDUE or
+     * DUE.
+     */
+    @Test fun deferredSitsBetweenCurrentAndOutOfSeasonAndCountsForNothing() = runTest {
+        graph.today = LocalDate.parse("2026-12-10")
+        graph.assets.upsert(assetRow("gen", name = "Generator", breakStart = "12-01", breakEnd = "02-28"))
+        graph.assets.upsert(assetRow("mow", name = "Mower", seasonMode = SeasonMode.CALENDAR, seasonStart = "04-15", seasonEnd = "10-31"))
+        seed(
+            scheduleOf(
+                "s-held", assetId = "gen", title = "Engine oil service", timeInterval = 6, anchorOn = "2026-12-20",
+                createdOn = "2026-06-01", servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0,
+            ),
+        )
+        seed(scheduleOf("s-ok", assetId = "gen", title = "Air filter", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR, anchorOn = "2027-06-01", createdOn = "2026-06-01"))
+        seed(scheduleOf("s-dormant", assetId = "mow", title = "Blade sharpen", anchorOn = "2026-06-01", createdOn = "2026-06-01", servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.sections.size == 3 }
+        assertEquals(
+            listOf(AttentionSection.CURRENT, AttentionSection.DEFERRED, AttentionSection.OUT_OF_SEASON),
+            state.sections.map { it.section },
+        )
+        val deferred = state.sections.single { it.section == AttentionSection.DEFERRED }
+        assertEquals(listOf("s-held"), deferred.items.map { it.scheduleId.value })
+        assertEquals(DueStatus.DEFERRED, deferred.items.single().status)
+        assertEquals("DEFERRED counts for nothing", 0, state.sections.flatMap { it.items }.count { it.countsAsDue })
+
+        vm.onStatusChange(DueStatus.DEFERRED)
+        val held = vm.state.first { it.filters.status == DueStatus.DEFERRED }
+        assertEquals(listOf(AttentionSection.DEFERRED), held.sections.map { it.section })
+
+        for (due in listOf(DueStatus.OVERDUE, DueStatus.DUE)) {
+            vm.onStatusChange(due)
+            val under = vm.state.first { it.filters.status == due }
+            assertFalse("never under $due", "s-held" in under.sections.flatMap { it.items }.map { it.scheduleId.value })
+        }
+    }
+
+    /**
+     * Inv. 122: a DOWN unit with nothing due reaches ATTENTION — a component naming its parent —
+     * and neither is left in the plain asset list nor hidden with the parts.
+     */
+    @Test fun aDownComponentWithNothingDueIsInAttentionWithItsParent() = runTest {
+        graph.assets.upsert(assetRow("tub", name = "Hot tub"))
+        graph.assets.upsert(assetRow("pack", name = "Battery pack", parent = "tub"))
+        graph.conditions.insert(conditionRow("c1", "pack", OperationalCondition.DOWN, "2026-04-12", reason = "Will not hold a charge"))
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.conditions.insert(conditionRow("c2", "gen", OperationalCondition.DOWN, "2026-04-01"))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.anyInService }
+        // The plain list is the systems with nothing drawn: the tub, and not the generator.
+        assertEquals("a DOWN unit is not left in the plain list", listOf("Hot tub"), state.assets.map { it.asset.name })
+        assertEquals(listOf(AttentionSection.ATTENTION), state.sections.map { it.section })
+        val attention = state.sections.single()
+        assertEquals(listOf("DOWN:Battery pack", "DOWN:Generator"), attention.drawn())
+        val pack = attention.assetRows.first()
+        assertEquals("the component names its parent", "Hot tub", pack.parentName)
+        assertEquals("Will not hold a charge", pack.reason)
+    }
+
+    /** Plan decision 40: an asset drawn as any row in a section is not repeated in the plain list. */
+    @Test fun anAssetDrawnAsARowIsNotRepeatedInTheAssetList() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.conditions.insert(conditionRow("c1", "gen", OperationalCondition.DEGRADED, "2026-04-01"))
+        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        ageSubject("h-crit", "ups", daysAgo = 90, name = "Battery age")
+        graph.assets.upsert(assetRow("tub", name = "Hot tub"))
+        ageSubject("h-warn", "tub", daysAgo = 50, name = "Filter age")
+        graph.assets.upsert(assetRow("mow", name = "Mower"))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.anyInService }
+        assertEquals(
+            listOf("DEGRADED:Generator", "CRITICAL:Battery age", "WARNING:Filter age"),
+            state.sections.flatMap { it.drawn() },
+        )
+        assertEquals(listOf("Mower"), state.assets.map { it.asset.name })
+    }
+
+    /**
+     * Spec §10.2: overdue-driven health rides its schedule's row. The subject's band is on the
+     * schedule row, and no independent row is drawn for it anywhere.
+     */
+    @Test fun overdueHealthRidesItsScheduleRow() = runTest {
+        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        seed(scheduleOf("s-check", assetId = "ups", title = "Battery check", leadDays = 0))
+        graph.healthSubjects.upsert(
+            subjectRow(
+                "h-check", "ups", name = "Battery", driver = HealthDriver.MAINTENANCE_OVERDUE, scheduleId = "s-check",
+                nominalUntilDays = 0, warningFromDays = 10, criticalFromDays = 50,
+            ),
+        )
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.anyInService }
+        assertEquals(listOf("schedule:Battery check"), state.sections.flatMap { it.drawn() })
+        val health = state.sections.single().items.single().health
+        assertNotNull("the band rides the row", health)
+        assertEquals(HealthBand.CRITICAL, health!!.band)
+        assertEquals("Battery", health.subjectName)
+    }
+
+    /**
+     * In-service rows only, each unit on its own lifecycle: a retired or archived unit draws no
+     * condition or health row, and a DEGRADED component of a retired parent is listed, naming it.
+     */
+    @Test fun retiredAndArchivedUnitsDoNotAppear() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator", retiredOn = "2026-03-01"))
+        graph.conditions.insert(conditionRow("c1", "gen", OperationalCondition.DOWN, "2026-04-01"))
+        graph.assets.upsert(assetRow("snow", name = "Snowblower", status = AssetStatus.ARCHIVED))
+        graph.conditions.insert(conditionRow("c2", "snow", OperationalCondition.DEGRADED, "2026-04-01"))
+        graph.assets.upsert(assetRow("ups", name = "UPS", retiredOn = "2026-03-01"))
+        ageSubject("h-crit", "ups", daysAgo = 90, name = "Battery age")
+        graph.assets.upsert(assetRow("tub", name = "Hot tub", retiredOn = "2026-03-01"))
+        graph.assets.upsert(assetRow("pack", name = "Battery pack", parent = "tub"))
+        graph.conditions.insert(conditionRow("c3", "pack", OperationalCondition.DEGRADED, "2026-04-05"))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.anyInService }
+        assertEquals(listOf("DEGRADED:Battery pack"), state.sections.flatMap { it.drawn() })
+        assertEquals("Hot tub", state.sections.single().assetRows.single().parentName)
+        assertEquals(emptyList<String>(), state.assets.map { it.asset.name })
+    }
+
+    /**
+     * Filters narrow and never re-section: the plain-list exclusion is decided before them, so an
+     * asset whose schedule row a filter hides is hidden, not moved into the plain list — even under
+     * a status and a chip its condition matches, which lets asset rows through (M14).
+     */
+    @Test fun aFilterNeverMovesAnAssetIntoThePlainList() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.conditions.insert(conditionRow("c1", "gen", OperationalCondition.OPERATIONAL, "2026-04-01"))
+        seed(scheduleOf("s-ok", assetId = "gen", title = "Air filter", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR, anchorOn = "2026-12-01"))
+        graph.assets.upsert(assetRow("mow", name = "Mower"))
+        graph.conditions.insert(conditionRow("c2", "mow", OperationalCondition.OPERATIONAL, "2026-04-01"))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val all = vm.state.first { it.anyInService }
+        assertEquals(listOf("schedule:Air filter"), all.sections.flatMap { it.drawn() })
+        assertEquals(listOf("Mower"), all.assets.map { it.asset.name })
+
+        vm.onStatusChange(DueStatus.OVERDUE)
+        vm.onConditionToggle(ConditionChip.OPERATIONAL)
+        val narrowed = vm.state.first { it.filters.status == DueStatus.OVERDUE && it.filters.conditions.isNotEmpty() }
+        assertEquals(emptyList<AttentionSection>(), narrowed.sections.map { it.section })
+        assertEquals("the generator is hidden, not re-listed", listOf("Mower"), narrowed.assets.map { it.asset.name })
+    }
+
+    /**
+     * Inv. 119: a DOWN asset's health is never drawn without its condition. The DOWN row leads
+     * ATTENTION and the CRITICAL subject follows in its own group; a chip or a category that keeps
+     * one keeps the other, because both read the same asset's condition and category.
+     */
+    @Test fun aDownAssetsHealthIsNeverDrawnWithoutItsCondition() = runTest {
+        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        graph.conditions.insert(conditionRow("c1", "ups", OperationalCondition.DOWN, "2026-04-10"))
+        ageSubject("h-crit", "ups", daysAgo = 90, name = "Battery age")
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        assertEquals(listOf("DOWN:UPS", "CRITICAL:Battery age"), vm.state.first { it.anyInService }.sections.flatMap { it.drawn() })
+
+        vm.onConditionToggle(ConditionChip.DOWN)
+        val down = vm.state.first { it.filters.conditions.isNotEmpty() }
+        assertEquals(listOf("DOWN:UPS", "CRITICAL:Battery age"), down.sections.flatMap { it.drawn() })
     }
 }

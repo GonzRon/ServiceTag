@@ -1,7 +1,11 @@
 package com.loosecannon.servicetag.ui.dashboard
 
+import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.NoHealthFindings
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +57,8 @@ class DashboardViewModelTest {
             graph.schedules, graph.assets, graph.groups,
             graph.definitions, graph.recomputeSchedules, graph.todayPort, graph.assetHealthReadModel, { null },
         ),
+        attention = graph.attentionReadModel,
+        assetHealth = graph.assetHealthReadModel,
         health = NoHealthFindings,
         prefs = graph.prefs,
     )
@@ -161,5 +167,40 @@ class DashboardViewModelTest {
         val state = vm.state.first { it.anyInService }
         assertTrue("the parent is retired, so there is no system to list", state.assets.isEmpty())
         assertEquals(1, state.hiddenComponents)
+    }
+
+    /**
+     * The plain list is asset rows too (spec §10.2, plan decision 26): the chips select them by
+     * their Asset's current condition — "Not recorded" is an asset with no condition row — a status
+     * alone hides them, and a status with a matching chip lets them through (M14).
+     */
+    @Test fun thePlainListAnswersTheConditionChips() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.conditions.insert(conditionRow("c1", "gen", OperationalCondition.OPERATIONAL, "2026-02-01"))
+        graph.assets.upsert(assetRow("mow", name = "Mower"))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        fun names(state: DashboardState) = state.assets.map { it.asset.name }.sorted()
+
+        assertEquals(listOf("Generator", "Mower"), names(vm.state.first { it.assets.size == 2 }))
+
+        vm.onConditionToggle(ConditionChip.NOT_RECORDED)
+        assertEquals(listOf("Mower"), names(vm.state.first { it.filters.conditions == setOf(ConditionChip.NOT_RECORDED) }))
+
+        vm.onConditionToggle(ConditionChip.NOT_RECORDED)
+        vm.onConditionToggle(ConditionChip.OPERATIONAL)
+        assertEquals(listOf("Generator"), names(vm.state.first { it.filters.conditions == setOf(ConditionChip.OPERATIONAL) }))
+
+        vm.onConditionToggle(ConditionChip.DOWN)
+        vm.onStatusChange(DueStatus.OVERDUE)
+        val statusAndChips = vm.state.first { it.filters.status == DueStatus.OVERDUE && it.filters.conditions.size == 2 }
+        assertEquals("a status with a matching chip", listOf("Generator"), names(statusAndChips))
+
+        vm.onConditionToggle(ConditionChip.DOWN)
+        vm.onConditionToggle(ConditionChip.OPERATIONAL)
+        val statusOnly = vm.state.first { it.filters.status == DueStatus.OVERDUE && it.filters.conditions.isEmpty() }
+        assertEquals("a status alone hides asset rows", emptyList<String>(), names(statusOnly))
     }
 }
