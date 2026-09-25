@@ -5,9 +5,11 @@ import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.testing.activationOf
 import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.conditionOf
@@ -122,6 +124,39 @@ class BackupFormat8Test {
         val floor = decoded.maintenanceSchedules.single { it.id == "s1" }.toDomain()
         assertEquals(dayMillis("2026-01-05"), floor.ruleChangedAt)
         assertEquals(dayMillis("2026-02-01"), floor.updatedAt)
+    }
+
+    /**
+     * #80 AC 10: provider rows travel exactly. A row `RepairScheduleProviders` repaired — LOCAL
+     * added, `updatedAt` moved, its floor untouched — exports its LOCAL row and restores it.
+     */
+    @Test
+    fun aRepairedRowRoundTripsItsLocalRow() {
+        val repaired = preService.copy(
+            providers = listOf(ScheduleProviderRow(ProviderId.LOCAL.name, enabled = true)),
+            updatedAt = dayMillis("2026-09-25"),
+        )
+        val archive = BackupCodec.decode(archiveOf(fixture().copy(maintenanceSchedules = listOf(repaired, clamped).map { it.toDto() })))
+
+        val decoded = archive.data.maintenanceSchedules.single { it.id == "s1" }.toDomain()
+        assertEquals(repaired, decoded)
+        assertEquals(listOf(ScheduleProviderRow(ProviderId.LOCAL.name, enabled = true)), decoded.providers)
+        assertEquals(dayMillis("2026-01-05"), decoded.ruleChangedAt)
+        assertEquals(2, archive.manifest.counts["scheduleProviders"])
+    }
+
+    /**
+     * #80 AC 10's other half: a providerless row — an old archive's, from before the repair — restores
+     * providerless. Nothing on the way in re-synthesises a provider row.
+     */
+    @Test
+    fun aProviderlessRowStaysProviderless() {
+        val rows = listOf(preService, clamped).map { it.copy(providers = emptyList()) }
+        val archive = BackupCodec.decode(archiveOf(fixture().copy(maintenanceSchedules = rows.map { it.toDto() })))
+
+        assertEquals(rows, archive.data.maintenanceSchedules.map { it.toDomain() })
+        assertEquals(listOf(emptyList<ScheduleProviderRow>(), emptyList()), archive.data.maintenanceSchedules.map { it.toDomain().providers })
+        assertEquals(0, archive.manifest.counts["scheduleProviders"])
     }
 
     // --- the field sets --------------------------------------------------------------------------

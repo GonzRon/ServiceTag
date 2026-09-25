@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
@@ -30,6 +31,7 @@ import com.loosecannon.servicetag.core.testing.readingOf
 import com.loosecannon.servicetag.core.testing.SeasonFixtures
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
+import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.Test
@@ -708,6 +710,31 @@ class BuildReminderSubjectsTest {
             forProvider.parameterTypes.first(),
             "the provider is a parameter, which is what makes a second one additive",
         )
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // #80: a providerless row is delivered by nobody; the repair makes it a LOCAL subject.
+    // ------------------------------------------------------------------------------------------
+
+    /**
+     * #80 AC 6: before the repair a reminders-on, providerless schedule is filtered out before any
+     * provider sees it; after `RepairScheduleProviders.apply()` it is a LOCAL subject like any other.
+     */
+    @Test
+    fun aRepairedRowIsALocalSubject() = runTest {
+        seedAsset("a1")
+        schedules.upsert(
+            scheduleOf(id = "s-providerless", timeInterval = 1, timeUnit = RecurrenceUnit.MONTH, anchorOn = "2026-04-01")
+                .copy(providers = emptyList()),
+        )
+        rebuild()
+        assertEquals(emptyList(), localSubjects(), "a providerless row reaches no provider")
+
+        val report = RepairScheduleProviders(schedules, FakeUnitOfWork(schedules), clock).apply()
+        assertEquals(listOf(ScheduleId("s-providerless")), report.repaired)
+
+        val subject = subjectFor(localSubjects(), "s-providerless")
+        assertEquals(SubjectState.Active, subject.state)
     }
 
     // ------------------------------------------------------------------------------------------
