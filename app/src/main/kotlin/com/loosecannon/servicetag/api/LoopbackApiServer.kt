@@ -65,7 +65,7 @@ internal sealed interface ListenerState {
     data object Died : ListenerState
 }
 
-/** The errno a bind failure carried, reduced to the three the classification can use. */
+/** The errno a bind failure carried, reduced to what [classifyBindFailure] can use. */
 internal enum class BindErrno { ADDRESS_IN_USE, ACCESS_DENIED, OTHER, UNKNOWN }
 
 /**
@@ -177,9 +177,10 @@ internal class LoopbackApiServer(
      * Binds and starts the worker, or says why it could not. Idempotent: while listening it binds
      * nothing new and answers [StartOutcome.Bound].
      *
-     * Catches [IOException] **and [SecurityException]**, and nothing broader: a denied socket
-     * surfaces as a `SocketException` on the builds observed so far, and a build that throws
-     * `SecurityException` instead must not turn the screen opening into a crash.
+     * Catches [IOException] **and [SecurityException]**, and nothing broader: a denied socket is
+     * expected as a `SocketException` (the one recorded denial logged the bind line rather than
+     * crashing), and a build that throws `SecurityException` instead must not turn the screen
+     * opening into a crash.
      */
     @Synchronized
     fun start(): StartOutcome {
