@@ -812,7 +812,7 @@ The scan writes nothing (spec 1.2 inv. 57). "Change condition" offers the three 
 - Status chips (DEFERRED added) select schedule rows.
 - Condition chips (Down, Degraded, Operational, Not recorded) select rows by condition.
 - When only status chips are active, asset rows are hidden.
-- Category chips and search apply to both kinds.
+- Category chips and search apply to both kinds. (Controller note, 2026-09-26: the dashboard has had no search box since the 1.2 ruling that moved search to the Assets screen; on the dashboard only the category half applies.)
 
 ### 10.3 Asset detail
 
