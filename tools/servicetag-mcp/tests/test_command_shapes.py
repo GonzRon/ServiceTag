@@ -139,3 +139,78 @@ def test_a_row_missing_a_vendored_key_is_refused_and_never_written(paired) -> No
         server_module.update_health_subject(subject_id="h1", name="x")
 
     assert not any(r.method == "PATCH" for r in paired.requests)
+
+
+def test_a_name_outside_the_vendored_command_is_refused_before_any_write(paired, monkeypatch) -> None:
+    """The overlay's safety net: an argument, or a name in `clear_fields`, whose wire key is not in
+    the command being built is refused by name — never dropped. So if the vendored list ever lost a
+    key a tool still takes, the caller's value could not vanish on its way to the phone."""
+    monkeypatch.setattr(
+        command_shapes, "ASSET_KEYS",
+        tuple(key for key in command_shapes.ASSET_KEYS if key != "seasonEndMmdd"),
+    )
+    paired.reply("GET", "/v1/assets/a1", 200, asset_row())
+
+    with pytest.raises(ToolError, match="seasonEndMmdd"):
+        server_module.update_asset(asset_id="a1", season_end_mmdd="10-31")
+    with pytest.raises(ToolError, match="seasonEndMmdd"):
+        server_module.update_asset(asset_id="a1", clear_fields=["season_end_mmdd"])
+
+    assert not any(r.method == "PATCH" for r in paired.requests)
+
+
+COMMAND_TOOLS = [
+    pytest.param(
+        "seasonMode",
+        lambda: server_module.set_season_mode(asset_id="a1", season_mode="YEAR_ROUND"),
+        id="set_season_mode",
+    ),
+    pytest.param(
+        "maintenanceBreak",
+        lambda: server_module.set_maintenance_break(
+            asset_id="a1", blackout_start_mmdd="07-01", blackout_end_mmdd="07-14",
+        ),
+        id="set_maintenance_break",
+    ),
+    pytest.param(
+        "healthPolicy",
+        lambda: server_module.set_health_policy(asset_id="a1", health_aggregation="WORST"),
+        id="set_health_policy",
+    ),
+    pytest.param(
+        "condition",
+        lambda: server_module.record_condition(
+            asset_id="a1", condition="OPERATIONAL", occurred_on=None, occurred_time=None,
+            tz_id="Etc/UTC", reason="", event_id=None,
+        ),
+        id="record_condition",
+    ),
+    pytest.param(
+        "activation",
+        lambda: server_module.start_season(asset_id="a1", occurred_on=None, event_id=None),
+        id="start_season",
+    ),
+    pytest.param(
+        "activation",
+        lambda: server_module.end_season(asset_id="a1", occurred_on=None, event_id=None),
+        id="end_season",
+    ),
+    pytest.param(
+        "healthSubject",
+        lambda: server_module.create_health_subject(
+            asset_id="a1", name="Battery", kind="PART", driver="AGE", nominal_until_days=700,
+            warning_from_days=900, critical_from_days=1100, schedule_id="s1",
+            baseline_profile_id="p1", weight=2, sort_order=0,
+        ),
+        id="create_health_subject-every-argument",
+    ),
+]
+
+
+@pytest.mark.parametrize(("entry", "call"), COMMAND_TOOLS)
+def test_the_command_tools_send_exactly_the_golden_keys(paired, entry, call) -> None:
+    """The tools that are not overlays write their bodies by hand, so no vendored list covers them;
+    this ties each one to its golden entry instead. A key the app's command gains or loses moves the
+    golden file through the JVM test, and then fails here until the tool moves with it."""
+    call()
+    assert sorted(body_of(paired.last())) == sorted(golden()[entry]["keys"])
