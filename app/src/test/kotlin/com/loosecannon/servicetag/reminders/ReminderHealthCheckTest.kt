@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
@@ -73,6 +74,16 @@ internal class FakeScheduleRepository : ScheduleRepository {
     override suspend fun forGroup(groupId: GroupId): List<MaintenanceSchedule> = emptyList()
     override suspend fun deleteAll() = rows.clear()
     override fun observeAll(): Flow<List<MaintenanceSchedule>> = flowOf(rows.values.toList())
+}
+
+/** The same rows, counting every write: what proves a health pass wrote no schedule. */
+internal class RecordingScheduleRepository(private val inner: ScheduleRepository) : ScheduleRepository by inner {
+    var upserts = 0
+
+    override suspend fun upsert(schedule: MaintenanceSchedule) {
+        upserts++
+        inner.upsert(schedule)
+    }
 }
 
 /** In-memory assets: a health run reads them for one thing, the target's lifecycle. */
@@ -159,13 +170,13 @@ private fun derivedState(
 private val TODAY: LocalDate = LocalDate.parse("2026-09-22")
 
 /**
- * The seven findings of #27, each with a positive test **and** a negative control (invariant 51),
+ * The eight findings of #27 (eight since 1.4.1), each with a positive test **and** a negative control (invariant 51),
  * plus the repair policy as a contract: only the alarm and the worker are ever repaired, running a
  * repair twice changes nothing, and nothing resolves a conflict (invariant 50).
  *
  * Off-device throughout. The three provider-side findings are read from B06's real
  * `LocalReminderProvider.health()` rather than re-derived here (carry-forward (a)), so the fold is
- * what is under test and the ratified sentences are drawn once in the codebase; the other four are
+ * what is under test and the ratified sentences are drawn once in the codebase; the other five are
  * this class's own. B05's `PlatformState`, B06's alarm, the backstop's unique work and the two
  * repositories are all fakes.
  */
@@ -199,7 +210,7 @@ class ReminderHealthCheckTest {
         ),
     )
 
-    private fun check() = ReminderHealthCheck(
+    private fun check(schedules: ScheduleRepository = this.schedules) = ReminderHealthCheck(
         provider = provider(),
         platform = platform,
         backstop = backstop,
@@ -394,55 +405,150 @@ class ReminderHealthCheckTest {
         assertEquals("and nothing else was invented either", emptyList<String>(), codes())
     }
 
-    // ---------------------------------------------------------------- SCHEDULE_NO_PROVIDER
+    // ---------------------------------------------------------------- SCHEDULE_NO_PROVIDER / _DISABLED
 
-    /** An ACTIVE schedule asking to be reminded through nothing at all. */
+    /**
+     * #80: ACTIVE schedules asking to be reminded, with no delivery set up at all — the shape the
+     * canonical repair fixes. The ratified 1.4.1 sentence, and the **whole** repair value: one
+     * in-app batch action with no target, never an `Automatic` one the backstop could run unattended.
+     */
     @Test
-    fun anActiveScheduleWithNoEnabledProviderRowIsTheFinding() = runTest {
+    fun aProviderlessActiveScheduleDrawsTheDeliverySentenceAndTheBatchRepair() = runTest {
+        add(scheduleOf(id = "s1", assetId = "a1").copy(providers = emptyList()), derivedState("s1"))
+        add(scheduleOf(id = "s2", assetId = "a1").copy(providers = emptyList()), derivedState("s2"))
+
+        val finding = check().run().single { it.code == "SCHEDULE_NO_PROVIDER" }
+        assertEquals(ReminderHealthSeverity.WARN, finding.severity)
+        assertEquals(
+            "2 schedules have reminders turned on, but reminder delivery isn't configured.",
+            finding.message,
+        )
+        assertEquals(RepairAction.OpenInApp("RESTORE_REMINDER_DELIVERY"), finding.repair)
+        assertEquals("the residual code is not raised", listOf("SCHEDULE_NO_PROVIDER"), codes())
+    }
+
+    /** The plural rule: exactly one gets the singular sentence. */
+    @Test
+    fun oneProviderlessScheduleUsesTheSingularSentence() = runTest {
+        add(scheduleOf(id = "s1", assetId = "a1").copy(providers = emptyList()), derivedState("s1"))
+
+        val finding = check().run().single { it.code == "SCHEDULE_NO_PROVIDER" }
+        assertEquals(
+            "1 schedule has reminders turned on, but reminder delivery isn't configured.",
+            finding.message,
+        )
+        assertEquals(RepairAction.OpenInApp("RESTORE_REMINDER_DELIVERY"), finding.repair)
+    }
+
+    /**
+     * R3: a non-empty set with nothing enabled is someone's deliberate choice, so it is **not** the
+     * batch repair's. It keeps the 1.2 sentence and "Open the schedule" under its own code.
+     */
+    @Test
+    fun aDisabledProviderSetIsTheResidualFindingWithOpenTheSchedule() = runTest {
         add(
-            scheduleOf(id = "s1", assetId = "a1").copy(providers = emptyList()),
+            scheduleOf(id = "s1", assetId = "a1").copy(providers = listOf(ScheduleProviderRow("LOCAL", enabled = false))),
             derivedState("s1"),
         )
-        val finding = check().run().single { it.code == "SCHEDULE_NO_PROVIDER" }
+
+        val finding = check().run().single { it.code == "SCHEDULE_PROVIDER_DISABLED" }
         assertEquals(ReminderHealthSeverity.WARN, finding.severity)
         assertEquals("1 schedules have reminders switched on but no way to deliver them.", finding.message)
         assertEquals(RepairAction.OpenInApp("OPEN_SCHEDULE:s1"), finding.repair)
+        assertEquals("the batch finding is not raised", listOf("SCHEDULE_PROVIDER_DISABLED"), codes())
+    }
+
+    /**
+     * Both shapes at once: each finding counts its own rows and no row is in both. The lowest id
+     * overall is a providerless one, so a residual finding that targeted the merged set would open
+     * the wrong schedule.
+     */
+    @Test
+    fun theTwoShapesNeverShareARowAndCountSeparately() = runTest {
+        listOf("a-1", "a-2", "a-3").forEach { id ->
+            add(scheduleOf(id = id, assetId = "a1").copy(providers = emptyList()), derivedState(id))
+        }
+        listOf("b-1", "b-2").forEach { id ->
+            add(
+                scheduleOf(id = id, assetId = "a1").copy(providers = listOf(ScheduleProviderRow("LOCAL", enabled = false))),
+                derivedState(id),
+            )
+        }
+
+        val findings = check().run()
+        assertEquals(listOf("SCHEDULE_NO_PROVIDER", "SCHEDULE_PROVIDER_DISABLED"), findings.map { it.code })
+        val batch = findings.single { it.code == "SCHEDULE_NO_PROVIDER" }
+        assertEquals("3 schedules have reminders turned on, but reminder delivery isn't configured.", batch.message)
+        assertEquals(RepairAction.OpenInApp("RESTORE_REMINDER_DELIVERY"), batch.repair)
+        val residual = findings.single { it.code == "SCHEDULE_PROVIDER_DISABLED" }
+        assertEquals("2 schedules have reminders switched on but no way to deliver them.", residual.message)
+        assertEquals(RepairAction.OpenInApp("OPEN_SCHEDULE:b-1"), residual.repair)
     }
 
     /**
      * Three controls on one condition, because the condition has three clauses: an enabled row, a
      * disabled schedule and an archived one. Without the lifecycle clause every archived schedule
-     * on the phone raises a finding for ever.
+     * on the phone raises a finding for ever. Each lifecycle control is run with **both** shapes,
+     * and neither code may appear.
      */
     @Test
     fun anEnabledRowOrANonActiveScheduleIsSilent() = runTest {
         add(scheduleOf(id = "s1", assetId = "a1"), derivedState("s1"))
-        assertFalse("an enabled LOCAL row is the healthy case", "SCHEDULE_NO_PROVIDER" in codes())
+        assertFalse("an enabled LOCAL row is the healthy case", deliveryCodes().any())
 
-        schedules.rows.clear()
-        add(
-            scheduleOf(id = "s2", assetId = "a1", status = ScheduleStatus.PAUSED).copy(providers = emptyList()),
-            derivedState("s2"),
-        )
-        assertFalse("paused", "SCHEDULE_NO_PROVIDER" in codes())
-
-        schedules.rows.clear()
-        add(
-            scheduleOf(id = "s3", assetId = "a1", status = ScheduleStatus.ARCHIVED).copy(providers = emptyList()),
-            derivedState("s3"),
-        )
-        assertFalse("archived", "SCHEDULE_NO_PROVIDER" in codes())
+        listOf(ScheduleStatus.PAUSED, ScheduleStatus.ARCHIVED).forEach { status ->
+            unrouted.forEach { (shape, providers) ->
+                schedules.rows.clear()
+                add(
+                    scheduleOf(id = "s2", assetId = "a1", status = status).copy(providers = providers),
+                    derivedState("s2"),
+                )
+                assertEquals("$status, $shape", emptyList<String>(), deliveryCodes())
+            }
+        }
     }
 
-    /** A schedule that was never asked to remind anyone is not missing a way to do it. */
+    /** A schedule that was never asked to remind anyone is not missing a way to do it, in either shape. */
     @Test
     fun aScheduleWithRemindersOffIsSilent() = runTest {
-        add(
-            scheduleOf(id = "s1", assetId = "a1").copy(providers = emptyList(), remindersEnabled = false),
-            derivedState("s1"),
-        )
-        assertFalse("SCHEDULE_NO_PROVIDER" in codes())
+        unrouted.forEach { (shape, providers) ->
+            schedules.rows.clear()
+            add(
+                scheduleOf(id = "s1", assetId = "a1").copy(providers = providers, remindersEnabled = false),
+                derivedState("s1"),
+            )
+            assertEquals(shape, emptyList<String>(), deliveryCodes())
+        }
     }
+
+    /**
+     * Never unattended: the backstop's pass reports the batch finding and writes nothing. The one
+     * canonical repair runs only on the owner's tap, so the first backstop run after an install
+     * cannot repair a phone behind the owner's back.
+     */
+    @Test
+    fun runAndRepairNeverWritesAProvider() = runTest {
+        val recording = RecordingScheduleRepository(schedules)
+        val providerless = scheduleOf(id = "s1", assetId = "a1").copy(providers = emptyList())
+        add(providerless, derivedState("s1"))
+        recording.upserts = 0
+
+        val found = check(recording).runAndRepair()
+
+        assertEquals("no schedule was written", 0, recording.upserts)
+        assertEquals("the row is as it was", providerless, schedules.rows["s1"])
+        assertEquals("and the finding is still there for the owner", listOf("SCHEDULE_NO_PROVIDER"), found.map { it.code })
+    }
+
+    /** The two unrouted shapes the lifecycle controls run over, named for the failure message. */
+    private val unrouted = listOf(
+        "no provider rows" to emptyList<ScheduleProviderRow>(),
+        "a disabled set" to listOf(ScheduleProviderRow("LOCAL", enabled = false)),
+    )
+
+    /** The two delivery codes, and only those: the controls are about them, not the rest. */
+    private suspend fun deliveryCodes(): List<String> =
+        codes().filter { it == "SCHEDULE_NO_PROVIDER" || it == "SCHEDULE_PROVIDER_DISABLED" }
 
     // ---------------------------------------------------------------- NO_DATA
 
@@ -596,7 +702,7 @@ class ReminderHealthCheckTest {
      * Non-vacuous twice over: each finding is shown first with its target in service, and the only
      * thing that changes is the target's lifecycle.
      *
-     * **Which finding sits on which target matters.** `SCHEDULE_NO_PROVIDER` is proved on the
+     * **Which finding sits on which target matters.** The two delivery findings are proved on the
      * **group** target and `NO_DATA` on the **asset** target, because a group-targeted schedule
      * carries no meter rule (invariant 2) and so can never reach `NO_DATA`'s
      * missing-baseline condition. Pairing them the other way round would prove one of the two
@@ -609,6 +715,10 @@ class ReminderHealthCheckTest {
             derivedState("g1"),
         )
         add(
+            scheduleOf(id = "g2", groupId = "grp1").copy(providers = listOf(ScheduleProviderRow("LOCAL", enabled = false))),
+            derivedState("g2"),
+        )
+        add(
             scheduleOf(
                 id = "s1",
                 assetId = "a1",
@@ -618,8 +728,8 @@ class ReminderHealthCheckTest {
             derivedState("s1"),
         )
         assertEquals(
-            "in service, both findings stand",
-            listOf("SCHEDULE_NO_PROVIDER", "NO_DATA"),
+            "in service, all three findings stand",
+            listOf("SCHEDULE_NO_PROVIDER", "SCHEDULE_PROVIDER_DISABLED", "NO_DATA"),
             codes(),
         )
 
@@ -648,6 +758,10 @@ class ReminderHealthCheckTest {
             derivedState("s1"),
         )
         add(
+            scheduleOf(id = "s3", assetId = "a1").copy(providers = listOf(ScheduleProviderRow("LOCAL", enabled = false))),
+            derivedState("s3"),
+        )
+        add(
             scheduleOf(
                 id = "s2",
                 assetId = "a1",
@@ -665,7 +779,7 @@ class ReminderHealthCheckTest {
             setOf("ARM_DIGEST_ALARM", "ENQUEUE_BACKSTOP"),
             findings.mapNotNull { (it.repair as? RepairAction.Automatic)?.code }.toSet(),
         )
-        assertEquals("all six of them", 6, findings.size)
+        assertEquals("all seven of them", 7, findings.size)
     }
 
     /**

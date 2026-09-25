@@ -13,21 +13,38 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.MainActivity
+import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
+import java.time.LocalDate
+import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** The one ratified sentence this suite drives: `DIGEST_ALARM_MISSING`'s (master plan §17.1a). */
+/** The ratified sentence this suite provokes on every test: `DIGEST_ALARM_MISSING`'s (master plan §17.1a). */
 private const val ALARM_FINDING =
     "The daily reminder check is not scheduled, so today's maintenance may go unannounced."
 
+/** 1.4.1's ratified P141-1b and P141-2: one providerless schedule, and the button that fixes it. */
+private const val DELIVERY_FINDING = "1 schedule has reminders turned on, but reminder delivery isn't configured."
+private const val FIX_DELIVERY = "Fix reminder delivery"
+
 /**
- * #27's Health section, on a device — the three things no JVM test can show.
+ * #27's Health section, on a device — the four things no JVM test can show.
  *
  * That it is **reachable**: through the real bottom bar, the real Maintenance destination and the
  * real Navigation 3 back stack, which until this brief popped straight back off a placeholder.
@@ -118,7 +135,67 @@ class ReminderHealthScreenTest {
         }
         rule.onAllNodesWithText("Reschedule the check").assertCountEquals(0)
     }
+
+    /**
+     * #80's one tap, over the real store: a Room-backed ACTIVE schedule with reminders on and no
+     * delivery set up draws P141-1b and P141-2; one tap runs the canonical repair, the sweep and
+     * the refresh, the row is gone, and the stored schedule now carries the one enabled row the
+     * editor would have written.
+     */
+    @Test fun tappingFixReminderDeliveryClearsTheFinding() {
+        val graph = app.graph
+        val today = LocalDate.now()
+        val stamp = System.currentTimeMillis()
+        runBlocking {
+            val asset = graph.createAsset.run(AssetCommand(name = "Pump A"))
+            graph.schedules.upsert(
+                MaintenanceSchedule(
+                    id = ScheduleId(SCHEDULE_ID),
+                    target = ScheduleTarget.AssetTarget(asset.id),
+                    title = "Service check",
+                    description = "",
+                    timeInterval = 3,
+                    timeUnit = RecurrenceUnit.MONTH,
+                    timeBasis = TimeBasis.FIXED,
+                    anchorOn = today.toString(),
+                    leadDays = 0,
+                    meterDefinitionId = null,
+                    meterInterval = null,
+                    anchorMeter = null,
+                    meterLead = null,
+                    servicePolicy = ServicePolicy.CONTINUOUS,
+                    policyOffsetDays = null,
+                    completionMode = CompletionMode.QUICK,
+                    profileId = null,
+                    remindersEnabled = true,
+                    status = ScheduleStatus.ACTIVE,
+                    postponedDueOn = null,
+                    createdAt = stamp,
+                    updatedAt = stamp,
+                    ruleChangedAt = stamp,
+                    providers = emptyList(),
+                ),
+            )
+        }
+        openHealth()
+        rule.awaitText(DELIVERY_FINDING)
+        rule.onNodeWithText(DELIVERY_FINDING).assertIsDisplayed()
+
+        rule.onNodeWithText(FIX_DELIVERY).performScrollTo().performClick()
+
+        rule.waitUntil(TIMEOUT_MS) {
+            rule.onAllNodesWithText(DELIVERY_FINDING).fetchSemanticsNodes().isEmpty()
+        }
+        rule.onAllNodesWithText(FIX_DELIVERY).assertCountEquals(0)
+        assertEquals(
+            listOf(ScheduleProviderRow("LOCAL", enabled = true)),
+            runBlocking { graph.schedules.get(ScheduleId(SCHEDULE_ID)) }?.providers,
+        )
+    }
 }
+
+/** The seeded schedule's id; the store is wiped before every test, so it cannot collide. */
+private const val SCHEDULE_ID = "p141-providerless"
 
 /** The same budget the shell's own waits use. */
 private const val TIMEOUT_MS = 5_000L
