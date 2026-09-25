@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.loosecannon.servicetag.core.model.AttachmentKind
@@ -15,7 +16,9 @@ import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
@@ -25,7 +28,9 @@ import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateAttachmentCommand
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.IOException
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.properties.Delegates
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -34,12 +39,14 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -56,6 +63,11 @@ import org.junit.Test
  * the mapper and the use cases are the production ones. `viewModelScope` dispatches on
  * `Dispatchers.Main`, so the main dispatcher is an unconfined test one for the length of each
  * test; every assertion waits for a state rather than reading `value` after a write.
+ *
+ * The model's own work — the scan, the three writes, the folder re-read — runs on a
+ * `StandardTestDispatcher` over the same [scheduler], so all of it happens on this test's thread
+ * and in this test's time. Every case that builds a model ends with [clearModels], which cancels
+ * that work and lets the cancellation finish before `runTest` returns (#65).
  *
  * `messages` has no replay by design, so a test that wants a line subscribes before the call
  * that produces it.
@@ -81,9 +93,10 @@ class AttachmentsSectionViewModelTest {
     private var assetId: AssetId by Delegates.notNull()
 
     /**
-     * Every model the test builds lives in here, so `tearDown` can clear it: `viewModelScope` is
+     * Every model the test builds lives in here, so [clearModels] can clear it: `viewModelScope` is
      * cancelled by the store in production and by nothing at all in a plain JVM test, which left
-     * the scan and the `stateIn` sharer running past `graph.close()` and `resetMain()`.
+     * the scan and the `stateIn` sharer running past `graph.close()` and `resetMain()`. `tearDown`
+     * clears it again, as a safety net that by then has nothing left to cancel.
      */
     private val store = ViewModelStore()
 
@@ -117,13 +130,16 @@ class AttachmentsSectionViewModelTest {
         updateAttachment: UpdateAttachment = graph.updateAttachment,
         deleteAttachment: DeleteAttachment = graph.deleteAttachment,
         storage: AttachmentStorage = graph.attachmentStorage,
+        addAttachment: AddAttachment = graph.addAttachment,
     ): AttachmentsSectionViewModel {
         val factory = viewModelFactory {
             initializer {
                 AttachmentsSectionViewModel(
-                    owner, graph.attachments, storage, graph.addAttachment,
+                    owner, graph.attachments, storage, addAttachment,
                     updateAttachment, deleteAttachment, graph.thumbnails,
                     today = today,
+                    // The scheduler Main and the database already share: no pool thread under test.
+                    io = StandardTestDispatcher(scheduler),
                 )
             }
         }
@@ -131,6 +147,18 @@ class AttachmentsSectionViewModelTest {
             AttachmentLocator.dirFor(owner),
             AttachmentsSectionViewModel::class,
         ]
+    }
+
+    /**
+     * The last line of every case that builds a model. A signal a case waits for is never the end
+     * of the work behind it — a save's `refresh` bump and the scan pass it starts come after — so
+     * the models are cleared here, inside `runTest`, and the cancellation that starts is drained on
+     * the test's own clock before the body returns. Clearing only in `tearDown` came after
+     * `runTest` had stopped draining, and left that cancellation to finish wherever it could.
+     */
+    private fun TestScope.clearModels() {
+        store.clear()
+        advanceUntilIdle()
     }
 
     /**
@@ -166,6 +194,7 @@ class AttachmentsSectionViewModelTest {
         assertEquals("Choose an attachment folder in Settings first", said.await())
         assertEquals(emptyList<AttachmentRowState>(), vm.state.value.rows)
         assertTrue(graph.attachmentStorage.store.files.isEmpty())
+        clearModels()
     }
 
     @Test fun withAFolderChosenAddedFilesAppearAsRowsOrderedByName() = runTest {
@@ -194,6 +223,7 @@ class AttachmentsSectionViewModelTest {
         )
         assertEquals(listOf(true, true), state.rows.map { it.present })
         assertNull(state.progress)
+        clearModels()
     }
 
     @Test fun aScanThatCannotReachTheFolderSaysSoAndKeepsTheRowsAndTheCollectorAlive() = runTest {
@@ -206,7 +236,7 @@ class AttachmentsSectionViewModelTest {
         backgroundScope.launch { healthy.state.collect() }
         healthy.add(listOf(picked("Guide.pdf")))
         healthy.state.first { it.rows.size == 1 }
-        store.clear()
+        clearModels()
 
         val flaky = FlakyExistsStorage(graph.attachmentStorage)
         val vm = model(storage = flaky)
@@ -218,6 +248,7 @@ class AttachmentsSectionViewModelTest {
         flaky.healthy = true
         vm.refreshStore()
         assertEquals(true, vm.state.first { it.rows.singleOrNull()?.present == true }.rows.single().present)
+        clearModels()
     }
 
     @Test fun theProgressLineNamesTheFileNumberAndTheTotal() {
@@ -226,23 +257,29 @@ class AttachmentsSectionViewModelTest {
 
     @Test fun addingSeveralFilesReportsProgressAndKeepsGoingPastAFailure() = runTest {
         hotTub()
-        val vm = model()
+        // The first file's bytes are held at the store until the test has seen the first progress
+        // line: otherwise all three adds could finish before the collector ever observes a
+        // non-null progress (the conflated state flow keeps only the latest). The gate suspends
+        // and never blocks — the add runs on this test's own thread now, and a blocking wait
+        // there would stop the only thread that could ever open it.
+        val gated = GatedPutStorage(graph.attachmentStorage)
+        val vm = model(
+            addAttachment = AddAttachment(
+                graph.attachments, graph.assets, graph.events, gated,
+                graph.uow, graph.ids, graph.clock,
+            ),
+        )
         val seen = mutableListOf<AttachmentsSectionState>()
         backgroundScope.launch { vm.state.collect { seen += it } }
         val said = mutableListOf<String>()
         backgroundScope.launch(Dispatchers.Main) { vm.messages.collect { said += it } }
 
-        // The first file's bytes are handed over only once the test has seen the first progress
-        // line: on a fast IO thread all three adds would otherwise finish before the collector
-        // ever observes a non-null progress (the conflated state flow keeps only the latest).
-        val gate = java.util.concurrent.CountDownLatch(1)
-        val first = PickedFile("First.pdf", "application/pdf", 1L) {
-            gate.await()
-            "x".toByteArray().inputStream()
-        }
-        vm.add(listOf(first, broken("Middle.pdf"), picked("Last.pdf")))
+        vm.add(listOf(picked("First.pdf"), broken("Middle.pdf"), picked("Last.pdf")))
         vm.state.first { it.progress == "Adding 1 of 3…" }
-        gate.countDown()
+        // The first copy is parked at the gate, and the section is saying so.
+        gated.reached.await()
+        assertEquals("Adding 1 of 3…", vm.state.value.progress)
+        gated.gate.complete(Unit)
 
         val state = vm.state.first { it.rows.size == 2 && it.progress == null }
         assertEquals(listOf("First.pdf", "Last.pdf"), state.rows.map { it.displayName })
@@ -257,6 +294,7 @@ class AttachmentsSectionViewModelTest {
             emptyList<String>(),
             progressLines - setOf("Adding 1 of 3…", "Adding 2 of 3…", "Adding 3 of 3…"),
         )
+        clearModels()
     }
 
     @Test fun anAccessLostStoreRefusesAddAndSaysWhyOnce() = runTest {
@@ -276,6 +314,7 @@ class AttachmentsSectionViewModelTest {
         assertEquals(StoreState.AccessLost("Attachments"), after.store)
         assertEquals(before.map { it.id }, after.rows.map { it.id })
         assertEquals(1, graph.attachmentStorage.store.files.size)
+        clearModels()
     }
 
     @Test fun aRowWhoseBytesAreGoneIsMarkedNotPresent() = runTest {
@@ -297,6 +336,7 @@ class AttachmentsSectionViewModelTest {
         assertEquals("Guide.pdf", rows.single().displayName)
         assertFalse(rows.single().present)
         assertNull(rows.single().thumbnail)
+        clearModels()
     }
 
     @Test fun savingRenamesTheRowAndLeavesTheLocatorAlone() = runTest {
@@ -318,6 +358,7 @@ class AttachmentsSectionViewModelTest {
         assertEquals("2026-09-14", after.capturedOn)
         assertEquals(before.locator, after.locator)
         assertTrue(before.locator in graph.attachmentStorage.store.files)
+        clearModels()
     }
 
     @Test fun savingNothingIsSilent() = runTest {
@@ -329,15 +370,15 @@ class AttachmentsSectionViewModelTest {
 
         val said = mutableListOf<String>()
         backgroundScope.launch(Dispatchers.Main) { vm.messages.collect { said += it } }
-        // Both `saved` signals are awaited, not counted after the fact. The two saves run
-        // through Room's own executor, so which of them finishes first is not ours to order:
-        // the rename's state change is **not** a barrier for the `Unchanged` one, and reading
-        // a list afterwards dropped whichever had not landed yet. Awaiting exactly two — both
-        // subscribed before either call, `saved` having no replay — is the barrier that says
-        // both have been the whole way through the path, whatever order they took. **How this
-        // fails:** if only one signal ever lands, `await()` never returns, so the RED shape is a
-        // `runTest` timeout and not an assertion message — the same shape, for the same reason,
-        // as the cold-launch badge case in `ReminderHealthViewModelTest`.
+        // Both `saved` signals are awaited, not counted after the fact. The two saves no longer
+        // race on a pool thread — they run on this test's scheduler — but the order it
+        // interleaves them in is still not this case's to assume: the rename's state change is
+        // **not** a barrier for the `Unchanged` one. Awaiting exactly two — both subscribed
+        // before either call, `saved` having no replay — is the barrier that says both have been
+        // the whole way through the path, whatever order they took. **How this fails:** if only
+        // one signal ever lands, `await()` never returns, so the RED shape is a `runTest` timeout
+        // and not an assertion message — the same shape, for the same reason, as the cold-launch
+        // badge case in `ReminderHealthViewModelTest`.
         val closed = async(Dispatchers.Main) { vm.saved.take(2).toList() }
 
         vm.save(row.id, UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes))
@@ -347,6 +388,7 @@ class AttachmentsSectionViewModelTest {
         assertEquals(listOf(row.id, row.id), closed.await())
         vm.state.first { it.rows.singleOrNull()?.displayName == "Renamed.pdf" }
         assertEquals(emptyList<String>(), said)
+        clearModels()
     }
 
     @Test fun deletingRemovesTheRowAndTheBytes() = runTest {
@@ -364,6 +406,7 @@ class AttachmentsSectionViewModelTest {
         assertEquals(row.id, gone.await())
         assertEquals(emptyList<AttachmentRowState>(), vm.state.first { it.rows.isEmpty() }.rows)
         assertFalse(row.locator in graph.attachmentStorage.store.files)
+        clearModels()
     }
 
     @Test fun anEventOwnerSeesOnlyItsOwnFiles() = runTest {
@@ -396,6 +439,7 @@ class AttachmentsSectionViewModelTest {
             eventVm.state.first { it.rows.size == 1 }.rows.map { it.displayName },
         )
         assertEquals(listOf("Asset.pdf"), assetVm.state.value.rows.map { it.displayName })
+        clearModels()
     }
 
     @Test fun capturedOnDefaultsToTodayForAPickedFile() = runTest {
@@ -404,6 +448,7 @@ class AttachmentsSectionViewModelTest {
         backgroundScope.launch { vm.state.collect() }
         vm.add(listOf(picked("guide.pdf")))
         assertEquals("2026-09-16", vm.state.first { it.rows.size == 1 }.rows.single().capturedOn)
+        clearModels()
     }
 
     @Test fun comingBackFromSettingsWithAFolderChosenFlipsTheSectionOver() = runTest {
@@ -418,6 +463,7 @@ class AttachmentsSectionViewModelTest {
         vm.refreshStore()
 
         assertEquals(READY, vm.state.first { it.store is StoreState.Ready }.store)
+        clearModels()
     }
 
     @Test fun aResubscriptionAlsoReReadsTheFolder() = runTest {
@@ -434,6 +480,7 @@ class AttachmentsSectionViewModelTest {
 
         backgroundScope.launch { vm.state.collect() }
         assertEquals(READY, vm.state.first { it.store is StoreState.Ready }.store)
+        clearModels()
     }
 
     @Test fun aSaveThatCannotBeWrittenSaysSoAndLeavesTheSheetOpen() = runTest {
@@ -456,6 +503,7 @@ class AttachmentsSectionViewModelTest {
 
         assertEquals("Could not save Installation guide", said.await())
         assertEquals(emptyList<String>(), closed)
+        clearModels()
     }
 
     @Test fun aRefusedSaveKeepsTheSheetOpenAndAGoodOneClosesIt() = runTest {
@@ -477,6 +525,7 @@ class AttachmentsSectionViewModelTest {
         vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes))
         vm.state.first { it.rows.singleOrNull()?.displayName == "Renamed.pdf" }
         assertEquals(listOf(row.id), closed)
+        clearModels()
     }
 
     @Test fun aDeleteThatCannotBeWrittenSaysSoInsteadOfCrashing() = runTest {
@@ -501,6 +550,7 @@ class AttachmentsSectionViewModelTest {
         assertEquals(emptyList<String>(), gone)
         // The bytes are still there, because the row that names them is still there.
         assertTrue(row.locator in graph.attachmentStorage.store.files)
+        clearModels()
     }
 
     /**
@@ -522,6 +572,84 @@ class AttachmentsSectionViewModelTest {
         val row = vm.state.first { it.rows.size == 1 }.rows.single()
         assertEquals(AttachmentKind.PHOTO, row.kind)
         assertFalse(row.isImage)
+        clearModels()
+    }
+
+    /**
+     * #65: nothing the model does reaches the folder or a transaction on any thread but this
+     * test's. The seams sit on the model's five hops — the folder re-read a subscription starts,
+     * the scan pass, add, save and delete — so a hop left on a real dispatcher shows up here as a
+     * pool thread, by name.
+     */
+    @Test fun everyPathRunsOnTheTestsThread() = runTest {
+        val testThread = Thread.currentThread()
+        hotTub()
+        val seams = ThreadSeams(graph.attachmentStorage, graph.uow)
+        val vm = model(
+            storage = seams.storage,
+            addAttachment = AddAttachment(
+                graph.attachments, graph.assets, graph.events, seams.storage,
+                seams.uow, graph.ids, graph.clock,
+            ),
+            updateAttachment = UpdateAttachment(graph.attachments, seams.uow, graph.clock),
+            deleteAttachment = DeleteAttachment(graph.attachments, seams.storage, seams.uow),
+        )
+        // A subscription, and the folder re-read it starts.
+        val watching = launch { vm.state.collect() }
+
+        // An add, and the scan pass behind it.
+        vm.add(listOf(picked("Guide.pdf")))
+        val row = vm.state.first { it.rows.size == 1 }.rows.single()
+
+        val closed = async(Dispatchers.Main) { vm.saved.first() }
+        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes))
+        closed.await()
+
+        val gone = async(Dispatchers.Main) { vm.deleted.first() }
+        vm.delete(row.id)
+        gone.await()
+
+        // A resubscription after the grace: only its re-read can see what changed meanwhile.
+        watching.cancelAndJoin()
+        advanceTimeBy(SUBSCRIPTION_GRACE_MS * 2)
+        graph.attachmentStorage.state = StoreState.AccessLost("Attachments")
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.store is StoreState.AccessLost }
+        clearModels()
+
+        val elsewhere = seams.seen
+            .filter { it.thread !== testThread }
+            .map { "${it.what} on ${it.thread.name}" }
+        assertEquals("work that ran off the test's thread", emptyList<String>(), elsewhere)
+        // Every seam was reached, so the empty list above is not an empty test.
+        val reached = seams.seen.map { it.what }.toSet()
+        val expected = setOf("state", "store", "exists", "put", "delete", "write")
+        assertEquals(expected, expected.filter { it in reached }.toSet())
+    }
+
+    /**
+     * #65: a signal a case waits for is not the end of the work behind it — a save's and a
+     * delete's `refresh` bump, and the scan pass each starts, come after — so [clearModels] must
+     * leave the model's scope finished, not merely cancelled, before `runTest` returns.
+     */
+    @Test fun clearingInsideTheTestLeavesNoWorkRunning() = runTest {
+        hotTub()
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+        vm.add(listOf(picked("guide.pdf")))
+        val row = vm.state.first { it.rows.size == 1 }.rows.single()
+
+        val closed = async(Dispatchers.Main) { vm.saved.first() }
+        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes))
+        closed.await()
+        val gone = async(Dispatchers.Main) { vm.deleted.first() }
+        vm.delete(row.id)
+        gone.await()
+        vm.refreshStore()
+
+        val scope = vm.viewModelScope.coroutineContext.job
+        clearModels()
+        assertTrue("the model's scope finished inside the test", scope.isCompleted)
     }
 
     /** A storage whose store answers `exists` with an IO failure until told to behave. */
@@ -534,6 +662,85 @@ class AttachmentsSectionViewModelTest {
                     if (!healthy) throw StoreIoException("rigged presence failure")
                     return inner.exists(locator)
                 }
+            }
+        }
+    }
+
+    /**
+     * A storage whose store's `put` says so on [reached] and then waits at [gate] until the test
+     * opens it. Both suspend: the add that gets here runs on the test's own thread, which has to
+     * stay free to open the gate.
+     */
+    private class GatedPutStorage(private val real: AttachmentStorage) : AttachmentStorage {
+        val reached = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<Unit>()
+        override fun state() = real.state()
+        override fun store(): AttachmentStore? = real.store()?.let { inner ->
+            object : AttachmentStore by inner {
+                override suspend fun put(locator: String, source: ByteSource): StoredBytes {
+                    reached.complete(Unit)
+                    gate.await()
+                    return inner.put(locator, source)
+                }
+            }
+        }
+    }
+
+    /**
+     * Notes the thread every call into the folder or a transaction arrives on: the storage the
+     * scan and the re-read ask and add and delete write through, and the unit of work add, save
+     * and delete commit through.
+     */
+    private class ThreadSeams(
+        private val real: AttachmentStorage,
+        private val realUow: UnitOfWork,
+    ) {
+        class Seen(val what: String, val thread: Thread)
+
+        val seen = CopyOnWriteArrayList<Seen>()
+
+        private fun note(what: String) {
+            seen += Seen(what, Thread.currentThread())
+        }
+
+        val storage = object : AttachmentStorage {
+            override fun state(): StoreState {
+                note("state")
+                return real.state()
+            }
+
+            override fun store(): AttachmentStore? {
+                note("store")
+                return real.store()?.let { inner ->
+                    object : AttachmentStore by inner {
+                        override suspend fun put(locator: String, source: ByteSource): StoredBytes {
+                            note("put")
+                            return inner.put(locator, source)
+                        }
+
+                        override suspend fun exists(locator: String): Boolean {
+                            note("exists")
+                            return inner.exists(locator)
+                        }
+
+                        override suspend fun delete(locator: String) {
+                            note("delete")
+                            inner.delete(locator)
+                        }
+                    }
+                }
+            }
+        }
+
+        val uow = object : UnitOfWork {
+            override suspend fun <T> write(block: suspend () -> T): T {
+                note("write")
+                return realUow.write(block)
+            }
+
+            override suspend fun <T> read(block: suspend () -> T): T {
+                note("read")
+                return realUow.read(block)
             }
         }
     }
