@@ -7,7 +7,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
@@ -52,26 +51,14 @@ class HealthPluralsContractTest {
         assertEquals("5 days", plurals.ageDays(5))
         assertEquals("Oil change is 1 day overdue", plurals.daysOverdue("Oil change", 1))
         assertEquals("Oil change is 5 days overdue", plurals.daysOverdue("Oil change", 5))
-
-        // The plurals resource names the same two forms: under English rules it reads exactly the same.
-        val target = InstrumentationRegistry.getInstrumentation().targetContext
-        val config = Configuration(target.resources.configuration).apply { setLocale(Locale.ENGLISH) }
-        val english = target.createConfigurationContext(config).resources
-        listOf(1, 5).forEach { n ->
-            assertEquals(english.getQuantityString(R.plurals.health_age_days, n, n), plurals.ageDays(n.toLong()))
-            assertEquals(
-                english.getQuantityString(R.plurals.health_days_overdue, n, "Oil change", n),
-                plurals.daysOverdue("Oil change", n.toLong()),
-            )
-        }
     }
 
     /**
      * The ruling on B12's review, I-2: the form is chosen by **English** rules whatever the device
      * language, because the ratified strings are English. French puts 0 in `one`, Russian puts 21 in
      * `one`, and Japanese has no `one` at all — so on each, 0 still reads "0 days", 21 "21 days" and
-     * 1 "1 day". The reader changes nothing in the resources it is given: the rest of them stay in
-     * their own language.
+     * 1 "1 day", read straight from the four day-form strings. The reader changes nothing in the
+     * resources it is given: the rest of them stay in their own language.
      */
     @Test fun theFormFollowsEnglishRulesOnAnyDeviceLanguage() {
         val target = InstrumentationRegistry.getInstrumentation().targetContext
@@ -86,6 +73,7 @@ class HealthPluralsContractTest {
             assertEquals("$locale", "0 days", words.ageDays(0))
             assertEquals("$locale", "1 day", words.ageDays(1))
             assertEquals("$locale", "21 days", words.ageDays(21))
+            assertEquals("$locale", "Oil change is 0 days overdue", words.daysOverdue("Oil change", 0))
             assertEquals("$locale", "Oil change is 1 day overdue", words.daysOverdue("Oil change", 1))
             assertEquals("$locale", "Oil change is 21 days overdue", words.daysOverdue("Oil change", 21))
             assertEquals("$locale: the rest keeps its language", cancel, local.getString(android.R.string.cancel))
