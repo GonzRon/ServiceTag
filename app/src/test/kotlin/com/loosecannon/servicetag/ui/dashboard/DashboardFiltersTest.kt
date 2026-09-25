@@ -57,10 +57,13 @@ class DashboardFiltersTest {
         assertFalse(DashboardFilters(status = DueStatus.DUE).admits(held))
     }
 
-    /** The four chips are the ratified words S8, S10, S12 and S26, in that order, and nothing else. */
+    /**
+     * The four chips are the ratified words S12, S10, S8 and S26 and nothing else, in spec §10.2's
+     * order: worst first.
+     */
     @Test fun theChipsAreTheFourRatifiedWords() {
         assertEquals(
-            listOf("Operational", "Degraded", "Down", "Not recorded"),
+            listOf("Down", "Degraded", "Operational", "Not recorded"),
             ConditionChip.entries.map { it.label },
         )
         assertTrue(ConditionChip.NOT_RECORDED.matches(null))

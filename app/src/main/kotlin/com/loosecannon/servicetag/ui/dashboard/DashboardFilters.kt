@@ -40,14 +40,15 @@ internal const val STATUS_LABEL = "Maintenance status"
 internal const val CHIP_NOT_RECORDED = "Not recorded"
 
 /**
- * The four condition chips (spec §10.2; master plan §13.2), in the ratified order S8, S10, S12,
- * S26. [NOT_RECORDED] is the absence of a condition row — nothing stores an UNKNOWN — so it matches
- * a null condition and nothing else.
+ * The four condition chips (master plan §13.2: S8, S10, S12, S26), drawn in spec §10.2's order —
+ * Down, Degraded, Operational, Not recorded — worst first, like the status picker and ATTENTION (the
+ * controller's ruling on the review's M-2). [NOT_RECORDED] is the absence of a condition row —
+ * nothing stores an UNKNOWN — so it matches a null condition and nothing else.
  */
 enum class ConditionChip(val condition: OperationalCondition?) {
-    OPERATIONAL(OperationalCondition.OPERATIONAL),
-    DEGRADED(OperationalCondition.DEGRADED),
     DOWN(OperationalCondition.DOWN),
+    DEGRADED(OperationalCondition.DEGRADED),
+    OPERATIONAL(OperationalCondition.OPERATIONAL),
     NOT_RECORDED(null),
     ;
 
@@ -138,7 +139,7 @@ internal fun DashboardFilters.narrow(sections: List<AttentionGroup>): List<Atten
     }
 
 /**
- * The two controls, side by side under the search box. Read-only fields with menus, the same idiom
+ * The two controls, side by side at the top of the list. Read-only fields with menus, the same idiom
  * the setup editors use for a value that is picked and never typed.
  */
 @OptIn(ExperimentalMaterial3Api::class)
