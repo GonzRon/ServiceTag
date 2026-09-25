@@ -631,18 +631,16 @@ class ScheduleEditViewModel(
 
     /**
      * `FORM` is unreachable for a group target (D-12): it carries no profile, so a form would have
-     * nothing to collect. Choosing `QUICK` also drops the profile, which is the field that would
-     * otherwise be sent for a mode that does not use it.
+     * nothing to collect. The mode alone no longer touches `profileId` (#81): a profile is one
+     * Asset's quick action in either completion mode (`ScheduleCommands.kt:110`), so switching to
+     * `QUICK` must not silently clear a chosen one — only `onProfile(null)`, the picker's `None`
+     * row, does that.
      */
     fun onCompletionMode(value: CompletionMode) = clearing(
         ScheduleField.COMPLETION_MODE,
         ScheduleField.PROFILE,
     ) { form ->
-        when {
-            form.isGroup && value == CompletionMode.FORM -> form
-            value == CompletionMode.QUICK -> form.copy(completionMode = value, profileId = null)
-            else -> form.copy(completionMode = value)
-        }
+        if (form.isGroup && value == CompletionMode.FORM) form else form.copy(completionMode = value)
     }
 
     fun onProfile(value: ProfileId?) = clearing(ScheduleField.PROFILE) { form ->
@@ -836,7 +834,10 @@ class ScheduleEditViewModel(
             servicePolicy = servicePolicy ?: ServicePolicy.CONTINUOUS,
             policyOffsetDays = policyOffsetDays,
             completionMode = if (group != null) CompletionMode.QUICK else completionMode,
-            profileId = profileId.takeIf { group == null && completionMode == CompletionMode.FORM },
+            // A profile is one Asset's quick action, valid in either completion mode (#81): the
+            // command carries it whenever there is an asset to own it, and never for a group
+            // (`ProfileOnGroupTarget`, `ScheduleCommands.kt:110`).
+            profileId = profileId.takeIf { group == null },
             remindersEnabled = remindersEnabled,
             // At most one row, ever (#4). #25 is the multi-provider UI and this is not it.
             providers = listOfNotNull(
