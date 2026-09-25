@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -94,6 +95,15 @@ class AssetSeasonActionsTest {
     private suspend fun rows(): List<SeasonActivation> = graph.seasonActivations.forAsset(tub)
 
     private fun AssetDetailViewModel.seasonPrompt(): DetailPrompt.SeasonChange? = prompt.value as? DetailPrompt.SeasonChange
+
+    /**
+     * Runs everything queued, the background collectors included: `advanceUntilIdle` alone treats
+     * `backgroundScope` work as idle, so a line the view model has just said may not be collected yet.
+     */
+    private fun settle() {
+        scheduler.advanceUntilIdle()
+        scheduler.runCurrent()
+    }
 
     /**
      * Inv. 93: **Start** writes one START with the date the dialog holds — here backdated to the 10th —
@@ -186,7 +196,7 @@ class AssetSeasonActionsTest {
         graph.recordSeasonActivation.run(tub, ActivationCommand(SeasonAction.START))
         vm.confirmSeason()
         vm.prompt.first { it == null }
-        scheduler.advanceUntilIdle()
+        settle()
         assertEquals(listOf(THE_SEASON_IS_ALREADY_RUNNING), said)
         assertEquals("only the racing START", 2, rows().size)
 
@@ -195,11 +205,68 @@ class AssetSeasonActionsTest {
         graph.recordSeasonActivation.run(tub, ActivationCommand(SeasonAction.END))
         vm.confirmSeason()
         vm.prompt.first { it == null }
-        scheduler.advanceUntilIdle()
+        settle()
         assertEquals(listOf(THE_SEASON_IS_ALREADY_RUNNING, THE_SEASON_HAS_ALREADY_ENDED), said)
         assertEquals("only the racing END", 3, rows().size)
         assertEquals("The season is already running.", THE_SEASON_IS_ALREADY_RUNNING)
         assertEquals("The season has already ended.", THE_SEASON_HAS_ALREADY_ENDED)
+    }
+
+    /**
+     * B04's ruling, "a 422 wins over a 409": a START dated after the dialog's date lands while the
+     * dialog is open. The use case refuses the body first (the date is now before the latest row),
+     * so the dialog stays open and says S54 naming the **newer** row's day — not S56 — and writes
+     * nothing. Only a date the newer row allows then meets the repeated-START refusal, S56, once.
+     */
+    @Test fun aNewerRowDatedLaterShowsS54NamingItNotS56() = runTest {
+        manualTub(activation("a1", SeasonAction.END, "2026-05-01"))
+        val said = mutableListOf<String>()
+        val vm = detail(said)
+
+        vm.askSeason(SeasonAction.START)
+        vm.onSeasonDate("2026-06-10")
+        graph.recordSeasonActivation.run(tub, ActivationCommand(SeasonAction.START, occurredOn = "2026-06-12"))
+        vm.confirmSeason()
+        vm.prompt.first { prompt -> (prompt as? DetailPrompt.SeasonChange)?.let { !it.saving && it.refusal != null } == true }
+        settle()
+
+        val open = vm.seasonPrompt()
+        assertEquals(chooseADateFrom(displayDate(LocalDate.parse("2026-06-12"))), open?.refusal)
+        assertEquals("the range now starts at the newer row", LocalDate.parse("2026-06-12"), open?.from)
+        assertEquals("nothing was said", emptyList<String>(), said)
+        assertEquals("nothing of its own was written", 2, rows().size)
+
+        vm.onSeasonDate("2026-06-12")
+        vm.confirmSeason()
+        vm.prompt.first { it == null }
+        settle()
+        assertEquals(listOf(THE_SEASON_IS_ALREADY_RUNNING), said)
+        assertEquals(2, rows().size)
+    }
+
+    /**
+     * Master dec. 46 and the ruling on B14's concern 3: a date that is not one, and a later-than-today
+     * date on a MANUAL asset with **no** row (S54 would have no `<date>` to name), hold the confirm
+     * rather than being worded, and a confirm writes nothing.
+     */
+    @Test fun aMalformedDateOrAnUnboundedFutureDateHoldsTheConfirm() = runTest {
+        manualTub()
+        val vm = detail()
+
+        vm.askSeason(SeasonAction.START)
+        assertNull("no row, no lower bound", vm.seasonPrompt()?.from)
+        assertTrue("today is allowed", vm.seasonPrompt()!!.canConfirm)
+
+        vm.onSeasonDate("2026-06-16")
+        assertFalse("a later date with no row to name is held", vm.seasonPrompt()!!.canConfirm)
+        vm.confirmSeason()
+        vm.onSeasonDate("2026-06-1")
+        assertFalse("a date that is not one is held", vm.seasonPrompt()!!.canConfirm)
+        vm.confirmSeason()
+        scheduler.advanceUntilIdle()
+
+        assertNull("held, never worded", vm.seasonPrompt()?.refusal)
+        assertEquals(emptyList<SeasonActivation>(), rows())
     }
 
     /** Inv. 93: Cancel — with a date chosen or not — closes the dialog and writes nothing. */
@@ -245,8 +312,28 @@ class AssetSeasonActionsTest {
         assertEquals(SeasonAction.END, manualAction(SeasonView.of(tub, ended.take(1), june)))
         assertNull(manualAction(SeasonView.of(mower, emptyList(), june)))
 
-        val leftManual = assetRow("left", seasonMode = SeasonMode.CALENDAR, seasonStart = "05-01", seasonEnd = "09-30")
-        assertEquals("no history once it is not MANUAL", emptyList<SeasonActivation>(), seasonHistory(SeasonView.of(leftManual, ended, june)))
         assertEquals(listOf("a2", "a1"), seasonHistory(SeasonView.of(tub, ended, june)).map { it.id })
+    }
+
+    /**
+     * The controller's ruling on I-2 (brief edge case; spec §3.2): the history is drawn whenever rows
+     * exist, newest first, **in any mode** — an asset that left MANUAL keeps S48 and its old rows
+     * readable — and a MANUAL asset with no row still shows its empty S48. Nothing else draws it.
+     */
+    @Test fun theSeasonHistoryIsReadableInAnyModeOnceRowsExist() = runTest {
+        val june = LocalDate.parse("2026-06-15")
+        val ended = listOf(activation("a1", SeasonAction.START, "2025-06-01"), activation("a2", SeasonAction.END, "2025-09-01"))
+        val leftManual = SeasonView.of(assetRow("left", seasonMode = SeasonMode.CALENDAR, seasonStart = "05-01", seasonEnd = "09-30"), ended, june)
+        val leftForYearRound = SeasonView.of(assetRow("gen"), ended, june)
+        val calendar = SeasonView.of(assetRow("mower", seasonMode = SeasonMode.CALENDAR, seasonStart = "05-01", seasonEnd = "09-30"), emptyList(), june)
+        val noRow = SeasonView.of(assetRow("tub", seasonMode = SeasonMode.MANUAL), emptyList(), june)
+
+        assertEquals("a CALENDAR asset that left MANUAL lists its old rows newest first", listOf("a2", "a1"), seasonHistory(leftManual).map { it.id })
+        assertTrue(seasonHistoryShown(leftManual))
+        assertEquals(listOf("a2", "a1"), seasonHistory(leftForYearRound).map { it.id })
+        assertTrue(seasonHistoryShown(leftForYearRound))
+        assertFalse("no rows and not MANUAL: no S48", seasonHistoryShown(calendar))
+        assertTrue("MANUAL with no row keeps its empty history", seasonHistoryShown(noRow))
+        assertEquals(emptyList<SeasonActivation>(), seasonHistory(noRow))
     }
 }

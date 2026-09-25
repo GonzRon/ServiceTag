@@ -29,7 +29,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -699,6 +698,8 @@ private fun plateBadges(facts: List<PlateFact>): (@Composable FlowRowScope.() ->
                 is PlateFact.Archived -> StatusBadge(label = fact.label, colors = semantic.seasonInactive)
                 PlateFact.OutOfSeason ->
                     StatusBadge(label = OUT_OF_SEASON, colors = semantic.seasonInactive, icon = seasonIcon)
+                // The Season section's own badge, so S39 reads the same in both places (spec §10.6).
+                PlateFact.InSeason -> PhaseBadge(SeasonPhase.IN_SEASON)
             }
         }
     }
@@ -810,7 +811,7 @@ private fun ConditionSection(
         current?.let { QuietLine(reasonLine(it.reason)) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val condition = current?.condition
-            if (condition == OperationalCondition.DOWN || condition == OperationalCondition.DEGRADED) {
+            if (state.offersMarkOperational && condition != null) {
                 Button(onClick = { onMarkOperational(condition) }, shape = ControlShape) { Text(MARK_OPERATIONAL) }
             }
             OutlinedButton(onClick = onChangeCondition, shape = ControlShape) { Text(CHANGE_CONDITION) }
@@ -919,11 +920,12 @@ private fun GlyphLine(glyph: StateGlyph, tint: Color, text: String) {
 }
 
 /**
- * **Season** (spec §10.3): the mode's own lines, then the break. YEAR_ROUND reads S29. CALENDAR reads
- * S32 and S33 with the window's days, the phase (S39 or the shipped out-of-season word) and S50 or
- * S49. MANUAL reads the phase and offers **S40** when out of season or **S41** when in — each opens
- * its dialog and writes nothing — then S48 with every START and END, newest first. No MANUAL start
- * is ever predicted (Q-6). A set break adds S58 with S60 and S61; it never changes the phase word.
+ * **Season** (S28; spec §10.3): the mode's own lines, then the history, then the break. YEAR_ROUND
+ * reads S29. CALENDAR reads S32 and S33 with the window's days, the phase (S39 or the shipped
+ * out-of-season word) and S50 or S49. MANUAL reads the phase and offers **S40** when out of season or
+ * **S41** when in — each opens its dialog and writes nothing. S48 lists every START and END, newest
+ * first, whenever rows exist in any mode, and always on a MANUAL asset. No MANUAL start is ever
+ * predicted (Q-6). A set break adds S58 with S60 and S61; it never changes the phase word.
  *
  * The phase is drawn as ratified — S39 "IN SEASON", the shipped "Out of season" — by [PhaseBadge]
  * rather than the upper-casing `StatusBadge`, which keeps the plate's shipped badge the one
@@ -932,11 +934,8 @@ private fun GlyphLine(glyph: StateGlyph, tint: Color, text: String) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SeasonSection(season: SeasonView, onStart: () -> Unit, onEnd: () -> Unit) {
-    HorizontalDivider(
-        thickness = 1.dp,
-        color = MaterialTheme.colorScheme.outlineVariant,
-        modifier = Modifier.padding(top = 18.dp, bottom = 10.dp),
-    )
+    // S28 heads the section, in the sentence case S5 and S94 are drawn in (the ruling on I-4).
+    SentenceSectionHeader(OPERATING_SEASON)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (season.seasonMode) {
             SeasonMode.YEAR_ROUND -> Text(
@@ -967,7 +966,7 @@ private fun SeasonSection(season: SeasonView, onStart: () -> Unit, onEnd: () -> 
             }
         }
     }
-    if (season.seasonMode == SeasonMode.MANUAL) {
+    if (seasonHistoryShown(season)) {
         val rows = seasonHistory(season)
         SentenceSectionHeader(SEASON_HISTORY)
         LedgerList(count = rows.size) { index ->

@@ -93,6 +93,7 @@ import com.loosecannon.servicetag.ui.health.aggregateLine
 import com.loosecannon.servicetag.ui.health.criticalLine
 import com.loosecannon.servicetag.ui.health.driverLines
 import com.loosecannon.servicetag.ui.health.healthBadgeLabel
+import com.loosecannon.servicetag.ui.health.needsAttention
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -105,6 +106,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -412,11 +414,19 @@ data class AssetDetailState(
      */
     val outOfSeason: Boolean get() = season.phase == SeasonPhase.OUT_OF_SEASON
 
-    /** The identity plate's badges: condition, then retired, archived and out of season. */
-    val plate: List<PlateFact> get() = plateFacts(asset, condition, outOfSeason)
+    /** The identity plate's badges: condition, then retired, archived, and the season phase. */
+    val plate: List<PlateFact> get() = plateFacts(asset, condition, season)
 
     /** The Health section, in its order (spec §6.5, inv. 119). */
     val healthBlocks: List<HealthBlock> get() = healthBlocksOf(health)
+
+    /**
+     * Whether the Condition section offers S7 "Mark operational": a DOWN or DEGRADED asset **in
+     * service** — active and not retired — as B07's `AssetHealthView.inService` rules for every
+     * surface (M1). A retired or archived asset's page still shows its condition and S6.
+     */
+    val offersMarkOperational: Boolean
+        get() = health.inService && condition?.condition?.needsAttention == true
 }
 
 /**
@@ -448,7 +458,7 @@ class AssetDetailViewModel(
     groups: GroupRepository,
     private val due: DueReadModel,
     conditions: ConditionRepository,
-    private val activations: SeasonActivationRepository,
+    activations: SeasonActivationRepository,
     subjects: HealthSubjectRepository,
     private val healthReadModel: AssetHealthReadModel,
     private val getSeason: GetAssetSeason,
@@ -509,10 +519,11 @@ class AssetDetailViewModel(
      * [maintenance], none of these is what a section says; each is the signal to read again.
      */
     private val facts: Flow<Unit> = combine(
-        rows.flatMapLatest { all ->
-            val watched = listOf(id) + AssetTree.descendants(all, id)
-            combine(watched.map { conditions.observeForAsset(it) }) { }
-        },
+        // Re-subscribed only when the tree under the asset changes, so an edit of the asset row
+        // (which `state` already hears through `rows`) rebuilds the page once, not twice.
+        rows.map { all -> listOf(id) + AssetTree.descendants(all, id) }
+            .distinctUntilChanged()
+            .flatMapLatest { watched -> combine(watched.map { conditions.observeForAsset(it) }) { } },
         activations.observeForAsset(id),
         subjects.observeForAsset(id),
     ) { _, _, _ -> }
@@ -588,26 +599,9 @@ class AssetDetailViewModel(
                     outOfRange = childReadings.count {
                         it.state == RangeState.LOW || it.state == RangeState.HIGH
                     },
-                    condition = histories[child.id]?.let { conditionViewOf(it) },
+                    condition = histories[child.id]?.let { healthReadModel.conditionViewOf(it) },
                 )
             }
-
-    /**
-     * A component's current condition as its badge reads it: the word, and "since" the first row of
-     * the latest run (`ConditionHistory.since`) — the same reading B07 gives the asset itself.
-     */
-    private suspend fun conditionViewOf(history: ConditionHistory): ConditionView? {
-        val current = history.current ?: return null
-        return ConditionView(
-            condition = current.condition,
-            since = LocalDate.parse(history.since!!.occurredOn),
-            reason = current.reason,
-            occurredOn = LocalDate.parse(current.occurredOn),
-            occurredTime = current.occurredTime,
-            eventId = current.eventId,
-            eventExists = current.eventId?.let { events.get(it) } != null,
-        )
-    }
 
     /**
      * S21's rows: **every** row of the asset, newest first — the ordering key reversed (dec. 41) —
@@ -654,7 +648,7 @@ class AssetDetailViewModel(
         val season = state.value?.season ?: return
         if (manualAction(season) != action) return
         val t = today.localDate()
-        _prompt.update { DetailPrompt.SeasonChange(action, t.toString(), latestActivationOn(season.activations), t) }
+        _prompt.update { DetailPrompt.SeasonChange(action, t.toString(), latestActivationOn(season), t) }
     }
 
     /** The dialog's date field. Editing it clears a refusal: the next confirm judges the new value. */
@@ -690,7 +684,7 @@ class AssetDetailViewModel(
                 is SeasonAlreadyStarted -> refuse(THE_SEASON_IS_ALREADY_RUNNING)
                 is SeasonAlreadyEnded -> refuse(THE_SEASON_HAS_ALREADY_ENDED)
                 is SeasonValidation -> {
-                    val latest = latestActivationOn(activations.forAsset(id))
+                    val latest = latestActivationOn(getSeason.run(id))
                     _prompt.update {
                         prompt.copy(from = latest, refusal = latest?.let { chooseADateFrom(displayDate(it)) })
                     }
@@ -919,18 +913,26 @@ sealed interface PlateFact {
     data class Archived(val label: String) : PlateFact
 
     data object OutOfSeason : PlateFact
+
+    /** S39 IN SEASON (spec §10.6: "plate, season section"). */
+    data object InSeason : PlateFact
 }
 
 /**
  * The plate's badges, in the order they are drawn: the condition — the fourth independent fact, on
  * **every** asset, retired and archived ones included (lifecycle bounds only the dashboard, spec
- * §5.1) — then retired, archived and out of season, each only when true.
+ * §5.1) — then retired and archived, each only when true, then the season phase: out of season, or
+ * S39 IN SEASON (spec §10.6, "plate, season section") wherever the Season section draws a phase word
+ * — CALENDAR and MANUAL. A YEAR_ROUND asset has no phase word (its section draws S29), so nothing.
  */
-fun plateFacts(asset: Asset, condition: ConditionView?, outOfSeason: Boolean): List<PlateFact> = buildList {
+fun plateFacts(asset: Asset, condition: ConditionView?, season: SeasonView): List<PlateFact> = buildList {
     add(PlateFact.Condition(condition))
     if (asset.isRetired) add(PlateFact.Retired)
     statusLabel(asset.status)?.let { add(PlateFact.Archived(it)) }
-    if (outOfSeason) add(PlateFact.OutOfSeason)
+    when {
+        season.phase == SeasonPhase.OUT_OF_SEASON -> add(PlateFact.OutOfSeason)
+        season.seasonMode != SeasonMode.YEAR_ROUND -> add(PlateFact.InSeason)
+    }
 }
 
 /**
@@ -1021,12 +1023,18 @@ fun manualAction(season: SeasonView): SeasonAction? = when {
 }
 
 /**
- * S48's rows, **newest first** (dec. 41): the activations the phase reads. Only a MANUAL asset has
- * the section (the controller's B04 carry-forward): elsewhere the rows are the unread history a
- * switch out of MANUAL left behind, and the phase never consults them.
+ * S48's rows, **newest first** (dec. 41), in **every** mode (the controller's ruling on I-2): an asset
+ * that left MANUAL keeps its old rows readable (spec §3.2), even though its phase no longer reads
+ * them. `SeasonView.activations` is already in the phase's order `(occurredOn, createdAt, id)`.
  */
-fun seasonHistory(season: SeasonView): List<SeasonActivation> =
-    if (season.seasonMode == SeasonMode.MANUAL) season.activations.asReversed() else emptyList()
+fun seasonHistory(season: SeasonView): List<SeasonActivation> = season.activations.asReversed()
+
+/**
+ * Whether the Season section draws S48: whenever rows exist, and always on a MANUAL asset — whose
+ * empty history (only an import makes one with no row) is still its history.
+ */
+fun seasonHistoryShown(season: SeasonView): Boolean =
+    season.seasonMode == SeasonMode.MANUAL || season.activations.isNotEmpty()
 
 /** S46 or S47. */
 fun activationWord(action: SeasonAction): String = when (action) {
@@ -1035,12 +1043,11 @@ fun activationWord(action: SeasonAction): String = when (action) {
 }
 
 /**
- * The latest activation's day — the lower bound of Start and End (spec §3.3) — by the phase's own
- * order `(occurredOn, createdAt, id)`; null when there is none.
+ * The latest activation's day — the lower bound of Start and End (spec §3.3); null when there is
+ * none. `SeasonView.activations` arrives in `:core`'s own activation order, so the latest is the last.
  */
-internal fun latestActivationOn(rows: List<SeasonActivation>): LocalDate? =
-    rows.maxWithOrNull(compareBy<SeasonActivation>({ it.occurredOn }, { it.createdAt }, { it.id }))
-        ?.let { runCatching { LocalDate.parse(it.occurredOn) }.getOrNull() }
+internal fun latestActivationOn(season: SeasonView): LocalDate? =
+    season.activations.lastOrNull()?.let { runCatching { LocalDate.parse(it.occurredOn) }.getOrNull() }
 
 /** One row of the "Part of" picker. [id] null is "None", which is also the default (spec §9). */
 data class ParentChoice(val id: String?, val label: String)

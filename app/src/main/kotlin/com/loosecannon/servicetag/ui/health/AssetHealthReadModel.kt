@@ -244,8 +244,15 @@ class AssetHealthReadModel(
             }
             .toMap()
 
-    private suspend fun conditionOf(assetId: AssetId): ConditionView? {
-        val history = ConditionHistory.of(conditions.forAsset(assetId))
+    private suspend fun conditionOf(assetId: AssetId): ConditionView? =
+        conditionViewOf(ConditionHistory.of(conditions.forAsset(assetId)))
+
+    /**
+     * One asset's current condition as every surface reads it, from its [history]: the current row's
+     * facts and "since" the first row of the latest run. Internal so asset detail's component badges
+     * (B14) read their children through this same builder.
+     */
+    internal suspend fun conditionViewOf(history: ConditionHistory): ConditionView? {
         val current = history.current ?: return null
         return ConditionView(
             condition = current.condition,

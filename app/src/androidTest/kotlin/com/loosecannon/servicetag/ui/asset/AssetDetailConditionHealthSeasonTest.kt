@@ -195,7 +195,9 @@ class AssetDetailConditionHealthSeasonTest {
         rule.onNodeWithText("DEGRADED").assertExists()
         // Condition before Health before Season, always (inv. 119).
         assertTrue("Condition before Health", top(CONDITION_TITLE) < top(HEALTH_SECTION))
-        assertTrue("Health before Season", top(HEALTH_SECTION) < top(YEAR_ROUND))
+        assertTrue("Health before Season", top(HEALTH_SECTION) < top(OPERATING_SEASON))
+        // S28 heads the Season section, above its first line (the ruling on I-4).
+        assertTrue("S28 heads the Season section", top(OPERATING_SEASON) < top(YEAR_ROUND))
 
         rule.onNodeWithText(MARK_OPERATIONAL).performScrollTo().performClick()
         rule.awaitText(MARK_OPERATIONAL_TITLE)
@@ -298,7 +300,9 @@ class AssetDetailConditionHealthSeasonTest {
         assertEquals(today.minusDays(5).toString(), started.occurredOn)
         assertEquals(null, started.eventId)
 
-        rule.awaitText(IN_SEASON_WORD)
+        // IN SEASON on the plate and in the section (spec §10.6: "plate, season section").
+        rule.awaitText(IN_SEASON_WORD, count = 2)
+        rule.onAllNodesWithText(IN_SEASON_WORD).assertCountEquals(2)
         rule.onNodeWithText(END_SEASON).performScrollTo().assertIsDisplayed()
         val order = (rule.onAllNodesWithText(SEASON_STARTED).fetchSemanticsNodes() + rule.onAllNodesWithText(SEASON_ENDED).fetchSemanticsNodes())
             .sortedBy { it.positionInRoot.y }
@@ -331,7 +335,8 @@ class AssetDetailConditionHealthSeasonTest {
         rule.awaitText(seasonEndsLine(displayDate(today.plusDays(1))))
         rule.onNodeWithText(SEASON_STARTS).performScrollTo().assertIsDisplayed()
         rule.onNodeWithText(SEASON_ENDS).assertIsDisplayed()
-        rule.onNodeWithText(IN_SEASON_WORD).assertIsDisplayed()
+        // On the plate and in the section (spec §10.6), the break notwithstanding.
+        rule.onAllNodesWithText(IN_SEASON_WORD).assertCountEquals(2)
         rule.onNodeWithText(MAINTENANCE_BREAK).performScrollTo().assertIsDisplayed()
         rule.onNodeWithText(BREAK_STARTS).assertIsDisplayed()
         rule.onNodeWithText(BREAK_ENDS).assertIsDisplayed()
@@ -346,6 +351,7 @@ class AssetDetailConditionHealthSeasonTest {
 
         show(gen)
         rule.awaitText(YEAR_ROUND)
+        rule.onAllNodesWithText(IN_SEASON_WORD).assertCountEquals(0)
         rule.onNodeWithText(YEAR_ROUND).performScrollTo().assertIsDisplayed()
         rule.onAllNodesWithText(SEASON_HISTORY).assertCountEquals(0)
         rule.onAllNodesWithText(MAINTENANCE_BREAK).assertCountEquals(0)

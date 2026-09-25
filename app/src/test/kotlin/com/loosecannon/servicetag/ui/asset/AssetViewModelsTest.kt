@@ -6,7 +6,9 @@ import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.usecase.ActivationCommand
+import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.dayMillis
@@ -1279,6 +1281,113 @@ class AssetViewModelsTest {
             loaded("mower").plate,
         )
         assertEquals("S4 on an asset with nothing recorded", listOf(PlateFact.Condition(null)), loaded("gen").plate)
+    }
+
+    /**
+     * Spec §10.6 ("plate, season section") and the controller's ruling on I-3: IN SEASON is on the
+     * plate wherever the Season section draws a phase word — a CALENDAR or a MANUAL asset in season —
+     * and never on a YEAR_ROUND one, whose section draws S29 instead of a phase.
+     */
+    @Test fun thePlateCarriesInSeasonForCalendarAndManualButNotYearRound() = runTest {
+        graph.today = LocalDate.parse("2026-01-15")
+        graph.assets.upsert(assetRow("snow", name = "Snowblower", seasonMode = SeasonMode.CALENDAR, seasonStart = "11-01", seasonEnd = "03-31"))
+        graph.assets.upsert(assetRow("tub", name = "Hot tub", seasonMode = SeasonMode.MANUAL))
+        graph.seasonActivations.insert(activation("a1", "tub", SeasonAction.START, "2026-01-01"))
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+
+        assertEquals(listOf(PlateFact.Condition(null), PlateFact.InSeason), loaded("snow").plate)
+        assertEquals(listOf(PlateFact.Condition(null), PlateFact.InSeason), loaded("tub").plate)
+        assertEquals("no phase word on a year-round asset", listOf(PlateFact.Condition(null)), loaded("gen").plate)
+    }
+
+    /**
+     * The controller's ruling on I-1 (B07's M1): "Mark operational" is offered only on an asset in
+     * service — active and not retired — that is DOWN or DEGRADED. A retired or archived asset's page
+     * still shows its condition; it just does not offer to change it back.
+     */
+    @Test fun markOperationalIsOfferedOnlyOnAnInServiceAsset() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.conditions.insert(conditionRow("c1", "gen", OperationalCondition.DOWN, "2026-02-01"))
+        graph.assets.upsert(assetRow("old", name = "Old pack", retiredOn = "2026-01-01"))
+        graph.conditions.insert(conditionRow("c2", "old", OperationalCondition.DOWN, "2026-02-01"))
+        graph.assets.upsert(assetRow("fan", name = "Fan", status = AssetStatus.ARCHIVED))
+        graph.conditions.insert(conditionRow("c3", "fan", OperationalCondition.DEGRADED, "2026-02-01"))
+        graph.assets.upsert(assetRow("mower", name = "Mower"))
+        graph.conditions.insert(conditionRow("c4", "mower", OperationalCondition.OPERATIONAL, "2026-02-01"))
+
+        assertTrue("an active DOWN asset", loaded("gen").offersMarkOperational)
+        assertFalse("a retired DOWN asset", loaded("old").offersMarkOperational)
+        assertFalse("an archived DEGRADED asset", loaded("fan").offersMarkOperational)
+        assertFalse("an OPERATIONAL asset", loaded("mower").offersMarkOperational)
+        assertEquals("the retired asset still shows its condition", OperationalCondition.DOWN, loaded("old").condition?.condition)
+    }
+
+    /**
+     * Brief: "a new condition redraws the page without a manual refresh" — a grandchild's DOWN, a
+     * direct child's new condition and a health subject, each written **after** the page loaded.
+     */
+    @Test fun theDetailRedrawsWhenADescendantsConditionOrASubjectChangesAfterLoad() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.assets.upsert(assetRow("eng", name = "Engine", parent = "gen"))
+        graph.assets.upsert(assetRow("pack", name = "Battery pack", parent = "eng"))
+        val vm = detailModel(AssetId("gen"))
+        backgroundScope.launch { vm.state.collect() }
+        assertEquals(listOf(NOT_TRACKED, HEALTH_FOOTER), vm.state.first { it != null }!!.healthWords())
+
+        graph.conditions.insert(conditionRow("c1", "pack", OperationalCondition.DOWN, "2026-02-01", reason = "Won't hold charge"))
+        scheduler.advanceUntilIdle()
+        assertEquals(
+            "a grandchild's DOWN, recorded after load",
+            listOf("Battery pack DOWN — Won't hold charge", NOT_TRACKED, HEALTH_FOOTER),
+            vm.state.value!!.healthWords(),
+        )
+
+        graph.conditions.insert(conditionRow("c2", "eng", OperationalCondition.DEGRADED, "2026-02-02"))
+        scheduler.advanceUntilIdle()
+        assertEquals("the child's own badge", OperationalCondition.DEGRADED, vm.state.value!!.components.single().condition?.condition)
+
+        graph.healthSubjects.upsert(subjectRow("h1", "gen", name = "Belt age"))
+        scheduler.advanceUntilIdle()
+        assertTrue("a subject added after load", vm.state.value!!.healthWords().contains("Belt age"))
+    }
+
+    /** Counts the season reads: every rebuild of the detail state reads the season exactly once. */
+    private class CountingActivations(private val inner: SeasonActivationRepository) : SeasonActivationRepository by inner {
+        var reads = 0
+        override suspend fun forAsset(assetId: AssetId): List<SeasonActivation> {
+            reads++
+            return inner.forAsset(assetId)
+        }
+    }
+
+    /**
+     * Review M-1: one edit of the asset row rebuilds the detail state **once** — the condition
+     * watchers are not torn down and re-subscribed when the asset tree has not changed.
+     */
+    @Test fun anAssetEditRebuildsTheDetailOnce() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.assets.upsert(assetRow("eng", name = "Engine", parent = "gen"))
+        val reads = CountingActivations(graph.seasonActivations)
+        val vm = AssetDetailViewModel(
+            graph.assets, graph.tags,
+            graph.definitions, graph.profiles, graph.events,
+            graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
+            graph.conditions, graph.seasonActivations, graph.healthSubjects,
+            graph.assetHealthReadModel, GetAssetSeason(graph.assets, reads, graph.uow, graph.todayPort),
+            graph.recordSeasonActivation,
+            graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
+            graph.applyTemplate, graph.uow, graph.clock, graph.todayPort, AssetId("gen"),
+        )
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it != null }
+        scheduler.advanceUntilIdle()
+        reads.reads = 0
+
+        graph.assets.upsert(graph.assets.get(AssetId("gen"))!!.copy(name = "Generator set"))
+        scheduler.advanceUntilIdle()
+
+        assertEquals("Generator set", vm.state.value!!.asset.name)
+        assertEquals("one edit, one rebuild", 1, reads.reads)
     }
 
     /**
