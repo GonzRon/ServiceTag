@@ -348,17 +348,21 @@ class VersionAgreementTest {
             repoFile("docs/design/12-visual-design-apollo-service-binder.md").readText()
                 .contains("**Dashboard · Assets · Maintenance**"),
         )
+        // The README stopped describing the navigation bar in its 2026-09-25 rewrite; it now names
+        // the capability in its own words and links the spec, and that is what is held here.
         val readme = repoFile("README.md").readText()
         assertTrue(
-            "the README must name the three destinations along the bottom",
-            readme.contains("Dashboard, Assets and Maintenance along the bottom"),
+            "the README must carry the maintenance capability bullet",
+            Regex(
+                """^- \*\*Maintenance scheduling and local reminders\*\* —""",
+                RegexOption.MULTILINE,
+            ).containsMatchIn(readme),
         )
         assertTrue(
-            "the README must name the capability and link the spec",
-            readme.contains("**Maintenance schedules, maintenance groups and local reminders**") &&
-                readme.contains(
-                    "docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md",
-                ),
+            "the README must link the 1.2 spec",
+            readme.contains(
+                "](docs/superpowers/specs/2026-09-22-servicetag-1.2-operational-maintenance.md)",
+            ),
         )
     }
 
@@ -373,7 +377,7 @@ class VersionAgreementTest {
         assertTrue(
             "the README must carry a capability bullet for the share intake",
             Regex(
-                """^- \*\*Share a link, a document, a photo or a note into an asset\*\* —""",
+                """^- \*\*Documents and references\*\* — .*share a document, image, URL, or note into an Asset""",
                 RegexOption.MULTILINE,
             ).containsMatchIn(readme),
         )
@@ -393,12 +397,10 @@ class VersionAgreementTest {
     @Test fun theReadmeNamesSeasonsConditionAndHealthAndLinksTheSpec() {
         val readme = repoFile("README.md").readText()
         assertTrue(
-            "the README must carry a capability bullet for seasons, service policy, condition and health",
-            Regex(
-                """^- \*\*Operating seasons, maintenance service policy, operational condition and derived """ +
-                    """health\*\* —""",
-                RegexOption.MULTILINE,
-            ).containsMatchIn(readme),
+            "the README must carry the 1.4 capability bullets: seasons, policy, condition and health",
+            listOf("Operating seasons", "Maintenance policy", "Condition", "Health").all { word ->
+                Regex("""^- \*\*$word\*\* """, RegexOption.MULTILINE).containsMatchIn(readme)
+            },
         )
         assertTrue(
             "that bullet must link the committed 1.4 spec",

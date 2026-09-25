@@ -194,5 +194,10 @@ tasks.withType<Test>().configureEach {
         root.dir(".github").asFileTree,
         root.file("docs/release-proofs.md"),
         layout.projectDirectory.dir("src/androidTest").asFileTree,
+        // VersionAgreementTest reads these too. Without them a README-only commit was answered by
+        // the cached result: 966aa91 broke three of its cases while CI stayed green.
+        root.file("README.md"),
+        root.file("docs/versioning.md"),
+        root.dir("docs/design").asFileTree,
     ).withPropertyName("releaseProofPolicyScope").withPathSensitivity(PathSensitivity.RELATIVE)
 }
