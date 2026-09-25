@@ -44,7 +44,7 @@ private const val DELIVERY_FINDING = "1 schedule has reminders turned on, but re
 private const val FIX_DELIVERY = "Fix reminder delivery"
 
 /**
- * #27's Health section, on a device — the three things no JVM test can show.
+ * #27's Health section, on a device — the four things no JVM test can show.
  *
  * That it is **reachable**: through the real bottom bar, the real Maintenance destination and the
  * real Navigation 3 back stack, which until this brief popped straight back off a placeholder.

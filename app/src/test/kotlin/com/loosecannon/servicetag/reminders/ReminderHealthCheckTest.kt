@@ -170,13 +170,13 @@ private fun derivedState(
 private val TODAY: LocalDate = LocalDate.parse("2026-09-22")
 
 /**
- * The seven findings of #27, each with a positive test **and** a negative control (invariant 51),
+ * The eight findings of #27 (eight since 1.4.1), each with a positive test **and** a negative control (invariant 51),
  * plus the repair policy as a contract: only the alarm and the worker are ever repaired, running a
  * repair twice changes nothing, and nothing resolves a conflict (invariant 50).
  *
  * Off-device throughout. The three provider-side findings are read from B06's real
  * `LocalReminderProvider.health()` rather than re-derived here (carry-forward (a)), so the fold is
- * what is under test and the ratified sentences are drawn once in the codebase; the other four are
+ * what is under test and the ratified sentences are drawn once in the codebase; the other five are
  * this class's own. B05's `PlatformState`, B06's alarm, the backstop's unique work and the two
  * repositories are all fakes.
  */

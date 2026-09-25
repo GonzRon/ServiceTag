@@ -118,7 +118,7 @@ object ReminderHealthDispatch {
 /**
  * #27 — what is wrong with this phone's ability to remind, and what the app may fix by itself.
  *
- * Seven findings, and the policy is visible in the shape: [run] reports, [repair] acts, and it acts
+ * Eight findings (since 1.4.1), and the policy is visible in the shape: [run] reports, [repair] acts, and it acts
  * **only** on an automatic repair — the two that are unambiguous and idempotent, re-arming the
  * alarm and re-enqueuing the worker. Everything else takes the owner somewhere to decide. **No
  * conflict is ever repaired** (invariant 50): nothing here reads a merge plan, has a merge plan in

@@ -89,7 +89,7 @@ fun ReminderHealthScreen(
     val context = LocalContext.current
 
     // Decision 32's third run point. `ON_START` rather than `LaunchedEffect(Unit)`, and that is the
-    // difference between a working repair and a stale screen: two of the seven repairs leave for
+    // difference between a working repair and a stale screen: two of the eight repairs leave for
     // the system settings activity, which does not take this destination out of composition, so a
     // once-per-entry effect would still be showing "notifications are turned off" after the owner
     // had just turned them on.
