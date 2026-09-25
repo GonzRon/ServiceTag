@@ -261,7 +261,7 @@ without ever printing a fingerprint, password or keystore path.
 
 ## Where it is going
 
-The roadmap of record is issue #76. After 1.4.0, Phase 1 is the cleanup, Assets, NFC, lending and transfer train (#65, #54, #66, #51, #52, #68, #70, #74, then #73, #71, #67, #72, then #77 Transfer Packs). Phase 2 is #15, the consumables domain (supplies with stock and reorder readiness), and then #69, which adds documents, photos, receipts, links and share intake on top of it. Tracking which parts are installed where and what material each maintenance needs (#47) and merging a backup set into an existing database (#44) come later. The production phone converges onto the same release once the owner decides.
+1.4.0 is this release: operating seasons, maintenance service policy and a maintenance break, operational condition and derived health, on top of the schedules, reminders, attachments, local automation API and share intake that earlier releases shipped. The roadmap of record is issue #76. After 1.4.0, Phase 1 is the cleanup, Assets, NFC, lending and transfer train (#65, #54, #66, #51, #52, #68, #70, #74, then #73, #71, #67, #72, then #77 Transfer Packs). Phase 2 is #15, the consumables domain (supplies with stock and reorder readiness), and then #69, which adds documents, photos, receipts, links and share intake on top of it. Tracking which parts are installed where and what material each maintenance needs (#47) and merging a backup set into an existing database (#44) come later. The production phone converges onto the same release once the owner decides.
 
 The 2026 product split is what produced the shape below: it moved the note utility out into NoteTag
 and the NFC mechanism down into the shared `nfc-tag-core` library, leaving ServiceTag to be the
