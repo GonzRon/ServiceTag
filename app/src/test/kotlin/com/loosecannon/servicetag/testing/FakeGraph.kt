@@ -66,6 +66,7 @@ import com.loosecannon.servicetag.core.usecase.SaveDefinition
 import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveHealthSubject
 import com.loosecannon.servicetag.core.usecase.SaveProfile
+import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.SetHealthPolicy
 import com.loosecannon.servicetag.core.usecase.SetMaintenanceBreak
@@ -356,6 +357,9 @@ class FakeGraph(
     val saveSchedule: SaveSchedule = SaveSchedule(
         schedules, assets, groups, definitions, profiles, uow, ids, clock, recomputeSchedules, healthSubjects,
     )
+
+    /** 1.4.1 (#80) — the provider repair, from exactly the members `AppGraph` builds it from. */
+    val repairScheduleProviders: RepairScheduleProviders = RepairScheduleProviders(schedules, uow, clock)
     val completeSchedule: CompleteSchedule =
         CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recomputeSchedules)
     val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)

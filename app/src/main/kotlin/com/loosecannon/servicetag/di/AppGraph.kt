@@ -86,6 +86,7 @@ import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveAssetSettings
 import com.loosecannon.servicetag.core.usecase.SaveHealthSubject
+import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.SetHealthPolicy
 import com.loosecannon.servicetag.core.usecase.SetMaintenanceBreak
@@ -542,6 +543,9 @@ class AppGraph(private val context: Context) {
     val saveSchedule: SaveSchedule = SaveSchedule(
         schedules, assets, groups, definitions, profiles, uow, ids, clock, recomputeSchedules, healthSubjects,
     )
+    // 1.4.1 (#80) — the one provider repair: `/v1` and the MCP call it through `MaintenanceHandlers`,
+    // Reminder Health on an explicit tap. Never an automatic repair, never from the backstop.
+    val repairScheduleProviders: RepairScheduleProviders = RepairScheduleProviders(schedules, uow, clock)
     val completeSchedule: CompleteSchedule =
         CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recomputeSchedules)
     val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)

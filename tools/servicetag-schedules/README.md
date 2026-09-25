@@ -66,6 +66,12 @@ thing first: `phone.snapshot` reads the MCP's `status` before anything else and 
 `schemaVersion` is missing or below 8, so `plan` and `apply` both print that one line and exit `2`
 without reading a row.
 
+**1.4.1 (issue #80): `apply` sends the reminder provider itself.** Every schedule it creates carries
+the row the app's own editor writes — one `LOCAL` provider, enabled exactly when `remindersEnabled`
+is — instead of leaving `providers` to the app's default, which before ServiceTag 1.4.1 stored none.
+The manifest has no provider key, and the re-plan never compares providers or `updatedAt`, so a row
+loaded before 1.4.1 and one since repaired by `repair_schedule_providers` both re-plan `IDENTICAL`.
+
 ## The CLI
 
 Installed as `servicetag-schedules` (`uv run servicetag-schedules ...` from this directory).

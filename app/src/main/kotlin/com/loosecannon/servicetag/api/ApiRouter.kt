@@ -54,7 +54,7 @@ internal class ApiRouter(
     }
 
     /**
-     * The whole surface. Forty-seven path shapes over fifty-seven method-and-path rows; anything
+     * The whole surface. Forty-nine path shapes over fifty-nine method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -78,6 +78,10 @@ internal class ApiRouter(
      * `/v1/attention` — additively, at version 1. **Nothing destructive came with them either**
      * (spec §9.2, invariant 127): no verb amends or removes a condition or an activation, removes a
      * health subject or writes a health value, so each of those falls through to a 404 or a 405.
+     *
+     * 1.4.1 added two rows over two shapes (#80): the provider repair's plan and apply, both `POST`,
+     * both `{}`. The plan writes nothing; the apply adds one `LOCAL` provider row to each ACTIVE,
+     * reminders-on, providerless schedule and to nothing else, and deletes nothing.
      */
     private suspend fun route(request: ApiRequest): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -232,6 +236,15 @@ internal class ApiRouter(
 
             rest == listOf("import-merge", "apply") ->
                 if (method == "POST") handlers.importMergeApply(request) else notAllowed(request)
+
+            // 1.4.1 (#80) — the provider repair. Top-level, so no `/v1/schedules/{id}` segment can
+            // ever read `repairs` as an id; the plan writes nothing, the apply re-plans inside its
+            // own write, and neither runs a reminder sweep.
+            rest == listOf("repairs", "schedule-providers", "plan") ->
+                if (method == "POST") handlers.maintenance.planProviderRepair(request) else notAllowed(request)
+
+            rest == listOf("repairs", "schedule-providers", "apply") ->
+                if (method == "POST") handlers.maintenance.applyProviderRepair(request) else notAllowed(request)
 
             else -> throw ApiFailure.notFound(request.path)
         }

@@ -39,8 +39,8 @@ MAINTENANCE_TOOLS = (
 """Master plan §10's seventeen, named exactly as it names them. `list_schedules` covers all three
 schedule listings — every schedule, one asset's, one group's — because §10 names one tool and the
 three are one question asked of three scopes. The registered total was 21 + 17 = **38** at 1.2,
-**41** after 1.3's three reference tools and is **55** since 1.4's fourteen, which
-`test_argument_guard.py` pins."""
+**41** after 1.3's three reference tools, **55** after 1.4's fourteen and is **56** since 1.4.1's
+`repair_schedule_providers`, which `test_argument_guard.py` pins."""
 
 
 def body_of(recorded) -> dict:
@@ -128,6 +128,7 @@ def test_create_group_sends_only_what_it_was_given(paired) -> None:
 
 
 def test_create_schedule_sends_only_what_it_was_given(paired) -> None:
+    """Plus the one default it never leaves to the app (1.4.1, #80): the LOCAL provider row."""
     server_module.create_schedule(
         title="Winterise",
         target_group_id="g1",
@@ -141,7 +142,119 @@ def test_create_schedule_sends_only_what_it_was_given(paired) -> None:
         "timeInterval": 1,
         "timeUnit": "MONTH",
         "anchorOn": "2026-02-01",
+        "providers": [{"provider": "LOCAL", "enabled": True}],
     }
+
+
+# --- 1.4.1 (#80, R4): create_schedule sends the LOCAL row itself -----------------------------------
+
+
+def test_create_schedule_sends_local_by_default(paired) -> None:
+    """#80 AC 4: no `providers` argument is the app editor's row, sent explicitly — the tool never
+    relies on the server's default. `reminders_enabled` omitted (or `None`) is the app's `true`."""
+    for arguments in ({}, {"reminders_enabled": None}, {"reminders_enabled": True}, {"providers": None}):
+        server_module.create_schedule(
+            title="Tune-up", target_asset_id="a1", time_interval=1, time_unit="YEAR",
+            anchor_on="2026-03-01", **arguments,
+        )
+        assert paired.last().path == "/v1/schedules"
+        assert body_of(paired.last())["providers"] == [{"provider": "LOCAL", "enabled": True}], arguments
+
+
+def test_create_schedule_follows_reminders_enabled_false(paired) -> None:
+    """Reminders off is LOCAL disabled — never no row, and never LOCAL enabled."""
+    server_module.create_schedule(
+        title="Tune-up", target_asset_id="a1", time_interval=1, time_unit="YEAR",
+        anchor_on="2026-03-01", reminders_enabled=False,
+    )
+    body = body_of(paired.last())
+    assert body["remindersEnabled"] is False
+    assert body["providers"] == [{"provider": "LOCAL", "enabled": False}]
+
+
+def test_create_schedule_sends_an_explicit_empty_list(paired) -> None:
+    """`providers=[]` is the documented way to store no provider, and it reaches the app as `[]`."""
+    server_module.create_schedule(
+        title="Tune-up", target_asset_id="a1", time_interval=1, time_unit="YEAR",
+        anchor_on="2026-03-01", providers=[],
+    )
+    assert body_of(paired.last())["providers"] == []
+    assert "providers=[]" in (server_module.create_schedule.__doc__ or "")
+
+
+# --- 1.4.1 (#80, R2): repair_schedule_providers, the plan by default ------------------------------
+
+REPAIR_PLAN = "/v1/repairs/schedule-providers/plan"
+REPAIR_APPLY = "/v1/repairs/schedule-providers/apply"
+_REPORT = {
+    "matched": 2, "repairable": 1, "skipped": 1, "repaired": 0,
+    "schedules": [
+        {"id": "s1", "title": "Belt check", "outcome": "REPAIR", "reason": None},
+        {"id": "s2", "title": "Drive check", "outcome": "SKIPPED", "reason": "PAUSED"},
+    ],
+}
+
+
+def test_repair_schedule_providers_is_registered_and_guarded() -> None:
+    assert "repair_schedule_providers" in server_module.TOOL_NAMES
+    tool = server_module.mcp._tool_manager.get_tool("repair_schedule_providers")
+    assert tool is not None
+    assert tool.parameters.get("additionalProperties") is False
+    assert tool.parameters["properties"]["plan_only"].get("default") is True
+
+
+def test_repair_schedule_providers_plans_by_default(paired) -> None:
+    """The safe default is the plan: no argument, `plan_only=True` and `plan_only=None` (what a
+    strict-function-calling client sends for an argument it was not asked to set) all post the plan,
+    with `{}`, and hand its answer back unchanged. Nothing ever reaches the apply."""
+    paired.reply("POST", REPAIR_PLAN, 200, _REPORT)
+    for call in (
+        lambda: server_module.repair_schedule_providers(),
+        lambda: server_module.repair_schedule_providers(plan_only=True),
+        lambda: server_module.repair_schedule_providers(plan_only=None),
+    ):
+        assert call() == _REPORT
+        assert paired.last().method == "POST"
+        assert paired.last().path == REPAIR_PLAN
+        assert body_of(paired.last()) == {}
+        assert paired.last().headers.get("Content-Type") == "application/json"
+    assert REPAIR_APPLY not in [r.path for r in paired.requests]
+
+
+def test_repair_schedule_providers_applies_when_asked(paired) -> None:
+    applied = dict(_REPORT, repaired=1, schedules=[dict(_REPORT["schedules"][0], outcome="REPAIRED"), _REPORT["schedules"][1]])
+    paired.reply("POST", REPAIR_APPLY, 200, applied)
+    assert server_module.repair_schedule_providers(plan_only=False) == applied
+    assert paired.last().path == REPAIR_APPLY
+    assert body_of(paired.last()) == {}
+    assert REPAIR_PLAN not in [r.path for r in paired.requests], "the apply re-plans on the phone"
+
+
+def test_repair_schedule_providers_raises_tool_error(paired) -> None:
+    for path, plan_only in ((REPAIR_PLAN, True), (REPAIR_APPLY, False)):
+        paired.reply(
+            "POST", path, 400,
+            {"error": {"code": "bad_request", "message": "that is not the JSON this endpoint wants", "problems": []}},
+        )
+        with pytest.raises(ToolError, match="bad_request") as raised:
+            server_module.repair_schedule_providers(plan_only=plan_only)
+        assert "that is not the JSON this endpoint wants" in str(raised.value)
+
+
+def test_repair_schedule_providers_plan_is_allowed_on_any_app(paired) -> None:
+    """The plan writes nothing, so it is in `_POSTS_THAT_WRITE_NOTHING` beside the merge plan and
+    is asked of any app; the apply is a write and is refused below schema 8 with nothing sent."""
+    assert REPAIR_PLAN in server_module._POSTS_THAT_WRITE_NOTHING
+    assert REPAIR_APPLY not in server_module._POSTS_THAT_WRITE_NOTHING
+    paired.reply("GET", "/v1/status", 200, {"appVersion": "1.3.0", "apiVersion": 1, "schemaVersion": 7,
+                                            "backupFormatVersion": 7, "counts": {}})
+    paired.reply("POST", REPAIR_PLAN, 200, _REPORT)
+    assert server_module.repair_schedule_providers() == _REPORT
+    assert [(r.method, r.path) for r in paired.requests] == [("POST", REPAIR_PLAN)]
+
+    with pytest.raises(ToolError, match="APP_SCHEMA_TOO_OLD"):
+        server_module.repair_schedule_providers(plan_only=False)
+    assert [(r.method, r.path) for r in paired.requests] == [("POST", REPAIR_PLAN), ("GET", "/v1/status")]
 
 
 # --- the state tools ----------------------------------------------------------------------------

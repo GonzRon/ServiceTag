@@ -103,6 +103,8 @@ async def apply(
             "completion_mode": schedule.completion_mode,
             "season_behavior": schedule.season_behavior,
             "reminders_enabled": schedule.reminders_enabled,
+            # #80 (R4): the app editor's own row, sent explicitly -- never the app's default.
+            "providers": [{"provider": "LOCAL", "enabled": schedule.reminders_enabled}],
         }
         if schedule.target_asset is not None:
             asset_id, err = planmod.resolve_asset(inventory, schedule.target_asset)

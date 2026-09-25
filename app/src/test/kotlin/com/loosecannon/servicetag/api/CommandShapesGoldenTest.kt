@@ -106,6 +106,8 @@ class CommandShapesGoldenTest {
             "/v1/assets/{id}/health-policy", "/v1/assets/{id}/conditions", "/v1/assets/{id}/health",
             "/v1/assets/{id}/health-subjects", "/v1/health-subjects", "/v1/health-subjects/{id}",
             "/v1/health-subjects/{id}/archive", "/v1/attention", "command-shapes.json",
+            // 1.4.1 (#80): the provider repair's two routes.
+            "/v1/repairs/schedule-providers/plan", "/v1/repairs/schedule-providers/apply",
         )) {
             assertTrue("docs/api/v1.md does not name $path", "`$path`" in doc || path in doc)
         }

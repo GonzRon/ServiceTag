@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.ServicePolicy
@@ -635,9 +636,12 @@ class MaintenanceRoutesTest {
         val stored = runBlocking { graph.schedules.get(ScheduleId(id))!! }
 
         graph.now = dayMillis("2026-02-05")
+        // 1.4.1 (#80): the create stored the editor's LOCAL row, and a PATCH is a full replace, so the
+        // echo carries the row's providers as a client echoing the row does.
         val echoed = legacy.replace(
             """"seasonBehavior":"FOLLOW_ASSET"}""",
-            """"seasonBehavior":"FOLLOW_ASSET","seasonReentry":"AT_START","seasonReentryOffsetDays":0}""",
+            """"seasonBehavior":"FOLLOW_ASSET","seasonReentry":"AT_START","seasonReentryOffsetDays":0,
+               "providers":[{"provider":"LOCAL","enabled":true}]}""",
         )
         val patched = call("PATCH", "/v1/schedules/$id", echoed)
         assertEquals(patched.text(), 200, patched.status)
@@ -1514,5 +1518,224 @@ class MaintenanceRoutesTest {
         } finally {
             donor.close()
         }
+    }
+
+    // --- 1.4.1 (#80, R4): the create default, and PATCH left exactly as it was -----------------
+
+    private val localOn = ScheduleProviderRow("LOCAL", enabled = true)
+    private val localOff = ScheduleProviderRow("LOCAL", enabled = false)
+
+    /** A monthly schedule on [assetId] with [extra] (a leading comma and keys) spliced into the body. */
+    private fun scheduleBody(assetId: String, extra: String = "", title: String = "Filter change"): String =
+        """{"title":"$title","targetAssetId":"$assetId","timeInterval":1,"timeUnit":"MONTH","anchorOn":"2026-02-01"$extra}"""
+
+    /** The stored row's provider set, read from the repository rather than the response. */
+    private fun storedProviders(id: String): List<ScheduleProviderRow> =
+        runBlocking { graph.schedules.get(ScheduleId(id))!!.providers }
+
+    private fun created(body: String): String {
+        val response = call("POST", "/v1/schedules", body)
+        assertEquals(response.text(), 201, response.status)
+        return scheduleIn(response).id
+    }
+
+    /**
+     * #80 AC 1–2: a create that omits `providers` stores what the app's editor stores — one LOCAL
+     * row enabled exactly when reminders are — for both values and for `remindersEnabled`'s own
+     * default.
+     */
+    @Test fun createWithoutProvidersStoresLocalFromRemindersEnabled() {
+        val asset = createAsset("Pump A")
+        assertEquals(listOf(localOn), storedProviders(created(scheduleBody(asset, title = "Default"))))
+        assertEquals(listOf(localOn), storedProviders(created(scheduleBody(asset, ""","remindersEnabled":true""", "On"))))
+        assertEquals(listOf(localOff), storedProviders(created(scheduleBody(asset, ""","remindersEnabled":false""", "Off"))))
+    }
+
+    /** The decoder cannot tell an absent key from a `null` on a create, and a create need not: same row. */
+    @Test fun createWithNullProvidersDoesTheSame() {
+        val asset = createAsset("Pump A")
+        assertEquals(listOf(localOn), storedProviders(created(scheduleBody(asset, ""","providers":null""", "On"))))
+        assertEquals(
+            listOf(localOff),
+            storedProviders(created(scheduleBody(asset, ""","remindersEnabled":false,"providers":null""", "Off"))),
+        )
+    }
+
+    /** #80 AC 3: an explicit empty list is the one way to store no provider, and it is kept. */
+    @Test fun createWithEmptyProvidersStoresNone() {
+        val asset = createAsset("Pump A")
+        assertEquals(emptyList<ScheduleProviderRow>(), storedProviders(created(scheduleBody(asset, ""","providers":[]"""))))
+    }
+
+    /** An explicit list is stored as sent and validated as today: an unknown name is still refused. */
+    @Test fun createWithAListKeepsIt() {
+        val asset = createAsset("Pump A")
+        assertEquals(
+            listOf(localOff),
+            storedProviders(created(scheduleBody(asset, ""","providers":[{"provider":"LOCAL","enabled":false}]"""))),
+        )
+        val unknown = call("POST", "/v1/schedules", scheduleBody(asset, ""","providers":[{"provider":"ALMANAC"}]""", "Unknown"))
+        assertEquals(422, unknown.status)
+        assertEquals("UNKNOWN_PROVIDER", unknown.code())
+    }
+
+    /** R4: a PATCH is a full replace, so an omitted `providers` still replaces the set with none. */
+    @Test fun patchWithoutProvidersStillReplacesWithNone() {
+        val asset = createAsset("Pump A")
+        val id = created(scheduleBody(asset, ""","providers":[{"provider":"LOCAL","enabled":true}]"""))
+        assertEquals(listOf(localOn), storedProviders(id))
+
+        val patched = call("PATCH", "/v1/schedules/$id", scheduleBody(asset))
+        assertEquals(patched.text(), 200, patched.status)
+        assertEquals(emptyList<ScheduleProviderRow>(), storedProviders(id))
+    }
+
+    /** R4 and Q2: a PATCH naming `providers` as `null` is refused as it was before 1.4.1, and writes nothing. */
+    @Test fun patchWithNullProvidersIsStillA400() {
+        val asset = createAsset("Pump A")
+        val id = created(scheduleBody(asset, ""","providers":[{"provider":"LOCAL","enabled":true}]"""))
+        val before = runBlocking { graph.schedules.get(ScheduleId(id)) }
+
+        val refused = call("PATCH", "/v1/schedules/$id", scheduleBody(asset, ""","providers":null""", "Renamed"))
+        assertEquals(refused.text(), 400, refused.status)
+        assertEquals("bad_request", refused.code())
+        assertTrue(refused.text(), "providers" in refused.errorDetail().message)
+        assertEquals(before, runBlocking { graph.schedules.get(ScheduleId(id)) })
+
+        // Keyed on the PATCH, not on the stored row: a PATCH naming no schedule is the same 400 it
+        // always was, never a 404 that only a well-formed body could earn.
+        val nowhere = call("PATCH", "/v1/schedules/00000000-0000-4000-8000-999999999999", scheduleBody(asset, ""","providers":null"""))
+        assertEquals(nowhere.text(), 400, nowhere.status)
+        assertEquals("bad_request", nowhere.code())
+    }
+
+    // --- 1.4.1 (#80, R2): the provider repair's two routes ------------------------------------
+
+    private val repairPlanPath = "/v1/repairs/schedule-providers/plan"
+    private val repairApplyPath = "/v1/repairs/schedule-providers/apply"
+
+    private fun repairIn(response: ApiResponse): ProviderRepairResponse {
+        assertEquals(response.text(), 200, response.status)
+        return ApiJson.decodeFromString(ProviderRepairResponse.serializer(), response.text())
+    }
+
+    /**
+     * The three shapes a plan sorts — ACTIVE and providerless (repairable), PAUSED and providerless,
+     * ACTIVE with LOCAL disabled — beside two it must not list: an ARCHIVED providerless row and an
+     * ordinary LOCAL one. Returns the ids by shape.
+     */
+    private fun seedRepairShapes(): Map<String, String> {
+        val asset = createAsset("Pump A")
+        val repairable = created(scheduleBody(asset, ""","providers":[]""", "Belt check"))
+        val paused = created(scheduleBody(asset, ""","providers":[]""", "Drive check"))
+        assertEquals(200, call("POST", "/v1/schedules/$paused/pause", """{"paused":true}""").status)
+        val disabled = created(scheduleBody(asset, ""","providers":[{"provider":"LOCAL","enabled":false}]""", "Coupling check"))
+        val archived = created(scheduleBody(asset, ""","providers":[]""", "Alignment check"))
+        assertEquals(200, call("POST", "/v1/schedules/$archived/archive", """{"archived":true}""").status)
+        val delivered = created(scheduleBody(asset, title = "Filter change"))
+        return mapOf(
+            "repairable" to repairable, "paused" to paused, "disabled" to disabled,
+            "archived" to archived, "delivered" to delivered,
+        )
+    }
+
+    /**
+     * Every table the repair's use case could reach, as sets of rows — `ApiReadsWriteNothingTest`'s
+     * read-only proof. The clock moves before the call, so even a rewrite of an identical row shows.
+     */
+    private fun repairTables(): Map<String, Set<Any>> = runBlocking {
+        mapOf(
+            "maintenance_schedule" to graph.schedules.all().toSet(),
+            "schedule_state" to graph.scheduleStates.all().toSet(),
+            "occurrence_closure" to graph.closures.all().toSet(),
+            "asset_event" to graph.events.all().toSet(),
+            "maintenance_group" to graph.groups.all().toSet(),
+            "asset" to graph.assets.all().toSet(),
+        )
+    }
+
+    /** The plan counts by shape, lists the matched rows by title, and writes nothing at all. */
+    @Test fun theRepairPlanWritesNothingAndCounts() {
+        val ids = seedRepairShapes()
+        val tablesBefore = repairTables()
+        val listBefore = call("GET", "/v1/schedules").text()
+        graph.now += 86_400_000L
+
+        val plan = repairIn(call("POST", repairPlanPath, "{}"))
+
+        assertEquals(3, plan.matched)
+        assertEquals(1, plan.repairable)
+        assertEquals(2, plan.skipped)
+        assertEquals(0, plan.repaired)
+        assertEquals(
+            listOf(
+                ProviderRepairRowResponse(ids.getValue("repairable"), "Belt check", "REPAIR", null),
+                ProviderRepairRowResponse(ids.getValue("disabled"), "Coupling check", "SKIPPED", "PROVIDERS_DISABLED"),
+                ProviderRepairRowResponse(ids.getValue("paused"), "Drive check", "SKIPPED", "PAUSED"),
+            ),
+            plan.schedules,
+        )
+        assertEquals(tablesBefore, repairTables())
+        assertEquals(listBefore, call("GET", "/v1/schedules").text())
+    }
+
+    /** The apply repairs what its own re-plan calls repairable; a re-plan then finds nothing to repair. */
+    @Test fun theRepairApplyThenReplanIsZero() {
+        val ids = seedRepairShapes()
+        graph.now = dayMillis("2026-02-07")
+
+        val applied = repairIn(call("POST", repairApplyPath, "{}"))
+        assertEquals(3, applied.matched)
+        assertEquals(1, applied.repairable)
+        assertEquals(2, applied.skipped)
+        assertEquals(applied.repairable, applied.repaired)
+        assertEquals(
+            listOf("REPAIRED", "SKIPPED", "SKIPPED"),
+            applied.schedules.map { it.outcome },
+        )
+        assertEquals(listOf(localOn), storedProviders(ids.getValue("repairable")))
+        assertEquals(dayMillis("2026-02-07"), runBlocking { graph.schedules.get(ScheduleId(ids.getValue("repairable")))!!.updatedAt })
+        assertEquals(emptyList<ScheduleProviderRow>(), storedProviders(ids.getValue("paused")))
+        assertEquals(emptyList<ScheduleProviderRow>(), storedProviders(ids.getValue("archived")))
+        assertEquals(listOf(localOff), storedProviders(ids.getValue("disabled")))
+
+        val replan = repairIn(call("POST", repairPlanPath, "{}"))
+        assertEquals(0, replan.repairable)
+        assertEquals(2, replan.skipped)
+        assertEquals(0, repairIn(call("POST", repairApplyPath, "{}")).repaired)
+    }
+
+    /**
+     * The body is `{}` and nothing else: a key is the strict decoder's 400, a zero-byte body is not
+     * JSON (400 with the JSON type, the router's 415 without one), another type is 415, another verb
+     * 405 — and none of them writes. Neither route has a bare or deeper spelling.
+     */
+    @Test fun theRepairRefusesABodyWithKeysOrNoBody() {
+        seedRepairShapes()
+        val rowsBefore = runBlocking { graph.schedules.all().toSet() }
+
+        for (path in listOf(repairPlanPath, repairApplyPath)) {
+            val keyed = call("POST", path, """{"planOnly":true}""")
+            assertEquals(keyed.text(), 400, keyed.status)
+            assertEquals("bad_request", keyed.code())
+
+            val emptyJson = router().handle(
+                ApiRequest(
+                    "POST", path,
+                    mapOf("host" to "127.0.0.1", "authorization" to "Bearer $TOKEN", "content-type" to "application/json"),
+                    ByteArray(0),
+                ),
+            )
+            assertEquals(emptyJson.text(), 400, emptyJson.status)
+            assertEquals("bad_request", emptyJson.code())
+
+            assertEquals(415, call("POST", path).status)
+            assertEquals(415, call("POST", path, "{}", contentType = "text/plain").status)
+            assertEquals(405, call("GET", path).status)
+            assertEquals(405, call("PATCH", path, "{}").status)
+        }
+        assertEquals(404, call("POST", "/v1/repairs/schedule-providers", "{}").status)
+        assertEquals(404, call("POST", "/v1/repairs", "{}").status)
+        assertEquals(rowsBefore, runBlocking { graph.schedules.all().toSet() })
     }
 }

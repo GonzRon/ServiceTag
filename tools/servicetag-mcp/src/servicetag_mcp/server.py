@@ -127,6 +127,8 @@ TOOL_NAMES: tuple[str, ...] = (
     "update_health_subject",
     "archive_health_subject",
     "list_attention",
+    # 1.4.1 — #80's provider repair, plan by default. One, taking the total to 56.
+    "repair_schedule_providers",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -142,8 +144,11 @@ _MIN_SCHEMA_VERSION = 8
 `servicePolicy`, the season, condition and health routes — so it writes only to an app at least that
 new (master plan §20, dec. 25). Reads keep working against an older app."""
 
-_POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset({"/v1/import-merge/plan"})
-"""The one non-`GET` route that writes nothing, ever: an old app may still be asked for a plan."""
+_POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
+    {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan"}
+)
+"""The non-`GET` routes that write nothing, ever — the merge plan and (1.4.1) the provider repair's
+plan: an old app may still be asked for either."""
 
 
 def _require_schema_8() -> None:
@@ -1088,6 +1093,33 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     )
 
 
+@mcp.tool()
+def repair_schedule_providers(plan_only: bool = True) -> dict[str, Any]:
+    """Find — and, only when asked, repair — schedules whose reminders are on but that nothing
+    delivers (issue #80). Needs ServiceTag 1.4.1 or later.
+
+    **By default this only plans, and the plan writes nothing.** A schedule is *matched* when it is
+    not archived, reminders are on and none of its providers is enabled; it is *repairable* when it
+    is also `ACTIVE` and has no provider row at all. Every other matched schedule is *skipped* with a
+    `reason`: `PAUSED` (any status but `ACTIVE`) or `PROVIDERS_DISABLED` (a provider row that is
+    there and disabled — a bulk repair never turns one on).
+
+    `plan_only=False` applies: the phone plans again inside its own write — it never replays an
+    earlier plan — and gives each repairable schedule exactly one `LOCAL` provider, enabled, moving
+    its `updatedAt` and nothing else. Skipped, archived and reminders-off schedules are not written.
+    A second apply repairs nothing. Neither call sends a reminder: delivery starts from the phone's
+    next digest, backstop run or Reminder Health action.
+
+    Returns the phone's report unchanged: `{matched, repairable, skipped, repaired, schedules}`,
+    each schedule `{id, title, outcome, reason}` with `outcome` `REPAIR` (plan), `REPAIRED` (apply)
+    or `SKIPPED`. The plan is asked of any app; the apply, a write, is refused below schema 8 with
+    `APP_SCHEMA_TOO_OLD` and nothing sent.
+    """
+    # Only an explicit `False` applies: an omitted argument, `True` or a `null` all mean the plan.
+    path = "/v1/repairs/schedule-providers/apply" if plan_only is False else "/v1/repairs/schedule-providers/plan"
+    return _call("POST", path, json_body={}, content_type="application/json")
+
+
 # --- 1.2, the maintenance surface -----------------------------------------------------------------
 #
 # Seventeen tools over master plan §9's nineteen routes. Everything above's conventions hold
@@ -1341,8 +1373,13 @@ def create_schedule(
     schedule starts reading DUE SOON. `anchor_on` is ISO `YYYY-MM-DD`.
 
     `completion_mode` is `QUICK` (one tap) or `FORM`, which collects a quick action's readings —
-    pass `profile_id` for that. `providers` is `[{"provider": "LOCAL", "enabled": true}]`; `LOCAL` is
-    the only provider.
+    pass `profile_id` for that.
+
+    **Reminder delivery.** `providers` omitted sends what the app's own editor stores: one `LOCAL`
+    row, `[{"provider": "LOCAL", "enabled": <reminders_enabled>}]`, enabled exactly when reminders
+    are (`reminders_enabled` omitted is the app's `true`). `LOCAL` is the only provider. Pass
+    `providers=[]` to store no provider at all — the schedule's reminders are then delivered by
+    nothing, which is the state `repair_schedule_providers` exists to find.
 
     **The service policy (1.4)** says when the work is actionable relative to its asset's season and
     maintenance break, and moves only the time side's date: `service_policy` is `CONTINUOUS` (the
@@ -1367,6 +1404,9 @@ def create_schedule(
     have a member, or the schedule's first round would oblige nobody.
     """
     _refuse_mixed_forms(_arguments(locals(), besides=()), set())
+    if providers is None:
+        # #80 (R4): never rely on the app's default for delivery — send the editor's own row.
+        providers = [{"provider": "LOCAL", "enabled": True if reminders_enabled is None else reminders_enabled}]
     return _call(
         "POST",
         "/v1/schedules",

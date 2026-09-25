@@ -206,6 +206,34 @@ def test_apply_sends_the_profile_id_for_a_quick_asset_target_schedule(fake_clien
     assert schedule_row["completionMode"] == "QUICK"
 
 
+@pytest.mark.parametrize("reminders_enabled", [True, False])
+def test_apply_sends_the_local_provider_derived_from_reminders_enabled(fake_client, reminders_enabled) -> None:
+    """#80 (R4): the loader never relies on the app's default for delivery. Every `create_schedule`
+    it sends carries the app editor's own row — one LOCAL provider, enabled exactly when the
+    manifest's `remindersEnabled` is — for an asset target and a group target alike."""
+    shed_id = fake_client.add_asset(name="Garden shed")
+    fake_client.add_group(name="Greenhouse misting nozzles", member_asset_ids=[shed_id])
+    manifest = mk_manifest(
+        groups=[mk_group("g1", "Greenhouse misting nozzles", ("Garden shed",))],
+        schedules=[
+            mk_schedule("s1", "Inspect roof", target_asset="Garden shed", reminders_enabled=reminders_enabled),
+            mk_schedule("s2", "Rinse the mister nozzles", target_group="g1", reminders_enabled=reminders_enabled),
+        ],
+    )
+    result = _run(_plan_against(manifest, fake_client))
+    assert result.clean
+
+    _run(A.apply(manifest, result, fake_client))
+
+    local = [{"provider": "LOCAL", "enabled": reminders_enabled}]
+    sent = [arguments for name, arguments in fake_client.calls if name == "create_schedule"]
+    assert [args["title"] for args in sent] == ["Inspect roof", "Rinse the mister nozzles"]
+    for args in sent:
+        assert args["reminders_enabled"] is reminders_enabled
+        assert args["providers"] == local
+    assert [row["providers"] for row in fake_client.schedules] == [local, local]
+
+
 # ---- re-plan and idempotence ------------------------------------------------------------------------
 
 

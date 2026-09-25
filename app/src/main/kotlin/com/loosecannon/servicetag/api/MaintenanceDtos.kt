@@ -14,10 +14,14 @@ import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.ConsumableInput
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
+import com.loosecannon.servicetag.core.usecase.ProviderRepairPlan
+import com.loosecannon.servicetag.core.usecase.ProviderRepairReport
+import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import kotlinx.serialization.Serializable
@@ -271,6 +275,11 @@ internal data class ScheduleProviderRequest(val provider: String, val enabled: B
  * object before this class is ever decoded, because a default here cannot tell an omitted key from
  * an explicit `null`. The defaults below are only what each form's own rule reads when its keys are
  * absent. `docs/api/command-shapes.json` pins the key set.
+ *
+ * 1.4.1 (#80, R4): [providers] is nullable so a create can tell "not sent" from `[]`. On a create an
+ * absent or `null` list is the editor's own row, `LOCAL` enabled exactly when [remindersEnabled] is;
+ * `[]` stays empty. On a PATCH an absent list is still the full replace's empty set, and a `null` one
+ * is refused by [ScheduleForms] before this class is decoded, as it always was.
  */
 @Serializable
 internal data class ScheduleCommandRequest(
@@ -295,11 +304,15 @@ internal data class ScheduleCommandRequest(
     val completionMode: String = "QUICK",
     val profileId: String? = null,
     val remindersEnabled: Boolean = true,
-    val providers: List<ScheduleProviderRequest> = emptyList(),
+    val providers: List<ScheduleProviderRequest>? = null,
 )
 
-/** The command [form] asks for; [ScheduleForms] decides the form and owns the policy's translation. */
-internal fun ScheduleCommandRequest.toCommand(form: ScheduleForms.Form): ScheduleCommand {
+/**
+ * The command [form] asks for; [ScheduleForms] decides the form and owns the policy's translation.
+ * [creating] is true for `POST /v1/schedules` only: it is what lets an omitted `providers` mean the
+ * editor's LOCAL row on a create and still mean "none" on a PATCH's full replace (R4).
+ */
+internal fun ScheduleCommandRequest.toCommand(form: ScheduleForms.Form, creating: Boolean): ScheduleCommand {
     // Parsed in the shipped field order, so a body with two bad enum names still names the first.
     val unit = timeUnit?.let { enumOr400<RecurrenceUnit>(it, "timeUnit") }
     val basis = enumOr400<TimeBasis>(timeBasis, "timeBasis")
@@ -326,9 +339,65 @@ internal fun ScheduleCommandRequest.toCommand(form: ScheduleForms.Form): Schedul
         // The provider name stays text all the way to the use case: an unknown one is a *validation*
         // problem it reports by name (`UnknownProvider`), not a 400 about a bad enum, because the
         // column is TEXT and the set grows without a migration.
-        providers = providers.map { ScheduleProviderRow(it.provider, it.enabled) },
+        providers = providersOf(creating),
     )
 }
+
+/**
+ * #80 (R4): an omitted or `null` list on a **create** is what the app's editor writes, one LOCAL row
+ * enabled exactly when reminders are; on a PATCH it is the full replace's empty set, unchanged. An
+ * explicit list, `[]` included, is taken as sent.
+ */
+private fun ScheduleCommandRequest.providersOf(creating: Boolean): List<ScheduleProviderRow> = when {
+    providers != null -> providers.map { ScheduleProviderRow(it.provider, it.enabled) }
+    creating -> listOf(ScheduleProviderRow(ProviderId.LOCAL.name, enabled = remindersEnabled))
+    else -> emptyList()
+}
+
+/**
+ * 1.4.1 (#80): the body both provider-repair routes take — `{}`, and nothing else. It has no field on
+ * purpose: the strict decoder refuses any key by name, and a zero-byte body is not JSON.
+ */
+@Serializable
+internal class ProviderRepairRequest
+
+/**
+ * 1.4.1 (#80): `POST /v1/repairs/schedule-providers/{plan,apply}`'s answer — [RepairScheduleProviders]'
+ * plan, or its apply's own re-plan and what it repaired, counted and listed in the plan's (title, id)
+ * order. [repaired] is 0 on a plan and equals [repairable] on an apply.
+ */
+@Serializable
+internal data class ProviderRepairResponse(
+    val matched: Int,
+    val repairable: Int,
+    val skipped: Int,
+    val repaired: Int,
+    val schedules: List<ProviderRepairRowResponse>,
+)
+
+/** [outcome] is `REPAIR` (plan), `REPAIRED` (apply) or `SKIPPED`; [reason] names a skip, else null. */
+@Serializable
+internal data class ProviderRepairRowResponse(val id: String, val title: String, val outcome: String, val reason: String?)
+
+internal fun ProviderRepairPlan.planResponse(): ProviderRepairResponse = repairResponse(this, repaired = 0, "REPAIR")
+
+internal fun ProviderRepairReport.applyResponse(): ProviderRepairResponse =
+    repairResponse(plan, repaired = repaired.size, "REPAIRED")
+
+private fun repairResponse(plan: ProviderRepairPlan, repaired: Int, repairOutcome: String) = ProviderRepairResponse(
+    matched = plan.matched,
+    repairable = plan.repairable.size,
+    skipped = plan.skipped.size,
+    repaired = repaired,
+    schedules = plan.entries.map {
+        ProviderRepairRowResponse(
+            id = it.scheduleId.value,
+            title = it.title,
+            outcome = if (it.skip == null) repairOutcome else "SKIPPED",
+            reason = it.skip?.name,
+        )
+    },
+)
 
 /**
  * One completion of one occurrence.

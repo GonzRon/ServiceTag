@@ -5,6 +5,8 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.SeasonBehavior
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import kotlinx.serialization.DeserializationStrategy
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -93,9 +95,28 @@ internal object ScheduleForms {
         }
         val flagKeys = if (acceptsFlags) ACTION_FLAGS.filter { it in raw } else emptyList()
         val flags = strict(ScheduleActionFlags.serializer(), JsonObject(raw.filterKeys { it in flagKeys }))
+        if (acceptsFlags) refuseNullProviders(raw)
         val body = strict(ScheduleCommandRequest.serializer(), JsonObject(raw.filterKeys { it !in flagKeys }))
         return Parsed(form, body, flags.unlinkHealthSubject)
     }
+
+    /**
+     * 1.4.1 (#80, R4; Q2): a PATCH naming `providers` as `null` stays the shipped 400. The request
+     * class's list became nullable so a **create** can read a `null` as an omitted key; a PATCH never
+     * took one, so its `null` is decoded here against the list as it was declared before — never
+     * null — and refused by the decoder's own message naming `providers`, exactly as before. Keyed
+     * on the PATCH itself rather than on the stored row, so a PATCH naming no schedule answers the
+     * same 400 it always did.
+     */
+    private fun refuseNullProviders(raw: JsonObject) {
+        if (raw["providers"] is JsonNull) {
+            strict(NonNullProviders.serializer(), JsonObject(raw.filterKeys { it == "providers" }))
+        }
+    }
+
+    /** The `providers` key as a PATCH has always read it. Decoded only to refuse a `null`. */
+    @Serializable
+    private class NonNullProviders(val providers: List<ScheduleProviderRequest>)
 
     /** The policy and offset [body] asks for, in its [form]. */
     fun policyOf(form: Form, body: ScheduleCommandRequest): LegacySeasonMapping.Policy = when (form) {
