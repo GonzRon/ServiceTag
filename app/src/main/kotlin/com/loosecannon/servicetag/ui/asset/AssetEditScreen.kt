@@ -572,6 +572,8 @@ private fun FormField(
     placeholder: String? = null,
     trailingIcon: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier.fillMaxWidth(),
+    /** The error outline. It follows [problem] unless the caller's state decides it ([MonthDayInput.outlined]). */
+    outlined: Boolean = problem != null,
 ) {
     val supporting = problem ?: hint
     OutlinedTextField(
@@ -579,7 +581,7 @@ private fun FormField(
         onValueChange = onValueChange,
         label = { Text(label) },
         placeholder = if (placeholder == null) null else { { Text(placeholder) } },
-        isError = problem != null,
+        isError = outlined,
         supportingText = if (supporting == null) null else { { Text(supporting) } },
         trailingIcon = trailingIcon,
         singleLine = minLines == 1,
@@ -719,6 +721,7 @@ private fun MonthDayField(
         onValueChange = onValueChange,
         label = input.drawnLabel,
         problem = input.problem,
+        outlined = input.outlined,
         placeholder = "MM-DD",
         mono = true,
         modifier = modifier,

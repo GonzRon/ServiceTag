@@ -599,7 +599,7 @@ data class MonthDayInput(
 internal const val NOT_A_REAL_MONTH_AND_DAY = "Not a real month and day"
 
 /**
- * The non-verbal required mark (the controller's ruling on I10 and B06's plan-review F4): an asterisk
+ * The non-verbal required mark (the controller's ruling on I10 and the plan-review follow-up's F4): an asterisk
  * in the ratified label, never a word.
  */
 internal fun requiredMark(label: String): String = "$label *"
@@ -934,6 +934,9 @@ class AssetEditViewModel(
         val result = runCatching {
             saveAssetSettings.run(id, cmd, form.templateKey.takeIf { id == null })
         }
+        // Each answer replaces the last one's lines: a refusal names what **this** save was refused for,
+        // never a line left over from an earlier one (B10 review M6).
+        _state.update { it.copy(seasonRefusal = null, breakRefusal = null) }
         when (val failure = result.exceptionOrNull()) {
             null -> {
                 _state.update { it.copy(saving = false, problems = emptyMap()) }

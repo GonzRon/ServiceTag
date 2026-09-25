@@ -130,6 +130,9 @@ class AssetEditorSeasonAndHealthTest {
         saveAsset().assertIsNotEnabled()
         field("$SEASON_ENDS *").performScrollTo().performTextInput("13-31")
         rule.onNodeWithText("Not a real month and day").assertExists()
+        // The outline is drawn from the state's flag (review M4): on the bad value only.
+        field("$SEASON_ENDS *").assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Error))
+        field("$SEASON_STARTS *").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Error))
         saveAsset().assertIsNotEnabled()
 
         rule.onNodeWithText(STARTED_AND_ENDED_BY_HAND).performScrollTo().performClick()

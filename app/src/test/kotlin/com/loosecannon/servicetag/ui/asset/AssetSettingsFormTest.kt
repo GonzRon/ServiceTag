@@ -39,7 +39,7 @@ import org.junit.Test
  * What is proved here is the form and its one save: that nothing the owner must decide is decided for
  * them — S35 has no default (inv. 92), the break is off and empty unless stored (inv. 121), "One
  * subject" names no subject — that a half-filled or malformed window holds Save with a non-verbal mark
- * and never a new sentence (the controller's ruling on I10, plan-review F4), that one Save is one
+ * and never a new sentence (the controller's ruling on I10, the plan-review follow-up's F4), that one Save is one
  * [SaveAssetSettings] write carrying all four parts or none, and that a refused boundary change is said
  * by S55, S63 or S64. The screen's drawing of it is `AssetEditorSeasonAndHealthTest`'s.
  */
@@ -247,6 +247,19 @@ class AssetSettingsFormTest {
         assertFalse("the form stays as typed", pause.state.value.breakOn)
         assertEquals("nothing is written", "12-01" to "02-28", stored("gen").let { it.blackoutStartMmdd to it.blackoutEndMmdd })
         assertTrue(written.upserts.isEmpty())
+
+        // Review M6: the next refusal replaces the last. With the break still off, a calendar season
+        // re-kinds the break's boundary too, and the save now answers S55 alone.
+        pause.onSeasonMode(SeasonMode.CALENDAR)
+        pause.onSeasonStart("04-01")
+        pause.onSeasonEnd("10-31")
+        pause.saveAndSettle()
+        assertEquals(
+            "Some maintenance on this asset is set to be ready before its season. Change it first: Load test, Oil change.",
+            pause.state.value.seasonRefusal,
+        )
+        assertNull("S64 was the last save's answer, not this one's", pause.state.value.breakRefusal)
+        assertTrue(written.upserts.isEmpty())
     }
 
     @Test fun aBreakCoveringTheYearShowsS63() = runTest {
@@ -402,12 +415,16 @@ class AssetSettingsFormTest {
     }
 
     /**
-     * Plan-review F4: the required mark is an asterisk or an outline, never a word. Every line the
-     * form's season, break and policy state can put on screen, walked through each state that holds
-     * Save, is a ratified string, a ratified string with the asterisk, or the shipped month-day line.
+     * The plan-review follow-up's F4: the required mark is an asterisk or an outline, never a word. Every
+     * line the form's season, break and policy state can put on screen — walked through each state that
+     * holds Save, and through a refused save of each kind (S64, S63, S55 and the asset's own field line)
+     * — is a ratified string, a ratified string with the asterisk, or a shipped line.
      */
     @Test fun theRequiredMarkIsNonVerbal() = runTest {
-        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        graph.assets.upsert(assetRow("ups", name = "UPS", breakStart = "12-01", breakEnd = "02-28"))
+        graph.schedules.upsert(
+            scheduleOf("s-test", assetId = "ups", title = "Load test", servicePolicy = ServicePolicy.PRE_SERVICE, policyOffsetDays = -7),
+        )
         graph.healthSubjects.upsert(subjectRow("battery", "ups", name = "Battery age", driver = HealthDriver.AGE))
         val vm = form("ups")
         vm.state.first { it.subjects.isNotEmpty() }
@@ -415,7 +432,9 @@ class AssetSettingsFormTest {
         val ratified = listOf(
             SEASON_STARTS, SEASON_ENDS, BREAK_STARTS, BREAK_ENDS, IS_THIS_ASSET_IN_SEASON, WHICH_SUBJECT,
         )
-        val allowed = ratified.toSet() + ratified.map { "$it *" } + NOT_A_REAL_MONTH_AND_DAY
+        val refusals = setOf(seasonStrands(listOf("Load test")), breakStrands(listOf("Load test")), BREAK_CANNOT_COVER_THE_YEAR)
+        val shipped = setOf(NOT_A_REAL_MONTH_AND_DAY, "Give the asset a name")
+        val allowed = ratified.toSet() + ratified.map { "$it *" } + refusals + shipped
         val seen = mutableSetOf<String>()
         fun look() {
             val s = vm.state.value
@@ -428,7 +447,13 @@ class AssetSettingsFormTest {
             seen += s.problems.values
             listOfNotNull(s.seasonRefusal, s.breakRefusal).forEach { seen += it }
         }
+        suspend fun refused() {
+            assertTrue(vm.state.value.canSave)
+            vm.saveAndSettle()
+            look()
+        }
 
+        // The held states.
         look()
         vm.onSeasonMode(SeasonMode.CALENDAR); look()
         vm.onSeasonStart("05-01"); look()
@@ -439,6 +464,17 @@ class AssetSettingsFormTest {
         vm.onBreakEnd("02-30"); look()
         vm.onAggregation(HealthAggregation.TRACK_ONE); look()
         vm.save(); vm.state.first { !it.saving }; look()
+
+        // The refused saves: S64, S63, S55, and the asset's own field line.
+        vm.onAggregation(HealthAggregation.WORST)
+        vm.onSeasonMode(SeasonMode.YEAR_ROUND)
+        vm.onBreak(false); refused()
+        vm.onBreak(true); vm.onBreakStart("03-01"); vm.onBreakEnd("02-28"); refused()
+        vm.onBreak(false); vm.onSeasonMode(SeasonMode.CALENDAR); vm.onSeasonStart("11-01"); vm.onSeasonEnd("03-31"); refused()
+        vm.onSeasonMode(SeasonMode.YEAR_ROUND); vm.onBreak(true); vm.onBreakStart("12-01"); vm.onBreakEnd("02-28")
+        vm.onName(""); refused()
+        assertTrue("every refusal was reached", seen.containsAll(refusals) && "Give the asset a name" in seen)
+        assertTrue(written.upserts.isEmpty())
 
         assertTrue("every line is ratified or shipped: ${seen - allowed}", allowed.containsAll(seen))
         assertTrue("the asterisk was drawn", "$SEASON_ENDS *" in seen && "$BREAK_STARTS *" in seen)
