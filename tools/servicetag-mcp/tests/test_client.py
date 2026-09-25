@@ -58,6 +58,52 @@ def test_an_error_body_becomes_an_ApiError_with_its_problems(paired) -> None:
     assert raised.value.problems == ["NameRequired"]
 
 
+def test_an_error_body_keeps_its_field(paired) -> None:
+    """#52: the envelope's `field` names the one body key the refusal is about; `ApiError` keeps it
+    beside `code`, `message` and `problems`, each exactly as the phone sent it."""
+    paired.reply(
+        "POST",
+        "/v1/assets",
+        422,
+        {"error": {"code": "asset_validation", "message": "an asset needs a name",
+                   "problems": ["NameRequired"], "field": "name"}},
+    )
+    with pytest.raises(ApiError) as raised:
+        server_module.device.request(
+            "POST", "/v1/assets", json_body={"name": "  "}, content_type="application/json"
+        )
+    assert raised.value.status == 422
+    assert raised.value.code == "asset_validation"
+    assert raised.value.message == "an asset needs a name"
+    assert raised.value.problems == ["NameRequired"]
+    assert raised.value.field == "name"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        # A refusal about no one key, and a body from an app older than the key.
+        {"code": "not_found", "message": "nothing here answers /v1/nope", "problems": [], "field": None},
+        {"code": "not_found", "message": "nothing here answers /v1/nope", "problems": []},
+        # Not a string: nothing a key could be, so nothing to show.
+        {"code": "not_found", "message": "nothing here answers /v1/nope", "problems": [], "field": 7},
+    ],
+)
+def test_a_missing_or_null_field_is_None(paired, error: dict) -> None:
+    paired.reply("GET", "/v1/nope", 404, {"error": error})
+    with pytest.raises(ApiError) as raised:
+        server_module.device.request("GET", "/v1/nope")
+    assert raised.value.code == "not_found"
+    assert raised.value.field is None
+
+
+def test_a_refusal_with_no_envelope_has_no_field(paired) -> None:
+    paired.reply("GET", "/v1/status", 413, b"")
+    with pytest.raises(ApiError) as raised:
+        server_module.device.request("GET", "/v1/status")
+    assert raised.value.field is None
+
+
 def test_an_error_with_no_json_body_still_raises_something_readable(paired) -> None:
     paired.reply("GET", "/v1/status", 500, b"not json")
     with pytest.raises(ApiError) as raised:

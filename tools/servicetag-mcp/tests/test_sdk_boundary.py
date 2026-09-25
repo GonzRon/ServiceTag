@@ -103,6 +103,38 @@ def test_a_422_survives_the_sdk_boundary_with_code_and_problems(paired) -> None:
     assert "NameRequired" in text
 
 
+def test_a_422_survives_the_sdk_boundary_with_its_field(paired) -> None:
+    """#52: the key the refusal is about reaches the model, between the message and the problems."""
+    paired.reply(
+        "POST", "/v1/assets", 422,
+        {"error": {"code": "asset_validation", "message": "an asset needs a name",
+                   "problems": ["NameRequired"], "field": "name"}},
+    )
+    with pytest.raises(ToolError) as raised:
+        _call_tool("create_asset", {"name": "  "})
+    assert str(raised.value) == (
+        "Error executing tool create_asset: "
+        "422 asset_validation: an asset needs a name [field=name] (NameRequired)"
+    )
+
+
+@pytest.mark.parametrize("field", [{"field": None}, {}], ids=["null", "absent"])
+def test_a_refusal_without_a_field_reads_exactly_as_before(paired, field: dict) -> None:
+    """The bracket appears only when `field` is not null: a refusal about no one key, or one from an
+    app that predates the key, reads byte for byte as it always has."""
+    paired.reply(
+        "POST", "/v1/assets", 422,
+        {"error": {"code": "asset_validation", "message": "the asset was refused",
+                   "problems": ["NameRequired"], **field}},
+    )
+    with pytest.raises(ToolError) as raised:
+        _call_tool("create_asset", {"name": "  "})
+    # The whole string, the SDK's own prefix included: exactly what a model read before `field`.
+    assert str(raised.value) == (
+        "Error executing tool create_asset: 422 asset_validation: the asset was refused (NameRequired)"
+    )
+
+
 # --- #53 task 1: an empty-body refusal reports its status and a real reason, never a fake code ---
 
 

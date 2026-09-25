@@ -4,7 +4,9 @@ A workstation MCP server for ServiceTag's local automation API. It forwards a po
 takes the pairing code the phone shows, and exposes one tool per `/v1` endpoint.
 
 The contract it speaks is `docs/api/v1.md` in this repository. Read that for the shapes, the status
-codes and the limits; this file is about running the thing.
+codes and the limits; this file is about running the thing. A refusal reaches the caller as a
+`ToolError` reading `<status> <code>: <message>`, then ` [field=<field>]` only when the phone names
+the one body key it is about, then the `problems` in parentheses.
 
 ## What it needs
 

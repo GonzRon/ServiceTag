@@ -10,7 +10,7 @@ for a bare `@mcp.tool`, which is a server that never starts.
 raises that is not itself a `ToolError` (or `ResourceError`, or `MCPError`) is discarded: the SDK
 wraps it as `UnexpectedToolError("Error executing tool <name>")` and nothing else reaches the model
 (`mcp/server/mcpserver/tools/base.py:208`–`210`). `_call` is the one place that conversion happens,
-so it is what makes `NotPaired`'s "read the code again" and `ApiError`'s code/message/problems
+so it is what makes `NotPaired`'s "read the code again" and `ApiError`'s code/message/field/problems
 visible at all — whether a tool is invoked through the SDK or, as this suite mostly does, directly.
 """
 
@@ -205,6 +205,10 @@ def _call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         raise ToolError(str(exc)) from exc
     except ApiError as exc:
         detail = f"{exc.status} {exc.code}: {exc.message}"
+        # #52: the key the refusal is about, only when the phone named one, so a refusal without
+        # one reads exactly as it always has.
+        if exc.field is not None:
+            detail += f" [field={exc.field}]"
         if exc.problems:
             detail += f" ({', '.join(exc.problems)})"
         raise ToolError(detail) from exc
