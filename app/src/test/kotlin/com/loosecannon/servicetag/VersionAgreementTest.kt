@@ -272,6 +272,47 @@ class VersionAgreementTest {
             "the D-16 known limits must be recorded",
             text.contains("ruling D-16's two known limits"),
         )
+
+        // 1.4: two §6 sentences stated rules the 1.4 spec retired. They stay, marked, so the
+        // assertion is on the marker — anchored, dated, naming the spec's two sections — and on the
+        // old words still being there, never on their absence.
+        val section6 = text.substringAfter("\n## 6. Seasonal activation\n").substringBefore("\n## 7. ")
+        assertTrue(
+            "§6's MANUAL_STARTUP deferral must be kept for the record",
+            section6.contains("Deferred (not MVP): `MANUAL_STARTUP`"),
+        )
+        assertTrue(
+            "§6's MANUAL_STARTUP deferral must be marked superseded by the 1.4 spec, dated",
+            Regex(
+                """^> \*\*The `MANUAL_STARTUP` deferral above is superseded by the 1\.4 spec \(2026-09-24; """ +
+                    """§3\.3 activation facts, §4 service policy\)\.""",
+                RegexOption.MULTILINE,
+            ).containsMatchIn(section6),
+        )
+        assertTrue(
+            "§6's season-end sentence must be kept for the record",
+            section6.contains("nothing is stored at \"season end\""),
+        )
+        assertTrue(
+            "§6's season-end sentence must be marked superseded by the 1.4 spec, dated",
+            Regex(
+                """^> \*\*The "nothing is stored at season end" sentence above is superseded by the 1\.4 spec """ +
+                    """\(2026-09-24; §3\.3 activation facts, §4 service policy\)\.""",
+                RegexOption.MULTILINE,
+            ).containsMatchIn(section6),
+        )
+        val section104 = text.substringAfter("\n### 10.4 ").substringBefore("\n### 10.5 ")
+        assertTrue(
+            "§10.4's winter example must carry the 1.4 answer, dated, citing O-5 and Finding A-1",
+            Regex(
+                """^> \*\*The 1\.4 answer \(2026-09-24; spec §4\.3, O-5; archaeology Finding A-1\)\.""",
+                RegexOption.MULTILINE,
+            ).containsMatchIn(section104),
+        )
+        assertTrue(
+            "the annotation must say the first in-season day reads DUE, not OVERDUE",
+            section104.contains("**DUE** on the first in-season day, not **OVERDUE**"),
+        )
     }
 
     /**
