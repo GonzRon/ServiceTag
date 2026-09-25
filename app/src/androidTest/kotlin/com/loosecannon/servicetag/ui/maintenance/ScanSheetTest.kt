@@ -3,16 +3,25 @@ package com.loosecannon.servicetag.ui.maintenance
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionId
+import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.HealthAggregation
+import com.loosecannon.servicetag.core.model.HealthDriver
+import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
@@ -27,13 +36,19 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.core.usecase.ConditionCommand
+import com.loosecannon.servicetag.core.usecase.EventCommand
+import com.loosecannon.servicetag.core.usecase.HealthPolicyCommand
+import com.loosecannon.servicetag.core.usecase.HealthSubjectCommand
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
+import com.loosecannon.servicetag.ui.condition.displayDate
 import com.loosecannon.servicetag.ui.scan.TagResultSheet
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.ZoneOffset
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -168,7 +183,8 @@ class ScanSheetTest {
         val record = sheetFor(graph, assetId, tagId)
 
         rule.awaitText("Blade sharpen")
-        rule.onNodeWithText("Maintenance").assertIsDisplayed()
+        // The sheet's title, and block 6's label over the items (spec §10.1).
+        rule.onAllNodesWithText("Maintenance").assertCountEquals(2)
         rule.onNodeWithText("Ride-on mower").assertIsDisplayed()
         rule.onNodeWithText("Tag placement").assertIsDisplayed()
         rule.onNodeWithText("Deck plate").assertIsDisplayed()
@@ -395,6 +411,187 @@ class ScanSheetTest {
 
         rule.waitUntil(TIMEOUT_MS) { record.isNotEmpty() }
         assertEquals(listOf("asset:$assetId"), record)
+    }
+
+    // ---------------------------------------------------------------- 1.4: condition and health
+
+    private val zone: String get() = ZoneId.systemDefault().id
+
+    private fun asset(graph: AppGraph, name: String, parent: AssetId? = null): AssetId = runBlocking {
+        graph.createAsset.run(AssetCommand(name = name, category = "Power", parentAssetId = parent)).id
+    }
+
+    private fun record(graph: AppGraph, assetId: AssetId, condition: OperationalCondition, on: LocalDate, reason: String = "") =
+        runBlocking {
+            graph.recordCondition.run(
+                assetId,
+                ConditionCommand(condition = condition, occurredOn = on.toString(), tzId = zone, reason = reason),
+            )
+        }
+
+    private fun conditionRows(graph: AppGraph) = runBlocking { graph.conditions.all().size }
+
+    /**
+     * Spec §10.1 on a DOWN asset with nothing due: the condition block — word, reason and S22
+     * "since" — S7 beside S6, and block 6 reading S139 with nothing to complete. Condition opened the
+     * sheet (O-8), so it stays open on its own.
+     */
+    @Test fun aDownAssetWithNothingDueShowsConditionAndNothingDue() {
+        val graph = app.graph
+        val today = LocalDate.now()
+        val pack = asset(graph, "Battery pack")
+        record(graph, pack, OperationalCondition.DOWN, today.minusDays(3), reason = "Cells swollen")
+        val trail = sheetFor(graph, pack.value, null)
+
+        rule.awaitText("DOWN")
+        rule.onNodeWithText("Battery pack").assertIsDisplayed()
+        rule.onNodeWithText("since ${displayDate(today.minusDays(3))}").assertIsDisplayed()
+        rule.onNodeWithText("Cells swollen").assertIsDisplayed()
+        rule.onNodeWithText("Mark operational").assertIsDisplayed()
+        rule.onNodeWithText("Change condition").assertIsDisplayed()
+        rule.onNodeWithText("Nothing due").assertIsDisplayed()
+        rule.onNodeWithText("Open asset").assertIsDisplayed()
+        rule.onAllNodesWithText("Complete selected").assertCountEquals(0)
+
+        // It stayed on the sheet, and the scan wrote nothing.
+        assertEquals(emptyList<String>(), trail)
+        assertEquals(1, conditionRows(graph))
+    }
+
+    /**
+     * A CRITICAL subject is drawn as S109 **whatever the aggregate**: under AVERAGE a starter
+     * battery at 22 beside two parts at 100 averages 74, NOMINAL, and the aggregate is not drawn —
+     * but the critical line is (inv. 119). Health rides along; the due work opened the sheet.
+     */
+    @Test fun averageNominalPlusOneCriticalShowsS109() {
+        val graph = app.graph
+        val today = LocalDate.now()
+        val (ups, _) = seedDueWork(graph).let { AssetId(it.first) to it.second }
+        runBlocking {
+            fun subject(name: String, t1: Int, t2: Int, t3: Int) = HealthSubjectCommand(
+                name = name, kind = HealthSubjectKind.PART, driver = HealthDriver.AGE,
+                nominalUntilDays = t1, warningFromDays = t2, criticalFromDays = t3,
+            )
+            graph.saveHealthSubject.create(ups, subject("Starter battery", 0, 40, 75))
+            graph.saveHealthSubject.create(ups, subject("Fan", 90, 100, 200))
+            graph.saveHealthSubject.create(ups, subject("Filter", 90, 100, 200))
+            graph.setHealthPolicy.run(ups, HealthPolicyCommand(HealthAggregation.AVERAGE))
+            graph.logEvent.run(
+                EventCommand(
+                    assetId = ups, profileId = null, kind = EventKind.REPLACEMENT, title = "Parts replaced",
+                    occurredOn = today.minusDays(80).toString(), occurredTime = null, tzId = zone, notes = "",
+                    values = emptyMap(), consumables = emptyList(),
+                ),
+            )
+        }
+        sheetFor(graph, ups.value, null)
+
+        rule.awaitText("Critical: Starter battery 22")
+        rule.onNodeWithText("Critical: Starter battery 22").assertIsDisplayed()
+        // A NOMINAL aggregate is not drawn: no S108 line and no band badge.
+        rule.onAllNodesWithText("74 —", substring = true).assertCountEquals(0)
+        rule.onAllNodesWithText("NOMINAL").assertCountEquals(0)
+        rule.onNodeWithText("Blade sharpen").assertIsDisplayed()
+    }
+
+    /**
+     * A DEGRADED component opens its parent's sheet and is drawn as S27, with S23 for its empty
+     * reason; the parent itself has nothing recorded, so it reads S4 and offers S6 alone.
+     */
+    @Test fun aDownComponentLine() {
+        val graph = app.graph
+        val today = LocalDate.now()
+        val generator = asset(graph, "Generator")
+        val fan = asset(graph, "Cooling fan", parent = generator)
+        record(graph, fan, OperationalCondition.DEGRADED, today.minusDays(1))
+        sheetFor(graph, generator.value, null)
+
+        rule.awaitText("Cooling fan DEGRADED — No reason given")
+        rule.onNodeWithText("Cooling fan DEGRADED — No reason given").assertIsDisplayed()
+        rule.onNodeWithText("Condition not recorded").assertIsDisplayed()
+        rule.onNodeWithText("Change condition").assertIsDisplayed()
+        rule.onAllNodesWithText("Mark operational").assertCountEquals(0)
+        rule.onNodeWithText("Nothing due").assertIsDisplayed()
+    }
+
+    /**
+     * Cancel writes nothing, from either condition surface the sheet opens: Change condition with an
+     * answer chosen and then cancelled, and the Mark operational confirmation cancelled.
+     */
+    @Test fun cancelWritesNothing() {
+        val graph = app.graph
+        val pack = asset(graph, "Battery pack")
+        record(graph, pack, OperationalCondition.DOWN, LocalDate.now(), reason = "Cells swollen")
+        sheetFor(graph, pack.value, null)
+        rule.awaitText("Change condition")
+
+        rule.onNodeWithText("Change condition").performClick()
+        rule.awaitText("Save condition")
+        rule.onNodeWithText("Operational").performClick()
+        rule.onNodeWithText("Cancel").performClick()
+        rule.waitUntil(TIMEOUT_MS) { rule.onAllNodesWithText("Save condition").fetchSemanticsNodes().isEmpty() }
+        assertEquals(1, conditionRows(graph))
+
+        rule.onNodeWithText("Mark operational").performClick()
+        rule.awaitText("Mark operational?")
+        rule.onNodeWithText("The earlier DOWN record stays in the history.").assertIsDisplayed()
+        rule.onNodeWithText("Cancel").performClick()
+        rule.waitUntil(TIMEOUT_MS) { rule.onAllNodesWithText("Mark operational?").fetchSemanticsNodes().isEmpty() }
+        assertEquals(1, conditionRows(graph))
+        rule.onNodeWithText("DOWN").assertIsDisplayed()
+    }
+
+    /** Completes the sheet's one due row, answering "When was this done?" with [on]. */
+    private fun completeTheDueRow(on: LocalDate) {
+        rule.awaitText("Blade sharpen")
+        rule.onNode(isToggleable()).performClick()
+        rule.onNodeWithText("Complete selected").performClick()
+        rule.awaitText("When was this done?")
+        rule.onNode(hasSetTextAction() and hasText("Date")).performTextReplacement(on.toString())
+        rule.onNodeWithText("Save").performClick()
+    }
+
+    /**
+     * After a completion on a DOWN asset the sheet **asks** "Mark operational?" — S17 over S19, with
+     * S7 and S20 — and "Not yet" writes nothing.
+     */
+    @Test fun aCompletionOnADownAssetAsksMarkOperational() {
+        val graph = app.graph
+        val (assetId, tagId) = seedDueWork(graph)
+        record(graph, AssetId(assetId), OperationalCondition.DOWN, LocalDate.now().minusDays(2))
+        sheetFor(graph, assetId, tagId)
+
+        completeTheDueRow(LocalDate.now())
+
+        rule.awaitText("Mark operational?")
+        rule.onNodeWithText("You logged Blade sharpen. Is Ride-on mower working normally again?").assertIsDisplayed()
+        rule.onNodeWithText("Not yet").performClick()
+        rule.waitUntil(TIMEOUT_MS) { rule.onAllNodesWithText("Mark operational?").fetchSemanticsNodes().isEmpty() }
+        assertEquals(1, runBlocking { graph.events.all().size })
+        assertEquals(1, conditionRows(graph))
+    }
+
+    /**
+     * The carry-forward from B06: a completion dated **after today** is never offered "Mark
+     * operational?" — accepting would be `CONDITION_DATE_IN_FUTURE` — so the sheet simply finishes.
+     */
+    @Test fun aCompletionDatedAfterTodayOffersNothing() {
+        val graph = app.graph
+        val (assetId, tagId) = seedDueWork(graph)
+        record(graph, AssetId(assetId), OperationalCondition.DOWN, LocalDate.now().minusDays(2))
+        sheetFor(graph, assetId, tagId)
+
+        completeTheDueRow(LocalDate.now().plusDays(1))
+
+        // Either the offer comes up, or the sheet finishes and the done row leaves it.
+        rule.waitUntil(TIMEOUT_MS) {
+            rule.onAllNodesWithText("Mark operational?").fetchSemanticsNodes().isNotEmpty() ||
+                rule.onAllNodesWithText("Blade sharpen").fetchSemanticsNodes().isEmpty()
+        }
+        rule.onAllNodesWithText("Mark operational?").assertCountEquals(0)
+        val event = runBlocking { graph.events.all().single() }
+        assertEquals(LocalDate.now().plusDays(1).toString(), event.occurredOn)
+        assertEquals(1, conditionRows(graph))
     }
 
     private companion object {
