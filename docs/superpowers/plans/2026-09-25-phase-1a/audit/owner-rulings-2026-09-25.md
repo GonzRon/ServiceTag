@@ -15,3 +15,8 @@ Audit accepted. Proceed with Phase 1A reconciliation and planning, using the aud
 **Order:** #54 → #65 → one combined brief for #66 + #51 → #52. Standing review policy unchanged. For the combined brief, propose the exact denial sentence and Settings-button label before implementation (one ratification batch); #51 reuses S6. For #52, a compact string table of changed/new API contract sentences during planning; no separate product-UX review.
 
 **Report after reconciling:** 1. exact issue title/body changes; 2. the Phase 1A brief structure and dependencies; 3. owner decisions still required; 4. the recommended first brief. STOP there; no implementation until the reconciled plan is approved.
+
+## Gates ruled while B02 ran (2026-09-25, after 1.4.1)
+
+- **Gate 1 — B03 strings: RATIFIED AS WRITTEN.** P1A-1 `ServiceTag is not allowed to use the network, so the Developer API cannot start. Allow network access in the app settings, then close ServiceTag and open it again.`; P1A-2 `Open app settings`. The restart advice stays unless the optional owner-controlled device proof shows a live grant.
+- **Gate 2 — B04 C1–C40: APPROVED WITH ONE CORRECTION.** C6 `Season(BothOrNeither)`: message `seasonStartMmdd and seasonEndMmdd go together: send both or neither`, field `seasonStartMmdd` (the pair's first key; never null); the contradictory post-table sentence corrected. C29–C33 keep `field` null (the problem names a reading id, not the request key). C38/C39 keep their generic messages and only add the carried field. Everything else verbatim.

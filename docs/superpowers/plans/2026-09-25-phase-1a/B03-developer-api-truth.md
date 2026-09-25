@@ -2,7 +2,7 @@
 
 **Read first:** plan.md §2–§4, §6, §8; `audit/audit-66-51.md`; the rulings on #66 and #51; #66's body and the #51 comment.
 **Lane:** third, branched from master after B02 merged. B04 may run beside it (plan.md §2).
-**Blocked on:** the owner ratifying P1A-1 and P1A-2 (plan.md §4).
+**Blocked on:** nothing. (P1A-1 and P1A-2 were ratified as written by the owner on 2026-09-25; the restart advice is not to be shortened absent the optional owner-run device proof.)
 
 ## Goal
 

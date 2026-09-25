@@ -2,7 +2,7 @@
 
 **Read first:** plan.md §2, §3, §5, §6 and §8 (#52); `audit/audit-65-52.md` (the #52 half); issue #52's rewritten body.
 **Lane:** fourth. It may run beside B03 (plan.md §2).
-**Blocked on:** the owner's review of plan.md §5 (sentences C1–C40).
+**Blocked on:** nothing. (Plan.md §5 was approved by the owner on 2026-09-25 with one correction: C6 `Season(BothOrNeither)` answers `field = seasonStartMmdd`; C29–C33 stay null.)
 
 ## Goal
 
@@ -74,7 +74,7 @@ Each is a `when` over its sealed type with **no `else`**. The nested sealed type
 - **K4.** Messages are plan.md §5's, verbatim once reviewed. They name a key or a rule, never a value the caller sent.
 - **K5.** The source-id `DerivedProblem`s (C29–C33) answer `field: null`: the problem does not say whether `sourceAId` or `sourceBId` sent the id.
 - **K6.** An event `BadDate` or `BadTime` with a null `definitionId` maps to `occurredOn` or `occurredTime`. With a non-null `definitionId` it maps to `values` (not produced today).
-- **K7.** Season `BadDate(field)` and condition `BadDate`, `BadTime` and `BadTimeZone(field)` set `field = problem.field`. Their messages stay as they are. `BothOrNeither` stays `null`.
+- **K7.** Season `BadDate(field)` and condition `BadDate`, `BadTime` and `BadTimeZone(field)` set `field = problem.field`. Their messages stay as they are. The season command's `BothOrNeither` answers `seasonStartMmdd`, the pair's first key — the same `SeasonProblem` value as C6, ruled on 2026-09-25 (controller: the ruling applied to both families that raise it; the message stays the shipped one).
 - **K8.** A client that ignores `field` and treats `message` as opaque sees no change. The MCP's text for a refusal with no `field` is byte-identical to today's.
 
 ## `docs/api/v1.md` (Errors only)
@@ -94,7 +94,7 @@ Each is a `when` over its sealed type with **no `else`**. The nested sealed type
 | the event dates unnamed | `ApiRouterTest` · `anEventsBadDateAndTimeNameTheirFields`, over the wire | `field = "values"` |
 | the wire changes beyond message and field | `ApiRouterTest` · `aValidationFailureIs422AndNamesTheProblems` (extended), plus one route case per family: 422, the family `code`, the §5 message, the §5 `field`, and `problems` equal to today's exact strings (for example `listOf("NameRequired")`, `listOf("BadDate(definitionId=null)")`) | put the message into `problems`, or change `code` |
 | the fallback throws | `ValidationRefusalsTest` · `aRefusalNamingNoProblemFallsBackToTheFamilySentence`, which calls `mapDomainFailure` with an empty list | drop the `?:` |
-| the 1.4 rows still null | `SeasonHealthRoutesTest` · `aMalformedValueKeepsTheShippedValidationShape`, extended: `seasonStartMmdd`, `occurredTime` and `tzId` in `field`; `BothOrNeither` → null; messages unchanged | leave `field` null |
+| the 1.4 rows still null | `SeasonHealthRoutesTest` · `aMalformedValueKeepsTheShippedValidationShape`, extended: `seasonStartMmdd`, `occurredTime` and `tzId` in `field`; `BothOrNeither` → `seasonStartMmdd`; messages unchanged | leave `field` null |
 | the document drifts | `ValidationRefusalsTest` · `theApiDocumentListsEveryFamilyRow`: anchored `^\| 422 \| …` patterns, one per C1–C37 row, and no remaining "`problems` names each bad field" | delete a row |
 | the MCP drops `field` | `test_client.py` · `test_an_error_body_keeps_its_field`, `test_a_missing_or_null_field_is_None` | `_detail` ignores `field` |
 | the `ToolError` text changes shape | `test_sdk_boundary.py` · `test_a_422_survives_the_sdk_boundary_with_its_field` (`[field=name]` present) and `test_a_refusal_without_a_field_reads_exactly_as_before` (a full-string equality) | always print the bracket |

@@ -30,7 +30,7 @@ None changes the schema, the backup format, an endpoint, a status or `code`, a `
 5. No device but `emulator-5554`; changing a phone's permissions is owner-only, and an implementer stops before any such step.
 6. Hygiene: no e-mail, no home-directory paths (write `~`), no serial but `emulator-5554`, no private equipment names; "the owner's hardened Android build", never a distribution's name.
 
-## 4. Owner gate 1 — B03's strings (ratify before B03 starts)
+## 4. Owner gate 1 — B03's strings: RATIFIED AS WRITTEN (owner, 2026-09-25)
 
 | # | surface | proposed text |
 |---|---|---|
@@ -41,7 +41,7 @@ Voice as 1.4 §10.7: plain, no jargon, imperative rather than "you". **The tail*
 
 **Numbering.** S6 here is **the 1.1.0 ledger's S6** (`docs/superpowers/plans/2026-09-21-servicetag-1.1.0-automation-api.md`, line 87): `The Developer API could not start. Leave this screen and open it again.` It is not 1.4 §10.7's S6 (`Change condition`), because S numbers restart with each release's ledger.
 
-## 5. Owner gate 2 — #52's contract sentences (review before B04 starts)
+## 5. Owner gate 2 — #52's contract sentences: APPROVED WITH ONE CORRECTION (owner, 2026-09-25; C6 below)
 
 API contract text for `docs/api/v1.md`, not app UI.
 
@@ -95,7 +95,7 @@ Style: lower-case, no final stop, as 1.4's `Refusal` messages; they name a key o
 | C39 | `condition_validation` · `BadDate`/`BadTime`/`BadTimeZone(field)` | the condition was refused | its field |
 | C40 | MCP `ToolError` text | `<status> <code>: <message> [field=<field>] (<problems>)`; the bracket appears only when `field` is not null | — |
 
-C5's ⟨field⟩ is `purchaseOn`, `inServiceOn` or `warrantyExpiresOn`. C8's unreachable arm (any other `which`) answers `a season date must be a real MM-DD date`, `field` null. `SeasonProblem.BothOrNeither` keeps `field` null: it carries no field.
+C5's ⟨field⟩ is `purchaseOn`, `inServiceOn` or `warrantyExpiresOn`. C8's unreachable arm (any other `which`) answers `a season date must be a real MM-DD date`, `field` null. `SeasonProblem.BothOrNeither` carries no field of its own, so C6 answers `seasonStartMmdd`, the pair's first key, by the rule above (owner ruling 2026-09-25: a caller can localise the problem there; never null). C29–C33 stay null: the problem names a reading id but not the request key that supplied it, and guessing would be worse than none.
 
 ## 6. Overrides to the standing constraints
 
