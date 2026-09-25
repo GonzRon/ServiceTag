@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.usecase.ProfileProblem
 import com.loosecannon.servicetag.core.usecase.ProfileValidation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import com.loosecannon.servicetag.core.model.Season as SeasonWindow
 
@@ -298,6 +299,162 @@ class ValidationRefusalsTest {
             assertEquals(code, 422, response.status)
             assertEquals(ApiErrorDetail(code, message, emptyList(), null), response.errorDetail())
         }
+    }
+
+    /**
+     * One row of `docs/api/v1.md`'s **The 1.1.0 validation families**, cell by cell. [c] is the plan's
+     * §5 row, or `fallback` for a family's shipped sentence. `…` stands for a value and `⟨field⟩` for
+     * C5's key; both are wildcards when a row is matched to what the code produces.
+     */
+    private data class DocRow(val c: String, val code: String, val problem: String, val field: String, val message: String)
+
+    private val docRows = listOf(
+        DocRow("C1", ASSET, "`NameRequired`", "`name`", "an asset needs a name"),
+        DocRow("C2", ASSET, "`BadCurrency`", "`currency`", "currency must be an ISO 4217 code this build knows"),
+        DocRow("C3", ASSET, "`CurrencyRequired`", "`currency`", "a purchasePriceMinor needs a currency"),
+        DocRow("C4", ASSET, "`NegativePrice`", "`purchasePriceMinor`", "purchasePriceMinor may not be negative"),
+        DocRow("C5", ASSET, "`BadDate(field=⟨field⟩)`", "`⟨field⟩`", "⟨field⟩ must be an ISO YYYY-MM-DD date"),
+        DocRow(
+            "C6", ASSET, "`Season(p=BothOrNeither)`", "`seasonStartMmdd`",
+            "seasonStartMmdd and seasonEndMmdd go together: send both or neither",
+        ),
+        DocRow(
+            "C7", ASSET, "`Season(p=BadDate(which=start))`", "`seasonStartMmdd`",
+            "seasonStartMmdd must be a real MM-DD date",
+        ),
+        DocRow("C8", ASSET, "`Season(p=BadDate(which=end))`", "`seasonEndMmdd`", "seasonEndMmdd must be a real MM-DD date"),
+        DocRow("C9", ASSET, "`UnknownParent`", "`parentAssetId`", "parentAssetId must name an asset on this phone"),
+        DocRow(
+            "C10", EVENT, "`TitleRequired`", "`title`",
+            "title is required unless the quick action gives a default title",
+        ),
+        DocRow("C11", EVENT, "`BadDate(definitionId=null)`", "`occurredOn`", "occurredOn must be an ISO YYYY-MM-DD date"),
+        DocRow("C12", EVENT, "`BadTime(definitionId=null)`", "`occurredTime`", "occurredTime must be an HH:MM time of day"),
+        DocRow(
+            "C13", EVENT,
+            "`BadDate(definitionId=DefinitionId(value=…))` or `BadTime(definitionId=DefinitionId(value=…))`, " +
+                "not raised today",
+            "`values`", "a value in values is not a valid date or time",
+        ),
+        DocRow(
+            "C14", EVENT, "`Required(definitionId=DefinitionId(value=…))`", "`values`",
+            "a required reading in values has no value",
+        ),
+        DocRow(
+            "C15", EVENT, "`NotANumber(definitionId=DefinitionId(value=…))`", "`values`",
+            "a value in values does not fit its reading: a number must be finite, a yes-or-no must be true, " +
+                "false, 1 or 0",
+        ),
+        DocRow(
+            "C16", EVENT, "`BadConsumable(index=…)`", "`consumables`",
+            "every consumable needs a name and a quantity of zero or more",
+        ),
+        DocRow("C17", DEFINITION, "`LabelRequired`", "`label`", "a reading needs a label"),
+        DocRow(
+            "C18", DEFINITION, "`BadKey`", "`key`",
+            "key must be a lower-case letter followed by up to 39 lower-case letters, digits or underscores",
+        ),
+        DocRow("C19", DEFINITION, "`KeyTaken`", "`key`", "another reading of this asset already uses that key"),
+        DocRow("C20", DEFINITION, "`BadDecimals`", "`decimals`", "decimals must be 0–4"),
+        DocRow("C21", DEFINITION, "`RangeOrder`", "`rangeLow`", "rangeLow may not be greater than rangeHigh"),
+        DocRow("C22", DEFINITION, "`RangeOnNonNumber`", "`rangeLow`", "only a NUMBER reading takes rangeLow or rangeHigh"),
+        DocRow("C23", DEFINITION, "`MeterOnNonNumber`", "`isMeter`", "only a NUMBER reading can be a meter"),
+        DocRow("C24", DEFINITION, "`Derived(p=NotNumber)`", "`valueType`", "a DERIVED reading must be a NUMBER"),
+        DocRow("C25", DEFINITION, "`Derived(p=IsMeter)`", "`isMeter`", "a DERIVED reading cannot be a meter"),
+        DocRow(
+            "C26", DEFINITION, "`Derived(p=MissingSpec)`", "`formula`",
+            "a DERIVED reading needs formula, sourceAId and sourceBId",
+        ),
+        DocRow(
+            "C27", DEFINITION, "`Derived(p=SpecOnEntered)`", "`formula`",
+            "an ENTERED reading takes no formula, sourceAId or sourceBId",
+        ),
+        DocRow(
+            "C28", DEFINITION, "`Derived(p=SameSource)`", "`sourceAId`",
+            "sourceAId and sourceBId must name two different readings",
+        ),
+        DocRow(
+            "C29", DEFINITION, "`Derived(p=UnknownSource(id=DefinitionId(value=…)))`", "",
+            "a source names no reading on this phone",
+        ),
+        DocRow(
+            "C30", DEFINITION, "`Derived(p=SourceOtherAsset(id=DefinitionId(value=…)))`", "",
+            "a source must be a reading of the same asset",
+        ),
+        DocRow(
+            "C31", DEFINITION, "`Derived(p=SourceNotEntered(id=DefinitionId(value=…)))`", "",
+            "a source must be an ENTERED reading",
+        ),
+        DocRow(
+            "C32", DEFINITION, "`Derived(p=SourceNotNumber(id=DefinitionId(value=…)))`", "",
+            "a source must be a NUMBER reading",
+        ),
+        DocRow(
+            "C33", DEFINITION, "`Derived(p=SourceIsMeter(id=DefinitionId(value=…)))`", "",
+            "a source cannot be a meter",
+        ),
+        DocRow("C34", PROFILE, "`NameRequired`", "`name`", "a quick action needs a name"),
+        DocRow(
+            "C35", PROFILE, "`NameTaken`", "`name`",
+            "another quick action of this asset, archived ones included, already has that name",
+        ),
+        DocRow(
+            "C36", PROFILE, "`BadField(id=DefinitionId(value=…), reason=…)`", "`fields`",
+            "every entry in fields must name an ENTERED reading of this asset, at most once; an archived reading " +
+                "stays only if the quick action already had it",
+        ),
+        DocRow(
+            "C37", PROFILE, "`BadConsumable(index=…)`", "`consumables`",
+            "every consumable needs a name, and a defaultQuantity of zero or more when one is given",
+        ),
+        // The unreachable ones, listed because they are still values `message` can carry.
+        DocRow(
+            "C8", ASSET, "`Season(p=BadDate(which=…))` with any other `which`, unreachable", "",
+            "a season date must be a real MM-DD date",
+        ),
+        DocRow("fallback", ASSET, "none: a refusal that named no problem, unreachable", "", "the asset was refused"),
+        DocRow("fallback", EVENT, "none, unreachable", "", "the event was refused"),
+        DocRow("fallback", DEFINITION, "none, unreachable", "", "the reading was refused"),
+        DocRow("fallback", PROFILE, "none, unreachable", "", "the quick action was refused"),
+    )
+
+    /** A documented cell as a pattern over what the code produces: `…` and `⟨field⟩` match anything. */
+    private fun template(cell: String): Regex = Regex(
+        cell.split("…", "⟨field⟩").joinToString(".+") { Regex.escape(it) },
+    )
+
+    /**
+     * The document drifts from the code only with this red. Every §5 row is a line of its own, in
+     * the fixed shape the anchored pattern names, inside **The 1.1.0 validation families** — and each
+     * row's problem and message are what the mapper test above pins for that row, so the plan's
+     * table, the code and `v1.md` agree row for row.
+     */
+    @Test fun theApiDocumentListsEveryFamilyRow() {
+        val text = repoFile("docs/api/v1.md").readText()
+        val errors = text.substringAfter("\n## Errors\n", "").substringBefore("\n## ")
+        val section = errors.substringAfter("\n### The 1.1.0 validation families\n", "").substringBefore("\n### ")
+        assertTrue(
+            "the families' subsection comes before the maintenance codes",
+            errors.indexOf("### The 1.1.0 validation families") in 0 until errors.indexOf("### The maintenance codes (1.2.0)"),
+        )
+        assertEquals((1..37).map { "C$it" }.toSet(), docRows.map { it.c }.filter { it != "fallback" }.toSet())
+
+        val rows = assetRows + eventRows + definitionRows + profileRows
+        for (doc in docRows) {
+            val line = "| 422 | `${doc.code}` | ${doc.problem} | ${doc.field} | `${doc.message}` |".replace("|  |", "| |")
+            assertTrue(
+                "docs/api/v1.md is missing the ${doc.c} row: $line",
+                Regex("^" + Regex.escape(line) + "$", RegexOption.MULTILINE).containsMatchIn(section),
+            )
+            val ofRow = rows.filter { it.c == doc.c && it.code == doc.code }
+            if (doc.c == "fallback") continue
+            assertTrue("${doc.c}: no mapper row says ${doc.message}", ofRow.any { template(doc.message).matches(it.message) })
+            if (Regex("^`[^`]+`$").matches(doc.problem)) {
+                val wire = template(doc.problem.removeSurrounding("`"))
+                assertTrue("${doc.c}: ${doc.problem} is not what problems spells", ofRow.any { wire.matches(it.wire) })
+            }
+        }
+        assertFalse("the 422 row no longer claims problems names each bad field", "`problems` names each bad field" in text)
     }
 
     private companion object {
