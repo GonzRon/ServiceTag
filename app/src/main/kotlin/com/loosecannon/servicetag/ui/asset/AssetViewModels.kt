@@ -2,6 +2,10 @@ package com.loosecannon.servicetag.ui.asset
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.servicetag.core.condition.ConditionHistory
+import com.loosecannon.servicetag.core.health.HealthBand
+import com.loosecannon.servicetag.core.health.SubjectHealth
+import com.loosecannon.servicetag.core.health.SubjectValue
 import com.loosecannon.servicetag.core.journal.CategorySuggestions
 import com.loosecannon.servicetag.core.journal.LatestReadings
 import com.loosecannon.servicetag.core.journal.RangeState
@@ -12,6 +16,7 @@ import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AssetTree
+import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthAggregation
@@ -19,14 +24,19 @@ import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.Season as SeasonWindow
+import com.loosecannon.servicetag.core.model.SeasonAction
+import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.isRetired
+import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
@@ -34,9 +44,13 @@ import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
+import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
+import com.loosecannon.servicetag.core.usecase.ActivationCommand
 import com.loosecannon.servicetag.core.usecase.ApplyResult
 import com.loosecannon.servicetag.core.usecase.ApplyTemplate
 import com.loosecannon.servicetag.core.usecase.ArchiveAsset
@@ -50,18 +64,39 @@ import com.loosecannon.servicetag.core.usecase.AssetValidation
 import com.loosecannon.servicetag.core.usecase.BreakCommand
 import com.loosecannon.servicetag.core.usecase.BreakStrandsPolicy
 import com.loosecannon.servicetag.core.usecase.DeleteAsset
+import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.usecase.HealthPolicyCommand
 import com.loosecannon.servicetag.core.usecase.HealthValidation
+import com.loosecannon.servicetag.core.usecase.NoSuchAsset
+import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RetireAsset
 import com.loosecannon.servicetag.core.usecase.SaveAssetSettings
+import com.loosecannon.servicetag.core.usecase.SeasonAlreadyEnded
+import com.loosecannon.servicetag.core.usecase.SeasonAlreadyStarted
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
+import com.loosecannon.servicetag.core.usecase.SeasonNotManual
 import com.loosecannon.servicetag.core.usecase.SeasonProblem
 import com.loosecannon.servicetag.core.usecase.SeasonValidation
+import com.loosecannon.servicetag.core.usecase.SeasonView
 import com.loosecannon.servicetag.core.usecase.StrandedSchedule
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.condition.componentLine
+import com.loosecannon.servicetag.ui.condition.displayDate
+import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
+import com.loosecannon.servicetag.ui.health.AssetHealthView
+import com.loosecannon.servicetag.ui.health.ComponentCondition
+import com.loosecannon.servicetag.ui.health.ConditionView
+import com.loosecannon.servicetag.ui.health.HealthPlurals
+import com.loosecannon.servicetag.ui.health.NOT_TRACKED
+import com.loosecannon.servicetag.ui.health.aggregateLine
+import com.loosecannon.servicetag.ui.health.criticalLine
+import com.loosecannon.servicetag.ui.health.driverLines
+import com.loosecannon.servicetag.ui.health.healthBadgeLabel
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -70,6 +105,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -130,10 +167,21 @@ data class AssetsState(
  * (controller ruling, B07 fix round 1): a blank query leaves the list exactly as it was before this
  * brief — every asset, components included, each still naming its system — and a non-blank query
  * only ever narrows that same list. Only the box's *location* moved; what the screen lists did not.
+ *
+ * **1.4 (B14).** A row's out-of-season mark is the asset's **season phase** on [today] (spec §3.1),
+ * read from [SeasonContext] like every other season surface — so a MANUAL asset after an END reads
+ * out of season here too. The activation rows are read, and observed, only for MANUAL assets
+ * (inv. 90); a Start or an End on the detail screen writes no asset column (inv. 126), so the list
+ * watches those rows directly rather than waiting for an asset row to change.
  */
-class AssetsViewModel(assets: AssetRepository, private val clock: Clock) : ViewModel() {
+@OptIn(ExperimentalCoroutinesApi::class)
+class AssetsViewModel(
+    assets: AssetRepository,
+    activations: SeasonActivationRepository,
+    private val today: Today,
+) : ViewModel() {
 
-    constructor(graph: AppGraph) : this(graph.assets, graph.clock)
+    constructor(graph: AppGraph) : this(graph.assets, graph.seasonActivations, graph.today)
 
     private val showArchived = MutableStateFlow(false)
     private val queries = MutableStateFlow("")
@@ -146,12 +194,21 @@ class AssetsViewModel(assets: AssetRepository, private val clock: Clock) : ViewM
      */
     val query: StateFlow<String> = queries.asStateFlow()
 
-    /** The zone the season window is read in: "out of season" is a fact about the user's today. */
-    private val zone: ZoneId = ZoneId.systemDefault()
+    /** Every asset, beside the activation rows of each MANUAL one (and of no other, inv. 90). */
+    private val seasonal: Flow<Seasonal> = assets.observeAll().flatMapLatest { rows ->
+        val manual = rows.filter { it.seasonMode == SeasonMode.MANUAL }
+        if (manual.isEmpty()) {
+            flowOf(Seasonal(rows, emptyMap()))
+        } else {
+            combine(manual.map { asset -> activations.observeForAsset(asset.id).map { asset.id to it } }) { pairs ->
+                Seasonal(rows, pairs.toMap())
+            }
+        }
+    }
 
     val state: StateFlow<AssetsState> =
-        combine(assets.observeAll(), showArchived, queries) { rows, archived, query ->
-            val today = clock.nowMillis().asLocalDate(zone)
+        combine(seasonal, showArchived, queries) { (rows, activationsOf), archived, query ->
+            val day = today.localDate()
             val byId = rows.associateBy { it.id }
             val visible = if (archived) rows else rows.filter { it.status == AssetStatus.ACTIVE }
             // A blank query leaves the list exactly as it was before B07 (components included);
@@ -167,7 +224,7 @@ class AssetsViewModel(assets: AssetRepository, private val clock: Clock) : ViewM
                             // and a parent that has gone leaves the subtitle off rather than
                             // showing an id.
                             parentName = row.parentAssetId?.let { byId[it]?.name },
-                            outOfSeason = outOfSeasonOn(row, today),
+                            outOfSeason = outOfSeasonOn(row, activationsOf[row.id].orEmpty(), day),
                         )
                     },
                 showArchived = archived,
@@ -193,6 +250,9 @@ class AssetsViewModel(assets: AssetRepository, private val clock: Clock) : ViewM
 
     /** The clear action. Separate from `onQueryChange("")` so the screen states its intent. */
     fun clearQuery() { queries.value = "" }
+
+    /** The asset rows and, keyed by asset, the activation rows of the MANUAL ones. */
+    private data class Seasonal(val rows: List<Asset>, val activationsOf: Map<AssetId, List<SeasonActivation>>)
 }
 
 /**
@@ -206,13 +266,16 @@ private fun lifecycleRank(asset: Asset): Int = when {
 }
 
 /**
- * Out of season for [today] (spec §6). A half-set window is a thing the use cases refuse, so it can
- * only reach here past them; reading it as year-round is the answer that never hides an asset
- * behind a window nobody could have set.
+ * Out of season for [today]: the asset's **season phase** (spec §3.1), from [SeasonContext] — the
+ * one predicate the schedules, health and the detail screen's `SeasonView` read too. YEAR_ROUND is
+ * never out of season; CALENDAR reads its window; MANUAL reads the latest of [activations] dated on
+ * or before [today], and a MANUAL asset with no row at all reads out of season. [activations] is
+ * consulted only for a MANUAL asset (inv. 90). A CALENDAR window the use cases would refuse reads as
+ * no window — in season — so no asset is hidden behind a window nobody could have set.
  */
-internal fun outOfSeasonOn(asset: Asset, today: LocalDate): Boolean =
-    runCatching { !SeasonWindow.inSeason(asset.seasonStartMmdd, asset.seasonEndMmdd, today) }
-        .getOrDefault(false)
+internal fun outOfSeasonOn(asset: Asset, activations: List<SeasonActivation>, today: LocalDate): Boolean =
+    SeasonContext.of(asset.seasonInputs(if (asset.seasonMode == SeasonMode.MANUAL) activations else emptyList()))
+        .phaseAt(today) == SeasonPhase.OUT_OF_SEASON
 
 /** A date the calendar has already passed. A string `LocalDate` refuses is not "expired". */
 internal fun expiredOn(date: String, today: LocalDate): Boolean =
@@ -226,12 +289,17 @@ private fun Long.asLocalDate(zone: ZoneId): LocalDate =
  * One child of the asset as COMPONENTS draws it (spec §9). [outOfRange] is a count of the child's
  * *own* current readings that are LOW or HIGH; 2B-2 rolls no values up into the parent (spec §2),
  * so the parent's screen says how many need a look and never what they read.
+ *
+ * **1.4 (B14).** [condition] is the child's **own** current condition (spec §10.3: every component
+ * row carries the condition badge), or null when none is recorded (S4). It is a fact about the
+ * child, never rolled up into the parent's.
  */
 data class ComponentRow(
     val id: String,
     val name: String,
     val category: String,
     val outOfRange: Int,
+    val condition: ConditionView? = null,
 )
 
 /**
@@ -251,7 +319,36 @@ sealed interface DetailPrompt {
 
     /** Children-first (spec §5): the delete was refused, and these are the children by name. */
     data class DeleteRefused(val children: List<String>) : DetailPrompt
+
+    /**
+     * 1.4 — **Start season** (S42, S43) or **End season** (S44, S45) on a MANUAL asset (spec §3.3).
+     * Nothing is written until the confirm (inv. 93), and then only the chosen [date], with no event.
+     *
+     * [date] is the field's text, today by default. The range is `[from, today]`: [from] is the
+     * latest activation's date (null when the asset has none, which only an import makes), and a
+     * date outside it is refused with [refusal] = S54 before anything is written. A date that is not
+     * one holds the confirm rather than being worded (master dec. 46), and so does a later-than-today
+     * date on an asset with no row, since S54 would have no `<date>` to name.
+     */
+    data class SeasonChange(
+        val action: SeasonAction,
+        val date: String,
+        val from: LocalDate?,
+        val today: LocalDate,
+        val refusal: String? = null,
+        val saving: Boolean = false,
+    ) : DetailPrompt {
+        /** The field as a date, by the strict `YYYY-MM-DD` shape the command takes; null otherwise. */
+        val parsed: LocalDate?
+            get() = date.trim().takeIf { ISO_DAY.matches(it) }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+
+        /** Whether the confirm (S40 or S41) may be tapped. */
+        val canConfirm: Boolean
+            get() = !saving && parsed.let { it != null && (from != null || !it.isAfter(today)) }
+    }
 }
+
+private val ISO_DAY = Regex("""\d{4}-\d{2}-\d{2}""")
 
 /**
  * One group this asset is an **open** member of, as the asset screen lists it (#55's asset -> groups
@@ -260,9 +357,22 @@ sealed interface DetailPrompt {
  */
 data class AssetGroupRow(val id: GroupId, val name: String)
 
-/** Everything the detail screen draws about one asset, or null while it is still unknown. */
+/**
+ * Everything the detail screen draws about one asset, or null while it is still unknown.
+ *
+ * **1.4 (B14).** The three independent facts beside the lifecycle (spec §10.3): [health] (B07's one
+ * health view, which also carries the current [condition] and the DOWN or DEGRADED components),
+ * [conditionHistory], and [season] (B04's `SeasonView`). Everything the screen draws from them is
+ * derived here — [plate], [healthBlocks], [outOfSeason] — so the composition decides nothing.
+ */
 data class AssetDetailState(
     val asset: Asset,
+    /** One read of B07's `AssetHealthReadModel.forAsset`: result, current condition, components. */
+    val health: AssetHealthView,
+    /** One read of B04's `GetAssetSeason`: mode, window, phase, next boundary, break, activations. */
+    val season: SeasonView,
+    /** S21: every condition row of this asset, **newest first** (dec. 41), read-only. */
+    val conditionHistory: List<ConditionHistoryRow> = emptyList(),
     val tags: List<TagBinding> = emptyList(),
     val definitions: List<MeasurementDefinition> = emptyList(),
     /** Unarchived only, in `sortOrder`: these are the quick actions the screen offers. */
@@ -282,8 +392,6 @@ data class AssetDetailState(
     val parentName: String? = null,
     /** This asset's children, by name. The COMPONENTS section always renders, empty or not. */
     val components: List<ComponentRow> = emptyList(),
-    /** Today is outside the season window (spec §6) — the one effect the window has in 2B-2. */
-    val outOfSeason: Boolean = false,
     /** The warranty date has passed, so DETAILS says "(expired)" rather than making the user count. */
     val warrantyExpired: Boolean = false,
     /**
@@ -294,7 +402,22 @@ data class AssetDetailState(
     val schedules: List<DueItem> = emptyList(),
     /** 1.2 — the groups this asset holds an **open** membership window in. */
     val groups: List<AssetGroupRow> = emptyList(),
-)
+) {
+    /** The current condition (S1–S3, or S4 when null), from the same read as [health]. */
+    val condition: ConditionView? get() = health.condition
+
+    /**
+     * Today is out of season: the **season phase** (spec §3.1), never the `MM-DD` window alone, so a
+     * MANUAL asset after an END reads out of season exactly as the list does.
+     */
+    val outOfSeason: Boolean get() = season.phase == SeasonPhase.OUT_OF_SEASON
+
+    /** The identity plate's badges: condition, then retired, archived and out of season. */
+    val plate: List<PlateFact> get() = plateFacts(asset, condition, outOfSeason)
+
+    /** The Health section, in its order (spec §6.5, inv. 119). */
+    val healthBlocks: List<HealthBlock> get() = healthBlocksOf(health)
+}
 
 /**
  * One asset and the rows that point at it. [missing] is separate from [state] because "not loaded
@@ -304,7 +427,16 @@ data class AssetDetailState(
  * Five flows feed the state and `combine` takes three, so the journal's three are folded into one
  * first. `readings` is computed here rather than stored: editing or deleting an event changes the
  * answer on the next emission with no cache to invalidate.
+ *
+ * **1.4 (B14).** Condition, health and season are read once per emission — B07's
+ * [AssetHealthReadModel.forAsset], B04's [GetAssetSeason] and the condition rows through
+ * `ConditionHistory` — and re-read on the flows that can change them: this asset's and every
+ * descendant's condition rows, this asset's activations and its health subjects, beside the events
+ * and schedules already observed. A Start, an End or a new condition therefore redraws the page with
+ * no manual refresh. Start and End write through [RecordSeasonActivation] and only from the dialog's
+ * confirm (inv. 93); nothing here edits or removes a condition or an activation (inv. 89, 107).
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class AssetDetailViewModel(
     private val assets: AssetRepository,
     private val tags: TagRepository,
@@ -315,6 +447,12 @@ class AssetDetailViewModel(
     states: ScheduleStateRepository,
     groups: GroupRepository,
     private val due: DueReadModel,
+    conditions: ConditionRepository,
+    private val activations: SeasonActivationRepository,
+    subjects: HealthSubjectRepository,
+    private val healthReadModel: AssetHealthReadModel,
+    private val getSeason: GetAssetSeason,
+    private val recordActivation: RecordSeasonActivation,
     private val archiveAsset: ArchiveAsset,
     private val retireAsset: RetireAsset,
     private val deleteAsset: DeleteAsset,
@@ -322,6 +460,8 @@ class AssetDetailViewModel(
     /** Review fix round 1, finding 3: `editTagLabel`'s read-modify-write needs the same transaction every other tag write goes through. */
     private val uow: UnitOfWork,
     private val clock: Clock,
+    /** `T` for the season dialog, the same day `RecordSeasonActivation` and the season view read. */
+    private val today: Today,
     private val id: AssetId,
 ) : ViewModel() {
 
@@ -329,8 +469,10 @@ class AssetDetailViewModel(
         graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
         graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
+        graph.conditions, graph.seasonActivations, graph.healthSubjects,
+        graph.assetHealthReadModel, graph.getAssetSeason, graph.recordSeasonActivation,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
-        graph.applyTemplate, graph.uow, graph.clock, AssetId(id),
+        graph.applyTemplate, graph.uow, graph.clock, graph.today, AssetId(id),
     )
 
     /** The zone the season window and the warranty date are read in: the user's calendar day. */
@@ -360,13 +502,38 @@ class AssetDetailViewModel(
         groups.observeForAsset(id),
     ) { _, _, groupRows -> groupRows }
 
+    /**
+     * 1.4 — the cue to re-read condition, health and season. The condition rows of this asset **and
+     * of every descendant** (the plate, the component badges and the Health section's DOWN or
+     * DEGRADED components all read them), this asset's activations and its health subjects. Like
+     * [maintenance], none of these is what a section says; each is the signal to read again.
+     */
+    private val facts: Flow<Unit> = combine(
+        rows.flatMapLatest { all ->
+            val watched = listOf(id) + AssetTree.descendants(all, id)
+            combine(watched.map { conditions.observeForAsset(it) }) { }
+        },
+        activations.observeForAsset(id),
+        subjects.observeForAsset(id),
+    ) { _, _, _ -> }
+
     val state: StateFlow<AssetDetailState?> =
-        combine(rows, tags.observeForAsset(id), journal, maintenance) { all, tagRows, j, groupRows ->
+        combine(rows, tags.observeForAsset(id), journal, maintenance, facts) { all, tagRows, j, groupRows, _ ->
             val row = all.firstOrNull { it.id == id } ?: return@combine null
             val today = clock.nowMillis().asLocalDate(zone)
             val parent = row.parentAssetId?.let { parentId -> all.firstOrNull { it.id == parentId } }
+            // A delete between the row above and this read leaves nothing to draw, not a crash.
+            val season = try {
+                getSeason.run(id)
+            } catch (gone: NoSuchAsset) {
+                return@combine null
+            }
+            val histories = healthReadModel.conditionHistories()
             AssetDetailState(
                 asset = row,
+                health = healthReadModel.forAsset(id),
+                season = season,
+                conditionHistory = histories[id]?.let { historyOf(it) }.orEmpty(),
                 tags = tagRows,
                 definitions = j.definitions,
                 // An archived profile keeps its history but stops offering a quick action.
@@ -377,8 +544,7 @@ class AssetDetailViewModel(
                 bare = j.definitions.isEmpty() && j.profiles.isEmpty(),
                 parentId = parent?.id?.value,
                 parentName = parent?.name,
-                components = componentsOf(all),
-                outOfSeason = outOfSeasonOn(row, today),
+                components = componentsOf(all, histories),
                 warrantyExpired = row.warrantyExpiresOn?.let { expiredOn(it, today) } == true,
                 // Asset-targeted only (decision 38). `forAsset` deliberately answers with the group
                 // schedules too, because the scan sheet wants both; this screen counts a group
@@ -410,7 +576,7 @@ class AssetDetailViewModel(
      * emission rather than observed: a handful of children is a handful of indexed lookups, and an
      * observer per child would have to be torn down and rebuilt whenever the tree changed.
      */
-    private suspend fun componentsOf(all: List<Asset>): List<ComponentRow> =
+    private suspend fun componentsOf(all: List<Asset>, histories: Map<AssetId, ConditionHistory>): List<ComponentRow> =
         AssetTree.children(all, id)
             .sortedBy { it.name.lowercase() }
             .map { child ->
@@ -422,8 +588,47 @@ class AssetDetailViewModel(
                     outOfRange = childReadings.count {
                         it.state == RangeState.LOW || it.state == RangeState.HIGH
                     },
+                    condition = histories[child.id]?.let { conditionViewOf(it) },
                 )
             }
+
+    /**
+     * A component's current condition as its badge reads it: the word, and "since" the first row of
+     * the latest run (`ConditionHistory.since`) — the same reading B07 gives the asset itself.
+     */
+    private suspend fun conditionViewOf(history: ConditionHistory): ConditionView? {
+        val current = history.current ?: return null
+        return ConditionView(
+            condition = current.condition,
+            since = LocalDate.parse(history.since!!.occurredOn),
+            reason = current.reason,
+            occurredOn = LocalDate.parse(current.occurredOn),
+            occurredTime = current.occurredTime,
+            eventId = current.eventId,
+            eventExists = current.eventId?.let { events.get(it) } != null,
+        )
+    }
+
+    /**
+     * S21's rows: **every** row of the asset, newest first — the ordering key reversed (dec. 41) —
+     * each with its word, day, time, reason and link. A link naming an event that has since been
+     * deleted is kept and marked, never hidden and never an error (spec §5.3). The row's zone is not
+     * read: nothing here draws one, so a restored zone this device cannot resolve can harm nothing.
+     */
+    private suspend fun historyOf(history: ConditionHistory): List<ConditionHistoryRow> =
+        history.ordered.asReversed().map { row ->
+            val linked = row.eventId?.let { events.get(it) }
+            ConditionHistoryRow(
+                id = row.id,
+                condition = row.condition,
+                occurredOn = row.occurredOn,
+                occurredTime = row.occurredTime,
+                reason = row.reason,
+                eventId = row.eventId,
+                eventExists = linked != null,
+                eventTitle = linked?.title,
+            )
+        }
 
     fun archive() {
         viewModelScope.launch { archiveAsset.run(id) }
@@ -439,6 +644,62 @@ class AssetDetailViewModel(
     fun askDelete() = _prompt.update { DetailPrompt.ConfirmDelete }
 
     fun dismissPrompt() = _prompt.update { null }
+
+    /**
+     * Opens **Start season** (S42) or **End season** (S44) on today, ranged from the latest
+     * activation's date to today (spec §3.3). Only the action the Season section offers opens —
+     * S40 on a MANUAL asset out of season, S41 in season — and opening writes nothing.
+     */
+    fun askSeason(action: SeasonAction) {
+        val season = state.value?.season ?: return
+        if (manualAction(season) != action) return
+        val t = today.localDate()
+        _prompt.update { DetailPrompt.SeasonChange(action, t.toString(), latestActivationOn(season.activations), t) }
+    }
+
+    /** The dialog's date field. Editing it clears a refusal: the next confirm judges the new value. */
+    fun onSeasonDate(text: String) = _prompt.update { prompt ->
+        if (prompt is DetailPrompt.SeasonChange && !prompt.saving) prompt.copy(date = text, refusal = null) else prompt
+    }
+
+    /**
+     * The dialog's confirm (S40 or S41), the **only** way this screen writes a season row (inv. 93).
+     *
+     * A date outside `[latest row, today]` is answered with S54 and writes nothing. Otherwise one
+     * [ActivationCommand] goes to `RecordSeasonActivation` with the chosen date and no event. A row
+     * that landed since the dialog opened is answered too: a repeated START or END (a race) closes
+     * the dialog with S56 or S57, and a date the newer row now puts out of range redraws S54 naming
+     * its date. An asset that has left MANUAL meanwhile simply closes the dialog; the page redraws in
+     * its new mode, which says why.
+     */
+    fun confirmSeason() {
+        val prompt = _prompt.value as? DetailPrompt.SeasonChange ?: return
+        if (!prompt.canConfirm) return
+        val on = prompt.parsed ?: return
+        val from = prompt.from
+        if (on.isAfter(prompt.today) || (from != null && on.isBefore(from))) {
+            _prompt.value = prompt.copy(refusal = from?.let { chooseADateFrom(displayDate(it)) })
+            return
+        }
+        // Set before the first suspension, so a second tap on the confirm finds `saving` and stops.
+        _prompt.value = prompt.copy(saving = true, refusal = null)
+        viewModelScope.launch {
+            val command = ActivationCommand(action = prompt.action, occurredOn = on.toString())
+            when (val failure = runCatching { recordActivation.run(id, command) }.exceptionOrNull()) {
+                null -> _prompt.update { null }
+                is SeasonAlreadyStarted -> refuse(THE_SEASON_IS_ALREADY_RUNNING)
+                is SeasonAlreadyEnded -> refuse(THE_SEASON_HAS_ALREADY_ENDED)
+                is SeasonValidation -> {
+                    val latest = latestActivationOn(activations.forAsset(id))
+                    _prompt.update {
+                        prompt.copy(from = latest, refusal = latest?.let { chooseADateFrom(displayDate(it)) })
+                    }
+                }
+                is SeasonNotManual -> _prompt.update { null }
+                else -> refuse(COULD_NOT_UPDATE_THIS_ASSET)
+            }
+        }
+    }
 
     /**
      * Retirement commits on its own (spec §7). Only once the date is written is logging what
@@ -457,7 +718,7 @@ class AssetDetailViewModel(
 
     fun unretire() {
         viewModelScope.launch {
-            if (runCatching { retireAsset.unretire(id) }.isFailure) refuse("Could not update this asset.")
+            if (runCatching { retireAsset.unretire(id) }.isFailure) refuse(COULD_NOT_UPDATE_THIS_ASSET)
         }
     }
 
@@ -550,6 +811,236 @@ class AssetDetailViewModel(
         val events: List<AssetEvent>,
     )
 }
+
+// ------------------------------------------------------------------------------------------------
+// 1.4 (B14) — asset detail's Condition, Health and Season sections (spec §10.3).
+//
+// The words below are RATIFIED (spec §10.7), each by its S-number and verbatim; `<…>` is the one
+// substitution. B14 owns S21, S24, S39, S42–S50, S54, S56, S57, S94, S107 and S138 (master §19) and
+// only uses B12's and B10's.
+// ------------------------------------------------------------------------------------------------
+
+/** S21, section. */
+const val CONDITION_HISTORY = "Condition history"
+
+/** S24, a condition row's link to an event that has since been deleted (spec §5.3). */
+const val LINKED_RECORD_REMOVED = "The linked record was removed."
+
+/** S39, the phase word for IN_SEASON. The out-of-season word is the shipped [OUT_OF_SEASON]. */
+const val IN_SEASON_WORD = "IN SEASON"
+
+/** S42, dialog title. */
+const val START_THE_SEASON = "Start the season?"
+
+/** S43, "Maintenance set to follow the season becomes active again from <date>.", the dialog's date substituted. */
+fun startSeasonBody(date: String): String =
+    "Maintenance set to follow the season becomes active again from $date."
+
+/** S44, dialog title. */
+const val END_THE_SEASON = "End the season?"
+
+/** S45, dialog body. */
+const val END_SEASON_BODY =
+    "Maintenance set to follow the season waits until you start it again. Nothing is marked done."
+
+/** S46, history row. */
+const val SEASON_STARTED = "Season started"
+
+/** S47, history row. */
+const val SEASON_ENDED = "Season ended"
+
+/** S48, section. */
+const val SEASON_HISTORY = "Season history"
+
+/** S49, "Next season starts <date>": a CALENDAR asset out of season. */
+fun nextSeasonStartsLine(date: String): String = "Next season starts $date"
+
+/** S50, "Season ends <date>": a CALENDAR asset in season. */
+fun seasonEndsLine(date: String): String = "Season ends $date"
+
+/** S54, "Choose a date from <date> to today.", `<date>` the latest activation's day. */
+fun chooseADateFrom(date: String): String = "Choose a date from $date to today."
+
+/** S56, refusal: a START raced by another START. */
+const val THE_SEASON_IS_ALREADY_RUNNING = "The season is already running."
+
+/** S57, refusal: an END raced by another END. */
+const val THE_SEASON_HAS_ALREADY_ENDED = "The season has already ended."
+
+/** S94, section. */
+const val HEALTH_SECTION = "Health"
+
+/** S107, the Health section's footer (spec §6.6). */
+const val HEALTH_FOOTER =
+    "Health is an estimate from dates and records, not a diagnosis. It never changes the condition."
+
+/** S138, fallback: TRACK_ONE's subject is gone and WORST is shown instead (spec §6.5). */
+const val FALLBACK_TO_WORST = "The subject to follow is missing, so the worst subject is shown."
+
+/** The shipped line this screen already says when a lifecycle write fails for no stated reason. */
+internal const val COULD_NOT_UPDATE_THIS_ASSET = "Could not update this asset."
+
+/**
+ * One row of S21 "Condition history" (spec §5.1): a recorded fact, drawn and never edited — no row
+ * here can be changed or removed (inv. 89, 107), and a correction is a newer row (inv. 110).
+ *
+ * [eventExists] is false when [eventId] names an event that has since been deleted: the row then
+ * draws S24 in place of the link and keeps every other field (spec §5.3). [eventTitle] is the
+ * linked event's own title while it exists — the link, drawn as the record it points at.
+ */
+data class ConditionHistoryRow(
+    val id: String,
+    val condition: OperationalCondition,
+    /** The row's own `YYYY-MM-DD`. */
+    val occurredOn: String,
+    /** `HH:MM`, or null when only the day was recorded. */
+    val occurredTime: String?,
+    /** As recorded; drawn as S23 when empty. */
+    val reason: String,
+    val eventId: EventId?,
+    val eventExists: Boolean,
+    val eventTitle: String?,
+) {
+    /** S24: the row names an event, and that event is gone. */
+    val linkRemoved: Boolean get() = eventId != null && !eventExists
+}
+
+/**
+ * One badge on the identity plate (spec §10.3, `AssetDetailScreen`'s `plateBadges`). The four are
+ * independent facts, and an asset can carry every one of them.
+ */
+sealed interface PlateFact {
+    /** The condition badge, always present: S1–S3 with S22, or S4 when nothing is recorded. */
+    data class Condition(val view: ConditionView?) : PlateFact
+
+    data object Retired : PlateFact
+
+    /** [label] is the shipped lifecycle word. */
+    data class Archived(val label: String) : PlateFact
+
+    data object OutOfSeason : PlateFact
+}
+
+/**
+ * The plate's badges, in the order they are drawn: the condition — the fourth independent fact, on
+ * **every** asset, retired and archived ones included (lifecycle bounds only the dashboard, spec
+ * §5.1) — then retired, archived and out of season, each only when true.
+ */
+fun plateFacts(asset: Asset, condition: ConditionView?, outOfSeason: Boolean): List<PlateFact> = buildList {
+    add(PlateFact.Condition(condition))
+    if (asset.isRetired) add(PlateFact.Retired)
+    statusLabel(asset.status)?.let { add(PlateFact.Archived(it)) }
+    if (outOfSeason) add(PlateFact.OutOfSeason)
+}
+
+/**
+ * One block of the Health section, in the order [healthBlocksOf] gives (spec §10.3, §6.5, §6.6).
+ * The engine's data rides along; the words are [words]'s.
+ */
+sealed interface HealthBlock {
+    /** S109: a CRITICAL subject, whatever the aggregate says (inv. 119). */
+    data class Critical(val subject: SubjectHealth) : HealthBlock
+
+    /** S27: a DOWN or DEGRADED in-service component, at any depth (inv. 119). */
+    data class Component(val component: ComponentCondition) : HealthBlock
+
+    /** The aggregate: its band and S108, or S98 when nothing contributes — never a number (inv. 118). */
+    data class Aggregate(val value: SubjectValue.Scored?, val subjects: List<SubjectHealth>) : HealthBlock
+
+    /** S138: the TRACK_ONE subject is gone and the worst subject is shown. */
+    data object Fallback : HealthBlock
+
+    /** One non-archived subject: its name, its band and score or S98, and its driver lines. */
+    data class Subject(val health: SubjectHealth) : HealthBlock
+
+    /** S107. */
+    data object Footer : HealthBlock
+}
+
+/**
+ * The Health section in order (spec §10.3; inv. 119): **first** every CRITICAL subject and every
+ * DOWN or DEGRADED in-service component, then the aggregate — with S138 only when the primary really
+ * fell back, which the engine reports only when WORST found a value — then each non-archived subject,
+ * then the footer. Which subjects and components appear is never the aggregate's to decide: an
+ * AVERAGE that reads NOMINAL still leads with its CRITICAL subject.
+ */
+fun healthBlocksOf(view: AssetHealthView): List<HealthBlock> = buildList {
+    val result = view.result
+    result.critical.forEach { add(HealthBlock.Critical(it)) }
+    view.components.forEach { add(HealthBlock.Component(it)) }
+    add(HealthBlock.Aggregate(result.aggregate, result.subjects))
+    if (result.fallback && result.aggregate != null) add(HealthBlock.Fallback)
+    result.subjects.filter { it.subject.archivedAt == null }.forEach { add(HealthBlock.Subject(it)) }
+    add(HealthBlock.Footer)
+}
+
+/**
+ * The words one [HealthBlock] draws, in order — the screen draws exactly these, beside the badge
+ * glyphs. A value with no band is S98 (`NOT TRACKED`) wherever it appears, never a number (inv. 118).
+ * S99's `<age>` and S102 go through [plurals] (B12's `AndroidHealthPlurals` on the screen).
+ */
+fun HealthBlock.words(plurals: HealthPlurals, format: (LocalDate) -> String): List<String> = when (this) {
+    is HealthBlock.Critical -> listOf(criticalLine(subject))
+    is HealthBlock.Component -> listOf(componentLine(component))
+    is HealthBlock.Aggregate -> value?.let { listOf(healthBadgeLabel(it.band, null), aggregateLine(it.score, subjects)) }
+        ?: listOf(NOT_TRACKED)
+    HealthBlock.Fallback -> listOf(FALLBACK_TO_WORST)
+    is HealthBlock.Subject -> listOf(health.subject.name, subjectBadge(health)) + driverLines(health, plurals, format)
+    HealthBlock.Footer -> listOf(HEALTH_FOOTER)
+}
+
+/** A subject's band and score, or S98 for a subject with no value. */
+fun subjectBadge(subject: SubjectHealth): String = healthBadgeLabel(subject.band, subject.score)
+
+/** The band of a scored subject; null — S98 — for one NOT TRACKED. */
+internal val SubjectHealth.band: HealthBand? get() = (value as? SubjectValue.Scored)?.band
+
+/** The score of a scored subject; null for one NOT TRACKED, which is never drawn as a number. */
+internal val SubjectHealth.score: Int? get() = (value as? SubjectValue.Scored)?.score
+
+/**
+ * The Season section's calendar line (spec §10.3): on a CALENDAR asset, S50 "Season ends <date>"
+ * while in season and S49 "Next season starts <date>" while out of it, from `nextBoundaryOn`. A
+ * MANUAL asset has **none**: its next START is never predicted (Q-6), and a START is real only once
+ * recorded (O-5). YEAR_ROUND has no boundary to name.
+ */
+fun calendarLine(season: SeasonView, format: (LocalDate) -> String): String? {
+    if (season.seasonMode != SeasonMode.CALENDAR) return null
+    val on = season.nextBoundaryOn ?: return null
+    return if (season.phase == SeasonPhase.IN_SEASON) seasonEndsLine(format(on)) else nextSeasonStartsLine(format(on))
+}
+
+/**
+ * The one manual action the Season section offers: START (S40) while a MANUAL asset is out of
+ * season, END (S41) while it is in. Nothing on any other mode.
+ */
+fun manualAction(season: SeasonView): SeasonAction? = when {
+    season.seasonMode != SeasonMode.MANUAL -> null
+    season.phase == SeasonPhase.IN_SEASON -> SeasonAction.END
+    else -> SeasonAction.START
+}
+
+/**
+ * S48's rows, **newest first** (dec. 41): the activations the phase reads. Only a MANUAL asset has
+ * the section (the controller's B04 carry-forward): elsewhere the rows are the unread history a
+ * switch out of MANUAL left behind, and the phase never consults them.
+ */
+fun seasonHistory(season: SeasonView): List<SeasonActivation> =
+    if (season.seasonMode == SeasonMode.MANUAL) season.activations.asReversed() else emptyList()
+
+/** S46 or S47. */
+fun activationWord(action: SeasonAction): String = when (action) {
+    SeasonAction.START -> SEASON_STARTED
+    SeasonAction.END -> SEASON_ENDED
+}
+
+/**
+ * The latest activation's day — the lower bound of Start and End (spec §3.3) — by the phase's own
+ * order `(occurredOn, createdAt, id)`; null when there is none.
+ */
+internal fun latestActivationOn(rows: List<SeasonActivation>): LocalDate? =
+    rows.maxWithOrNull(compareBy<SeasonActivation>({ it.occurredOn }, { it.createdAt }, { it.id }))
+        ?.let { runCatching { LocalDate.parse(it.occurredOn) }.getOrNull() }
 
 /** One row of the "Part of" picker. [id] null is "None", which is also the default (spec §9). */
 data class ParentChoice(val id: String?, val label: String)
