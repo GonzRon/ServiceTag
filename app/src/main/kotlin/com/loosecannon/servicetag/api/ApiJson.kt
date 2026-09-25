@@ -539,7 +539,7 @@ internal fun seasonRefusal(problem: SeasonProblem): Refusal = when (problem) {
     is SeasonProblem.BadDate -> Refusal(SEASON_VALIDATION, "the season command was refused", problem.field)
     // Phase 1A K7 (ruled 2026-09-25): the key the asset command's own `BothOrNeither` answers (C6); the
     // message stays the shipped one.
-    SeasonProblem.BothOrNeither -> Refusal(SEASON_VALIDATION, "the season command was refused", "seasonStartMmdd")
+    SeasonProblem.BothOrNeither -> Refusal(SEASON_VALIDATION, "the season command was refused", "blackoutStartMmdd")
     SeasonProblem.BlackoutCoversTheYear -> Refusal(
         "BLACKOUT_COVERS_THE_YEAR", "that break leaves some year, common or leap, with no day outside it",
     )

@@ -263,10 +263,10 @@ class SeasonHealthRoutesTest {
         )
         assertEquals(listOf("BadDate(field=blackoutStartMmdd)"), bound.problems)
         assertEquals("the season command was refused", bound.message)
-        // Phase 1A K7 (ruled 2026-09-25): a break with one bound answers `seasonStartMmdd`, as C6 does.
+        // Phase 1A K7 (ruled 2026-09-25, corrected the same day): a break with one bound answers `blackoutStartMmdd`, the pair's first key on this route.
         val half = refused(
             call("POST", "/v1/assets/$mower/maintenance-break", """{"blackoutStartMmdd":"12-01","blackoutEndMmdd":null}"""),
-            422, "season_validation", "seasonStartMmdd",
+            422, "season_validation", "blackoutStartMmdd",
         )
         assertEquals(listOf("BothOrNeither"), half.problems)
         assertEquals("the season command was refused", half.message)
