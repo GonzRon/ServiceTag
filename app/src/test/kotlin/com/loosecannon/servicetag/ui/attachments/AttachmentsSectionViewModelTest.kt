@@ -48,6 +48,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -650,6 +651,36 @@ class AttachmentsSectionViewModelTest {
         val scope = vm.viewModelScope.coroutineContext.job
         clearModels()
         assertTrue("the model's scope finished inside the test", scope.isCompleted)
+    }
+
+    /**
+     * Two saves in flight — a double tap on the sheet's Save — each get their signal. The
+     * collector here is dispatched, as the screen's `LaunchedEffect` is on the main thread, and
+     * not unconfined like the rest of this class's: an unconfined one takes each signal inside
+     * the `tryEmit` that sent it, which hides the case where both saves emit before the collector
+     * resumes, and the second finds the buffer still holding the first.
+     */
+    @Test fun twoSavesInFlightBothSignal() = runTest {
+        hotTub()
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+        vm.add(listOf(picked("guide.pdf")))
+        val row = vm.state.first { it.rows.size == 1 }.rows.single()
+
+        // Not in `backgroundScope`, so the drain below runs this collector's resumptions too.
+        val closed = mutableListOf<String>()
+        val sheet = launch(StandardTestDispatcher(testScheduler)) {
+            vm.saved.collect { closed += it }
+        }
+        runCurrent()
+        val same = UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes)
+        vm.save(row.id, same)
+        vm.save(row.id, same)
+        advanceUntilIdle()
+
+        assertEquals(listOf(row.id, row.id), closed)
+        sheet.cancel()
+        clearModels()
     }
 
     /** A storage whose store answers `exists` with an IO failure until told to behave. */

@@ -166,8 +166,11 @@ class AttachmentsSectionViewModel(
      * The id of an attachment whose edit sheet may close: the save landed, or it changed nothing.
      * A refusal is deliberately absent — the sheet stays open holding what the person typed, so
      * the line the snackbar just showed is something they can act on.
+     *
+     * Room for two: a double tap on Save puts two saves in flight, and the second one's signal
+     * must not be dropped because the screen has not yet taken the first.
      */
-    private val _saved = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
+    private val _saved = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 2)
     val saved: SharedFlow<String> = _saved.asSharedFlow()
 
     /** The id of an attachment that is gone — row and bytes. A failed delete emits nothing. */
