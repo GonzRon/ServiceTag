@@ -94,9 +94,10 @@ internal data class ApiErrorBody(val error: ApiErrorDetail)
  * [field] is the one body key a refusal is about, and null where a refusal is not about exactly one
  * key. The 1.4 codes master plan §11.3 names fill it (1.4, spec §9.2) — `POLICY_OFFSET_INVALID` is
  * `policyOffsetDays`, `HEALTH_SUBJECT_NAME_REQUIRED` is `name`, and so on — and so do the four 1.1.0
- * validation families (#52, `ValidationRefusals.kt`). One key names that key, a pair names its first
- * key, and a reading's id without the request key that sent it answers null. It is encoded like every
- * other field, so a client reads `null` rather than an absent key.
+ * validation families (#52, `ValidationRefusals.kt`) and the 1.4 malformed-value rows, from the key
+ * their problem already carries. One key names that key, a pair names its first key, and a reading's
+ * id without the request key that sent it answers null. It is encoded like every other field, so a
+ * client reads `null` rather than an absent key.
  */
 @Serializable
 internal data class ApiErrorDetail(
@@ -512,7 +513,8 @@ private fun strandedName(schedule: StrandedSchedule): String =
  * The code a malformed value answers with: **the shipped validation shape** (spec §9.2) — 1.1.0's
  * `…_validation` family, whose `problems` name the field (`BadDate(field=seasonStartMmdd)`,
  * `BadTime(field=occurredTime)`, `BadTimeZone(field=tzId)`). Spec §9.2 gives these no code of their
- * own and its 1.4 set is closed, so none is invented for them.
+ * own and its 1.4 set is closed, so none is invented for them. Their message stays the family's
+ * shipped sentence; since #52 the envelope's `field` carries the key the problem already names.
  */
 internal const val SEASON_VALIDATION: String = "season_validation"
 internal const val CONDITION_VALIDATION: String = "condition_validation"
@@ -534,7 +536,7 @@ internal fun seasonRefusal(problem: SeasonProblem): Refusal = when (problem) {
     SeasonProblem.ManualPhaseForbidden -> Refusal(
         "MANUAL_PHASE_FORBIDDEN", "manualPhase is taken only on a switch into MANUAL from another mode", "manualPhase",
     )
-    is SeasonProblem.BadDate -> Refusal(SEASON_VALIDATION, "the season command was refused")
+    is SeasonProblem.BadDate -> Refusal(SEASON_VALIDATION, "the season command was refused", problem.field)
     SeasonProblem.BothOrNeither -> Refusal(SEASON_VALIDATION, "the season command was refused")
     SeasonProblem.BlackoutCoversTheYear -> Refusal(
         "BLACKOUT_COVERS_THE_YEAR", "that break leaves some year, common or leap, with no day outside it",
@@ -556,9 +558,9 @@ internal fun conditionRefusal(problem: ConditionProblem): Refusal = when (proble
         "CONDITION_REASON_TOO_LONG", "reason may hold at most ${problem.limit} characters", "reason",
     )
     is ConditionProblem.ForeignEvent -> Refusal("FOREIGN_EVENT", "eventId must name an event of this asset", "eventId")
-    is ConditionProblem.BadDate -> Refusal(CONDITION_VALIDATION, "the condition was refused")
-    is ConditionProblem.BadTime -> Refusal(CONDITION_VALIDATION, "the condition was refused")
-    is ConditionProblem.BadTimeZone -> Refusal(CONDITION_VALIDATION, "the condition was refused")
+    is ConditionProblem.BadDate -> Refusal(CONDITION_VALIDATION, "the condition was refused", problem.field)
+    is ConditionProblem.BadTime -> Refusal(CONDITION_VALIDATION, "the condition was refused", problem.field)
+    is ConditionProblem.BadTimeZone -> Refusal(CONDITION_VALIDATION, "the condition was refused", problem.field)
 }
 
 /**
