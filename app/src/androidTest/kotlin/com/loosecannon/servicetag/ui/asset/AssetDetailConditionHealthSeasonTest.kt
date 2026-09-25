@@ -190,12 +190,12 @@ class AssetDetailConditionHealthSeasonTest {
         rule.onNode(hasText(LINKED_RECORD_REMOVED)).performScrollTo().assertIsDisplayed().assert(hasNoClickAction())
         rule.onNodeWithText("08:30").assertExists()
         // Newest first: the DOWN row above the older OPERATIONAL one.
-        assertTrue(top("08:30") < top("OPERATIONAL"))
+        assertTrue("newest first", top("08:30") < top("OPERATIONAL"))
         // The component row's own badge.
         rule.onNodeWithText("DEGRADED").assertExists()
         // Condition before Health before Season, always (inv. 119).
-        assertTrue(top(CONDITION_TITLE) < top(HEALTH_SECTION))
-        assertTrue(top(HEALTH_SECTION) < top(YEAR_ROUND))
+        assertTrue("Condition before Health", top(CONDITION_TITLE) < top(HEALTH_SECTION))
+        assertTrue("Health before Season", top(HEALTH_SECTION) < top(YEAR_ROUND))
 
         rule.onNodeWithText(MARK_OPERATIONAL).performScrollTo().performClick()
         rule.awaitText(MARK_OPERATIONAL_TITLE)
