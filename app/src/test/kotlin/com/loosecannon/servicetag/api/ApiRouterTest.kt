@@ -427,6 +427,101 @@ class ApiRouterTest {
         val error = ApiJson.decodeFromString(ApiErrorBody.serializer(), response.text()).error
         assertEquals("asset_validation", error.code)
         assertEquals(listOf("NameRequired"), error.problems)
+        // #52: the envelope's message and field now describe that problem; the rest is unchanged.
+        assertEquals("an asset needs a name", error.message)
+        assertEquals("name", error.field)
+    }
+
+    private fun ApiResponse.refusal(): ApiErrorDetail =
+        ApiJson.decodeFromString(ApiErrorBody.serializer(), text()).error
+
+    /**
+     * #52, one case per 1.1.0 family: 422, the family's shipped code, the **first** problem's
+     * sentence and key, and `problems` still every problem in the domain's own spelling, byte for
+     * byte. The ticket's own example leads, a season bound that is not a real `MM-DD`.
+     */
+    @Test fun anAssetRefusalDescribesItsFirstProblemAndKeepsEveryProblem() {
+        val response = call(
+            "POST", "/v1/assets",
+            """{"name":"Hot tub","seasonStartMmdd":"13-45","seasonEndMmdd":"10-31","parentAssetId":"nope"}""",
+        )
+        assertEquals(422, response.status)
+        assertEquals(
+            ApiErrorDetail(
+                "asset_validation", "seasonStartMmdd must be a real MM-DD date",
+                listOf("Season(p=BadDate(which=start))", "UnknownParent"), "seasonStartMmdd",
+            ),
+            response.refusal(),
+        )
+    }
+
+    /**
+     * The event's own date and time name no reading, so `problems` reads `BadDate(definitionId=null)`
+     * — which is why `field` carries the key: `occurredOn` and `occurredTime`, never `values`.
+     */
+    @Test fun anEventsBadDateAndTimeNameTheirFields() {
+        val id = createHotTub()
+        fun log(occurredOn: String, occurredTime: String?): ApiResponse = call(
+            "POST", "/v1/events",
+            """{"assetId":"$id","kind":"MAINTENANCE","title":"Filter change","occurredOn":"$occurredOn",""" +
+                """"tzId":"UTC"""" + (occurredTime?.let { ""","occurredTime":"$it"""" } ?: "") + "}",
+        )
+
+        val date = log("not a date", null)
+        assertEquals(422, date.status)
+        assertEquals(
+            ApiErrorDetail(
+                "event_validation", "occurredOn must be an ISO YYYY-MM-DD date",
+                listOf("BadDate(definitionId=null)"), "occurredOn",
+            ),
+            date.refusal(),
+        )
+
+        val time = log("2026-09-21", "25:00")
+        assertEquals(422, time.status)
+        assertEquals(
+            ApiErrorDetail(
+                "event_validation", "occurredTime must be an HH:MM time of day",
+                listOf("BadTime(definitionId=null)"), "occurredTime",
+            ),
+            time.refusal(),
+        )
+
+        val both = log("not a date", "25:00")
+        assertEquals(422, both.status)
+        assertEquals(
+            ApiErrorDetail(
+                "event_validation", "occurredOn must be an ISO YYYY-MM-DD date",
+                listOf("BadDate(definitionId=null)", "BadTime(definitionId=null)"), "occurredOn",
+            ),
+            both.refusal(),
+        )
+        runBlocking { assertTrue(graph.events.forAsset(AssetId(id)).isEmpty()) }
+    }
+
+    @Test fun aDefinitionRefusalDescribesItsFirstProblem() {
+        val id = createHotTub()
+        val response = call(
+            "POST", "/v1/definitions",
+            """{"assetId":"$id","label":"pH","decimals":9,"rangeLow":8,"rangeHigh":6}""",
+        )
+        assertEquals(422, response.status)
+        assertEquals(
+            ApiErrorDetail(
+                "definition_validation", "decimals must be 0–4", listOf("BadDecimals", "RangeOrder"), "decimals",
+            ),
+            response.refusal(),
+        )
+    }
+
+    @Test fun aProfileRefusalDescribesItsFirstProblem() {
+        val id = createHotTub()
+        val response = call("POST", "/v1/profiles", """{"assetId":"$id","name":"  ","eventKind":"MEASUREMENT"}""")
+        assertEquals(422, response.status)
+        assertEquals(
+            ApiErrorDetail("profile_validation", "a quick action needs a name", listOf("NameRequired"), "name"),
+            response.refusal(),
+        )
     }
 
     @Test fun anAbsentRowIs404AndAnUnknownFieldIs400() {
