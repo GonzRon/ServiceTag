@@ -7,14 +7,12 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.GroupId
-import com.loosecannon.servicetag.core.model.LegacySeasonMapping
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.SeasonBehavior
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.ConsumableInput
@@ -58,10 +56,19 @@ internal data class ScheduleResponse(val schedule: ScheduleRowResponse)
 /**
  * `schedule_state`'s columns, as a client reads them — never as a command writes them.
  *
- * Every field is recomputable from configuration, events, closures, membership and `T`, and
- * `ScheduleRecompute.rebuild` is the only thing that ever writes the row (invariant 17). This
- * projection exists so a client can see what the engine derived without having to re-derive it, and
- * for no other reason.
+ * Every field is recomputable from configuration, events, closures, membership, the asset's season
+ * and `T`, and `ScheduleRecompute.rebuild` is the only thing that ever writes the row (invariant
+ * 17). This projection exists so a client can see what the engine derived without having to
+ * re-derive it, and for no other reason. Every route builds it from `RecomputeSchedules.readState`,
+ * so a row stored before a season or break boundary is derived for today in memory and never
+ * trusted, and never written (invariant 105).
+ *
+ * 1.4 (spec §9.1): [actionableDueOn] is the policy's answer — the day the work is actionable —
+ * beside [effectiveDueOn], whose 1.2 meaning (`postponedDueOn ?: computedDueOn`) is unchanged;
+ * [policyReason] says why the two differ, [policyPhase] whether the schedule is surfacing work
+ * (`ACTIVE`) or held out of season (`DORMANT`), and [quiet] whether today is inside the asset's
+ * maintenance break under a non-`CONTINUOUS` policy. [seasonActive] is 1.3's field, answered as
+ * `policyPhase == ACTIVE`.
  */
 @Serializable
 internal data class ScheduleStateDto(
@@ -75,6 +82,10 @@ internal data class ScheduleStateDto(
     val lastTerminationKind: String,
     val computedDueOn: String?,
     val effectiveDueOn: String?,
+    val actionableDueOn: String?,
+    val policyReason: String,
+    val policyPhase: String,
+    val quiet: Boolean,
     val seasonActive: Boolean,
     val computedForOn: String,
     val computedAt: Long,
@@ -91,6 +102,10 @@ internal fun ScheduleState.stateDto(): ScheduleStateDto = ScheduleStateDto(
     lastTerminationKind = lastTerminationKind.name,
     computedDueOn = computedDueOn,
     effectiveDueOn = effectiveDueOn,
+    actionableDueOn = actionableDueOn,
+    policyReason = policyReason.name,
+    policyPhase = policyPhase.name,
+    quiet = quiet,
     // The 1.3 field, answered as 1.3 answered it: a DORMANT schedule is the one out of season.
     seasonActive = policyPhase == PolicyPhase.ACTIVE,
     computedForOn = computedForOn,
@@ -140,11 +155,15 @@ internal data class ClosureListResponse(val closures: List<OccurrenceClosureDto>
 /**
  * One row of `GET /v1/due`, master plan §9.3's shape.
  *
- * It is B08's `DueItem` on the wire, plus the two termination fields the projection reads off
- * `schedule_state` — so the API and the app order identically and [rank] means the same thing in
- * both. A group-targeted schedule is **one** item carrying [membersRequired]/[membersComplete] and
- * is counted once (D-15). Every field is present with its default encoded, so a client never has to
- * distinguish absent from default.
+ * It is B08's `DueItem` on the wire, plus the two termination fields the projection reads off the
+ * schedule's derived state — so the API and the app order identically and [rank] means the same
+ * thing in both. A group-targeted schedule is **one** item carrying [membersRequired]/
+ * [membersComplete] and is counted once (D-15). Every field is present with its default encoded, so
+ * a client never has to distinguish absent from default.
+ *
+ * 1.4 (spec §9.1): [actionableDueOn], [policyReason] and [quiet] are the policy's answer for today,
+ * [status] may be `DEFERRED`, and the order — so [rank] — follows [actionableDueOn] and the
+ * Deferred section rather than [effectiveDueOn], whose meaning is unchanged.
  */
 @Serializable
 internal data class DueItemDto(
@@ -156,6 +175,9 @@ internal data class DueItemDto(
     val title: String,
     val status: String,
     val effectiveDueOn: String?,
+    val actionableDueOn: String?,
+    val policyReason: String,
+    val quiet: Boolean,
     val computedDueMeter: Double?,
     val currentMeter: Double?,
     val lastCompletedOn: String?,
@@ -179,6 +201,9 @@ internal fun DueItem.dueDto(state: ScheduleStateDto?): DueItemDto = DueItemDto(
     title = title,
     status = status.name,
     effectiveDueOn = effectiveDueOn?.toString(),
+    actionableDueOn = actionableDueOn?.toString(),
+    policyReason = policyReason.name,
+    quiet = quiet,
     computedDueMeter = computedDueMeter,
     currentMeter = currentMeter,
     lastCompletedOn = lastCompletedOn?.toString(),
@@ -239,6 +264,13 @@ internal data class ScheduleProviderRequest(val provider: String, val enabled: B
  *
  * `postponedDueOn` is **not** here: the postponement is an operation with its own route, which is
  * the distinction that stops a postpone from quietly becoming a reschedule.
+ *
+ * 1.4 (spec §9.3): [servicePolicy] and [policyOffsetDays] are the 1.4 form; [seasonBehavior],
+ * [seasonReentry] and [seasonReentryOffsetDays] are 1.3's, kept as deprecated inputs. Which of the
+ * two a body is — and what an omitted field in it means — is [ScheduleForms]', decided from the raw
+ * object before this class is ever decoded, because a default here cannot tell an omitted key from
+ * an explicit `null`. The defaults below are only what each form's own rule reads when its keys are
+ * absent. `docs/api/command-shapes.json` pins the key set.
  */
 @Serializable
 internal data class ScheduleCommandRequest(
@@ -255,6 +287,8 @@ internal data class ScheduleCommandRequest(
     val meterInterval: Double? = null,
     val anchorMeter: Double? = null,
     val meterLead: Double? = null,
+    val servicePolicy: String = "CONTINUOUS",
+    val policyOffsetDays: Int? = null,
     val seasonBehavior: String = "IGNORE",
     val seasonReentry: String? = null,
     val seasonReentryOffsetDays: Int? = null,
@@ -264,18 +298,12 @@ internal data class ScheduleCommandRequest(
     val providers: List<ScheduleProviderRequest> = emptyList(),
 )
 
-internal fun ScheduleCommandRequest.toCommand(): ScheduleCommand {
+/** The command [form] asks for; [ScheduleForms] decides the form and owns the policy's translation. */
+internal fun ScheduleCommandRequest.toCommand(form: ScheduleForms.Form): ScheduleCommand {
     // Parsed in the shipped field order, so a body with two bad enum names still names the first.
     val unit = timeUnit?.let { enumOr400<RecurrenceUnit>(it, "timeUnit") }
     val basis = enumOr400<TimeBasis>(timeBasis, "timeBasis")
-    // The three 1.3 season fields reach the command only through the legacy mapping, which
-    // normalises them; an unknown `seasonBehavior` name is still the shipped 400.
-    val policy = LegacySeasonMapping.toPolicy(
-        behavior = enumOr400<SeasonBehavior>(seasonBehavior, "seasonBehavior"),
-        reentry = seasonReentry,
-        offsetDays = seasonReentryOffsetDays,
-        hasTimeRule = timeInterval != null,
-    )
+    val policy = ScheduleForms.policyOf(form, this)
     return ScheduleCommand(
         targetAssetId = targetAssetId?.let(::AssetId),
         targetGroupId = targetGroupId?.let(::GroupId),
@@ -337,6 +365,21 @@ internal data class PostponeRequest(val postponedDueOn: String? = null)
 /** `true` pauses, `false` resumes. */
 @Serializable
 internal data class PauseRequest(val paused: Boolean)
+
+/**
+ * The action flags a schedule PATCH takes beside its command (spec §9.1): [unlinkHealthSubject]
+ * archives, in the same write, every live health subject the edit would strand. Not a column, and
+ * not a row field — `docs/api/command-shapes.json` lists it as the schedule's `actionFlags`.
+ */
+@Serializable
+internal data class ScheduleActionFlags(val unlinkHealthSubject: Boolean = false)
+
+/**
+ * `POST /v1/schedules/{id}/archive`: [archived] as every archive route takes it, plus the same
+ * [unlinkHealthSubject] flag, because archiving a schedule strands the subjects it drives.
+ */
+@Serializable
+internal data class ScheduleArchiveRequest(val archived: Boolean, val unlinkHealthSubject: Boolean = false)
 
 /** Omitted means today. Any date from the round's open date through today is accepted. */
 @Serializable

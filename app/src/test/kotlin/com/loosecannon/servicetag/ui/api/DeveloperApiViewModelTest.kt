@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.api.PAIRING_ALPHABET
 import com.loosecannon.servicetag.api.PAIRING_CODE_LENGTH
 import com.loosecannon.servicetag.api.maintenanceHandlersFor
 import com.loosecannon.servicetag.api.referenceHandlersFor
+import com.loosecannon.servicetag.api.seasonHealthHandlersFor
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -36,6 +37,7 @@ class DeveloperApiViewModelTest {
         graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
         maintenanceHandlersFor(graph),
         referenceHandlersFor(graph),
+        seasonHealthHandlersFor(graph),
         appVersion = "1.1.0",
         schemaVersion = 5,
     )

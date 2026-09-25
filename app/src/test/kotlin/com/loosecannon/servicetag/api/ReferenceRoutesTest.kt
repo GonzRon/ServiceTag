@@ -12,7 +12,6 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -48,6 +47,7 @@ class ReferenceRoutesTest {
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
             maintenanceHandlersFor(graph),
             referenceHandlersFor(graph),
+            seasonHealthHandlersFor(graph),
             appVersion = "1.3.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -467,6 +467,8 @@ class ReferenceRoutesTest {
             setOf(
                 "assets", "tags", "links", "definitions", "profiles", "events", "attachments",
                 "groups", "schedules", "closures", "assetReferences",
+                // 1.4's three, under the archive's own list names.
+                "seasonActivations", "assetConditions", "healthSubjects",
             ),
             counts.keys,
         )
@@ -519,20 +521,22 @@ class ReferenceRoutesTest {
     @Test fun theApiDocumentAgreesWithTheRouter() {
         val text = repoFile("docs/api/v1.md").readText()
 
-        assertFalse("the merge report is eleven tables now", "ten tables" in text)
-        assertTrue("the merge report must say eleven tables", "eleven tables" in text)
+        // 1.4 (B09): format 8 made the report fourteen tables, the import range 1–8 and the asset
+        // sub-resources sixteen; these pins moved with the document.
+        assertFalse("the merge report is fourteen tables now", "eleven tables" in text)
+        assertTrue("the merge report must say fourteen tables", "fourteen tables" in text)
         // The bare string, both sites: the document spells the emphasis two ways, and a pattern
         // pinned to one asterisk placement would leave the other stale and still report clean.
-        assertFalse("the import endpoints read format 1–7 now", "1–6" in text)
-        assertTrue("the import endpoints must say 1–7", "1–7" in text)
+        assertFalse("the import endpoints read format 1–8 now", "1–7" in text)
+        assertTrue("the import endpoints must say 1–8", "1–8" in text)
 
         assertFalse(
-            "there are nine asset sub-resources now",
-            "eight `/v1/assets/{id}/…` sub-resources" in text,
+            "there are sixteen asset sub-resources now",
+            "nine `/v1/assets/{id}/…` sub-resources" in text,
         )
         assertTrue(
-            "the 405 row must name nine asset sub-resources",
-            "nine `/v1/assets/{id}/…` sub-resources" in text,
+            "the 405 row must name sixteen asset sub-resources",
+            "sixteen `/v1/assets/{id}/…` sub-resources" in text,
         )
 
         // The one code the mapper can spell and no route can return. The 1.2 subsection documents
@@ -563,14 +567,5 @@ class ReferenceRoutesTest {
                 Regex(row, RegexOption.MULTILINE).containsMatchIn(text),
             )
         }
-    }
-
-    /** The repository root, found the way `VersionAgreementTest` finds it, without borrowing it. */
-    private fun repoFile(path: String): File {
-        var dir = File(".").absoluteFile
-        while (!File(dir, "settings.gradle.kts").isFile) {
-            dir = dir.parentFile ?: error("no settings.gradle.kts above ${File(".").absolutePath}")
-        }
-        return File(dir, path)
     }
 }

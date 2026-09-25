@@ -52,6 +52,7 @@ class MaintenanceCommandShapeTest {
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
             maintenanceHandlersFor(graph),
             referenceHandlersFor(graph),
+            seasonHealthHandlersFor(graph),
             appVersion = "1.2.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -127,16 +128,13 @@ class MaintenanceCommandShapeTest {
      * `docs/api/v1.md`.
      *
      * 1.4: the row is the `/v1` schedule row, [ScheduleRowResponse] — the format-8 row plus the
-     * derived season triple, which the command still accepts as its deprecated input.
-     * `ruleChangedAt` is response-only, so it is subtracted with the identity keys; and
-     * `servicePolicy`/`policyOffsetDays` are subtracted **only until B09** adds them to the command,
-     * which removes that last subtraction.
+     * derived season triple — and the command carries both: `servicePolicy`/`policyOffsetDays` as
+     * the 1.4 form and the triple as the deprecated legacy form (spec §9.3). `ruleChangedAt` is
+     * response-only, so it is subtracted with the identity keys, and nothing else is.
      */
     @Test fun theScheduleCommandIsTheScheduleRowMinusIdentityBookkeepingAndThePostponement() {
         val fromRow = ScheduleRowResponse.serializer().descriptor.names
             .filterNot { it in setOf("id", "status", "createdAt", "updatedAt", "postponedDueOn", "ruleChangedAt") }
-            // Until B09 (wave 6) adds the two to the command.
-            .filterNot { it in setOf("servicePolicy", "policyOffsetDays") }
             .map {
                 when (it) {
                     "assetId" -> "targetAssetId"
@@ -212,7 +210,12 @@ class MaintenanceCommandShapeTest {
             ).text(),
         ).schedule
         val scheduleRow = ApiJson.encodeToString(ScheduleRowResponse.serializer(), schedule)
-        assertEquals(400, call("PATCH", "/v1/schedules/${schedule.id}", scheduleRow).status)
+        // 1.4: a schedule row carries both season forms — its policy and the derived 1.3 triple — so
+        // the first thing wrong with it is the mix, refused by name before its identity keys are read
+        // (spec §9.3). Either way it is refused and nothing is written.
+        val scheduleStraightBack = call("PATCH", "/v1/schedules/${schedule.id}", scheduleRow)
+        assertEquals(422, scheduleStraightBack.status)
+        assertTrue(scheduleStraightBack.text(), scheduleStraightBack.text().contains("LEGACY_AND_CURRENT_FIELDS_MIXED"))
         assertEquals(
             200,
             call(

@@ -47,15 +47,17 @@ internal class ApiRouter(
         return try {
             runBlocking(Dispatchers.IO) { route(request) }
         } catch (e: ApiFailure) {
-            errorResponse(e.status, e.reason, e.code, e.message ?: e.code, e.problems)
+            errorResponse(e.status, e.reason, e.code, e.message ?: e.code, e.problems, e.field)
         } catch (e: Exception) {
             mapDomainFailure(e)
         }
     }
 
     /**
-     * The whole surface. Thirty-six path shapes over forty-three method-and-path rows; anything else is a 404, and a known shape with the
-     * wrong verb is a 405. Written as an explicit `when` over the path's segments rather than a
+     * The whole surface. Forty-seven path shapes over fifty-seven method-and-path rows; anything
+     * else is a 404, and a known shape with the wrong verb is a 405 — except that an
+     * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
+     * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
      * table of regexes, so the set of things this listener answers can be read in one screen and
      * grepped in one line. Note that bare `/v1/import-merge` is **not** a route: the plan and the
      * apply are two different acts and neither is the default.
@@ -69,6 +71,13 @@ internal class ApiRouter(
      * 1.3 added three, and the same holds: a reference is listed, created and amended, and
      * **nothing deletes one** — the API adds and amends, the phone removes (spec §6). No row here
      * accepts or returns a file either, at any version, so there is no share-by-API (I-3).
+     *
+     * 1.4 added fourteen rows over eleven new shapes (spec §9.1): seven `/v1/assets/{id}/…`
+     * sub-resources (the season and its activations, the season mode, the maintenance break, the
+     * health policy, conditions, health, health subjects), the three `/v1/health-subjects` shapes and
+     * `/v1/attention` — additively, at version 1. **Nothing destructive came with them either**
+     * (spec §9.2, invariant 127): no verb amends or removes a condition or an activation, removes a
+     * health subject or writes a health value, so each of those falls through to a 404 or a 405.
      */
     private suspend fun route(request: ApiRequest): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -111,6 +120,17 @@ internal class ApiRouter(
                 // `else` below and answers 404, not 405. That asymmetry with `/v1/references` is
                 // the shipped convention and `docs/api/v1.md`'s 405 row records it.
                 "references" to "GET" -> handlers.references.listForAsset(rest[1])
+                // 1.4 — seven more sub-resources, on the same 404 convention. A condition and an
+                // activation are appended, read and never amended; health is read, never written.
+                "season" to "GET" -> handlers.seasonHealth.getSeason(rest[1])
+                "season" to "POST" -> handlers.seasonHealth.recordActivation(rest[1], request)
+                "season-mode" to "POST" -> handlers.seasonHealth.setSeasonMode(rest[1], request)
+                "maintenance-break" to "POST" -> handlers.seasonHealth.setMaintenanceBreak(rest[1], request)
+                "health-policy" to "POST" -> handlers.seasonHealth.setHealthPolicy(rest[1], request)
+                "conditions" to "GET" -> handlers.seasonHealth.listConditions(rest[1])
+                "conditions" to "POST" -> handlers.seasonHealth.recordCondition(rest[1], request)
+                "health" to "GET" -> handlers.seasonHealth.getHealth(rest[1])
+                "health-subjects" to "GET" -> handlers.seasonHealth.listSubjects(rest[1])
                 else -> throw ApiFailure.notFound(request.path)
             }
 
@@ -188,6 +208,24 @@ internal class ApiRouter(
 
             rest.size == 2 && rest[0] == "references" ->
                 if (method == "PATCH") handlers.references.update(rest[1], request) else notAllowed(request)
+
+            // 1.4 — a health subject is created, read, replaced and archived, and never removed.
+            rest == listOf("health-subjects") ->
+                if (method == "POST") handlers.seasonHealth.createSubject(request) else notAllowed(request)
+
+            rest.size == 2 && rest[0] == "health-subjects" -> when (method) {
+                "GET" -> handlers.seasonHealth.getSubject(rest[1])
+                "PATCH" -> handlers.seasonHealth.updateSubject(rest[1], request)
+                else -> notAllowed(request)
+            }
+
+            rest.size == 3 && rest[0] == "health-subjects" -> when (rest[2] to method) {
+                "archive" to "POST" -> handlers.seasonHealth.archiveSubject(rest[1], request)
+                else -> throw ApiFailure.notFound(request.path)
+            }
+
+            rest == listOf("attention") ->
+                if (method == "GET") handlers.seasonHealth.listAttention() else notAllowed(request)
 
             rest == listOf("import-merge", "plan") ->
                 if (method == "POST") handlers.importMergePlan(request) else notAllowed(request)
