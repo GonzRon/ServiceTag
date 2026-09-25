@@ -132,6 +132,22 @@ class WhyLinesTest {
         assertNull(line(row(status = DueStatus.DUE, policyReason = PolicyReason.AFTER_BREAK, actionableDueOn = "2026-03-01")))
     }
 
+    /**
+     * A PAUSED row draws no why-line at all (the controller's ruling on the review's I-1): the shipped
+     * PAUSED word is the whole story. The engine still derives a phase, `quiet` and a reason for a
+     * paused schedule, so each would otherwise draw a line that is false of it — including S91,
+     * which a narrower "paused and dormant" guard would fall through to inside a break.
+     */
+    @Test fun aPausedRowHasNoWhyLine() {
+        val paused = listOf(
+            row(status = DueStatus.PAUSED, policyPhase = PolicyPhase.DORMANT, seasonMode = SeasonMode.CALENDAR, dormantUntil = "2027-04-15"),
+            row(status = DueStatus.PAUSED, policyPhase = PolicyPhase.DORMANT, policyReason = PolicyReason.AWAITING_START, seasonMode = SeasonMode.MANUAL),
+            row(status = DueStatus.PAUSED, policyReason = PolicyReason.AFTER_BREAK, quiet = true, actionableDueOn = "2027-03-01"),
+            row(status = DueStatus.PAUSED, policyReason = PolicyReason.BEFORE_SEASON, seasonMode = SeasonMode.CALENDAR),
+        )
+        paused.forEach { assertNull("paused, ${it.policyPhase} ${it.policyReason} quiet=${it.quiet}", line(it)) }
+    }
+
     /** A group has no season: a group row is never drawn with a season line, whatever its phase. */
     @Test fun aGroupRowHasNoSeasonLine() {
         val group = row(status = DueStatus.INACTIVE_SEASON, policyPhase = PolicyPhase.DORMANT, seasonMode = null)

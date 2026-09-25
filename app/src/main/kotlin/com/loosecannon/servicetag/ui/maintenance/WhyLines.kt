@@ -40,6 +40,10 @@ internal fun outOfSeasonUntilLine(date: LocalDate, format: (LocalDate) -> String
  * The one line under a schedule row that says why its date is what it is (spec §10.5; master plan
  * §13.3, plan decision 27), or null for none. The first that applies wins:
  *
+ * 0. **PAUSED** — none. The shipped PAUSED word is the whole story, as in `statusOf`'s order (spec
+ *    §4.5): a paused schedule neither resumes with its season nor notifies after a break, so every
+ *    line below would be false of it. Decision 27 is silent on PAUSED, and the shipped word wins
+ *    (the controller's ruling on B13's review, I-1).
  * 1. **DORMANT** — S89 with [DueItem.dormantUntil] on a CALENDAR asset, S90 on a MANUAL one. A
  *    dormant row is waiting for its season and nothing else about its date is the point.
  * 2. **DEFERRED** — S85 with [DueItem.actionableDueOn], the first allowed day after the break.
@@ -53,6 +57,7 @@ internal fun outOfSeasonUntilLine(date: LocalDate, format: (LocalDate) -> String
  * is the app's display shape (`displayDate`).
  */
 fun whyLine(item: DueItem, format: (LocalDate) -> String): String? = when {
+    item.status == DueStatus.PAUSED -> null
     item.policyPhase == PolicyPhase.DORMANT -> when (item.seasonMode) {
         SeasonMode.CALENDAR -> item.dormantUntil?.let { outOfSeasonUntilLine(it, format) }
         SeasonMode.MANUAL -> WHY_UNTIL_YOU_START
