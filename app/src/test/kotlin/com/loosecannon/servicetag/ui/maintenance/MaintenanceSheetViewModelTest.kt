@@ -1,13 +1,17 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.links.DeepLinkRoute
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.PayloadFormat
+import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
@@ -23,16 +27,25 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
-import com.loosecannon.servicetag.core.usecase.ResolveTag
+import com.loosecannon.servicetag.core.usecase.ProfileCommand
 import com.loosecannon.servicetag.core.usecase.Resolution
+import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.routeForDeepLink
 import com.loosecannon.servicetag.routeForQuickCompletion
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.meterDefinitionOf
+import com.loosecannon.servicetag.testing.replacementOf
 import com.loosecannon.servicetag.testing.scheduleOf
+import com.loosecannon.servicetag.testing.subjectRow
+import com.loosecannon.servicetag.ui.condition.OperationalOfferPrompt
+import com.loosecannon.servicetag.ui.condition.componentLine
+import com.loosecannon.servicetag.ui.health.aggregateLine
+import com.loosecannon.servicetag.ui.health.criticalLine
+import com.loosecannon.servicetag.ui.journal.EventEntryViewModel
 import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.nav.TopLevelRoutes
 import com.loosecannon.servicetag.ui.nav.readsTags
@@ -43,9 +56,11 @@ import com.loosecannon.servicetag.ui.scan.asTagResult
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -274,6 +289,305 @@ class MaintenanceSheetViewModelTest {
         assertEquals(DueStatus.OVERDUE, item.status)
         assertEquals("Overdue since 2026-11-01.", item.whyNow)
         assertEquals("the canonical date is unchanged", "2026-12-20", item.effectiveDueOn)
+    }
+
+    // ---------------------------------------------------------------- 1.4: the seven blocks
+
+    /**
+     * A DOWN generator (F3) with a DOWN component, a CRITICAL subject and overdue work: everything
+     * spec §10.1 can draw at once. The starter battery was replaced on 25 January, 80 days before
+     * 15 April, so with the fixture thresholds 0 / 40 / 75 it scores 22 — CRITICAL — and under WORST
+     * the aggregate is that same 22.
+     */
+    private suspend fun generatorWithEverything() {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.assets.upsert(assetRow("fan", name = "Cooling fan", parent = "gen"))
+        graph.conditions.insert(
+            conditionRow("c-gen", "gen", OperationalCondition.DOWN, "2026-04-01", reason = "Will not start"),
+        )
+        graph.conditions.insert(conditionRow("c-fan", "fan", OperationalCondition.DOWN, "2026-04-02"))
+        graph.events.upsert(replacementOf("e-battery", "gen", "2026-01-25"))
+        graph.healthSubjects.upsert(subjectRow("h-battery", "gen", name = "Starter battery"))
+        seed(scheduleOf("s-gen", assetId = "gen", title = "Load test", anchorOn = "2026-01-01", leadDays = 0))
+    }
+
+    /**
+     * Spec §10.1's seven blocks, **in order**: the asset, its condition, the condition actions, the
+     * DOWN or DEGRADED components, the CRITICAL subjects and the aggregate, "Maintenance" with its
+     * items, and the way out — each filled from the one `scanSheetContent`.
+     */
+    @Test fun theSevenBlocksInOrder() = runTest(scheduler) {
+        generatorWithEverything()
+
+        val model = viewModel(AssetId("gen"))
+        advanceUntilIdle()
+        val state = model.state.value
+        val blocks = state.blocks
+
+        assertEquals(
+            listOf("Identity", "Condition", "ConditionActions", "Components", "Health", "Maintenance", "OpenAsset"),
+            blocks.map { it::class.simpleName },
+        )
+        assertEquals("Generator", state.assetName)
+        val condition = (blocks[1] as SheetBlock.Condition).view!!
+        assertEquals(OperationalCondition.DOWN, condition.condition)
+        assertEquals("Will not start", condition.reason)
+        assertEquals(LocalDate.parse("2026-04-01"), condition.since)
+        assertEquals(OperationalCondition.DOWN, (blocks[2] as SheetBlock.ConditionActions).markOperational)
+        assertEquals(
+            listOf("Cooling fan DOWN — No reason given"),
+            (blocks[3] as SheetBlock.Components).components.map(::componentLine),
+        )
+        val health = blocks[4] as SheetBlock.Health
+        assertEquals(listOf("Critical: Starter battery 22"), health.critical.map(::criticalLine))
+        assertEquals(HealthBand.CRITICAL, health.aggregate!!.band)
+        assertEquals("22 — Starter battery 22", aggregateLine(health.aggregate!!.score, health.contributors))
+        assertFalse((blocks[5] as SheetBlock.Maintenance).nothingDue)
+        assertEquals(listOf("Load test"), state.items.map { it.title })
+    }
+
+    /**
+     * S7 is offered beside S6 for a DOWN or DEGRADED asset, and S6 alone otherwise — including an
+     * asset with nothing recorded, whose block reads S4.
+     */
+    @Test fun markOperationalOnlyForDownOrDegraded() = runTest(scheduler) {
+        val cases = listOf(
+            OperationalCondition.DOWN, OperationalCondition.DEGRADED, OperationalCondition.OPERATIONAL, null,
+        )
+        cases.forEachIndexed { index, condition ->
+            val id = "ups-$index"
+            graph.assets.upsert(assetRow(id, name = "UPS $index"))
+            condition?.let { graph.conditions.insert(conditionRow("c-$id", id, it, "2026-04-01")) }
+            // Due work, so the sheet opens whatever the condition says.
+            seed(scheduleOf("s-$id", assetId = id, title = "Battery self-test", anchorOn = "2026-01-01", leadDays = 0))
+        }
+
+        val offered = cases.indices.map { index ->
+            val model = viewModel(AssetId("ups-$index"))
+            advanceUntilIdle()
+            val blocks = model.state.value.blocks
+            blocks.filterIsInstance<SheetBlock.ConditionActions>().single().markOperational
+        }
+
+        assertEquals(listOf(OperationalCondition.DOWN, OperationalCondition.DEGRADED, null, null), offered)
+    }
+
+    /**
+     * A DOWN asset with nothing due still opens the sheet — condition is an at-the-unit concern
+     * (O-8) — and its maintenance block reads S139 with no item and no "Complete selected" to act on.
+     */
+    @Test fun nothingDueWhenNoItem() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("pack", name = "Battery pack"))
+        graph.conditions.insert(conditionRow("c-pack", "pack", OperationalCondition.DOWN, "2026-04-10", reason = "Cells swollen"))
+
+        val model = viewModel(AssetId("pack"))
+        advanceUntilIdle()
+        val state = model.state.value
+
+        assertTrue("condition opens the sheet", state.content!!.opens)
+        assertFalse(state.emptyOnArrival)
+        assertEquals(emptyList<SheetItem>(), state.items)
+        assertTrue(state.blocks.filterIsInstance<SheetBlock.Maintenance>().single().nothingDue)
+        assertEquals("Nothing due", NOTHING_DUE)
+        assertEquals(0, graph.events.all().size)
+    }
+
+    /**
+     * The carry-forward from B06's follow-up: a restored condition may name a zone this device cannot
+     * resolve. The sheet draws the row as it is — its word, its reason and its "since" — and nothing
+     * resolves the zone, so nothing crashes and nothing hides.
+     */
+    @Test fun aRestoredConditionInAZoneThisDeviceCannotResolveIsStillDrawn() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("tub", name = "Hot tub"))
+        graph.conditions.insert(
+            conditionRow(
+                "c-tub", "tub", OperationalCondition.DEGRADED, "2026-04-03",
+                reason = "Heater slow", tzId = "Mars/Olympus_Mons",
+            ),
+        )
+
+        val model = viewModel(AssetId("tub"))
+        advanceUntilIdle()
+        val view = model.state.value.blocks.filterIsInstance<SheetBlock.Condition>().single().view!!
+
+        assertEquals(OperationalCondition.DEGRADED, view.condition)
+        assertEquals("Heater slow", view.reason)
+        assertEquals(LocalDate.parse("2026-04-03"), view.since)
+        assertEquals(
+            OperationalCondition.DEGRADED,
+            model.state.value.blocks.filterIsInstance<SheetBlock.ConditionActions>().single().markOperational,
+        )
+    }
+
+    /** A DOWN UPS (F1) with [titles] each overdue, and the sheet open on it with every row selected. */
+    private suspend fun TestScope.downUpsWithEverythingSelected(vararg titles: String): MaintenanceSheetViewModel {
+        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        graph.conditions.insert(conditionRow("c-ups", "ups", OperationalCondition.DOWN, "2026-04-01", reason = "Alarm on"))
+        titles.forEachIndexed { index, title ->
+            seed(scheduleOf("s-ups-$index", assetId = "ups", title = title, anchorOn = "2026-01-01", leadDays = 0))
+        }
+        val model = viewModel(AssetId("ups"))
+        advanceUntilIdle()
+        model.state.value.items.forEach { model.toggle(it.scheduleId) }
+        return model
+    }
+
+    /**
+     * The ruling on B12's review, R-2: the completion's reminder reconcile runs **as soon as the
+     * completion is written**, while "Mark operational?" is still open — so leaving the sheet with the
+     * offer open skips only the offer's write. "Not yet" then writes nothing.
+     */
+    @Test fun theReconcileRunsBeforeTheOfferIsAnswered() = runTest(scheduler) {
+        val model = downUpsWithEverythingSelected("Battery self-test")
+
+        model.completeSelected()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+
+        assertNotNull("the offer is open", graph.completionFlow.offer.value)
+        assertEquals(1, graph.events.all().size)
+        assertEquals("reconciled before the offer is answered", 1, reconciles)
+
+        graph.completionFlow.declineOffer()
+        advanceUntilIdle()
+        assertEquals(1, reconciles)
+        assertEquals(1, graph.conditions.all().size)
+    }
+
+    /**
+     * The ruling on B12's review, M-1: one "Complete selected" asks each asset "Mark operational?" at
+     * most once. After "Not yet" on the first item, the second item done on the same DOWN asset does
+     * not ask again; both completions are written and reconciled.
+     */
+    @Test fun aSelectionAsksEachAssetOnce() = runTest(scheduler) {
+        val model = downUpsWithEverythingSelected("Battery self-test", "Fan clean")
+
+        model.completeSelected()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+        assertNotNull("the first item asks", graph.completionFlow.offer.value)
+        graph.completionFlow.declineOffer()
+        advanceUntilIdle()
+
+        assertNotNull("the second item's question is open", graph.completionFlow.prompt.value)
+        answerToday()
+        advanceUntilIdle()
+
+        assertNull("the same asset is not asked again in this selection", graph.completionFlow.offer.value)
+        assertEquals(2, graph.events.all().size)
+        assertEquals(2, reconciles)
+        assertEquals(1, graph.conditions.all().size)
+        assertFalse(model.state.value.busy)
+    }
+
+    /**
+     * The ruling on B12's review, RS-1: the batch is **per selection**. "Not yet" in one "Complete
+     * selected" is not carried into the next one on the same DOWN asset: that one asks again.
+     */
+    @Test fun aNewSelectionAsksAgain() = runTest(scheduler) {
+        val model = downUpsWithEverythingSelected("Battery self-test", "Fan clean")
+        val second = model.state.value.items[1].scheduleId
+        model.toggle(second)
+
+        model.completeSelected()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+        assertNotNull("the first selection asks", graph.completionFlow.offer.value)
+        graph.completionFlow.declineOffer()
+        advanceUntilIdle()
+
+        model.toggle(second)
+        model.completeSelected()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+
+        assertNotNull("a new selection asks again", graph.completionFlow.offer.value)
+        graph.completionFlow.declineOffer()
+        advanceUntilIdle()
+        assertEquals(2, graph.events.all().size)
+        assertEquals(1, graph.conditions.all().size)
+    }
+
+    /** A MAINTENANCE profile on [assetId], as a form item's journal entry logs it. */
+    private suspend fun maintenanceForm(assetId: String) = graph.saveProfile.run(
+        null,
+        ProfileCommand(
+            assetId = AssetId(assetId), name = "Annual service", eventKind = EventKind.MAINTENANCE,
+            defaultTitle = "Annual service", fields = emptyList(), consumables = emptyList(),
+        ),
+    ).id
+
+    /** The journal entry a form item opens, saved as it opens; its offer (or none) is returned. */
+    private suspend fun TestScope.saveTheForm(assetId: String, profileId: ProfileId): EventEntryViewModel {
+        val entry = EventEntryViewModel(
+            graph.assets, graph.definitions, graph.profiles, graph.events,
+            graph.logEvent, graph.updateEvent, graph.clock,
+            AssetId(assetId), profileId, null, offers = graph.eventOffers,
+        )
+        entry.state.first { it.loaded }
+        entry.save()
+        advanceUntilIdle()
+        return entry
+    }
+
+    /**
+     * The ruling on B12's review, RS-2: a selection holding a **form** item and a **quick** item for
+     * one DOWN asset asks "Mark operational?" once — once per asset per batch, whatever the item kinds
+     * and whichever comes first. The form's journal entry asks through the same open batch the flow
+     * does.
+     */
+    @Test fun aFormItemAndAQuickItemOnOneAssetAskOnce() = runTest(scheduler) {
+        // Form first: the journal entry asks, and the quick item after it does not.
+        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        graph.conditions.insert(conditionRow("c-ups", "ups", OperationalCondition.DOWN, "2026-04-01"))
+        val upsForm = maintenanceForm("ups")
+        seed(scheduleOf("f-ups", assetId = "ups", title = "Annual service", anchorOn = "2026-01-01", leadDays = 0, completionMode = CompletionMode.FORM))
+        seed(scheduleOf("q-ups", assetId = "ups", title = "Fan clean", anchorOn = "2026-01-02", leadDays = 0))
+        val ups = viewModel(AssetId("ups"))
+        advanceUntilIdle()
+        assertEquals(listOf("f-ups", "q-ups"), ups.state.value.items.map { it.scheduleId.value })
+        ups.state.value.items.forEach { ups.toggle(it.scheduleId) }
+        ups.completeSelected()
+        advanceUntilIdle()
+
+        val entry = saveTheForm("ups", upsForm)
+        assertTrue("the form's entry asks", entry.state.value.offer is OperationalOfferPrompt)
+        entry.declineOffer()
+        // The owner's form completes its occurrence, as in the shipped form tests.
+        graph.completeSchedule.run(ScheduleId("f-ups"), CompletionCommand(occurredOn = graph.today.toString(), tzId = "UTC"))
+        ups.refresh()
+        advanceUntilIdle()
+        assertNotNull("the quick item's question is open", graph.completionFlow.prompt.value)
+        answerToday()
+        advanceUntilIdle()
+        assertNull("the quick item does not ask again", graph.completionFlow.offer.value)
+        assertFalse(ups.state.value.busy)
+
+        // Quick first: the flow asks, and the form's journal entry after it does not.
+        graph.assets.upsert(assetRow("pack", name = "Battery pack"))
+        graph.conditions.insert(conditionRow("c-pack", "pack", OperationalCondition.DOWN, "2026-04-01"))
+        val packForm = maintenanceForm("pack")
+        seed(scheduleOf("q-pack", assetId = "pack", title = "Cell check", anchorOn = "2026-01-01", leadDays = 0))
+        seed(scheduleOf("f-pack", assetId = "pack", title = "Annual service", anchorOn = "2026-01-02", leadDays = 0, completionMode = CompletionMode.FORM))
+        val pack = viewModel(AssetId("pack"))
+        advanceUntilIdle()
+        assertEquals(listOf("q-pack", "f-pack"), pack.state.value.items.map { it.scheduleId.value })
+        pack.state.value.items.forEach { pack.toggle(it.scheduleId) }
+        pack.completeSelected()
+        advanceUntilIdle()
+        answerToday()
+        advanceUntilIdle()
+        assertNotNull("the quick item asks", graph.completionFlow.offer.value)
+        graph.completionFlow.declineOffer()
+        advanceUntilIdle()
+
+        val packEntry = saveTheForm("pack", packForm)
+        assertNull("the form's entry does not ask again", packEntry.state.value.offer)
+        assertEquals(2, graph.conditions.all().size)
     }
 
     // ---------------------------------------------------------------- completion

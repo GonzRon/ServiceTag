@@ -94,6 +94,9 @@ import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
+import com.loosecannon.servicetag.ui.condition.EventOffers
+import com.loosecannon.servicetag.ui.condition.OperationalOffers
+import com.loosecannon.servicetag.ui.condition.SeasonOffers
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import com.loosecannon.servicetag.reminders.ReminderSnooze
@@ -364,9 +367,20 @@ class FakeGraph(
     val saveGroup: SaveGroup = SaveGroup(groups, assets, uow, ids, clock)
     val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock)
 
+    /**
+     * 1.4 — the offers an event makes (spec §3.3, §5.4): "Mark operational?" and the season offer,
+     * each written only by its accept (B06's `AcceptOperationalOffer`, B04's `AcceptSeasonOffer`).
+     * Built here once; the completion flow and the journal entry both ask through it.
+     */
+    val eventOffers: EventOffers = EventOffers(
+        OperationalOffers(assets, conditions, acceptOperationalOffer, todayPort),
+        SeasonOffers(assets, seasonActivations, acceptSeasonOffer, todayPort),
+    )
+
     /** The one completion mechanism, over the real use cases — always UTC, so a `tzId` is stable. */
     val completionFlow: CompletionFlow = CompletionFlow(
         schedules, definitions, completeSchedule, completeGroupMembers, todayPort,
+        eventOffers,
     ) { java.time.ZoneOffset.UTC }
 
     /**

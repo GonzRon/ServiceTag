@@ -82,7 +82,7 @@ class EventEntryViewModelTest {
         EventEntryViewModel(
             graph.assets, graph.definitions, graph.profiles, graph.events,
             graph.logEvent, graph.updateEvent, graph.clock,
-            assetId, profileId, eventId,
+            assetId, profileId, eventId, offers = graph.eventOffers,
         )
 
     private fun detailModel(id: EventId) =

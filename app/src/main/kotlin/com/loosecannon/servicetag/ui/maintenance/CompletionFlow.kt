@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.AlertDialog
@@ -32,9 +33,14 @@ import com.loosecannon.servicetag.core.usecase.CompleteSchedule
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.GroupCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
-import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.asset.DateField
+import com.loosecannon.servicetag.ui.condition.EventOffer
+import com.loosecannon.servicetag.ui.condition.EventOfferDialog
+import com.loosecannon.servicetag.ui.condition.EventOffers
+import com.loosecannon.servicetag.ui.condition.OfferBatch
+import com.loosecannon.servicetag.ui.condition.tapped
 import java.time.ZoneId
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -118,6 +124,23 @@ data class CompletionAnswer(
  * It re-implements no rule. `occurrence_on`, the idempotence index, the conditional postponement
  * clear and the recompute are all the use cases'; what is here is the affordance, the optional
  * time, the meter demand and the routing of a `FORM` schedule into its own form.
+ *
+ * **1.4 — the offers after a completion** (spec §3.3, §5.4; master plan §9, decision 12). After a
+ * completion, each completed asset is asked what its event asks ([EventOffers]): "Mark operational?"
+ * when it is DOWN or DEGRADED, and "Start the season now?" or "End the season now?" when the event
+ * took a season kind from its profile on a MANUAL asset in the opposite phase. They are asked **one at
+ * a time** — one event after another in the order they were written, and the operational offer
+ * before the season offer — and the call returns once every offer is answered. Declining one leaves
+ * the others to be asked. Only an accept writes; the completion itself never touches a condition or
+ * an activation (inv. 81, 93). The notification's one-tap completion does not come through this flow
+ * at all, so it offers nothing: there is no screen to ask on.
+ *
+ * A caller that must act on the written completion before anyone answers an offer — the scan sheet's
+ * reminder reconcile — passes `afterWrite`, which runs right after the write and before the first
+ * offer (the controller's ruling on B12's review, R-2). A caller completing several items at once
+ * opens one [OfferBatch] with [openSelection] and closes it with [closeSelection], so each asset is
+ * asked each offer at most once in the whole selection — form items saved in the journal entry
+ * included (M-1, RS-2).
  */
 class CompletionFlow(
     private val schedules: ScheduleRepository,
@@ -125,16 +148,9 @@ class CompletionFlow(
     private val completeSchedule: CompleteSchedule,
     private val completeGroupMembers: CompleteGroupMembers,
     private val today: Today,
+    private val offers: EventOffers,
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) {
-
-    constructor(graph: AppGraph) : this(
-        graph.schedules,
-        graph.definitions,
-        graph.completeSchedule,
-        graph.completeGroupMembers,
-        graph.today,
-    )
 
     private val _prompt = MutableStateFlow<CompletionPrompt?>(null)
 
@@ -143,6 +159,13 @@ class CompletionFlow(
 
     private var pending: CompletableDeferred<CompletionAnswer?>? = null
 
+    private val _offer = MutableStateFlow<EventOffer?>(null)
+
+    /** The open offer after a completion, or null. [CompletionFlowHost] renders it too. */
+    val offer: StateFlow<EventOffer?> = _offer.asStateFlow()
+
+    private var offerAnswer: CompletableDeferred<Boolean>? = null
+
     /**
      * One occurrence of one schedule, done.
      *
@@ -150,8 +173,14 @@ class CompletionFlow(
      * whose member is its own Asset. A group target with no member named is refused rather than
      * guessed at: picking one would write a maintenance record onto somebody else's equipment
      * (invariants 28, 29).
+     *
+     * [afterWrite] runs once the completion is written and before any offer is asked.
      */
-    suspend fun complete(scheduleId: ScheduleId, assetId: AssetId? = null): CompletionOutcome {
+    suspend fun complete(
+        scheduleId: ScheduleId,
+        assetId: AssetId? = null,
+        afterWrite: suspend () -> Unit = {},
+    ): CompletionOutcome {
         val schedule = schedules.get(scheduleId)
             ?: return CompletionOutcome.Refused(NoSuchSchedule(scheduleId))
         return when (val target = schedule.target) {
@@ -164,23 +193,30 @@ class CompletionFlow(
                     CompletionOutcome.NeedsForm(scheduleId, target.assetId, schedule.profileId)
                 } else {
                     val answer = ask(schedule) ?: return CompletionOutcome.Cancelled
-                    attempt { listOf(completeSchedule.run(scheduleId, answer.command(schedule))) }
+                    attempt(afterWrite) { listOf(completeSchedule.run(scheduleId, answer.command(schedule))) }
                 }
             is ScheduleTarget.GroupTarget -> {
                 if (assetId == null) {
                     return CompletionOutcome.Refused(GroupCompletionNotSupported(scheduleId))
                 }
-                completeSelected(scheduleId, listOf(assetId))
+                completeMembers(scheduleId, listOf(assetId), afterWrite)
             }
         }
     }
 
     /** "Complete selected": the named members of a group round, in one write. */
-    suspend fun completeSelected(scheduleId: ScheduleId, assetIds: List<AssetId>): CompletionOutcome {
+    suspend fun completeSelected(scheduleId: ScheduleId, assetIds: List<AssetId>): CompletionOutcome =
+        completeMembers(scheduleId, assetIds, afterWrite = {})
+
+    private suspend fun completeMembers(
+        scheduleId: ScheduleId,
+        assetIds: List<AssetId>,
+        afterWrite: suspend () -> Unit,
+    ): CompletionOutcome {
         val schedule = schedules.get(scheduleId)
             ?: return CompletionOutcome.Refused(NoSuchSchedule(scheduleId))
         val answer = ask(schedule) ?: return CompletionOutcome.Cancelled
-        return attempt { completeGroupMembers.run(scheduleId, assetIds, answer.command(schedule)) }
+        return attempt(afterWrite) { completeGroupMembers.run(scheduleId, assetIds, answer.command(schedule)) }
     }
 
     /** "Complete all": every required member of a group round that is not yet done. */
@@ -188,7 +224,7 @@ class CompletionFlow(
         val schedule = schedules.get(scheduleId)
             ?: return CompletionOutcome.Refused(NoSuchSchedule(scheduleId))
         val answer = ask(schedule) ?: return CompletionOutcome.Cancelled
-        return attempt { completeGroupMembers.all(scheduleId, answer.command(schedule)) }
+        return attempt(afterWrite = {}) { completeGroupMembers.all(scheduleId, answer.command(schedule)) }
     }
 
     /**
@@ -203,9 +239,38 @@ class CompletionFlow(
         return pending?.complete(answer) ?: false
     }
 
+    /**
+     * Opens [batch] as the memory of one selection of completions: until [closeSelection], each asset
+     * is asked each offer at most once, by this flow and by the journal entry a form item opens.
+     */
+    fun openSelection(batch: OfferBatch) = offers.open(batch)
+
+    /** Closes [batch]; a later call for a batch that is no longer open does nothing. */
+    fun closeSelection(batch: OfferBatch) = offers.close(batch)
+
     /** The owner backed out. Nothing is written, which is the affordance's whole promise. */
     fun cancel() {
         pending?.complete(null)
+    }
+
+    /**
+     * The open offer's accept — "Mark operational", "Start season" or "End season". The offer is
+     * marked as tapped **before** anything else, which disables its buttons, and a second tap finds it
+     * tapped and does nothing — so a double tap can never write a second row. False when there was
+     * nothing to accept.
+     */
+    fun acceptOffer(): Boolean {
+        val open = _offer.value ?: return false
+        if (open.accepting) return false
+        _offer.value = open.tapped()
+        return offerAnswer?.complete(true) ?: false
+    }
+
+    /** **"Not yet"** or **"Not now"**: nothing is written, and the next offer, if any, is asked. */
+    fun declineOffer() {
+        val open = _offer.value ?: return
+        if (open.accepting) return
+        offerAnswer?.complete(false)
     }
 
     /**
@@ -238,11 +303,57 @@ class CompletionFlow(
         }
     }
 
-    /** A refusal is an outcome rather than an exception crossing a view model. */
-    private suspend fun attempt(block: suspend () -> List<AssetEvent>): CompletionOutcome = try {
-        CompletionOutcome.Completed(block())
-    } catch (failure: Throwable) {
-        CompletionOutcome.Refused(failure)
+    /**
+     * A refusal is an outcome rather than an exception crossing a view model. A completion that was
+     * written runs [afterWrite] at once, and is then followed by its offers before the outcome is
+     * returned — so leaving mid-offer skips only an offer's write, never the caller's own step.
+     */
+    private suspend fun attempt(
+        afterWrite: suspend () -> Unit,
+        block: suspend () -> List<AssetEvent>,
+    ): CompletionOutcome {
+        val events = try {
+            block()
+        } catch (failure: Throwable) {
+            return CompletionOutcome.Refused(failure)
+        }
+        afterWrite()
+        offerAfter(events)
+        return CompletionOutcome.Completed(events)
+    }
+
+    /**
+     * Every offer each written event makes, **one at a time**: each event's offers are read fresh
+     * when its turn comes, and each is answered before the next is asked. An offer the open
+     * selection has already asked of that asset is not asked again ([EventOffers.offersAfter]). A refused accept is logged and the next offer
+     * still asked — §10.7 ratifies no sentence for it, and the fact simply stays as recorded.
+     */
+    private suspend fun offerAfter(events: List<AssetEvent>) {
+        for (event in events) {
+            for (offer in offers.offersAfter(event)) {
+                val answer = CompletableDeferred<Boolean>()
+                offerAnswer = answer
+                _offer.value = offer
+                try {
+                    if (answer.await()) {
+                        try {
+                            offers.accept(offer)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (refused: Exception) {
+                            Log.w(TAG, "an accepted offer was refused", refused)
+                        }
+                    }
+                } finally {
+                    offerAnswer = null
+                    _offer.value = null
+                }
+            }
+        }
+    }
+
+    private companion object {
+        const val TAG = "CompletionFlow"
     }
 
     private fun CompletionAnswer.command(schedule: MaintenanceSchedule): CompletionCommand {
@@ -272,6 +383,9 @@ class CompletionFlow(
 @Composable
 fun CompletionFlowHost(flow: CompletionFlow) {
     val prompt by flow.prompt.collectAsStateWithLifecycle()
+    val offer by flow.offer.collectAsStateWithLifecycle()
+    // The offers after a completion (1.4), on every surface that drives the flow.
+    offer?.let { EventOfferDialog(it, onAccept = { flow.acceptOffer() }, onDecline = flow::declineOffer) }
     val open = prompt ?: return
 
     // Keyed on the schedule so a second prompt starts from today again rather than the last answer.
@@ -351,13 +465,14 @@ fun LogMaintenancePicker(
         value = due.items().filter { it.countsAsDue || it.isRepairableNoData }
     }
     val prompt by flow.prompt.collectAsStateWithLifecycle()
+    val offer by flow.offer.collectAsStateWithLifecycle()
 
     // The affordance, hosted here too, so the quick action asks the same question in the same words.
     CompletionFlowHost(flow)
 
-    // Once the flow has the owner's attention the picker steps out of the way rather than stacking
-    // a second dialog over its own.
-    if (prompt != null) return
+    // Once the flow has the owner's attention — its question, or the offer after it — the picker
+    // steps out of the way rather than stacking a second dialog over its own.
+    if (prompt != null || offer != null) return
     if (items.isEmpty()) {
         LaunchedEffect(items) { onDismiss() }
         return

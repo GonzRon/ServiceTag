@@ -39,10 +39,22 @@ class ContrastTest {
         ).forEach { (label, sc) -> assertAtLeast(4.5, sc.foreground, sc.container, "$name semantic $label") }
     }
 
+    /** The eight 1.4 condition and health tokens (spec §10.6, O-2), under the same threshold. */
+    private fun checkConditionAndHealth(name: String, c: ServiceTagSemanticColors) {
+        listOf(
+            "conditionOperational" to c.conditionOperational, "conditionDegraded" to c.conditionDegraded,
+            "conditionDown" to c.conditionDown, "conditionNotRecorded" to c.conditionNotRecorded,
+            "healthNominal" to c.healthNominal, "healthWarning" to c.healthWarning,
+            "healthCritical" to c.healthCritical, "healthNotTracked" to c.healthNotTracked,
+        ).forEach { (label, sc) -> assertAtLeast(4.5, sc.foreground, sc.container, "$name semantic $label") }
+    }
+
     @Test fun lightSchemePairsMeetAA() { checkScheme("light", LightColorScheme) }
     @Test fun darkSchemePairsMeetAA() { checkScheme("dark", DarkColorScheme) }
     @Test fun lightSemanticPairsMeetAA() { checkSemantic("light", ServiceTagLightSemanticColors) }
     @Test fun darkSemanticPairsMeetAA() { checkSemantic("dark", ServiceTagDarkSemanticColors) }
+    @Test fun lightConditionAndHealthPairsMeetAA() { checkConditionAndHealth("light", ServiceTagLightSemanticColors) }
+    @Test fun darkConditionAndHealthPairsMeetAA() { checkConditionAndHealth("dark", ServiceTagDarkSemanticColors) }
     @Test fun darkMetadataRecedesFromBodyText() {
         // G1 correction h: onSurfaceVariant must be visibly darker than onSurface in dark mode
         assertTrue(luminance(DarkColorScheme.onSurfaceVariant) < luminance(DarkColorScheme.onSurface) * 0.75)

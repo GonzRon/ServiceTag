@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.journal
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.journal.Derived
@@ -33,6 +34,9 @@ import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.NoSuchEvent
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.condition.EventOffer
+import com.loosecannon.servicetag.ui.condition.EventOffers
+import com.loosecannon.servicetag.ui.condition.tapped
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -44,6 +48,7 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The entry route's state: the field test sheet of G1 §1.3, one row per profile field, plus the
@@ -96,6 +101,12 @@ data class EventEntryState(
     /** The one line the screen says out loud when a save is refused; null while nothing is wrong. */
     val firstProblem: String? = null,
     val loaded: Boolean = false,
+    /**
+     * 1.4: the question a just-logged event asks before the screen leaves — "Mark operational?" or
+     * the season offer (spec §3.3, §5.4). Null while there is none. The entry is already saved; this
+     * only asks, and only its accept writes.
+     */
+    val offer: EventOffer? = null,
 )
 
 /**
@@ -130,6 +141,12 @@ class EventEntryViewModel(
      * was set up to log; an edit always keeps the kind it was logged with.
      */
     private val presetKind: EventKind? = null,
+    /**
+     * 1.4: the offers a **newly logged** event may make (spec §3.3, §5.4) — the graph's one
+     * [EventOffers]. An edit never offers: S19 and S53 say "You logged", and an edit logged nothing
+     * new.
+     */
+    private val offers: EventOffers,
 ) : ViewModel() {
 
     constructor(
@@ -143,10 +160,14 @@ class EventEntryViewModel(
         graph.logEvent, graph.updateEvent, graph.clock,
         AssetId(assetId), profileId?.let(::ProfileId), eventId?.let(::EventId),
         kind?.let { name -> runCatching { EventKind.valueOf(name) }.getOrNull() },
+        graph.eventOffers,
     )
 
     /** The zone the entry is being made in; stored on the event as `tzId` for the audit trail. */
     private val zone: ZoneId = ZoneId.systemDefault()
+
+    /** The offers a just-logged event still has to ask after the open one, in order. */
+    private var laterOffers: List<EventOffer> = emptyList()
 
     /** Set once the event is loaded, so an edit's save carries the kind it was logged with. */
     private var kind: EventKind = EventKind.NOTE
@@ -400,8 +421,16 @@ class EventEntryViewModel(
             // rather than be reported to the user as a refused save.
             try {
                 val event = if (eventId == null) logEvent.run(cmd) else updateEvent.run(eventId, cmd)
-                _state.update { it.copy(saving = false) }
-                _saved.tryEmit(event.id)
+                val asked = if (eventId == null) offers.offersAfter(event) else emptyList()
+                if (asked.isEmpty()) {
+                    _state.update { it.copy(saving = false) }
+                    _saved.tryEmit(event.id)
+                } else {
+                    // Saved, and its questions before the screen leaves, one at a time. `saving`
+                    // stays set, so the form cannot log the entry again while a question is open.
+                    laterOffers = asked.drop(1)
+                    _state.update { it.copy(offer = asked.first()) }
+                }
             } catch (e: EventValidation) {
                 markProblems(e, submitted.map { it.first })
             } catch (e: EventOwnership) {
@@ -409,6 +438,46 @@ class EventEntryViewModel(
             } catch (e: NoSuchEvent) {
                 refuse(e)
             }
+        }
+    }
+
+    /**
+     * The offer's accept: marked as tapped **before** the write — which disables its buttons — and
+     * refused on a second tap, so a double tap writes one row. Then the next offer is asked, or the
+     * screen leaves, as it would have without the offer. A refused accept has no ratified sentence;
+     * the entry stands either way.
+     */
+    fun acceptOffer() {
+        val open = _state.value.offer ?: return
+        if (open.accepting) return
+        _state.update { it.copy(offer = open.tapped()) }
+        viewModelScope.launch {
+            try {
+                offers.accept(open)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (refused: Exception) {
+                Log.w(TAG, "an accepted offer was refused", refused)
+            }
+            nextAfter(open)
+        }
+    }
+
+    /** "Not yet" or "Not now": nothing is written, and the next offer is asked or the screen leaves. */
+    fun declineOffer() {
+        val open = _state.value.offer ?: return
+        if (open.accepting) return
+        nextAfter(open)
+    }
+
+    private fun nextAfter(offer: EventOffer) {
+        val next = laterOffers.firstOrNull()
+        laterOffers = laterOffers.drop(1)
+        if (next != null) {
+            _state.update { it.copy(offer = next) }
+        } else {
+            _state.update { it.copy(offer = null, saving = false) }
+            _saved.tryEmit(offer.event.id)
         }
     }
 
@@ -449,6 +518,7 @@ class EventEntryViewModel(
         .map { (index, row) -> index to ConsumableInput(row.name, row.quantity, row.unit) }
 
     private companion object {
+        const val TAG = "EventEntry"
         val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd")
         val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
