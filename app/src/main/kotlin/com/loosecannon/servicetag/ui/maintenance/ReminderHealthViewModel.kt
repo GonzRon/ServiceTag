@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.reminders.ReminderHealthFinding
@@ -12,6 +13,7 @@ import com.loosecannon.servicetag.reminders.ReminderHealthRun
 import com.loosecannon.servicetag.reminders.ReminderRepair
 import com.loosecannon.servicetag.reminders.repairActionOf
 import com.loosecannon.servicetag.reminders.repairTargetOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,9 +21,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * The seven RATIFIED repair labels (master plan §17.1a), keyed by the action half of a repair's
- * code. `NO_DATA`'s is D-24's already-ratified "Log meter reading"; the other six were ratified at
- * the gate on 2026-09-22. Quoted verbatim, never paraphrased.
+ * The eight RATIFIED repair labels, keyed by the action half of a repair's code: master plan
+ * §17.1a's seven — `NO_DATA`'s is D-24's already-ratified "Log meter reading", the other six were
+ * ratified at the gate on 2026-09-22 — and 1.4.1's P141-2 for the delivery repair (ratified
+ * 2026-09-25). Quoted verbatim, never paraphrased.
  *
  * Null for a code this build has no label for, which is how an unlabelled repair becomes a finding
  * shown with no button rather than a button saying nothing.
@@ -34,17 +37,18 @@ fun repairLabel(code: String): String? = when (repairActionOf(code)) {
     ReminderRepair.TURN_REMINDERS_ON -> "Turn reminders on"
     ReminderRepair.OPEN_SCHEDULE -> "Open the schedule"
     ReminderRepair.LOG_METER_READING -> "Log meter reading"
+    ReminderRepair.RESTORE_REMINDER_DELIVERY -> "Fix reminder delivery"
     else -> null
 }
 
 /**
- * What tapping a repair does, in the five kinds the Health screen can actually perform.
+ * What tapping a repair does, in the kinds the Health screen can actually perform.
  *
  * The screen switches on this and holds **no** repair policy of its own: which repairs may be run
  * on the owner's behalf is [ReminderHealthCheck]'s decision, carried here by whether the port's
- * action was [RepairAction.Automatic]. [TurnRemindersOn] is the one in-app repair that writes
- * instead of navigating — #27's "one tap to enable" — and it writes B06's preference and nothing
- * else.
+ * action was [RepairAction.Automatic]. Two in-app repairs write instead of navigating, and only on
+ * the owner's tap: [TurnRemindersOn] — #27's "one tap to enable" — writes B06's preference and
+ * nothing else, and [RestoreReminderDelivery] (1.4.1, #80) runs the one canonical delivery repair.
  */
 sealed interface HealthAction {
     data object Automatic : HealthAction
@@ -53,6 +57,7 @@ sealed interface HealthAction {
     data object TurnRemindersOn : HealthAction
     data class OpenSchedule(val scheduleId: String) : HealthAction
     data class LogMeterReading(val scheduleId: String) : HealthAction
+    data object RestoreReminderDelivery : HealthAction
 }
 
 /**
@@ -137,14 +142,21 @@ class ReminderHealth(private val check: ReminderHealthCheck) : HealthSummary, Re
  *
  * It reports and repairs and decides nothing: the findings, their severities and which of them may
  * be repaired automatically are all [ReminderHealthCheck]'s, and this turns each one into a row with
- * its ratified label. The two repairs it performs itself are the automatic one — delegated straight
- * back to the check — and #27's one-tap "Turn reminders on", which writes B06's preference. The
- * other four take the owner somewhere: two system screens and two in-app destinations, both
- * performed by the screen.
+ * its ratified label. The three repairs it performs itself are the automatic one — delegated
+ * straight back to the check — #27's one-tap "Turn reminders on", which writes B06's preference,
+ * and #80's "Fix reminder delivery", which runs the one canonical delivery repair. The other four
+ * take the owner somewhere: two system screens and two in-app destinations, both performed by the
+ * screen.
  */
 class ReminderHealthViewModel(
     private val health: ReminderHealth,
     private val prefs: AppPrefs,
+    /**
+     * #80's one canonical repair — the use case the `/v1` and MCP adapters also call, so there is
+     * one repair policy (R2). A seam, placed before [resumeDelivery] and with no default, so a
+     * wiring that forgot it does not compile.
+     */
+    private val restoreDelivery: suspend () -> Unit,
     /**
      * B06's own reconcile — the same entry point the backstop worker and every platform receiver
      * drive. A seam rather than the type, because nothing about this view model is Android-shaped
@@ -157,6 +169,7 @@ class ReminderHealthViewModel(
     constructor(graph: AppGraph) : this(
         graph.reminderHealth,
         graph.prefs,
+        { graph.repairScheduleProviders.apply() },
         { graph.reminderRuns.reconcileAll() },
     )
 
@@ -175,8 +188,8 @@ class ReminderHealthViewModel(
     }
 
     /**
-     * The two repairs this view model performs. Anything else on the row is the screen's to do, and
-     * a row with no action at all falls through without a refresh — there is nothing to have
+     * The three repairs this view model performs. Anything else on the row is the screen's to do,
+     * and a row with no action at all falls through without a refresh — there is nothing to have
      * changed.
      */
     fun repair(row: HealthRow) {
@@ -192,10 +205,33 @@ class ReminderHealthViewModel(
                     // call the worker makes and has no second effect of its own.
                     resumeDelivery()
                 }
+                HealthAction.RestoreReminderDelivery -> restoreThenResume()
                 else -> return@launch
             }
             emit(health.refresh())
         }
+    }
+
+    /**
+     * The repair writes first; the sweep runs after it, so the schedules it just gave a delivery
+     * row are delivered now rather than at the next digest or backstop — the same reason
+     * [HealthAction.TurnRemindersOn] sweeps — and the caller's refresh comes last, so the row
+     * clears within the same tap.
+     *
+     * A repair that throws is logged and nothing more: no sweep follows a write that did not
+     * happen, the refresh still runs, and the finding simply stays. Nothing is drawn for it — no
+     * sentence for a failed repair is ratified — and what it repaired is not drawn either.
+     */
+    private suspend fun restoreThenResume() {
+        try {
+            restoreDelivery()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "the delivery repair failed; the finding stays", e)
+            return
+        }
+        resumeDelivery()
     }
 
     private fun emit(findings: List<ReminderHealthFinding>) {
@@ -227,7 +263,12 @@ class ReminderHealthViewModel(
             ReminderRepair.TURN_REMINDERS_ON -> HealthAction.TurnRemindersOn
             ReminderRepair.OPEN_SCHEDULE -> repairTargetOf(repair.code)?.let(HealthAction::OpenSchedule)
             ReminderRepair.LOG_METER_READING -> repairTargetOf(repair.code)?.let(HealthAction::LogMeterReading)
+            ReminderRepair.RESTORE_REMINDER_DELIVERY -> HealthAction.RestoreReminderDelivery
             else -> null
         }
+    }
+
+    private companion object {
+        const val TAG = "ReminderHealth"
     }
 }

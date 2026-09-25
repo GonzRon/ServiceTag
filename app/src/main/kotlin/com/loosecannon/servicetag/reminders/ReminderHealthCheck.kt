@@ -24,9 +24,10 @@ import kotlinx.coroutines.withContext
  * A [RepairAction] carries a code and nothing else, so the code is the whole of what a screen has
  * to go on: which automatic repair to run, which system screen to open, which **in-app action the
  * owner must take** — of which navigating somewhere is one kind and `TURN_REMINDERS_ON`, which
- * flips the owner's own switch on their explicit tap, is the other. Declared here rather than as
- * literals at each construction site because three of them are
- * built by [LocalReminderProvider] and all seven are labelled by the Health screen, and a code that
+ * flips the owner's own switch on their explicit tap, is the other; `RESTORE_REMINDER_DELIVERY`
+ * (1.4.1, #80) is a third of that second kind, the one canonical delivery repair run on the owner's
+ * tap. Declared here rather than as literals at each construction site because three of them are
+ * built by [LocalReminderProvider] and all eight are labelled by the Health screen, and a code that
  * was spelled differently at those two ends would be a button that does nothing.
  *
  * **The two in-app destinations carry their target.** "Open the schedule" and "Log meter reading"
@@ -43,6 +44,9 @@ object ReminderRepair {
     const val TURN_REMINDERS_ON = "TURN_REMINDERS_ON"
     const val OPEN_SCHEDULE = "OPEN_SCHEDULE"
     const val LOG_METER_READING = "LOG_METER_READING"
+
+    /** A batch over every schedule the repair's own predicate matches, so it carries no target. */
+    const val RESTORE_REMINDER_DELIVERY = "RESTORE_REMINDER_DELIVERY"
 
     /** What separates an action from the one thing it acts on. */
     const val TARGET_SEPARATOR = ":"
@@ -255,9 +259,17 @@ class ReminderHealthCheck(
     }
 
     /**
-     * The two findings whose facts are in the store.
+     * The three findings whose facts are in the store.
      *
-     * **Both findings carry both lifecycle bounds** (fix round 1, S1/S2). `listedForDue()` drops an
+     * **Reminders on, delivered by nobody, is two findings** (1.4.1, #80). An ACTIVE schedule with
+     * reminders on and **no** delivery rows at all is exactly the canonical repair's predicate (R3),
+     * so `SCHEDULE_NO_PROVIDER` offers that repair as one in-app batch action for the owner to tap —
+     * never an `Automatic` one, because [runAndRepair] runs unattended from the backstop. A
+     * non-empty set with nothing enabled is somebody's deliberate choice that no bulk repair may
+     * second-guess, so it keeps the 1.2 sentence and "Open the schedule" under its own code,
+     * `SCHEDULE_PROVIDER_DISABLED`. The two partition the 1.2 finding's rows: none is in both.
+     *
+     * **Every finding carries both lifecycle bounds** (fix round 1, S1/S2). `listedForDue()` drops an
      * archived schedule; [inService] drops a live schedule on a retired asset or an archived group;
      * and `status == ACTIVE` drops a paused one. Every clause earns its place: without the archive
      * bound every retired schedule raises a finding nothing can clear; without the target bound the
@@ -291,18 +303,35 @@ class ReminderHealthCheck(
                 it.remindersEnabled &&
                 it.providers.none(ScheduleProviderRow::enabled)
         }
-        if (undeliverable.isNotEmpty()) {
+        val (unconfigured, switchedOff) = undeliverable.partition { it.providers.isEmpty() }
+        if (unconfigured.isNotEmpty()) {
             add(
                 ReminderHealthFinding(
                     code = "SCHEDULE_NO_PROVIDER",
+                    severity = ReminderHealthSeverity.WARN,
+                    // RATIFIED verbatim (1.4.1 plan §4, P141-1a / P141-1b): one form for exactly one,
+                    // one for every other count. The count is this finding's rows alone.
+                    message = if (unconfigured.size == 1) {
+                        "1 schedule has reminders turned on, but reminder delivery isn't configured."
+                    } else {
+                        "${unconfigured.size} schedules have reminders turned on, but reminder delivery isn't configured."
+                    },
+                    // The whole batch, on the owner's tap: no target, and never `Automatic`.
+                    repair = RepairAction.OpenInApp(ReminderRepair.RESTORE_REMINDER_DELIVERY),
+                ),
+            )
+        }
+        if (switchedOff.isNotEmpty()) {
+            add(
+                ReminderHealthFinding(
+                    code = "SCHEDULE_PROVIDER_DISABLED",
                     severity = ReminderHealthSeverity.WARN,
                     // RATIFIED verbatim, count-shaped (master plan §17.1a). The finding cannot name
                     // the schedule — the ratified sentence counts them and `ReminderHealthFinding` has no
                     // field for a name — so the repair is what reaches one, and the count is what
                     // says there are more.
-                    message = "${undeliverable.size} schedules have reminders switched on " +
-                        "but no way to deliver them.",
-                    repair = RepairAction.OpenInApp(targeted(ReminderRepair.OPEN_SCHEDULE, undeliverable)),
+                    message = "${switchedOff.size} schedules have reminders switched on but no way to deliver them.",
+                    repair = RepairAction.OpenInApp(targeted(ReminderRepair.OPEN_SCHEDULE, switchedOff)),
                 ),
             )
         }

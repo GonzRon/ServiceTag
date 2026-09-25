@@ -3,11 +3,14 @@ package com.loosecannon.servicetag.ui.maintenance
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.TerminationKind
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
+import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import com.loosecannon.servicetag.reminders.AppRestriction
@@ -84,6 +87,21 @@ class ReminderHealthViewModelTest {
     /** How many times the one-tap enable drove B06's reconcile. */
     private var deliveryResumed = 0
 
+    /** Both seams, in the order they were called: what proves restore, then sweep. */
+    private val calls = mutableListOf<String>()
+
+    /** A write-through unit of work, so the canonical repair runs over the fake rows. */
+    private val uow = object : UnitOfWork {
+        override suspend fun <T> write(block: suspend () -> T): T = block()
+        override suspend fun <T> read(block: suspend () -> T): T = block()
+    }
+
+    /** The one canonical repair, over this suite's rows, recorded as it runs. */
+    private val restoreForReal: suspend () -> Unit = {
+        calls += "restore"
+        RepairScheduleProviders(schedules, uow, clock).apply()
+    }
+
     /**
      * One scheduler for `Dispatchers.Main`, for `runTest` and for the Room-backed fixture the
      * cold-launch test builds. `runTest` adopts the main dispatcher's scheduler, so a fixture with a
@@ -130,8 +148,13 @@ class ReminderHealthViewModelTest {
      * Refreshed on the way out, because the screen refreshes on every `ON_START` and the view model
      * deliberately does not run the check from its constructor.
      */
-    private fun viewModel(health: ReminderHealth = health()) =
-        ReminderHealthViewModel(health, prefs) { deliveryResumed++ }.also { it.refresh() }
+    private fun viewModel(
+        health: ReminderHealth = health(),
+        restoreDelivery: suspend () -> Unit = { calls += "restore" },
+    ) = ReminderHealthViewModel(health, prefs, restoreDelivery) {
+        deliveryResumed++
+        calls += "resume"
+    }.also { it.refresh() }
 
     /**
      * The badge threshold, over the real summary: **≥ WARN** shows it, and an INFO-only set does
@@ -184,9 +207,12 @@ class ReminderHealthViewModelTest {
         assertEquals(ReminderHealthSeverity.ERROR, health.worstSeverity())
     }
 
-    /** The seven RATIFIED repair labels (§17.1a), verbatim, including the two that carry a target. */
+    /**
+     * The eight RATIFIED repair labels, verbatim: §17.1a's seven, including the two that carry a
+     * target, and 1.4.1's P141-2.
+     */
     @Test
-    fun theSevenRepairLabelsAreTheRatifiedWords() {
+    fun theEightRepairLabelsAreTheRatifiedWords() {
         assertEquals("Open notification settings", repairLabel(ReminderRepair.OPEN_NOTIFICATION_SETTINGS))
         assertEquals("Reschedule the check", repairLabel(ReminderRepair.ARM_DIGEST_ALARM))
         assertEquals("Restart the check", repairLabel(ReminderRepair.ENQUEUE_BACKSTOP))
@@ -194,6 +220,7 @@ class ReminderHealthViewModelTest {
         assertEquals("Turn reminders on", repairLabel(ReminderRepair.TURN_REMINDERS_ON))
         assertEquals("Open the schedule", repairLabel("${ReminderRepair.OPEN_SCHEDULE}:sched-1"))
         assertEquals("Log meter reading", repairLabel("${ReminderRepair.LOG_METER_READING}:sched-1"))
+        assertEquals("Fix reminder delivery", repairLabel(ReminderRepair.RESTORE_REMINDER_DELIVERY))
         assertNull("a code this build has no label for gets no button", repairLabel("SOMETHING_ELSE"))
     }
 
@@ -279,11 +306,16 @@ class ReminderHealthViewModelTest {
     /**
      * The two in-app repairs carry the schedule they open, which is the whole point of the code
      * convention: a "Open the schedule" button with nothing to open is a button that does nothing.
+     * Since 1.4.1 only the residual shape — a set with nothing enabled — opens a schedule; the
+     * providerless row beside it is the batch action, which carries none.
      */
     @Test
     fun theInAppRepairsCarryTheScheduleTheyOpen() = runTest {
         assets.upsert(assetOf("a1"))
-        schedules.upsert(scheduleOf(id = "sched-1", assetId = "a1").copy(providers = emptyList()))
+        schedules.upsert(
+            scheduleOf(id = "sched-1", assetId = "a1").copy(providers = listOf(ScheduleProviderRow("LOCAL", enabled = false))),
+        )
+        schedules.upsert(scheduleOf(id = "sched-3", assetId = "a1").copy(providers = emptyList()))
         schedules.upsert(
             scheduleOf(
                 id = "sched-2",
@@ -319,18 +351,92 @@ class ReminderHealthViewModelTest {
 
         val rows = viewModel().state.first { it.loaded }.rows
 
-        val provider = rows.single { it.code == "SCHEDULE_NO_PROVIDER" }
-        assertEquals(HealthAction.OpenSchedule("sched-1"), provider.action)
-        assertEquals("Open the schedule", provider.label)
+        val residual = rows.single { it.code == "SCHEDULE_PROVIDER_DISABLED" }
+        assertEquals(HealthAction.OpenSchedule("sched-1"), residual.action)
+        assertEquals("Open the schedule", residual.label)
         assertEquals(
             "1 schedules have reminders switched on but no way to deliver them.",
-            provider.message,
+            residual.message,
+        )
+
+        val batch = rows.single { it.code == "SCHEDULE_NO_PROVIDER" }
+        assertEquals(HealthAction.RestoreReminderDelivery, batch.action)
+        assertEquals("Fix reminder delivery", batch.label)
+        assertEquals(
+            "1 schedule has reminders turned on, but reminder delivery isn't configured.",
+            batch.message,
         )
 
         val meter = rows.single { it.code == "NO_DATA" }
         assertEquals(HealthAction.LogMeterReading("sched-2"), meter.action)
         assertEquals("Log meter reading", meter.label)
         assertEquals("1 schedules need a meter reading before they can come due.", meter.message)
+    }
+
+    /**
+     * #80's one tap: the canonical repair writes first, the sweep runs after it so the repaired
+     * schedules are delivered at once, and the refresh comes last so the row is gone within the
+     * same tap. The residual shape beside it is not the batch's to touch.
+     */
+    @Test
+    fun fixReminderDeliveryRestoresSweepsThenClears() = runTest {
+        assets.upsert(assetOf("a1"))
+        schedules.upsert(scheduleOf(id = "sched-1", assetId = "a1").copy(providers = emptyList()))
+        val model = viewModel(restoreDelivery = restoreForReal)
+        val row = model.state.first { it.loaded }.rows.single { it.code == "SCHEDULE_NO_PROVIDER" }
+        assertEquals(HealthAction.RestoreReminderDelivery, row.action)
+        assertEquals("Fix reminder delivery", row.label)
+
+        model.repair(row)
+
+        assertEquals("restore, then sweep", listOf("restore", "resume"), calls)
+        assertEquals(
+            "the repair wrote the one canonical row",
+            listOf(ScheduleProviderRow("LOCAL", enabled = true)),
+            schedules.rows.getValue("sched-1").providers,
+        )
+        assertEquals("and the refresh cleared the finding", emptyList<HealthRow>(), model.state.value.rows)
+    }
+
+    /**
+     * A repair that throws is caught: no sweep, the refresh still runs, the finding stays, nothing
+     * is drawn for the failure, and the model is still there to take the next tap.
+     *
+     * The backstop is dropped **after** the first load, so its row appearing is what proves the
+     * refresh after the failed tap really ran rather than the old state still being on screen.
+     */
+    @Test
+    fun aFailedRestoreLeavesTheFindingAndDoesNotCrash() = runTest {
+        assets.upsert(assetOf("a1"))
+        schedules.upsert(scheduleOf(id = "sched-1", assetId = "a1").copy(providers = emptyList()))
+        var failNext = true
+        val model = viewModel(
+            restoreDelivery = {
+                if (failNext) {
+                    failNext = false
+                    calls += "restore"
+                    throw IllegalStateException("the store refused the write")
+                }
+                restoreForReal()
+            },
+        )
+        val row = model.state.first { it.loaded }.rows.single { it.code == "SCHEDULE_NO_PROVIDER" }
+        backstop.drop()
+
+        model.repair(row)
+
+        assertEquals("no sweep after a failed repair", listOf("restore"), calls)
+        assertEquals(
+            "the refresh still ran, and the finding stays",
+            listOf("BACKSTOP_WORK_MISSING", "SCHEDULE_NO_PROVIDER"),
+            model.state.value.rows.map { it.code },
+        )
+        assertEquals("nothing was written", emptyList<ScheduleProviderRow>(), schedules.rows.getValue("sched-1").providers)
+
+        model.repair(model.state.value.rows.single { it.code == "SCHEDULE_NO_PROVIDER" })
+
+        assertEquals("the model took the next tap", listOf("restore", "restore", "resume"), calls)
+        assertEquals(listOf("BACKSTOP_WORK_MISSING"), model.state.value.rows.map { it.code })
     }
 
     /**

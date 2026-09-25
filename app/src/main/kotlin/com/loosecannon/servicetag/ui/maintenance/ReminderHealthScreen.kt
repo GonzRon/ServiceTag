@@ -122,7 +122,10 @@ fun ReminderHealthScreen(
                     row = row,
                     onRepair = {
                         when (val action = row.action) {
-                            HealthAction.Automatic, HealthAction.TurnRemindersOn -> model.repair(row)
+                            HealthAction.Automatic,
+                            HealthAction.TurnRemindersOn,
+                            HealthAction.RestoreReminderDelivery,
+                            -> model.repair(row)
                             HealthAction.NotificationSettings -> context.open(notificationSettings(context))
                             HealthAction.BatterySettings -> context.open(appDetails(context))
                             is HealthAction.OpenSchedule -> onOpenSchedule(action.scheduleId)
