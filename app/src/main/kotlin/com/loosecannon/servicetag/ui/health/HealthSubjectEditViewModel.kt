@@ -105,7 +105,19 @@ data class HealthSubjectEditState(
     val restoreAllowed: Boolean = false,
     /** The starting point whose S129 is open; nothing is filled until S130. */
     val confirming: StartingPoint? = null,
-    /** S135: the schedule already drives another non-archived subject. */
+    /**
+     * The three fields still hold exactly what S130 put there. Those numbers belong to overdue
+     * maintenance, so a switch to "Age since replacement" empties them (the controller's ruling on
+     * B10-M2); any edit of a threshold makes them the owner's own and ends this.
+     */
+    val filledByStartingPoint: Boolean = false,
+    /**
+     * S125, as last judged: set when a threshold field is left or a Save is tried with numbers that do
+     * not rise, and cleared by the next threshold edit — never judged keystroke by keystroke (the
+     * controller's ruling on B10-M3).
+     */
+    val orderRefused: Boolean = false,
+    /** S135: the schedule already drives another non-archived subject. Drawn under S122 only. */
     val scheduleTaken: Boolean = false,
     /** S137: archiving the subject its asset's health follows was refused. */
     val primaryRefused: Boolean = false,
@@ -124,7 +136,7 @@ data class HealthSubjectEditState(
     /** S126: a threshold is still empty. */
     val thresholdsMissing: Boolean get() = thresholds.any { it.isEmpty() }
 
-    /** S125: the numbers entered so far do not rise strictly, in field order. */
+    /** The numbers entered so far do not rise strictly, in field order: what S125 is judged on. */
     val thresholdsOutOfOrder: Boolean
         get() = thresholds.mapNotNull { it.toIntOrNull() }.zipWithNext().any { (before, after) -> after <= before }
 
@@ -146,11 +158,12 @@ data class HealthSubjectEditState(
 
     /**
      * Save is held until every answer is given: a name, S113, S117, the link S117 needs, all three
-     * thresholds rising strictly, and a weight of 1–10. No refusal of these needs a sentence.
+     * thresholds, and a weight of 1–10. No refusal of these needs a sentence. Numbers that do not rise
+     * are the one thing a Save may be tried with: the try is answered by S125 and writes nothing.
      */
     val canSave: Boolean
         get() = loaded && !saving && name.isNotBlank() && kind != null && linkAnswered &&
-            !thresholdsMissing && !thresholdsOutOfOrder && HealthSubjectShape.weightValid(weight)
+            !thresholdsMissing && HealthSubjectShape.weightValid(weight)
 
     private val linkAnswered: Boolean
         get() = when (driver) {
@@ -178,7 +191,7 @@ private const val MAX_THRESHOLD_DIGITS = 5
  * the use cases'; this turns the form into one [HealthSubjectCommand] and draws what comes back.
  *
  * - [HealthScheduleTaken] is S135 (inv. 120); archiving the primary is S137 ([HealthSubjectIsPrimary]).
- * - **The race rule** (B08's shape; plan-review F5): an API or MCP write can archive, retarget or
+ * - **The race rule** (B08's shape; the plan-review follow-up's F5): an API or MCP write can archive, retarget or
  *   de-rule the schedule between this model's check and the tap. The [HealthValidation] that answers
  *   it — `FOREIGN_SCHEDULE`, `HEALTH_SCHEDULE_NEEDS_A_TIME_RULE` — **reloads the pickers and the
  *   Restore state, writes nothing and draws no sentence**: the schedule simply leaves S122.
@@ -238,8 +251,25 @@ class HealthSubjectEditViewModel(
 
     fun onKind(kind: HealthSubjectKind) = _state.update { it.copy(kind = kind) }
 
-    /** Kind and driver are independent (spec §6.1); the driver decides which link and labels apply. */
-    fun onDriver(driver: HealthDriver) = _state.update { it.copy(driver = driver, confirming = null) }
+    /**
+     * Kind and driver are independent (spec §6.1); the driver decides which link and labels apply. S135
+     * is about S122's schedule, so it goes with the change; so do numbers a starting point put there
+     * when the driver becomes age, which has no starting point (spec §6.3).
+     */
+    fun onDriver(driver: HealthDriver) = _state.update { form ->
+        if (form.driver == driver) return@update form
+        val cleared = form.filledByStartingPoint && driver == HealthDriver.AGE
+        form.copy(
+            driver = driver,
+            confirming = null,
+            scheduleTaken = false,
+            nominalUntil = if (cleared) "" else form.nominalUntil,
+            warningFrom = if (cleared) "" else form.warningFrom,
+            criticalFrom = if (cleared) "" else form.criticalFrom,
+            filledByStartingPoint = form.filledByStartingPoint && !cleared,
+            orderRefused = form.orderRefused && !cleared,
+        )
+    }
 
     fun onBaseline(baseline: Baseline) = _state.update { form ->
         val offered = form.baselineOptions.any { it.id == baseline }
@@ -254,14 +284,18 @@ class HealthSubjectEditViewModel(
     fun onThreshold(index: Int, text: String) {
         if (!acceptsThresholdDays(text)) return
         _state.update { form ->
+            val edited = form.copy(filledByStartingPoint = false, orderRefused = false)
             when (index) {
-                0 -> form.copy(nominalUntil = text)
-                1 -> form.copy(warningFrom = text)
-                2 -> form.copy(criticalFrom = text)
+                0 -> edited.copy(nominalUntil = text)
+                1 -> edited.copy(warningFrom = text)
+                2 -> edited.copy(criticalFrom = text)
                 else -> form
             }
         }
     }
+
+    /** A threshold field was left: S125 is judged now, on what the three fields hold. */
+    fun commitThresholds() = _state.update { it.copy(orderRefused = it.thresholdsOutOfOrder) }
 
     /** S133's stepper: one step at a time, never below 1 or above 10. */
     fun onWeightStep(step: Int) = _state.update { form ->
@@ -281,6 +315,8 @@ class HealthSubjectEditViewModel(
             warningFrom = point.warningFrom.toString(),
             criticalFrom = point.criticalFrom.toString(),
             confirming = null,
+            filledByStartingPoint = true,
+            orderRefused = false,
         )
     }
 
@@ -296,6 +332,10 @@ class HealthSubjectEditViewModel(
     fun save() {
         val form = _state.value
         if (!form.canSave) return
+        if (form.thresholdsOutOfOrder) {
+            _state.update { it.copy(orderRefused = true) }
+            return
+        }
         _state.update { it.copy(saving = true, scheduleTaken = false) }
         viewModelScope.launch {
             val cmd = form.command()
@@ -423,7 +463,14 @@ class HealthSubjectEditViewModel(
                 stored.baselineProfileId == null && links.schedules.any { it.id == stored.scheduleId }
         }
 
-    /** A time side, read as the engine and B06's link check read it: an interval, a unit and an anchor. */
+    /**
+     * A time side, read as the engine and B06's link check read it: an interval, a unit and an anchor.
+     *
+     * This restates `:core`'s `MaintenanceSchedule.hasTimeRule()` (`usecase/HealthCommands.kt`), which is
+     * `internal` to `:core`, and B10 may not touch `:core`. **Carry-forward (B10 review M5):** a later
+     * `:core` brief makes `hasTimeRule` public, and this becomes a call to it, so S122's filter and
+     * B06's `HEALTH_SCHEDULE_NEEDS_A_TIME_RULE` can never read a schedule differently.
+     */
     private fun MaintenanceSchedule.timed(): Boolean = timeInterval != null && timeUnit != null && anchorOn != null
 
     private data class Links(val actions: List<PickRow<ProfileId>>, val schedules: List<PickRow<ScheduleId>>)

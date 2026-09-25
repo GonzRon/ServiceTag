@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -167,7 +168,16 @@ class HealthSubjectEditorTest {
         field(overdueLabels[0]).performScrollTo().performTextInput("0")
         field(overdueLabels[1]).performScrollTo().performTextInput("30")
         rule.onNodeWithText("Save").assertIsNotEnabled()
-        field(overdueLabels[2]).performScrollTo().performTextInput("90")
+
+        // S125 waits until a field is left (the controller's ruling on B10-M3): 2 is typed, and
+        // nothing is said until the focus moves on.
+        field(overdueLabels[2]).performScrollTo().performTextInput("2")
+        rule.onAllNodesWithText(EACH_NUMBER_MUST_BE_LARGER).assertCountEquals(0)
+        field(overdueLabels[0]).performScrollTo().performClick()
+        rule.onNodeWithText(EACH_NUMBER_MUST_BE_LARGER).performScrollTo().assertIsDisplayed()
+        field(overdueLabels[2]).performScrollTo().performTextClearance()
+        rule.onAllNodesWithText(EACH_NUMBER_MUST_BE_LARGER).assertCountEquals(0)
+        field(overdueLabels[2]).performTextInput("90")
         rule.onAllNodesWithText(ENTER_ALL_THREE_NUMBERS).assertCountEquals(0)
 
         // S133 under Weighted average: a stepper, one step at a time.

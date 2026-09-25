@@ -275,18 +275,70 @@ class HealthSubjectEditViewModelTest {
         val vm = overdueForm()
         vm.onThreshold(0, "10")
         vm.onThreshold(1, "10")
-        assertTrue("equal is not larger", vm.state.value.thresholdsOutOfOrder)
+        vm.commitThresholds()
+        assertTrue("equal is not larger", vm.state.value.orderRefused)
         vm.onThreshold(2, "20")
-        assertTrue(vm.state.value.thresholdsOutOfOrder)
-        assertFalse(vm.state.value.canSave)
+        assertFalse("an edit waits for the next commit", vm.state.value.orderRefused)
+
+        // A Save may be tried with numbers that do not rise: S125 answers it and nothing is written.
+        assertTrue(vm.state.value.canSave)
         vm.save()
+        assertTrue("the try is answered by S125", vm.state.value.orderRefused)
         assertTrue(subjects("gen").isEmpty())
 
         vm.onThreshold(1, "5")
-        assertTrue("a fall between any two is S125", vm.state.value.thresholdsOutOfOrder)
+        vm.commitThresholds()
+        assertTrue("a fall between any two is S125", vm.state.value.orderRefused)
         vm.onThreshold(0, "0")
-        assertFalse("0 < 5 < 20, and t1 = 0 is legal", vm.state.value.thresholdsOutOfOrder)
-        assertTrue(vm.state.value.canSave)
+        vm.commitThresholds()
+        assertFalse("0 < 5 < 20, and t1 = 0 is legal", vm.state.value.orderRefused)
+        vm.save()
+        vm.settle()
+        assertEquals(listOf(Triple(0, 5, 20)), subjects("gen").map { Triple(it.nominalUntilDays, it.warningFromDays, it.criticalFromDays) })
+    }
+
+    /** The controller's ruling on B10-M3: S125 is judged on leaving a field or trying Save, never per keystroke. */
+    @Test fun s125WaitsForACommitOrASave() = runTest {
+        val vm = overdueForm()
+        vm.onThreshold(0, "14")
+        vm.commitThresholds()
+        // 45 and 120 typed digit by digit pass through 4, 1 and 12, which do not rise: nothing is drawn.
+        listOf("4", "45").forEach { vm.onThreshold(1, it); assertFalse("typing $it", vm.state.value.orderRefused) }
+        vm.commitThresholds()
+        listOf("1", "12").forEach { vm.onThreshold(2, it); assertFalse("typing $it", vm.state.value.orderRefused) }
+
+        // Left at 12, the field commits, and 14 / 45 / 12 is S125.
+        vm.commitThresholds()
+        assertTrue(vm.state.value.orderRefused)
+        vm.onThreshold(2, "120")
+        vm.commitThresholds()
+        assertFalse(vm.state.value.orderRefused)
+    }
+
+    /** The controller's ruling on B10-M2: a starting point's numbers belong to overdue maintenance. */
+    @Test fun aStartingPointIsClearedWhenTheDriverSwitchesToAge() = runTest {
+        val vm = overdueForm()
+        vm.chooseStartingPoint(StartingPoint.ENGINE_SERVICE)
+        vm.confirmStartingPoint()
+        assertEquals(listOf("14", "45", "120"), vm.state.value.thresholds)
+
+        vm.onDriver(HealthDriver.AGE)
+        assertEquals("age has no starting point, so its numbers go", listOf("", "", ""), vm.state.value.thresholds)
+        vm.onDriver(HealthDriver.MAINTENANCE_OVERDUE)
+        assertEquals("and they do not come back", listOf("", "", ""), vm.state.value.thresholds)
+
+        // Once the owner edits them, the numbers are the owner's own and stay.
+        vm.chooseStartingPoint(StartingPoint.WATER_CARE)
+        vm.confirmStartingPoint()
+        vm.onThreshold(2, "21")
+        vm.onDriver(HealthDriver.AGE)
+        assertEquals(listOf("2", "7", "21"), vm.state.value.thresholds)
+
+        // Typed by hand, they stay too.
+        val typed = overdueForm()
+        typed.onThreshold(0, "1"); typed.onThreshold(1, "2"); typed.onThreshold(2, "3")
+        typed.onDriver(HealthDriver.AGE)
+        assertEquals(listOf("1", "2", "3"), typed.state.value.thresholds)
     }
 
     @Test fun weightOnlyUnderWeightedAverage() = runTest {
@@ -364,6 +416,9 @@ class HealthSubjectEditViewModelTest {
         vm.settle()
         assertTrue("S135", vm.state.value.scheduleTaken)
         assertEquals(listOf("engine"), subjects("gen").map { it.id.value })
+        // S135 is about S122's schedule, so it goes when the driver no longer has one.
+        vm.onDriver(HealthDriver.AGE)
+        assertFalse("S135 goes with the switch to age", vm.state.value.scheduleTaken)
 
         // A restore refused because the schedule is taken still answers S135 and stays archived.
         graph.healthSubjects.upsert(
@@ -417,7 +472,7 @@ class HealthSubjectEditViewModelTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Restore and the race rule (dec. 45; plan-review F5)
+    // Restore and the race rule (dec. 45; the plan-review follow-up's F5)
     // ---------------------------------------------------------------------------------------------
 
     @Test fun restoreIsDisabledWhileTheLinkWouldBeRefused() = runTest {

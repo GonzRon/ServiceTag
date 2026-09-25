@@ -34,10 +34,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.core.health.HealthSubjectShape
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.di.AppGraph
@@ -261,10 +263,11 @@ fun HealthSubjectEditScreen(
                     state.timedSchedules.forEach { option ->
                         ChoiceRow(option.label, state.scheduleId == option.id) { model.onSchedule(option.id) }
                     }
+                    // S135 is about this picker's schedule, so it is drawn under it and nowhere else.
+                    if (state.scheduleTaken) RefusalLine(SCHEDULE_ALREADY_DRIVES_ANOTHER_SUBJECT)
                 }
                 null -> Unit
             }
-            if (state.scheduleTaken) RefusalLine(SCHEDULE_ALREADY_DRIVES_ANOTHER_SUBJECT)
 
             if (state.driver != null) Thresholds(state, model)
             if (state.weighted) WeightStepper(state.weight, model::onWeightStep)
@@ -295,23 +298,33 @@ fun HealthSubjectEditScreen(
 /**
  * The three thresholds under their driver's labels, each through the digits filter capped at 36,500,
  * then S125 when they do not rise, S126 while one is empty, and S127 for an overdue subject.
+ *
+ * S125 is judged when a field is **left** — its focus lost — or when Save is tried, never keystroke by
+ * keystroke: typing 45 after 14 passes through a 4 that is smaller, and that is not a refusal (the
+ * controller's ruling on B10-M3).
  */
 @Composable
 private fun Thresholds(state: HealthSubjectEditState, model: HealthSubjectEditViewModel) {
     state.thresholdLabels.forEachIndexed { index, label ->
+        var focused by remember { mutableStateOf(false) }
         OutlinedTextField(
             value = state.thresholds[index],
             onValueChange = { model.onThreshold(index, it) },
             label = { Text(label) },
             singleLine = true,
-            isError = state.thresholdsOutOfOrder,
+            isError = state.orderRefused,
             textStyle = MonoText,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             shape = ControlShape,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focus ->
+                    if (focused && !focus.isFocused) model.commitThresholds()
+                    focused = focus.isFocused
+                },
         )
     }
-    if (state.thresholdsOutOfOrder) RefusalLine(EACH_NUMBER_MUST_BE_LARGER)
+    if (state.orderRefused) RefusalLine(EACH_NUMBER_MUST_BE_LARGER)
     if (state.thresholdsMissing) QuietLine(ENTER_ALL_THREE_NUMBERS)
     if (state.startingPointsOffered) StartingPoints(model::chooseStartingPoint)
 }
@@ -338,17 +351,15 @@ private fun StartingPoints(onPick: (StartingPoint) -> Unit) {
 
 /**
  * S133 as a 1–10 stepper, never free text (master dec. 46). The two steps are the minus and plus signs,
- * which are symbols, not words; each is disabled at its end of the range.
+ * which are symbols, not words; each is disabled at its end of `:core`'s own range,
+ * [HealthSubjectShape.WEIGHTS], the one the subject command refuses outside.
  */
 @Composable
 private fun WeightStepper(weight: Int, onStep: (Int) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Text(text = WEIGHT, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        TextButton(onClick = { onStep(-1) }, enabled = weight > MIN_WEIGHT) { Text("−") }
+        TextButton(onClick = { onStep(-1) }, enabled = weight > HealthSubjectShape.WEIGHTS.first) { Text("−") }
         Text(text = weight.toString(), style = MonoText)
-        TextButton(onClick = { onStep(1) }, enabled = weight < MAX_WEIGHT) { Text("+") }
+        TextButton(onClick = { onStep(1) }, enabled = weight < HealthSubjectShape.WEIGHTS.last) { Text("+") }
     }
 }
-
-private const val MIN_WEIGHT = 1
-private const val MAX_WEIGHT = 10
