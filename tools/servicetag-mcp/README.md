@@ -14,13 +14,15 @@ codes and the limits; this file is about running the thing.
 - ServiceTag 1.1.0 or later on the phone, with **Settings > Utilities > Developer API** open. The
   listener exists only while that screen is open, and the pairing code is new every time it opens.
   The seventeen maintenance tools need **1.2.0 or later**, the three reference tools need
-  **1.3.0 or later** and the fourteen season, condition and health tools need **1.4.0 or later**;
-  on an older build their routes are not there and every call answers 404.
+  **1.3.0 or later**, the fourteen season, condition and health tools need **1.4.0 or later** and
+  `repair_schedule_providers` needs **1.4.1 or later**; on an older build their routes are not there
+  and every call answers 404.
 - **Every write needs ServiceTag 1.4.0.** Before its first write under a pairing, the server reads
   `/v1/status` once and refuses to write to an app whose `schemaVersion` is below 8 — a `ToolError`
   carrying `APP_SCHEMA_TOO_OLD`, with nothing sent. The answer is kept for that pairing, and a new
   code reads it again. Reads keep working against an older app, and so does `import_merge` with
-  `plan_only=True` (the plan writes nothing).
+  `plan_only=True` (the plan writes nothing); `repair_schedule_providers`' plan, which writes nothing
+  either, is not schema-checked for the same reason.
 
 ## Using it
 
@@ -63,7 +65,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Fifty-five: `pair` plus one per API operation.
+Fifty-six: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -75,6 +77,10 @@ Fifty-five: `pair` plus one per API operation.
 `create_group`, `update_group`, `archive_group`, `list_schedules`, `get_schedule`,
 `create_schedule`, `update_schedule`, `pause_schedule`, `archive_schedule`, `postpone_schedule`,
 `complete_schedule`, `close_round`, `list_closures`, `list_due`.
+
+`create_schedule` without `providers` sends the row the app's own editor stores — one `LOCAL`
+provider, enabled exactly when `reminders_enabled` is — rather than leaving it to the app; pass
+`providers=[]` to store none.
 
 **References (needs ServiceTag 1.3.0)** — `list_references`, `add_reference`, `update_reference`.
 A reference is a URI on an asset — a manual on the web, a note in Joplin — with no bytes of its
@@ -92,6 +98,13 @@ and policy tools write configuration, never a value. `start_season`, `end_season
 `record_condition` each record a new, immutable fact, so like `close_round` they have no overlay —
 every argument is required. Nothing here amends or deletes a condition or an activation, deletes a
 health subject, or writes a health value; a subject leaves only by `archive_health_subject`.
+
+**Repairs (needs ServiceTag 1.4.1)** — `repair_schedule_providers`. It finds schedules whose
+reminders are on but that nothing delivers (issue #80) and, **only with `plan_only=False`**, gives
+each ACTIVE, providerless one a single enabled `LOCAL` provider. The default is the plan, which
+writes nothing; the apply plans again on the phone inside its own write, skips a paused schedule and
+a disabled provider, and a second apply repairs nothing. `docs/api/v1.md`'s **Repairs** section is
+the contract.
 
 ### The schedule's two forms, and the deprecated season arguments
 
