@@ -13,6 +13,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.MainActivity
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.HealthDriver
+import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
@@ -20,17 +22,22 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
+import com.loosecannon.servicetag.core.usecase.HealthSubjectCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
+import com.loosecannon.servicetag.ui.condition.displayDate
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
@@ -290,6 +297,100 @@ class MaintenanceShellTest {
         rule.runOnIdle { check(record == listOf("health")) { "unexpected navigation: $record" } }
     }
 
+
+    /** The destination drawn over whatever [graph] holds, with every route recorded and ignored. */
+    private fun drawShell(graph: AppGraph) {
+        rule.setContent {
+            ServiceTagTheme {
+                MaintenanceScreen(
+                    graph = graph,
+                    onOpenSchedule = {},
+                    onOpenGroup = {},
+                    onNewGroup = {},
+                    onReminderHealth = {},
+                    onScanTag = {},
+                    onAddAsset = {},
+                    onLogMaintenance = {},
+                )
+            }
+        }
+    }
+
+    /**
+     * Spec §10.5: every row carries its why-line (S85–S91), from the same `DueItemRow` the dashboard
+     * draws. A row the break holds says S85 with its first allowed day; a dormant row on a calendar
+     * season says S89 with the next start, and on a manual season S90; a plain CONTINUOUS row says
+     * nothing.
+     */
+    @Test fun rowsCarryTheirWhyLine() {
+        val graph = app.graph
+        val today = LocalDate.now()
+        runBlocking {
+            val generator = graph.createAsset.run(AssetCommand(name = "Generator", category = "Power")).id
+            graph.assets.upsert(
+                graph.assets.get(generator)!!.copy(
+                    blackoutStartMmdd = today.minusDays(10).format(MMDD),
+                    blackoutEndMmdd = today.plusDays(20).format(MMDD),
+                ),
+            )
+            seed(graph, "b13-held", generator.value, "Engine oil service", anchorOn = today.minusDays(5), createdOn = today.minusDays(30), policy = ServicePolicy.IN_SERVICE_AT_START)
+
+            val blower = graph.createAsset.run(
+                AssetCommand(
+                    name = "Snowblower", category = "Yard",
+                    seasonStartMmdd = today.plusDays(30).format(MMDD), seasonEndMmdd = today.plusDays(60).format(MMDD),
+                ),
+            ).id
+            seed(graph, "b13-parked", blower.value, "Pre-season check", policy = ServicePolicy.IN_SERVICE_AT_START)
+
+            val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water")).id
+            graph.assets.upsert(graph.assets.get(tub)!!.copy(seasonMode = SeasonMode.MANUAL, seasonStartMmdd = null, seasonEndMmdd = null))
+            seed(graph, "b13-manual", tub.value, "Water care", policy = ServicePolicy.IN_SERVICE_AT_START)
+
+            val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard")).id
+            seed(graph, "b13-plain", mower.value, "Blade sharpen")
+        }
+        drawShell(graph)
+
+        val lines = listOf(
+            // The break ends on its last day; the first allowed day is the one after.
+            "Held until ${displayDate(today.plusDays(21))} because of the maintenance break",
+            "Out of season until ${displayDate(today.plusDays(30))}",
+            "Out of season until you start it",
+        )
+        lines.forEach { rule.awaitText(it) }
+        // Each under Schedules only — none of the three is due work — and the held row's S85 wins
+        // over the quiet line it also qualifies for.
+        lines.forEach { rule.onAllNodesWithText(it).assertCountEquals(1) }
+        rule.onAllNodesWithText("Reminders wait for the maintenance break to end").assertCountEquals(0)
+    }
+
+    /**
+     * Spec §10.2: overdue-driven health rides its schedule's row — S110 under the row that drives
+     * it, on the Maintenance tab as on the dashboard, and never as a row of its own.
+     */
+    @Test fun aRowCarriesTheHealthItDrives() {
+        val graph = app.graph
+        runBlocking {
+            val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard")).id
+            seed(graph, "b13-overdue", mower.value, "Blade sharpen")
+            graph.saveHealthSubject.create(
+                mower,
+                HealthSubjectCommand(
+                    name = "Blade", kind = HealthSubjectKind.PART, driver = HealthDriver.MAINTENANCE_OVERDUE,
+                    scheduleId = ScheduleId("b13-overdue"),
+                    nominalUntilDays = 0, warningFromDays = 10, criticalFromDays = 50,
+                ),
+            )
+        }
+        drawShell(graph)
+
+        rule.awaitText("Blade sharpen")
+        // Once under Due work and once under Schedules: the row's passenger, never a row itself.
+        rule.awaitText("Blade CRITICAL", count = 2)
+        rule.onAllNodesWithText("Blade CRITICAL").assertCountEquals(2)
+    }
+
     private companion object {
         /**
          * An instant whose calendar date is before local today in **every** zone: yesterday's date
@@ -305,6 +406,54 @@ class MaintenanceShellTest {
             .atStartOfDay(java.time.ZoneOffset.UTC)
             .toInstant()
             .toEpochMilli()
+
+        val MMDD: DateTimeFormatter = DateTimeFormatter.ofPattern("MM-dd")
+
+        fun dayMillis(date: LocalDate): Long = date.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+
+        /**
+         * A 3-monthly schedule written straight to the repository and rebuilt by the real engine: a
+         * genuinely older `created_at` is the only way a fresh store holds a row already due (D-27).
+         */
+        @Suppress("LongParameterList")
+        suspend fun seed(
+            graph: AppGraph,
+            id: String,
+            assetId: String,
+            title: String,
+            anchorOn: LocalDate = LocalDate.parse("2026-01-01"),
+            createdOn: LocalDate = LocalDate.parse("2026-01-01"),
+            policy: ServicePolicy = ServicePolicy.CONTINUOUS,
+        ) {
+            val schedule = MaintenanceSchedule(
+                id = ScheduleId(id),
+                target = ScheduleTarget.AssetTarget(com.loosecannon.servicetag.core.model.AssetId(assetId)),
+                title = title,
+                description = "",
+                timeInterval = 3,
+                timeUnit = RecurrenceUnit.MONTH,
+                timeBasis = TimeBasis.FIXED,
+                anchorOn = anchorOn.toString(),
+                leadDays = 0,
+                meterDefinitionId = null,
+                meterInterval = null,
+                anchorMeter = null,
+                meterLead = null,
+                servicePolicy = policy,
+                policyOffsetDays = if (policy == ServicePolicy.CONTINUOUS) null else 0,
+                completionMode = CompletionMode.QUICK,
+                profileId = null,
+                remindersEnabled = true,
+                status = ScheduleStatus.ACTIVE,
+                postponedDueOn = null,
+                createdAt = dayMillis(createdOn),
+                updatedAt = dayMillis(createdOn),
+                ruleChangedAt = dayMillis(createdOn),
+                providers = listOf(ScheduleProviderRow("LOCAL", enabled = true)),
+            )
+            graph.schedules.upsert(schedule)
+            graph.recomputeSchedules.forSchedule(schedule.id)
+        }
     }
 }
 

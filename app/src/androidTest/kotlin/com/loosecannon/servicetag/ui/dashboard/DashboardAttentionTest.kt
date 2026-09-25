@@ -2,17 +2,23 @@ package com.loosecannon.servicetag.ui.dashboard
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.HealthDriver
+import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
@@ -24,19 +30,24 @@ import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
+import com.loosecannon.servicetag.core.usecase.ConditionCommand
 import com.loosecannon.servicetag.core.usecase.DefinitionCommand
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
+import com.loosecannon.servicetag.core.usecase.HealthSubjectCommand
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
+import com.loosecannon.servicetag.ui.condition.displayDate
 import com.loosecannon.servicetag.ui.maintenance.HealthSummary
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
@@ -330,8 +341,182 @@ class DashboardAttentionTest {
         rule.awaitText("REMINDER FAILED")
     }
 
+
+    // ------------------------------------------------------------ 1.4: condition, health, Deferred
+
+    /** The top of the first node carrying exactly [text]. */
+    private fun top(text: String): Float = rule.onNodeWithText(text).fetchSemanticsNode().positionInRoot.y
+
+    /**
+     * Spec §10.2 on a real tree: ATTENTION draws the DOWN unit, then the schedule row, then the
+     * DEGRADED component naming its parent, then the independent CRITICAL subject (S110); UPCOMING
+     * then draws the independent WARNING subject. The condition rows carry S22 and the reason or S23.
+     */
+    @Test fun sectionOrderWithConditionAndHealthRows() {
+        val graph = app.graph
+        val today = LocalDate.now()
+        runBlocking {
+            val generator = graph.createAsset.run(AssetCommand(name = "Generator", category = "Power")).id
+            graph.recordCondition.run(
+                generator,
+                ConditionCommand(OperationalCondition.DOWN, occurredOn = today.minusDays(3).toString(), tzId = zone(), reason = "Won't start"),
+            )
+            val pack = graph.createAsset.run(AssetCommand(name = "Battery pack", category = "Power", parentAssetId = generator)).id
+            graph.recordCondition.run(
+                pack,
+                ConditionCommand(OperationalCondition.DEGRADED, occurredOn = today.minusDays(2).toString(), tzId = zone()),
+            )
+            val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+            seed(
+                graph,
+                scheduleOf(
+                    id = "b13-overdue", assetId = mower.id.value, title = "Blade sharpen",
+                    timeInterval = 3, timeUnit = RecurrenceUnit.MONTH, anchorOn = "2026-01-01", createdOn = "2026-01-01",
+                ),
+            )
+            ageSubject(graph, "Hot tub", "Filter age", daysAgo = 90)
+            ageSubject(graph, "Snowblower", "Belt age", daysAgo = 50)
+        }
+        draw(graph)
+
+        rule.awaitText("Belt age WARNING")
+        rule.awaitText("Won't start")
+        rule.awaitText("since ${displayDate(today.minusDays(3))}")
+        rule.awaitText("No reason given")
+        rule.awaitText("Part of Generator")
+
+        val order = listOf("ATTENTION", "Generator", "Blade sharpen", "Battery pack", "Filter age CRITICAL", "UPCOMING", "Belt age WARNING")
+        val tops = order.map(::top)
+        check(tops == tops.sorted()) { "drawn out of order: ${order.zip(tops)}" }
+    }
+
+    /**
+     * Spec §4.5 on a real tree: a row the maintenance break holds is under its own **Deferred**
+     * heading (S93, in its ratified case), between CURRENT and OUT OF SEASON, with its status word
+     * (S92) and its why-line (S85).
+     */
+    @Test fun theDeferredSection() {
+        val graph = app.graph
+        val today = LocalDate.now()
+        runBlocking {
+            val generator = graph.createAsset.run(AssetCommand(name = "Generator", category = "Power")).id
+            graph.assets.upsert(
+                graph.assets.get(generator)!!.copy(
+                    blackoutStartMmdd = today.minusDays(10).format(MMDD),
+                    blackoutEndMmdd = today.plusDays(20).format(MMDD),
+                ),
+            )
+            seed(
+                graph,
+                scheduleOf(
+                    id = "b13-held", assetId = generator.value, title = "Engine oil service",
+                    timeInterval = 3, timeUnit = RecurrenceUnit.MONTH, anchorOn = today.minusDays(5).toString(),
+                    createdOn = today.minusDays(30).toString(),
+                    servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0,
+                ),
+            )
+            val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+            seed(
+                graph,
+                scheduleOf(
+                    id = "b13-ok", assetId = mower.id.value, title = "Blade sharpen",
+                    timeInterval = 1, timeUnit = RecurrenceUnit.YEAR, anchorOn = today.plusDays(100).toString(),
+                    createdOn = "2026-01-01",
+                ),
+            )
+            val blower = graph.createAsset.run(
+                AssetCommand(
+                    name = "Snowblower", category = "Yard",
+                    seasonStartMmdd = today.plusDays(30).format(MMDD), seasonEndMmdd = today.plusDays(60).format(MMDD),
+                ),
+            )
+            seed(
+                graph,
+                scheduleOf(
+                    id = "b13-parked", assetId = blower.id.value, title = "Pre-season check",
+                    timeInterval = 3, timeUnit = RecurrenceUnit.MONTH, anchorOn = "2026-01-01", createdOn = "2026-01-01",
+                    servicePolicy = ServicePolicy.IN_SERVICE_AT_START, policyOffsetDays = 0,
+                ),
+            )
+        }
+        draw(graph)
+
+        rule.awaitText("Deferred")
+        rule.awaitText("DEFERRED")
+        rule.awaitText("Held until ${displayDate(today.plusDays(21))} because of the maintenance break")
+        rule.awaitText("CURRENT")
+
+        val outOfSeasonTop = rule.onAllNodesWithText("OUT OF SEASON").fetchSemanticsNodes().minOf { it.positionInRoot.y }
+        check(top("CURRENT") < top("Deferred")) { "Deferred is below CURRENT" }
+        check(top("Deferred") < top("Engine oil service")) { "the held row is under the Deferred heading" }
+        check(top("Engine oil service") < outOfSeasonTop) { "Deferred is above OUT OF SEASON" }
+        // Held is never due: nothing is in ATTENTION.
+        rule.onAllNodesWithText("ATTENTION").assertCountEquals(0)
+    }
+
+    /**
+     * The four condition chips (S8, S10, S12, S26), multi-select with no label and no "All" chip.
+     * A chip selects rows by their asset's condition; none selected is no condition filter.
+     */
+    @Test fun conditionChips() {
+        val graph = app.graph
+        runBlocking {
+            val generator = graph.createAsset.run(AssetCommand(name = "Generator", category = "Power")).id
+            graph.recordCondition.run(generator, ConditionCommand(OperationalCondition.DOWN, tzId = zone(), reason = "Won't start"))
+            val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+            seed(
+                graph,
+                scheduleOf(
+                    id = "b13-overdue", assetId = mower.id.value, title = "Blade sharpen",
+                    timeInterval = 3, timeUnit = RecurrenceUnit.MONTH, anchorOn = "2026-01-01", createdOn = "2026-01-01",
+                ),
+            )
+        }
+        draw(graph)
+
+        rule.awaitText("Blade sharpen")
+        rule.awaitText("Won't start")
+        for (word in listOf("Operational", "Degraded", "Down", "Not recorded")) {
+            rule.onNode(hasText(word) and hasClickAction()).assertIsDisplayed()
+        }
+
+        // Down: the DOWN unit stays, the mower's row (nothing recorded) goes.
+        rule.onNode(hasText("Down") and hasClickAction()).performClick()
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Blade sharpen").fetchSemanticsNodes().isEmpty() }
+        rule.onNodeWithText("Won't start").assertIsDisplayed()
+
+        // Down off, Not recorded on: the other way round.
+        rule.onNode(hasText("Down") and hasClickAction()).performClick()
+        rule.onNode(hasText("Not recorded") and hasClickAction()).performClick()
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Won't start").fetchSemanticsNodes().isEmpty() }
+        rule.awaitText("Blade sharpen")
+    }
+
+    /** An AGE subject on a new asset named [assetName], replaced [daysAgo] days ago (0 / 40 / 75). */
+    private suspend fun ageSubject(graph: AppGraph, assetName: String, subject: String, daysAgo: Long) {
+        val asset = graph.createAsset.run(AssetCommand(name = assetName, category = "Water")).id
+        graph.saveHealthSubject.create(
+            asset,
+            HealthSubjectCommand(
+                name = subject, kind = HealthSubjectKind.PART, driver = HealthDriver.AGE,
+                nominalUntilDays = 0, warningFromDays = 40, criticalFromDays = 75,
+            ),
+        )
+        graph.logEvent.run(
+            EventCommand(
+                assetId = asset, profileId = null, kind = EventKind.REPLACEMENT, title = "$subject replaced",
+                occurredOn = LocalDate.now().minusDays(daysAgo).toString(), occurredTime = null, tzId = zone(),
+                notes = "", values = emptyMap(), consumables = emptyList(),
+            ),
+        )
+    }
+
     private companion object {
         fun today(): String = LocalDate.now().toString()
+
+        val MMDD: DateTimeFormatter = DateTimeFormatter.ofPattern("MM-dd")
+
+        fun zone(): String = ZoneId.systemDefault().id
 
         fun summary(severity: ReminderHealthSeverity?): HealthSummary = object : HealthSummary {
             override suspend fun worstSeverity(): ReminderHealthSeverity? = severity
