@@ -5,7 +5,6 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.SeasonBehavior
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import kotlinx.serialization.DeserializationStrategy
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -133,9 +132,6 @@ internal object ScheduleForms {
      * a legacy body decodes exactly as 1.3 decoded it, and any failure is the shipped 400 naming the
      * key the decoder objected to.
      */
-    private fun <T> strict(serializer: DeserializationStrategy<T>, body: JsonObject): T = try {
-        ApiJson.decodeFromString(serializer, body.toString())
-    } catch (e: SerializationException) {
-        throw ApiFailure.badRequest(e.message ?: "that is not the JSON this endpoint wants")
-    }
+    private fun <T> strict(serializer: DeserializationStrategy<T>, body: JsonObject): T =
+        decodeOr400(serializer, body.toString())
 }

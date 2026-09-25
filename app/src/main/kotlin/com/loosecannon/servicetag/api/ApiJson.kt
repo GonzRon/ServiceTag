@@ -189,11 +189,14 @@ internal fun <T> conflictResponse(serializer: SerializationStrategy<T>, value: T
 internal fun <T> ApiRequest.decode(serializer: DeserializationStrategy<T>): T {
     val type = mediaType()
     if (type != JSON_MEDIA_TYPE) throw ApiFailure.unsupportedMediaType(JSON_MEDIA_TYPE, type)
-    return try {
-        ApiJson.decodeFromString(serializer, body.decodeToString())
-    } catch (e: SerializationException) {
-        throw ApiFailure.badRequest(e.message ?: "that is not the JSON this endpoint wants")
-    }
+    return decodeOr400(serializer, body.decodeToString())
+}
+
+/** [text] as [serializer]'s value, or the shipped 400 carrying the decoder's own message. */
+internal fun <T> decodeOr400(serializer: DeserializationStrategy<T>, text: String): T = try {
+    ApiJson.decodeFromString(serializer, text)
+} catch (e: SerializationException) {
+    throw ApiFailure.badRequest(e.message ?: "that is not the JSON this endpoint wants")
 }
 
 /**
@@ -422,9 +425,22 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     // carries every problem by the domain's own name. The three problem-to-code functions below are
     // exhaustive over their sealed types, so a problem added later is a compile error here rather
     // than a refusal with a code nobody documented.
-    is SeasonValidation -> unprocessable(seasonRefusal(e.problems.first()), e.problems.map { it.toString() })
-    is ConditionValidation -> unprocessable(conditionRefusal(e.problems.first()), e.problems.map { it.toString() })
-    is HealthValidation -> unprocessable(healthRefusal(e.problems.first()), e.problems.map { it.toString() })
+    //
+    // Each falls back to its family's lower-snake validation code for a refusal that named no problem,
+    // as 1.2's `SCHEDULE_INVALID` does. It is unreachable — every throw site collects at least one — but
+    // `mapDomainFailure` runs inside the router's `catch`, so a throw here would escape `handle`.
+    is SeasonValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::seasonRefusal) ?: Refusal(SEASON_VALIDATION, "the season command was refused"),
+        e.problems.map { it.toString() },
+    )
+    is ConditionValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::conditionRefusal) ?: Refusal(CONDITION_VALIDATION, "the condition was refused"),
+        e.problems.map { it.toString() },
+    )
+    is HealthValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::healthRefusal) ?: Refusal(HEALTH_VALIDATION, "the health configuration was refused"),
+        e.problems.map { it.toString() },
+    )
     is LegacyWriteCannotRepresent -> errorResponse(
         422, "Unprocessable Content", "LEGACY_WRITE_CANNOT_REPRESENT",
         "this asset's season is MANUAL, which a seasonStartMmdd/seasonEndMmdd pair cannot represent; " +
@@ -492,6 +508,9 @@ private fun strandedName(schedule: StrandedSchedule): String =
  */
 internal const val SEASON_VALIDATION: String = "season_validation"
 internal const val CONDITION_VALIDATION: String = "condition_validation"
+
+/** A health refusal that named no problem: the same unreachable fallback, never a malformed-value code. */
+internal const val HEALTH_VALIDATION: String = "health_validation"
 
 /** Every [SeasonProblem] — the season-mode, break and activation commands' — as spec §9.2 codes it. */
 internal fun seasonRefusal(problem: SeasonProblem): Refusal = when (problem) {
