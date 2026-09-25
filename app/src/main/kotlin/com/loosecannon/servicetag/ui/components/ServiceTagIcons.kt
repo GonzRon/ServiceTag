@@ -34,4 +34,68 @@ object ServiceTagIcons {
 
     /** An equals sign: the kind glyph on a reading that is computed rather than entered. */
     val Equal: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_equal)
+
+    // 1.4 condition, health and season glyphs (spec §10.6's proposed icons); see [StateGlyph].
+    val TaskAlt: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_task_alt)
+    val TrendingDown: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_trending_down)
+    val Block: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_block)
+    val RadioButtonUnchecked: ImageVector @Composable get() =
+        ImageVector.vectorResource(R.drawable.ic_radio_button_unchecked)
+    val SignalCellularAlt: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_signal_cellular_alt)
+    val SignalCellularAlt2Bar: ImageVector @Composable get() =
+        ImageVector.vectorResource(R.drawable.ic_signal_cellular_alt_2_bar)
+    val SignalCellularAlt1Bar: ImageVector @Composable get() =
+        ImageVector.vectorResource(R.drawable.ic_signal_cellular_alt_1_bar)
+    val SignalCellularNodata: ImageVector @Composable get() =
+        ImageVector.vectorResource(R.drawable.ic_signal_cellular_nodata)
+    val EventAvailable: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_event_available)
+}
+
+/**
+ * The glyph half of the 1.4 condition, health and season states (spec §10.6), **named** rather than
+ * resolved — the `StatusGlyph` precedent — so "no two states share a glyph" is a fact a JVM test can
+ * assert. Colour is only reinforcement: with the palette gone, the word, this glyph and the position
+ * each still tell every state apart. [icon] resolves a member to its vector.
+ */
+enum class StateGlyph {
+    /** OPERATIONAL. */
+    TASK_ALT,
+
+    /** DEGRADED. */
+    TRENDING_DOWN,
+
+    /** DOWN. */
+    BLOCK,
+
+    /** Condition not recorded. */
+    RADIO_BUTTON_UNCHECKED,
+
+    /** NOMINAL: three bars. */
+    SIGNAL_3_BARS,
+
+    /** WARNING: two bars. */
+    SIGNAL_2_BARS,
+
+    /** CRITICAL: one bar. */
+    SIGNAL_1_BAR,
+
+    /** NOT TRACKED. */
+    SIGNAL_NO_DATA,
+
+    /** IN SEASON. */
+    EVENT_AVAILABLE,
+    ;
+
+    val icon: ImageVector
+        @Composable get() = when (this) {
+            TASK_ALT -> ServiceTagIcons.TaskAlt
+            TRENDING_DOWN -> ServiceTagIcons.TrendingDown
+            BLOCK -> ServiceTagIcons.Block
+            RADIO_BUTTON_UNCHECKED -> ServiceTagIcons.RadioButtonUnchecked
+            SIGNAL_3_BARS -> ServiceTagIcons.SignalCellularAlt
+            SIGNAL_2_BARS -> ServiceTagIcons.SignalCellularAlt2Bar
+            SIGNAL_1_BAR -> ServiceTagIcons.SignalCellularAlt1Bar
+            SIGNAL_NO_DATA -> ServiceTagIcons.SignalCellularNodata
+            EVENT_AVAILABLE -> ServiceTagIcons.EventAvailable
+        }
 }

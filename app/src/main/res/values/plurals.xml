@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The two quantity-bearing health substitutions (1.4 spec §10.7; plan decision 29, the controller's
+  ruling). Each `other` form is the RATIFIED text verbatim; each `one` form differs from it only by
+  the unit's "s" — an inflection of a ratified string, not a new one (master plan §17.2).
+-->
+<resources>
+    <!-- S99's <age>: "Replaced <date>, <age> ago". -->
+    <plurals name="health_age_days">
+        <item quantity="one">1 day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
+    <!-- S102: "<schedule> is <n> days overdue". -->
+    <plurals name="health_days_overdue">
+        <item quantity="one">%1$s is 1 day overdue</item>
+        <item quantity="other">%1$s is %2$d days overdue</item>
+    </plurals>
+</resources>
