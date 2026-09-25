@@ -62,8 +62,10 @@ class TagPlacementTest {
         graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
         graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
+        graph.conditions, graph.seasonActivations, graph.healthSubjects,
+        graph.assetHealthReadModel, graph.getAssetSeason, graph.recordSeasonActivation,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
-        graph.applyTemplate, graph.uow, graph.clock, id,
+        graph.applyTemplate, graph.uow, graph.clock, graph.todayPort, id,
     )
 
     // --- 1: two tags, one asset ------------------------------------------------------------

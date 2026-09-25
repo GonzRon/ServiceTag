@@ -4,6 +4,8 @@ import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,16 +25,19 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -41,14 +46,19 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.journal.RangeState
 import com.loosecannon.servicetag.core.journal.Reading
 import com.loosecannon.servicetag.core.journal.SeedTemplates
@@ -63,11 +73,16 @@ import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
+import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.model.SeasonAction
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.model.isRetired
+import com.loosecannon.servicetag.core.schedule.SeasonPhase
+import com.loosecannon.servicetag.core.usecase.SeasonView
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.links.LinkLauncher
 import com.loosecannon.servicetag.ui.attachments.AttachmentsSection
@@ -84,8 +99,29 @@ import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.PlateValue
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.components.StateGlyph
 import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.components.TypedConfirmDialog
+import com.loosecannon.servicetag.ui.condition.CHANGE_CONDITION
+import com.loosecannon.servicetag.ui.condition.CONDITION_TITLE
+import com.loosecannon.servicetag.ui.condition.ChangeConditionSheet
+import com.loosecannon.servicetag.ui.condition.ConditionBadge
+import com.loosecannon.servicetag.ui.condition.END_SEASON
+import com.loosecannon.servicetag.ui.condition.MARK_OPERATIONAL
+import com.loosecannon.servicetag.ui.condition.MarkOperationalDialog
+import com.loosecannon.servicetag.ui.condition.START_SEASON
+import com.loosecannon.servicetag.ui.condition.WHEN_DID_THIS_CHANGE
+import com.loosecannon.servicetag.ui.condition.conditionColors
+import com.loosecannon.servicetag.ui.condition.conditionGlyph
+import com.loosecannon.servicetag.ui.condition.conditionWord
+import com.loosecannon.servicetag.ui.condition.displayDate
+import com.loosecannon.servicetag.ui.condition.reasonLine
+import com.loosecannon.servicetag.ui.health.AndroidHealthPlurals
+import com.loosecannon.servicetag.ui.health.HealthBadge
+import com.loosecannon.servicetag.ui.health.HealthPlurals
+import com.loosecannon.servicetag.ui.health.healthColors
+import com.loosecannon.servicetag.ui.health.healthGlyph
+import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.journal.eventDetailLine
 import com.loosecannon.servicetag.ui.journal.formatTarget
 import com.loosecannon.servicetag.ui.journal.formatValue
@@ -100,6 +136,7 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.Instant
 import java.time.LocalDate
+import java.time.MonthDay
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -142,6 +179,13 @@ fun AssetDetailScreen(
     val prompt by model.prompt.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
     var pickingTemplate by remember { mutableStateOf(false) }
+    // 1.4 — B12's two condition surfaces, opened from the Condition section; saveable, as the scan
+    // sheet keeps them, so a rotation does not drop an open surface.
+    var changingCondition by rememberSaveable { mutableStateOf(false) }
+    var markingOperational by rememberSaveable { mutableStateOf<OperationalCondition?>(null) }
+    // S99's `<age>` and S102 through B12's day forms, read from this screen's own resources.
+    val resources = LocalResources.current
+    val plurals: HealthPlurals = remember(resources) { AndroidHealthPlurals(resources) }
 
     // A deep link, a restored back stack or a replacing import can name an asset that is not there
     // any more. Leaving is the honest answer; an empty plate would pretend it still exists.
@@ -206,7 +250,16 @@ fun AssetDetailScreen(
             onRetire = model::retire,
             onDelete = model::delete,
             onLogOutcome = { kind -> model.dismissPrompt(); onLogOutcome(assetId, kind) },
+            onSeasonDate = model::onSeasonDate,
+            onConfirmSeason = model::confirmSeason,
         )
+        // The page redraws from the condition flow when either closes: nothing to refresh by hand.
+        if (changingCondition) {
+            ChangeConditionSheet(graph = graph, assetId = assetId) { changingCondition = false }
+        }
+        markingOperational?.let { condition ->
+            MarkOperationalDialog(graph = graph, assetId = assetId, current = condition) { markingOperational = null }
+        }
         // The screen's 16dp gutter is applied per block rather than to the whole scroll, because
         // 1.2's two maintenance sections draw their **own** gutter: they reuse the Maintenance
         // destination's heading and its due row verbatim, so a group's work reads the same on this
@@ -239,6 +292,20 @@ fun AssetDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 DetailsSection(current)
+                // 1.4 — the three independent facts, always in this order (spec §10.3): condition
+                // first, so a DOWN asset's health is never drawn above its condition (inv. 119).
+                ConditionSection(
+                    state = current,
+                    onChangeCondition = { changingCondition = true },
+                    onMarkOperational = { markingOperational = it },
+                    onOpenEvent = onOpenEvent,
+                )
+                HealthSection(current.healthBlocks, plurals)
+                SeasonSection(
+                    season = current.season,
+                    onStart = { model.askSeason(SeasonAction.START) },
+                    onEnd = { model.askSeason(SeasonAction.END) },
+                )
             }
             // 1.2 — what is scheduled on this asset, and who it shares work with (spec §2.6).
             //
@@ -483,9 +550,12 @@ private fun DetailPrompts(
     onRetire: (String) -> Unit,
     onDelete: () -> Unit,
     onLogOutcome: (String) -> Unit,
+    onSeasonDate: (String) -> Unit,
+    onConfirmSeason: () -> Unit,
 ) {
     when (prompt) {
         null -> Unit
+        is DetailPrompt.SeasonChange -> SeasonDialog(prompt, onSeasonDate, onConfirmSeason, onDismiss)
         is DetailPrompt.Retire -> RetireDialog(prompt.date, onDismiss, onRetire)
         DetailPrompt.LogWhatHappened -> LogWhatHappenedDialog(
             onDismiss = onDismiss,
@@ -597,7 +667,7 @@ private fun AssetPlate(state: AssetDetailState) {
             "NFC tag" to PlateValue(state.tags.firstOrNull()?.identityLine().orEmpty(), mono = true),
         ),
         icon = categoryIcon(asset.category),
-        badges = plateBadges(asset, state.outOfSeason),
+        badges = plateBadges(state.plate),
         modifier = Modifier.fillMaxWidth(),
     )
 }
@@ -610,26 +680,27 @@ private fun modelLine(asset: Asset): String =
     listOf(asset.manufacturer, asset.model).filter { it.isNotBlank() }.joinToString(" ")
 
 /**
- * Retired, archived and out of season are three independent facts and an asset can carry all three
- * (spec §6, §7). Each gets its own D12 §5 family, wording and glyph; an ordinary asset gets no
- * badge slot at all, because "normal" needs no badge.
+ * Condition, retired, archived and out of season are four independent facts and an asset can carry
+ * all four (spec §6, §7, §10.3). Each gets its own D12 §5 family, wording and glyph. The condition
+ * badge is on every plate — "Condition not recorded" is a fact too — so the slot always exists;
+ * which badges appear is [AssetDetailState.plate]'s decision, not this function's.
  */
 @Composable
-private fun plateBadges(asset: Asset, outOfSeason: Boolean): (@Composable FlowRowScope.() -> Unit)? {
-    val archived = statusLabel(asset.status)
-    if (!asset.isRetired && archived == null && !outOfSeason) return null
+private fun plateBadges(facts: List<PlateFact>): (@Composable FlowRowScope.() -> Unit) {
     val semantic = ServiceTagTheme.semanticColors
     val retiredIcon = ServiceTagIcons.PauseCircle
     val seasonIcon = ServiceTagIcons.CalendarMonth
     return {
-        if (asset.isRetired) {
-            StatusBadge(label = RETIRED, colors = semantic.paused, icon = retiredIcon)
-        }
-        if (archived != null) {
-            StatusBadge(label = archived, colors = semantic.seasonInactive)
-        }
-        if (outOfSeason) {
-            StatusBadge(label = OUT_OF_SEASON, colors = semantic.seasonInactive, icon = seasonIcon)
+        facts.forEach { fact ->
+            when (fact) {
+                is PlateFact.Condition -> ConditionBadge(fact.view)
+                PlateFact.Retired -> StatusBadge(label = RETIRED, colors = semantic.paused, icon = retiredIcon)
+                is PlateFact.Archived -> StatusBadge(label = fact.label, colors = semantic.seasonInactive)
+                PlateFact.OutOfSeason ->
+                    StatusBadge(label = OUT_OF_SEASON, colors = semantic.seasonInactive, icon = seasonIcon)
+                // The Season section's own badge, so S39 reads the same in both places (spec §10.6).
+                PlateFact.InSeason -> PhaseBadge(SeasonPhase.IN_SEASON)
+            }
         }
     }
 }
@@ -711,10 +782,303 @@ private fun ComponentsSection(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 QuietLine(componentLine(child))
+                // 1.4 — the child's own condition badge (spec §10.3), S4 when none is recorded.
+                ConditionBadge(child.condition, Modifier.padding(top = 4.dp))
             }
         }
         TextButton(onClick = onAddComponent) { Text("+ Add component") }
     }
+}
+
+/**
+ * **Condition** (S5; spec §10.3, §5.1): the current badge, the current row's reason (or S23), **S7**
+ * for a DOWN or DEGRADED asset and **S6**, then **S21** — every row, newest first, each with its day,
+ * word, reason and link, or S24 where the linked record is gone. Each action only opens B12's own
+ * surface; nothing here writes, and no history row can be edited or removed (inv. 89, 107, 110).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ConditionSection(
+    state: AssetDetailState,
+    onChangeCondition: () -> Unit,
+    onMarkOperational: (OperationalCondition) -> Unit,
+    onOpenEvent: (String) -> Unit,
+) {
+    val current = state.condition
+    SentenceSectionHeader(CONDITION_TITLE)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ConditionBadge(current)
+        current?.let { QuietLine(reasonLine(it.reason)) }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val condition = current?.condition
+            if (state.offersMarkOperational && condition != null) {
+                Button(onClick = { onMarkOperational(condition) }, shape = ControlShape) { Text(MARK_OPERATIONAL) }
+            }
+            OutlinedButton(onClick = onChangeCondition, shape = ControlShape) { Text(CHANGE_CONDITION) }
+        }
+    }
+    SentenceSectionHeader(CONDITION_HISTORY)
+    LedgerList(count = state.conditionHistory.size) { index ->
+        val row = state.conditionHistory[index]
+        val (day, month, year) = row.occurredOn.asLedgerDate()
+        Column {
+            LedgerEntry(
+                day = day,
+                month = month,
+                year = year,
+                title = conditionWord(row.condition),
+                detail = reasonLine(row.reason),
+                meta = listOfNotNull(row.occurredTime),
+            )
+            when {
+                row.linkRemoved -> QuietLine(
+                    LINKED_RECORD_REMOVED,
+                    Modifier.padding(start = LedgerDateColumnWidth, bottom = 8.dp),
+                )
+                row.eventExists && row.eventId != null -> Text(
+                    text = row.eventTitle.orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .padding(start = LedgerDateColumnWidth)
+                        .fillMaxWidth()
+                        .clickable { onOpenEvent(row.eventId.value) }
+                        .heightIn(min = 44.dp)
+                        .padding(vertical = 10.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * **Health** (S94; spec §10.3, §6.5, §6.6), drawn from [HealthBlock]s in their order: every CRITICAL
+ * subject (S109) and every DOWN or DEGRADED component (S27) **first**, then the aggregate — its badge
+ * and S108, or S98 — with S138 when the primary fell back, then each subject with its badge or S98
+ * and its driver lines, then S107. The words are [words]'s; this function only lays them out.
+ */
+@Composable
+private fun HealthSection(blocks: List<HealthBlock>, plurals: HealthPlurals) {
+    val semantic = ServiceTagTheme.semanticColors
+    SentenceSectionHeader(HEALTH_SECTION)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        blocks.forEach { block ->
+            val words = block.words(plurals, ::displayDate)
+            when (block) {
+                is HealthBlock.Critical -> GlyphLine(
+                    glyph = healthGlyph(HealthBand.CRITICAL),
+                    tint = healthColors(HealthBand.CRITICAL, semantic).foreground,
+                    text = words.single(),
+                )
+                is HealthBlock.Component -> GlyphLine(
+                    glyph = conditionGlyph(block.component.condition),
+                    tint = conditionColors(block.component.condition, semantic).foreground,
+                    text = words.single(),
+                )
+                is HealthBlock.Aggregate -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // The badge draws the band word (or S98 alone); S108 follows it only with a value.
+                    HealthBadge(band = block.value?.band, score = null)
+                    if (block.value != null) Text(words.last(), style = MaterialTheme.typography.bodyMedium)
+                }
+                HealthBlock.Fallback -> QuietLine(words.single())
+                is HealthBlock.Subject -> Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = words[0],
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        HealthBadge(band = block.health.band, score = block.health.score)
+                    }
+                    words.drop(2).forEach { QuietLine(it) }
+                }
+                HealthBlock.Footer -> Text(
+                    text = words.single(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+/** A glyph in its state's colour beside one line: a critical subject or a broken component. */
+@Composable
+private fun GlyphLine(glyph: StateGlyph, tint: Color, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Icon(imageVector = glyph.icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+/**
+ * **Season** (S28; spec §10.3): the mode's own lines, then the history, then the break. YEAR_ROUND
+ * reads S29. CALENDAR reads S32 and S33 with the window's days, the phase (S39 or the shipped
+ * out-of-season word) and S50 or S49. MANUAL reads the phase and offers **S40** when out of season or
+ * **S41** when in — each opens its dialog and writes nothing. S48 lists every START and END, newest
+ * first, whenever rows exist in any mode, and always on a MANUAL asset. No MANUAL start is ever
+ * predicted (Q-6). A set break adds S58 with S60 and S61; it never changes the phase word.
+ *
+ * The phase is drawn as ratified — S39 "IN SEASON", the shipped "Out of season" — by [PhaseBadge]
+ * rather than the upper-casing `StatusBadge`, which keeps the plate's shipped badge the one
+ * "OUT OF SEASON" on the page.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SeasonSection(season: SeasonView, onStart: () -> Unit, onEnd: () -> Unit) {
+    // S28 heads the section, in the sentence case S5 and S94 are drawn in (the ruling on I-4).
+    SentenceSectionHeader(OPERATING_SEASON)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        when (season.seasonMode) {
+            SeasonMode.YEAR_ROUND -> Text(
+                text = YEAR_ROUND,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            SeasonMode.CALENDAR -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    SentenceLabelValue(SEASON_STARTS, monthDayText(season.seasonStartMmdd))
+                    SentenceLabelValue(SEASON_ENDS, monthDayText(season.seasonEndMmdd))
+                }
+                PhaseLine(season.phase, calendarLine(season, ::displayDate))
+            }
+            SeasonMode.MANUAL -> {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PhaseBadge(season.phase)
+                    when (manualAction(season)) {
+                        SeasonAction.START -> Button(onClick = onStart, shape = ControlShape) { Text(START_SEASON) }
+                        SeasonAction.END -> OutlinedButton(onClick = onEnd, shape = ControlShape) { Text(END_SEASON) }
+                        null -> Unit
+                    }
+                }
+            }
+        }
+    }
+    if (seasonHistoryShown(season)) {
+        val rows = seasonHistory(season)
+        SentenceSectionHeader(SEASON_HISTORY)
+        LedgerList(count = rows.size) { index ->
+            val row = rows[index]
+            val (day, month, year) = row.occurredOn.asLedgerDate()
+            LedgerEntry(day = day, month = month, year = year, title = activationWord(row.action))
+        }
+    }
+    val breakStart = season.blackoutStartMmdd
+    val breakEnd = season.blackoutEndMmdd
+    if (breakStart != null && breakEnd != null) {
+        SentenceSectionHeader(MAINTENANCE_BREAK)
+        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            SentenceLabelValue(BREAK_STARTS, monthDayText(breakStart))
+            SentenceLabelValue(BREAK_ENDS, monthDayText(breakEnd))
+        }
+    }
+}
+
+/** The phase badge beside S50 or S49, on one line when there is room. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PhaseLine(phase: SeasonPhase, line: String?) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        PhaseBadge(phase)
+        line?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface) }
+    }
+}
+
+/**
+ * The season phase as one badge (spec §10.6): S39 "IN SEASON" with `event_available` in the cool
+ * blue family, or the shipped "Out of season" with the calendar glyph in the season-inactive grey.
+ * Each word is drawn as ratified, never re-cased.
+ */
+@Composable
+private fun PhaseBadge(phase: SeasonPhase) {
+    val semantic = ServiceTagTheme.semanticColors
+    val inSeason = phase == SeasonPhase.IN_SEASON
+    val colors = if (inSeason) semantic.maintenanceOkay else semantic.seasonInactive
+    Surface(color = colors.container, contentColor = colors.foreground, shape = BadgeShape) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+        ) {
+            Icon(
+                imageVector = if (inSeason) StateGlyph.EVENT_AVAILABLE.icon else ServiceTagIcons.CalendarMonth,
+                contentDescription = null,
+                tint = colors.foreground,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = if (inSeason) IN_SEASON_WORD else OUT_OF_SEASON,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = colors.foreground,
+            )
+        }
+    }
+}
+
+/** A ratified field name over its value, in the case it was ratified (S32, S33, S60, S61). */
+@Composable
+private fun SentenceLabelValue(label: String, value: String) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+/**
+ * **Start season** (S42 over S43) or **End season** (S44 over S45): the date — today by default —
+ * under B12's S15 field name, the S54 refusal under it when the date is outside `[latest row,
+ * today]`, the confirm (S40 or S41) and Cancel. Cancel and dismissal write nothing (inv. 93).
+ */
+@Composable
+private fun SeasonDialog(
+    prompt: DetailPrompt.SeasonChange,
+    onDate: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val start = prompt.action == SeasonAction.START
+    AlertDialog(
+        onDismissRequest = { if (!prompt.saving) onDismiss() },
+        title = { Text(if (start) START_THE_SEASON else END_THE_SEASON) },
+        text = {
+            Column {
+                Text(if (start) startSeasonBody(prompt.parsed?.let(::displayDate) ?: prompt.date) else END_SEASON_BODY)
+                Spacer(Modifier.height(12.dp))
+                DateField(
+                    value = prompt.date,
+                    onValueChange = onDate,
+                    label = WHEN_DID_THIS_CHANGE,
+                    problem = prompt.refusal,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = prompt.canConfirm) { Text(if (start) START_SEASON else END_SEASON) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !prompt.saving) { Text("Cancel") } },
+    )
+}
+
+/** A window's `MM-DD` as a day and month ("1 May"); the stored text itself if it is not one. */
+private fun monthDayText(mmdd: String?): String {
+    if (mmdd == null) return ""
+    return runCatching { MonthDay.parse("--$mmdd").format(monthDay) }.getOrDefault(mmdd)
 }
 
 /** "Pump · Water · 1 reading out of range", with an unset category simply left out. */
@@ -862,6 +1226,7 @@ private fun categoryIcon(category: String): ImageVector {
 }
 
 private val plateDate = DateTimeFormatter.ofPattern("d MMM uuuu")
+private val monthDay = DateTimeFormatter.ofPattern("d MMM")
 private val ledgerDay = DateTimeFormatter.ofPattern("dd")
 private val ledgerMonth = DateTimeFormatter.ofPattern("MMM")
 private val ledgerYear = DateTimeFormatter.ofPattern("uuuu")

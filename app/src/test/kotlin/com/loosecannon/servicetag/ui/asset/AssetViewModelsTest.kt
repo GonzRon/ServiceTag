@@ -1,5 +1,22 @@
 package com.loosecannon.servicetag.ui.asset
 
+import com.loosecannon.servicetag.core.health.HealthBand
+import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.HealthAggregation
+import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.model.SeasonAction
+import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.usecase.ActivationCommand
+import com.loosecannon.servicetag.core.usecase.GetAssetSeason
+import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.conditionRow
+import com.loosecannon.servicetag.testing.dayMillis
+import com.loosecannon.servicetag.testing.replacementOf
+import com.loosecannon.servicetag.testing.subjectRow
+import com.loosecannon.servicetag.ui.health.ConditionView
+import com.loosecannon.servicetag.ui.health.HealthPlurals
+import com.loosecannon.servicetag.ui.health.NOT_TRACKED
 import com.loosecannon.servicetag.core.journal.RangeState
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
@@ -72,14 +89,19 @@ class AssetViewModelsTest {
         updatedAt = 1L,
     )
 
-    /** The detail model takes seventeen collaborators; every test wants the same seventeen off the graph. */
+    /** The detail model takes twenty-three collaborators; every test wants the same ones off the graph. */
     private fun detailModel(id: AssetId) = AssetDetailViewModel(
         graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
         graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
+        graph.conditions, graph.seasonActivations, graph.healthSubjects,
+        graph.assetHealthReadModel, graph.getAssetSeason, graph.recordSeasonActivation,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
-        graph.applyTemplate, graph.uow, graph.clock, id,
+        graph.applyTemplate, graph.uow, graph.clock, graph.todayPort, id,
     )
+
+    /** The list, reading the season phase on the graph's injected `T`. */
+    private fun listModel() = AssetsViewModel(graph.assets, graph.seasonActivations, graph.todayPort)
 
     /**
      * Create ([id] null) or edit one asset; [parentId] is the "+ Add component" preset. Suspends
@@ -115,7 +137,7 @@ class AssetViewModelsTest {
     )
 
     @Test fun theListEmitsAfterACreateAndHidesArchivedRowsUntilTheChipIsOn() = runTest {
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
 
         val pump = graph.createAsset.run("Pool pump", "Water")
@@ -737,8 +759,8 @@ class AssetViewModelsTest {
     }
 
     /**
-     * OUT OF SEASON is read off the clock, not stored (spec §6). The same asset is out of season in
-     * January and in it in June, and a window that wraps the year says the opposite of both.
+     * OUT OF SEASON is read off the injected `T`, not stored (spec §6, §3.1). The same asset is out of
+     * season in January and in it in June, and a window that wraps the year says the opposite of both.
      */
     @Test fun outOfSeasonComputedFromClock() = runTest {
         val mower = graph.createAsset.run("Mower", "Yard")
@@ -747,12 +769,12 @@ class AssetViewModelsTest {
             AssetCommand(name = "Mower", seasonStartMmdd = "05-01", seasonEndMmdd = "09-30"),
         )
 
-        graph.now = millisOn("2026-01-15")
+        graph.today = LocalDate.parse("2026-01-15")
         val winter = detailModel(mower.id)
         backgroundScope.launch { winter.state.collect() }
         assertTrue(winter.state.first { it != null }!!.outOfSeason)
 
-        graph.now = millisOn("2026-06-15")
+        graph.today = LocalDate.parse("2026-06-15")
         val summer = detailModel(mower.id)
         backgroundScope.launch { summer.state.collect() }
         assertFalse(summer.state.first { it != null }!!.outOfSeason)
@@ -762,12 +784,12 @@ class AssetViewModelsTest {
             mower.id,
             AssetCommand(name = "Mower", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
         )
-        graph.now = millisOn("2026-01-15")
+        graph.today = LocalDate.parse("2026-01-15")
         val wrappedWinter = detailModel(mower.id)
         backgroundScope.launch { wrappedWinter.state.collect() }
         assertFalse(wrappedWinter.state.first { it != null }!!.outOfSeason)
 
-        graph.now = millisOn("2026-06-15")
+        graph.today = LocalDate.parse("2026-06-15")
         val wrappedSummer = detailModel(mower.id)
         backgroundScope.launch { wrappedSummer.state.collect() }
         assertTrue(wrappedSummer.state.first { it != null }!!.outOfSeason)
@@ -869,7 +891,7 @@ class AssetViewModelsTest {
         graph.retireAsset.retire(both.id, "2026-01-01")
         graph.archiveAsset.run(both.id)
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
 
         val active = vm.state.first { it.items.size == 3 }
@@ -931,9 +953,9 @@ class AssetViewModelsTest {
                 seasonEndMmdd = "09-30",
             ),
         )
-        graph.now = millisOn("2026-01-15")
+        graph.today = LocalDate.parse("2026-01-15")
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
 
         val rows = vm.state.first { it.items.size == 2 }.items.associateBy { it.asset.name }
@@ -953,7 +975,7 @@ class AssetViewModelsTest {
         val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
         graph.createAsset.run(AssetCommand(name = "Circulation pump", parentAssetId = tub.id))
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
 
         // Blank query: both rows, the component already naming its system.
@@ -974,7 +996,7 @@ class AssetViewModelsTest {
         graph.createAsset.run("Zebra mower", "Yard")
         graph.createAsset.run("apple press", "Kitchen")
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
 
         val state = vm.state.first { it.items.size == 2 }
@@ -987,7 +1009,7 @@ class AssetViewModelsTest {
         graph.createAsset.run("Circulation pump", "Water")
         graph.createAsset.run("Mower", "Yard")
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
         vm.state.first { it.items.size == 2 }
 
@@ -1001,7 +1023,7 @@ class AssetViewModelsTest {
         graph.createAsset.run("Circulation pump", "Water")
         graph.createAsset.run("Mower", "Yard")
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
         vm.state.first { it.items.size == 2 }
 
@@ -1015,7 +1037,7 @@ class AssetViewModelsTest {
         val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
         graph.createAsset.run(AssetCommand(name = "Circulation pump", parentAssetId = tub.id))
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
         vm.state.first { it.items.size == 2 }
 
@@ -1036,7 +1058,7 @@ class AssetViewModelsTest {
         graph.createAsset.run("Zebra mower", "Yard")
         graph.archiveAsset.run(mower.id)
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
         vm.state.first { it.items.isNotEmpty() }
 
@@ -1060,7 +1082,7 @@ class AssetViewModelsTest {
         graph.createAsset.run(AssetCommand(name = "Circulation pump", category = "Water"))
         graph.createAsset.run("Mower", "Yard")
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
         vm.state.first { it.items.size == 2 }
 
@@ -1079,7 +1101,7 @@ class AssetViewModelsTest {
      * `DashboardViewModel.query` proved before this brief moved it here.
      */
     @Test fun theBoxSeesItsOwnKeystrokeWithoutWaitingForTheList() = runTest {
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
 
         assertEquals("", vm.query.value)
         vm.onQueryChange("circ")
@@ -1096,7 +1118,7 @@ class AssetViewModelsTest {
     @Test fun aRowArrivingDoesNotDisturbTheQuery() = runTest {
         graph.createAsset.run(AssetCommand(name = "Circulation pump", category = "Water"))
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
         vm.state.first { it.items.isNotEmpty() }
 
@@ -1119,7 +1141,7 @@ class AssetViewModelsTest {
         val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
         graph.archiveAsset.run(tub.id)
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
         vm.state.first { it.archivedCount == 1 }
 
@@ -1135,7 +1157,7 @@ class AssetViewModelsTest {
         val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
         graph.archiveAsset.run(tub.id)
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
 
         val state = vm.state.first { it.archivedCount == 1 }
@@ -1155,7 +1177,7 @@ class AssetViewModelsTest {
         val heater = graph.createAsset.run(AssetCommand(name = "Water heater", category = "Kitchen"))
         graph.archiveAsset.run(heater.id)
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
         vm.state.first { it.archivedCount == 1 }
 
@@ -1170,7 +1192,7 @@ class AssetViewModelsTest {
         val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
         graph.archiveAsset.run(tub.id)
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
         vm.state.first { it.archivedCount == 1 }
 
@@ -1188,7 +1210,7 @@ class AssetViewModelsTest {
         val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
         graph.archiveAsset.run(tub.id)
 
-        val vm = AssetsViewModel(graph.assets, graph.clock)
+        val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
         vm.state.first { it.archivedCount == 1 }
 
@@ -1197,5 +1219,352 @@ class AssetViewModelsTest {
         val state = vm.state.first { it.showArchived && it.query == "hot" }
         assertEquals(listOf("Hot tub"), state.items.map { it.asset.name })
         assertFalse(state.showArchivedOnlyHint)
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // 1.4 (B14) — asset detail's condition, health and season, and the list's season phase.
+    // ------------------------------------------------------------------------------------------
+
+    /** S99 and S102 through a fake: the JVM has no resources, and the day forms are B12's to prove. */
+    private val plurals = object : HealthPlurals {
+        override fun ageDays(n: Long) = "$n days"
+        override fun daysOverdue(title: String, n: Long) = "$title is $n days overdue"
+    }
+
+    /** Every word the Health section draws, block by block, in its order. */
+    private fun AssetDetailState.healthWords(): List<String> =
+        healthBlocks.flatMap { it.words(plurals) { day -> day.toString() } }
+
+    /** The detail state once it has loaded, collected in the test's background scope. */
+    private suspend fun kotlinx.coroutines.test.TestScope.loaded(id: String): AssetDetailState {
+        val vm = detailModel(AssetId(id))
+        backgroundScope.launch { vm.state.collect() }
+        return vm.state.first { it != null }!!
+    }
+
+    private fun activation(id: String, assetId: String, action: SeasonAction, on: String) = SeasonActivation(
+        id = id,
+        assetId = AssetId(assetId),
+        action = action,
+        occurredOn = on,
+        eventId = null,
+        createdAt = dayMillis(on),
+    )
+
+    /**
+     * Spec §10.3: the plate carries the condition badge **beside** retired, archived and out of
+     * season — four independent facts, all four on one asset — and an asset with none of the three
+     * still carries its condition badge, S4 when nothing is recorded.
+     */
+    @Test fun thePlateCarriesConditionBesideRetiredArchivedAndOutOfSeason() = runTest {
+        graph.today = LocalDate.parse("2026-01-15")
+        graph.assets.upsert(
+            assetRow(
+                "mower", name = "Mower", status = AssetStatus.ARCHIVED, retiredOn = "2026-01-01",
+                seasonMode = SeasonMode.CALENDAR, seasonStart = "05-01", seasonEnd = "09-30",
+            ),
+        )
+        graph.conditions.insert(conditionRow("c1", "mower", OperationalCondition.DOWN, "2026-01-10", reason = "Belt snapped"))
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+
+        val down = ConditionView(
+            condition = OperationalCondition.DOWN,
+            since = LocalDate.parse("2026-01-10"),
+            reason = "Belt snapped",
+            occurredOn = LocalDate.parse("2026-01-10"),
+            occurredTime = null,
+            eventId = null,
+            eventExists = false,
+        )
+        assertEquals(
+            listOf(PlateFact.Condition(down), PlateFact.Retired, PlateFact.Archived("Archived"), PlateFact.OutOfSeason),
+            loaded("mower").plate,
+        )
+        assertEquals("S4 on an asset with nothing recorded", listOf(PlateFact.Condition(null)), loaded("gen").plate)
+    }
+
+    /**
+     * Spec §10.6 ("plate, season section") and the controller's ruling on I-3: IN SEASON is on the
+     * plate wherever the Season section draws a phase word — a CALENDAR or a MANUAL asset in season —
+     * and never on a YEAR_ROUND one, whose section draws S29 instead of a phase.
+     */
+    @Test fun thePlateCarriesInSeasonForCalendarAndManualButNotYearRound() = runTest {
+        graph.today = LocalDate.parse("2026-01-15")
+        graph.assets.upsert(assetRow("snow", name = "Snowblower", seasonMode = SeasonMode.CALENDAR, seasonStart = "11-01", seasonEnd = "03-31"))
+        graph.assets.upsert(assetRow("tub", name = "Hot tub", seasonMode = SeasonMode.MANUAL))
+        graph.seasonActivations.insert(activation("a1", "tub", SeasonAction.START, "2026-01-01"))
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+
+        assertEquals(listOf(PlateFact.Condition(null), PlateFact.InSeason), loaded("snow").plate)
+        assertEquals(listOf(PlateFact.Condition(null), PlateFact.InSeason), loaded("tub").plate)
+        assertEquals("no phase word on a year-round asset", listOf(PlateFact.Condition(null)), loaded("gen").plate)
+    }
+
+    /**
+     * The controller's ruling on I-1 (B07's M1): "Mark operational" is offered only on an asset in
+     * service — active and not retired — that is DOWN or DEGRADED. A retired or archived asset's page
+     * still shows its condition; it just does not offer to change it back.
+     */
+    @Test fun markOperationalIsOfferedOnlyOnAnInServiceAsset() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.conditions.insert(conditionRow("c1", "gen", OperationalCondition.DOWN, "2026-02-01"))
+        graph.assets.upsert(assetRow("old", name = "Old pack", retiredOn = "2026-01-01"))
+        graph.conditions.insert(conditionRow("c2", "old", OperationalCondition.DOWN, "2026-02-01"))
+        graph.assets.upsert(assetRow("fan", name = "Fan", status = AssetStatus.ARCHIVED))
+        graph.conditions.insert(conditionRow("c3", "fan", OperationalCondition.DEGRADED, "2026-02-01"))
+        graph.assets.upsert(assetRow("mower", name = "Mower"))
+        graph.conditions.insert(conditionRow("c4", "mower", OperationalCondition.OPERATIONAL, "2026-02-01"))
+
+        assertTrue("an active DOWN asset", loaded("gen").offersMarkOperational)
+        assertFalse("a retired DOWN asset", loaded("old").offersMarkOperational)
+        assertFalse("an archived DEGRADED asset", loaded("fan").offersMarkOperational)
+        assertFalse("an OPERATIONAL asset", loaded("mower").offersMarkOperational)
+        assertEquals("the retired asset still shows its condition", OperationalCondition.DOWN, loaded("old").condition?.condition)
+    }
+
+    /**
+     * Brief: "a new condition redraws the page without a manual refresh" — a grandchild's DOWN, a
+     * direct child's new condition and a health subject, each written **after** the page loaded.
+     */
+    @Test fun theDetailRedrawsWhenADescendantsConditionOrASubjectChangesAfterLoad() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.assets.upsert(assetRow("eng", name = "Engine", parent = "gen"))
+        graph.assets.upsert(assetRow("pack", name = "Battery pack", parent = "eng"))
+        val vm = detailModel(AssetId("gen"))
+        backgroundScope.launch { vm.state.collect() }
+        assertEquals(listOf(NOT_TRACKED, HEALTH_FOOTER), vm.state.first { it != null }!!.healthWords())
+
+        graph.conditions.insert(conditionRow("c1", "pack", OperationalCondition.DOWN, "2026-02-01", reason = "Won't hold charge"))
+        scheduler.advanceUntilIdle()
+        assertEquals(
+            "a grandchild's DOWN, recorded after load",
+            listOf("Battery pack DOWN — Won't hold charge", NOT_TRACKED, HEALTH_FOOTER),
+            vm.state.value!!.healthWords(),
+        )
+
+        graph.conditions.insert(conditionRow("c2", "eng", OperationalCondition.DEGRADED, "2026-02-02"))
+        scheduler.advanceUntilIdle()
+        assertEquals("the child's own badge", OperationalCondition.DEGRADED, vm.state.value!!.components.single().condition?.condition)
+
+        graph.healthSubjects.upsert(subjectRow("h1", "gen", name = "Belt age"))
+        scheduler.advanceUntilIdle()
+        assertTrue("a subject added after load", vm.state.value!!.healthWords().contains("Belt age"))
+    }
+
+    /** Counts the season reads: every rebuild of the detail state reads the season exactly once. */
+    private class CountingActivations(private val inner: SeasonActivationRepository) : SeasonActivationRepository by inner {
+        var reads = 0
+        override suspend fun forAsset(assetId: AssetId): List<SeasonActivation> {
+            reads++
+            return inner.forAsset(assetId)
+        }
+    }
+
+    /**
+     * Review M-1: one edit of the asset row rebuilds the detail state **once** — the condition
+     * watchers are not torn down and re-subscribed when the asset tree has not changed.
+     */
+    @Test fun anAssetEditRebuildsTheDetailOnce() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.assets.upsert(assetRow("eng", name = "Engine", parent = "gen"))
+        val reads = CountingActivations(graph.seasonActivations)
+        val vm = AssetDetailViewModel(
+            graph.assets, graph.tags,
+            graph.definitions, graph.profiles, graph.events,
+            graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
+            graph.conditions, graph.seasonActivations, graph.healthSubjects,
+            graph.assetHealthReadModel, GetAssetSeason(graph.assets, reads, graph.uow, graph.todayPort),
+            graph.recordSeasonActivation,
+            graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
+            graph.applyTemplate, graph.uow, graph.clock, graph.todayPort, AssetId("gen"),
+        )
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it != null }
+        scheduler.advanceUntilIdle()
+        reads.reads = 0
+
+        graph.assets.upsert(graph.assets.get(AssetId("gen"))!!.copy(name = "Generator set"))
+        scheduler.advanceUntilIdle()
+
+        assertEquals("Generator set", vm.state.value!!.asset.name)
+        assertEquals("one edit, one rebuild", 1, reads.reads)
+    }
+
+    /**
+     * Spec §3.1: the out-of-season mark is the **season phase**, on the list and on the detail —
+     * a MANUAL asset after an END reads out of season, one with no row at all does too, a START
+     * brings it back in, and the list redraws on the activation alone (inv. 126: no asset column).
+     */
+    @Test fun outOfSeasonFollowsThePhaseIncludingManual() = runTest {
+        graph.today = LocalDate.parse("2026-06-15")
+        graph.assets.upsert(assetRow("tub", name = "Hot tub", seasonMode = SeasonMode.MANUAL))
+        graph.seasonActivations.insert(activation("a1", "tub", SeasonAction.START, "2026-04-01"))
+        graph.seasonActivations.insert(activation("a2", "tub", SeasonAction.END, "2026-06-01"))
+        graph.assets.upsert(assetRow("bare", name = "Imported tub", seasonMode = SeasonMode.MANUAL))
+        graph.assets.upsert(assetRow("mower", name = "Mower", seasonMode = SeasonMode.CALENDAR, seasonStart = "05-01", seasonEnd = "09-30"))
+        graph.assets.upsert(assetRow("snow", name = "Snowblower", seasonMode = SeasonMode.CALENDAR, seasonStart = "11-01", seasonEnd = "03-31"))
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+
+        val list = listModel()
+        backgroundScope.launch { list.state.collect() }
+        val marks = list.state.first { it.items.size == 5 }.items.associate { it.asset.name to it.outOfSeason }
+        assertEquals(
+            mapOf("Generator" to false, "Hot tub" to true, "Imported tub" to true, "Mower" to false, "Snowblower" to true),
+            marks,
+        )
+
+        val tub = loaded("tub")
+        assertTrue("the detail reads the same phase", tub.outOfSeason)
+        assertTrue(PlateFact.OutOfSeason in tub.plate)
+        val bare = loaded("bare")
+        assertTrue("no row at all reads out of season", bare.outOfSeason)
+        assertEquals(SeasonAction.START, manualAction(bare.season))
+        assertEquals("an empty history", emptyList<SeasonActivation>(), seasonHistory(bare.season))
+
+        graph.recordSeasonActivation.run(AssetId("tub"), ActivationCommand(SeasonAction.START))
+        val back = list.state.first { state -> state.items.single { it.asset.name == "Hot tub" }.outOfSeason.not() }
+        assertFalse(back.items.single { it.asset.name == "Hot tub" }.outOfSeason)
+        assertFalse(loaded("tub").outOfSeason)
+    }
+
+    /**
+     * Spec §5.1, §5.3; inv. 107, 110: S21 lists **every** row, newest first by the ordering key
+     * reversed — a backdated correction sorted into place, a return to OPERATIONAL as one more row —
+     * and a row whose linked event is gone keeps every field and is marked for S24, never hidden. A
+     * restored row whose zone this device cannot resolve is drawn like any other (B06 carry-forward).
+     */
+    @Test fun historyIsEveryRowNewestFirstWithADanglingLinkAsS24() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.events.upsert(replacementOf("e-kept", "gen", "2026-03-01"))
+        graph.conditions.insert(conditionRow("c1", "gen", OperationalCondition.DEGRADED, "2026-02-20"))
+        graph.conditions.insert(conditionRow("c2", "gen", OperationalCondition.DOWN, "2026-03-01", reason = "Won't start", eventId = "e-kept"))
+        graph.conditions.insert(
+            conditionRow("c3", "gen", OperationalCondition.DOWN, "2026-03-05", reason = "Still won't start", occurredTime = "08:30", eventId = "e-gone"),
+        )
+        graph.conditions.insert(
+            conditionRow("c4", "gen", OperationalCondition.OPERATIONAL, "2026-03-06", tzId = "Mars/Olympus_Mons"),
+        )
+        // Recorded last, dated between the first two: it sorts into place by its date.
+        graph.conditions.insert(
+            conditionRow("c5", "gen", OperationalCondition.DEGRADED, "2026-02-25", reason = "Rough idle", createdAt = dayMillis("2026-03-07")),
+        )
+
+        val history = loaded("gen").conditionHistory
+
+        assertEquals(listOf("c4", "c3", "c2", "c5", "c1"), history.map { it.id })
+        val dangling = history.single { it.id == "c3" }
+        assertEquals(
+            ConditionHistoryRow(
+                id = "c3", condition = OperationalCondition.DOWN, occurredOn = "2026-03-05", occurredTime = "08:30",
+                reason = "Still won't start", eventId = EventId("e-gone"), eventExists = false, eventTitle = null,
+            ),
+            dangling,
+        )
+        assertEquals("only the dangling link reads S24", listOf("c3"), history.filter { it.linkRemoved }.map { it.id })
+        val linked = history.single { it.id == "c2" }
+        assertTrue(linked.eventExists)
+        assertEquals("Battery replaced", linked.eventTitle)
+        assertEquals("the unresolvable zone's row is drawn", OperationalCondition.OPERATIONAL, history.first().condition)
+        assertEquals("S23 for an empty reason", "No reason given", com.loosecannon.servicetag.ui.condition.reasonLine(history.last().reason))
+        assertEquals("The linked record was removed.", LINKED_RECORD_REMOVED)
+    }
+
+    /**
+     * Inv. 119, spec §6.5: an AVERAGE that reads NOMINAL still leads its Health section with its
+     * CRITICAL subject (S109), before the aggregate (S108), then every subject, then S107.
+     */
+    @Test fun anAverageNominalAssetShowsItsCriticalSubjectFirst() = runTest {
+        graph.today = LocalDate.parse("2026-04-15")
+        graph.assets.upsert(assetRow("ups", name = "UPS", aggregation = HealthAggregation.AVERAGE))
+        graph.events.upsert(replacementOf("e1", "ups", "2026-01-15"))
+        graph.healthSubjects.upsert(subjectRow("h1", "ups", name = "Battery age", sortOrder = 0))
+        graph.healthSubjects.upsert(subjectRow("h2", "ups", name = "Fan age", nominalUntilDays = 1000, warningFromDays = 2000, criticalFromDays = 3000, sortOrder = 1))
+        graph.healthSubjects.upsert(subjectRow("h3", "ups", name = "Case age", nominalUntilDays = 1000, warningFromDays = 2000, criticalFromDays = 3000, sortOrder = 2))
+
+        val state = loaded("ups")
+        val blocks = state.healthBlocks
+
+        val critical = blocks.first() as HealthBlock.Critical
+        assertEquals("Battery age", critical.subject.subject.name)
+        val aggregate = blocks[1] as HealthBlock.Aggregate
+        assertEquals(HealthBand.NOMINAL, aggregate.value?.band)
+        assertEquals(
+            listOf("Battery age", "Fan age", "Case age"),
+            blocks.filterIsInstance<HealthBlock.Subject>().map { it.health.subject.name },
+        )
+        assertEquals(HealthBlock.Footer, blocks.last())
+        val words = state.healthWords()
+        assertTrue(words.first().startsWith("Critical: Battery age "))
+        assertEquals("S107 closes the section", HEALTH_FOOTER, words.last())
+        assertTrue("the replacement's age is S99", words.contains("Replaced 2026-01-15, 90 days ago"))
+    }
+
+    /**
+     * Inv. 119, spec §6.5 "at any depth": a DOWN grandchild and a DEGRADED child come **first**, DOWN
+     * before DEGRADED, before the aggregate — here NOT TRACKED, as the asset has no subject. Each
+     * component row also carries its own condition badge.
+     */
+    @Test fun downComponentsAtAnyDepthComeFirst() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.assets.upsert(assetRow("eng", name = "Engine", parent = "gen"))
+        graph.conditions.insert(conditionRow("c1", "eng", OperationalCondition.OPERATIONAL, "2026-01-01"))
+        graph.assets.upsert(assetRow("pack", name = "Battery pack", parent = "eng"))
+        graph.conditions.insert(conditionRow("c2", "pack", OperationalCondition.DOWN, "2026-01-02", reason = "Won't hold charge"))
+        graph.assets.upsert(assetRow("fan", name = "Fan", parent = "gen"))
+        graph.conditions.insert(conditionRow("c3", "fan", OperationalCondition.DEGRADED, "2026-01-03"))
+
+        val state = loaded("gen")
+
+        assertEquals(
+            listOf("Battery pack DOWN — Won't hold charge", "Fan DEGRADED — No reason given", NOT_TRACKED, HEALTH_FOOTER),
+            state.healthWords(),
+        )
+        assertEquals(
+            mapOf("Engine" to OperationalCondition.OPERATIONAL, "Fan" to OperationalCondition.DEGRADED),
+            state.components.associate { it.name to it.condition?.condition },
+        )
+        assertEquals("the grandchild is on its parent's page too", listOf("Battery pack DOWN — Won't hold charge", NOT_TRACKED, HEALTH_FOOTER), loaded("eng").healthWords())
+    }
+
+    /**
+     * Inv. 118: a subject with no value and an aggregate with no contributor are S98, never a number
+     * — least of all 100. Every subject archived leaves S98 and S107 and no subject line.
+     */
+    @Test fun untrackedSubjectsAndAggregatesAreS98() = runTest {
+        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        graph.healthSubjects.upsert(subjectRow("h1", "ups", name = "Battery age"))
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.healthSubjects.upsert(subjectRow("h2", "gen", name = "Belt age", archivedAt = 5L))
+
+        assertEquals(
+            listOf(NOT_TRACKED, "Battery age", NOT_TRACKED, "No replacement recorded yet", HEALTH_FOOTER),
+            loaded("ups").healthWords(),
+        )
+        assertEquals(listOf(NOT_TRACKED, HEALTH_FOOTER), loaded("gen").healthWords())
+    }
+
+    /**
+     * Spec §6.5: a TRACK_ONE whose subject is gone falls back to WORST and says so with S138 under
+     * the aggregate — and only then: with nothing to score there is no worst subject to show, so the
+     * aggregate is S98 and S138 is absent, as it is on an ordinary WORST asset.
+     */
+    @Test fun theFallbackShowsS138() = runTest {
+        graph.today = LocalDate.parse("2026-04-15")
+        graph.assets.upsert(assetRow("ups", name = "UPS", aggregation = HealthAggregation.TRACK_ONE, primary = "h-gone"))
+        graph.events.upsert(replacementOf("e1", "ups", "2026-01-15"))
+        graph.healthSubjects.upsert(subjectRow("h1", "ups", name = "Battery age"))
+        graph.assets.upsert(assetRow("gen", name = "Generator", aggregation = HealthAggregation.TRACK_ONE, primary = "h-gone"))
+        graph.healthSubjects.upsert(subjectRow("h2", "gen", name = "Belt age"))
+        graph.assets.upsert(assetRow("fan", name = "Fan"))
+        graph.events.upsert(replacementOf("e2", "fan", "2026-01-15"))
+        graph.healthSubjects.upsert(subjectRow("h3", "fan", name = "Blade age"))
+
+        val fellBack = loaded("ups").healthBlocks
+        assertEquals(HealthBlock.Fallback, fellBack[fellBack.indexOfFirst { it is HealthBlock.Aggregate } + 1])
+        assertTrue(loaded("ups").healthWords().contains(FALLBACK_TO_WORST))
+
+        val nothingToShow = loaded("gen").healthWords()
+        assertEquals(listOf(NOT_TRACKED, "Belt age", NOT_TRACKED, "No replacement recorded yet", HEALTH_FOOTER), nothingToShow)
+        assertFalse(loaded("fan").healthWords().contains(FALLBACK_TO_WORST))
     }
 }
