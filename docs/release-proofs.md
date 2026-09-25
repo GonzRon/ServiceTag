@@ -69,6 +69,7 @@ Each prints nothing, or the count stated.
 - empty bodies: `git log --format=%b <base>..HEAD | grep -c .` → 0
 - the shared library's pin: `bash tools/check-submodule-pin.sh` → `submodule pin ok`
 - no Kotlin `assert` in connected tests, beside the retired-token tripwire below: `grep -rnE '(^|[^.[:alnum:]_])assert\(' app/src/androidTest` → no output (ART runs with assertions disabled, so `assert(` there checks nothing in any release; use `assertTrue`/`assertEquals` or `check`. The pattern also catches an inline `runOnIdle { assert(` and leaves Compose's `.assert(` alone)
+- lint: `./gradlew :app:lintDebug` → 0 errors, nothing suppressed (a real error is a real finding; 1.4's gate found an API-26 crash this way)
 
 ## R7 in full
 
