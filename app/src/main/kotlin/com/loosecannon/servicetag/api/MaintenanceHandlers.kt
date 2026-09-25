@@ -166,7 +166,7 @@ internal class MaintenanceHandlers(
     /** Either form; a create has nothing to unlink, so the action flag is an unknown field here. */
     suspend fun createSchedule(request: ApiRequest): ApiResponse {
         val parsed = ScheduleForms.read(request, stored = null, acceptsFlags = false)
-        val saved = saveSchedule.run(null, parsed.body.toCommand(parsed.form))
+        val saved = saveSchedule.run(null, parsed.body.toCommand(parsed.form, creating = true))
         return createdResponse(ScheduleResponse.serializer(), ScheduleResponse(saved.rowResponse()))
     }
 
@@ -179,7 +179,7 @@ internal class MaintenanceHandlers(
      */
     suspend fun updateSchedule(id: String, request: ApiRequest): ApiResponse {
         val parsed = ScheduleForms.read(request, schedules.get(ScheduleId(id)), acceptsFlags = true)
-        val saved = saveSchedule.run(ScheduleId(id), parsed.body.toCommand(parsed.form), parsed.unlinkHealthSubject)
+        val saved = saveSchedule.run(ScheduleId(id), parsed.body.toCommand(parsed.form, creating = false), parsed.unlinkHealthSubject)
         return ok(ScheduleResponse.serializer(), ScheduleResponse(saved.rowResponse()))
     }
 

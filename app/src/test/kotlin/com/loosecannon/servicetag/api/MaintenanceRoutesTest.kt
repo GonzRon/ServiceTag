@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.ServicePolicy
@@ -635,9 +636,12 @@ class MaintenanceRoutesTest {
         val stored = runBlocking { graph.schedules.get(ScheduleId(id))!! }
 
         graph.now = dayMillis("2026-02-05")
+        // 1.4.1 (#80): the create stored the editor's LOCAL row, and a PATCH is a full replace, so the
+        // echo carries the row's providers as a client echoing the row does.
         val echoed = legacy.replace(
             """"seasonBehavior":"FOLLOW_ASSET"}""",
-            """"seasonBehavior":"FOLLOW_ASSET","seasonReentry":"AT_START","seasonReentryOffsetDays":0}""",
+            """"seasonBehavior":"FOLLOW_ASSET","seasonReentry":"AT_START","seasonReentryOffsetDays":0,
+               "providers":[{"provider":"LOCAL","enabled":true}]}""",
         )
         val patched = call("PATCH", "/v1/schedules/$id", echoed)
         assertEquals(patched.text(), 200, patched.status)
@@ -1514,5 +1518,88 @@ class MaintenanceRoutesTest {
         } finally {
             donor.close()
         }
+    }
+
+    // --- 1.4.1 (#80, R4): the create default, and PATCH left exactly as it was -----------------
+
+    private val localOn = ScheduleProviderRow("LOCAL", enabled = true)
+    private val localOff = ScheduleProviderRow("LOCAL", enabled = false)
+
+    /** A monthly schedule on [assetId] with [extra] (a leading comma and keys) spliced into the body. */
+    private fun scheduleBody(assetId: String, extra: String = "", title: String = "Filter change"): String =
+        """{"title":"$title","targetAssetId":"$assetId","timeInterval":1,"timeUnit":"MONTH","anchorOn":"2026-02-01"$extra}"""
+
+    /** The stored row's provider set, read from the repository rather than the response. */
+    private fun storedProviders(id: String): List<ScheduleProviderRow> =
+        runBlocking { graph.schedules.get(ScheduleId(id))!!.providers }
+
+    private fun created(body: String): String {
+        val response = call("POST", "/v1/schedules", body)
+        assertEquals(response.text(), 201, response.status)
+        return scheduleIn(response).id
+    }
+
+    /**
+     * #80 AC 1–2: a create that omits `providers` stores what the app's editor stores — one LOCAL
+     * row enabled exactly when reminders are — for both values and for `remindersEnabled`'s own
+     * default.
+     */
+    @Test fun createWithoutProvidersStoresLocalFromRemindersEnabled() {
+        val asset = createAsset("Hot tub")
+        assertEquals(listOf(localOn), storedProviders(created(scheduleBody(asset, title = "Default"))))
+        assertEquals(listOf(localOn), storedProviders(created(scheduleBody(asset, ""","remindersEnabled":true""", "On"))))
+        assertEquals(listOf(localOff), storedProviders(created(scheduleBody(asset, ""","remindersEnabled":false""", "Off"))))
+    }
+
+    /** The decoder cannot tell an absent key from a `null` on a create, and a create need not: same row. */
+    @Test fun createWithNullProvidersDoesTheSame() {
+        val asset = createAsset("Hot tub")
+        assertEquals(listOf(localOn), storedProviders(created(scheduleBody(asset, ""","providers":null""", "On"))))
+        assertEquals(
+            listOf(localOff),
+            storedProviders(created(scheduleBody(asset, ""","remindersEnabled":false,"providers":null""", "Off"))),
+        )
+    }
+
+    /** #80 AC 3: an explicit empty list is the one way to store no provider, and it is kept. */
+    @Test fun createWithEmptyProvidersStoresNone() {
+        val asset = createAsset("Hot tub")
+        assertEquals(emptyList<ScheduleProviderRow>(), storedProviders(created(scheduleBody(asset, ""","providers":[]"""))))
+    }
+
+    /** An explicit list is stored as sent and validated as today: an unknown name is still refused. */
+    @Test fun createWithAListKeepsIt() {
+        val asset = createAsset("Hot tub")
+        assertEquals(
+            listOf(localOff),
+            storedProviders(created(scheduleBody(asset, ""","providers":[{"provider":"LOCAL","enabled":false}]"""))),
+        )
+        val unknown = call("POST", "/v1/schedules", scheduleBody(asset, ""","providers":[{"provider":"ALMANAC"}]""", "Unknown"))
+        assertEquals(422, unknown.status)
+        assertEquals("UNKNOWN_PROVIDER", unknown.code())
+    }
+
+    /** R4: a PATCH is a full replace, so an omitted `providers` still replaces the set with none. */
+    @Test fun patchWithoutProvidersStillReplacesWithNone() {
+        val asset = createAsset("Hot tub")
+        val id = created(scheduleBody(asset, ""","providers":[{"provider":"LOCAL","enabled":true}]"""))
+        assertEquals(listOf(localOn), storedProviders(id))
+
+        val patched = call("PATCH", "/v1/schedules/$id", scheduleBody(asset))
+        assertEquals(patched.text(), 200, patched.status)
+        assertEquals(emptyList<ScheduleProviderRow>(), storedProviders(id))
+    }
+
+    /** R4 and Q2: a PATCH naming `providers` as `null` is refused as it was before 1.4.1, and writes nothing. */
+    @Test fun patchWithNullProvidersIsStillA400() {
+        val asset = createAsset("Hot tub")
+        val id = created(scheduleBody(asset, ""","providers":[{"provider":"LOCAL","enabled":true}]"""))
+        val before = runBlocking { graph.schedules.get(ScheduleId(id)) }
+
+        val refused = call("PATCH", "/v1/schedules/$id", scheduleBody(asset, ""","providers":null""", "Renamed"))
+        assertEquals(refused.text(), 400, refused.status)
+        assertEquals("bad_request", refused.code())
+        assertTrue(refused.text(), "providers" in refused.errorDetail().message)
+        assertEquals(before, runBlocking { graph.schedules.get(ScheduleId(id)) })
     }
 }
