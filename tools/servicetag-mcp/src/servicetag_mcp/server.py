@@ -1024,7 +1024,8 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a format-5 `ServiceTag-data-*.zip`. The phone decides, per row, whether
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–8 (format 8, from ServiceTag
+    1.4.0, adds season activations, conditions and health subjects). The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
     only ever inserted: an id already on the phone is never overwritten and nothing is ever deleted.
@@ -1032,7 +1033,12 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     This tool asks for the plan and then applies it **only when the plan has no conflicts**. With
     `plan_only=True`, or when the plan does have conflicts, it stops and returns the plan — whose
     `conflicts` list names each one by table, id and a stable reason code, in a deterministic order.
-    Read `applicable` to know which happened.
+    Read `applicable` to know which happened. The report tallies `{insert, identical, conflict,
+    skipped}` for each of fourteen tables.
+
+    The plan writes nothing, so it is asked of any app. The apply is a write: against an app below
+    schema 8 (older than ServiceTag 1.4.0) it is refused after the plan with `APP_SCHEMA_TOO_OLD`
+    and nothing is sent, while `plan_only=True` still answers.
 
     Attachment rows are written only when their bytes are already in the phone's attachment folder,
     and skipped otherwise, so a merge can never leave a row pointing at a file that is not there.
@@ -1342,7 +1348,11 @@ def create_schedule(
     maintenance break, and moves only the time side's date: `service_policy` is `CONTINUOUS` (the
     default — whenever it is due), `IN_SERVICE_AT_START` (`policy_offset_days` 0–365 after the season
     starts; omitted is 0), `IN_SERVICE_RESUME_CLAMPED` (no offset) or `PRE_SERVICE`
-    (`policy_offset_days` −365 to −1, required — nothing suggests one).
+    (`policy_offset_days` −365 to −1, required — nothing suggests one). An offset outside its
+    policy's range is `POLICY_OFFSET_INVALID`. `PRE_SERVICE` needs a time rule (on a meter-only
+    schedule it, or a non-zero offset, is `SEASON_POLICY_NEEDS_A_TIME_RULE`) and an asset with a
+    calendar season or a maintenance break to count back from (409 `PRE_SERVICE_NEEDS_DATES` — the
+    remedy is the asset).
 
     **Deprecated arguments.** `season_behavior` (`IGNORE`｜`FOLLOW_ASSET`), `season_reentry` and
     `season_reentry_offset_days` are 1.3's season fields, still accepted. Any one of them makes this
@@ -1496,12 +1506,22 @@ def update_schedule(
     supplying the new one alone would submit both and be refused. Pass the new target and
     `clear_fields` the old one in the same call.
 
+    **Changing the policy may take two arguments too.** The overlay keeps the row's
+    `policyOffsetDays`, and each policy takes only its own range (`IN_SERVICE_AT_START` 0–365,
+    `PRE_SERVICE` −365 to −1, the other two none). So moving a schedule that has an offset to a
+    policy that does not take it — `IN_SERVICE_AT_START` 5 to `CONTINUOUS`, `PRE_SERVICE` −14 to
+    anything else — needs the new `policy_offset_days`, or `clear_fields=["policy_offset_days"]`, in
+    the same call; `service_policy` alone is refused as `POLICY_OFFSET_INVALID`. `PRE_SERVICE` needs
+    a time rule (`SEASON_POLICY_NEEDS_A_TIME_RULE`) and an asset with a calendar season or a
+    maintenance break to count back from (409 `PRE_SERVICE_NEEDS_DATES` — the remedy is the asset).
+
     **What an edit does beyond the fields.** A rule change clears any postponement, **abandons an
     open partially complete group round** — the member completions already recorded stay as truthful
     history and the edited rule opens the next round — and moves a never-terminated schedule's due
     date to the first series date on or after today, so re-anchoring an old schedule does not pin it
-    immediately overdue. Pausing, archiving and postponing are **not** here: each is its own tool,
-    so an edit can never quietly do one of them.
+    immediately overdue. **A policy change is not a rule change**: changing only `service_policy` or
+    `policy_offset_days` does none of that. Pausing, archiving and postponing are **not** here: each
+    is its own tool, so an edit can never quietly do one of them.
     """
     arguments = _arguments(locals(), besides=("schedule_id", "clear_fields", "unlink_health_subject"))
     to_clear = _validate_clear_fields(clear_fields, _SCHEDULE_CLEARABLE_FIELDS, arguments)
@@ -1705,9 +1725,11 @@ def list_due() -> dict[str, Any]:
     appear.
 
     1.4: each item also carries `actionableDueOn` (the day the work is actionable under its service
-    policy, season and break), `policyReason` and `quiet`, and `status` may be `DEFERRED` — work the
-    policy holds back, which never notifies and sits in its own Deferred section after the current
-    items. The order and `rank` follow `actionableDueOn`. Asset-level condition and age-driven health
+    policy, season and break), `policyReason` and `quiet`, and `status` may be `DEFERRED`: a time
+    side the maintenance break is holding — inside its own lead, before its actionable date, with the
+    meter side (if any) not due. It never counts as due and never notifies, and it sits in its own
+    Deferred section after the current items. Work held because its asset is out of season is
+    `INACTIVE_SEASON`, not `DEFERRED`. The order and `rank` follow `actionableDueOn`. Asset-level condition and age-driven health
     rows are not here: they are `list_attention`.
     """
     return _call("GET", "/v1/due")

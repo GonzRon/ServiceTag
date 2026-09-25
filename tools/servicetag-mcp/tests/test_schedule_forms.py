@@ -130,6 +130,42 @@ def test_new_arguments_send_the_14_form(paired) -> None:
         assert key not in body, key
 
 
+def test_changing_the_policy_away_from_an_offset_takes_both_arguments(paired) -> None:
+    """The overlay keeps the row's offset, so `service_policy` alone on an `IN_SERVICE_AT_START` 5
+    schedule sends that 5 along — which the app refuses for `CONTINUOUS` — and the documented call is
+    the policy plus `clear_fields=["policy_offset_days"]`: the 1.4 form with an explicit `null`."""
+    paired.reply("GET", "/v1/schedules/s1", 200, schedule_row(**AT_START_5))
+    paired.reply(
+        "PATCH", "/v1/schedules/s1", 422,
+        _refusal("POLICY_OFFSET_INVALID", "CONTINUOUS takes no offset"),
+    )
+    with pytest.raises(ToolError, match="POLICY_OFFSET_INVALID"):
+        server_module.update_schedule(schedule_id="s1", service_policy="CONTINUOUS")
+    one_argument = body_of(paired.last())
+    assert (one_argument["servicePolicy"], one_argument["policyOffsetDays"]) == ("CONTINUOUS", 5)
+
+    paired.reply("PATCH", "/v1/schedules/s1", 200, schedule_row())
+    server_module.update_schedule(
+        schedule_id="s1", service_policy="CONTINUOUS", clear_fields=["policy_offset_days"],
+    )
+    body = body_of(paired.last())
+    assert body["servicePolicy"] == "CONTINUOUS"
+    assert "policyOffsetDays" in body and body["policyOffsetDays"] is None
+    for key in LEGACY_KEYS:
+        assert key not in body, key
+
+
+def test_the_policy_docstring_says_it_may_take_two_arguments_and_is_not_a_rule_change() -> None:
+    doc = " ".join((server_module.update_schedule.__doc__ or "").split())
+    assert "Changing the policy may take two arguments" in doc
+    assert "A policy change is not a rule change" in doc
+    for code in ("POLICY_OFFSET_INVALID", "SEASON_POLICY_NEEDS_A_TIME_RULE", "PRE_SERVICE_NEEDS_DATES"):
+        assert code in doc, code
+    create_doc = server_module.create_schedule.__doc__ or ""
+    for code in ("POLICY_OFFSET_INVALID", "SEASON_POLICY_NEEDS_A_TIME_RULE", "PRE_SERVICE_NEEDS_DATES"):
+        assert code in create_doc, code
+
+
 def test_a_create_with_neither_form_sends_neither_key(paired) -> None:
     """Which the app reads as the legacy form with `seasonBehavior` IGNORE → `CONTINUOUS`, the same
     answer as the 1.4 default."""

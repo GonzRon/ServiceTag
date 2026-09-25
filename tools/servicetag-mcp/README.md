@@ -114,6 +114,14 @@ health subject, or writes a health value; a subject leaves only by `archive_heal
   included — is refused **here, before any request**, as a `ToolError` carrying
   `LEGACY_AND_CURRENT_FIELDS_MIXED`.
 
+**Changing the policy may take two arguments**, as moving the target does. `update_schedule` keeps
+the row's `policyOffsetDays`, and each policy takes only its own range, so moving a schedule that has
+an offset to a policy that does not take it (`IN_SERVICE_AT_START` 5 to `CONTINUOUS`, say) needs the
+new `policy_offset_days` or `clear_fields=["policy_offset_days"]` in the same call — `service_policy`
+alone is refused as `POLICY_OFFSET_INVALID`. A policy change is **not a rule change**: it clears no
+postponement and abandons no round. `PRE_SERVICE` needs a time rule and an asset with a calendar
+season or a maintenance break to count back from (`PRE_SERVICE_NEEDS_DATES`).
+
 `update_schedule` and `archive_schedule` also take `unlink_health_subject=True`, the API's action
 flag: while a live health subject is driven by the schedule, an edit that takes away its time rule or
 moves it, or archiving it, is refused as `SCHEDULE_DRIVES_HEALTH_SUBJECT` unless the flag is set.
