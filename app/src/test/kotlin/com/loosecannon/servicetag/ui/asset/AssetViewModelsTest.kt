@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
@@ -86,7 +87,7 @@ class AssetViewModelsTest {
      * a ViewModel left mid-load outlives the test that made it and then meets a closed database.
      */
     private suspend fun editModel(id: AssetId? = null, parentId: String? = null): AssetEditViewModel {
-        val model = AssetEditViewModel(graph.assets, graph.createAsset, graph.updateAsset, id, parentId)
+        val model = AssetEditViewModel(graph.assets, graph.healthSubjects, graph.saveAssetSettings, id, parentId)
         model.state.first { it.parentChoices.isNotEmpty() }
         return model
     }
@@ -473,34 +474,37 @@ class AssetViewModelsTest {
         assertEquals(root.id, graph.assets.all().single { it.name == "Starter battery" }.parentAssetId)
     }
 
-    /** Year-round is the absence of a window (spec §6), so the switch is what clears both dates. */
-    @Test fun seasonYearRoundClearsBoth() = runTest {
+    /**
+     * 1.4: "Same dates every year" is where a window lives; "Year-round" sends none. The typed dates
+     * stay in the form but are sent only under S30, so going back to Year-round clears the stored pair.
+     */
+    @Test fun calendarSendsTheWindowAndYearRoundSendsNone() = runTest {
         val vm = editModel()
         vm.onName("Snowblower")
-        assertTrue(vm.state.value.seasonYearRound)
+        assertEquals(SeasonMode.YEAR_ROUND, vm.state.value.seasonMode)
 
-        vm.onSeasonYearRound(false)
+        vm.onSeasonMode(SeasonMode.CALENDAR)
         vm.onSeasonStart("11-01")
         vm.onSeasonEnd("03-31")
         vm.save()
         vm.state.first { !it.saving }
 
         val stored = graph.assets.all().single()
+        assertEquals(SeasonMode.CALENDAR, stored.seasonMode)
         assertEquals("11-01", stored.seasonStartMmdd)
         assertEquals("03-31", stored.seasonEndMmdd)
 
         val edit = editModel(stored.id)
         val loaded = edit.state.first { it.name == "Snowblower" }
-        assertFalse(loaded.seasonYearRound)
+        assertEquals(SeasonMode.CALENDAR, loaded.seasonMode)
         assertEquals("11-01", loaded.seasonStart)
 
-        edit.onSeasonYearRound(true)
-        assertEquals("", edit.state.value.seasonStart)
-        assertEquals("", edit.state.value.seasonEnd)
+        edit.onSeasonMode(SeasonMode.YEAR_ROUND)
         edit.save()
         edit.state.first { !it.saving }
 
         val cleared = graph.assets.all().single()
+        assertEquals(SeasonMode.YEAR_ROUND, cleared.seasonMode)
         assertEquals(null, cleared.seasonStartMmdd)
         assertEquals(null, cleared.seasonEndMmdd)
     }
@@ -543,7 +547,7 @@ class AssetViewModelsTest {
         vm.onSerialNumber("SN-90210")
         vm.onDescription("Six seats, two pumps")
         vm.onLocation("Back deck")
-        vm.onSeasonYearRound(false)
+        vm.onSeasonMode(SeasonMode.CALENDAR)
         vm.onSeasonStart("05-01")
         vm.onSeasonEnd("09-30")
         vm.onPurchaseOn("2026-04-01")
@@ -637,9 +641,6 @@ class AssetViewModelsTest {
         vm.onPurchaseOn("nope")
         vm.onInServiceOn("2026-02-30")
         vm.onWarrantyExpiresOn("later")
-        vm.onSeasonYearRound(false)
-        vm.onSeasonStart("13-40")
-        vm.onSeasonEnd("02-30")
         vm.save()
 
         val marked = vm.state.first { !it.saving }.problems
@@ -647,8 +648,6 @@ class AssetViewModelsTest {
         assertEquals("Enter a date as YYYY-MM-DD", marked[AssetField.PURCHASE_ON])
         assertEquals("Enter a date as YYYY-MM-DD", marked[AssetField.IN_SERVICE_ON])
         assertEquals("Enter a date as YYYY-MM-DD", marked[AssetField.WARRANTY_EXPIRES_ON])
-        assertEquals("Not a real month and day", marked[AssetField.SEASON_START])
-        assertEquals("Not a real month and day", marked[AssetField.SEASON_END])
         assertTrue(graph.assets.all().isEmpty())
 
         vm.onPurchaseOn("2026-04-01")
@@ -681,16 +680,6 @@ class AssetViewModelsTest {
             priced.state.first { !it.saving }.problems[AssetField.PRICE],
         )
         assertTrue(graph.assets.all().isEmpty())
-
-        // Both-or-neither is about the pair, so it lands on the pair and not on either date.
-        val season = editModel()
-        season.onName("Mower")
-        season.onSeasonYearRound(false)
-        season.onSeasonStart("05-01")
-        season.save()
-        val pair = season.state.first { !it.saving }.problems
-        assertEquals("Set both season dates or neither", pair[AssetField.SEASON])
-        assertEquals(null, pair[AssetField.SEASON_START])
     }
 
     /**

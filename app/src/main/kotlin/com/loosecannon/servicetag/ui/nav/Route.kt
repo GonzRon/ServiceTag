@@ -19,6 +19,13 @@ sealed interface Route : NavKey {
      */
     @Serializable data class AssetEdit(val id: String?, val parentId: String? = null) : Route
 
+    /**
+     * 1.4 (B10) — one health subject of [assetId]: new when [subjectId] is null, otherwise that subject,
+     * whose own asset always wins (a subject never changes asset). Opened by the asset editor's "Add
+     * health subject" and its subject rows, and by B14's on asset detail.
+     */
+    @Serializable data class HealthSubjectEdit(val assetId: String, val subjectId: String? = null) : Route
+
     /** What this asset measures and what can be logged against it — the editors of spec §9. */
     @Serializable data class AssetSetup(val assetId: String) : Route
 

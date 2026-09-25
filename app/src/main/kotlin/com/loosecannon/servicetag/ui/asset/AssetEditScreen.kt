@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.asset
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -21,11 +24,13 @@ import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -42,15 +47,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.journal.CategorySuggestions
 import com.loosecannon.servicetag.core.journal.SeedTemplates
+import com.loosecannon.servicetag.core.model.HealthAggregation
+import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.di.AppGraph
-import com.loosecannon.servicetag.ui.components.ServiceTagIcons
+import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.components.ServiceTagIcons
+import com.loosecannon.servicetag.ui.health.RESTORE_SUBJECT
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.MonoText
@@ -58,6 +69,99 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.Locale
+
+// The asset editor's season, break and health words (spec §10.7), RATIFIED, each by its S-number and
+// verbatim. S132 is one ratified set of words, split only at its "·" separators.
+
+/** S28, asset editor section. */
+const val OPERATING_SEASON = "Operating season"
+
+/** S29, mode (re). */
+const val YEAR_ROUND = "Year-round"
+
+/** S30, mode. */
+const val SAME_DATES_EVERY_YEAR = "Same dates every year"
+
+/** S31, mode. */
+const val STARTED_AND_ENDED_BY_HAND = "Started and ended by hand"
+
+/** S32, field (re). */
+const val SEASON_STARTS = "Season starts"
+
+/** S33, field (re). */
+const val SEASON_ENDS = "Season ends"
+
+/** S34, helper under S32 and S33. */
+const val SEASON_MAY_RUN_ACROSS_THE_NEW_YEAR =
+    "The season may run across the new year, for example from October to April."
+
+/** S35, the switch question: asked only on a switch into S31, with no default. */
+const val IS_THIS_ASSET_IN_SEASON = "Is this asset in season right now?"
+
+/** S36, option. */
+const val IN_SEASON_NOW = "In season"
+
+/** S37, option (re). */
+const val OUT_OF_SEASON_NOW = "Out of season"
+
+/** S38, helper under S31. */
+const val YOU_START_AND_END_THE_SEASON =
+    "You start and end the season yourself. Maintenance set to follow the season waits while it is ended."
+
+/** S55, refusal; `<titles>` is the stranded schedules' titles — see [seasonStrands]. */
+const val SEASON_STRANDS_PRE_SERVICE =
+    "Some maintenance on this asset is set to be ready before its season. Change it first: <titles>."
+
+/** S58, asset editor section. */
+const val MAINTENANCE_BREAK = "Maintenance break"
+
+/** S59, toggle: off unless a break is stored. */
+const val NO_ROUTINE_MAINTENANCE_BETWEEN_TWO_DATES = "No routine maintenance between two dates"
+
+/** S60, field. */
+const val BREAK_STARTS = "Break starts"
+
+/** S61, field. */
+const val BREAK_ENDS = "Break ends"
+
+/** S62, helper under S60 and S61. */
+const val BREAK_HELPER =
+    "Maintenance set to follow the season, or to be ready before it, does not become due during the break. " +
+        "Work already overdue stays overdue, without reminders."
+
+/** S63, refusal: `BLACKOUT_COVERS_THE_YEAR`. */
+const val BREAK_CANNOT_COVER_THE_YEAR = "The break cannot cover the whole year."
+
+/** S64, refusal; `<titles>` is the stranded schedules' titles — see [breakStrands]. */
+const val BREAK_STRANDS_PRE_SERVICE =
+    "Some maintenance on this asset is set to be ready before the break. Change it first: <titles>."
+
+/** S111, section. */
+const val HEALTH_SUBJECTS = "Health subjects"
+
+/** S112, action: opens the health subject editor for this asset (B14's asset detail uses it too). */
+const val ADD_HEALTH_SUBJECT = "Add health subject"
+
+/** S131, field. */
+const val COMBINE_HEALTH_BY = "Combine health by"
+
+/** S132, options, one ratified set: split only at its "·" separators, in its own order. */
+const val COMBINE_HEALTH_OPTIONS = "Worst subject · One subject · Average · Weighted average"
+
+/** S134, field under "One subject". */
+const val WHICH_SUBJECT = "Which subject?"
+
+/** S132's four words, each with the aggregation it names, in the ratified order. */
+internal val COMBINE_CHOICES: List<Pair<HealthAggregation, String>> =
+    listOf(
+        HealthAggregation.WORST,
+        HealthAggregation.TRACK_ONE,
+        HealthAggregation.AVERAGE,
+        HealthAggregation.WEIGHTED,
+    ).zip(ratifiedParts(COMBINE_HEALTH_OPTIONS))
+
+/** One ratified set of words, split only at its "·" separators (spec §10.7). */
+internal fun ratifiedParts(words: String): List<String> = words.split(" · ")
 
 /**
  * Create ([assetId] null) or edit one asset: the grouped form of spec §9 — IDENTITY, PLACEMENT,
@@ -68,6 +172,13 @@ import java.util.Locale
  * parent's screen makes a child. Every rule belongs to the use cases; the screen only draws what
  * they refused — a line under each bad field, and the refused reparent on the snackbar, because
  * "that asset is inside this one" is about a pair and not about any single input.
+ *
+ * **1.4 (B10):** "Operating season" replaces 1.2's single year-round switch, "Maintenance break" is
+ * never prefilled, and an existing asset lists its "Health subjects" — [onAddSubject] and
+ * [onOpenSubject] open the health subject editor — and asks how to "Combine health by". All of it is
+ * one save. Save is held, in the app bar and at the foot, while an answer the owner must give is
+ * missing; the fields that hold it carry an asterisk, and no sentence is drawn for it (master dec. 46).
+ * Leaving without Save writes nothing: opening a subject writes nothing either.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,6 +188,8 @@ fun AssetEditScreen(
     onDone: (String) -> Unit,
     onBack: () -> Unit,
     parentId: String? = null,
+    onAddSubject: (assetId: String) -> Unit = {},
+    onOpenSubject: (assetId: String, subjectId: String) -> Unit = { _, _ -> },
 ) {
     // The key carries the parent as well as the id: "+ Add component" on two different parents
     // must not share one half-filled form, and neither must a plain "Add asset" and a component.
@@ -101,7 +214,7 @@ fun AssetEditScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = model::save, enabled = !state.saving) { Text("Save") }
+                    TextButton(onClick = model::save, enabled = state.canSave) { Text("Save") }
                 },
             )
         },
@@ -115,6 +228,18 @@ fun AssetEditScreen(
         ) {
             IdentityBlock(state, model)
             PlacementBlock(state, model)
+            OperatingSeasonBlock(state, model)
+            MaintenanceBreakBlock(state, model)
+            // A subject needs its asset's id, so a new asset gains subjects after its first save
+            // (master dec. 39).
+            if (state.editing && assetId != null) {
+                HealthBlock(
+                    state = state,
+                    model = model,
+                    onAddSubject = { onAddSubject(assetId) },
+                    onOpenSubject = { subjectId -> onOpenSubject(assetId, subjectId) },
+                )
+            }
             PurchaseBlock(state, model)
             WarrantyBlock(state, model)
 
@@ -133,7 +258,7 @@ fun AssetEditScreen(
             }
             Button(
                 onClick = model::save,
-                enabled = !state.saving,
+                enabled = state.canSave,
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -160,7 +285,7 @@ private fun IdentityBlock(state: AssetEditState, model: AssetEditViewModel) {
     FormField(value = state.description, onValueChange = model::onDescription, label = "Description")
 }
 
-/** Where it is, what it is part of, and when it is in use at all (spec §5, §6). */
+/** Where it is and what it is part of (spec §5). When it is in use is "Operating season", below. */
 @Composable
 private fun PlacementBlock(state: AssetEditState, model: AssetEditViewModel) {
     SectionHeader(title = "Placement")
@@ -172,7 +297,137 @@ private fun PlacementBlock(state: AssetEditState, model: AssetEditViewModel) {
         onSelect = model::onParent,
         problem = state.problems[AssetField.PARENT],
     )
-    SeasonField(state, model)
+}
+
+/**
+ * S28 and its three answers (spec §3.1, §10.4), each chosen answer's own fields under it: S32 and S33
+ * with S34 under S30; S38 under S31, and S35 with S36 and S37 — **none chosen** — when S31 is a
+ * switch into MANUAL (inv. 92). S55 names the schedules a refused change would strand.
+ */
+@Composable
+private fun OperatingSeasonBlock(state: AssetEditState, model: AssetEditViewModel) {
+    SentenceSectionHeader(OPERATING_SEASON)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        ChoiceRow(YEAR_ROUND, state.seasonMode == SeasonMode.YEAR_ROUND) {
+            model.onSeasonMode(SeasonMode.YEAR_ROUND)
+        }
+        ChoiceRow(SAME_DATES_EVERY_YEAR, state.seasonMode == SeasonMode.CALENDAR) {
+            model.onSeasonMode(SeasonMode.CALENDAR)
+        }
+        if (state.seasonMode == SeasonMode.CALENDAR) {
+            Nested {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    MonthDayField(state.seasonStartInput, model::onSeasonStart, Modifier.weight(1f))
+                    MonthDayField(state.seasonEndInput, model::onSeasonEnd, Modifier.weight(1f))
+                }
+                QuietLine(SEASON_MAY_RUN_ACROSS_THE_NEW_YEAR)
+            }
+        }
+        ChoiceRow(STARTED_AND_ENDED_BY_HAND, state.seasonMode == SeasonMode.MANUAL) {
+            model.onSeasonMode(SeasonMode.MANUAL)
+        }
+        if (state.seasonMode == SeasonMode.MANUAL) {
+            Nested {
+                QuietLine(YOU_START_AND_END_THE_SEASON)
+                if (state.asksManualPhase) {
+                    FieldLabel(state.manualQuestionLabel)
+                    ChoiceRow(IN_SEASON_NOW, state.manualPhase == SeasonPhase.IN_SEASON) {
+                        model.onManualPhase(SeasonPhase.IN_SEASON)
+                    }
+                    ChoiceRow(OUT_OF_SEASON_NOW, state.manualPhase == SeasonPhase.OUT_OF_SEASON) {
+                        model.onManualPhase(SeasonPhase.OUT_OF_SEASON)
+                    }
+                }
+            }
+        }
+    }
+    state.seasonRefusal?.let { RefusalLine(it) }
+}
+
+/**
+ * S58: S59, off unless a break is stored; on, S60 and S61 **empty** with S62 under them (inv. 121).
+ * S63 and S64 are drawn under the fields when a save is refused.
+ */
+@Composable
+private fun MaintenanceBreakBlock(state: AssetEditState, model: AssetEditViewModel) {
+    SentenceSectionHeader(MAINTENANCE_BREAK)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(value = state.breakOn, role = Role.Switch, onValueChange = model::onBreak),
+    ) {
+        Text(
+            text = NO_ROUTINE_MAINTENANCE_BETWEEN_TWO_DATES,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = state.breakOn, onCheckedChange = null)
+    }
+    if (state.breakOn) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            MonthDayField(state.breakStartInput, model::onBreakStart, Modifier.weight(1f))
+            MonthDayField(state.breakEndInput, model::onBreakEnd, Modifier.weight(1f))
+        }
+        QuietLine(BREAK_HELPER)
+    }
+    state.breakRefusal?.let { RefusalLine(it) }
+}
+
+/**
+ * S111 and S131, an existing asset only (master dec. 39). The subjects in `sortOrder`, each opening
+ * its editor; an archived one is marked by its S136 action, "Restore subject", which is done in that
+ * editor, so nothing is written from here. S112 opens a new subject. S134 lists the non-archived
+ * subjects alone, so `HEALTH_PRIMARY_INVALID` cannot be reached from this form.
+ */
+@Composable
+private fun HealthBlock(
+    state: AssetEditState,
+    model: AssetEditViewModel,
+    onAddSubject: () -> Unit,
+    onOpenSubject: (String) -> Unit,
+) {
+    SentenceSectionHeader(HEALTH_SUBJECTS)
+    Column {
+        state.subjects.forEach { subject ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenSubject(subject.id) }
+                    .padding(vertical = 12.dp),
+            ) {
+                Text(
+                    text = subject.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                if (subject.archived) {
+                    Text(
+                        text = RESTORE_SUBJECT,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
+        TextButton(onClick = onAddSubject) { Text(ADD_HEALTH_SUBJECT) }
+    }
+
+    FieldLabel(COMBINE_HEALTH_BY)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        COMBINE_CHOICES.forEach { (aggregation, words) ->
+            ChoiceRow(words, state.aggregation == aggregation) { model.onAggregation(aggregation) }
+            if (aggregation == HealthAggregation.TRACK_ONE && state.aggregation == aggregation) {
+                Nested {
+                    FieldLabel(state.primaryQuestionLabel)
+                    state.primaryChoices.forEach { subject ->
+                        ChoiceRow(subject.name, state.primaryId == subject.id) { model.onPrimary(subject.id) }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** What it cost and when it arrived. A price is text until [priceHint]'s currency resolves it. */
@@ -233,51 +488,69 @@ private fun WarrantyBlock(state: AssetEditState, model: AssetEditViewModel) {
 }
 
 /**
- * Year-round is the absence of a window (spec §6), so the switch is the first thing asked and the
- * two month-day fields only exist once it is off. The picker is an ordinary date picker whose year
- * is thrown away: a season has a month and a day and no year at all.
+ * A section heading in [SectionHeader]'s idiom — `labelMedium` on `onSurfaceVariant` over a 1dp rule
+ * — **without** its upper-casing: S28, S58 and S111 are ratified in sentence case, and upper-casing a
+ * ratified string is paraphrasing it. Internal because the health subject editor draws its own the
+ * same way.
  */
 @Composable
-private fun SeasonField(state: AssetEditState, model: AssetEditViewModel) {
+internal fun SentenceSectionHeader(title: String) {
+    Column(modifier = Modifier.padding(top = 18.dp, bottom = 6.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+/** A question or field name over its answers (S35, S131, S134 here; S113, S117 and more in the subject editor). */
+@Composable
+internal fun FieldLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+/**
+ * One answer of a question, as a radio row. The whole row is the control, so its words are its name
+ * and nothing else needs saying; the radio mirrors the row.
+ */
+@Composable
+internal fun ChoiceRow(label: String, selected: Boolean, enabled: Boolean = true, onSelect: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onSelect),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Year-round", style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = "Off means this asset is only in use between two dates each year.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Switch(checked = state.seasonYearRound, onCheckedChange = model::onSeasonYearRound)
+        RadioButton(selected = selected, onClick = null, enabled = enabled)
+        Text(text = label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 12.dp))
     }
-    if (!state.seasonYearRound) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            MonthDayField(
-                value = state.seasonStart,
-                onValueChange = model::onSeasonStart,
-                label = "Season starts",
-                problem = state.problems[AssetField.SEASON_START],
-                modifier = Modifier.weight(1f),
-            )
-            MonthDayField(
-                value = state.seasonEnd,
-                onValueChange = model::onSeasonEnd,
-                label = "Season ends",
-                problem = state.problems[AssetField.SEASON_END],
-                modifier = Modifier.weight(1f),
-            )
-        }
-        val bothOrNeither = state.problems[AssetField.SEASON]
-        if (bothOrNeither != null) {
-            Text(
-                text = bothOrNeither,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
+}
+
+/** A refusal that has ratified words, in the error colour under the section it is about. */
+@Composable
+internal fun RefusalLine(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+    )
+}
+
+/** The fields and helpers under a chosen answer, indented to sit under its words. */
+@Composable
+private fun Nested(content: @Composable () -> Unit) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(start = 36.dp, top = 4.dp, bottom = 8.dp),
+    ) {
+        content()
     }
 }
 
@@ -299,6 +572,8 @@ private fun FormField(
     placeholder: String? = null,
     trailingIcon: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier.fillMaxWidth(),
+    /** The error outline. It follows [problem] unless the caller's state decides it ([MonthDayInput.outlined]). */
+    outlined: Boolean = problem != null,
 ) {
     val supporting = problem ?: hint
     OutlinedTextField(
@@ -306,7 +581,7 @@ private fun FormField(
         onValueChange = onValueChange,
         label = { Text(label) },
         placeholder = if (placeholder == null) null else { { Text(placeholder) } },
-        isError = problem != null,
+        isError = outlined,
         supportingText = if (supporting == null) null else { { Text(supporting) } },
         trailingIcon = trailingIcon,
         singleLine = minLines == 1,
@@ -430,27 +705,29 @@ internal fun DateField(
     }
 }
 
-/** A `MM-DD` boundary: the same calendar, with the year it hands back thrown away (spec §6). */
+/**
+ * A `MM-DD` boundary: the same calendar, with the year it hands back thrown away (spec §6). The
+ * [input] carries its label with the required mark, its outline and its one shipped line.
+ */
 @Composable
 private fun MonthDayField(
-    value: String,
+    input: MonthDayInput,
     onValueChange: (String) -> Unit,
-    label: String,
-    problem: String? = null,
     modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     var picking by remember { mutableStateOf(false) }
     FormField(
-        value = value,
+        value = input.text,
         onValueChange = onValueChange,
-        label = label,
-        problem = problem,
+        label = input.drawnLabel,
+        problem = input.problem,
+        outlined = input.outlined,
         placeholder = "MM-DD",
         mono = true,
         modifier = modifier,
         trailingIcon = {
             IconButton(onClick = { picking = true }) {
-                Icon(ServiceTagIcons.CalendarMonth, contentDescription = "Pick $label")
+                Icon(ServiceTagIcons.CalendarMonth, contentDescription = "Pick ${input.label}")
             }
         },
     )
