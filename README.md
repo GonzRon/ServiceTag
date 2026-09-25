@@ -261,13 +261,14 @@ without ever printing a fingerprint, password or keystore path.
 
 ## Where it is going
 
-The design package under [`docs/design/`](docs/design/README.md) lays out the whole system and the
-phase sequence: assets with a journal of events and typed measurements (Phase 2), provider-neutral
-maintenance schedules with local reminders and a health screen (Phase 3), attachments on a pluggable,
-cloud-agnostic store (Phase 4), an optional Todoist projection (Phase 5), supplies and parts
-(Phase 6). Phases 0, 1A–1C, 2A, 2B-1, 2B-2 and 4A are merged; Phase 3 — schedules, reminders and the
-dashboard sections that depend on them — is next, and begins once the product split completes.
-Progress is tracked in the GitHub issues, one milestone per phase.
+1.4.0 is this release: operating seasons, maintenance service policy and a maintenance break,
+operational condition and derived health, on top of the schedules, reminders, attachments, local
+automation API and share intake that earlier releases shipped. Next comes a shared catalog of parts
+and supplies with stock and reorder readiness (#15), then tracking which parts are installed in which
+assets and what material each maintenance needs (#47), then merging a backup set into an existing
+ServiceTag database (#44). Once those are in, the production phone converges onto the same release
+and data as the development phone. The design package under [`docs/design/`](docs/design/README.md)
+still describes the whole system, and progress is tracked in the GitHub issues.
 
 The 2026 product split is what produced the shape below: it moved the note utility out into NoteTag
 and the NFC mechanism down into the shared `nfc-tag-core` library, leaving ServiceTag to be the
