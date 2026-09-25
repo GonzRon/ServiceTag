@@ -220,6 +220,17 @@ Deferred (not MVP): `MANUAL_STARTUP` — cadence begins only when a `SEASON_STAR
 It can be emulated today: set the schedule's `anchor_on` when logging the startup event (the
 startup profile offers "reset these schedules' anchors").
 
+> **The `MANUAL_STARTUP` deferral above is superseded by the 1.4 spec (2026-09-24; §3.3 activation facts, §4 service policy).**
+> It is kept for the record and is no longer the plan. Manual activation shipped in ServiceTag
+> 1.4.0: an asset's season mode is `YEAR_ROUND`, `CALENDAR` or `MANUAL`, and a `MANUAL` asset's
+> phase is the action of its latest `asset_season_activation` row — immutable `START` and `END`
+> facts, never updated or deleted (spec §3.1, §3.3). A journal event never activates a season:
+> after a `SEASON_START` or `SEASON_END` event the app only *offers* to record the matching fact.
+> No anchor reset is needed for the cadence to follow the startup: each schedule's service policy
+> says when its work falls around the season (spec §4.1), and under `IN_SERVICE_AT_START` a raw
+> due earlier than the recorded `START` plus the offset becomes actionable on that day (spec §4.3,
+> O-5).
+
 Annual season tasks ("winter startup" on Oct 10, "fall storage prep" on Nov 5) are ordinary
 FIXED yearly schedules with `season_behavior = IGNORE`. They **must** ignore the window because
 their dates fall outside it; the schedule editor warns when a FOLLOW_ASSET schedule's anchor lies
@@ -227,6 +238,16 @@ outside the asset's window.
 
 Season boundaries and status are evaluated on `T` only; nothing is stored at "season end". Turning
 a window on or off is a rule edit (§8.6) and triggers `rebuild`.
+
+> **The "nothing is stored at season end" sentence above is superseded by the 1.4 spec (2026-09-24; §3.3 activation facts, §4 service policy).**
+> It is kept for the record and is no longer the rule. A `CALENDAR` season is still evaluated on
+> `T` alone, but a `MANUAL` season's end is stored: it is an `END` row in
+> `asset_season_activation` (spec §3.3). The schedule row no longer carries a season rule of its
+> own — `season_behavior` and the re-entry pair became `service_policy` and `policy_offset_days`
+> (spec §4.1) — and `rebuild` materialises the season's effect as derived state from the asset's
+> season context: `actionable_due_on`, `policy_reason`, `policy_phase` and `quiet` (spec §4.3).
+> A change to an asset's season mode, window or maintenance break recomputes its schedules; a
+> policy edit is not a rule edit and moves no pin (spec §4.3, D-28).
 
 ## 7. The four operations that are not aliases
 
@@ -414,6 +435,17 @@ Oct 10 is outside the window. The editor warns if someone sets it to FOLLOW_ASSE
 
 Pool in Florida: no window on the asset → every schedule behaves as year-round; `FOLLOW_ASSET` is a
 no-op.
+
+> **The 1.4 answer (2026-09-24; spec §4.3, O-5; archaeology Finding A-1).** The table above is
+> what ServiceTag 1.4.0 does; 1.3.0 did not. Until 1.4 the season never reached the due date
+> (Finding A-1): the raw due of Apr 16 stood through the off-season, so on Oct 15 this example read
+> OVERDUE by six months. In 1.4 the schedule is `IN_SERVICE_AT_START` with offset 0 (the legacy
+> mapping of `FOLLOW_ASSET` + `AT_START`, spec §4.1), and AT_START moves a raw date only when it is
+> earlier than the season start plus the offset (O-5): Apr 16 is earlier than Oct 15, so the
+> actionable date is Oct 15 and the example reads **DUE** on the first in-season day, not **OVERDUE**.
+> The raw due stays Apr 16 and remains the occurrence key. By the same rule a raw date later than
+> the start plus the offset is never dragged back, so the deep-clean line's "(AT_START would have
+> said Oct 15)" no longer holds: AT_START keeps Oct 27.
 
 ### 10.5 Recurrence edit
 

@@ -21,8 +21,9 @@ import org.junit.Test
 /**
  * The release's numbers, asserted where they can fail in CI instead of in a review's eyes.
  *
- * 1.3 carries four numbers that have to agree — the `versionName`, the `versionCode`, the Room
- * schema version and the backup format version — and they live in four different files. A schema
+ * A release carries numbers that have to agree — the `versionName`, the `versionCode`, the Room
+ * schema version and the backup format version, which `/v1/status` echoes — and they live in four
+ * different files. A schema
  * bumped in one place and not the other makes an import refuse an archive it could read, or accept
  * one it cannot; a `versionName` that disagrees with the tag makes the release workflow refuse to
  * publish, which is the right failure but a late one. **Change any one of them in one place only
@@ -48,10 +49,10 @@ class VersionAgreementTest {
      * `BuildConfig`, and the tag the release workflow checks the APK against is built from the
      * first of them.
      */
-    @Test fun theReleaseIdentityIs130AndCode15() {
-        assertEquals("1.3.0", BuildConfig.VERSION_NAME)
-        assertEquals(15, BuildConfig.VERSION_CODE)
-        assertEquals("servicetag-v1.3.0", "servicetag-v${BuildConfig.VERSION_NAME}")
+    @Test fun theReleaseIdentityIs140AndCode16() {
+        assertEquals("1.4.0", BuildConfig.VERSION_NAME)
+        assertEquals(16, BuildConfig.VERSION_CODE)
+        assertEquals("servicetag-v1.4.0", "servicetag-v${BuildConfig.VERSION_NAME}")
     }
 
     /**
@@ -129,7 +130,7 @@ class VersionAgreementTest {
         val status = ApiJson.decodeFromString(
             StatusResponse.serializer(), response.body.decodeToString(),
         )
-        assertEquals("1.3.0", status.appVersion)
+        assertEquals("1.4.0", status.appVersion)
         assertEquals(8, status.schemaVersion)
         assertEquals(8, status.backupFormatVersion)
     }
@@ -194,6 +195,53 @@ class VersionAgreementTest {
     }
 
     /**
+     * The 1.4.0 / 16 row. Its reason for being a MINOR is the forward-only rule above, so the row
+     * has to say the three things that make it one: the schema and the format it ships, that the
+     * new app reads every older archive, and that 1.3.x refuses a format-8 one loudly. Anchored at
+     * the start of the row, so a mention of 1.4.0 in prose or in the reservation table never
+     * satisfies it.
+     *
+     * `versionCode` 16 is claimed by this row and by nothing else — a second row or a reservation
+     * naming 16 is how two releases come to claim one number.
+     */
+    @Test fun versioningRecordsThisRelease() {
+        val text = repoFile("docs/versioning.md").readText()
+        val rows = Regex("""^\|\s*1\.4\.0\s*\|\s*16\s*\|.*$""", RegexOption.MULTILINE).findAll(text)
+            .map { it.value }.toList()
+        assertEquals("the supported release history must carry exactly one 1.4.0 / 16 row", 1, rows.size)
+        val row = rows.single()
+        assertTrue(
+            "the row must name the schema and the format it ships",
+            Regex("""schema \*\*8\*\*.*format \*\*8\*\*""").containsMatchIn(row),
+        )
+        assertTrue(
+            "the row must give the forward-only reason it is a MINOR",
+            row.contains("`BackupNewerFormat`") && row.contains("MINOR by the rule above"),
+        )
+        for (capability in listOf(
+            "operating seasons (calendar and manual)",
+            "maintenance service policy and a maintenance break",
+            "operational condition and derived health",
+        )) {
+            assertTrue("the row must name \"$capability\" in the spec's words", row.contains(capability))
+        }
+        assertTrue(
+            "the row must name the contracts",
+            row.contains("`docs/api/v1.md`") &&
+                row.contains("`docs/superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md`"),
+        )
+        assertFalse(
+            "the row's gate counts are measured, so no placeholder ships",
+            row.contains("PLACEHOLDER"),
+        )
+        assertEquals(
+            "no other row, and no reservation, may claim versionCode 16",
+            1,
+            Regex("""^\|[^\n]*\|\s*16\s*\|""", RegexOption.MULTILINE).findAll(text).count(),
+        )
+    }
+
+    /**
      * D5's two corrections. The old `prevDue` reconstruction and the old recurrence-edit answer
      * are **kept** for the record, so the assertion is not that the sentences are gone — it is
      * that each is marked superseded, which is what stops a reader taking either as the rule.
@@ -223,6 +271,47 @@ class VersionAgreementTest {
         assertTrue(
             "the D-16 known limits must be recorded",
             text.contains("ruling D-16's two known limits"),
+        )
+
+        // 1.4: two §6 sentences stated rules the 1.4 spec retired. They stay, marked, so the
+        // assertion is on the marker — anchored, dated, naming the spec's two sections — and on the
+        // old words still being there, never on their absence.
+        val section6 = text.substringAfter("\n## 6. Seasonal activation\n").substringBefore("\n## 7. ")
+        assertTrue(
+            "§6's MANUAL_STARTUP deferral must be kept for the record",
+            section6.contains("Deferred (not MVP): `MANUAL_STARTUP`"),
+        )
+        assertTrue(
+            "§6's MANUAL_STARTUP deferral must be marked superseded by the 1.4 spec, dated",
+            Regex(
+                """^> \*\*The `MANUAL_STARTUP` deferral above is superseded by the 1\.4 spec \(2026-09-24; """ +
+                    """§3\.3 activation facts, §4 service policy\)\.""",
+                RegexOption.MULTILINE,
+            ).containsMatchIn(section6),
+        )
+        assertTrue(
+            "§6's season-end sentence must be kept for the record",
+            section6.contains("nothing is stored at \"season end\""),
+        )
+        assertTrue(
+            "§6's season-end sentence must be marked superseded by the 1.4 spec, dated",
+            Regex(
+                """^> \*\*The "nothing is stored at season end" sentence above is superseded by the 1\.4 spec """ +
+                    """\(2026-09-24; §3\.3 activation facts, §4 service policy\)\.""",
+                RegexOption.MULTILINE,
+            ).containsMatchIn(section6),
+        )
+        val section104 = text.substringAfter("\n### 10.4 ").substringBefore("\n### 10.5 ")
+        assertTrue(
+            "§10.4's winter example must carry the 1.4 answer, dated, citing O-5 and Finding A-1",
+            Regex(
+                """^> \*\*The 1\.4 answer \(2026-09-24; spec §4\.3, O-5; archaeology Finding A-1\)\.""",
+                RegexOption.MULTILINE,
+            ).containsMatchIn(section104),
+        )
+        assertTrue(
+            "the annotation must say the first in-season day reads DUE, not OVERDUE",
+            section104.contains("**DUE** on the first in-season day, not **OVERDUE**"),
         )
     }
 
@@ -297,6 +386,29 @@ class VersionAgreementTest {
     }
 
     /**
+     * The README's capability line for 1.4. Anchored at the bullet, so a mention of seasons or
+     * health anywhere else in the file can never satisfy it; the link is to the spec's path, not to
+     * a section anchor, so a later revision of the spec cannot break it.
+     */
+    @Test fun theReadmeNamesSeasonsConditionAndHealthAndLinksTheSpec() {
+        val readme = repoFile("README.md").readText()
+        assertTrue(
+            "the README must carry a capability bullet for seasons, service policy, condition and health",
+            Regex(
+                """^- \*\*Operating seasons, maintenance service policy, operational condition and derived """ +
+                    """health\*\* —""",
+                RegexOption.MULTILINE,
+            ).containsMatchIn(readme),
+        )
+        assertTrue(
+            "that bullet must link the committed 1.4 spec",
+            readme.contains(
+                "](docs/superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md)",
+            ),
+        )
+    }
+
+    /**
      * D9's Attachments row claimed two controls this app has never had: sniffing the type on
      * import, and a configurable size cap. Spec §4.3 retires both. A stated control that does not
      * exist is worse than an absent one, so the claims go and the row says instead why trusting
@@ -346,12 +458,34 @@ class VersionAgreementTest {
             Regex("""^> \| v7 \| \*\*1\.3\.0\*\* \|""", RegexOption.MULTILINE).containsMatchIn(text),
         )
         assertTrue(
-            "what is still unnumbered must now be said to take v8 upward, dated",
+            "what is still unnumbered must now be said to take v9 upward, dated (v8 is 1.4.0's)",
             Regex(
-                """^> .*will take \*\*v8 upward\*\* \(amended 2026-09-23, ServiceTag 1\.3\.0""",
+                """^> .*will take \*\*v9 upward\*\* \(amended 2026-09-24, ServiceTag 1\.4\.0""",
                 RegexOption.MULTILINE,
             ).containsMatchIn(text),
         )
+        assertFalse(
+            "the v8 reservation must not survive beside the v9 one",
+            text.contains("will take **v8 upward**"),
+        )
+    }
+
+    /**
+     * D4 §15's table, one row further again: v8 is 1.4.0's three new tables and the two it
+     * recreates. Anchored at the row, so the reservation sentence under the table cannot stand in
+     * for it.
+     */
+    @Test fun theDataModelDocumentNamesV8() {
+        val text = repoFile("docs/design/04-domain-data-model.md").readText()
+        val rows = Regex("""^> \| v8 \| \*\*1\.4\.0\*\* \|.*$""", RegexOption.MULTILINE).findAll(text)
+            .map { it.value }.toList()
+        assertEquals("the v8 row must name this release, once", 1, rows.size)
+        for (table in listOf(
+            "`asset_season_activation`", "`asset_condition`", "`health_subject`",
+            "`maintenance_schedule`", "`schedule_state`",
+        )) {
+            assertTrue("the v8 row must name $table", rows.single().contains(table))
+        }
     }
 
     private companion object {

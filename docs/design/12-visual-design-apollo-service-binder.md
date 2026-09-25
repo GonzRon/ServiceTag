@@ -289,6 +289,16 @@ Color is reinforcement.
 | Scheduler failure    | Error family                 | Error family                | `notifications_off` — **REMINDER FAILED** | Explicit failure text                 |
 | Sync problem         | `#684682` / `#E9DFF2`        | `#CFB3E5` / `#3B2C46`       | `cloud_off` — **SYNC ISSUE**              | Provider name + retry state           |
 | Destructive action   | `#A43D36` / `#F8DAD6`        | `#F2B8B5` / `#4E1C1A`       | `delete_forever` etc.                     | Confirmation required                 |
+| Condition operational | `#245B78` / `#DCEBF3`       | `#91BED6` / `#17384B`       | `task_alt` — **OPERATIONAL**              | On the plate; cool-blue family        |
+| Condition degraded   | `#6B5200` / `#EFE3A6`        | `#E3CB6A` / `#3A3208`       | `trending_down` — **DEGRADED**            | ATTENTION, after the due rows; its own ochre token, never Due's or Due soon's |
+| Condition down       | `#8C2E2A` / `#F8DAD6`        | `#F2B8B5` / `#4E1C1A`       | `block` — **DOWN**                        | ATTENTION, first; error family        |
+| Condition not recorded | `#444B50` / `#E6E5DF`      | `#D9E0E4` / `#202A32`       | `radio_button_unchecked` — **Condition not recorded** | On the plate; neutral     |
+| Health nominal       | Same as OK                   | Same as OK                  | `signal_cellular_alt`, 3 bars — **NOMINAL** + score | Asset detail, badges, rows  |
+| Health warning       | Same as Due soon             | Same as Due soon            | `signal_cellular_alt`, 2 bars — **WARNING** + score | Asset detail, badges, rows  |
+| Health critical      | Same as Overdue              | Same as Overdue             | `signal_cellular_alt`, 1 bar — **CRITICAL** + score | Asset detail, badges, rows  |
+| Health not tracked   | Same as Measurement no target | Same as Measurement no target | `signal_cellular_nodata` — **NOT TRACKED** | Asset detail; neutral            |
+| Deferred             | Same as Season inactive      | Same as Season inactive     | `hourglass_top` — **DEFERRED**            | Its own quiet **Deferred** section, between current and out-of-season work |
+| In season            | Same as OK                   | Same as OK                  | `event_available` — **IN SEASON**         | On the plate and in the Season section |
 
 The semantic foreground/container combinations above were selected with roughly **4.9:1–8.2:1**
 contrast, depending on state and theme.
@@ -307,6 +317,20 @@ They are distinguishable because they literally contain **↓ LOW** and **↑ HI
 
 That also complies with the broader accessibility principle that color should not be the sole
 visual carrier of information.
+
+**Condition and health (added at ServiceTag 1.4.0, 2026-09-24; spec §10.6, owner ruling O-2).**
+The ten rows after Destructive action are the 1.4 states, in the three semantic families O-2
+approved: operational, nominal and in season in the cool-blue family; degraded and warning in the
+warning/amber family, with DEGRADED on a token of its own (`conditionDegraded`, an ochre) so it
+never reads as Due or Due soon; down and critical in the error family. Not recorded and not
+tracked are neutral, and DEFERRED takes the season-inactive grey. Colour is reinforcement only, as
+everywhere in this table: the word, the glyph and the position each distinguish the state on
+their own — the health glyph's bar count is a shape that survives grayscale, and no two condition
+states share a glyph. The one new colour pair, DEGRADED's, measures 5.72:1 light and 7.94:1 dark;
+`ContrastTest` holds every condition and health pair at 4.5:1 or better in both themes. Literal
+token values are design-token choices under the existing contrast requirements, not new
+product-state meanings (O-2). DEFERRED is `DueStatus.DEFERRED` (the 1.4 spec §4.5); a health band
+is derived at read time and never stored.
 
 Mapping to the domain vocabulary (D5 §1): OK → `OK`; Due soon → `DUE_SOON`; Due → `DUE`;
 Overdue → `OVERDUE`; Season inactive → `INACTIVE_SEASON`; Paused → `PAUSED`; `NO_DATA` renders

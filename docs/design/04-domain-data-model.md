@@ -606,12 +606,14 @@ they are all local writes; the only asynchronous part is draining the outbox.
 > | v5 | 1.0.0 | **`attachment`** |
 > | v6 | **1.2.0** | `maintenance_group`, `maintenance_group_member`, `maintenance_schedule`, `schedule_provider`, `occurrence_closure`, `schedule_state`, `schedule_local_delivery`, and the three new `asset_event` columns |
 > | v7 | **1.3.0** | `asset_reference` |
+> | v8 | **1.4.0** | `asset_season_activation`, `asset_condition`, `health_subject`; `maintenance_schedule` recreated (the three season columns dropped; `service_policy`, `policy_offset_days` and `rule_changed_at` added) and `schedule_state` recreated as derived and empty; five `asset` columns added (`season_mode`, `blackout_start_mmdd` and `blackout_end_mmdd` for the maintenance break, `health_aggregation`, `health_primary_subject_id`) |
 >
 > So **attachments shipped at v5, not v4, and schedules land at v6, not v3** (1.2 spec §3.1).
 > Supplies, reminder projections and the provider outbox hold no version number yet: they are
-> Phase 5 and later, and will take **v8 upward** (amended 2026-09-23, ServiceTag 1.3.0: v7 is
-> taken by `asset_reference`). Reading the stale plan is what almost put 1.2's schedules at
-> v3, on top of tables that already exist.
+> Phase 5 and later, and will take **v9 upward** (amended 2026-09-24, ServiceTag 1.4.0: v8 is
+> taken by the seasons, condition and health tables; amended before that on 2026-09-23,
+> ServiceTag 1.3.0, when v7 was taken by `asset_reference`). Reading the stale plan is what almost
+> put 1.2's schedules at v3, on top of tables that already exist.
 - The section above is written against Room's annotation model, which Room 3.0 shares with 2.8
   (`@Entity`, `@ForeignKey`, `@Index`, `@Transaction`, schema export). Room 3.0 is the starting
   line (D3 §5); nothing in this schema depends on a Room 2-only API.

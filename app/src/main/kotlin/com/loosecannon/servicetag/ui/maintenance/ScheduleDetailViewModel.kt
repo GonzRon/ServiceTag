@@ -145,7 +145,7 @@ data class ScheduleDetailState(
     val currentOccurrenceOn: String? = null,
     /** The round's open date — the closure range's floor, before the clamp to today. */
     val roundOpenOn: LocalDate? = null,
-    val today: LocalDate = LocalDate.EPOCH,
+    val today: LocalDate = LocalDate.of(1970, 1, 1),
     val busy: Boolean = false,
     val loaded: Boolean = false,
     val missing: Boolean = false,
