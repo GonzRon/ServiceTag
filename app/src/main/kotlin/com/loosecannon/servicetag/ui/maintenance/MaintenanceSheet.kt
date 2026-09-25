@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -101,8 +102,9 @@ fun MaintenanceSheet(
     var postponing by remember { mutableStateOf<ScheduleId?>(null) }
     // 1.4: the two condition actions (spec §10.1). Each writes only after its own explicit tap, and
     // the sheet re-reads the store when either closes.
-    var changingCondition by remember { mutableStateOf(false) }
-    var markingOperational by remember { mutableStateOf<OperationalCondition?>(null) }
+    // Saveable, so a rotation keeps the surface open over the write its view model is making.
+    var changingCondition by rememberSaveable { mutableStateOf(false) }
+    var markingOperational by rememberSaveable { mutableStateOf<OperationalCondition?>(null) }
 
     // Coming back from a profile form is how the sequential run advances, so the sheet re-derives
     // on every resume rather than trusting the list it drew before it left — but not on the

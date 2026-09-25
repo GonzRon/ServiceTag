@@ -127,6 +127,27 @@ class ChangeConditionViewModelTest {
         assertEquals("", model.state.value.reason)
     }
 
+    /**
+     * The ruling on B12's review, M-2: Cancel is ignored while a Save is in flight — the row is
+     * landing, so the form finishes once, as saved, and never also as cancelled.
+     */
+    @Test fun cancelWhileSavingIsIgnored() = runTest(scheduler) {
+        val gen = generator()
+        val model = model(gen)
+        var finished = 0
+        // The host listens before anything is tapped, as the sheet's LaunchedEffect does.
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.finished.collect { finished++ } }
+
+        model.choose(OperationalCondition.DOWN)
+        model.save()
+        assertTrue("the save is in flight", model.state.value.saving)
+        model.cancel()
+        advanceUntilIdle()
+
+        assertEquals(1, graph.conditions.all().size)
+        assertEquals("finished once, as saved", 1, finished)
+    }
+
     @Test fun thePastIsAllowed() = runTest(scheduler) {
         val gen = generator()
         graph.conditions.insert(conditionRow("c-now", "gen", OperationalCondition.OPERATIONAL, "2026-04-10"))

@@ -3,15 +3,19 @@ package com.loosecannon.servicetag.ui.maintenance
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.servicetag.core.condition.ConditionHistory
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionId
@@ -50,6 +54,10 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -539,6 +547,46 @@ class ScanSheetTest {
         rule.waitUntil(TIMEOUT_MS) { rule.onAllNodesWithText("Mark operational?").fetchSemanticsNodes().isEmpty() }
         assertEquals(1, conditionRows(graph))
         rule.onNodeWithText("DOWN").assertIsDisplayed()
+    }
+
+    /**
+     * The ruling on B12's review, M-3: the Mark operational write belongs to a view model, so a
+     * rotation while it is in flight neither cancels it nor loses the dialog. The database's write lock
+     * is held from another thread across the tap and the rotation, so the write is truly mid-flight
+     * when the composition is torn down and restored.
+     */
+    @Test fun markOperationalSurvivesARotationMidWrite() {
+        val graph = app.graph
+        val pack = asset(graph, "Battery pack")
+        record(graph, pack, OperationalCondition.DOWN, LocalDate.now().minusDays(1), reason = "Cells swollen")
+        val restoration = StateRestorationTester(rule)
+        restoration.setContent {
+            ServiceTagTheme {
+                MaintenanceSheet(
+                    graph = graph, assetId = pack.value, tagId = null, onOpenAsset = {}, onReviewSchedule = {},
+                    onLogForm = { _, _ -> }, onDismiss = {},
+                )
+            }
+        }
+        rule.awaitText("Mark operational")
+        rule.onNodeWithText("Mark operational").performClick()
+        rule.awaitText("Mark operational?")
+
+        val release = CompletableDeferred<Unit>()
+        val holding = CountDownLatch(1)
+        val holder = thread { runBlocking { graph.uow.write { holding.countDown(); release.await() } } }
+        check(holding.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)) { "the write lock was not taken" }
+        rule.onNode(hasText("Mark operational") and hasAnyAncestor(isDialog())).performClick()
+        rule.waitForIdle()
+
+        restoration.emulateSavedInstanceStateRestore()
+        release.complete(Unit)
+        holder.join(TIMEOUT_MS)
+
+        rule.waitUntil(TIMEOUT_MS) { conditionRows(graph) == 2 }
+        rule.waitUntil(TIMEOUT_MS) { rule.onAllNodesWithText("Mark operational?").fetchSemanticsNodes().isEmpty() }
+        val current = runBlocking { ConditionHistory.of(graph.conditions.forAsset(pack)).current!! }
+        assertEquals(OperationalCondition.OPERATIONAL, current.condition)
     }
 
     /** Completes the sheet's one due row, answering "When was this done?" with [on]. */

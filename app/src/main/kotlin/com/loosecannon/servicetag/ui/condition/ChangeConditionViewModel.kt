@@ -122,8 +122,14 @@ class ChangeConditionViewModel(
         }
     }
 
-    /** **Cancel** (and the sheet dismissed): nothing is written. */
-    fun cancel() = finish()
+    /**
+     * **Cancel** (and the sheet dismissed): nothing is written. Ignored while a Save is in flight — its
+     * row is landing, so the form ends as saved and never as cancelled (the button is disabled too).
+     */
+    fun cancel() {
+        if (_state.value.saving) return
+        finish()
+    }
 
     private fun finish() {
         _state.value = fresh()

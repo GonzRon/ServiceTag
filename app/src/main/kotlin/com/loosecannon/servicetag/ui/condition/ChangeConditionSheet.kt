@@ -120,7 +120,7 @@ private fun ChangeConditionForm(
         )
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onCancel) { Text("Cancel") }
+            TextButton(onClick = onCancel, enabled = !state.saving) { Text("Cancel") }
             Button(onClick = onSave, enabled = state.canSave, shape = ControlShape) { Text(SAVE_CONDITION) }
         }
         Spacer(Modifier.height(4.dp))
