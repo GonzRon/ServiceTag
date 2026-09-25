@@ -66,6 +66,13 @@ async def call_tool(
 
 # ---- the snapshot ------------------------------------------------------------------------------
 
+REQUIRED_SCHEMA_VERSION = 8
+"""ServiceTag 1.4.0's Room schema. The loader ships in lockstep with that app (spec §9.3): its
+re-plan compares a manifest with each row's `servicePolicy`, which an older app does not report,
+and the lockstep MCP writes only to schema 8 or later. So `snapshot` confirms it first — the same
+check the MCP makes before a write — rather than planning every existing schedule as a CONFLICT
+against rows it cannot read."""
+
 @dataclass(frozen=True)
 class Asset:
     id: str
@@ -174,10 +181,31 @@ def _schedule_from(row: dict[str, Any]) -> Schedule:
     )
 
 
+async def _require_schema_8(client: ToolClient) -> None:
+    status = await call_tool(client, "status", {})
+    version = status.get("schemaVersion") if isinstance(status, dict) else None
+    if not isinstance(version, int) or isinstance(version, bool):
+        reported = "no schemaVersion" if version is None else f"schemaVersion {version!r}"
+        raise PhoneError(
+            f"the phone's status reports {reported}; this loader needs "
+            f"ServiceTag 1.4.0 (schema {REQUIRED_SCHEMA_VERSION}) — nothing was read"
+        )
+    if version < REQUIRED_SCHEMA_VERSION:
+        raise PhoneError(
+            f"the phone's app reports schema {version}; this loader needs "
+            f"ServiceTag 1.4.0 (schema {REQUIRED_SCHEMA_VERSION}) — update the app first, nothing was read"
+        )
+
+
 async def snapshot(client: ToolClient) -> Inventory:
-    """Fill an `Inventory` from the phone through `client`'s MCP tools: `list_assets`,
-    `list_profiles` (one call per asset), `list_groups`, `list_schedules`. Never `pair` — a caller
-    pairs once, before taking any snapshot."""
+    """Fill an `Inventory` from the phone through `client`'s MCP tools: `status` first, then
+    `list_assets`, `list_profiles` (one call per asset), `list_groups`, `list_schedules`. Never
+    `pair` — a caller pairs once, before taking any snapshot.
+
+    A phone whose `schemaVersion` is missing, not an integer, or below `REQUIRED_SCHEMA_VERSION` is a
+    `PhoneError` before anything else is read. `apply` snapshots too, so both `plan` and `apply`
+    refuse such a phone, and the CLI prints the one line and exits 2."""
+    await _require_schema_8(client)
     assets_payload = await call_tool(client, "list_assets", {})
     assets: list[Asset] = [_asset_from(row, None) for row in assets_payload.get("topLevel", [])]
     for parent_id, rows in (assets_payload.get("components") or {}).items():

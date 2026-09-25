@@ -114,3 +114,30 @@ def test_schedule_reads_service_policy_and_offset(fake_client) -> None:
     }
     for schedule in inventory.schedules:
         assert not hasattr(schedule, "season_behavior"), "the derived triple is not read"
+
+
+@pytest.mark.parametrize(
+    ("answer", "named"),
+    [({"schemaVersion": 7}, "schema 7"), ({}, "no schemaVersion"), ({"schemaVersion": "8"}, "'8'")],
+    ids=["schema-7", "missing", "not-an-integer"],
+)
+def test_snapshot_refuses_a_phone_older_than_schema_8_before_any_read(fake_client, answer, named) -> None:
+    """The loader's half of lockstep (spec §9.3): against a pre-1.4 app its re-plan could only read
+    rows with no `servicePolicy`, so it refuses up front — the same check the MCP makes before a
+    write — with the version the phone reports and the one it needs, and reads nothing else."""
+    fake_client.add_asset(name="Garden shed")
+    fake_client.status_answer = {"appVersion": "1.3.0", **answer}
+
+    with pytest.raises(phone.PhoneError) as exc:
+        _run(phone.snapshot(fake_client))
+
+    message = str(exc.value)
+    assert named in message
+    assert "ServiceTag 1.4.0 (schema 8)" in message
+    assert fake_client.calls == [("status", {})], "nothing is read before the version is confirmed"
+
+
+def test_snapshot_reads_the_status_first_and_then_the_phone(fake_client) -> None:
+    fake_client.add_asset(name="Garden shed")
+    _run(phone.snapshot(fake_client))
+    assert [name for name, _ in fake_client.calls][:2] == ["status", "list_assets"]

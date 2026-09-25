@@ -1,6 +1,7 @@
 """A `FakeClient`: an in-memory phone answering exactly the tools `servicetag_schedules` calls
-(`pair`, `list_assets`, `list_profiles`, `list_groups`, `list_schedules`, `create_group`,
-`create_schedule`), shaped like the real ones' JSON (`docs/api/v1.md`). It implements the same
+(`pair`, `status`, `list_assets`, `list_profiles`, `list_groups`, `list_schedules`, `create_group`,
+`create_schedule`), shaped like the real ones' JSON (`docs/api/v1.md`). `status` answers a
+ServiceTag 1.4.0 app (schema 8) unless a test edits `status_answer`. It implements the same
 `call_tool(name, arguments)` coroutine `mcp.Client` offers, so `phone.call_tool` and everything
 built on it treat a `FakeClient` exactly like a real in-process client. `calls` records every
 `(name, arguments)` in call order, which is what the apply tests check (groups before schedules,
@@ -76,6 +77,13 @@ class FakeClient:
         self.groups: list[dict[str, Any]] = []
         self.schedules: list[dict[str, Any]] = []
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.status_answer: dict[str, Any] = {
+            "appVersion": "1.4.0",
+            "apiVersion": 1,
+            "schemaVersion": 8,
+            "backupFormatVersion": 8,
+            "counts": {},
+        }
         self._ids = itertools.count(1)
         self._fail_next: dict[str, str] = {}
 
@@ -103,6 +111,9 @@ class FakeClient:
 
     def _tool_pair(self, code: str) -> _Result:
         return _ok("paired")
+
+    def _tool_status(self) -> _Result:
+        return _ok(dict(self.status_answer))
 
     def _tool_list_assets(self) -> _Result:
         return _ok({"topLevel": list(self.top_level), "components": dict(self.components)})

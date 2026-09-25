@@ -129,6 +129,23 @@ def test_run_plan_exits_0_when_the_plan_is_clean(tmp_path, fake_client, monkeypa
     assert "SECRETCODE" not in out  # the pairing code is never printed
 
 
+def test_run_plan_exits_2_and_prints_nothing_against_a_phone_older_than_schema_8(
+    tmp_path, fake_client, monkeypatch, capsys,
+) -> None:
+    fake_client.add_asset(name="Garden shed")
+    fake_client.status_answer["schemaVersion"] = 7
+    _patch_paired_client(monkeypatch, fake_client)
+    args = argparse.Namespace(manifest=_write_manifest(tmp_path, _manifest_obj()), code="SECRETCODE", serial=None)
+
+    rc = _run(cli._run_plan(args))
+
+    assert rc == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "ServiceTag 1.4.0 (schema 8)" in captured.err
+    assert [name for name, _ in fake_client.calls] == ["status"]
+
+
 def test_run_plan_exits_1_when_the_plan_is_not_clean(tmp_path, fake_client, monkeypatch) -> None:
     # no matching asset on the phone -> ERROR
     _patch_paired_client(monkeypatch, fake_client)

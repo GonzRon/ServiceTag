@@ -61,7 +61,10 @@ argument, which the app translates. A 1.4 phone stores a **service policy** inst
 (`PRE_SERVICE`, a non-zero offset, `IN_SERVICE_RESUME_CLAMPED`) is a `CONFLICT` whose reason names
 both policies, and this tool never changes it. The mapping is held to the repository's golden
 `docs/api/legacy-season-mapping.json` by `tests/test_legacy_mapping.py`. It needs the lockstep
-`servicetag-mcp`, which writes only to ServiceTag 1.4.0 or later.
+`servicetag-mcp`, which writes only to ServiceTag 1.4.0 or later — and the loader checks the same
+thing first: `phone.snapshot` reads the MCP's `status` before anything else and refuses a phone whose
+`schemaVersion` is missing or below 8, so `plan` and `apply` both print that one line and exit `2`
+without reading a row.
 
 ## The CLI
 
