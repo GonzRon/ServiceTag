@@ -199,5 +199,6 @@ tasks.withType<Test>().configureEach {
         root.file("README.md"),
         root.file("docs/versioning.md"),
         root.dir("docs/design").asFileTree,
+        root.dir("docs/api").asFileTree,
     ).withPropertyName("releaseProofPolicyScope").withPathSensitivity(PathSensitivity.RELATIVE)
 }

@@ -25,6 +25,7 @@ object ReminderRepair { const val RESTORE_REMINDER_DELIVERY = "RESTORE_REMINDER_
 sealed interface HealthAction { data object RestoreReminderDelivery : HealthAction }
 class ReminderHealthViewModel(health: ReminderHealth, prefs: AppPrefs,
     restoreDelivery: suspend () -> Unit, resumeDelivery: suspend () -> Unit)
+// neither seam has a default value: a production wiring that omitted one must fail to compile
 ```
 
 ## Contracts
@@ -57,7 +58,7 @@ class ReminderHealthViewModel(health: ReminderHealth, prefs: AppPrefs,
 
 - `./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin --console=plain`: zero failures, zero skips.
 - Connected, on `emulator-5554` only, one class, scheduled by the controller: `com.loosecannon.servicetag.ui.maintenance.ReminderHealthScreenTest`.
-- Anchored `git grep -nE` over `app/src/main/kotlin/com/loosecannon/servicetag/ui app/src/main/kotlin/com/loosecannon/servicetag/reminders`: `'^\s*ReminderRepair\.RESTORE_REMINDER_DELIVERY -> "Fix reminder delivery"$'` → 1; `'"\$\{[a-zA-Z.]+\} schedules have reminders turned on, but reminder delivery isn.t configured\."'` → 1; `'"1 schedule has reminders turned on, but reminder delivery isn.t configured\."'` → 1; `'schedules have reminders switched on but no way to deliver them\."'` → 1 (kept, one literal); `'code = "SCHEDULE_PROVIDER_DISABLED"'` → 1; `'RepairAction\.Automatic\('` → the same lines as at `<base>`; `'"[^"]*[Rr]eminder provider[^"]*"'` → 0.
+- Anchored `git grep -nE` over `app/src/main/kotlin/com/loosecannon/servicetag/ui app/src/main/kotlin/com/loosecannon/servicetag/reminders` (a `[^"/]*` prefix keeps a comment from matching): `'^\s*ReminderRepair\.RESTORE_REMINDER_DELIVERY -> "Fix reminder delivery"$'` → 1; `'^\s*[^"/]*"\$\{[a-zA-Z.]+\} schedules have reminders turned on, but reminder delivery isn.t configured\."'` → 1; `'^\s*[^"/]*"1 schedule has reminders turned on, but reminder delivery isn.t configured\."'` → 1; `'^\s*[^"/]*"\$\{[a-zA-Z.]+\} schedules have reminders switched on but no way to deliver them\."'` → 1 (kept, one literal); `'^\s*code = "SCHEDULE_PROVIDER_DISABLED",?$'` → 1; `'RepairAction\.Automatic\('` → the same lines as at `<base>`; `'"[^"]*([Pp]rovider|LOCAL)[^"]*"'` → the same lines as at `<base>` (no new user-visible string names a reminder provider, local or otherwise).
 - `git diff <base> -- core tools docs app/src/main/kotlin/com/loosecannon/servicetag/di app/src/main/kotlin/com/loosecannon/servicetag/api app/src/main/AndroidManifest.xml` → empty.
 - Hygiene; gitlink `7e0377a`; `git status` clean.
 

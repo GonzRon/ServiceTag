@@ -20,7 +20,7 @@
 
 - `./gradlew :app:testDebugUnitTest --console=plain`: zero failures, zero skips (`VersionAgreementTest` and `ReleaseProofPolicyTest` among them — exactly one R4 row remains).
 - `git grep -nE 'versionCode = 17|versionName = "1\.4\.1"' app/build.gradle.kts` → 2; `git grep -nE '^\| 1\.4\.1 \| 17 \|' docs/versioning.md` → 1; `git grep -nE '1\.4\.1' docs/design/03-target-architecture.md docs/design/issues/new-reminder-health.md` → 2.
-- `git diff <base> --stat -- app/src core tools .github` names exactly `app/build.gradle.kts` and `app/src/test/kotlin/com/loosecannon/servicetag/VersionAgreementTest.kt`, nothing under `app/src/main`, `core`, `tools` or `.github`.
+- `git diff <base> --stat -- app core tools .github` names exactly `app/build.gradle.kts` and `app/src/test/kotlin/com/loosecannon/servicetag/VersionAgreementTest.kt`, nothing under `app/src/main`, `core`, `tools` or `.github`.
 - Hygiene; gitlink `7e0377a`; `git status` clean.
 
 ## Must NOT
