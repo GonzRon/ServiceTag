@@ -18,6 +18,7 @@ import mcp.types
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
+from conftest import schedule_row
 from servicetag_mcp import server as server_module
 
 LEGACY_KEYS = ("seasonBehavior", "seasonReentry", "seasonReentryOffsetDays")
@@ -26,22 +27,6 @@ CURRENT_KEYS = ("servicePolicy", "policyOffsetDays")
 
 def body_of(recorded) -> dict:
     return json.loads(recorded.body.decode())
-
-
-def schedule_row(**overrides) -> dict:
-    """A 1.4 schedule row: the format-8 row plus the derived 1.3 triple."""
-    row = {
-        "id": "s1", "assetId": "a1", "groupId": None, "title": "Tune-up", "description": "",
-        "timeInterval": 1, "timeUnit": "YEAR", "timeBasis": "FIXED", "anchorOn": "2026-03-01",
-        "leadDays": 14, "meterDefinitionId": None, "meterInterval": None, "anchorMeter": None,
-        "meterLead": None, "servicePolicy": "CONTINUOUS", "policyOffsetDays": None,
-        "completionMode": "QUICK", "profileId": None, "remindersEnabled": True, "status": "ACTIVE",
-        "postponedDueOn": None, "createdAt": 1, "updatedAt": 1, "ruleChangedAt": 1,
-        "providers": [{"provider": "LOCAL", "enabled": True}],
-        "seasonBehavior": "IGNORE", "seasonReentry": None, "seasonReentryOffsetDays": None,
-    }
-    row.update(overrides)
-    return {"schedule": row, "state": {}, "status": "OK", "computedForOn": "2026-02-01"}
 
 
 AT_START_5 = dict(

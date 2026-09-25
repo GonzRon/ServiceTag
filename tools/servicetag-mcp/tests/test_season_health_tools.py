@@ -22,6 +22,7 @@ import zipfile
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
+from conftest import subject_row
 from servicetag_mcp import server as server_module
 
 NEW_TOOLS = (
@@ -37,17 +38,6 @@ STATUS_1_3 = {"appVersion": "1.3.0", "apiVersion": 1, "schemaVersion": 7, "backu
 
 def body_of(recorded) -> dict:
     return json.loads(recorded.body.decode())
-
-
-def subject_row(**overrides) -> dict:
-    row = {
-        "id": "h1", "assetId": "a1", "name": "Battery", "kind": "PART", "driver": "AGE",
-        "scheduleId": None, "baselineProfileId": "p1", "nominalUntilDays": 700,
-        "warningFromDays": 900, "criticalFromDays": 1100, "weight": 2, "sortOrder": 0,
-        "archivedAt": None, "createdAt": 1, "updatedAt": 1,
-    }
-    row.update(overrides)
-    return {"subject": row}
 
 
 def _refusal(code: str) -> dict:

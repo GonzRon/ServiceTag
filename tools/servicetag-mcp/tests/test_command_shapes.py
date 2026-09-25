@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
+from conftest import schedule_row, subject_row
 from servicetag_mcp import command_shapes
 from servicetag_mcp import server as server_module
 
@@ -44,32 +45,6 @@ def asset_row(**overrides) -> dict:
     }
     row.update(overrides)
     return {"asset": row}
-
-
-def schedule_row(**overrides) -> dict:
-    row = {
-        "id": "s1", "assetId": "a1", "groupId": None, "title": "Load test", "description": "",
-        "timeInterval": 1, "timeUnit": "MONTH", "timeBasis": "FIXED", "anchorOn": "2026-01-05",
-        "leadDays": 3, "meterDefinitionId": None, "meterInterval": None, "anchorMeter": None,
-        "meterLead": None, "servicePolicy": "CONTINUOUS", "policyOffsetDays": None,
-        "completionMode": "QUICK", "profileId": None, "remindersEnabled": True, "status": "ACTIVE",
-        "postponedDueOn": None, "createdAt": 1, "updatedAt": 1, "ruleChangedAt": 1,
-        "providers": [{"provider": "LOCAL", "enabled": True}],
-        "seasonBehavior": "IGNORE", "seasonReentry": None, "seasonReentryOffsetDays": None,
-    }
-    row.update(overrides)
-    return {"schedule": row, "state": {}, "status": "OK", "computedForOn": "2026-02-01"}
-
-
-def subject_row(**overrides) -> dict:
-    row = {
-        "id": "h1", "assetId": "a1", "name": "Battery", "kind": "PART", "driver": "AGE",
-        "scheduleId": None, "baselineProfileId": "p1", "nominalUntilDays": 700,
-        "warningFromDays": 900, "criticalFromDays": 1100, "weight": 2, "sortOrder": 0,
-        "archivedAt": None, "createdAt": 1, "updatedAt": 1,
-    }
-    row.update(overrides)
-    return {"subject": row}
 
 
 # --- the vendored copy is the golden file ---------------------------------------------------------
