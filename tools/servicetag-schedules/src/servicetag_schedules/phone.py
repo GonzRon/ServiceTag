@@ -104,15 +104,19 @@ class Schedule:
     lead_days: int | None
     completion_mode: str | None
     profile_id: str | None
-    season_behavior: str | None
+    service_policy: str | None
+    """The row's own `servicePolicy` (ServiceTag 1.4). 1.3's `seasonBehavior` is only a derived
+    projection of it on a 1.4 row and is deliberately not read: `FOLLOW_ASSET` names three policies
+    and `null` a fourth, so it cannot say what the phone holds."""
+    policy_offset_days: int | None
     archived: bool
 
 
 @dataclass(frozen=True)
 class Inventory:
     """A plain snapshot: assets (id, name, archived/retired, parent), profiles by asset id, groups
-    (id, name, archived, open member asset ids), schedules (id, title, target, rule fields,
-    archived). `plan.plan` reads this and nothing else of the phone."""
+    (id, name, archived, open member asset ids), schedules (id, title, target, rule fields, service
+    policy and offset, archived). `plan.plan` reads this and nothing else of the phone."""
 
     assets: tuple[Asset, ...] = ()
     profiles: tuple[Profile, ...] = ()
@@ -164,7 +168,8 @@ def _schedule_from(row: dict[str, Any]) -> Schedule:
         lead_days=row.get("leadDays"),
         completion_mode=row.get("completionMode"),
         profile_id=row.get("profileId"),
-        season_behavior=row.get("seasonBehavior"),
+        service_policy=row.get("servicePolicy"),
+        policy_offset_days=row.get("policyOffsetDays"),
         archived=row.get("status") == "ARCHIVED",
     )
 

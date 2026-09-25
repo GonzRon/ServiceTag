@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import legacy_mapping
 from . import manifest as manifestmod
 from . import phone
 
@@ -145,18 +146,51 @@ class _ScheduleTarget:
 def _schedule_rule(
     schedule: manifestmod.Schedule, profile_id: str | None,
 ) -> tuple[object, ...]:
-    """The identity-comparison tuple, invariant 4's field list, in the same order on both sides."""
+    """The identity-comparison tuple, invariant 4's field list, in the same order on both sides —
+    its last element the `(servicePolicy, policyOffsetDays)` pair.
+
+    1.4: the manifest still says `seasonBehavior`, and `apply.py` still writes it through the MCP's
+    deprecated argument; the phone stores a service policy. So the manifest's value is compared as
+    the app translates it — spec §4.1 (`legacy_mapping.to_policy`), with no re-entry and a time
+    rule, since a manifest schedule has no re-entry and always a time rule: `IGNORE` is
+    `CONTINUOUS`, `FOLLOW_ASSET` is `IN_SERVICE_AT_START` at 0. That is what keeps a loaded
+    manifest re-planning IDENTICAL against 1.4 rows."""
+    policy = legacy_mapping.to_policy(schedule.season_behavior, has_time_rule=True)
     return (
         schedule.time.interval, schedule.time.unit, schedule.time.basis, schedule.time.anchor_on,
-        schedule.lead_days, schedule.completion_mode, profile_id, schedule.season_behavior,
+        schedule.lead_days, schedule.completion_mode, profile_id, policy,
     )
 
 
 def _phone_schedule_rule(row: phone.Schedule) -> tuple[object, ...]:
+    """The row's side: its own policy and offset, never the derived `seasonBehavior`."""
     return (
         row.time_interval, row.time_unit, row.time_basis, row.anchor_on,
-        row.lead_days, row.completion_mode, row.profile_id, row.season_behavior,
+        row.lead_days, row.completion_mode, row.profile_id,
+        (row.service_policy, row.policy_offset_days),
     )
+
+
+def _policy_text(policy: object) -> str:
+    name, offset = policy  # type: ignore[misc]
+    return str(name) if offset is None else f"{name} (offset {offset})"
+
+
+def _rule_difference(
+    schedule: manifestmod.Schedule, mine: tuple[object, ...], theirs: tuple[object, ...],
+) -> str:
+    """A CONFLICT's reason. A difference in the rule proper keeps its shipped wording; a policy
+    difference is named — the phone's policy, and what the manifest's `seasonBehavior` maps to — so
+    a row no manifest value can describe (a `PRE_SERVICE` one, above all) is never a mystery."""
+    reasons: list[str] = []
+    if mine[:-1] != theirs[:-1]:
+        reasons.append("existing schedule's rule differs")
+    if mine[-1] != theirs[-1]:
+        reasons.append(
+            f"existing schedule's service policy differs: the phone has {_policy_text(theirs[-1])}, "
+            f"the manifest's seasonBehavior {schedule.season_behavior} is {_policy_text(mine[-1])}"
+        )
+    return "; ".join(reasons)
 
 
 def _resolve_schedule_target(
@@ -257,9 +291,11 @@ def _decide_schedule(schedule: manifestmod.Schedule, target: _ScheduleTarget) ->
             "multiple existing schedules match this target and title",
         )
     row = target.existing_matches[0]
-    if _schedule_rule(schedule, target.profile_id) == _phone_schedule_rule(row):
+    mine = _schedule_rule(schedule, target.profile_id)
+    theirs = _phone_schedule_rule(row)
+    if mine == theirs:
         return PlanEntry("schedule", schedule.key, "IDENTICAL", "matches the existing schedule")
-    return PlanEntry("schedule", schedule.key, "CONFLICT", "existing schedule's rule differs")
+    return PlanEntry("schedule", schedule.key, "CONFLICT", _rule_difference(schedule, mine, theirs))
 
 
 # ---- the plan -------------------------------------------------------------------------------------

@@ -5,6 +5,13 @@
 built on it treat a `FakeClient` exactly like a real in-process client. `calls` records every
 `(name, arguments)` in call order, which is what the apply tests check (groups before schedules,
 the right ids on the wire).
+
+Its schedule rows are **1.4 rows** (ServiceTag 1.4.0's `/v1`): `servicePolicy` and
+`policyOffsetDays`, plus 1.3's `seasonBehavior`/`seasonReentry`/`seasonReentryOffsetDays` as the
+**derived** compatibility triple. A `create_schedule` sent with the deprecated `season_behavior`
+argument is translated the way the app translates the legacy form — by this fixture's own two-line
+table (`_PHONE_LEGACY_FORM`), never by the loader's `legacy_mapping`, so a re-plan proof here never
+grades the code under test against itself.
 """
 
 from __future__ import annotations
@@ -34,6 +41,31 @@ def _ok(payload: Any) -> _Result:
 
 def _err(message: str) -> _Result:
     return _Result(structured_content=None, is_error=True, content=[_TextContent(message)])
+
+
+_PHONE_LEGACY_FORM: dict[str, tuple[str, int | None]] = {
+    "IGNORE": ("CONTINUOUS", None),
+    "FOLLOW_ASSET": ("IN_SERVICE_AT_START", 0),
+}
+"""What the app makes of the only legacy bodies the loader sends: a `seasonBehavior` with no
+re-entry and no offset, on a schedule with a time rule (spec §4.1)."""
+
+
+def _derived_triple(policy: str, offset: int | None) -> dict[str, Any]:
+    """Spec §9.1's reverse projection, as a 1.4 row reports it (all null for `PRE_SERVICE`)."""
+    behavior, reentry, reentry_offset = {
+        "CONTINUOUS": ("IGNORE", None, None),
+        "IN_SERVICE_AT_START": ("FOLLOW_ASSET", "AT_START", offset),
+        "IN_SERVICE_RESUME_CLAMPED": ("FOLLOW_ASSET", "RESUME_CLAMPED", None),
+        "PRE_SERVICE": (None, None, None),
+    }[policy]
+    return {
+        "servicePolicy": policy,
+        "policyOffsetDays": offset,
+        "seasonBehavior": behavior,
+        "seasonReentry": reentry,
+        "seasonReentryOffsetDays": reentry_offset,
+    }
 
 
 class FakeClient:
@@ -115,6 +147,13 @@ class FakeClient:
         return _ok({"group": row})
 
     def _tool_create_schedule(self, title: str, **fields: Any) -> _Result:
+        if fields.get("service_policy") is not None or fields.get("policy_offset_days") is not None:
+            policy = fields.get("service_policy") or "CONTINUOUS"
+            offset = fields.get("policy_offset_days")
+            if policy == "IN_SERVICE_AT_START" and offset is None:
+                offset = 0
+        else:
+            policy, offset = _PHONE_LEGACY_FORM[fields.get("season_behavior") or "IGNORE"]
         row = {
             "id": self._new_id("schedule"),
             "title": title,
@@ -128,9 +167,9 @@ class FakeClient:
             "leadDays": fields.get("lead_days") or 0,
             "completionMode": fields.get("completion_mode") or "QUICK",
             "profileId": fields.get("profile_id"),
-            "seasonBehavior": fields.get("season_behavior") or "IGNORE",
             "remindersEnabled": bool(fields.get("reminders_enabled") or False),
             "status": "ACTIVE",
+            **_derived_triple(policy, offset),
         }
         self.schedules.append(row)
         return _ok({"schedule": row})
@@ -197,9 +236,16 @@ class FakeClient:
         lead_days: int = 0,
         completion_mode: str = "QUICK",
         profile_id: str | None = None,
-        season_behavior: str = "IGNORE",
+        season_behavior: str | None = None,
+        service_policy: str | None = None,
+        policy_offset_days: int | None = None,
         archived: bool = False,
     ) -> str:
+        """Seed a 1.4 row. `service_policy`/`policy_offset_days` set the policy directly;
+        `season_behavior` alone (the shipped seeding) is translated as the app translates a legacy
+        body; neither is `CONTINUOUS`."""
+        if service_policy is None:
+            service_policy, policy_offset_days = _PHONE_LEGACY_FORM[season_behavior or "IGNORE"]
         schedule_id = self._new_id("schedule")
         self.schedules.append(
             {
@@ -215,9 +261,9 @@ class FakeClient:
                 "leadDays": lead_days,
                 "completionMode": completion_mode,
                 "profileId": profile_id,
-                "seasonBehavior": season_behavior,
                 "remindersEnabled": False,
                 "status": "ARCHIVED" if archived else "ACTIVE",
+                **_derived_triple(service_policy, policy_offset_days),
             }
         )
         return schedule_id

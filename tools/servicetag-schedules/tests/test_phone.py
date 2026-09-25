@@ -85,3 +85,32 @@ def test_call_tool_error_leads_with_the_entry_when_given(fake_client) -> None:
 def test_call_tool_error_without_an_entry_still_names_only_the_tool(fake_client) -> None:
     with pytest.raises(phone.PhoneError, match=r"^list_profiles:"):
         _run(phone.call_tool(fake_client, "list_profiles", {}))
+
+
+def test_schedule_reads_service_policy_and_offset(fake_client) -> None:
+    """1.4: the snapshot reads the row's own `servicePolicy` and `policyOffsetDays`, and no longer
+    1.3's derived `seasonBehavior` — which reads `FOLLOW_ASSET` for three different policies and
+    `null` for a fourth, so it could never tell a re-plan what the phone actually holds."""
+    fake_client.add_schedule(
+        title="Tune-up", target_asset_id="a", service_policy="PRE_SERVICE", policy_offset_days=-14,
+    )
+    fake_client.add_schedule(
+        title="Blade service", target_asset_id="a", service_policy="IN_SERVICE_AT_START",
+        policy_offset_days=5,
+    )
+    fake_client.add_schedule(
+        title="Cover check", target_asset_id="a", service_policy="IN_SERVICE_RESUME_CLAMPED",
+    )
+    fake_client.add_schedule(title="Filter", target_asset_id="a")
+
+    inventory = _run(phone.snapshot(fake_client))
+
+    by_title = {s.title: (s.service_policy, s.policy_offset_days) for s in inventory.schedules}
+    assert by_title == {
+        "Tune-up": ("PRE_SERVICE", -14),
+        "Blade service": ("IN_SERVICE_AT_START", 5),
+        "Cover check": ("IN_SERVICE_RESUME_CLAMPED", None),
+        "Filter": ("CONTINUOUS", None),
+    }
+    for schedule in inventory.schedules:
+        assert not hasattr(schedule, "season_behavior"), "the derived triple is not read"

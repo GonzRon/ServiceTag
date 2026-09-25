@@ -5,6 +5,8 @@ docstring or name.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from servicetag_schedules import manifest as M
 from servicetag_schedules import phone as P
 from servicetag_schedules import plan as PL
@@ -73,14 +75,16 @@ def mk_pschedule(
     lead_days: int = 0,
     completion_mode: str = "QUICK",
     profile_id: str | None = None,
-    season_behavior: str = "IGNORE",
+    service_policy: str = "CONTINUOUS",
+    policy_offset_days: int | None = None,
     archived: bool = False,
 ) -> P.Schedule:
+    """A 1.4 row as `phone.snapshot` reads it: the policy and its offset, never 1.3's triple."""
     return P.Schedule(
         id=id_, title=title, target_asset_id=target_asset_id, target_group_id=target_group_id,
         time_interval=time_interval, time_unit=time_unit, time_basis=time_basis, anchor_on=anchor_on,
         lead_days=lead_days, completion_mode=completion_mode, profile_id=profile_id,
-        season_behavior=season_behavior, archived=archived,
+        service_policy=service_policy, policy_offset_days=policy_offset_days, archived=archived,
     )
 
 
@@ -549,3 +553,94 @@ def test_plan_summary_counts_each_decision() -> None:
     result = PL.plan(manifest, P.Inventory(assets=(a,), schedules=(existing,)))
     counts = result.summary()
     assert counts == {"CREATE": 1, "IDENTICAL": 1, "CONFLICT": 0, "ERROR": 1}
+
+
+# ---- 1.4: the re-plan compares through spec §4.1 (lockstep) -------------------------------------
+
+
+FIXTURE = Path(__file__).resolve().parent / "fixtures" / "estate-manifest.json"
+
+
+def test_a_loaded_ignore_manifest_replans_identical_against_14_rows() -> None:
+    """The lockstep proof in miniature: a manifest whose schedules are all `IGNORE` (as all 43
+    Stage-B schedules are), already loaded, against the rows a 1.4 phone reports for it —
+    `servicePolicy` `CONTINUOUS`, no offset — re-plans entirely IDENTICAL."""
+    manifest = M.load(FIXTURE)
+    assert {s.season_behavior for s in manifest.schedules} == {"IGNORE"}
+    shed = mk_asset("a1", "Garden shed")
+    north = mk_asset("a2", "Greenhouse mister north")
+    south = mk_asset("a3", "Greenhouse mister south")
+    roof = mk_profile("p1", "a1", "Roof inspection")
+    misters = mk_pgroup("pg1", "Greenhouse misting nozzles", ("a2", "a3"))
+    rows = (
+        mk_pschedule(
+            "ps1", "Inspect the shed roof", target_asset_id="a1", time_interval=6, time_unit="MONTH",
+            anchor_on="2026-10-01", lead_days=7, completion_mode="FORM", profile_id="p1",
+            service_policy="CONTINUOUS", policy_offset_days=None,
+        ),
+        mk_pschedule(
+            "ps2", "Rinse the mister nozzles", target_group_id="pg1", time_interval=30,
+            time_unit="DAY", anchor_on="2026-09-25", lead_days=3,
+            service_policy="CONTINUOUS", policy_offset_days=None,
+        ),
+    )
+    inventory = P.Inventory(
+        assets=(shed, north, south), profiles=(roof,), groups=(misters,), schedules=rows,
+    )
+
+    result = PL.plan(manifest, inventory)
+
+    assert result.summary() == {"CREATE": 0, "IDENTICAL": 3, "CONFLICT": 0, "ERROR": 0}
+    assert result.clean
+
+
+def test_follow_asset_matches_at_start_zero() -> None:
+    """A manifest `FOLLOW_ASSET` (no re-entry, a time rule) is `IN_SERVICE_AT_START` at 0 — that row
+    is IDENTICAL, and the other two policies 1.3 would also have called `FOLLOW_ASSET` are not."""
+    a = mk_asset("a1", "Snowblower")
+    manifest = mk_manifest(
+        schedules=[mk_schedule("s1", "Tune-up", target_asset="Snowblower", season_behavior="FOLLOW_ASSET")]
+    )
+
+    def decided(**policy) -> str:
+        row = mk_pschedule("ps1", "Tune-up", target_asset_id="a1", **policy)
+        return entry(PL.plan(manifest, P.Inventory(assets=(a,), schedules=(row,))), "schedule", "s1").decision
+
+    assert decided(service_policy="IN_SERVICE_AT_START", policy_offset_days=0) == "IDENTICAL"
+    assert decided(service_policy="IN_SERVICE_AT_START", policy_offset_days=5) == "CONFLICT"
+    assert decided(service_policy="IN_SERVICE_RESUME_CLAMPED", policy_offset_days=None) == "CONFLICT"
+
+
+def test_a_policy_difference_is_a_conflict() -> None:
+    """Every policy the manifest's value does not map to is a CONFLICT whose reason names the policy
+    difference — a `PRE_SERVICE` row against an `IGNORE` entry above all (it reads a null
+    `seasonBehavior`, so no 1.3 value could describe it) — and a CONFLICT means the plan is not
+    clean, so apply writes nothing."""
+    a = mk_asset("a1", "Mower")
+    for behavior, policy, offset in (
+        ("IGNORE", "PRE_SERVICE", -14),
+        ("IGNORE", "IN_SERVICE_AT_START", 0),
+        ("FOLLOW_ASSET", "IN_SERVICE_RESUME_CLAMPED", None),
+        ("FOLLOW_ASSET", "IN_SERVICE_AT_START", 30),
+        ("FOLLOW_ASSET", "CONTINUOUS", None),
+    ):
+        manifest = mk_manifest(
+            schedules=[mk_schedule("s1", "Blade service", target_asset="Mower", season_behavior=behavior)]
+        )
+        row = mk_pschedule(
+            "ps1", "Blade service", target_asset_id="a1", service_policy=policy, policy_offset_days=offset,
+        )
+        result = PL.plan(manifest, P.Inventory(assets=(a,), schedules=(row,)))
+        decision = entry(result, "schedule", "s1")
+        assert decision.decision == "CONFLICT", (behavior, policy, offset)
+        assert "service policy" in decision.reason, decision.reason
+        assert policy in decision.reason, decision.reason
+        assert not result.clean
+
+
+def test_a_rule_difference_still_reads_as_one_and_names_the_policy_only_when_it_differs() -> None:
+    a = mk_asset("a1", "Mower")
+    manifest = mk_manifest(schedules=[mk_schedule("s1", "Blade service", target_asset="Mower")])
+    row = mk_pschedule("ps1", "Blade service", target_asset_id="a1", lead_days=9)
+    decision = entry(PL.plan(manifest, P.Inventory(assets=(a,), schedules=(row,))), "schedule", "s1")
+    assert (decision.decision, decision.reason) == ("CONFLICT", "existing schedule's rule differs")
