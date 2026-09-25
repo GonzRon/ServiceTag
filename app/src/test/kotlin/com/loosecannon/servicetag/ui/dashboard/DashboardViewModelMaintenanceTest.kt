@@ -584,4 +584,30 @@ class DashboardViewModelMaintenanceTest {
         assertEquals("Hot tub", state.sections.single().assetRows.single().parentName)
         assertEquals(emptyList<String>(), state.assets.map { it.asset.name })
     }
+
+    /**
+     * Filters narrow and never re-section: the plain-list exclusion is decided before them, so an
+     * asset whose schedule row a filter hides is hidden, not moved into the plain list — even under
+     * a status and a chip its condition matches, which lets asset rows through (M14).
+     */
+    @Test fun aFilterNeverMovesAnAssetIntoThePlainList() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.conditions.insert(conditionRow("c1", "gen", OperationalCondition.OPERATIONAL, "2026-04-01"))
+        seed(scheduleOf("s-ok", assetId = "gen", title = "Air filter", timeInterval = 1, timeUnit = RecurrenceUnit.YEAR, anchorOn = "2026-12-01"))
+        graph.assets.upsert(assetRow("mow", name = "Mower"))
+        graph.conditions.insert(conditionRow("c2", "mow", OperationalCondition.OPERATIONAL, "2026-04-01"))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val all = vm.state.first { it.sections.isNotEmpty() }
+        assertEquals(listOf("schedule:Air filter"), all.sections.flatMap { it.drawn() })
+        assertEquals(listOf("Mower"), all.assets.map { it.asset.name })
+
+        vm.onStatusChange(DueStatus.OVERDUE)
+        vm.onConditionToggle(ConditionChip.OPERATIONAL)
+        val narrowed = vm.state.first { it.filters.status == DueStatus.OVERDUE && it.filters.conditions.isNotEmpty() }
+        assertEquals(emptyList<AttentionSection>(), narrowed.sections.map { it.section })
+        assertEquals("the generator is hidden, not re-listed", listOf("Mower"), narrowed.assets.map { it.asset.name })
+    }
 }
