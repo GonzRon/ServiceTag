@@ -68,6 +68,7 @@ Each prints nothing, or the count stated.
 - one author: `git log --format='%an %ae' <base>..HEAD | sort -u | wc -l` → 1
 - empty bodies: `git log --format=%b <base>..HEAD | grep -c .` → 0
 - the shared library's pin: `bash tools/check-submodule-pin.sh` → `submodule pin ok`
+- no Kotlin `assert` in connected tests, beside the retired-token tripwire below: `grep -rnE '(^|[^.[:alnum:]_])assert\(' app/src/androidTest` → no output (ART runs with assertions disabled, so `assert(` there checks nothing in any release; use `assertTrue`/`assertEquals` or `check`. The pattern also catches an inline `runOnIdle { assert(` and leaves Compose's `.assert(` alone)
 
 ## R7 in full
 
