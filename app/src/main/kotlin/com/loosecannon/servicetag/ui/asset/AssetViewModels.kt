@@ -684,9 +684,16 @@ class AssetDetailViewModel(
                 is SeasonAlreadyStarted -> refuse(THE_SEASON_IS_ALREADY_RUNNING)
                 is SeasonAlreadyEnded -> refuse(THE_SEASON_HAS_ALREADY_ENDED)
                 is SeasonValidation -> {
-                    val latest = latestActivationOn(getSeason.run(id))
-                    _prompt.update {
-                        prompt.copy(from = latest, refusal = latest?.let { chooseADateFrom(displayDate(it)) })
+                    // The asset may have gone since the write was refused: then there is no row to
+                    // name and no dialog to keep, and the page leaves through `missing`.
+                    val season = runCatching { getSeason.run(id) }.getOrNull()
+                    if (season == null) {
+                        _prompt.update { null }
+                    } else {
+                        val latest = latestActivationOn(season)
+                        _prompt.update {
+                            prompt.copy(from = latest, refusal = latest?.let { chooseADateFrom(displayDate(it)) })
+                        }
                     }
                 }
                 is SeasonNotManual -> _prompt.update { null }

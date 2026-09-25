@@ -1,6 +1,9 @@
 package com.loosecannon.servicetag.ui.asset
 
+import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
@@ -76,13 +79,16 @@ class AssetSeasonActionsTest {
     }
 
     /** The detail model with its state and its one-shot lines collected, once it has loaded. */
-    private suspend fun TestScope.detail(said: MutableList<String> = mutableListOf()): AssetDetailViewModel {
+    private suspend fun TestScope.detail(
+        said: MutableList<String> = mutableListOf(),
+        getSeason: GetAssetSeason = graph.getAssetSeason,
+    ): AssetDetailViewModel {
         val vm = AssetDetailViewModel(
             graph.assets, graph.tags,
             graph.definitions, graph.profiles, graph.events,
             graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
             graph.conditions, graph.seasonActivations, graph.healthSubjects,
-            graph.assetHealthReadModel, graph.getAssetSeason, graph.recordSeasonActivation,
+            graph.assetHealthReadModel, getSeason, graph.recordSeasonActivation,
             graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
             graph.applyTemplate, graph.uow, graph.clock, graph.todayPort, tub,
         )
@@ -243,6 +249,34 @@ class AssetSeasonActionsTest {
         settle()
         assertEquals(listOf(THE_SEASON_IS_ALREADY_RUNNING), said)
         assertEquals(2, rows().size)
+    }
+
+    /** The asset store as the season read sees it, with the asset made to vanish on demand. */
+    private class VanishingAssets(private val inner: AssetRepository) : AssetRepository by inner {
+        var gone = false
+        override suspend fun get(id: AssetId): Asset? = if (gone) null else inner.get(id)
+    }
+
+    /**
+     * Re-review residual: the 422 path re-reads the season to name the newer row. If the asset has
+     * gone by then, the dialog closes — no crash, nothing said, nothing written.
+     */
+    @Test fun anAssetGoneBeforeTheReReadClosesTheDialog() = runTest {
+        manualTub(activation("a1", SeasonAction.END, "2026-05-01"))
+        val assets = VanishingAssets(graph.assets)
+        val said = mutableListOf<String>()
+        val vm = detail(said, GetAssetSeason(assets, graph.seasonActivations, graph.uow, graph.todayPort))
+
+        vm.askSeason(SeasonAction.START)
+        vm.onSeasonDate("2026-06-10")
+        graph.recordSeasonActivation.run(tub, ActivationCommand(SeasonAction.START, occurredOn = "2026-06-12"))
+        assets.gone = true
+        vm.confirmSeason()
+        settle()
+
+        assertNull("the dialog closes", vm.prompt.value)
+        assertEquals("nothing was said", emptyList<String>(), said)
+        assertEquals("nothing of its own was written", 2, rows().size)
     }
 
     /**
