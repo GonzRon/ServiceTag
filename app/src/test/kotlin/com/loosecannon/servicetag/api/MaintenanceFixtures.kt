@@ -41,6 +41,7 @@ internal fun maintenanceHandlersFor(graph: FakeGraph): MaintenanceHandlers = Mai
     ),
     recompute = graph.recomputeSchedules,
     today = graph.todayPort,
+    repairScheduleProviders = graph.repairScheduleProviders,
 )
 
 /**

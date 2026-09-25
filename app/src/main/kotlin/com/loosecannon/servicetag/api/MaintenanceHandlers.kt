@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
 import com.loosecannon.servicetag.core.usecase.PauseSchedule
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
+import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.di.AppGraph
@@ -82,14 +83,34 @@ internal class MaintenanceHandlers(
     private val due: DueReadModel,
     private val recompute: RecomputeSchedules,
     private val today: Today,
+    /** 1.4.1 (#80): the provider repair's plan and apply, the same use case Reminder Health calls. */
+    private val repairScheduleProviders: RepairScheduleProviders,
 ) {
     constructor(graph: AppGraph) : this(
         graph.groups, graph.schedules, graph.closures, graph.assets,
         graph.saveGroup, graph.archiveGroup,
         graph.saveSchedule, graph.pauseSchedule, graph.archiveSchedule, graph.postponeSchedule,
         graph.completeSchedule, graph.completeGroupMembers, graph.closeRound,
-        graph.dueReadModel, graph.recomputeSchedules, graph.today,
+        graph.dueReadModel, graph.recomputeSchedules, graph.today, graph.repairScheduleProviders,
     )
+
+    // --- the provider repair (1.4.1, #80) --------------------------------------------------
+
+    /** What [RepairScheduleProviders.apply] would do now. Writes nothing and sweeps nothing. */
+    suspend fun planProviderRepair(request: ApiRequest): ApiResponse {
+        request.decode(ProviderRepairRequest.serializer())
+        return ok(ProviderRepairResponse.serializer(), repairScheduleProviders.plan().planResponse())
+    }
+
+    /**
+     * One [RepairScheduleProviders.apply], reported: its own re-plan and what it repaired. Like every
+     * other `/v1` write it runs no reminder sweep — the next digest, backstop or Reminder Health
+     * action delivers.
+     */
+    suspend fun applyProviderRepair(request: ApiRequest): ApiResponse {
+        request.decode(ProviderRepairRequest.serializer())
+        return ok(ProviderRepairResponse.serializer(), repairScheduleProviders.apply().applyResponse())
+    }
 
     // --- groups ---------------------------------------------------------------------------
 

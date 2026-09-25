@@ -19,6 +19,9 @@ import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.ConsumableInput
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
+import com.loosecannon.servicetag.core.usecase.ProviderRepairPlan
+import com.loosecannon.servicetag.core.usecase.ProviderRepairReport
+import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import kotlinx.serialization.Serializable
@@ -350,6 +353,51 @@ private fun ScheduleCommandRequest.providersOf(creating: Boolean): List<Schedule
     creating -> listOf(ScheduleProviderRow(ProviderId.LOCAL.name, enabled = remindersEnabled))
     else -> emptyList()
 }
+
+/**
+ * 1.4.1 (#80): the body both provider-repair routes take — `{}`, and nothing else. It has no field on
+ * purpose: the strict decoder refuses any key by name, and a zero-byte body is not JSON.
+ */
+@Serializable
+internal class ProviderRepairRequest
+
+/**
+ * 1.4.1 (#80): `POST /v1/repairs/schedule-providers/{plan,apply}`'s answer — [RepairScheduleProviders]'
+ * plan, or its apply's own re-plan and what it repaired, counted and listed in the plan's (title, id)
+ * order. [repaired] is 0 on a plan and equals [repairable] on an apply.
+ */
+@Serializable
+internal data class ProviderRepairResponse(
+    val matched: Int,
+    val repairable: Int,
+    val skipped: Int,
+    val repaired: Int,
+    val schedules: List<ProviderRepairRowResponse>,
+)
+
+/** [outcome] is `REPAIR` (plan), `REPAIRED` (apply) or `SKIPPED`; [reason] names a skip, else null. */
+@Serializable
+internal data class ProviderRepairRowResponse(val id: String, val title: String, val outcome: String, val reason: String?)
+
+internal fun ProviderRepairPlan.planResponse(): ProviderRepairResponse = repairResponse(this, repaired = 0, "REPAIR")
+
+internal fun ProviderRepairReport.applyResponse(): ProviderRepairResponse =
+    repairResponse(plan, repaired = repaired.size, "REPAIRED")
+
+private fun repairResponse(plan: ProviderRepairPlan, repaired: Int, repairOutcome: String) = ProviderRepairResponse(
+    matched = plan.matched,
+    repairable = plan.repairable.size,
+    skipped = plan.skipped.size,
+    repaired = repaired,
+    schedules = plan.entries.map {
+        ProviderRepairRowResponse(
+            id = it.scheduleId.value,
+            title = it.title,
+            outcome = if (it.skip == null) repairOutcome else "SKIPPED",
+            reason = it.skip?.name,
+        )
+    },
+)
 
 /**
  * One completion of one occurrence.
