@@ -227,7 +227,8 @@ class AssetSeasonActionsTest {
         vm.onSeasonDate("2026-06-10")
         graph.recordSeasonActivation.run(tub, ActivationCommand(SeasonAction.START, occurredOn = "2026-06-12"))
         vm.confirmSeason()
-        vm.prompt.first { prompt -> (prompt as? DetailPrompt.SeasonChange)?.let { !it.saving && it.refusal != null } == true }
+        // The write has answered: either the dialog closed or it holds a refusal.
+        vm.prompt.first { prompt -> prompt == null || (prompt as? DetailPrompt.SeasonChange)?.let { !it.saving && it.refusal != null } == true }
         settle()
 
         val open = vm.seasonPrompt()
