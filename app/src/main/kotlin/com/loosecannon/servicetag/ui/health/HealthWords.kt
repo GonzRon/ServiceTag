@@ -40,14 +40,16 @@ const val NOT_TRACKED_PAUSED = "Not tracked while the schedule is paused"
 const val NOT_TRACKED_LINK = "Not tracked: the linked schedule has no date rule or belongs to another asset."
 
 /**
- * The two quantity-bearing substitutions, through an Android plurals resource (controller ruling,
- * plan decision 29): S99's `<age>` and S102 whole. The `other` form is the ratified text; the `one`
- * form drops only the unit's "s" ("1 day", "… is 1 day overdue") — an inflection of a ratified
- * string, not a new one (master plan §17.2).
+ * The two quantity-bearing substitutions (plan decision 29): S99's `<age>` and S102 whole. The
+ * `other` form is the ratified text; the `one` form drops only the unit's "s" ("1 day", "… is 1 day
+ * overdue") — an inflection of a ratified string, not a new one (master plan §17.2).
  *
- * [AndroidHealthPlurals] is the production implementation over `plurals.xml`. It is an interface
+ * The forms are **four plain strings read by id**, chosen by **English** rules — `one` exactly when
+ * the number is 1 — whatever the device language; there is no Android plurals resource, whose device
+ * rules could read 0 or 21 as "1 day" (the controller's rulings on B12's review, I-2 and RS-3).
+ * [AndroidHealthPlurals] is the production implementation over those strings. It is an interface
  * because `:app`'s JVM tests have no Robolectric: they pass a fake and prove the quantity reaches it,
- * and a connected contract test proves the resource itself.
+ * and a connected contract test proves the strings themselves.
  */
 interface HealthPlurals {
     /** S99's `<age>`: "1 day" or "`<n>` days". */
