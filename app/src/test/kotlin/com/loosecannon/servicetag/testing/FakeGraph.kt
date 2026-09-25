@@ -94,6 +94,7 @@ import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
+import com.loosecannon.servicetag.ui.condition.OperationalOffers
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import com.loosecannon.servicetag.reminders.ReminderSnooze
@@ -367,6 +368,7 @@ class FakeGraph(
     /** The one completion mechanism, over the real use cases — always UTC, so a `tzId` is stable. */
     val completionFlow: CompletionFlow = CompletionFlow(
         schedules, definitions, completeSchedule, completeGroupMembers, todayPort,
+        OperationalOffers(assets, conditions, acceptOperationalOffer, todayPort),
     ) { java.time.ZoneOffset.UTC }
 
     /**

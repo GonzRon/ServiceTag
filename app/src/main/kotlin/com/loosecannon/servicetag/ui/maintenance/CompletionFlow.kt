@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.AlertDialog
@@ -34,7 +35,11 @@ import com.loosecannon.servicetag.core.usecase.GroupCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.asset.DateField
+import com.loosecannon.servicetag.ui.condition.EventOfferDialog
+import com.loosecannon.servicetag.ui.condition.OperationalOfferPrompt
+import com.loosecannon.servicetag.ui.condition.OperationalOffers
 import java.time.ZoneId
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -118,6 +123,14 @@ data class CompletionAnswer(
  * It re-implements no rule. `occurrence_on`, the idempotence index, the conditional postponement
  * clear and the recompute are all the use cases'; what is here is the affordance, the optional
  * time, the meter demand and the routing of a `FORM` schedule into its own form.
+ *
+ * **1.4 — the operational offer** (spec §5.4; master plan §9, decision 12). After a completion, each
+ * completed asset that is DOWN or DEGRADED is asked "Mark operational?" — **one at a time**, one
+ * offer per completed member of a group round, in the order the events were written — and the call
+ * returns once every offer is answered. Declining one leaves the others to be asked. Only the
+ * accept writes, through [OperationalOffers]; the completion itself never touches a condition
+ * (inv. 81). The notification's one-tap completion does not come through this flow at all, so it
+ * offers nothing: there is no screen to ask on.
  */
 class CompletionFlow(
     private val schedules: ScheduleRepository,
@@ -125,6 +138,7 @@ class CompletionFlow(
     private val completeSchedule: CompleteSchedule,
     private val completeGroupMembers: CompleteGroupMembers,
     private val today: Today,
+    private val offers: OperationalOffers,
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) {
 
@@ -134,6 +148,7 @@ class CompletionFlow(
         graph.completeSchedule,
         graph.completeGroupMembers,
         graph.today,
+        OperationalOffers(graph.assets, graph.conditions, graph.acceptOperationalOffer, graph.today),
     )
 
     private val _prompt = MutableStateFlow<CompletionPrompt?>(null)
@@ -142,6 +157,13 @@ class CompletionFlow(
     val prompt: StateFlow<CompletionPrompt?> = _prompt.asStateFlow()
 
     private var pending: CompletableDeferred<CompletionAnswer?>? = null
+
+    private val _offer = MutableStateFlow<OperationalOfferPrompt?>(null)
+
+    /** The open "Mark operational?" offer, or null. [CompletionFlowHost] renders it too. */
+    val offer: StateFlow<OperationalOfferPrompt?> = _offer.asStateFlow()
+
+    private var offerAnswer: CompletableDeferred<Boolean>? = null
 
     /**
      * One occurrence of one schedule, done.
@@ -209,6 +231,25 @@ class CompletionFlow(
     }
 
     /**
+     * **"Mark operational"** on the open offer. The offer is marked as tapped **before** anything
+     * else, which disables its buttons, and a second tap finds it tapped and does nothing — so a double
+     * tap can never write a second OPERATIONAL row. False when there was nothing to accept.
+     */
+    fun acceptOffer(): Boolean {
+        val open = _offer.value ?: return false
+        if (open.accepting) return false
+        _offer.value = open.copy(accepting = true)
+        return offerAnswer?.complete(true) ?: false
+    }
+
+    /** **"Not yet"**: nothing is written, and the next offer, if any, is asked. */
+    fun declineOffer() {
+        val open = _offer.value ?: return
+        if (open.accepting) return
+        offerAnswer?.complete(false)
+    }
+
+    /**
      * Opens the affordance and waits. Null means the owner backed out, or a prompt was already open
      * — in both cases nothing is written, which is what [CompletionOutcome.Cancelled] states.
      *
@@ -238,11 +279,51 @@ class CompletionFlow(
         }
     }
 
-    /** A refusal is an outcome rather than an exception crossing a view model. */
-    private suspend fun attempt(block: suspend () -> List<AssetEvent>): CompletionOutcome = try {
-        CompletionOutcome.Completed(block())
-    } catch (failure: Throwable) {
-        CompletionOutcome.Refused(failure)
+    /**
+     * A refusal is an outcome rather than an exception crossing a view model. A completion that was
+     * written is followed by its offers before the outcome is returned.
+     */
+    private suspend fun attempt(block: suspend () -> List<AssetEvent>): CompletionOutcome {
+        val events = try {
+            block()
+        } catch (failure: Throwable) {
+            return CompletionOutcome.Refused(failure)
+        }
+        offerAfter(events)
+        return CompletionOutcome.Completed(events)
+    }
+
+    /**
+     * One "Mark operational?" per completed asset that qualifies, **one at a time**: each is read
+     * fresh when its turn comes, asked, and answered before the next is read. A refused accept is
+     * logged and the next offer still asked — §10.7 ratifies no sentence for it, and the asset's
+     * condition simply stays as recorded.
+     */
+    private suspend fun offerAfter(events: List<AssetEvent>) {
+        for (event in events) {
+            val prompt = offers.offerFor(event) ?: continue
+            val answer = CompletableDeferred<Boolean>()
+            offerAnswer = answer
+            _offer.value = prompt
+            try {
+                if (answer.await()) {
+                    try {
+                        offers.accept(prompt)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (refused: Exception) {
+                        Log.w(TAG, "an accepted operational offer was refused", refused)
+                    }
+                }
+            } finally {
+                offerAnswer = null
+                _offer.value = null
+            }
+        }
+    }
+
+    private companion object {
+        const val TAG = "CompletionFlow"
     }
 
     private fun CompletionAnswer.command(schedule: MaintenanceSchedule): CompletionCommand {
@@ -272,6 +353,9 @@ class CompletionFlow(
 @Composable
 fun CompletionFlowHost(flow: CompletionFlow) {
     val prompt by flow.prompt.collectAsStateWithLifecycle()
+    val offer by flow.offer.collectAsStateWithLifecycle()
+    // The operational offer after a completion (1.4), on every surface that drives the flow.
+    offer?.let { EventOfferDialog(it, onAccept = { flow.acceptOffer() }, onDecline = flow::declineOffer) }
     val open = prompt ?: return
 
     // Keyed on the schedule so a second prompt starts from today again rather than the last answer.
@@ -351,13 +435,14 @@ fun LogMaintenancePicker(
         value = due.items().filter { it.countsAsDue || it.isRepairableNoData }
     }
     val prompt by flow.prompt.collectAsStateWithLifecycle()
+    val offer by flow.offer.collectAsStateWithLifecycle()
 
     // The affordance, hosted here too, so the quick action asks the same question in the same words.
     CompletionFlowHost(flow)
 
-    // Once the flow has the owner's attention the picker steps out of the way rather than stacking
-    // a second dialog over its own.
-    if (prompt != null) return
+    // Once the flow has the owner's attention — its question, or the offer after it — the picker
+    // steps out of the way rather than stacking a second dialog over its own.
+    if (prompt != null || offer != null) return
     if (items.isEmpty()) {
         LaunchedEffect(items) { onDismiss() }
         return

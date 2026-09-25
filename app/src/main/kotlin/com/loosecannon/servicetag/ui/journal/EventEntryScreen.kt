@@ -51,6 +51,7 @@ import com.loosecannon.servicetag.ui.components.InstrumentEntryRow
 import com.loosecannon.servicetag.ui.components.InstrumentList
 import com.loosecannon.servicetag.ui.components.InstrumentRow
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.condition.EventOfferDialog
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
@@ -87,6 +88,10 @@ fun EventEntryScreen(
 
     // The save itself belongs to the ViewModel; this only listens for the one shot that says done.
     LaunchedEffect(model) { model.saved.collect { onDone() } }
+
+    // 1.4: a just-logged event's one question — "Mark operational?" or the season offer — asked
+    // before the screen leaves. Only its accept writes (spec §3.3, §5.4).
+    state.offer?.let { EventOfferDialog(it, onAccept = model::acceptOffer, onDecline = model::declineOffer) }
     LaunchedEffect(state.firstProblem) { state.firstProblem?.let { snackbars.showSnackbar(it) } }
 
     // A profile-less entry has no name of its own in the bar, so it shows one part, not an orphan

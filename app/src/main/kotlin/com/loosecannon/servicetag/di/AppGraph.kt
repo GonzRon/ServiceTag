@@ -146,6 +146,7 @@ import com.loosecannon.servicetag.reminders.ScheduleCompletion
 import com.loosecannon.servicetag.reminders.ScheduleDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.reminders.WorkManagerBackstop
+import com.loosecannon.servicetag.ui.condition.OperationalOffers
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
@@ -639,6 +640,8 @@ class AppGraph(private val context: Context) {
      */
     val completionFlow: CompletionFlow = CompletionFlow(
         schedules, definitions, completeSchedule, completeGroupMembers, today,
+        // 1.4: the "Mark operational?" offer after a completion (spec §5.4, plan decision 12).
+        OperationalOffers(assets, conditions, acceptOperationalOffer, today),
     )
 
     /**
