@@ -363,6 +363,10 @@ class MaintenanceShellTest {
         // over the quiet line it also qualifies for.
         lines.forEach { rule.onAllNodesWithText(it).assertCountEquals(1) }
         rule.onAllNodesWithText("Reminders wait for the maintenance break to end").assertCountEquals(0)
+        // And nothing else: the plain CONTINUOUS row draws none of the other why-lines.
+        rule.onAllNodesWithText("Made due before the season starts").assertCountEquals(0)
+        rule.onAllNodesWithText("Made due before the maintenance break").assertCountEquals(0)
+        rule.onAllNodesWithText("because the season was not running", substring = true).assertCountEquals(0)
     }
 
     /**
