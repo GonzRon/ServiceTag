@@ -435,12 +435,34 @@ class VersionAgreementTest {
             Regex("""^> \| v7 \| \*\*1\.3\.0\*\* \|""", RegexOption.MULTILINE).containsMatchIn(text),
         )
         assertTrue(
-            "what is still unnumbered must now be said to take v8 upward, dated",
+            "what is still unnumbered must now be said to take v9 upward, dated (v8 is 1.4.0's)",
             Regex(
-                """^> .*will take \*\*v8 upward\*\* \(amended 2026-09-23, ServiceTag 1\.3\.0""",
+                """^> .*will take \*\*v9 upward\*\* \(amended 2026-09-24, ServiceTag 1\.4\.0""",
                 RegexOption.MULTILINE,
             ).containsMatchIn(text),
         )
+        assertFalse(
+            "the v8 reservation must not survive beside the v9 one",
+            text.contains("will take **v8 upward**"),
+        )
+    }
+
+    /**
+     * D4 §15's table, one row further again: v8 is 1.4.0's three new tables and the two it
+     * recreates. Anchored at the row, so the reservation sentence under the table cannot stand in
+     * for it.
+     */
+    @Test fun theDataModelDocumentNamesV8() {
+        val text = repoFile("docs/design/04-domain-data-model.md").readText()
+        val rows = Regex("""^> \| v8 \| \*\*1\.4\.0\*\* \|.*$""", RegexOption.MULTILINE).findAll(text)
+            .map { it.value }.toList()
+        assertEquals("the v8 row must name this release, once", 1, rows.size)
+        for (table in listOf(
+            "`asset_season_activation`", "`asset_condition`", "`health_subject`",
+            "`maintenance_schedule`", "`schedule_state`",
+        )) {
+            assertTrue("the v8 row must name $table", rows.single().contains(table))
+        }
     }
 
     private companion object {
