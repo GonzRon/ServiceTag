@@ -1158,6 +1158,7 @@ There is no new external-boundary test: 1.4 adds no UID, intent or grant boundar
 
 `docs/release-proofs.md` R7 installs 1.4.0 over 1.3.0 in place and also checks equal counts, CALENDAR if and only if both `MM-DD` were set, no break, the §4.1 mapping, empty new lists, and that the pre-upgrade format-7 export merge-plans IDENTICAL.
 
+**Controller note (2026-09-25):** the pre-upgrade format-7 export proof named above was replaced by ruling (plan review I1 / concern 2): the development phone's data survival is proven by API counts and per-table hashes before and after the upgrade (added or normalised keys compared through the release's documented mapping), the loader's IDENTICAL re-plan, and the emulator's preserved-set restore. No export is requested.
 ### 12.4 The five fixtures (fictional; every value entered)
 
 | Fixture | Configuration | Expected at `T` = 2026-09-24 |
