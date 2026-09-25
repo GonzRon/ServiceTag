@@ -422,7 +422,7 @@ class DashboardViewModelMaintenanceTest {
         val vm = viewModel()
         backgroundScope.launch { vm.state.collect() }
 
-        val state = vm.state.first { it.sections.isNotEmpty() }
+        val state = vm.state.first { it.anyInService }
         assertEquals(listOf(AttentionSection.ATTENTION), state.sections.map { it.section })
         assertEquals(
             listOf("DOWN:Generator", "schedule:Blade sharpen", "schedule:Engine oil service", "DEGRADED:Hot tub", "CRITICAL:Battery age"),
@@ -444,7 +444,7 @@ class DashboardViewModelMaintenanceTest {
         val vm = viewModel()
         backgroundScope.launch { vm.state.collect() }
 
-        val state = vm.state.first { it.sections.isNotEmpty() }
+        val state = vm.state.first { it.anyInService }
         assertEquals(listOf(AttentionSection.UPCOMING), state.sections.map { it.section })
         assertEquals(listOf("schedule:Blade sharpen", "WARNING:Battery age"), state.sections.single().drawn())
     }
@@ -505,14 +505,15 @@ class DashboardViewModelMaintenanceTest {
         val vm = viewModel()
         backgroundScope.launch { vm.state.collect() }
 
-        val state = vm.state.first { it.sections.isNotEmpty() }
-        val attention = state.sections.single { it.section == AttentionSection.ATTENTION }
+        val state = vm.state.first { it.anyInService }
+        // The plain list is the systems with nothing drawn: the tub, and not the generator.
+        assertEquals("a DOWN unit is not left in the plain list", listOf("Hot tub"), state.assets.map { it.asset.name })
+        assertEquals(listOf(AttentionSection.ATTENTION), state.sections.map { it.section })
+        val attention = state.sections.single()
         assertEquals(listOf("DOWN:Battery pack", "DOWN:Generator"), attention.drawn())
         val pack = attention.assetRows.first()
         assertEquals("the component names its parent", "Hot tub", pack.parentName)
         assertEquals("Will not hold a charge", pack.reason)
-        // The plain list is the systems with nothing drawn: the tub, and not the generator.
-        assertEquals(listOf("Hot tub"), state.assets.map { it.asset.name })
     }
 
     /** Plan decision 40: an asset drawn as any row in a section is not repeated in the plain list. */
@@ -528,7 +529,7 @@ class DashboardViewModelMaintenanceTest {
         val vm = viewModel()
         backgroundScope.launch { vm.state.collect() }
 
-        val state = vm.state.first { it.sections.isNotEmpty() }
+        val state = vm.state.first { it.anyInService }
         assertEquals(
             listOf("DEGRADED:Generator", "CRITICAL:Battery age", "WARNING:Filter age"),
             state.sections.flatMap { it.drawn() },
@@ -553,7 +554,7 @@ class DashboardViewModelMaintenanceTest {
         val vm = viewModel()
         backgroundScope.launch { vm.state.collect() }
 
-        val state = vm.state.first { it.sections.isNotEmpty() }
+        val state = vm.state.first { it.anyInService }
         assertEquals(listOf("schedule:Battery check"), state.sections.flatMap { it.drawn() })
         val health = state.sections.single().items.single().health
         assertNotNull("the band rides the row", health)
@@ -579,7 +580,7 @@ class DashboardViewModelMaintenanceTest {
         val vm = viewModel()
         backgroundScope.launch { vm.state.collect() }
 
-        val state = vm.state.first { it.sections.isNotEmpty() }
+        val state = vm.state.first { it.anyInService }
         assertEquals(listOf("DEGRADED:Battery pack"), state.sections.flatMap { it.drawn() })
         assertEquals("Hot tub", state.sections.single().assetRows.single().parentName)
         assertEquals(emptyList<String>(), state.assets.map { it.asset.name })
@@ -600,7 +601,7 @@ class DashboardViewModelMaintenanceTest {
         val vm = viewModel()
         backgroundScope.launch { vm.state.collect() }
 
-        val all = vm.state.first { it.sections.isNotEmpty() }
+        val all = vm.state.first { it.anyInService }
         assertEquals(listOf("schedule:Air filter"), all.sections.flatMap { it.drawn() })
         assertEquals(listOf("Mower"), all.assets.map { it.asset.name })
 
