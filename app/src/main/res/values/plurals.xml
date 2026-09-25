@@ -3,16 +3,25 @@
   The two quantity-bearing health substitutions (1.4 spec §10.7; plan decision 29, the controller's
   ruling). Each `other` form is the RATIFIED text verbatim; each `one` form differs from it only by
   the unit's "s" — an inflection of a ratified string, not a new one (master plan §17.2).
+
+  Each form is its own string, and each plural names its two forms by reference. The ratified text is
+  English, so the app chooses the form by ENGLISH rules on every device — `one` exactly when the
+  number is 1 — and reads that form by its own id (AndroidHealthPlurals), never through the device
+  language's plural rules, under which 0 or 21 could select the `one` form and read "1 day".
 -->
 <resources>
     <!-- S99's <age>: "Replaced <date>, <age> ago". -->
+    <string name="health_age_one_day">1 day</string>
+    <string name="health_age_n_days">%d days</string>
     <plurals name="health_age_days">
-        <item quantity="one">1 day</item>
-        <item quantity="other">%d days</item>
+        <item quantity="one">@string/health_age_one_day</item>
+        <item quantity="other">@string/health_age_n_days</item>
     </plurals>
     <!-- S102: "<schedule> is <n> days overdue". -->
+    <string name="health_one_day_overdue">%1$s is 1 day overdue</string>
+    <string name="health_n_days_overdue">%1$s is %2$d days overdue</string>
     <plurals name="health_days_overdue">
-        <item quantity="one">%1$s is 1 day overdue</item>
-        <item quantity="other">%1$s is %2$d days overdue</item>
+        <item quantity="one">@string/health_one_day_overdue</item>
+        <item quantity="other">@string/health_n_days_overdue</item>
     </plurals>
 </resources>

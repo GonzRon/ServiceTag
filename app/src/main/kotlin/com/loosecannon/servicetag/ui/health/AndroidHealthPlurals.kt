@@ -1,56 +1,40 @@
 package com.loosecannon.servicetag.ui.health
 
-import android.content.res.Configuration
 import android.content.res.Resources
 import com.loosecannon.servicetag.R
 import java.util.Locale
 
 /**
- * [HealthPlurals] over `res/values/plurals.xml` (plan decision 29), with the quantity as the selector.
+ * [HealthPlurals] over `res/values/plurals.xml` (plan decision 29).
  *
  * **The form is chosen by English rules on every device** (the controller's ruling on B12's review,
- * I-2). The ratified strings exist in English only, and each `one` form carries a literal "1" — so a
- * device language whose `one` category also holds 0 (French, Portuguese, Hindi) or 21, 31, 101 …
- * (Russian, Ukrainian, Croatian) would otherwise draw "1 day" for those numbers, and a language with
- * no `one` category at all (Japanese) would draw "1 days". The two plurals are therefore read through
- * a copy of [resources] configured for [Locale.ENGLISH]: `one` exactly when the number is 1, the
- * ratified `other` form otherwise, and the number in English digits.
+ * I-2): `one` exactly when the number is 1, the ratified `other` form otherwise. The ratified strings
+ * exist in English only, and each `one` form carries a literal "1". Selecting through
+ * `getQuantityString` would apply the device language's rules instead: where `one` also holds 0
+ * (French, Portuguese, Hindi) or 21, 31, 101 … (Russian, Ukrainian, Croatian), those numbers would
+ * read "1 day", and where there is no `one` at all (Japanese), 1 would read "1 days".
+ *
+ * So this class picks the form itself and reads it **by its own string id** — each plural's two
+ * items name those same strings. It reads [resources] and changes nothing in it, and it formats the
+ * number with English digits.
  *
  * A screen builds one from its own resources where it draws health; none is stored in the graph.
  */
-class AndroidHealthPlurals(resources: Resources) : HealthPlurals {
-
-    private val english: Resources = inEnglish(resources)
+class AndroidHealthPlurals(private val resources: Resources) : HealthPlurals {
 
     override fun ageDays(n: Long): String =
-        english.getQuantityString(R.plurals.health_age_days, n.quantity(), n)
+        if (n == 1L) {
+            resources.getString(R.string.health_age_one_day)
+        } else {
+            english(resources.getString(R.string.health_age_n_days), n)
+        }
 
     override fun daysOverdue(title: String, n: Long): String =
-        english.getQuantityString(R.plurals.health_days_overdue, n.quantity(), title, n)
+        english(
+            resources.getString(if (n == 1L) R.string.health_one_day_overdue else R.string.health_n_days_overdue),
+            title,
+            n,
+        )
 
-    /** `getQuantityString` selects on an `Int`; a day count never comes near its bounds. */
-    private fun Long.quantity(): Int = coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
-
-    private companion object {
-        /**
-         * The same assets and metrics under an English configuration, so the plural **rule** is
-         * English. The `Resources` constructor is deprecated in favour of
-         * `Context.createConfigurationContext`, which needs a `Context` the pinned signature does not
-         * carry.
-         *
-         * The constructor also applies its configuration to the `AssetManager` it shares with
-         * [resources], which would switch every other lookup through [resources] — a library's
-         * translated strings, say — to English. So the caller's own configuration is applied back at
-         * once. The copy keeps its English rule either way: the rule lives in the copy, and the two
-         * plurals exist only in `values/`, so which language the shared assets resolve in cannot
-         * change them.
-         */
-        @Suppress("DEPRECATION")
-        fun inEnglish(resources: Resources): Resources {
-            val config = Configuration(resources.configuration).apply { setLocale(Locale.ENGLISH) }
-            val english = Resources(resources.assets, resources.displayMetrics, config)
-            resources.updateConfiguration(resources.configuration, resources.displayMetrics)
-            return english
-        }
-    }
+    private fun english(form: String, vararg args: Any): String = String.format(Locale.ENGLISH, form, *args)
 }
