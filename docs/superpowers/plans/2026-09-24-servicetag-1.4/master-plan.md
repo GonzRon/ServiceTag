@@ -503,6 +503,8 @@ Each invariant has **one accountable owner** — the brief where it is enforced 
 | 129 | nothing names an installed component or assembly; nothing reads stock | B01 (schema) | B09 (routes), B11 (tools) — each runs §17's grep in its gate; B15 asserts it at release |
 | 130 | the schedule-side link guard and its flag | B06 | B09 (wire); B08 (UI) |
 | 131 | snooze never changes health; postpone restarts it from the new actionable date; no journal | B05 | B07 (the snooze half) |
+**Note on 119 (controller, 2026-09-26):** it applies to the UNFILTERED dashboard; with a status-only filter a DOWN asset's own row may be hidden while its schedule row's health line still shows (B13 review M-1).
+
 
 **Spec 1.2 invariants restated by spec §11:** **10** (`effectiveDueOn` keeps its meaning) B02; **16** (`rebuild` pure including the season input) B02; **17** (one writer, kept by 105) B02; **22** (INACTIVE_SEASON, PAUSED and DEFERRED never notify; nothing notifies while quiet) B02; **23** (a season, activation or break boundary may change status with no history change; the between-rebuilds exception is gone) B02, B07; **25** becomes 87 (B01); **26** is retired (B01 deletes `ScheduleStructuralTest.theDeferredReentryColumnsAreStoredAndNeverRead`; 84 and 104 replace it in B02); **27** becomes 106 (B04); **47** (DEFERRED and quiet are PARKED) B02; **57** (the scan never mutates) B12; **62–64** extended to format 8 and health B03. **No invariant is unassigned.**
 
