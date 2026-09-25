@@ -120,3 +120,7 @@ All MCP tests run against the stdlib HTTP server fixture; no device, no `adb`.
 ## Size
 
 Medium: fourteen thin tools, two reworked overlays, one small Python mapping. Split seam if needed: **B11a** the MCP; **B11b** the loader.
+
+## Carry-forward from B09's review (controller, 2026-09-25)
+
+- Gate exception: this brief MAY edit the MCP overlay paragraph of `docs/api/v1.md` (and nothing else under `docs/api`), which still describes 1.3's MCP; the diff under `docs/api` is limited to that paragraph and the gate says so.
