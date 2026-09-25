@@ -113,4 +113,4 @@ Small: one version block, five documents, one test class, one proof list. No spl
 
 ## Carry-forward from B12 (controller, 2026-09-25)
 
-- Run `./gradlew :app:lintDebug` in the release gate. The two number-less `one` plural forms are ruled (decision 29 as ruled); an `ImpliedQuantity` warning on them gets a `tools:ignore` with a comment citing the ruling, never a number added to the `one` form. Any other new lint error is a real finding.
+- Run `./gradlew :app:lintDebug` in the release gate. The day forms are four plain strings read by id under English rules (B12, controller ruling), so no plurals suppression is needed; any new lint error is a real finding.
