@@ -453,6 +453,37 @@ class SeasonHealthRoutesTest {
         assertEquals(listOf("StrandedSchedule(id=$pre, title=Tune-up)"), error.problems)
     }
 
+    /**
+     * The asset command's pair reaches the same refusal (spec §3.2): a PATCH that leaves the pair out of a
+     * CALENDAR asset — a full replace, so the season would become YEAR_ROUND — strands its PRE_SERVICE
+     * schedule, is 409 naming it, and leaves the asset row exactly as it was.
+     */
+    @Test fun anAssetPatchThatDropsThePairIs409SeasonModeStrandsPolicy() {
+        val snow = api.asset("Snowblower")
+        calendar(snow)
+        val pre = schedule(snow, "Tune-up", """"servicePolicy":"PRE_SERVICE","policyOffsetDays":-14""")
+        val before = runBlocking { graph.assets.get(com.loosecannon.servicetag.core.model.AssetId(snow)) }
+        graph.now = dayMillis("2026-02-05")
+        val error = refused(call("PATCH", "/v1/assets/$snow", """{"name":"Snowblower"}"""), 409, "SEASON_MODE_STRANDS_POLICY")
+        assertEquals(listOf("StrandedSchedule(id=$pre, title=Tune-up)"), error.problems)
+        assertEquals(before, runBlocking { graph.assets.get(com.loosecannon.servicetag.core.model.AssetId(snow)) })
+    }
+
+    /**
+     * Defence in depth (review M4): a validation refusal that names no problem — unreachable, since every
+     * throw site collects one — still answers an envelope, under its family's lower-snake code, rather
+     * than throwing out of the mapper.
+     */
+    @Test fun aValidationRefusalWithNoProblemStillAnswersAnEnvelope() {
+        for ((failure, code) in listOf(
+            com.loosecannon.servicetag.core.usecase.SeasonValidation(emptyList()) to "season_validation",
+            com.loosecannon.servicetag.core.usecase.ConditionValidation(emptyList()) to "condition_validation",
+            com.loosecannon.servicetag.core.usecase.HealthValidation(emptyList()) to "health_validation",
+        )) {
+            refused(mapDomainFailure(failure), 422, code)
+        }
+    }
+
     @Test fun breakStrandsPolicyIs409AndNamesTheSchedules() {
         val generator = api.asset("Generator")
         api.ok(

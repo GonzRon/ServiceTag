@@ -90,6 +90,20 @@ class LegacyFormTest {
         val clamped = create(body(asset, """"servicePolicy":"IN_SERVICE_RESUME_CLAMPED"""", title = "Shear pins"))
         assertEquals("IN_SERVICE_RESUME_CLAMPED", clamped.servicePolicy)
         assertNull(clamped.policyOffsetDays)
+
+        // An explicit `"servicePolicy": null` is present — the 1.4 form — and a policy is never null, so it
+        // is the shipped 400 naming the key, on a create and on a PATCH, and nothing is written; it is
+        // never read as an omitted key's CONTINUOUS.
+        val count = runBlocking { graph.schedules.all() }.size
+        val before = stored(pre.id)
+        for ((method, path) in listOf("POST" to "/v1/schedules", "PATCH" to "/v1/schedules/${pre.id}")) {
+            val refused = api.call(method, path, body(asset, """"servicePolicy":null""", title = "Tune-up"))
+            assertEquals("$method ${refused.bodyText()}", 400, refused.status)
+            assertEquals(method, "bad_request", refused.errorDetail().code)
+            assertTrue(refused.bodyText(), "servicePolicy" in refused.errorDetail().message)
+        }
+        assertEquals(count, runBlocking { graph.schedules.all() }.size)
+        assertEquals(before, stored(pre.id))
     }
 
     /**

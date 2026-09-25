@@ -12,7 +12,6 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -568,14 +567,5 @@ class ReferenceRoutesTest {
                 Regex(row, RegexOption.MULTILINE).containsMatchIn(text),
             )
         }
-    }
-
-    /** The repository root, found the way `VersionAgreementTest` finds it, without borrowing it. */
-    private fun repoFile(path: String): File {
-        var dir = File(".").absoluteFile
-        while (!File(dir, "settings.gradle.kts").isFile) {
-            dir = dir.parentFile ?: error("no settings.gradle.kts above ${File(".").absolutePath}")
-        }
-        return File(dir, path)
     }
 }
