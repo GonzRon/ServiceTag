@@ -195,6 +195,53 @@ class VersionAgreementTest {
     }
 
     /**
+     * The 1.4.0 / 16 row. Its reason for being a MINOR is the forward-only rule above, so the row
+     * has to say the three things that make it one: the schema and the format it ships, that the
+     * new app reads every older archive, and that 1.3.x refuses a format-8 one loudly. Anchored at
+     * the start of the row, so a mention of 1.4.0 in prose or in the reservation table never
+     * satisfies it.
+     *
+     * `versionCode` 16 is claimed by this row and by nothing else — a second row or a reservation
+     * naming 16 is how two releases come to claim one number.
+     */
+    @Test fun versioningRecordsThisRelease() {
+        val text = repoFile("docs/versioning.md").readText()
+        val rows = Regex("""^\|\s*1\.4\.0\s*\|\s*16\s*\|.*$""", RegexOption.MULTILINE).findAll(text)
+            .map { it.value }.toList()
+        assertEquals("the supported release history must carry exactly one 1.4.0 / 16 row", 1, rows.size)
+        val row = rows.single()
+        assertTrue(
+            "the row must name the schema and the format it ships",
+            Regex("""schema \*\*8\*\*.*format \*\*8\*\*""").containsMatchIn(row),
+        )
+        assertTrue(
+            "the row must give the forward-only reason it is a MINOR",
+            row.contains("`BackupNewerFormat`") && row.contains("MINOR by the rule above"),
+        )
+        for (capability in listOf(
+            "operating seasons (calendar and manual)",
+            "maintenance service policy and a maintenance break",
+            "operational condition and derived health",
+        )) {
+            assertTrue("the row must name \"$capability\" in the spec's words", row.contains(capability))
+        }
+        assertTrue(
+            "the row must name the contracts",
+            row.contains("`docs/api/v1.md`") &&
+                row.contains("`docs/superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md`"),
+        )
+        assertFalse(
+            "the row's gate counts are measured, so no placeholder ships",
+            row.contains("PLACEHOLDER"),
+        )
+        assertEquals(
+            "no other row, and no reservation, may claim versionCode 16",
+            1,
+            Regex("""^\|[^\n]*\|\s*16\s*\|""", RegexOption.MULTILINE).findAll(text).count(),
+        )
+    }
+
+    /**
      * D5's two corrections. The old `prevDue` reconstruction and the old recurrence-edit answer
      * are **kept** for the record, so the assertion is not that the sentences are gone — it is
      * that each is marked superseded, which is what stops a reader taking either as the rule.
