@@ -78,13 +78,26 @@ const val RENAME = "Rename"
 const val DELETE_THIS_CATEGORY = "Delete this category?"
 
 /**
+ * P74-18 (the follow-ups, RATIFIED 2026-09-26), under the rename field, the dialog staying: a rename
+ * failed for a reason none of the refusals names.
+ */
+const val COULD_NOT_RENAME = "Could not rename that category."
+
+/**
+ * P74-19 (the follow-ups, RATIFIED 2026-09-26), on the screen's snackbar: a confirmed delete failed for
+ * a reason none of the refusals names; the row stays.
+ */
+const val COULD_NOT_DELETE = "Could not delete that category."
+
+/**
  * Settings → Categories (#74, C17): the owner's own categories with how many assets use each, then the
  * built-ins as quiet rows with no menu — they are compiled, not rows, and cannot be renamed or deleted.
  * There is no "Add": a successful asset save is the owner's way in, and P74-5 says so; a restore or a
  * merge also adds rows, for the assets it brings.
  *
- * A row's overflow renames it (a dialog whose refusals are drawn under its field, the dialog staying)
- * or deletes it: an unused one after P74-15/16, one in use not at all, with P74-17 on the snackbar.
+ * A row's overflow renames it (a dialog whose refusals, and P74-18 when a rename fails, are drawn under
+ * its field, the dialog staying) or deletes it: an unused one after P74-15/16, one in use not at all,
+ * with P74-17 on the snackbar — and P74-19 there when a confirmed delete fails.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

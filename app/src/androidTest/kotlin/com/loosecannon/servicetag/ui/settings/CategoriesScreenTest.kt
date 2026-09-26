@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.settings
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -20,9 +21,17 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.text.AnnotatedString
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.AssetCategory
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
@@ -147,6 +156,51 @@ class CategoriesScreenTest {
         nameField().assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Error))
         inDialog("Rename category").assertIsDisplayed()
         assertEquals("Spare", runBlocking { graph.categories.get("spare") }?.display)
+    }
+
+    /** The store, except that writing a row fails the way a full or broken disk would. */
+    private class UpsertFails(real: CategoryRepository) : CategoryRepository by real {
+        override suspend fun upsert(row: AssetCategory): Unit = throw IllegalStateException("disk I/O error")
+    }
+
+    /**
+     * The follow-ups' F1 (P74-18, owner 2026-09-26): a rename that fails for a reason none of the
+     * refusals names is said under the field, in the dialog that stays — never on the snackbar under its
+     * scrim. The screen's model is seeded into the `ViewModelStore` this test provides, under the default
+     * key `CategoriesScreen`'s `viewModel { }` resolves with, so its rename is one whose write fails.
+     */
+    @Test fun aFailedRenameShowsItsLineUnderTheField() {
+        seed()
+        val owner = object : ViewModelStoreOwner {
+            override val viewModelStore = ViewModelStore()
+        }
+        val failing = RenameCategory(UpsertFails(graph.categories), graph.assets, graph.uow, graph.clock)
+        ViewModelProvider.create(
+            owner,
+            viewModelFactory {
+                initializer { CategoriesViewModel(graph.categories, graph.assets, failing, graph.deleteCategory) }
+            },
+        )[CategoriesViewModel::class]
+        rule.setContent {
+            CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
+                ServiceTagTheme { CategoriesScreen(graph = graph, onBack = {}) }
+            }
+        }
+        rule.awaitText("Spare")
+        menuOf(1)
+        rule.onNodeWithText("Rename").performClick()
+        rule.awaitText("Rename category")
+        nameField().performTextReplacement("Spares")
+        inDialog("Rename").performClick()
+
+        rule.awaitText("Could not rename that category.")
+        inDialog("Could not rename that category.").assertIsDisplayed()
+        rule.onAllNodesWithText("Could not rename that category.").assertCountEquals(1)
+        nameField().assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Error))
+        nameField().assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("Spares")))
+        inDialog("Rename category").assertIsDisplayed()
+        assertEquals("Spare", runBlocking { graph.categories.get("spare") }?.display)
+        assertNull(runBlocking { graph.categories.get("spares") })
     }
 
     @Test fun anUnusedDeleteAsksThenRemovesTheRow() {
