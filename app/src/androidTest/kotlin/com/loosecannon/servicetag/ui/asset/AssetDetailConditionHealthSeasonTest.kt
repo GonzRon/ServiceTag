@@ -29,6 +29,7 @@ import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
@@ -39,6 +40,7 @@ import com.loosecannon.servicetag.core.usecase.ConditionCommand
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.HealthPolicyCommand
 import com.loosecannon.servicetag.core.usecase.HealthSubjectCommand
+import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.app
@@ -52,6 +54,7 @@ import com.loosecannon.servicetag.ui.condition.MARK_OPERATIONAL_TITLE
 import com.loosecannon.servicetag.ui.condition.START_SEASON
 import com.loosecannon.servicetag.ui.condition.WHEN_DID_THIS_CHANGE
 import com.loosecannon.servicetag.ui.condition.displayDate
+import com.loosecannon.servicetag.ui.maintenance.SCHEDULES_SECTION
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -88,8 +91,8 @@ class AssetDetailConditionHealthSeasonTest {
     private val today: LocalDate = LocalDate.now()
     private val zone: String get() = ZoneId.systemDefault().id
 
-    /** Asset detail on [initial]; the returned setter switches it to another asset. */
-    private fun detail(initial: AssetId): (AssetId) -> Unit {
+    /** Asset detail on [initial], opened on [section]; the returned setter switches it to another asset. */
+    private fun detail(initial: AssetId, section: String? = null): (AssetId) -> Unit {
         var shown by mutableStateOf(initial)
         rule.setContent {
             ServiceTagTheme {
@@ -99,7 +102,7 @@ class AssetDetailConditionHealthSeasonTest {
                     onBack = {}, onEdit = {}, onSetup = {}, onWriteTag = {}, onBackup = {},
                     onLogEvent = { _, _ -> }, onOpenEvent = {}, onOpenAsset = {}, onAddComponent = {},
                     onAddSchedule = {}, onLogOutcome = { _, _ -> }, onOpenSettings = {},
-                    onOpenSchedule = {}, onOpenGroup = {},
+                    onOpenSchedule = {}, onOpenGroup = {}, section = section,
                 )
             }
         }
@@ -355,6 +358,45 @@ class AssetDetailConditionHealthSeasonTest {
         rule.onNodeWithText(YEAR_ROUND).performScrollTo().assertIsDisplayed()
         rule.onAllNodesWithText(SEASON_HISTORY).assertCountEquals(0)
         rule.onAllNodesWithText(MAINTENANCE_BREAK).assertCountEquals(0)
+    }
+
+    /**
+     * #78 (C4): opened with [SECTION_SCHEDULES] — where "Review maintenance schedules" lands — the
+     * screen shows its maintenance sections without a tap. The page is made tall on purpose (a
+     * template's readings and quick actions, every detail filled, two health subjects), so the
+     * sections start below the fold and only the scroll can bring them into view.
+     */
+    @Test fun theSchedulesSectionScrollsIntoViewWhenAsked() {
+        val gen = runBlocking {
+            val id = graph.createAsset.run(
+                AssetCommand(
+                    name = "Generator", category = "Power", description = "Standby unit", notes = "Serviced yearly",
+                    manufacturer = "Maker", model = "M-1", serialNumber = "SN-1", purchaseOn = "2024-01-15",
+                    inServiceOn = "2024-02-01", vendor = "Vendor", location = "Outside",
+                    warrantyExpiresOn = "2029-01-15", warrantyNotes = "Parts only",
+                ),
+                templateKey = "power_equipment",
+            ).id
+            graph.saveHealthSubject.create(id, age("Battery age", 0, 700, 1000))
+            graph.saveHealthSubject.create(id, age("Belt age", 0, 300, 600))
+            graph.saveSchedule.run(
+                null,
+                ScheduleCommand(
+                    targetAssetId = id,
+                    targetGroupId = null,
+                    title = "Weekly check",
+                    timeInterval = 1,
+                    timeUnit = RecurrenceUnit.WEEK,
+                    anchorOn = today.toString(),
+                ),
+            )
+            id
+        }
+        detail(gen, section = SECTION_SCHEDULES)
+        rule.awaitText("Weekly check")
+
+        rule.onNodeWithText(SCHEDULES_SECTION).assertIsDisplayed()
+        rule.onNodeWithText("Weekly check").assertIsDisplayed()
     }
 
     private companion object {

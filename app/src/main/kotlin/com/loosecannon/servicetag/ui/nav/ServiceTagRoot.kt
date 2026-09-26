@@ -23,6 +23,7 @@ import com.loosecannon.servicetag.ui.api.DeveloperApiScreen
 import com.loosecannon.servicetag.ui.asset.AssetDetailScreen
 import com.loosecannon.servicetag.ui.asset.AssetEditScreen
 import com.loosecannon.servicetag.ui.asset.AssetsScreen
+import com.loosecannon.servicetag.ui.asset.SECTION_SCHEDULES
 import com.loosecannon.servicetag.ui.backup.BackupScreen
 import com.loosecannon.servicetag.ui.dashboard.DashboardScreen
 import com.loosecannon.servicetag.ui.health.HealthSubjectEditScreen
@@ -198,6 +199,7 @@ fun ServiceTagRoot(
                         // 1.2's two sections: a schedule opens B14's screen, a group opens B15's.
                         onOpenSchedule = { backStack.add(Route.ScheduleDetail(it)) },
                         onOpenGroup = { backStack.add(Route.GroupDetail(it)) },
+                        section = key.section,
                     )
                 }
                 entry<Route.AssetEdit> { key ->
@@ -214,6 +216,19 @@ fun ServiceTagRoot(
                         onBack = { backStack.removeLastOrNull() },
                         onAddSubject = { asset -> backStack.add(Route.HealthSubjectEdit(asset)) },
                         onOpenSubject = { asset, subject -> backStack.add(Route.HealthSubjectEdit(asset, subject)) },
+                        // #78 (C4): the editor leaves, and the asset's own screen opens on its schedules.
+                        // The detail the editor was opened from is replaced, not stacked under a second
+                        // one, so one back press leaves the asset.
+                        onReviewSchedules = { id ->
+                            backStack.removeLastOrNull()
+                            val schedules = Route.AssetDetail(id, SECTION_SCHEDULES)
+                            val under = backStack.lastOrNull()
+                            if (under is Route.AssetDetail && under.id == id) {
+                                backStack[backStack.lastIndex] = schedules
+                            } else {
+                                backStack.add(schedules)
+                            }
+                        },
                     )
                 }
                 entry<Route.HealthSubjectEdit> { key ->

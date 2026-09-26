@@ -11,7 +11,11 @@ import kotlinx.serialization.Serializable
 sealed interface Route : NavKey {
     @Serializable data object Dashboard : Route
     @Serializable data object Assets : Route
-    @Serializable data class AssetDetail(val id: String) : Route
+    /**
+     * One asset. [section] names a part of the screen to open with in view, read once per entry:
+     * #78's "Review maintenance schedules" opens it with `SECTION_SCHEDULES`. null is the top.
+     */
+    @Serializable data class AssetDetail(val id: String, val section: String? = null) : Route
     /**
      * New when [id] is null. [parentId] is the "Part of" a new asset opens with, which is how
      * "+ Add component" on a parent's screen makes a child (spec §9); it is ignored on an edit,

@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -203,6 +204,11 @@ internal fun ratifiedParts(words: String): List<String> = words.split(" · ")
  * one save. Save is held, in the app bar and at the foot, while an answer the owner must give is
  * missing; the fields that hold it carry an asterisk, and no sentence is drawn for it (master dec. 46).
  * Leaving without Save writes nothing: opening a subject writes nothing either.
+ *
+ * **#78:** a save that takes an existing asset from year-round into a season, while it has live
+ * schedules set to "Whenever it is due", asks once before the editor closes (P78-1a/1b, no title). The
+ * season is already saved; "Keep schedules as-is" and the back gesture finish through [onDone], and
+ * "Review maintenance schedules" through [onReviewSchedules]. Neither answer writes anything.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -214,6 +220,7 @@ fun AssetEditScreen(
     parentId: String? = null,
     onAddSubject: (assetId: String) -> Unit = {},
     onOpenSubject: (assetId: String, subjectId: String) -> Unit = { _, _ -> },
+    onReviewSchedules: (assetId: String) -> Unit = {},
 ) {
     // The key carries the parent as well as the id: "+ Add component" on two different parents
     // must not share one half-filled form, and neither must a plain "Add asset" and a component.
@@ -221,11 +228,29 @@ fun AssetEditScreen(
         AssetEditViewModel(graph, assetId, parentId)
     }
     val state by model.state.collectAsStateWithLifecycle()
+    val prompt by model.prompt.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
 
     // The save itself belongs to the ViewModel; this only listens for where it says to go next.
     LaunchedEffect(model) { model.saved.collect { id -> onDone(id.value) } }
+    LaunchedEffect(model) { model.review.collect { id -> onReviewSchedules(id.value) } }
     LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
+
+    // #78 (C3): the question over the saved form. Dismissing it any other way — the back gesture, a
+    // tap outside — is "Keep schedules as-is", so the owner is never left without an answer.
+    when (val ask = prompt) {
+        is EditPrompt.ReconcileSchedules -> AlertDialog(
+            onDismissRequest = model::keepSchedules,
+            text = { Text(notTiedToSeason(ask.count)) },
+            confirmButton = {
+                TextButton(onClick = model::reviewSchedules) { Text(REVIEW_MAINTENANCE_SCHEDULES) }
+            },
+            dismissButton = {
+                TextButton(onClick = model::keepSchedules) { Text(KEEP_SCHEDULES_AS_IS) }
+            },
+        )
+        null -> Unit
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbars) },
