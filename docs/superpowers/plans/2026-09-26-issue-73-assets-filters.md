@@ -1,4 +1,4 @@
-# #73 — compact Type, Components and Archived filters on the Assets list: plan and brief (rev 2, reviewed 2026-09-26; re-review fixes N1–N9 applied)
+# #73 — compact Type, Components and Archived filters on the Assets list: plan and brief (rev 2, reviewed 2026-09-26; re-review fixes N1–N9 applied; RATIFIED 2026-09-26)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development under the review
 > budget in `docs/superpowers/planning-policy.md`. One brief (§9), one implementer, one task review, one
@@ -6,7 +6,10 @@
 > 2026-09-26, with #71 audited alongside for the shared Assets-list seam (§8). Rev 2 folds in the
 > independent brief review (eight majors: the blank-query empty state, the empty-reason rule, the device
 > and JVM re-anchorings, the stale-type write-back, the Type chip's semantics, three vacuous REDs, the
-> Type-hidden case). Nothing is dispatched until the owner has ratified every string in §6 and read §7.
+> Type-hidden case). **Owner ruling 2026-09-26: P73-1…7, P73-9 and P73-10 RATIFIED verbatim; P73-1 `Type` kept
+> knowingly (the domain and Settings word stays Category; no second taxonomy); P73-8 keep `Show archived`;
+> P73-10 adopted; P73-11 the placeholder becomes `Search assets`; R73-1…8 stand; #71 serialized after #73 in
+> its own brief; `AssetRow` and `AssetListRow` untouched. GO: dispatched.**
 
 **Goal:** the Assets tab gains one compact filter row under the search box — `Type ▼`, `Components`,
 `Archived` — that fits one line at ordinary phone width, wraps rather than clips elsewhere, and composes
@@ -122,7 +125,7 @@ row fields and flows), so they serialize, #73 first, with the seams in §8.
   larger font wraps the row onto more lines, never over the list.
 - **C7, the row itself is untouched** — name, category, "Part of", the three badges — so #71's trailing
   cluster lands on an unchanged composable (§8).
-- **C8, nothing else moves.** The search box and its placeholder (unless P73-11 is ratified), the sort,
+- **C8, nothing else moves.** The search box (its placeholder becomes P73-11 `Search assets`, a const in `AssetSearch.kt`), the sort,
   `archivedCount`, the add action, navigation, the dashboard.
 
 ## 3. Test matrix (hazards; the brief fixes names)
@@ -147,7 +150,7 @@ row fields and flows), so they serialize, #73 first, with the seams in §8.
 **Modify** `ui/asset/AssetViewModels.kt` (`AssetFilters`, `AssetsState`, `EmptyReason`, `AssetsViewModel`;
 its KDoc rewritten — the retired rule goes), `ui/asset/AssetsScreen.kt` (the control row, an internal
 `AssetsFilterRow` composable for the layout tests, the empty states; the P73 consts; the comment at
-`:93–110` rewritten), `ui/asset/AssetSearch.kt` (the placeholder only if P73-11 is ratified). Tests:
+`:93–110` rewritten), `ui/asset/AssetSearch.kt` (the placeholder P73-11). Tests:
 `AssetViewModelsTest`, `AssetsSearchTest` (its class KDoc rewritten), `AssetModelDeviceProofTest`,
 `SeasonReconciliationNavigationTest`, a new `AssetsFiltersTest`. **Untouched:** `AssetListRow`'s content
 (C7), `DashboardFilters.kt` / `DashboardViewModel.kt` (R74-9), the catalog, the repositories.
@@ -171,14 +174,13 @@ nothing scrolls horizontally and nothing overlaps the list. Chip touch targets a
 | P73-5 | empty: hidden by Archived only | `Matching assets are archived. Turn on Archived to see them.` | rewords the ratified §18.23 hint to the chip's new name |
 | P73-6 | empty: hidden by Components only | `Matching assets are components. Turn on Components to see them.` | new |
 | P73-7 | empty: hidden by both | `Matching assets are hidden. Turn on Components and Archived to see them.` | new; true for a mix and for an archived component |
-| P73-8 | the blank-query empty state's outlined button | `Show archived` | **recommended: keep** (a button names its action; already ratified) |
+| P73-8 | the blank-query empty state's outlined button | `Show archived` | **RATIFIED: kept** (a button names its action) |
 | P73-9 | blank query, every active asset is a component, Components OFF | `Only components here. Turn on Components to see them.` | new (the review's finding 1) |
-| P73-10 | empty: the matches have another type | `Matching assets have another type. Set Type to All.` | new; R73-7 — **recommended**, keeping §18.23 whole (no "to see them": those hits may also be hidden by Components or Archived, and the next empty state names that control); the alternative is `Nothing matches that.` with the chip showing the type |
-| P73-11 | the search box placeholder | keep `Search assets and components` **or** `Search assets` | owner's choice; with Components OFF by default a search finds no component until the chip is on, and P73-6 says so |
+| P73-10 | empty: the matches have another type | `Matching assets have another type. Set Type to All.` | new; R73-7 — **RATIFIED**, keeping §18.23 whole (no "to see them": those hits may also be hidden by Components or Archived, and the next empty state names that control); the alternative is `Nothing matches that.` with the chip showing the type |
+| P73-11 | the search box placeholder | `Search assets` | **RATIFIED** (replaces `Search assets and components`: components are assets, and with Components OFF by default the old text over-promised) |
 | — | unchanged | `Assets`, `Add asset`, `Nothing matches that.`, `No active assets · <n> archived`, `No assets yet`, `Part of <parent>`, the badges | |
 
-New sentences: P73-1, P73-2, P73-3, P73-4, P73-6, P73-7, P73-9, P73-10 (eight); the P73-5 rewording; the
-P73-8 and P73-11 choices.
+New sentences: P73-1, P73-2, P73-3, P73-4, P73-6, P73-7, P73-9, P73-10 (eight) and P73-11 (one replaced placeholder); the P73-5 rewording; P73-8 unchanged. All ratified 2026-09-26.
 
 ## 7. Rulings (controller, 2026-09-26; the owner reads these before dispatch and may override any)
 
@@ -234,7 +236,7 @@ members hard-coded.
 - Anchored `git grep -nF` over `app/src/main/kotlin/com/loosecannon/servicetag/ui/asset/AssetsScreen.kt`,
   each literal on one line: `"Type"` → 1; `"All"` → 1; `"Components"` → 1; `"Archived"` → 1 (the chip and
   the badge share the const); P73-5, P73-6, P73-7, P73-9, P73-10 → 1 each; `"Show archived"` → 1 (P73-8
-  kept) or 0; `Show archived to see them` → 0 across `app/src/main`; P73-10 → 1 if ratified, else 0; if P73-11 is reworded, `"Search assets"` → 1 in `AssetSearch.kt` (a const) and the old literal → 0 with `AssetsSearchTest.kt:66` re-anchored; `components included` (2 today) and `hide-components` (1 today) → 0 across `app/src` (the retired rule's comments gone).
+  kept) or 0; `Show archived to see them` → 0 across `app/src/main`; P73-10 → 1; `"Search assets"` → 1 in `AssetSearch.kt` (a const) and `Search assets and components` → 0 across `app/src` with `AssetsSearchTest.kt:66` re-anchored; `components included` (2 today) and `hide-components` (1 today) → 0 across `app/src` (the retired rule's comments gone).
 - `git diff <base> --stat -- core tools app/src/main/kotlin/com/loosecannon/servicetag/ui/dashboard app/src/main/kotlin/com/loosecannon/servicetag/ui/settings app/src/main/kotlin/com/loosecannon/servicetag/data` → empty.
 - The assert sweep; gitlink `7e0377a`; `git status` clean.
 
