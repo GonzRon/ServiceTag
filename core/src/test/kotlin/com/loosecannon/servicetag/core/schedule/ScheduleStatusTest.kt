@@ -1,11 +1,13 @@
 package com.loosecannon.servicetag.core.schedule
 
+import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.SeasonInputs
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
@@ -204,6 +206,38 @@ class ScheduleStatusTest {
         today = on("2026-04-16")
         assertEquals(DueStatus.INACTIVE_SEASON, statusOf(winter, recompute.readState(winter), today))
         assertEquals(stored, states.get(winter.id), "no history change and no write: only the day moved")
+    }
+
+    /**
+     * #78 AC 2 (spec §3.5, §4.1): a MANUAL asset whose season was ended, two schedules side by side
+     * with the same weekly rule and the same history. The `IN_SERVICE_AT_START` one keeps its open
+     * occurrence and computes its date, and reads `INACTIVE_SEASON`; the `CONTINUOUS` one ignores the
+     * season and reads DUE on that date — the behaviour #78 leaves alone and only explains (AC 3).
+     */
+    @Test
+    fun aManualAssetThatEndedMakesAnInServiceScheduleInactiveAndLeavesAContinuousOneDue() {
+        val today = "2026-04-18"
+        // START 3 Jan, END Thu 16 Apr: out of season on Sat 18 Apr, and no START predicted.
+        val ended = SeasonFixtures.hotTubAsset().seasonInputs(SeasonFixtures.hotTubActivationsUpTo(today))
+        val inService = SeasonFixtures.hotTubSchedule()
+        val continuous = SeasonFixtures.hotTubSchedule(id = "s-tub-continuous")
+            .copy(servicePolicy = ServicePolicy.CONTINUOUS, policyOffsetDays = null)
+        val inServiceDone = listOf(SeasonFixtures.hotTubCompletedOnApril11(scheduleId = inService.id.value))
+        val continuousDone = listOf(SeasonFixtures.hotTubCompletedOnApril11(scheduleId = continuous.id.value))
+
+        val dormant = ScheduleRecompute.rebuild(
+            inService, inServiceDone, emptyList(), emptyList(), on(today), ZoneOffset.UTC, ended,
+        )
+        assertEquals("2026-04-18", dormant.computedDueOn, "the open occurrence is kept and its date computed")
+        assertEquals(PolicyPhase.DORMANT, dormant.policyPhase)
+        assertEquals(DueStatus.INACTIVE_SEASON, statusOf(inService, dormant, on(today)))
+
+        val beside = ScheduleRecompute.rebuild(
+            continuous, continuousDone, emptyList(), emptyList(), on(today), ZoneOffset.UTC, ended,
+        )
+        assertEquals("2026-04-18", beside.computedDueOn, "the same occurrence")
+        assertEquals(PolicyPhase.ACTIVE, beside.policyPhase, "CONTINUOUS never goes dormant")
+        assertEquals(DueStatus.DUE, statusOf(continuous, beside, on(today)))
     }
 
     /** The worst-of order itself, asserted once so the two sides can be combined with confidence. */
