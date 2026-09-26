@@ -381,3 +381,23 @@ and S95–S97 are reused verbatim through their existing functions, never retype
 → only the existing detail sites plus the row's use. §9's untouched-paths diff stands except that
 `AssetHealthReadModel.kt` changes per E3 (its existing tests stay green); the detail screen, the dashboard
 and the engine remain untouched.
+
+## 11. Errata after implementation (controller, 2026-09-26; recorded against the task review and the reports)
+
+- **E8's first grep** reads `git grep -nF '"Critical: ' -- app/src/main` → `HealthWords.kt` only. The
+  unquoted form also matched the `healthCritical` palette token name, which the base already had; the
+  gate's intent was always string literals.
+- **E5's clipping check** is `didOverflowHeight` plus each line's widest ink fitting its box, with one-line
+  badge labels, containment and no overlaps — not `hasVisualOverflow`, which reports every exactly-fitting
+  one-line label as overflowing on the emulator (the #68 finding). The technique is `ActionGridTest`'s.
+- **E5's estimate for case (iii)** undercounted: the reused `ConditionBadge` draws "since <date>" beside
+  DOWN, so the worst in-service row takes three badge lines at 320/1.0 and at 412/2.0 and two at 360/1.0.
+  Nothing clips; the row grows. A compact row-only condition badge would be a new owner ruling.
+- **"Left of and above the disc"** (§3) is asserted as three checks: the health badge is left of the disc,
+  the disc is right-anchored and vertically centred, and health precedes the disc in reading order (R71-3).
+- **The view model keeps the last row-health map across a restart of the flow** after WhileSubscribed's
+  grace, so the group never blinks off for rows already on screen; the first open still gets the empty
+  placeholder (the task review's MINOR-1). After a restart a changed band shows its older value until the
+  new pass lands — the accepted trade over blanking.
+- **The table-read guard** (a failing asset or condition read emits an empty map, logs at warn, retries
+  on the next signal) is within C2's "the list never dies with the health pass" and stays.
