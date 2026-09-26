@@ -20,9 +20,13 @@ season or a break). Issue #78's invariants and acceptance criteria 1–10.
 ## 1. Diagnosis first (AC 1–2; controller, read-only)
 
 - **AC 1.** Read the owner's case on the development phone through the API: the asset's `seasonMode` and
-  phase, and every schedule on it with `servicePolicy`, `status` and the derived state. **Pending:** the
-  phone was dozing on its lock screen when the read was attempted (2026-09-25); it needs to be unlocked.
-- **AC 2.** If a schedule on that asset is `IN_SERVICE_AT_START` / `IN_SERVICE_RESUME_CLAMPED` and still
+  phase, and every schedule on it with `servicePolicy`, `status` and the derived state. **Done 2026-09-25 (read-only, through the API on the unlocked development phone):** the case asset is the
+  only MANUAL asset on the phone; its phase is OUT_OF_SEASON (one END activation dated 2026-09-25); it has
+  two ACTIVE schedules, both `servicePolicy = CONTINUOUS`, offset null: a weekly FIXED rule (status DUE,
+  `computedDueOn` 2026-09-25, `policyPhase` ACTIVE, never completed) and a two-yearly FIXED rule (status OK,
+  due 2027-09-17). So the engine behaves as §4 specifies — a CONTINUOUS schedule ignores the season — and
+  #78 is the UX gap, not a status defect. No bug is split out.
+- **AC 2.** (Not the case here.) If a schedule on that asset is `IN_SERVICE_AT_START` / `IN_SERVICE_RESUME_CLAMPED` and still
   reads DUE while the MANUAL season is ended, that is a 1.4 status defect: it is split into its own
   `[NEXT-1][BUG]` and fixed first, before this enhancement. If every DUE schedule there is `CONTINUOUS`,
   the engine behaves as specified and this plan proceeds as a UX gap. Either way a core test pins AC 2
