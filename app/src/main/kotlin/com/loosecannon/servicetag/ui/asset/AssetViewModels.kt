@@ -1490,11 +1490,13 @@ class AssetEditViewModel(
         _state.update { it.copy(seasonRefusal = null, breakRefusal = null) }
         when (val failure = result.exceptionOrNull()) {
             null -> {
-                // The question is settled before the form stops saving, so whoever waits on
-                // `saving` sees either the question or the finished editor, never neither.
-                val ask = reconcilePromptFor(form)
+                // The question goes up before the form stops saving, so whoever waits on `saving`
+                // finds either the question or, as before, the finished editor — never neither.
+                val saved = result.getOrNull()
+                val ask = saved?.let { reconcilePromptFor(form) }
+                ask?.let { _prompt.value = it }
                 _state.update { it.copy(saving = false, problems = emptyMap()) }
-                result.getOrNull()?.let { saved -> if (ask != null) _prompt.value = ask else _saved.tryEmit(saved.id) }
+                if (ask == null) saved?.let { _saved.tryEmit(it.id) }
             }
             is SeasonModeStrandsPolicy -> _state.update {
                 it.copy(saving = false, seasonRefusal = seasonStrands(failure.schedules.map(StrandedSchedule::title)))
