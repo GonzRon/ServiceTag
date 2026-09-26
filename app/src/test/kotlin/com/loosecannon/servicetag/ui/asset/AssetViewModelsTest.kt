@@ -17,6 +17,11 @@ import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.replacementOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.testing.subjectRow
+import com.loosecannon.servicetag.core.health.AssetHealthResult
+import com.loosecannon.servicetag.core.model.HealthSubject
+import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
+import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
+import com.loosecannon.servicetag.ui.health.AssetHealthView
 import com.loosecannon.servicetag.ui.health.ConditionView
 import com.loosecannon.servicetag.ui.health.HealthPlurals
 import com.loosecannon.servicetag.ui.health.NOT_TRACKED
@@ -59,7 +64,9 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -73,6 +80,7 @@ import org.junit.Before
 import org.junit.Test
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.Locale
 
 /**
@@ -1889,6 +1897,79 @@ class AssetViewModelsTest {
         assertEquals("DOWN, tracked, retired", null, rows.getValue("old").health)
     }
 
+    /**
+     * Review MINOR-1: coming back to the list after the subscription grace restarts its flows, and the
+     * health group already drawn must not blink off while the restarted pass runs. The pass is held
+     * shut across the restart, so the first list after it is built from the kept views, never from
+     * the read model's empty first emission. An asset retired while the list was away shows no health
+     * from the kept views: the row's own asset gates them.
+     */
+    @Test fun aRestartAfterTheGraceKeepsTheHealthAlreadyDrawn() = runTest {
+        graph.today = T71
+        trackedAsset("ups", daysBack = 10, name = "UPS")
+        trackedAsset("old", daysBack = 10, name = "Old")
+        val open = MutableStateFlow(true)
+        val held = object : HealthSubjectRepository by graph.healthSubjects {
+            override suspend fun forAsset(assetId: AssetId): List<HealthSubject> {
+                open.first { it }
+                return graph.healthSubjects.forAsset(assetId)
+            }
+        }
+        val health = AssetHealthReadModel(
+            graph.assets, held, graph.schedules, graph.scheduleStates, graph.events, graph.profiles,
+            graph.seasonActivations, graph.conditions, graph.recomputeSchedules, graph.todayPort, zone = { ZoneOffset.UTC },
+        )
+        val vm = AssetsViewModel(graph.assets, graph.categories, graph.seasonActivations, graph.tags, health, graph.todayPort)
+        val watching = backgroundScope.launch { vm.state.collect() }
+        vm.rowsOnce("the group drawn") { it["ups"]?.band() == HealthBand.NOMINAL && it["old"]?.band() == HealthBand.NOMINAL }
+
+        watching.cancel()
+        advanceTimeBy(PAST_THE_GRACE_MS)
+        open.value = false
+        graph.assets.upsert(assetRow("old", name = "Old", retiredOn = "2026-04-14"))
+        backgroundScope.launch { vm.state.collect() }
+
+        val restarted = vm.rowsOnce("the first list after the restart") { it["old"]?.asset?.retiredOn != null }
+        assertEquals("the kept health, with the pass still held", HealthBand.NOMINAL, restarted.getValue("ups").band())
+        assertEquals("a row retired meanwhile shows none of the kept health", null, restarted.getValue("old").health)
+
+        open.value = true
+        val passed = vm.rowsOnce("the restarted pass") { it["old"]?.asset?.retiredOn != null && it["ups"]?.band() == HealthBand.NOMINAL }
+        assertEquals(null, passed.getValue("old").health)
+    }
+
+    /**
+     * Review MINOR-2: the row's gate alone (E2, E4), on synthetic views — the read model never hands
+     * it an out-of-service view today, so each clause is pinned here: the row's own asset in service,
+     * the view in service, and the view tracked.
+     */
+    @Test fun theRowGateShowsHealthOnlyForAnInServiceTrackedRow() {
+        val active = assetRow("ups", name = "UPS")
+        val tracked = gateView(inService = true, band = HealthBand.NOMINAL)
+
+        assertEquals("in service and tracked: the view itself", tracked, rowHealthOf(active, tracked))
+        assertEquals("no view", null, rowHealthOf(active, null))
+        assertEquals("the view is not tracked", null, rowHealthOf(active, gateView(inService = true, band = null)))
+        assertEquals("the view is out of service", null, rowHealthOf(active, gateView(inService = false, band = HealthBand.NOMINAL)))
+        assertEquals("the row is retired", null, rowHealthOf(assetRow("ups", name = "UPS", retiredOn = "2026-01-01"), tracked))
+        assertEquals("the row is archived", null, rowHealthOf(assetRow("ups", name = "UPS", status = AssetStatus.ARCHIVED), tracked))
+    }
+
+    private fun gateView(inService: Boolean, band: HealthBand?) = AssetHealthView(
+        assetId = AssetId("ups"),
+        computedForOn = T71,
+        condition = null,
+        aggregation = HealthAggregation.WORST,
+        result = AssetHealthResult(
+            subjects = emptyList(),
+            aggregate = band?.let { SubjectValue.Scored(80, it, null) },
+            fallback = false,
+            critical = emptyList(),
+        ),
+        components = emptyList(),
+        inService = inService,
+    )
+
     // ------------------------------------------------------------------------------------------
     // 1.4 (B14) — asset detail's condition, health and season, and the list's season phase.
     // ------------------------------------------------------------------------------------------
@@ -2539,5 +2620,8 @@ class AssetViewModelsTest {
 
         /** A real-time bound on each #71 wait: Room answers the list's flows on its own threads. */
         const val WAIT_MS = 5_000L
+
+        /** Past the list's 5s subscription grace, on the virtual clock the view model's scope runs on. */
+        const val PAST_THE_GRACE_MS = 6_000L
     }
 }

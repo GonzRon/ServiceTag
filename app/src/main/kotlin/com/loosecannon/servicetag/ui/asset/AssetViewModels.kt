@@ -101,6 +101,7 @@ import com.loosecannon.servicetag.ui.health.aggregateLine
 import com.loosecannon.servicetag.ui.health.criticalLine
 import com.loosecannon.servicetag.ui.health.driverLines
 import com.loosecannon.servicetag.ui.health.healthBadgeLabel
+import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.health.needsAttention
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
@@ -116,6 +117,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.map
@@ -162,9 +164,13 @@ data class AssetRow(
  * #71's gate (plan E2): the row shows health only for an asset **in service** — active and not
  * retired; its season plays no part — whose health is **tracked**. A row that shows no health shows
  * none of the group, the condition badge included (R71-6, R71-11). Decided here, never in Compose.
+ *
+ * In service is asked of both the view and the list's own [asset] row: the view is the read model's
+ * snapshot, and a view kept across a restart (review MINOR-1) or a pass still running can be older
+ * than the row, so an asset the list already knows is retired or archived never shows its health.
  */
-internal fun rowHealthOf(view: AssetHealthView?): AssetHealthView? =
-    view?.takeIf { it.inService && it.result.aggregate != null }
+internal fun rowHealthOf(asset: Asset, view: AssetHealthView?): AssetHealthView? =
+    view?.takeIf { asset.inService && it.inService && it.result.aggregate != null }
 
 /**
  * The lines the row draws under its badges (plan E2): S109 for every CRITICAL subject, then S27 for
@@ -306,8 +312,32 @@ class AssetsViewModel(
      * carry a written tag, folded once per emission of every tag row, and the row health, whose
      * first emission is empty so the list never waits for a health pass.
      */
+    /**
+     * The row health a pass last delivered (review MINOR-1). [state] stops its upstream after the
+     * subscription grace, and a restarted read model begins with its synthetic empty map — made so the
+     * list's first open never waits, never to erase groups already drawn. So a restart shows these
+     * kept views until its own pass lands; the first open, with nothing kept, still gets the empty map.
+     * Only the collecting coroutine touches it, one at a time.
+     */
+    private var keptRowHealth: Map<AssetId, AssetHealthView>? = null
+
+    private val rowHealth: Flow<Map<AssetId, AssetHealthView>> = flow {
+        val kept = keptRowHealth
+        var first = true
+        health.observeRowHealth(refreshes).collect { views ->
+            if (first) {
+                // The read model's first emission is always its synthetic empty map, never a pass.
+                first = false
+                emit(kept ?: views)
+            } else {
+                keptRowHealth = views
+                emit(views)
+            }
+        }
+    }
+
     private val facts: Flow<Facts> =
-        combine(seasonal, tags.observeAll(), health.observeRowHealth(refreshes)) { (rows, activationsOf), tagRows, views ->
+        combine(seasonal, tags.observeAll(), rowHealth) { (rows, activationsOf), tagRows, views ->
             Facts(rows, activationsOf, writtenTagsOf(tagRows), views)
         }
 
@@ -338,7 +368,7 @@ class AssetsViewModel(
                             parentName = row.parentAssetId?.let { byId[it]?.name },
                             outOfSeason = outOfSeasonOn(row, activationsOf[row.id].orEmpty(), day),
                             hasWrittenTag = row.id in tagged,
-                            health = rowHealthOf(views[row.id]),
+                            health = rowHealthOf(row, views[row.id]),
                         )
                     },
                 filters = controls,
