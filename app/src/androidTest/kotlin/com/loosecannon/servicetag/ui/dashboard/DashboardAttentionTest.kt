@@ -224,7 +224,7 @@ class DashboardAttentionTest {
         draw(aStoreWithAttentionWork())
 
         rule.awaitText("ATTENTION")
-        rule.onNodeWithContentDescription("Search assets and components").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Search assets").assertDoesNotExist()
 
         // Q1-residual (B07 fix round 3): the two guards the search box's removal simplified,
         // asserted at render level now that `DashboardSearchTest` is gone. The fixture's pump is a
