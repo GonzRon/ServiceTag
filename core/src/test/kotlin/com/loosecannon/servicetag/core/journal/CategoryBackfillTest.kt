@@ -78,4 +78,45 @@ class CategoryBackfillTest {
         )
         assertEquals(mapOf(AssetId("g1") to "Generator"), plan.rewrites)
     }
+
+    // --- N6: the one chooser, with rows that already exist (the replace and the merge planner) -----
+
+    /**
+     * An existing row wins over every Asset's spelling, however old the Asset: its variants are
+     * rewritten to it and it is never emitted again. A key nobody holds yet still gets the oldest rule.
+     */
+    @Test
+    fun anExistingRowWinsAndIsNotReEmitted() {
+        val plan = CategoryBackfill.plan(
+            listOf(
+                asset("a1", "appliance", 100L),
+                asset("a2", "APPLIANCE", 50L),
+                asset("a3", "Appliance", 70L),
+                asset("w1", "Water", 10L),
+            ),
+            existing = listOf(AssetCategory("appliance", "Appliance", 900L, 950L)),
+        )
+        assertEquals(listOf(AssetCategory("water", "Water", 10L, 10L)), plan.newRows)
+        assertEquals(mapOf(AssetId("a1") to "Appliance", AssetId("a2") to "Appliance"), plan.rewrites)
+    }
+
+    /** A built-in still beats a row filed under its key — the catalog's own precedence (C3, C5). */
+    @Test
+    fun aBuiltInBeatsAnExistingRowUnderItsKey() {
+        val plan = CategoryBackfill.plan(
+            listOf(asset("h1", "HOT TUB", 1L)),
+            existing = listOf(AssetCategory("hot tub", "hot tub", 1L, 1L)),
+        )
+        assertEquals(emptyList(), plan.newRows)
+        assertEquals(mapOf(AssetId("h1") to "Hot tub"), plan.rewrites)
+    }
+
+    /** An existing row no Asset names is left alone: nothing emitted, nothing rewritten. */
+    @Test
+    fun anUnusedExistingRowIsNothing() {
+        assertEquals(
+            Backfill(emptyList(), emptyMap()),
+            CategoryBackfill.plan(emptyList(), existing = listOf(AssetCategory("spare", "Spare", 1L, 1L))),
+        )
+    }
 }
