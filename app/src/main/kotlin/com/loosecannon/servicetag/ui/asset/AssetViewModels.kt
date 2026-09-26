@@ -37,6 +37,8 @@ import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
+import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.model.isWrittenFor
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -136,15 +138,46 @@ import java.util.Locale
 private const val SUBSCRIPTION_GRACE_MS = 5_000L
 
 /**
- * One row of the Assets list: the asset plus the two things the row says that the asset itself does
- * not carry — whose component it is, and whether today falls outside its season window (spec §9).
+ * One row of the Assets list: the asset plus what the row says that the asset itself does not carry —
+ * whose component it is, whether today falls outside its season window (spec §9), and (#71) whether it
+ * carries a written ServiceTag tag and what its health is. Every fact is the row's own asset's: a
+ * component's row reads its own tags and its own health, and a parent's row never borrows a child's.
  */
 data class AssetRow(
     val asset: Asset,
     /** The parent's name for the "Part of <parent>" subtitle; null for a root asset. */
     val parentName: String? = null,
     val outOfSeason: Boolean = false,
+    /** #71: some tag row [isWrittenFor] this asset — targets it, ACTIVE, and written. */
+    val hasWrittenTag: Boolean = false,
+    /**
+     * #71 (plan E2, E4): the read model's own health view, the one `forAsset` gives, while the row is
+     * a health surface — the asset in service (lifecycle, E1) and tracked (a non-null aggregate) —
+     * and null otherwise, when the row draws no health and no condition beside it ([rowHealthOf]).
+     */
+    val health: AssetHealthView? = null,
 )
+
+/**
+ * #71's gate (plan E2): the row shows health only for an asset **in service** — active and not
+ * retired; its season plays no part — whose health is **tracked**. A row that shows no health shows
+ * none of the group, the condition badge included (R71-6, R71-11). Decided here, never in Compose.
+ */
+internal fun rowHealthOf(view: AssetHealthView?): AssetHealthView? =
+    view?.takeIf { it.inService && it.result.aggregate != null }
+
+/**
+ * The lines the row draws under its badges (plan E2): S109 for every CRITICAL subject, then S27 for
+ * every DOWN or DEGRADED in-service component, in [healthBlocksOf]'s order and in its words. Every
+ * other block — the aggregate line, the fallback, the subjects, the footer — stays on the detail.
+ */
+fun rowHealthLines(view: AssetHealthView): List<String> = healthBlocksOf(view).mapNotNull { block ->
+    when (block) {
+        is HealthBlock.Critical -> criticalLine(block.subject)
+        is HealthBlock.Component -> componentLine(block.component)
+        else -> null
+    }
+}
 
 /**
  * The Assets list's three controls (#73, C1): the category it is narrowed to — a [CategoryKey], null
@@ -229,13 +262,24 @@ class AssetsViewModel(
     assets: AssetRepository,
     categories: CategoryRepository,
     activations: SeasonActivationRepository,
+    tags: TagRepository,
+    health: AssetHealthReadModel,
     private val today: Today,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph) : this(graph.assets, graph.categories, graph.seasonActivations, graph.today)
+    constructor(graph: AppGraph) : this(
+        graph.assets, graph.categories, graph.seasonActivations, graph.tags, graph.assetHealthReadModel, graph.today,
+    )
 
     private val filters = MutableStateFlow(AssetFilters())
     private val queries = MutableStateFlow("")
+
+    /**
+     * #71 (plan C2): the health read model's one unobserved signal. Events, activations, profiles and
+     * midnight move no table the row health watches, so the screen calls [refresh] on every resume —
+     * the attention list's accepted staleness, and its `refreshes` shape.
+     */
+    private val refreshes = MutableStateFlow(0)
 
     /**
      * What the search box draws itself from, synchronously (F3): a `combine`/`stateIn` round trip
@@ -257,8 +301,18 @@ class AssetsViewModel(
         }
     }
 
+    /**
+     * #71 (plan C1–C3): the rows beside the two facts each row reads by its own id — the assets that
+     * carry a written tag, folded once per emission of every tag row, and the row health, whose
+     * first emission is empty so the list never waits for a health pass.
+     */
+    private val facts: Flow<Facts> =
+        combine(seasonal, tags.observeAll(), health.observeRowHealth(refreshes)) { (rows, activationsOf), tagRows, views ->
+            Facts(rows, activationsOf, writtenTagsOf(tagRows), views)
+        }
+
     val state: StateFlow<AssetsState> =
-        combine(seasonal, filters, categories.observeAll(), queries) { (rows, activationsOf), picked, custom, query ->
+        combine(facts, filters, categories.observeAll(), queries) { (rows, activationsOf, tagged, views), picked, custom, query ->
             val choices = CategoryCatalog.choices(custom)
             val stale = picked.type?.takeIf { key -> choices.none { it.key == key } }
             // C4: a chosen category the catalog no longer holds (renamed to a new key, or deleted)
@@ -283,6 +337,8 @@ class AssetsViewModel(
                             // showing an id.
                             parentName = row.parentAssetId?.let { byId[it]?.name },
                             outOfSeason = outOfSeasonOn(row, activationsOf[row.id].orEmpty(), day),
+                            hasWrittenTag = row.id in tagged,
+                            health = rowHealthOf(views[row.id]),
                         )
                     },
                 filters = controls,
@@ -312,9 +368,24 @@ class AssetsViewModel(
     /** The clear action. Separate from `onQueryChange("")` so the screen states its intent. */
     fun clearQuery() { queries.value = "" }
 
+    /** #71: re-derive the row health — the screen's resume, as the dashboard's `refresh`. */
+    fun refresh() = refreshes.update { it + 1 }
+
     /** The asset rows and, keyed by asset, the activation rows of the MANUAL ones. */
     private data class Seasonal(val rows: List<Asset>, val activationsOf: Map<AssetId, List<SeasonActivation>>)
+
+    /** [Seasonal] beside the assets with a written tag and the row health (#71). */
+    private data class Facts(
+        val rows: List<Asset>,
+        val activationsOf: Map<AssetId, List<SeasonActivation>>,
+        val tagged: Set<AssetId>,
+        val views: Map<AssetId, AssetHealthView>,
+    )
 }
+
+/** #71 (R71-1): the assets some tag row [isWrittenFor] — one fold of every tag row, the predicate its one home. */
+private fun writtenTagsOf(tags: List<TagBinding>): Set<AssetId> =
+    tags.mapNotNullTo(HashSet()) { tag -> (tag.target as? TagTarget.AssetTarget)?.assetId?.takeIf(tag::isWrittenFor) }
 
 /** The Archived control's predicate: archived rows only while it is on. */
 private fun AssetFilters.admitsStatus(asset: Asset): Boolean = showArchived || asset.status == AssetStatus.ACTIVE
