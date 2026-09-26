@@ -101,9 +101,10 @@ data class DeleteAsk(val key: String, val display: String)
  *   row's own count already shows the use and when the use arrived after the confirmation opened;
  * - a rename or delete aimed at a row that is gone ([NoSuchCategory]) has no words: the dialog closes
  *   and the list, which follows the store, already shows the truth;
- * - a rename or delete that fails for any other reason — none of the named refusals — says so where its
- *   refusals are said: P74-18 under the rename field, the dialog staying as typed; P74-19 on the
- *   snackbar after a confirmed delete, the row staying. A cancellation is never a failure: it is rethrown.
+ * - a rename or delete that fails for any other reason — none of that operation's own refusals — says so
+ *   where its refusals are said: P74-18 under the rename field, the dialog staying as typed; P74-19 on
+ *   the snackbar after a confirmed delete, the row staying. A cancellation is never a failure: it is
+ *   rethrown.
  */
 class CategoriesViewModel(
     categories: CategoryRepository,
@@ -166,10 +167,9 @@ class CategoriesViewModel(
                         null, is NoSuchCategory -> null
                         is CategoryExists -> open.copy(renaming = false, refusal = nameTaken(failure.existingDisplay))
                         is CategoryIsBuiltIn -> open.copy(renaming = false, refusal = builtInName(failure.label))
-                        // CategoryValidation is what the held button already prevents; CategoryInUse is
-                        // a delete's. Either way the dialog stays as typed and can be tried again.
-                        is CategoryValidation, is CategoryInUse -> open.copy(renaming = false)
-                        // A failure no refusal names (P74-18): the owner may change the text or cancel.
+                        // What the held button already prevents: the dialog stays as typed, no line.
+                        is CategoryValidation -> open.copy(renaming = false)
+                        // Anything else, a delete's refusal included (P74-18): change the text or cancel.
                         else -> open.copy(renaming = false, refusal = COULD_NOT_RENAME)
                     }
                 }
@@ -204,8 +204,9 @@ class CategoriesViewModel(
             val failure = runCatching { deleteCategory.run(ask.key) }.exceptionOrNull()
             if (failure is CancellationException) throw failure
             when (failure) {
-                null, is NoSuchCategory, is CategoryValidation, is CategoryIsBuiltIn, is CategoryExists -> Unit
+                null, is NoSuchCategory -> Unit
                 is CategoryInUse -> _messages.tryEmit(stillInUse(failure.display, failure.count))
+                // Anything else, a rename's refusal included (P74-19); the row stays.
                 else -> _messages.tryEmit(COULD_NOT_DELETE)
             }
         }

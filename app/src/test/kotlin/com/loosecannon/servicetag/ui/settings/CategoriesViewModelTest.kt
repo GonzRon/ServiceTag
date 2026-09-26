@@ -4,6 +4,8 @@ import com.loosecannon.servicetag.core.journal.CategorySuggestions
 import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.core.usecase.CategoryExists
+import com.loosecannon.servicetag.core.usecase.CategoryInUse
 import com.loosecannon.servicetag.core.usecase.DeleteCategory
 import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.testing.FakeGraph
@@ -90,6 +92,11 @@ class CategoriesViewModelTest {
     /** The store, except that deleting a row fails the way a full or broken disk would. */
     private class DeleteFails(real: CategoryRepository) : CategoryRepository by real {
         override suspend fun delete(key: String): Unit = throw IllegalStateException("disk I/O error")
+    }
+
+    /** The store, except that reading a row throws [failure] — a refusal of the other operation's. */
+    private class GetFails(real: CategoryRepository, private val failure: Throwable) : CategoryRepository by real {
+        override suspend fun get(key: String): AssetCategory? = throw failure
     }
 
     @Test fun theOwnersRowsCarryTheirUsageArchivedAndRetiredIncludedAndTheBuiltInsFollow() = runTest {
@@ -236,6 +243,26 @@ class CategoriesViewModelTest {
         assertNull(screen.model.rename.value!!.refusal)
     }
 
+    /**
+     * A refusal only a delete names ([CategoryInUse]) is, from a rename, a failure like any other: the
+     * review's S5 — "everything else" is P74-18, and only a rename's own refusals keep their own words.
+     */
+    @Test fun aRenameFailingWithADeletesRefusalSaysP7418() = runTest {
+        seed()
+        val failing = GetFails(graph.categories, CategoryInUse("Spare", 1))
+        val screen = open(rename = RenameCategory(failing, graph.assets, graph.uow, graph.clock))
+        screen.model.startRename(screen.row("Spare"))
+        screen.model.onRenameText("Spares")
+        screen.model.confirmRename()
+        advanceUntilIdle()
+
+        val draft = screen.model.rename.value
+        assertNotNull("the dialog stays", draft)
+        assertEquals("Could not rename that category.", draft!!.refusal)
+        assertFalse(draft.renaming)
+        assertTrue("never the snackbar", screen.said.isEmpty())
+    }
+
     @Test fun anUnusedDeleteAsksFirstThenRemovesTheRow() = runTest {
         seed()
         val screen = open()
@@ -300,6 +327,23 @@ class CategoriesViewModelTest {
         assertEquals(listOf("Could not delete that category."), screen.said)
         assertEquals(listOf("Appliance", "Machine", "Spare"), screen.model.state.value!!.own.map(OwnCategory::display))
         assertEquals(listOf("appliance" to "Appliance", "machine" to "Machine", "spare" to "Spare"), stored())
+    }
+
+    /**
+     * A refusal only a rename names ([CategoryExists]) is, from a delete, a failure like any other: the
+     * review's S5 — "everything else" is P74-19 on the snackbar, and the row stays.
+     */
+    @Test fun aDeleteFailingWithARenamesRefusalSaysP7419() = runTest {
+        seed()
+        val failing = GetFails(graph.categories, CategoryExists("Spare"))
+        val screen = open(delete = DeleteCategory(failing, graph.assets, graph.uow))
+        screen.model.requestDelete(screen.row("Spare"))
+        screen.model.confirmDelete()
+        advanceUntilIdle()
+
+        assertNull(screen.model.deleting.value)
+        assertEquals(listOf("Could not delete that category."), screen.said)
+        assertNotNull(graph.categories.get("spare"))
     }
 
     @Test fun aDeleteOfARowThatIsGoneClosesWithoutAWord() = runTest {
