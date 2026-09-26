@@ -1,4 +1,4 @@
-# #74 — durable Asset categories: plan and briefs (rev 2, reviewed 2026-09-26; re-review fixes N1–N8 applied)
+# #74 — durable Asset categories: plan and briefs (rev 2, reviewed 2026-09-26; re-review fixes N1–N8 applied; RATIFIED 2026-09-26)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development under the
 > review budget in `docs/superpowers/planning-policy.md`. Three briefs (§9), one lane, in order
@@ -7,8 +7,11 @@
 > Rev 2 folds in the independent brief review (verdict REJECT on rev 1: canonicalising a spelling
 > outside an owner save broke merge idempotency; the backfill trigger raced; promotions made by the
 > merge apply were invisible to the plan; the API mirrors, `StoreIsEmpty`, the export and forty-odd
-> constructor sites were missing; B1 could not end green). Nothing is dispatched until the owner has
-> ratified every string in §6 and read the rulings in §7.
+> constructor sites were missing; B1 could not end green). **Owner ruling 2026-09-26: all nineteen §6 strings
+> RATIFIED verbatim; R74-3 (the canonical stored spelling, with the merge/migration protections) and R74-10
+> (built-ins first in compiled order, then the owner's categories alphabetically) RATIFIED; R74-1, R74-2,
+> R74-4–R74-9, R74-11–R74-13 stand; the re-review corrections N1–N8 are part of the contract — in particular
+> `LAST_LEGACY_FORMAT` stays 7 and format-8 1.4 data decodes unchanged. GO: B1 dispatched.**
 
 **Goal:** a category the owner types into an Asset and saves becomes a durable, reusable category —
 offered in every Asset's Category picker, kept when the last Asset using it is gone, carried by
@@ -315,10 +318,9 @@ P74-5 says so; no snackbar follows a successful rename (the row changes in place
   canonicalised to the built-in label or the row's display, and rename rewrites every matching asset
   (a spelling-only rename included). Without it the list would show `Appliance` and `appliance` side
   by side and the Type filter could not match by string. First promotion keeps the typed spelling, so
-  today's data and the API/MCP tests are unchanged; the migration, the merge and the replace
-  canonicalise too but never move `updatedAt`, and the planner compares by key, so every re-plan stays
-  IDENTICAL. **Owner: confirm** (the alternative keeps the typed spelling on each asset and matches by
-  key in every reader — more code in every reader, and two spellings on screen).
+  today's data and the API/MCP tests are unchanged; the migration, the merge and the replace canonicalise too
+  but never move `updatedAt`, and the planner compares by key, so every re-plan stays IDENTICAL. **RATIFIED
+  2026-09-26** — one visible `Appliance`, never three different-looking classifications.
 - **R74-4, the backfill lives in the migration, in Kotlin, once.** `MIGRATION_8_9` creates the table
   and applies the promotion rule retroactively to the saves made before the catalog existed, through
   the pure core function C9 (the 7→8 precedent): atomic with the schema step, before any DAO read, no
@@ -341,8 +343,8 @@ P74-5 says so; no snackbar follows a successful rename (the row changes in place
 - **R74-9, the dashboard's category filter is untouched** (it filters the dashboard's own rows; an
   unused category there is noise). #73 consumes the catalog on the Assets list.
 - **R74-10, picker order: built-ins in compiled order, then the owner's categories alphabetically**
-  (`String.CASE_INSENSITIVE_ORDER` on display, then key). **Owner: confirm, or ask for one
-  alphabetical list.**
+  (`String.CASE_INSENSITIVE_ORDER` on display, then key). **RATIFIED 2026-09-26** — built-ins carry semantics
+  (the template hints) that custom categories deliberately do not; prefix filtering reaches either group.
 - **R74-11, schema 9 / format 9 now, no app version bump.** The next feature-bearing release carries
   Phase 1A, #83, #78, #68, #70 and #74 and records the bumps in its `docs/versioning.md` row (a MINOR
   by the versioning rule; no older archive stops restoring).
