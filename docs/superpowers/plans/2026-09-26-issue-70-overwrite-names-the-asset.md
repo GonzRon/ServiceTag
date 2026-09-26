@@ -1,19 +1,23 @@
-# #70 — the overwrite confirmation names what the tag already identifies: plan and brief (rev 2, reviewed 2026-09-26)
+# #70 — the overwrite confirmation names what the tag already identifies: plan and brief (rev 2, reviewed and RATIFIED 2026-09-26)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development under the
 > review budget in `docs/superpowers/planning-policy.md`. One brief (§8), one implementer, one task
 > review, one batched fix round, at most one scoped re-review. Planned from issue #70's body under the
 > owner's GO of 2026-09-26; rev 2 folds in the independent brief review (one MAJOR: the lookup must not
 > suspend between recording the question and showing it; a package cycle; a bounded lookup; the
-> placement's home). Nothing is dispatched until the owner has ratified every string in §5 and read §6.
+> placement's home). Owner ruling 2026-09-26: P70-1, P70-2, P70-3a, P70-3b, P70-6 RATIFIED verbatim; P70-4/P70-5
+> stay the ratified inspect strings; R70-3 (the quiet line) and R70-5 (P70-6 distinct) RATIFIED; R70-1, R70-2,
+> R70-4, R70-6, R70-7 stand; one editorial correction applied (a cancellation shows no sheet — it does not fall
+> back to P70-6). GO.
 
 **Goal:** when the tag being written already holds a different ServiceTag v1 identity, the overwrite
 sheet says what that identity means to the owner — the Asset it is bound to, a spare tag, a lost or
 retired tag, a pre-split link tag, or a ServiceTag tag this phone has no record of — with the tag id
 and the tag's placement kept as one quiet shortened line, never as the explanation. The newer-app,
 foreign and unreadable cases keep their present words. Nothing about overwrite authorisation or write
-safety changes: every case still costs exactly one confirmation, and a lookup that fails, is cancelled
-or takes too long changes only the words.
+safety changes: every case still costs exactly one confirmation; a lookup that fails or takes too long
+falls back to P70-6 and still asks; a lookup cancelled by the coroutine's lifecycle shows no sheet, writes
+nothing, releases the tap and lets the next tap proceed (C7).
 
 **Spec:** D12 (`docs/design/12-visual-design-apollo-service-binder.md`) §11 "Overwrite confirmation
 (tag already holds something)", whose own sketch already names the asset on the tag, and G1
@@ -194,7 +198,7 @@ API, the MCP, `AppGraph.kt` (it already holds `resolveTag`), `FakeGraph.kt`.
 | P70-3b | known, status RETIRED | `This tag was retired and taken out of service.` | mirrors "Tag retired" |
 | P70-4 | valid v1, not in this phone's records | `This ServiceTag tag is not in this phone's records.` | **reused verbatim** from the inspect sheet; nothing new |
 | P70-5 | known, pre-split link tombstone | `This tag points at a note link from before the product split. ServiceTag no longer opens links; NoteTag does.` | **reused verbatim** (`PRE_SPLIT_LINK_SENTENCE`); nothing new |
-| P70-6 | lookup failed, cancelled by a bound, or unavailable | `This is a ServiceTag tag, but its record could not be checked just now.` | honest; never claims "not in the records" (R70-5) |
+| P70-6 | lookup failed or timed out (never a cancellation, which shows no sheet) | `This is a ServiceTag tag, but its record could not be checked just now.` | honest; never claims "not in the records" (R70-5) |
 | P70-7 | the quiet line under P70-1…6 | `<first 8 of the id> · v1`, and for a known row with a placement `<first 8 of the id> · v1 · <placement>` | **reused shape** (`identityLine`, G1 §3 correction a; the Written state's `· locked` precedent) — no new sentence, one new suffix form |
 | — | newer app | `The tag already holds a ServiceTag tag written by a newer app (format <n>).` | unchanged words |
 | — | foreign NDEF | `The tag already holds foreign NDEF content (<detail>).` | unchanged words |
@@ -229,13 +233,14 @@ row is not the one being written; the tag gets a new identity).
   the Written state's own shape (`· locked`), keeps every sentence a single template, avoids the
   "X (Y) (Z)" ambiguity of a parenthetical, and shows the placement for every known row (bound, spare,
   revoked — a revoked tag's placement is still where it was stuck). The sheet gains at most one short
-  line. The alternatives are in §5. **Owner: confirm the quiet-line form or pick (i), (ii) or (iii).**
+  line. The alternatives are in §5. **RATIFIED 2026-09-26: the quiet line** — cleaner than prose, no
+  `Asset (qualifier) (placement)` ambiguity, an existing metadata pattern rather than a new block.
 - **R70-4, one answer per case.** `sentence()` stops wording `OTHER_TAG_SAME_PRODUCT`; `OverwriteSubjects.of`
   is the sheet's only entry for the v1 case. The two `OverwriteReasonsTest` cases that pinned the uuid
   sentence are re-anchored.
 - **R70-5, the failure words.** P70-6 is distinct from P70-4: when the lookup failed, "not in this
   phone's records" would tell the owner a tag bound to an asset is unknown, which invites an overwrite.
-  **Owner: ratify P70-6 (recommended) or say "reuse P70-4".**
+  **RATIFIED 2026-09-26: P70-6 distinct** — a failed lookup means unknown right now, not definitively absent.
 - **R70-6, a bounded lookup.** Two seconds, `withTimeoutOrNull` (a `withTimeout` would raise a
   cancellation and kill the tap); past the bound the sheet shows P70-6. A Room read never takes that
   long; the bound exists so that "changes only the words" is true even if it did.
