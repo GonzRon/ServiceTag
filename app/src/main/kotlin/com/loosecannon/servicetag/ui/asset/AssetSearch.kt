@@ -59,7 +59,7 @@ internal fun SearchBox(
         onValueChange = onQueryChange,
         singleLine = true,
         shape = ControlShape,
-        placeholder = { Text("Search assets and components") },
+        placeholder = { Text(SEARCH_ASSETS) },
         leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
         trailingIcon = {
             if (query.isNotEmpty()) {
@@ -73,6 +73,12 @@ internal fun SearchBox(
         // be a new string, so the ratified placeholder is reused rather than a fifth sentence added.
         modifier = modifier
             .fillMaxWidth()
-            .semantics { contentDescription = "Search assets and components" },
+            .semantics { contentDescription = SEARCH_ASSETS },
     )
 }
+
+/**
+ * P73-11 (#73, ratified 2026-09-26): the box's placeholder and its accessible name. Components are
+ * assets, and with the Components control off by default a promise to search them would over-promise.
+ */
+private const val SEARCH_ASSETS = "Search assets"
