@@ -537,8 +537,8 @@ internal fun seasonRefusal(problem: SeasonProblem): Refusal = when (problem) {
         "MANUAL_PHASE_FORBIDDEN", "manualPhase is taken only on a switch into MANUAL from another mode", "manualPhase",
     )
     is SeasonProblem.BadDate -> Refusal(SEASON_VALIDATION, "the season command was refused", problem.field)
-    // Phase 1A K7 (ruled 2026-09-25): the key the asset command's own `BothOrNeither` answers (C6); the
-    // message stays the shipped one.
+    // Phase 1A K7 (ruled 2026-09-25, corrected the same day): the maintenance break is the only route that
+    // raises this value, and its pair's first key is `blackoutStartMmdd`; the message stays the shipped one.
     SeasonProblem.BothOrNeither -> Refusal(SEASON_VALIDATION, "the season command was refused", "blackoutStartMmdd")
     SeasonProblem.BlackoutCoversTheYear -> Refusal(
         "BLACKOUT_COVERS_THE_YEAR", "that break leaves some year, common or leap, with no day outside it",
