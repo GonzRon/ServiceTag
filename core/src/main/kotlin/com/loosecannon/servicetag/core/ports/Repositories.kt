@@ -327,9 +327,11 @@ interface HealthSubjectRepository {
 
 /**
  * #74. The owner's own Asset categories, keyed by `CategoryKey.of(display)` (C4). The compiled
- * built-ins are never rows here. Written by the promotion of a successful Asset save, by a rename and
- * by a delete of an unused row; `deleteAll` is the replace import's wipe. There is no query by
- * Asset, and no list derived from Assets: the catalog is this table, and a row outlives its Assets.
+ * built-ins are never rows here. Written by the promotion of a successful Asset save, by a rename, by
+ * a delete of an unused row, by the replace import (its wipe — `deleteAll` — the archive's rows, and
+ * the promotion of every restored Asset, C12) and by the merge apply (the rows its plan accepted or
+ * synthesised, C13). There is no query by Asset, and no list derived from Assets: the catalog is
+ * this table, and a row outlives its Assets.
  */
 interface CategoryRepository {
     suspend fun upsert(row: AssetCategory)
