@@ -69,6 +69,9 @@ data class ActionSpec(
  *   the grid unsets [LocalMinimumInteractiveComponentSize] so a one-line button stays its visible
  *   44dp and the rows keep their 10dp gaps on a 54dp pitch, as before. The 48dp touch target is not
  *   lost: Compose expands a 44dp clickable's touch bounds to the platform minimum on its own.
+ *
+ * The layout answers no intrinsic query of its own: a parent asking for its intrinsic height would see
+ * one-line rows at Material's 40dp button minimum, not the 44dp floor. No caller asks today.
  */
 @Composable
 fun ActionGrid(actions: List<ActionSpec>, modifier: Modifier = Modifier) {
@@ -83,7 +86,10 @@ fun ActionGrid(actions: List<ActionSpec>, modifier: Modifier = Modifier) {
     }
 }
 
-/** K of #68: the ems of the label face each column must keep for two columns to be drawn (R68-2). */
+/**
+ * K of #68: the ems of the label face each column must keep for two columns to be drawn (R68-2).
+ * The arithmetic, and the widths it gives at each font scale, are in [ActionGrid]'s KDoc.
+ */
 private const val LABEL_EMS = 6f
 
 /** The height of a one-line action (G1 §1.1), and the least any action is. */
@@ -107,13 +113,18 @@ private class ActionGridMeasurePolicy(private val labelFace: TextUnit) : Measure
             measurables.chunked(2).map { row ->
                 if (row.size == 2) {
                     val height = maxOf(floor, row[0].maxIntrinsicHeight(first), row[1].maxIntrinsicHeight(second))
-                    listOf(row[0].measure(column(first, height)), row[1].measure(column(second, height)))
+                    listOf(
+                        row[0].measure(columnConstraints(first, height)),
+                        row[1].measure(columnConstraints(second, height)),
+                    )
                 } else {
-                    listOf(row[0].measure(column(first, floor)))
+                    listOf(row[0].measure(columnConstraints(first, floor)))
                 }
             }
         } else {
-            val full = if (bounded) column(width, floor) else Constraints(minHeight = floor)
+            // Unbounded width is defensive only (the one caller is fillMaxWidth in a vertically
+            // scrolling Column): there the buttons are as wide as their content, not full width.
+            val full = if (bounded) columnConstraints(width, floor) else Constraints(minHeight = floor)
             measurables.map { listOf(it.measure(full)) }
         }
 
@@ -143,7 +154,7 @@ private class ActionGridMeasurePolicy(private val labelFace: TextUnit) : Measure
     }
 
     /** A column's exact width, at least [minHeight] tall and as much taller as the label needs. */
-    private fun column(width: Int, minHeight: Int) =
+    private fun columnConstraints(width: Int, minHeight: Int) =
         Constraints(minWidth = width, maxWidth = width, minHeight = minHeight, maxHeight = Constraints.Infinity)
 }
 

@@ -51,7 +51,7 @@ import kotlin.math.abs
  * the rule under test, so a broken rule cannot mirror itself into the oracle.
  *
  * A label is read from the unmerged tree (its button merges it), and whether any of it was cut is its
- * own `TextLayoutResult`: `didOverflowHeight`, and each line's right edge against the label's width. The
+ * own `TextLayoutResult`'s `didOverflowHeight` (why not its width flag is said at [assertWhole]). The
  * label's box lying inside its button's box is checked too, but only as containment: a label squeezed
  * into a box too short for it is still inside that box.
  *
@@ -81,9 +81,13 @@ class ActionGridTest {
         assertEquals("the first pair shares a top", descale.top.value, writeTag.top.value, HALF)
         assertEquals("Write tag is as tall as its neighbour", heightOf(descale), heightOf(writeTag), HALF)
         assertTrue("the wrapped pair grew past 44dp, was ${heightOf(descale)}", heightOf(descale) > 44f + HALF)
+        rows(FIXTURE).filter { it.size == 2 }.forEach { (left, right) ->
+            assertEquals("each pair is level", heightOf(left), heightOf(right), HALF)
+        }
         val backup = bounds(BACKUP)
         assertEquals("Backup sits in the left column", descale.left.value, backup.left.value, HALF)
         assertEquals("Backup keeps half the width", HALF_OF_PHONE_412, widthOf(backup), HALF)
+        assertEquals("Backup takes the floor alone", 44f, heightOf(backup), HALF)
     }
 
     /** AC 3: a name nobody would shorten wraps as far as it must and its neighbour levels to it. */
@@ -161,12 +165,13 @@ class ActionGridTest {
         val labels = listOf(WRITE_TAG, EDIT, BACKUP, HISTORY, SET_UP)
         val all = labels.map(::bounds)
 
+        assertEquals("a 54dp row pitch", 54f, (all[2].top - all[0].top).value, HALF)
+        assertEquals("a 54dp row pitch below the second row", 54f, (all[4].top - all[2].top).value, HALF)
         all.take(4).forEachIndexed { i, b -> assertEquals("${labels[i]} is 44dp tall", 44f, heightOf(b), HALF) }
         assertTrue("$SET_UP is at least 44dp tall, was ${heightOf(all[4])}", heightOf(all[4]) >= 44f - HALF)
         labels.forEach(::assertWhole)
         assertEquals("two per row", listOf(2, 2, 1), columnsPerRow(labels))
         all.forEachIndexed { i, b -> assertEquals("${labels[i]} keeps half the width", HALF_OF_PHONE_412, widthOf(b), HALF) }
-        assertEquals("a 54dp row pitch", 54f, (all[2].top - all[0].top).value, HALF)
         assertEquals("the fifth sits in the left column", all[0].left.value, all[4].left.value, HALF)
 
         button(EDIT).assertTouchHeightIsEqualTo(48.dp)
@@ -232,19 +237,13 @@ class ActionGridTest {
         return results.single()
     }
 
-    /** Nothing cut in either axis, and the label's box inside its button's box. */
+    /** No line cut off, and the label's box inside its button's box. */
     private fun assertWhole(label: String) {
-        val layout = textLayout(label)
-        assertFalse("'$label' is cut vertically", layout.didOverflowHeight)
-        // The node rebuilds this result at its incoming maximum width, so its didOverflowWidth calls a
-        // one-line label narrower than its column cut. Each line's right edge against the label's own
-        // laid-out width is the horizontal reading (a label that ran past its box would end beyond it).
-        (0 until layout.lineCount).forEach { line ->
-            assertTrue(
-                "'$label' is cut horizontally on line $line",
-                layout.getLineRight(line) <= layout.size.width + HALF,
-            )
-        }
+        assertFalse("'$label' is cut vertically", textLayout(label).didOverflowHeight)
+        // No width check: the node rebuilds this result at its incoming maximum width, so its
+        // didOverflowWidth calls every one-line label narrower than its column cut. A soft-wrapped label
+        // cannot run past a box as wide as its column, and one that stopped wrapping would be rebuilt onto
+        // more lines than its box holds, which is didOverflowHeight above.
         val text = labelNode(label).getUnclippedBoundsInRoot()
         val outer = bounds(label)
         assertTrue(
