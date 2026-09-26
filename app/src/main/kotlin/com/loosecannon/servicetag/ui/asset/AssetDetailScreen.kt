@@ -198,17 +198,21 @@ fun AssetDetailScreen(
     // S99's `<age>` and S102 through B12's day forms, read from this screen's own resources.
     val resources = LocalResources.current
     val plurals: HealthPlurals = remember(resources) { AndroidHealthPlurals(resources) }
-    // #78 (C4): where the maintenance sections start in the scroll, measured once the page is laid out,
-    // and whether this entry has already been taken there. The flag is saveable — the entry's own
-    // saveable state — so a rotation or a recreated activity never scrolls the owner a second time;
-    // the scroll position itself is restored by the saveable scroll state.
+    // #78 (C4): whether this entry has already been taken to its maintenance sections, and where they
+    // start in the scroll. The flag is saveable — the entry's own saveable state — so a rotation or a
+    // recreated activity never scrolls the owner a second time; the scroll position itself is restored
+    // by the saveable scroll state. Only an entry still on its way there measures anything, so an
+    // ordinary visit does not recompose when the page above the sections changes height.
     val scroll = rememberScrollState()
-    var maintenanceTop by remember { mutableIntStateOf(-1) }
     var sectionShown by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(maintenanceTop) {
-        if (section == SECTION_SCHEDULES && !sectionShown && maintenanceTop >= 0) {
-            scroll.scrollTo(maintenanceTop)
-            sectionShown = true
+    val seekingSchedules = section == SECTION_SCHEDULES && !sectionShown
+    var maintenanceTop by remember { mutableIntStateOf(-1) }
+    if (seekingSchedules) {
+        LaunchedEffect(maintenanceTop) {
+            if (maintenanceTop >= 0) {
+                scroll.scrollTo(maintenanceTop)
+                sectionShown = true
+            }
         }
     }
 
@@ -299,7 +303,13 @@ fun AssetDetailScreen(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
                     // The maintenance sections follow this block directly: its bottom is their top.
-                    .onPlaced { maintenanceTop = (it.positionInParent().y + it.size.height).roundToInt() },
+                    .then(
+                        if (seekingSchedules) {
+                            Modifier.onPlaced { maintenanceTop = (it.positionInParent().y + it.size.height).roundToInt() }
+                        } else {
+                            Modifier
+                        },
+                    ),
             ) {
                 AssetPlate(current)
                 current.parentName?.let { parent ->
