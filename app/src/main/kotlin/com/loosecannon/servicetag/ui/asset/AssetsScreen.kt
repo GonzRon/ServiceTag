@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.asset
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,8 +10,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.AssistChip
@@ -36,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -43,6 +47,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.journal.CategoryChoice
@@ -52,6 +57,9 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.StatusBadge
+import com.loosecannon.servicetag.ui.condition.ConditionBadge
+import com.loosecannon.servicetag.ui.health.HealthBadge
+import com.loosecannon.servicetag.ui.health.needsAttention
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
@@ -81,6 +89,12 @@ fun AssetsScreen(
     // the latter is a `combine`/`stateIn` round trip and a text field has to see its own keystroke
     // back in the same frame. `state.query` still decides what the list below says.
     val query by model.query.collectAsStateWithLifecycle()
+    // #71 (plan C2): coming back to the list is the moment to re-derive health — an event, a season
+    // activation or midnight moves no table the row health watches (the dashboard's staleness).
+    LifecycleResumeEffect(model) {
+        model.refresh()
+        onPauseOrDispose { }
+    }
 
     Scaffold(
         topBar = {
@@ -278,14 +292,24 @@ private fun EmptyList(
  * Name over category, then "Part of <parent>" when the asset is a component of another (spec §9).
  * The badges do the work colour alone must not (D12 §5), and an asset can carry more than one:
  * retired and out of season are different facts and neither implies the other.
+ *
+ * **#71 (plan C4, E2, E5).** The badges wrap under the name — Retired, Out of season, Archived, their
+ * words, families, glyphs and order unchanged — so no count of them, at any width or font scale, can
+ * run past the row. While the row is a health surface ([AssetRow.health]) the same line goes on with
+ * the condition badge for a DOWN or DEGRADED asset, then the health badge (the band's glyph and word,
+ * no score), and under it one quiet line per CRITICAL subject (S109) and per DOWN or DEGRADED
+ * component (S27), in the detail's order and words. The NFC disc anchors the right edge; it is a
+ * glyph with a description, never a control, so a tap on it opens the asset as a tap anywhere does.
+ * No text here carries a line limit (the #68 rule). Internal so the layout tests can draw one row.
  */
 @Composable
-private fun AssetListRow(row: AssetRow, onClick: () -> Unit) {
+internal fun AssetListRow(row: AssetRow, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val asset = row.asset
+    val health = row.health
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .heightIn(min = 56.dp)
@@ -311,24 +335,66 @@ private fun AssetListRow(row: AssetRow, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            val archived = statusLabel(asset.status)
+            if (asset.isRetired || row.outOfSeason || archived != null || health != null) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(top = 4.dp),
+                ) {
+                    if (asset.isRetired) {
+                        StatusBadge(
+                            label = RETIRED,
+                            colors = ServiceTagTheme.semanticColors.paused,
+                            icon = ServiceTagIcons.PauseCircle,
+                        )
+                    }
+                    if (row.outOfSeason) {
+                        StatusBadge(
+                            label = OUT_OF_SEASON,
+                            colors = ServiceTagTheme.semanticColors.seasonInactive,
+                            icon = ServiceTagIcons.CalendarMonth,
+                        )
+                    }
+                    archived?.let { label ->
+                        StatusBadge(label = label, colors = ServiceTagTheme.semanticColors.seasonInactive)
+                    }
+                    if (health != null) {
+                        // Condition before health: a DOWN asset's health is never drawn before its
+                        // condition (inv. 119), the detail's own rule.
+                        if (health.condition?.condition?.needsAttention == true) ConditionBadge(health.condition)
+                        health.result.aggregate?.let { HealthBadge(band = it.band, score = null) }
+                    }
+                }
+            }
+            health?.let { view -> rowHealthLines(view).forEach { line -> QuietLine(line) } }
         }
-        if (asset.isRetired) {
-            StatusBadge(
-                label = RETIRED,
-                colors = ServiceTagTheme.semanticColors.paused,
-                icon = ServiceTagIcons.PauseCircle,
-            )
-        }
-        if (row.outOfSeason) {
-            StatusBadge(
-                label = OUT_OF_SEASON,
-                colors = ServiceTagTheme.semanticColors.seasonInactive,
-                icon = ServiceTagIcons.CalendarMonth,
-            )
-        }
-        statusLabel(asset.status)?.let { label ->
-            StatusBadge(label = label, colors = ServiceTagTheme.semanticColors.seasonInactive)
-        }
+        if (row.hasWrittenTag) NfcTagDisc()
+    }
+}
+
+/**
+ * #71 (R71-2): the written-tag mark — the app's NFC tag glyph in the OK family's cool blue, never a
+ * green and never a check (D12's OK signifier). 22dp at any font scale: an informational glyph, not
+ * a control. The glyph sits in its own centred box so the disc cannot stretch it.
+ */
+@Composable
+private fun NfcTagDisc() {
+    val colors = ServiceTagTheme.semanticColors.maintenanceOkay
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(22.dp)
+            .clip(CircleShape)
+            .background(colors.container)
+            .semantics { contentDescription = NFC_TAG_WRITTEN },
+    ) {
+        Icon(
+            imageVector = ServiceTagIcons.NfcTag,
+            contentDescription = null,
+            tint = colors.foreground,
+            modifier = Modifier.size(14.dp),
+        )
     }
 }
 
@@ -337,6 +403,9 @@ internal fun statusLabel(status: AssetStatus): String? = when (status) {
     AssetStatus.ACTIVE -> null
     AssetStatus.ARCHIVED -> ARCHIVED
 }
+
+/** P71-4 (ratified 2026-09-26): the NFC disc's accessibility description. */
+private const val NFC_TAG_WRITTEN = "NFC tag written"
 
 /** The two badge words spec §7 and §6 fix, shared by the list row and the identity plate. */
 internal const val RETIRED = "Retired"
