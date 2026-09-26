@@ -33,6 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.usecase.OverwriteSubject
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
@@ -104,7 +105,7 @@ fun WriteTagScreen(
     val asking = state as? WriteState.Confirm
     if (asking != null) {
         OverwriteSheet(
-            reason = asking.reason,
+            subject = asking.subject,
             target = targetName,
             onOverwrite = model::confirmOverwrite,
             onKeepIt = model::keepIt,
@@ -227,7 +228,7 @@ private fun VerifiedLine() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun OverwriteSheet(
-    reason: String,
+    subject: OverwriteSubject,
     target: String,
     onOverwrite: () -> Unit,
     onKeepIt: () -> Unit,
@@ -248,11 +249,9 @@ internal fun OverwriteSheet(
                 shape = PlateShape,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
-                    text = "The tag already holds $reason.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(12.dp),
-                )
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(text = subject.line, style = MaterialTheme.typography.bodyMedium)
+                }
             }
             Text(
                 text = "Replacing it will make the tag identify $target. The old content is lost. " +

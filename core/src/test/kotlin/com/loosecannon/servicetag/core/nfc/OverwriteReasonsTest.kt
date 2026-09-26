@@ -6,8 +6,8 @@ import com.loosecannon.nfc.tagcore.OverwriteReason
 import com.loosecannon.servicetag.core.model.TagId
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
-import kotlin.test.assertTrue
 
 class OverwriteReasonsTest {
     private val mine = TagId("123e4567-e89b-12d3-a456-426614174000")
@@ -23,10 +23,14 @@ class OverwriteReasonsTest {
 
     @Test fun emptyTagProceeds() = assertEquals(OverwriteDecision.Proceed, OverwriteReasons.decide(TagPayload.Empty, mine))
     @Test fun sameV1IdProceeds() = assertEquals(OverwriteDecision.Proceed, OverwriteReasons.decide(TagPayload.V1(mine), mine))
+    /**
+     * #70 R70-4: the v1 question is worded by `OverwriteSubjects` (core/usecase), which knows what
+     * the id means on this phone; `sentence` no longer has a uuid sentence to fall back on.
+     */
     @Test fun differentV1IdConfirms() {
         val c = assertIs<OverwriteDecision.Confirm>(OverwriteReasons.decide(TagPayload.V1(other), mine))
         assertEquals(OverwriteReason.OTHER_TAG_SAME_PRODUCT, c.reason)
-        assertEquals("a different ServiceTag tag (${other.value})", OverwriteReasons.sentence(c))
+        assertFailsWith<IllegalStateException> { OverwriteReasons.sentence(c) }
     }
     @Test fun newerVersionConfirms() {
         val c = assertIs<OverwriteDecision.Confirm>(OverwriteReasons.decide(TagPayload.NewerVersion(3), mine))
@@ -40,8 +44,8 @@ class OverwriteReasonsTest {
         val c = assertIs<OverwriteDecision.Confirm>(OverwriteReasons.decide(TagPayload.Malformed("x"), mine))
         assertEquals("unreadable NDEF content (x)", OverwriteReasons.sentence(c))
     }
-    /** The question names what is on the tag, not just that something is. */
+    /** The question carries what is on the tag, not just that something is: the id the sheet looks up. */
     @Test fun reasonNamesTheTagThatIsThere() {
-        assertTrue(other.value in OverwriteReasons.sentence(OverwriteReasons.decide(TagPayload.V1(other), mine) as OverwriteDecision.Confirm))
+        assertEquals(other.value, (OverwriteReasons.decide(TagPayload.V1(other), mine) as OverwriteDecision.Confirm).detail)
     }
 }

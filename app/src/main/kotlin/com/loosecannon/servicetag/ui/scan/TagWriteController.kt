@@ -4,6 +4,7 @@ import android.util.Log
 import com.loosecannon.nfc.tagcore.NdefRecordData
 import com.loosecannon.nfc.tagcore.NdefSize
 import com.loosecannon.nfc.tagcore.OverwriteDecision
+import com.loosecannon.nfc.tagcore.OverwriteReason
 import com.loosecannon.nfc.tagcore.android.CapacityVerdict
 import com.loosecannon.nfc.tagcore.android.TagHandle
 import com.loosecannon.nfc.tagcore.android.TagInspection
@@ -18,9 +19,14 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.nfc.OverwriteReasons
 import com.loosecannon.servicetag.core.nfc.TagPayload
+import com.loosecannon.servicetag.core.usecase.OverwriteSubject
+import com.loosecannon.servicetag.core.usecase.OverwriteSubjects
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
+import com.loosecannon.servicetag.core.usecase.Resolution
+import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.di.AppGraph
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -31,14 +37,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** What the write screen draws. One state at a time; the lock switch is separate state. */
 sealed interface WriteState {
     /** Nothing has happened yet, the tag was only formatted, or the last tap deliberately left it alone. */
     data class Idle(val message: String) : WriteState
 
-    /** The tag already holds something; [reason] names it, in this product's words. */
-    data class Confirm(val reason: String) : WriteState
+    /** The tag already holds something; [subject] names it, in this product's words (#70). */
+    data class Confirm(val subject: OverwriteSubject) : WriteState
 
     data class Written(val tagId: String, val locked: Boolean) : WriteState
     data class Error(val message: String) : WriteState
@@ -54,6 +61,13 @@ sealed interface WriteState {
  * A ServiceTag row is provisioned on the first writable tap — a format-only tap creates no
  * product state at all — and is reused across retries; [abandonIfUnwritten] deletes it if the
  * screen closes before a verified write claims it, so no phantom tag is left behind.
+ *
+ * When the tag holds a different ServiceTag v1 identity, the question names what that identity
+ * means on this phone (#70): [ResolveTag.peek] — the scan's own classification, recording nothing —
+ * runs first, bounded by [LOOKUP_BOUND], and only then is the question recorded and shown, in one
+ * breath. The lookup changes the words and nothing else: a lookup that fails or runs out of time
+ * still asks (with the honest "could not be checked" line); a cancelled one asks nothing and frees
+ * the tap.
  */
 class TagWriteController(
     private val provisionTag: ProvisionTag,
@@ -64,10 +78,12 @@ class TagWriteController(
     private val target: TagTarget,
     label: String?,
     private val scope: CoroutineScope,
+    /** Read-only here: only [ResolveTag.peek] is called, never the scan-recording `run`. */
+    private val resolveTag: ResolveTag,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     constructor(graph: AppGraph, io: TagIo, target: TagTarget, label: String?, scope: CoroutineScope) :
-        this(graph.provisionTag, graph.appScope, io, graph.ndefCodec, target, label, scope)
+        this(graph.provisionTag, graph.appScope, io, graph.ndefCodec, target, label, scope, graph.resolveTag)
 
     /**
      * The "Tag placement" value carried into [ProvisionTag.begin] (#49). It starts at the
@@ -178,12 +194,32 @@ class TagWriteController(
         return when (val d = OverwriteReasons.decide(existing, row.id)) {
             OverwriteDecision.Proceed -> { write(tag, intended, row); false }
             is OverwriteDecision.Confirm -> {
+                // Look the id up FIRST (R70-2): no suspension point may separate recording the
+                // question from showing it, or `keepIt()` / `confirmOverwrite()` could answer a
+                // question that is not on screen yet. `d` is final; the lookup only picks words.
+                val resolution = if (d.reason == OverwriteReason.OTHER_TAG_SAME_PRODUCT) lookUp(existing) else null
                 awaitingAnswer = existing
-                _state.value = WriteState.Confirm(OverwriteReasons.sentence(d))
+                _state.value = WriteState.Confirm(OverwriteSubjects.of(d, resolution))
                 true
             }
         }
     }
+
+    /**
+     * What the id on the tag means on this phone, or null when the lookup failed or took longer
+     * than [LOOKUP_BOUND] (C7). `withTimeoutOrNull`, not `withTimeout`: running out of time must
+     * still ask. A cancellation is rethrown, never turned into a sheet: `onTag`'s `finally` frees
+     * the tap. No io hop — Room keeps its own threads, as `provisionTag.begin` already relies on.
+     */
+    private suspend fun lookUp(existing: TagPayload): Resolution? =
+        try {
+            withTimeoutOrNull(LOOKUP_BOUND) { resolveTag.peek(existing) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "overwrite lookup failed", e)
+            null
+        }
 
     /** What the tag holds, in this product's terms. Unreadable NDEF is unreadable — never "empty" (C1). */
     private fun existingOn(inspection: TagInspection): TagPayload = when (val read = inspection.read) {
@@ -276,5 +312,8 @@ class TagWriteController(
     private companion object {
         const val TAG = "TagWriteController"
         val InitialState = WriteState.Idle("Hold a blank or reusable tag to the back of the phone.")
+
+        /** R70-6: a Room read never takes this long; the bound keeps "changes only the words" true if one did. */
+        val LOOKUP_BOUND = 2.seconds
     }
 }
