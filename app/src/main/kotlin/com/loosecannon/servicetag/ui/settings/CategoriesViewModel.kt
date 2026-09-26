@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.usecase.CategoryExists
 import com.loosecannon.servicetag.core.usecase.CategoryInUse
 import com.loosecannon.servicetag.core.usecase.CategoryIsBuiltIn
 import com.loosecannon.servicetag.core.usecase.CategoryUsage
+import com.loosecannon.servicetag.core.usecase.CategoryValidation
 import com.loosecannon.servicetag.core.usecase.DeleteCategory
 import com.loosecannon.servicetag.core.usecase.NoSuchCategory
 import com.loosecannon.servicetag.core.usecase.RenameCategory
@@ -67,7 +68,7 @@ data class CategoriesState(val own: List<OwnCategory>, val builtIns: List<String
 
 /**
  * The open rename dialog (P74-8) for the row [key], which read [current] when it opened. [refusal] is
- * P74-11 or P74-12 under the field; typing takes it down.
+ * P74-11, P74-12 or P74-18 under the field; typing takes it down.
  */
 data class RenameDraft(
     val key: String,
@@ -99,7 +100,10 @@ data class DeleteAsk(val key: String, val display: String)
  * - a delete of a category in use asks nothing and says why on the snackbar (P74-17), both when the
  *   row's own count already shows the use and when the use arrived after the confirmation opened;
  * - a rename or delete aimed at a row that is gone ([NoSuchCategory]) has no words: the dialog closes
- *   and the list, which follows the store, already shows the truth.
+ *   and the list, which follows the store, already shows the truth;
+ * - a rename or delete that fails for any other reason — none of the named refusals — says so where its
+ *   refusals are said: P74-18 under the rename field, the dialog staying as typed; P74-19 on the
+ *   snackbar after a confirmed delete, the row staying. A cancellation is never a failure: it is rethrown.
  */
 class CategoriesViewModel(
     categories: CategoryRepository,
@@ -128,7 +132,7 @@ class CategoriesViewModel(
     private val _deleting = MutableStateFlow<DeleteAsk?>(null)
     val deleting: StateFlow<DeleteAsk?> = _deleting.asStateFlow()
 
-    /** The snackbar's lines: only P74-17. One line, once. */
+    /** The snackbar's lines: P74-17 and P74-19. One line, once. */
     private val _messages = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
@@ -162,9 +166,11 @@ class CategoriesViewModel(
                         null, is NoSuchCategory -> null
                         is CategoryExists -> open.copy(renaming = false, refusal = nameTaken(failure.existingDisplay))
                         is CategoryIsBuiltIn -> open.copy(renaming = false, refusal = builtInName(failure.label))
-                        // CategoryValidation is what the held button already prevents, and nothing
-                        // else has ratified words: the dialog stays as typed and can be tried again.
-                        else -> open.copy(renaming = false)
+                        // CategoryValidation is what the held button already prevents; CategoryInUse is
+                        // a delete's. Either way the dialog stays as typed and can be tried again.
+                        is CategoryValidation, is CategoryInUse -> open.copy(renaming = false)
+                        // A failure no refusal names (P74-18): the owner may change the text or cancel.
+                        else -> open.copy(renaming = false, refusal = COULD_NOT_RENAME)
                     }
                 }
             }
@@ -189,14 +195,19 @@ class CategoriesViewModel(
 
     /**
      * The confirmation's Delete. The use case counts again in its own transaction, so an asset that
-     * took the category after the dialog opened refuses the delete with P74-17 and the row stays.
+     * took the category after the dialog opened refuses the delete with P74-17 and the row stays. A
+     * failure no refusal names says P74-19, and the row stays too.
      */
     fun confirmDelete() {
         val ask = _deleting.getAndUpdate { null } ?: return
         viewModelScope.launch {
             val failure = runCatching { deleteCategory.run(ask.key) }.exceptionOrNull()
             if (failure is CancellationException) throw failure
-            if (failure is CategoryInUse) _messages.tryEmit(stillInUse(failure.display, failure.count))
+            when (failure) {
+                null, is NoSuchCategory, is CategoryValidation, is CategoryIsBuiltIn, is CategoryExists -> Unit
+                is CategoryInUse -> _messages.tryEmit(stillInUse(failure.display, failure.count))
+                else -> _messages.tryEmit(COULD_NOT_DELETE)
+            }
         }
     }
 }

@@ -2,7 +2,10 @@ package com.loosecannon.servicetag.ui.settings
 
 import com.loosecannon.servicetag.core.journal.CategorySuggestions
 import com.loosecannon.servicetag.core.model.AssetCategory
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.core.usecase.DeleteCategory
+import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -65,8 +68,11 @@ class CategoriesViewModelTest {
         fun row(display: String): OwnCategory = model.state.value!!.own.single { it.display == display }
     }
 
-    private fun TestScope.open(): Open {
-        val model = CategoriesViewModel(graph.categories, graph.assets, graph.renameCategory, graph.deleteCategory)
+    private fun TestScope.open(
+        rename: RenameCategory = graph.renameCategory,
+        delete: DeleteCategory = graph.deleteCategory,
+    ): Open {
+        val model = CategoriesViewModel(graph.categories, graph.assets, rename, delete)
         val said = mutableListOf<String>()
         backgroundScope.launch { model.state.collect() }
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.messages.collect { said += it } }
@@ -75,6 +81,16 @@ class CategoriesViewModelTest {
     }
 
     private suspend fun stored(): List<Pair<String, String>> = graph.categories.all().map { it.key to it.display }
+
+    /** The store, except that writing a row fails the way a full or broken disk would. */
+    private class UpsertFails(real: CategoryRepository) : CategoryRepository by real {
+        override suspend fun upsert(row: AssetCategory): Unit = throw IllegalStateException("disk I/O error")
+    }
+
+    /** The store, except that deleting a row fails the way a full or broken disk would. */
+    private class DeleteFails(real: CategoryRepository) : CategoryRepository by real {
+        override suspend fun delete(key: String): Unit = throw IllegalStateException("disk I/O error")
+    }
 
     @Test fun theOwnersRowsCarryTheirUsageArchivedAndRetiredIncludedAndTheBuiltInsFollow() = runTest {
         seed()
@@ -195,6 +211,31 @@ class CategoriesViewModelTest {
         assertEquals(listOf("Appliance", "Machine"), screen.model.state.value!!.own.map(OwnCategory::display))
     }
 
+    /**
+     * The follow-ups' F1 (P74-18, owner 2026-09-26): a failure that is none of the named refusals keeps
+     * the dialog as typed, says so under the field — never on the snackbar — and typing takes it down.
+     */
+    @Test fun anUnexpectedRenameFailureKeepsTheDialogAndSaysSo() = runTest {
+        seed()
+        val screen = open(rename = RenameCategory(UpsertFails(graph.categories), graph.assets, graph.uow, graph.clock))
+        screen.model.startRename(screen.row("Spare"))
+        screen.model.onRenameText("Spares")
+        screen.model.confirmRename()
+        advanceUntilIdle()
+
+        val draft = screen.model.rename.value
+        assertNotNull("the dialog stays", draft)
+        assertEquals("Could not rename that category.", draft!!.refusal)
+        assertFalse(draft.renaming)
+        assertEquals("Spares", draft.text)
+        assertTrue("the Rename can be tried again", draft.canRename)
+        assertTrue("never the snackbar", screen.said.isEmpty())
+        assertEquals(listOf("appliance" to "Appliance", "machine" to "Machine", "spare" to "Spare"), stored())
+
+        screen.model.onRenameText("Spare parts")
+        assertNull(screen.model.rename.value!!.refusal)
+    }
+
     @Test fun anUnusedDeleteAsksFirstThenRemovesTheRow() = runTest {
         seed()
         val screen = open()
@@ -242,6 +283,23 @@ class CategoriesViewModelTest {
         assertNull(screen.model.deleting.value)
         assertEquals(listOf("Spare is used by 1 asset. Change its category first."), screen.said)
         assertNotNull(graph.categories.get("spare"))
+    }
+
+    /**
+     * The follow-ups' F2 (P74-19, owner 2026-09-26): a failure that is none of the named refusals closes
+     * the confirmation, keeps the row, and says so on the snackbar.
+     */
+    @Test fun anUnexpectedDeleteFailureSaysSoOnTheSnackbar() = runTest {
+        seed()
+        val screen = open(delete = DeleteCategory(DeleteFails(graph.categories), graph.assets, graph.uow))
+        screen.model.requestDelete(screen.row("Spare"))
+        screen.model.confirmDelete()
+        advanceUntilIdle()
+
+        assertNull(screen.model.deleting.value)
+        assertEquals(listOf("Could not delete that category."), screen.said)
+        assertEquals(listOf("Appliance", "Machine", "Spare"), screen.model.state.value!!.own.map(OwnCategory::display))
+        assertEquals(listOf("appliance" to "Appliance", "machine" to "Machine", "spare" to "Spare"), stored())
     }
 
     @Test fun aDeleteOfARowThatIsGoneClosesWithoutAWord() = runTest {
