@@ -20,6 +20,8 @@ import com.loosecannon.servicetag.testing.subjectRow
 import com.loosecannon.servicetag.ui.health.ConditionView
 import com.loosecannon.servicetag.ui.health.HealthPlurals
 import com.loosecannon.servicetag.ui.health.NOT_TRACKED
+import com.loosecannon.servicetag.core.journal.CategoryCatalog
+import com.loosecannon.servicetag.core.journal.CategoryChoice
 import com.loosecannon.servicetag.core.journal.RangeState
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
@@ -120,7 +122,7 @@ class AssetViewModelsTest {
      */
     private suspend fun editModel(id: AssetId? = null, parentId: String? = null): AssetEditViewModel {
         val model = AssetEditViewModel(
-            graph.assets, graph.healthSubjects, graph.saveAssetSettings, graph.schedules, id, parentId,
+            graph.assets, graph.healthSubjects, graph.saveAssetSettings, graph.schedules, graph.categories, id, parentId,
         )
         model.state.first { it.parentChoices.isNotEmpty() }
         return model
@@ -250,6 +252,33 @@ class AssetViewModelsTest {
         vm.state.first { !it.saving }
         assertEquals(listOf("appliance" to "Appliance"), graph.categories.all().map { it.key to it.display })
         assertEquals("Appliance", graph.assets.all().single().category)
+    }
+
+    /**
+     * #74 AC 1 (C16): a category saved once is offered by every editor after it — the next one opened,
+     * and one already open, because the choices follow the catalog rather than being read once. Typing
+     * alone offers nothing: until the save the choices are the built-ins, and the saved category comes
+     * after them, reading like one of them but with no template hint (AC 7).
+     */
+    @Test fun aSavedCategoryIsOfferedNextTime() = runTest {
+        val first = editModel()
+        backgroundScope.launch { first.categoryChoices.collect() }
+        first.onName("Unit A")
+        first.onCategory("Appliance")
+        advanceUntilIdle()
+        assertEquals("typing offers nothing", CategoryCatalog.builtIns, first.categoryChoices.value)
+
+        first.save()
+        first.state.first { !it.saving }
+        advanceUntilIdle()
+        val appliance = CategoryChoice("Appliance", "appliance", builtIn = false, templateKey = null)
+        assertEquals("the open editor gains it", CategoryCatalog.builtIns + appliance, first.categoryChoices.value)
+
+        val second = editModel()
+        backgroundScope.launch { second.categoryChoices.collect() }
+        advanceUntilIdle()
+        assertEquals("the next editor offers it", CategoryCatalog.builtIns + appliance, second.categoryChoices.value)
+        assertEquals(13, second.categoryChoices.value.size)
     }
 
     @Test fun missingIsTrueForAnUnknownId() = runTest {
@@ -1805,7 +1834,9 @@ class AssetViewModelsTest {
             override suspend fun forAsset(assetId: AssetId): List<MaintenanceSchedule> =
                 throw IllegalStateException("the schedule read failed")
         }
-        val model = AssetEditViewModel(graph.assets, graph.healthSubjects, graph.saveAssetSettings, unreadable, AssetId("gen"))
+        val model = AssetEditViewModel(
+            graph.assets, graph.healthSubjects, graph.saveAssetSettings, unreadable, graph.categories, AssetId("gen"),
+        )
         model.state.first { it.parentChoices.isNotEmpty() }
         val saved = mutableListOf<AssetId>()
         val review = mutableListOf<AssetId>()
