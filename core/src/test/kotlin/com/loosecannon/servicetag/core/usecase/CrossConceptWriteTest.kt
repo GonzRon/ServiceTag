@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
@@ -27,6 +28,7 @@ import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.ConditionRepository
@@ -44,6 +46,7 @@ import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.HealthFixtures
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
@@ -75,6 +78,9 @@ import org.junit.jupiter.api.Test
  * - No activation, season, break, policy, subject or guarded schedule write touches `asset_event` or
  *   `occurrence_closure`; a policy write touches only the asset row; a subject write only its own table.
  * - The journal's own writers — an event and a completion — write no condition (inv. 81).
+ * - #74: `asset_category` is written by the three Asset commands only when they save a category
+ *   nobody has saved before, and by a rename and a delete; nothing else here writes it. (The replace
+ *   import and the merge write it too; they arrive with backup format 9.)
  */
 class CrossConceptWriteTest {
 
@@ -92,9 +98,10 @@ class CrossConceptWriteTest {
     private val groupRows = InMemoryGroupRepository()
     private val definitionRows = InMemoryDefinitionRepository()
     private val profileRows = InMemoryProfileRepository()
+    private val categoryRows = InMemoryCategoryRepository()
     private val uow = FakeUnitOfWork(
         assetRows, eventRows, activationRows, conditionRows, subjectRows, closureRows, stateRows, scheduleRows,
-        groupRows, definitionRows, profileRows,
+        groupRows, definitionRows, profileRows, categoryRows,
     )
 
     private val assets = object : AssetRepository by assetRows {
@@ -142,6 +149,11 @@ class CrossConceptWriteTest {
             definitionRows.delete(id).also { writes += "measurement_definition" }
         override suspend fun deleteAll() = definitionRows.deleteAll().also { writes += "measurement_definition" }
     }
+    private val categories = object : CategoryRepository by categoryRows {
+        override suspend fun upsert(row: AssetCategory) = categoryRows.upsert(row).also { writes += "asset_category" }
+        override suspend fun delete(key: String) = categoryRows.delete(key).also { writes += "asset_category" }
+        override suspend fun deleteAll() = categoryRows.deleteAll().also { writes += "asset_category" }
+    }
     private val profiles = object : ProfileRepository by profileRows {
         override suspend fun upsert(p: EventProfile) = profileRows.upsert(p).also { writes += "event_profile" }
         override suspend fun delete(id: ProfileId) = profileRows.delete(id).also { writes += "event_profile" }
@@ -170,10 +182,16 @@ class CrossConceptWriteTest {
     private val saveSchedule =
         SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, subjects)
     private val archiveSchedule = ArchiveSchedule(schedules, uow, recompute, subjects, assets, clock)
+    private val promoteCategory = PromoteCategory(categories)
     private val saveAssetSettings = SaveAssetSettings(
         assets, schedules, subjects, activations, uow, ids, clock, today, recompute,
-        ApplyTemplate(definitions, profiles, assets, uow, ids, clock),
+        ApplyTemplate(definitions, profiles, assets, uow, ids, clock), promoteCategory,
     )
+    private val createAsset =
+        CreateAsset(assets, uow, ids, clock, ApplyTemplate(definitions, profiles, assets, uow, ids, clock), promoteCategory)
+    private val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute, promoteCategory)
+    private val renameCategory = RenameCategory(categories, assets, uow, clock)
+    private val deleteCategory = DeleteCategory(categories, assets, uow)
     private val logEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock, recompute)
     private val completeSchedule = CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recompute)
 
@@ -222,6 +240,7 @@ class CrossConceptWriteTest {
             nominalUntilDays = 365, warningFromDays = 1095, criticalFromDays = 1460,
         )
         var created: HealthSubject? = null
+        var compressor: Asset? = null
         val s1 = scheduleRows.rows.getValue("s1")
         val cmdS1 = ScheduleCommand(
             targetAssetId = AssetId("a1"), targetGroupId = null, title = s1.title, timeInterval = s1.timeInterval,
@@ -287,6 +306,27 @@ class CrossConceptWriteTest {
                 )
             },
             wrote("CompleteSchedule") { completeSchedule.run(ScheduleId("s1"), CompletionCommand("2026-09-24", tzId = "UTC")) },
+            wrote("CreateAsset, a new category") { compressor = createAsset.run(AssetCommand(name = "Compressor", category = "Appliance")) },
+            wrote("CreateAsset, a built-in") { createAsset.run(AssetCommand(name = "Spare mower", category = "lawn  MOWER")) },
+            wrote("SaveAssetSettings, a new category") {
+                saveAssetSettings.run(
+                    compressor!!.id,
+                    AssetSettingsCommand(
+                        AssetCommand(name = "Compressor", category = "Backup power"),
+                        SeasonModeCommand(SeasonMode.YEAR_ROUND),
+                        BreakCommand(null, null),
+                        HealthPolicyCommand(HealthAggregation.WORST),
+                    ),
+                )
+            },
+            wrote("UpdateAsset, a saved category") {
+                updateAsset.run(AssetId("a3"), AssetCommand(name = "Generator a3", category = " APPLIANCE "))
+            },
+            wrote("UpdateAsset, a new category") {
+                updateAsset.run(AssetId("a3"), AssetCommand(name = "Generator a3", category = "Water heater"))
+            },
+            wrote("RenameCategory") { renameCategory.run("backup power", "Standby power") },
+            wrote("DeleteCategory") { deleteCategory.run("appliance") },
         )
 
         val derived = "schedule_state"
@@ -308,8 +348,31 @@ class CrossConceptWriteTest {
             "SaveAssetSettings" to setOf("asset", "asset_season_activation", derived),
             "LogEvent" to setOf("asset_event", derived),
             "CompleteSchedule" to setOf("asset_event", derived),
+            "CreateAsset, a new category" to setOf("asset", "asset_category"),
+            "CreateAsset, a built-in" to setOf("asset"),
+            "SaveAssetSettings, a new category" to setOf("asset", "asset_category"),
+            "UpdateAsset, a saved category" to setOf("asset"),
+            "UpdateAsset, a new category" to setOf("asset", "asset_category"),
+            "RenameCategory" to setOf("asset_category", "asset"),
+            "DeleteCategory" to setOf("asset_category"),
         )
         assertEquals(expected, cases.toMap())
+        assertEquals(
+            setOf(
+                "CreateAsset, a new category", "SaveAssetSettings, a new category", "UpdateAsset, a new category",
+                "RenameCategory", "DeleteCategory",
+            ),
+            cases.filter { (_, tables) -> "asset_category" in tables }.map { it.first }.toSet(),
+            "only a new category's save, a rename and a delete write asset_category",
+        )
+        for (what in listOf("CreateAsset, a new category", "SaveAssetSettings, a new category", "UpdateAsset, a new category")) {
+            assertEquals(1, counts.getValue(what)["asset_category"], "$what writes exactly one category row")
+        }
+        assertEquals(
+            listOf("standby power", "water heater"),
+            categoryRows.rows.keys.sorted(),
+            "the rename moved the key; the delete took the unused row",
+        )
 
         val onePointFour = cases.filter { (what, _) -> what != "LogEvent" && what != "CompleteSchedule" }
         onePointFour.forEach { (what, tables) ->

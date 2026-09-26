@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
@@ -29,7 +30,8 @@ class TagBindingUseCasesTest {
     private val ndefCodec = NdefCodec(TagIdentity("com.example.app", "tag", "com.example.app"))
     private val assets = InMemoryAssetRepository()
     private val tags = InMemoryTagRepository()
-    private val uow = FakeUnitOfWork(assets, tags)
+    private val categories = InMemoryCategoryRepository()
+    private val uow = FakeUnitOfWork(assets, tags, categories)
     private var seq = 0
     private val ids = IdGenerator { "00000000-0000-4000-8000-%012d".format(++seq) }
     private val clock = Clock { 7_000L }
@@ -38,7 +40,7 @@ class TagBindingUseCasesTest {
     private val defs = InMemoryDefinitionRepository()
     private val profiles = InMemoryProfileRepository()
     private val applyTemplate = ApplyTemplate(defs, profiles, assets, uow, ids, clock)
-    private val create = CreateAsset(assets, uow, ids, clock, applyTemplate)
+    private val create = CreateAsset(assets, uow, ids, clock, applyTemplate, PromoteCategory(categories))
 
     private val scanned = TagId("123e4567-e89b-12d3-a456-426614174000")
     private val a1 = TagTarget.AssetTarget(AssetId("a1"))

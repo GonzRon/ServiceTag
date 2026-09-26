@@ -208,6 +208,47 @@ class AssetViewModelsTest {
         assertEquals(graph.assets.all().single().id, saved.single())
     }
 
+    /**
+     * #74 AC 2, first half: typing a category nobody has saved writes nothing. The editor has no
+     * catalog write of its own; leaving it without a save — a new asset or an edit — never reaches the
+     * promotion, so the catalog and the stored row are as they were.
+     */
+    @Test fun cancellingAfterTypingACategoryAddsNothing() = runTest {
+        val vm = editModel()
+        vm.onName("Compressor")
+        vm.onCategory("Appliance")
+        vm.onCategory("Large appliance")
+        assertTrue(graph.categories.all().isEmpty())
+        assertTrue(graph.assets.all().isEmpty())
+
+        val stored = graph.createAsset.run(AssetCommand(name = "Blower", category = "Pump"))
+        val edit = editModel(stored.id)
+        edit.state.first { it.name == "Blower" }
+        edit.onCategory("Appliance")
+        assertTrue(graph.categories.all().isEmpty())
+        assertEquals("Pump", graph.assets.get(stored.id)!!.category)
+    }
+
+    /**
+     * #74 AC 2, second half: a refused save adds no category. The same form, once it saves, promotes
+     * the text it holds — so what kept the row out was the refusal and nothing else.
+     */
+    @Test fun aRefusedSaveAddsNoCategory() = runTest {
+        val vm = editModel()
+        vm.onName("   ")
+        vm.onCategory("Appliance")
+        vm.save()
+        vm.state.first { !it.saving }
+        assertEquals("Give the asset a name", vm.state.value.problems[AssetField.NAME])
+        assertTrue(graph.categories.all().isEmpty())
+
+        vm.onName("Compressor")
+        vm.save()
+        vm.state.first { !it.saving }
+        assertEquals(listOf("appliance" to "Appliance"), graph.categories.all().map { it.key to it.display })
+        assertEquals("Appliance", graph.assets.all().single().category)
+    }
+
     @Test fun missingIsTrueForAnUnknownId() = runTest {
         val vm = detailModel(AssetId("nope"))
         backgroundScope.launch { vm.missing.collect() }

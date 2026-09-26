@@ -604,7 +604,7 @@ class ApiRouterTest {
             var n = 0
             val disjoint = IdGenerator { "00000000-0000-4000-8000-9000%08d".format(++n) }
             val createAsset = CreateAsset(
-                donor.assets, donor.uow, disjoint, donor.clock, donor.applyTemplate,
+                donor.assets, donor.uow, disjoint, donor.clock, donor.applyTemplate, donor.promoteCategory,
             )
             runBlocking {
                 names.forEach { createAsset.run(it, "Power") }

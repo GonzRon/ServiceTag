@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.data.room
 
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
+import com.loosecannon.servicetag.data.room.dao.AssetCategoryDao
 import com.loosecannon.servicetag.data.room.dao.AssetConditionDao
 import com.loosecannon.servicetag.data.room.dao.AssetDao
 import com.loosecannon.servicetag.data.room.dao.AssetReferenceDao
@@ -18,6 +19,7 @@ import com.loosecannon.servicetag.data.room.dao.ProfileDao
 import com.loosecannon.servicetag.data.room.dao.ScheduleLocalDeliveryDao
 import com.loosecannon.servicetag.data.room.dao.ScheduleStateDao
 import com.loosecannon.servicetag.data.room.dao.SeasonActivationDao
+import com.loosecannon.servicetag.data.room.entities.AssetCategoryEntity
 import com.loosecannon.servicetag.data.room.entities.AssetConditionEntity
 import com.loosecannon.servicetag.data.room.entities.AssetEntity
 import com.loosecannon.servicetag.data.room.entities.AssetEventEntity
@@ -65,8 +67,9 @@ import com.loosecannon.servicetag.data.room.entities.ScheduleStateEntity
         AssetSeasonActivationEntity::class,
         AssetConditionEntity::class,
         HealthSubjectEntity::class,
+        AssetCategoryEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -86,4 +89,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun seasonActivationDao(): SeasonActivationDao
     abstract fun assetConditionDao(): AssetConditionDao
     abstract fun healthSubjectDao(): HealthSubjectDao
+    abstract fun assetCategoryDao(): AssetCategoryDao
 }

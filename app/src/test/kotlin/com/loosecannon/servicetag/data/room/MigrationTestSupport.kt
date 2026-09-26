@@ -64,7 +64,7 @@ internal fun openMigrated(file: File): AppDatabase = Room
     .setQueryCoroutineContext(Dispatchers.Default)
     .addMigrations(
         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
-        MIGRATION_7_8,
+        MIGRATION_7_8, MIGRATION_8_9,
     )
     .build()
 
@@ -207,6 +207,9 @@ internal val V8_SCHEDULE_COLUMNS = setOf("service_policy", "policy_offset_days",
 
 /** The three tables schema v8 added. */
 internal val V8_TABLES = setOf("asset_season_activation", "asset_condition", "health_subject")
+
+/** The one table schema v9 added (#74). */
+internal val V9_TABLES = setOf("asset_category")
 
 /** The seven tables schema v2 added. */
 internal val JOURNAL_TABLES = setOf(

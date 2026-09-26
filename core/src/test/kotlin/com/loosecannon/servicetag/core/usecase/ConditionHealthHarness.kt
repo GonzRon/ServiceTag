@@ -28,6 +28,7 @@ import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.HealthFixtures
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
@@ -73,9 +74,10 @@ internal class ConditionHealthHarness(today: String = "2026-09-24") {
     val groups = InMemoryGroupRepository()
     val definitions = InMemoryDefinitionRepository()
     val profiles = InMemoryProfileRepository()
+    val categories = InMemoryCategoryRepository()
     val uow = FakeUnitOfWork(
         assets, events, activations, conditions, healthSubjects, closures, states, schedules, groups,
-        definitions, profiles,
+        definitions, profiles, categories,
     )
 
     private var seq = 0
@@ -101,8 +103,10 @@ internal class ConditionHealthHarness(today: String = "2026-09-24") {
     val archiveSchedule = ArchiveSchedule(schedules, uow, recompute, healthSubjects, assets, clock)
     val saveGroup = SaveGroup(groups, assets, uow, ids, clock)
     val applyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
+    val promoteCategory = PromoteCategory(categories)
     val saveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, activations, uow, ids, clock, todayPort, recompute, applyTemplate,
+        promoteCategory,
     )
 
     /** An asset stored as it is, with no command in between — the state a test starts from. */

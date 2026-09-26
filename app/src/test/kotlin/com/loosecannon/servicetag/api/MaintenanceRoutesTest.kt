@@ -1341,10 +1341,11 @@ class MaintenanceRoutesTest {
     }
 
     /**
-     * Master plan §11.3: `/v1/status` reports schema 8 and format 8, and counts the three 1.4 tables
-     * under the archive's own list names beside every shipped key.
+     * Master plan §11.3: `/v1/status` reports the schema and the format, and counts the three 1.4 tables
+     * under the archive's own list names beside every shipped key. #74 moved the schema to 9 (its
+     * `asset_category` table); the format stays 8 until the archive carries the categories.
      */
-    @Test fun statusReports8And8AndThreeNewCounts() {
+    @Test fun statusReports9And8AndThreeNewCounts() {
         val tub = createAsset("Hot tub")
         assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
         assertEquals(
@@ -1361,7 +1362,7 @@ class MaintenanceRoutesTest {
         )
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
-        assertEquals(8, status.schemaVersion)
+        assertEquals(9, status.schemaVersion)
         assertEquals(8, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
@@ -1417,7 +1418,8 @@ class MaintenanceRoutesTest {
         return try {
             var n = 0
             val disjoint = IdGenerator { "00000000-0000-4000-8000-9000%08d".format(++n) }
-            val createAsset = CreateAsset(donor.assets, donor.uow, disjoint, donor.clock, donor.applyTemplate)
+            val createAsset =
+                CreateAsset(donor.assets, donor.uow, disjoint, donor.clock, donor.applyTemplate, donor.promoteCategory)
             val saveGroup = SaveGroup(donor.groups, donor.assets, donor.uow, disjoint, donor.clock)
             val saveSchedule = SaveSchedule(
                 donor.schedules, donor.assets, donor.groups, donor.definitions, donor.profiles,
