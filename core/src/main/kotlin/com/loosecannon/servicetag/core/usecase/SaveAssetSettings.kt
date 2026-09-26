@@ -83,6 +83,13 @@ class SaveAssetSettings(
             all,
             id,
         )
+        // A create's template is looked up before anything is written, so an unknown one is refused
+        // with the other 422s rather than after the asset and its category.
+        val template = if (current == null) {
+            templateKey?.let { key -> SeedTemplates.byKey(key) ?: throw UnknownTemplate(key) }
+        } else {
+            null
+        }
 
         val now = clock.nowMillis()
         val promotion = promoteCategory.resolve(asset.category, now)
@@ -117,9 +124,7 @@ class SaveAssetSettings(
         manualSwitchActivation(next.id, modeBefore, mode, today.localDate(), now, ids)
             ?.let { activations.insert(it) }
         if (current == null) {
-            templateKey?.let { key ->
-                applyTemplate.applyInTransaction(next.id, SeedTemplates.byKey(key) ?: throw UnknownTemplate(key))
-            }
+            template?.let { applyTemplate.applyInTransaction(next.id, it) }
         } else if (current.seasonChangedTo(next)) {
             recompute.forAsset(next.id)
         }

@@ -233,6 +233,9 @@ class SaveAssetSettingsTest {
         assertFailsWith<SeasonValidation> {
             h.saveAssetSettings.run(null, settings("Compressor", SeasonMode.CALENDAR).category("Appliance"))
         }
+        assertFailsWith<UnknownTemplate> {
+            h.saveAssetSettings.run(null, settings("Compressor").category("Appliance"), templateKey = "no_such_template")
+        }
         withPreService("a2", SeasonMode.YEAR_ROUND, pause = "06-01" to "06-30")
         assertFailsWith<BreakStrandsPolicy> {
             h.saveAssetSettings.run(AssetId("a2"), settings("Generator a2").category("Appliance"))
