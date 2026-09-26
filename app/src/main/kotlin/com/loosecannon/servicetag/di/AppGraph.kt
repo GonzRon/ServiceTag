@@ -445,11 +445,13 @@ class AppGraph(private val context: Context) {
      */
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, categories,
+        attachmentStorage, uow,
     )
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, categories,
+        attachmentStorage, uow,
         // The total post-apply recompute, wired to the engine: an imported event, membership row,
         // closure or meter reading can each move a due date, and rebuilding every schedule inside
         // the apply's own transaction is cheaper than enumerating which.

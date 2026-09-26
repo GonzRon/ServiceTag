@@ -113,13 +113,13 @@ class ImportBackupMergeTest {
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            storage, uow,
+            categories, storage, uow,
         )
         val apply = ApplyBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            storage, uow,
+            categories, storage, uow,
             rebuildAll = {
                 rebuilds += 1
                 writesAtRebuild = runBlocking {

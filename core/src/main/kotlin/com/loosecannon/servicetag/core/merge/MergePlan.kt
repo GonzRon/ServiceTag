@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.core.merge
 
 import com.loosecannon.servicetag.core.backup.Backup
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetReference
@@ -19,10 +20,10 @@ import com.loosecannon.servicetag.core.ports.StoredBytes
 import java.security.MessageDigest
 
 /**
- * The fourteen canonical tables, **in the order a merge must write them**: every reference a row makes
- * points at a table declared before it (assets first, attachment rows last, when every owner is
- * in). The ordinal is also the first key conflicts are sorted by, which is what makes a report
- * deterministic.
+ * The fifteen canonical tables. The first fourteen are **in the order a merge must write them**:
+ * every reference a row makes points at a table declared before it (assets first, attachment rows
+ * last, when every owner is in). The ordinal is also the first key decisions and conflicts are
+ * sorted by, which is what makes a report deterministic.
  *
  * The three 1.2 members sit in dependency position rather than at the end. A group's members
  * reference assets, so `GROUPS` follows `ASSETS`; a schedule references an asset or a group, a
@@ -38,10 +39,17 @@ import java.security.MessageDigest
  * point only at an asset, and a health subject at an asset and — when it has one — a schedule, both
  * decided long before. Their other links (an event, a baseline profile, the asset's primary subject)
  * are soft and are never owners, so nothing here waits on them.
+ *
+ * #74's [CATEGORIES] is the exception, and the one table whose ordinal is **not** its write position.
+ * It is appended **last** because the ordinals are pinned (the sort key above, and three planner
+ * tests) and a category references nothing and is referenced by nothing — `asset.category` is free
+ * text, never a foreign key — so no position could break a reference. Its rows are **decided first**
+ * (an accepted asset is written in the spelling an accepted category row gives it) and **written
+ * first** ([MergeWrites.categories] is that value's first field), but listed last.
  */
 enum class MergeTable {
     ASSETS, GROUPS, DEFINITIONS, PROFILES, SCHEDULES, CLOSURES, LINKS, TAGS, EVENTS, ATTACHMENTS,
-    REFERENCES, SEASON_ACTIVATIONS, CONDITIONS, HEALTH_SUBJECTS,
+    REFERENCES, SEASON_ACTIVATIONS, CONDITIONS, HEALTH_SUBJECTS, CATEGORIES,
 }
 
 /**
@@ -58,7 +66,8 @@ enum class MergeTable {
  * incoming name and description could never be adopted, so a conflict there could only refuse the
  * whole archive, and a skip leaves the local row exactly as it was. And a **health subject** that
  * would drive a schedule a local non-archived subject under a different id already drives (1.4),
- * for the same reason.
+ * for the same reason. And a **category** row (#74) whose key a built-in or a local row already
+ * holds: a spelling is never worth refusing an archive, and the local spelling wins.
  */
 enum class MergeVerdict { INSERT, IDENTICAL, CONFLICT, SKIPPED }
 
@@ -244,6 +253,25 @@ enum class MergeReason {
      * [MergeDecision.detail] is the id of the archive row that claimed the schedule first.
      */
     HEALTH_SUBJECT_SCHEDULE_DUPLICATED_IN_ARCHIVE,
+
+    /**
+     * #74. A category row whose key a **local** row already holds under another display — or, from a
+     * hand-built archive only (the codec refuses a duplicate key), an earlier row of the same archive.
+     * It rides on a **`SKIPPED`**, for [REFERENCE_HELD_BY_A_LOCAL_ROW]'s reason (D-18 C): there is no
+     * `UPDATE` verdict that could adopt the incoming spelling, a spelling is never worth refusing a
+     * whole archive over, and the local row stays exactly as it was — its spelling is the one every
+     * accepted asset of that key is written in. [MergeDecision.detail] is the key, which is the
+     * holder's row id.
+     */
+    CATEGORY_KEY_HELD,
+
+    /**
+     * #74. A category row filed under a **built-in's** key. The built-ins are compiled and are never
+     * rows, so the row is declined — a `SKIPPED`, never a conflict, because a built-in added by a later
+     * release must not make an older archive unmergeable. An accepted asset of that key is written in
+     * the built-in's label. [MergeDecision.detail] is the key.
+     */
+    CATEGORY_IS_BUILT_IN,
 }
 
 /** A review hint (#44: "review hints only, never automatic identity"). It never blocks an apply. */
@@ -258,6 +286,13 @@ enum class MergeHint { SAME_MANUFACTURER_MODEL_SERIAL }
  * asset id of theirs. All three share one reason, which their own docs give: the key contains the
  * parent's own id, so in the only reachable case the holder *is* the incoming row and its own id
  * would say nothing.
+ *
+ * **One decision can be synthesised** (#74, C13): a [MergeTable.CATEGORIES] `INSERT` that no archive
+ * row carries — the category an accepted asset needs, because its key is no built-in's, no local
+ * row's and no accepted archive row's. Its [id] is that key, and its display is chosen by
+ * `CategoryBackfill.plan`, the one chooser. It is a decision like any other: it is tallied, it is in
+ * the report and the fingerprint, and its row is in [MergeWrites.categories], so the promotion a
+ * merge makes is planned and never applied behind the plan's back.
  */
 data class MergeDecision(
     val table: MergeTable,
@@ -279,11 +314,17 @@ data class MergeTally(val insert: Int, val identical: Int, val conflict: Int, va
 
 /**
  * The rows to insert. **The field order is the write order**, and each list is ordered within
- * itself — assets parents-first, definitions ENTERED-before-DERIVED. Empty in every field when the
- * plan holds a conflict, so "no partial merge" is a property of this value rather than a discipline
- * the apply has to remember.
+ * itself — categories by key, assets parents-first, definitions ENTERED-before-DERIVED. Empty in
+ * every field when the plan holds a conflict, so "no partial merge" is a property of this value
+ * rather than a discipline the apply has to remember.
+ *
+ * [categories] comes first (#74, C13): the archive's accepted rows and the synthesised ones, so an
+ * apply that wrote this value and nothing else leaves every accepted asset's category in the catalog.
+ * [assets] carries each accepted asset in its **canonical** spelling — a local row's, an accepted
+ * row's, or a built-in's label — with the archive's own `updatedAt`.
  */
 data class MergeWrites(
+    val categories: List<AssetCategory> = emptyList(),
     val assets: List<Asset> = emptyList(),
     val groups: List<MaintenanceGroup> = emptyList(),
     val definitions: List<MeasurementDefinition> = emptyList(),
@@ -326,6 +367,8 @@ data class MergeSnapshot(
     val seasonActivations: List<SeasonActivation> = emptyList(),
     val conditions: List<AssetCondition> = emptyList(),
     val healthSubjects: List<HealthSubject> = emptyList(),
+    /** #74 — the owner's own categories. The built-ins are compiled, never rows, never here. */
+    val categories: List<AssetCategory> = emptyList(),
     val storedBytes: Map<String, StoredBytes> = emptyMap(),
     val attachmentStoreConfigured: Boolean,
 )
@@ -336,8 +379,8 @@ data class MergeSnapshot(
  * [applicable] is the only thing a client has to read to know whether an apply will do anything:
  * it is true exactly when [conflicts] is empty. [duplicateCandidates] never makes it false, and
  * neither does a `SKIPPED` row — an attachment whose bytes are absent, a reference whose
- * `(asset_id, uri)` a diverged local row already holds (D-18 C), or a health subject whose schedule
- * a local subject already drives.
+ * `(asset_id, uri)` a diverged local row already holds (D-18 C), a health subject whose schedule
+ * a local subject already drives, or a category whose key a built-in or a local row holds (#74).
  */
 data class MergeReport(
     val formatVersion: Int,
@@ -357,6 +400,8 @@ data class MergeReport(
     val seasonActivations: MergeTally,
     val conditions: MergeTally,
     val healthSubjects: MergeTally,
+    /** #74 — last, in [MergeTable] order, although categories are written first. */
+    val categories: MergeTally,
     /** Deterministic: table order, then id. */
     val conflicts: List<MergeDecision>,
     val duplicateCandidates: List<DuplicateCandidate>,
@@ -427,6 +472,7 @@ class MergePlan internal constructor(
         seasonActivations = tally(MergeTable.SEASON_ACTIVATIONS),
         conditions = tally(MergeTable.CONDITIONS),
         healthSubjects = tally(MergeTable.HEALTH_SUBJECTS),
+        categories = tally(MergeTable.CATEGORIES),
         conflicts = conflicts,
         duplicateCandidates = duplicateCandidates,
     )

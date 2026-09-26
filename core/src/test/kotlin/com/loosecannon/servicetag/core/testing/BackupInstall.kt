@@ -2,13 +2,16 @@ package com.loosecannon.servicetag.core.testing
 
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.usecase.ApplyBackupMergePlan
+import com.loosecannon.servicetag.core.usecase.BuildBackupMergePlan
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 
 /**
  * #74 (B2) — one install for the backup use cases: every canonical store in memory, the category
- * catalog among them, one [FakeUnitOfWork] over all of them, and the export and the replace built
- * over them in `AppGraph`'s collaborator order. [rebuilds] counts the total recompute seam.
+ * catalog among them, one [FakeUnitOfWork] over all of them, and the export, the replace, the merge
+ * plan and the merge apply built over them in `AppGraph`'s collaborator order. [rebuilds] counts the
+ * total recompute seam, which the replace and the apply share.
  */
 class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000L) {
     val assets = InMemoryAssetRepository()
@@ -40,6 +43,15 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
         uow, IdGenerator { setId }, Clock { now }, appVersion = "1.4.1", schemaVersion = 9,
     )
     val replace = ImportBackupReplace(
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
+        references, activations, conditions, subjects, categories, storage, uow,
+        rebuildAll = { rebuilds += 1 },
+    )
+    val build = BuildBackupMergePlan(
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
+        references, activations, conditions, subjects, categories, storage, uow,
+    )
+    val apply = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, storage, uow,
         rebuildAll = { rebuilds += 1 },
