@@ -65,6 +65,7 @@ class BackupContentCheckTest {
         subjects: List<HealthSubject> = emptyList(),
         conditions: List<AssetCondition> = emptyList(),
         activations: List<SeasonActivation> = emptyList(),
+        categories: List<AssetCategoryDto> = emptyList(),
     ) = BackupData(
         assets = assets.map { it.toDto() },
         nfcTags = emptyList(),
@@ -75,6 +76,7 @@ class BackupContentCheckTest {
         seasonActivations = activations.map { it.toDto() },
         assetConditions = conditions.map { it.toDto() },
         healthSubjects = subjects.map { it.toDto() },
+        assetCategories = categories,
     )
 
     /** The refusal's message, which names the table, the row and the command's problem. */
@@ -222,5 +224,54 @@ class BackupContentCheckTest {
 
         val golden = BackupCodec.decode(resourceBytes(GOLDEN_FORMAT_7))
         assertTrue(golden.data.maintenanceSchedules.isNotEmpty())
+    }
+
+    // --- #74 (C11): the owner's categories -----------------------------------------------------------
+
+    /**
+     * A category row is refused only when it is **malformed**: a blank display, or a key that is not
+     * the key rule's own for its display — the row a promotion (C5) could never have written. The
+     * duplicate key is the graph check's `uniqueIds`, which runs first, and is pinned beside them.
+     */
+    @Test
+    fun aMalformedCategoryRowIsRefused() {
+        assertRefused(
+            data(categories = listOf(AssetCategoryDto("", "   ", 1L, 1L))),
+            "assetCategories: category ", "has a blank display",
+        )
+        assertRefused(
+            data(categories = listOf(AssetCategoryDto("Appliance", "Appliance", 1L, 1L))),
+            "assetCategories: category Appliance", "is not keyed by its display",
+        )
+        assertRefused(
+            data(categories = listOf(AssetCategoryDto("water  heater", "Water  heater", 1L, 1L))),
+            "assetCategories: category water  heater", "is not keyed by its display",
+        )
+        assertRefused(
+            data(
+                categories = listOf(
+                    AssetCategoryDto("appliance", "Appliance", 1L, 1L),
+                    AssetCategoryDto("appliance", "APPLIANCE", 2L, 2L),
+                ),
+            ),
+            "assetCategories: duplicate id appliance", "",
+        )
+    }
+
+    /**
+     * A row filed under a **built-in's** key is never refused: a built-in added by a later release
+     * must not make an older archive unrestorable (MAJOR by `versioning.md`). The planner and the
+     * replace drop it instead. A well-formed row of the owner's own decodes beside it.
+     */
+    @Test
+    fun aBuiltInKeyedCategoryRowStillDecodes() {
+        val rows = data(
+            categories = listOf(
+                AssetCategoryDto("appliance", "Appliance", 1L, 1L),
+                AssetCategoryDto("hot tub", "Hot tub", 2L, 2L),
+                AssetCategoryDto("ro system", "ro SYSTEM", 3L, 3L),
+            ),
+        )
+        assertEquals(rows, BackupCodec.decode(archiveOf(rows)).data)
     }
 }

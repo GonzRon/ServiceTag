@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.backup
 
+import com.loosecannon.servicetag.core.journal.CategoryKey
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.usecase.BreakCommand
 import com.loosecannon.servicetag.core.usecase.SeasonProblem
@@ -25,6 +26,12 @@ import com.loosecannon.servicetag.core.usecase.wellFormedZone
  * - a health subject's name, thresholds and weight;
  * - a condition's date, time, zone and reason — the zone by its form alone, never by this device's zone
  *   data (the controller's ruling on B06-F7); an activation's date.
+ *
+ * - a category (#74, C11) that is **malformed**: a blank display, or a key that is not
+ *   `CategoryKey.of(display)` — the row a promotion could never have written. Nothing else about a
+ *   category is refused: a row filed under a **built-in's** key decodes, because a built-in added by a
+ *   later release must never make an older archive unrestorable, and the replace and the merge
+ *   planner drop it. (A duplicate key is the graph check's `uniqueIds`, which runs first.)
  *
  * What depends on **other rows or on today** is deliberately not asked: a subject naming an archived
  * or retargeted schedule (NOT TRACKED, which a merge may bring — plan decision 17), a TRACK_ONE
@@ -81,6 +88,22 @@ internal object BackupContentCheck {
                 "seasonActivations", "activation", row.id,
                 listOfNotNull(SeasonProblem.BadDate("occurredOn").takeIf { parseDate(row.occurredOn) == null }),
             )
+        }
+        checkCategories(data)
+    }
+
+    /** A promotion writes `key = CategoryKey.of(display)` and never a blank display (C2, C5). */
+    private fun checkCategories(data: BackupData) {
+        data.assetCategories.forEach { row ->
+            if (row.display.isBlank()) {
+                throw BackupCorrupt("assetCategories: category ${row.key} has a blank display")
+            }
+            val expected = CategoryKey.of(row.display)
+            if (row.key != expected) {
+                throw BackupCorrupt(
+                    "assetCategories: category ${row.key} is not keyed by its display (its key is \"$expected\")",
+                )
+            }
         }
     }
 

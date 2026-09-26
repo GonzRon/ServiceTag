@@ -229,6 +229,8 @@ class BackupCodecTest {
                 "assetReferences" to 0,
                 // Format 8's three keys, at zero here because this class pins the whole map.
                 "seasonActivations" to 0, "assetConditions" to 0, "healthSubjects" to 0,
+                // Format 9's key, at zero here because this class pins the whole map.
+                "assetCategories" to 0,
             ),
             manifest.counts,
         )
@@ -450,6 +452,8 @@ class BackupCodecTest {
                 "assetReferences" to 0,
                 // Format 8's three keys, at zero here because this class pins the whole map.
                 "seasonActivations" to 0, "assetConditions" to 0, "healthSubjects" to 0,
+                // Format 9's key, at zero here because this class pins the whole map.
+                "assetCategories" to 0,
             ),
             decoded.manifest.counts,
         )

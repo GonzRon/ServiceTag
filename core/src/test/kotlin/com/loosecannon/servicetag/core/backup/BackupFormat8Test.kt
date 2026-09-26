@@ -201,9 +201,10 @@ class BackupFormat8Test {
             assetFields.takeLast(5),
         )
         assertEquals(29, assetFields.size)
+        // By position: format 9's categories follow them (`BackupFormat9Test`).
         assertEquals(
             listOf("seasonActivations", "assetConditions", "healthSubjects"),
-            BackupData.serializer().descriptor.names.takeLast(3),
+            BackupData.serializer().descriptor.names.subList(11, 14),
         )
 
         // No new field carries a default (the new *lists* do, as the format's other lists do).
@@ -265,17 +266,18 @@ class BackupFormat8Test {
     // --- direction -------------------------------------------------------------------------------
 
     /**
-     * Hazard: a newer archive half-read. A format-9 manifest over a `data.json` that no format could
-     * read is refused as **newer**, not as corrupt — so the gate ran before a single row was parsed.
+     * Hazard: a newer archive half-read. A manifest one format past this build's (10, since #74 made
+     * the build's own 9) over a `data.json` that no format could read is refused as **newer**, not as
+     * corrupt — so the gate ran before a single row was parsed.
      */
     @Test
-    fun formatNineIsRefusedBeforeAnyRow() {
+    fun aFormatPastThisBuildsIsRefusedBeforeAnyRow() {
         val unreadable = dataTreeOf(archiveOf(fixture())).editRows("healthSubjects") { it.with("weight", JsonPrimitive("heavy")) }
-        val bytes = sealed(unreadable, formatVersion = 9)
+        val bytes = sealed(unreadable, formatVersion = 10)
 
         val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(bytes) }
-        assertEquals(9, refusal.found)
-        assertEquals(8, refusal.supported)
+        assertEquals(10, refusal.found)
+        assertEquals(9, refusal.supported)
         // The same tree at a format this build reads *is* parsed — and refused as corrupt.
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(sealed(unreadable, formatVersion = 8)) }
     }
@@ -287,7 +289,7 @@ class BackupFormat8Test {
      */
     @Test
     fun aSevenBuildRefusesFormatEight() {
-        val bytes = archiveOf(fixture())
+        val bytes = archiveOf(fixture(), formatVersion = 8)
         val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(bytes, supportedFormat = 7) }
         assertEquals(8, refusal.found)
         assertEquals(7, refusal.supported)
@@ -302,7 +304,8 @@ class BackupFormat8Test {
         assertEquals(2, counts["seasonActivations"])
         assertEquals(3, counts["assetConditions"])
         assertEquals(1, counts["healthSubjects"])
-        assertEquals(20, counts.size)
+        // Twenty through format 8, and format 9's `assetCategories`.
+        assertEquals(21, counts.size)
     }
 
     // --- determinism -----------------------------------------------------------------------------

@@ -204,9 +204,9 @@ class BackupFormat7Test {
         assertTrue("provenance" !in names, "a reference carries no provenance (D-21 C)")
 
         val tables = BackupData.serializer().descriptor.elementNames.toList()
-        // By position: format 8 appends its three tables after this one.
+        // By position: format 8 appends its three tables after this one, and format 9 one more.
         assertEquals("assetReferences", tables[10])
-        assertEquals(14, tables.size)
+        assertEquals(15, tables.size)
         // and the tombstone is still its own list, neither bumped nor renamed (I-5)
         assertTrue("externalLinks" in tables)
     }
@@ -280,7 +280,7 @@ class BackupFormat7Test {
         val manifest = BackupCodec.decode(encoded(fixture())).manifest
 
         assertEquals(2, manifest.counts["assetReferences"])
-        assertEquals(20, manifest.counts.size)
+        assertEquals(21, manifest.counts.size)
         assertEquals(
             mapOf(
                 "assets" to 1, "nfcTags" to 0, "externalLinks" to 1,
@@ -294,6 +294,8 @@ class BackupFormat7Test {
                 "assetReferences" to 2,
                 // Format 8's three keys, at zero here because this class pins the whole map.
                 "seasonActivations" to 0, "assetConditions" to 0, "healthSubjects" to 0,
+                // Format 9's key, at zero here for the same reason.
+                "assetCategories" to 0,
             ),
             manifest.counts,
         )
