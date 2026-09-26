@@ -18,11 +18,19 @@ import com.loosecannon.servicetag.core.testing.plainAssetOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import com.loosecannon.servicetag.core.testing.seasonalAssetOf
 import com.loosecannon.servicetag.core.testing.subjectOf
+import com.loosecannon.servicetag.core.testing.without
+import com.loosecannon.servicetag.core.testing.zipEntries
+import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.descriptors.elementNames
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -85,14 +93,53 @@ class BackupFormat9Test {
         assertEquals("assetCategories", BackupData.serializer().descriptor.elementNames.last())
     }
 
-    /** A format-8 archive has no categories and decodes to none. */
+    /**
+     * A format-8 archive has no categories and decodes to none. A 1.4.x writer never emitted the
+     * `assetCategories` key or its manifest count at all, so resealing this encoder's own empty list
+     * would prove nothing about the list's default (`BackupCodecTest`'s format-4 precedent): both are
+     * stripped for real, and the data entry resealed.
+     */
     @Test
     fun aFormat8ArchiveDecodesWithNoCategories() {
-        val decoded = BackupCodec.decode(archiveOf(data(emptyList()), formatVersion = 8))
+        val encoded = archiveOf(data(emptyList()), formatVersion = 8)
+        val dataBytes = prettyJson.encodeToString(JsonObject.serializer(), dataTreeOf(encoded).without("assetCategories"))
+            .toByteArray(Charsets.UTF_8)
+        val manifest = prettyJson.decodeFromString(
+            BackupManifest.serializer(), String(zipEntries(encoded).getValue(BackupCodec.MANIFEST_ENTRY), Charsets.UTF_8),
+        ).let { it.copy(counts = it.counts - "assetCategories", dataSha256 = sha256Hex(dataBytes)) }
+        val shipped = zipOf(
+            BackupCodec.MANIFEST_ENTRY to prettyJson.encodeToString(BackupManifest.serializer(), manifest).toByteArray(Charsets.UTF_8),
+            BackupCodec.DATA_ENTRY to dataBytes,
+        )
+        assertTrue(zipEntries(shipped).values.none { "assetCategories" in String(it, Charsets.UTF_8) }, "not stripped")
+
+        val decoded = BackupCodec.decode(shipped)
 
         assertEquals(8, decoded.manifest.formatVersion)
         assertEquals(emptyList(), decoded.data.assetCategories)
+        assertEquals(null, decoded.manifest.counts["assetCategories"])
+        assertEquals(20, decoded.manifest.counts.size)
         assertEquals(listOf(compressor), decoded.data.assets.map { it.toDomain() })
+    }
+
+    private val prettyJson = Json {
+        prettyPrint = true
+        encodeDefaults = true
+    }
+
+    private fun sha256Hex(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    private fun zipOf(vararg entries: Pair<String, ByteArray>): ByteArray {
+        val out = ByteArrayOutputStream()
+        ZipOutputStream(out).use { zos ->
+            for ((name, payload) in entries) {
+                zos.putNextEntry(ZipEntry(name).apply { time = 1_758_700_000_000L })
+                zos.write(payload)
+                zos.closeEntry()
+            }
+        }
+        return out.toByteArray()
     }
 
     /** What a 1.4.x build (format 8) does with this one: refuses it loudly, before a row is read. */
