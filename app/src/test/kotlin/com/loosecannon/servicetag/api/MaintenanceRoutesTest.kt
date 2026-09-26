@@ -1212,8 +1212,8 @@ class MaintenanceRoutesTest {
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.references)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.healthSubjects)
-        // The donor's one category row, which this phone does not hold.
-        assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.categories)
+        // The donor's two category rows, which this phone does not hold.
+        assertEquals(MergeTallyDto(insert = 2, identical = 0, conflict = 0, skipped = 0), report.categories)
     }
 
     // --- 1.4 (B09): derived state, status and the fourteen-table merge ---------------------------
@@ -1380,8 +1380,8 @@ class MaintenanceRoutesTest {
 
     /**
      * Import-merge reads a **format-9** archive and reports **fifteen** tables: the donor's
-     * activation, condition and health subject each tally one INSERT on the wire, and so does its
-     * category (#74), and the apply writes each of them — an INSERT, never an update (spec §8.4).
+     * activation, condition and health subject each tally one INSERT on the wire, its two categories
+     * (#74) two, and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
     @Test fun importMergeReadsFormat9AndReportsFifteenTables() {
         val archive = donorArchive()
@@ -1401,14 +1401,14 @@ class MaintenanceRoutesTest {
         assertEquals(one, report.seasonActivations)
         assertEquals(one, report.conditions)
         assertEquals(one, report.healthSubjects)
-        assertEquals(one, report.categories)
+        assertEquals(MergeTallyDto(insert = 2, identical = 0, conflict = 0, skipped = 0), report.categories)
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
         runBlocking {
             assertEquals(1, graph.seasonActivations.all().size)
             assertEquals(1, graph.conditions.all().size)
             assertEquals(1, graph.healthSubjects.all().size)
-            assertEquals(listOf("Test gear"), graph.categories.all().map { it.display })
+            assertEquals(listOf("Spare parts", "Test gear"), graph.categories.all().map { it.display })
         }
     }
 
@@ -1523,6 +1523,14 @@ class MaintenanceRoutesTest {
                         archivedAt = null,
                         createdAt = dayMillis("2026-01-01"),
                         updatedAt = dayMillis("2026-01-01"),
+                    ),
+                )
+                // #74: the donor asset's saved category is one row; a second, unused row makes the
+                // categories tally two — a value no other tally here has, so a mirror wired to the
+                // wrong tally fails.
+                donor.categories.upsert(
+                    com.loosecannon.servicetag.core.model.AssetCategory(
+                        "spare parts", "Spare parts", dayMillis("2026-01-02"), dayMillis("2026-01-02"),
                     ),
                 )
                 donor.exportBackupSet.run().data
