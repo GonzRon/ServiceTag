@@ -149,7 +149,7 @@ private fun ActionGridPreview() {
     PreviewFrame {
         ActionGrid(
             actions = listOf(
-                ActionSpec("Log maintenance", Icons.Outlined.Build, outlined = true, onClick = {}),
+                ActionSpec("Log quarterly inspection, calibration and seal replacement", Icons.Outlined.Build, outlined = true, onClick = {}),
                 ActionSpec("Record reading", ServiceTagIcons.Speed, outlined = true, onClick = {}),
                 ActionSpec("History", ServiceTagIcons.History, outlined = false, onClick = {}),
                 ActionSpec("Documents", ServiceTagIcons.Description, outlined = false, onClick = {}),
