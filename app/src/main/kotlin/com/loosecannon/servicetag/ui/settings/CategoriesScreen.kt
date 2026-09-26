@@ -29,11 +29,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -136,11 +138,14 @@ fun CategoriesScreen(graph: AppGraph, onBack: () -> Unit) {
             } else {
                 LedgerList(count = current.own.size) { index ->
                     val row = current.own[index]
-                    OwnCategoryRow(
-                        row = row,
-                        onRename = { model.startRename(row) },
-                        onDelete = { model.requestDelete(row) },
-                    )
+                    // Keyed by the row, so a row's menu state stays with it when the list reorders.
+                    key(row.key) {
+                        OwnCategoryRow(
+                            row = row,
+                            onRename = { model.startRename(row) },
+                            onDelete = { model.requestDelete(row) },
+                        )
+                    }
                 }
             }
 
@@ -154,12 +159,18 @@ fun CategoriesScreen(graph: AppGraph, onBack: () -> Unit) {
     }
 }
 
-/** One of the owner's categories: its display, how many assets use it, and its menu. */
+/**
+ * One of the owner's categories: its display, how many assets use it, and its menu. The name and the
+ * usage line are one node to a screen reader ("Appliance, Used by 2 assets"); the menu stays its own.
+ */
 @Composable
 private fun OwnCategoryRow(row: OwnCategory, onRename: () -> Unit, onDelete: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {}
+            .padding(vertical = 4.dp),
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -207,7 +218,8 @@ private fun BuiltInRow(label: String) {
 /**
  * P74-8 over P74-9, pre-filled with the row's display. A refusal is the field's own line in the error
  * colour — the editor's problems-under-fields rule — and the dialog stays, so the owner can change the
- * name or cancel. [RenameDraft.canRename] holds the confirm while the text is blank or unchanged.
+ * name or cancel. [RenameDraft.canRename] holds the confirm while the text is blank or unchanged, and
+ * the field is read-only while a rename is on its way, so the answer is always about the text it sent.
  */
 @Composable
 private fun RenameDialog(
@@ -225,6 +237,7 @@ private fun RenameDialog(
                 value = draft.text,
                 onValueChange = onText,
                 label = { Text("Name") },
+                readOnly = draft.renaming,
                 singleLine = true,
                 isError = refusal != null,
                 supportingText = if (refusal == null) null else { { Text(refusal) } },

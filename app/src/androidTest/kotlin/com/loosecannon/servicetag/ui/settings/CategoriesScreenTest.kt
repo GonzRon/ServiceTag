@@ -28,7 +28,6 @@ import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -57,15 +56,7 @@ class CategoriesScreenTest {
 
     private val graph get() = app.graph
 
-    /** `clearInstall` predates the catalog, so the category rows are wiped here as well, before and after. */
-    @Before fun freshInstall() {
-        clearInstall()
-        wipeCategories()
-    }
-
-    @After fun leaveNoCategories() = wipeCategories()
-
-    private fun wipeCategories() = runBlocking { graph.uow.write { graph.categories.deleteAll() } }
+    @Before fun freshInstall() = clearInstall()
 
     /** Appliance, used by two assets; Spare, used by none (a row that outlived its assets). */
     private fun seed() = runBlocking {
@@ -100,6 +91,9 @@ class CategoriesScreenTest {
         rule.onNodeWithText("Used by 2 assets").assertIsDisplayed()
         rule.onNodeWithText("Spare").assertIsDisplayed()
         rule.onNodeWithText("Not used").assertIsDisplayed()
+        // A row's name and usage line are one node to a screen reader; its menu is another.
+        rule.onNode(hasText("Appliance") and hasText("Used by 2 assets")).assertIsDisplayed()
+        rule.onNode(hasText("Spare") and hasText("Not used")).assertIsDisplayed()
         rule.onAllNodesWithText(
             "No categories of your own yet. Save an asset with a new category to add one.",
         ).assertCountEquals(0)
