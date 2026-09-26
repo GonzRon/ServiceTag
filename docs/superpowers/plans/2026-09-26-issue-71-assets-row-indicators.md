@@ -273,8 +273,8 @@ glyph; no version bump.
 (`refreshes`), `ScheduleDetailScreen.kt` (`LifecycleResumeEffect`), `HealthBadge.kt`, `StatusBadge.kt`,
 `AssetsScreen.kt` (`AssetListRow`), `AssetViewModels.kt` (the post-#73 `AssetsViewModel`),
 `AssetsFiltersTest.kt` and `ActionGridTest.kt` (the `draw` technique and the unclipped-text check).
-**Lane:** alone, branched from master after this plan's ratified commit. **Blocked on:** §6 and the owner's
-answers to R71-2, R71-6, R71-7, R71-9, R71-10.
+**Lane:** alone, branched from master after this plan's ratified commit. **Resolved 2026-09-26:** every §6 string and every §7 ruling is answered in §10, which
+overrides §2–§7 where they differ — read §10 before §2.
 
 ### Contracts
 C1–C9 of §2, §5, the strings of §6 as ratified, the rulings of §7 as answered.
@@ -303,3 +303,81 @@ list; add a NOT TRACKED badge, a score or a green; change a badge's word, family
 Medium: one core predicate, two ports, two DAO queries, two Room mappings, two in-memory flows, the read
 model's flow and collaborator, the row read model and view model, the row composable; seven test files
 touched, three new.
+
+## 10. Errata — rev 2.1, the owner's rulings of 2026-09-26 (binding; overrides §2–§7 where they differ)
+
+**Ratified.** P71-4 = `NFC tag written`. R71-2 = option b: `ServiceTagIcons.NfcTag` in the
+`maintenanceOkay` family — no green, no check. R71-7 confirmed: the health badge with bars and word, no
+icon-only discs. R71-9 confirmed: issue AC 9 is amended — the lifecycle badges' meaning and behaviour are
+unchanged, their position moves under the name to remove the existing overflow. R71-10 confirmed with E1.
+R71-6 = **option b: no exemption from invariant 119.** Any row that shows health is a health surface.
+
+**E1. In service is lifecycle, not season.** Throughout this plan "in service" means `Asset.inService`,
+the lifecycle property the read model already uses for `AssetHealthView.inService` and to pick in-service
+components: ACTIVE and not retired. An out-of-season active asset is in service. The `inService` names in
+core's `HealthClock` and `ServicePolicyEngine` are the schedule service policy and play no part here.
+
+**E2. The row's health group** (replaces C2's band, C4's health badge, C7's last sentence and C8). For an
+asset that is in service (E1) and tracked (a non-null aggregate) the row draws one *health group*, every part
+of it taken from the read model's `AssetHealthView` for that asset — the same view the detail, the scan
+sheet and the API read through `forAsset`:
+- in the wrapping badge line, after the lifecycle badges: the **condition badge**
+  (`ConditionBadge(view.condition)`) when `view.condition?.condition?.needsAttention == true` (DOWN or
+  DEGRADED), then the **health badge** (`HealthBadge(band, score = null)`) — condition before health, so a
+  DOWN asset's health is never drawn before its condition, the detail's own rule;
+- under the badge line, one quiet text line per `HealthBlock.Critical` and per `HealthBlock.Component` of
+  `healthBlocksOf(view)`, in that function's order (critical subjects first, then components DOWN before
+  DEGRADED), worded through `HealthBlock.words` or the two functions it calls — S109
+  `Critical: <subject> <score>` and S27 `<component> <DOWN/DEGRADED> — <reason>`; every other block kind
+  (the aggregate line, Fallback, Subject, Footer) stays on the detail.
+Nothing in the group is computed on the row: no threshold, no aggregate, no condition derived from health
+or health from condition (C7's first sentence stands). A row that shows no health — not in service, or not
+tracked — draws none of the group, the condition badge included: the row is a health surface only when it
+shows health, which is the owner's reading of inv. 119 ("any row that shows health…"); the plate and the
+detail keep showing condition on their own terms. **R71-11 (controller):** that gate is the literal ruling;
+if the owner wants the condition badge on untracked rows too, it is a one-line change to the gate in the
+view model and one more test.
+
+**E3. The read model's flow carries views, not bands.** C2's `observeBands` becomes
+`observeRowHealth(refreshes: Flow<*>): Flow<Map<AssetId, AssetHealthView>>` — the same triggers (assets,
+subjects, schedules, schedule states, refreshes) plus the **condition table** (`ConditionRepository.observeAll()`
+— add it to the port, the DAO, the Room mapping and the in-memory double if the port has only `all()`),
+the same `mapLatest` → `conflate`, the same empty first emission, the same per-asset `runCatching` (absent
+and logged at warn; `CancellationException` rethrown). One pass reads the asset table once and the
+condition histories once (`conditionHistories()`), and builds each in-service asset's view from the same
+pieces `forAsset` uses — `resultFor`, `conditionViewOf`, the component picker; refactor `componentsOf` to
+take the histories map instead of re-reading it per asset, behaviour identical, `forAsset` and the detail
+untouched in behaviour. Assets not in service, or with no live subject, may be skipped: they draw nothing.
+Contract test: every view in the map equals `forAsset(id)` on the same day (one computation for every
+surface, inv. 82/111).
+
+**E4. `AssetRow`.** `health: HealthBand?` becomes `health: AssetHealthView?` — null when the group is not
+drawn (the E2 gate, applied in the view model, never in Compose). `hasWrittenTag` is unchanged.
+
+**E5. Layout.** The badge line may now hold a condition badge and a health badge after the lifecycle
+badges; the worst in-service case is OUT OF SEASON + DOWN + CRITICAL (about 125 + 75 + 90dp at 1.0: two
+lines at 360dp, one badge per line at 412/2.0), since RETIRED and ARCHIVED rows draw no group. The text
+lines below wrap as ordinary text: **no `maxLines`, no `TextOverflow`, no ellipsis on any row text** (the
+#68 rule). §5's arithmetic for the lifecycle badges stands. §3's layout case gains (iii): in service, OUT OF
+SEASON + DOWN + CRITICAL + two critical lines + one component line + the disc — every badge and every text
+line unclipped (`hasVisualOverflow == false`), all inside the row, none overlapping, at 320/1.0, 360/1.0 and
+412/2.0.
+
+**E6. Test matrix — additions and replacements.**
+
+| hazard | test (class · case) | RED mutation |
+|---|---|---|
+| inv. 119 on the row (replaces §3's R71-6 row) | `AssetViewModelsTest` · `aDownRowCarriesItsConditionBesideHealth` (DOWN + a nominal subject → `health != null`, `health.condition.condition == DOWN`); `aCriticalContributorBehindANominalAggregateIsListed` (two subjects, AVERAGE aggregate NOMINAL, one CRITICAL → `healthBlocksOf(row.health)` holds that `Critical`); `aDownInServiceComponentIsListedOnTheParentRow` (a DOWN component under a tracked parent → a `Component` block; the same component retired → none); `noHealthNoGroup` (DOWN but untracked → `health == null`; DOWN, tracked, retired → `health == null`) | drop the condition; drop `critical`; drop `components`; draw the group on an untracked row |
+| the view equals the detail's (E3) | `AssetRowHealthTest` (was `AssetHealthBandsTest`; the same cases, over views) · `everyRowViewEqualsForAsset`; `aConditionChangeReemits` (mark DOWN → the next emission carries it) | compute the view differently; drop the trigger |
+| the row draws the group (E2) | `AssetsIndicatorsTest` · `aDownCriticalRowShowsConditionThenHealthThenTheLines` (condition badge left of or above the health badge; the S109 and S27 texts present, critical above component); `anOkTrackedRowShowsOnlyTheHealthBadge` (no condition badge, no lines) | reorder; drop a line |
+| layout (E5) | `AssetsIndicatorsTest` · case (iii) inside `nothingClipsAtNarrowWidthOrLargeFont` | `maxLines = 1` on a line |
+
+**E7. Strings.** §6 is unchanged: one new string, P71-4 `NFC tag written`. S109, S27, the condition words
+and S95–S97 are reused verbatim through their existing functions, never retyped.
+
+**E8. Gate additions.** `git grep -nE 'maxLines|TextOverflow' -- app/src/main/kotlin/com/loosecannon/servicetag/ui/asset/AssetsScreen.kt`
+→ no hit that the base did not have; `git grep -nF 'Critical: ' -- app/src/main` → `HealthWords.kt` only;
+`git grep -nE 'criticalLine\(|componentLine\(' -- app/src/main/kotlin/com/loosecannon/servicetag/ui/asset`
+→ only the existing detail sites plus the row's use. §9's untouched-paths diff stands except that
+`AssetHealthReadModel.kt` changes per E3 (its existing tests stay green); the detail screen, the dashboard
+and the engine remain untouched.
