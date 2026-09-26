@@ -29,6 +29,9 @@ object ServiceTagIcons {
     val Photo: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_photo)
     val AttachFile: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_attach_file)
 
+    /** #74: the Settings row into the owner's categories. */
+    val Label: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_label)
+
     /** The DEFERRED status glyph (1.4 spec §10.6): the break is holding the work until a set day. */
     val HourglassTop: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_hourglass_top)
 

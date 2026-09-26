@@ -80,6 +80,9 @@ private const val PROJECT_URL = "https://github.com/GonzRon/ServiceTag"
  * Developer API is the third utility (1.1.0, #46) and the only one whose *screen* is the feature:
  * while it is open the app answers commands on this phone's own loopback address, and closing it
  * is what stops that. The row is last, so the two doors the owner already knows keep their places.
+ *
+ * Categories (#74) is the fourth, after it on the same rule: the owner's own categories, renamed or
+ * deleted there. The rows already here keep their places.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +92,7 @@ fun SettingsScreen(
     onReadTag: () -> Unit,
     onBackup: () -> Unit,
     onDeveloperApi: () -> Unit,
+    onCategories: () -> Unit = {},
 ) {
     val activity = LocalActivity.current
     val prefs = graph.prefs
@@ -249,6 +253,11 @@ fun SettingsScreen(
                 icon = ServiceTagIcons.Speed,
                 label = "Developer API",
                 onClick = onDeveloperApi,
+            )
+            UtilityRow(
+                icon = ServiceTagIcons.Label,
+                label = "Categories",
+                onClick = onCategories,
             )
 
             SectionHeader(title = "About")

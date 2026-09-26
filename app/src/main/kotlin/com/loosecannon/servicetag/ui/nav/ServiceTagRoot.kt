@@ -42,6 +42,7 @@ import com.loosecannon.servicetag.ui.nfc.rememberReaderMode
 import com.loosecannon.servicetag.ui.scan.ScanScreen
 import com.loosecannon.servicetag.ui.scan.TagResultSheet
 import com.loosecannon.servicetag.ui.scan.WriteTagScreen
+import com.loosecannon.servicetag.ui.settings.CategoriesScreen
 import com.loosecannon.servicetag.ui.settings.SettingsScreen
 import com.loosecannon.servicetag.ui.setup.AssetSetupScreen
 import com.loosecannon.servicetag.ui.setup.DefinitionEditScreen
@@ -355,6 +356,13 @@ fun ServiceTagRoot(
                         onReadTag = { backStack.add(Route.Scan) },
                         onBackup = { backStack.add(Route.Backup) },
                         onDeveloperApi = { backStack.add(Route.DeveloperApi) },
+                        onCategories = { backStack.add(Route.Categories) },
+                    )
+                }
+                entry<Route.Categories> {
+                    CategoriesScreen(
+                        graph = graph,
+                        onBack = { backStack.removeLastOrNull() },
                     )
                 }
                 entry<Route.DeveloperApi> {

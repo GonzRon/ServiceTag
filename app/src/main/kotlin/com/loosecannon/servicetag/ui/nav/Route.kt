@@ -66,6 +66,12 @@ sealed interface Route : NavKey {
     @Serializable data object DeveloperApi : Route
 
     /**
+     * #74 — the owner's categories beside the built-ins: rename one, delete an unused one. A pushed
+     * destination reached from Settings, like [DeveloperApi]; it reads no tag.
+     */
+    @Serializable data object Categories : Route
+
+    /**
      * 1.2 — the Maintenance destination (spec §2.6, the navigation ruling): due work, schedules
      * including the paused ones the dashboard deliberately omits, maintenance groups and reminder
      * health. The third and last tab.
