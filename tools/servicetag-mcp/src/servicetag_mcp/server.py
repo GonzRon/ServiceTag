@@ -1539,6 +1539,10 @@ def update_schedule(
     `service_policy`/`policy_offset_days` together — `clear_fields` included — is refused here,
     before any request, as `LEGACY_AND_CURRENT_FIELDS_MIXED`.
 
+    **Reminder delivery.** `reminders_enabled` supplied with `providers` neither given nor cleared
+    mirrors it onto every stored `LOCAL` row (`enabled = reminders_enabled`), the same as the app's
+    own editor — so turning reminders back on never re-sends a `LOCAL` row this tool left disabled.
+
     **`unlink_health_subject=True`** is an action, not a field: while a live health subject is driven
     by this schedule, an edit that takes its time rule away or moves it to another asset or a group
     is refused as `SCHEDULE_DRIVES_HEALTH_SUBJECT` unless this is set, and with it the subject is
@@ -1578,6 +1582,13 @@ def update_schedule(
         text_fields=_SCHEDULE_TEXT_CLEARABLE, list_fields=_SCHEDULE_LIST_CLEARABLE,
         renames=command_shapes.SCHEDULE_ROW_TO_COMMAND, of="the schedule",
     )
+    if reminders_enabled is not None and providers is None and "providers" not in to_clear:
+        # #83: an unsupplied `providers` re-sent the stored row verbatim, so turning reminders
+        # back on could re-send a `LOCAL` row this tool itself had left disabled.
+        body["providers"] = [
+            {**p, "enabled": reminders_enabled} if p.get("provider") == "LOCAL" else p
+            for p in body["providers"]
+        ]
     if unlink_health_subject:
         body[_UNLINK_HEALTH_SUBJECT] = True
     return _call("PATCH", path, json_body=body, content_type="application/json")
