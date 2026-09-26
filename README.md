@@ -75,7 +75,7 @@ ServiceTag is also distinct from [NoteTag](https://github.com/GonzRon/NoteTag). 
 - **The attachments folder** — not a permission but a folder-picker grant, for the folder you choose and nothing else.
 - **A shared file** — not a permission but a temporary read grant that comes with the share.
 - **Merged from libraries** — `FOREGROUND_SERVICE`, `WAKE_LOCK` and `ACCESS_NETWORK_STATE` (WorkManager's backstop for reminders), and AndroidX's signature-level `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`. None is requested at runtime.
-- **ACCESS_LOCAL_NETWORK** — Android 17 adds and grants it implicitly to an app that declares INTERNET; ServiceTag never requests it.
+- **ACCESS_LOCAL_NETWORK** — Android 17 adds and grants it implicitly to an app that declares INTERNET and targets API 36, as ServiceTag does; ServiceTag never requests it.
 
 ## Build
 
