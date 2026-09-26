@@ -1491,12 +1491,14 @@ class AssetEditViewModel(
         when (val failure = result.exceptionOrNull()) {
             null -> {
                 // The question goes up before the form stops saving, so whoever waits on `saving`
-                // finds either the question or, as before, the finished editor — never neither.
-                val saved = result.getOrNull()
-                val ask = saved?.let { reconcilePromptFor(form) }
+                // finds either the question or, as before, the finished editor — never neither. The
+                // question is advisory and the save is already written: a schedule read that fails
+                // finishes the editor as a save that asked nothing.
+                val written = result.getOrNull()
+                val ask = written?.let { runCatching { reconcilePromptFor(form) }.getOrNull() }
                 ask?.let { _prompt.value = it }
                 _state.update { it.copy(saving = false, problems = emptyMap()) }
-                if (ask == null) saved?.let { _saved.tryEmit(it.id) }
+                if (ask == null) written?.let { _saved.tryEmit(it.id) }
             }
             is SeasonModeStrandsPolicy -> _state.update {
                 it.copy(saving = false, seasonRefusal = seasonStrands(failure.schedules.map(StrandedSchedule::title)))

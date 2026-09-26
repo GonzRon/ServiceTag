@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.usecase.ActivationCommand
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
@@ -1744,6 +1745,33 @@ class AssetViewModelsTest {
         created.model.saveAs(SeasonMode.MANUAL)
         assertEquals(null, created.model.prompt.value)
         assertEquals(1, created.saved.size)
+    }
+
+    /**
+     * C1's read is advisory: the save is already written when the schedules are read, so a read that
+     * fails finishes the editor through `saved` as a save that asked nothing — no question, no stuck
+     * Save, no crash out of `viewModelScope`.
+     */
+    @Test fun aScheduleReadThatFailsAfterTheSaveStillFinishesTheEditor() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.schedules.upsert(weekly("s1", "gen", ServicePolicy.CONTINUOUS))
+        val unreadable = object : ScheduleRepository by graph.schedules {
+            override suspend fun forAsset(assetId: AssetId): List<MaintenanceSchedule> =
+                throw IllegalStateException("the schedule read failed")
+        }
+        val model = AssetEditViewModel(graph.assets, graph.healthSubjects, graph.saveAssetSettings, unreadable, AssetId("gen"))
+        model.state.first { it.parentChoices.isNotEmpty() }
+        val saved = mutableListOf<AssetId>()
+        val review = mutableListOf<AssetId>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.saved.collect { saved += it } }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.review.collect { review += it } }
+
+        model.saveAs(SeasonMode.MANUAL)
+
+        assertEquals("the save stands", SeasonMode.MANUAL, graph.assets.get(AssetId("gen"))!!.seasonMode)
+        assertEquals(null, model.prompt.value)
+        assertEquals(listOf(AssetId("gen")), saved)
+        assertTrue(review.isEmpty())
     }
 
     /** C2: "Keep schedules as-is" finishes the editor through `saved`, never `review`, and the question goes. */
