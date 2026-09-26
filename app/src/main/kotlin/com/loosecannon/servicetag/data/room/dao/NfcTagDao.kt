@@ -41,6 +41,9 @@ interface NfcTagDao {
     @Query("SELECT * FROM nfc_tag ORDER BY created_at")
     suspend fun all(): List<NfcTagEntity>
 
+    @Query("SELECT * FROM nfc_tag ORDER BY created_at")
+    fun observeAll(): Flow<List<NfcTagEntity>>
+
     @Query("DELETE FROM nfc_tag WHERE id = :id")
     suspend fun delete(id: String)
 

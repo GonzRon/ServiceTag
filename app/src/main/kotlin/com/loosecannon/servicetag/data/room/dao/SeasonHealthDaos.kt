@@ -59,6 +59,9 @@ interface AssetConditionDao {
             "ORDER BY occurred_on, occurred_time, created_at, id",
     )
     fun observeForAsset(assetId: String): Flow<List<AssetConditionEntity>>
+
+    @Query("SELECT * FROM asset_condition ORDER BY occurred_on, occurred_time, created_at, id")
+    fun observeAll(): Flow<List<AssetConditionEntity>>
 }
 
 /**
@@ -91,4 +94,7 @@ interface HealthSubjectDao {
 
     @Query("SELECT * FROM health_subject WHERE asset_id = :assetId ORDER BY sort_order, id")
     fun observeForAsset(assetId: String): Flow<List<HealthSubjectEntity>>
+
+    @Query("SELECT * FROM health_subject ORDER BY sort_order, id")
+    fun observeAll(): Flow<List<HealthSubjectEntity>>
 }

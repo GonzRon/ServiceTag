@@ -17,6 +17,11 @@ import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.replacementOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.testing.subjectRow
+import com.loosecannon.servicetag.core.health.AssetHealthResult
+import com.loosecannon.servicetag.core.model.HealthSubject
+import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
+import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
+import com.loosecannon.servicetag.ui.health.AssetHealthView
 import com.loosecannon.servicetag.ui.health.ConditionView
 import com.loosecannon.servicetag.ui.health.HealthPlurals
 import com.loosecannon.servicetag.ui.health.NOT_TRACKED
@@ -42,6 +47,8 @@ import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.model.TagStatus
+import com.loosecannon.servicetag.core.health.SubjectValue
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.EventCommand
@@ -57,10 +64,14 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -69,6 +80,7 @@ import org.junit.Before
 import org.junit.Test
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.Locale
 
 /**
@@ -114,8 +126,9 @@ class AssetViewModelsTest {
     )
 
     /** The list, reading the season phase on the graph's injected `T` and the catalog off the graph. */
-    private fun listModel() =
-        AssetsViewModel(graph.assets, graph.categories, graph.seasonActivations, graph.todayPort)
+    private fun listModel() = AssetsViewModel(
+        graph.assets, graph.categories, graph.seasonActivations, graph.tags, graph.assetHealthReadModel, graph.todayPort,
+    )
 
     /**
      * Create ([id] null) or edit one asset; [parentId] is the "+ Add component" preset. Suspends
@@ -1597,7 +1610,10 @@ class AssetViewModelsTest {
         val rootless = FakeGraph(queryContext = StandardTestDispatcher(scheduler))
         try {
             rootless.assets.upsert(assetRow("loop", name = "Loose part", parent = "loop", status = AssetStatus.ARCHIVED))
-            val alone = AssetsViewModel(rootless.assets, rootless.categories, rootless.seasonActivations, rootless.todayPort)
+            val alone = AssetsViewModel(
+                rootless.assets, rootless.categories, rootless.seasonActivations, rootless.tags,
+                rootless.assetHealthReadModel, rootless.todayPort,
+            )
             val collecting = launch { alone.state.collect() }
             assertEquals(EmptyReason.NO_ACTIVE_ASSETS, alone.state.first { it.archivedCount == 1 }.emptyReason)
             alone.toggleArchived()
@@ -1607,6 +1623,352 @@ class AssetViewModelsTest {
             rootless.close()
         }
     }
+
+    // ------------------------------------------------------------------------------------------
+    // #71 — the list row's NFC and health indicators (plan §3, errata E6). `T` is 2026-04-15 for
+    // every health case, and the fixture thresholds are 0 / 40 / 75: a replacement 10, 50 and 100
+    // days back reads NOMINAL, WARNING and CRITICAL. Room answers the list's flows off the virtual
+    // clock, so every wait is real time and bounded, and a case that asserts an absence waits first
+    // for a control row whose health came from the same pass.
+    // ------------------------------------------------------------------------------------------
+
+    /** An asset with one AGE subject replaced [daysBack] days before [T71]. */
+    private suspend fun trackedAsset(
+        id: String,
+        daysBack: Long,
+        name: String = id,
+        parent: String? = null,
+        retiredOn: String? = null,
+        status: AssetStatus = AssetStatus.ACTIVE,
+    ) {
+        graph.assets.upsert(assetRow(id, name = name, parent = parent, retiredOn = retiredOn, status = status))
+        graph.events.upsert(replacementOf("e-$id", id, T71.minusDays(daysBack).toString()))
+        graph.healthSubjects.upsert(subjectRow("h-$id", id, name = "$name age"))
+    }
+
+    /** A tag row as `ProvisionTag` leaves it once the write is verified: ACTIVE, targeting [assetId], written. */
+    private fun written(id: String, assetId: String) = tag(id, assetId).copy(writtenAt = 42L)
+
+    /** The list model, collected for the length of the test. */
+    private fun TestScope.collectedList(): AssetsViewModel =
+        listModel().also { vm -> backgroundScope.launch { vm.state.collect() } }
+
+    /** The rows by id, once [until] accepts them — bounded in real time, and naming what it waited for. */
+    private suspend fun AssetsViewModel.rowsOnce(what: String, until: (Map<String, AssetRow>) -> Boolean): Map<String, AssetRow> =
+        withContext(Dispatchers.Default) {
+            withTimeoutOrNull(WAIT_MS) { state.first { until(it.items.associateBy { row -> row.asset.id.value }) } }
+        }?.items?.associateBy { it.asset.id.value }
+            ?: throw AssertionError("$what: never; the rows were ${state.value.items.map { it.summary() }}")
+
+    private fun AssetRow.summary() =
+        "${asset.id.value}(tag=$hasWrittenTag, band=${band()}, condition=${health?.condition?.condition})"
+
+    private fun AssetRow.band(): HealthBand? = health?.result?.aggregate?.band
+
+    /** AC 1: a verified write shows the indicator, through the real provisioning path. */
+    @Test fun aWrittenActiveTagShowsTheIndicator() = runTest {
+        graph.assets.upsert(assetRow("pump", name = "Pool pump"))
+        val vm = collectedList()
+        vm.rowsOnce("listed") { "pump" in it }
+
+        val provisioned = graph.provisionTag.begin(TagTarget.AssetTarget(AssetId("pump")), "lid")
+        graph.provisionTag.complete(provisioned.id, "04aabbcc")
+
+        vm.rowsOnce("the written tag") { it["pump"]?.hasWrittenTag == true }
+    }
+
+    /** AC 2: no tag row at all, no indicator — on a row whose tag fact has certainly arrived. */
+    @Test fun noTagRowsNoIndicator() = runTest {
+        graph.assets.upsert(assetRow("pump", name = "Pool pump"))
+        graph.assets.upsert(assetRow("heater", name = "Heater"))
+        graph.tags.upsert(written("t1", "heater"))
+        val rows = collectedList().rowsOnce("the control's tag") { it["heater"]?.hasWrittenTag == true }
+
+        assertFalse(rows.getValue("pump").hasWrittenTag)
+    }
+
+    /** AC 3: a row provisioned but never written is not a tag the asset carries. */
+    @Test fun aProvisionedUnwrittenTagDoesNotCount() = runTest {
+        graph.assets.upsert(assetRow("pump", name = "Pool pump"))
+        graph.assets.upsert(assetRow("heater", name = "Heater"))
+        graph.provisionTag.begin(TagTarget.AssetTarget(AssetId("pump")), "lid")
+        graph.tags.upsert(written("t1", "heater"))
+        val rows = collectedList().rowsOnce("the control's tag") { it["heater"]?.hasWrittenTag == true }
+
+        assertFalse("provisioned, unwritten", rows.getValue("pump").hasWrittenTag)
+    }
+
+    /** AC 4: LOST and RETIRED rows never count, and one qualifying row among them is enough. */
+    @Test fun oneQualifyingTagAmongLostAndRetiredOnesIsEnough() = runTest {
+        graph.assets.upsert(assetRow("pump", name = "Pool pump"))
+        graph.assets.upsert(assetRow("heater", name = "Heater"))
+        listOf("pump", "heater").forEach { id ->
+            graph.tags.upsert(written("lost-$id", id).copy(status = TagStatus.LOST))
+            graph.tags.upsert(written("retired-$id", id).copy(status = TagStatus.RETIRED))
+            graph.tags.upsert(tag("unwritten-$id", id))
+        }
+        graph.tags.upsert(written("t1", "pump"))
+
+        val rows = collectedList().rowsOnce("the qualifying tag") { it["pump"]?.hasWrittenTag == true }
+
+        assertFalse("only lost, retired and unwritten rows", rows.getValue("heater").hasWrittenTag)
+    }
+
+    /** AC 5: a tag counts for the asset it targets, and for no other. */
+    @Test fun anotherAssetsTagCountsForThatAssetOnly() = runTest {
+        graph.assets.upsert(assetRow("pump", name = "Pool pump"))
+        graph.assets.upsert(assetRow("heater", name = "Heater"))
+        graph.tags.upsert(written("t1", "heater"))
+
+        val rows = collectedList().rowsOnce("heater's tag") { it["heater"]?.hasWrittenTag == true }
+
+        assertTrue(rows.getValue("heater").hasWrittenTag)
+        assertFalse(rows.getValue("pump").hasWrittenTag)
+    }
+
+    /** AC 6: the indicator follows the store without a restart — lost, retired, unbound, re-targeted. */
+    @Test fun losingTheLastQualifyingTagRemovesTheIndicatorWithoutRestart() = runTest {
+        graph.assets.upsert(assetRow("pump", name = "Pool pump"))
+        graph.assets.upsert(assetRow("heater", name = "Heater"))
+        graph.tags.upsert(written("t1", "pump"))
+        val vm = collectedList()
+        vm.rowsOnce("tagged") { it["pump"]?.hasWrittenTag == true }
+
+        graph.tags.upsert(written("t1", "pump").copy(status = TagStatus.LOST))
+        vm.rowsOnce("marked lost") { it["pump"]?.hasWrittenTag == false }
+
+        graph.tags.upsert(written("t2", "pump"))
+        vm.rowsOnce("a new tag") { it["pump"]?.hasWrittenTag == true }
+        graph.tags.upsert(written("t2", "pump").copy(status = TagStatus.RETIRED))
+        vm.rowsOnce("retired") { it["pump"]?.hasWrittenTag == false }
+
+        graph.tags.upsert(written("t3", "pump"))
+        vm.rowsOnce("another") { it["pump"]?.hasWrittenTag == true }
+        graph.tags.upsert(written("t3", "pump").copy(target = TagTarget.None, status = TagStatus.UNBOUND))
+        vm.rowsOnce("unbound") { it["pump"]?.hasWrittenTag == false }
+
+        graph.tags.upsert(written("t4", "pump"))
+        vm.rowsOnce("and another") { it["pump"]?.hasWrittenTag == true }
+        graph.tags.upsert(written("t4", "heater"))
+        val rows = vm.rowsOnce("re-targeted") { it["pump"]?.hasWrittenTag == false }
+        assertTrue("the tag now counts for the asset it names", rows.getValue("heater").hasWrittenTag)
+    }
+
+    /** AC 7: a component's row reads its own tag and its own health; the parent's borrows neither. */
+    @Test fun aComponentCarriesItsOwnIndicators() = runTest {
+        graph.today = T71
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        trackedAsset("pack", daysBack = 10, name = "Battery pack", parent = "gen")
+        graph.tags.upsert(written("t1", "pack"))
+        val vm = collectedList()
+        vm.toggleComponents()
+
+        val rows = vm.rowsOnce("the component's own facts") { it["pack"]?.hasWrittenTag == true && it["pack"]?.band() != null }
+
+        assertEquals(HealthBand.NOMINAL, rows.getValue("pack").band())
+        assertFalse("the parent borrows no tag", rows.getValue("gen").hasWrittenTag)
+        assertEquals("the parent borrows no health", null, rows.getValue("gen").health)
+    }
+
+    /** AC 10, 11: the band is the read model's aggregate, and it moves with the day on a refresh. */
+    @Test fun theHealthBadgeIsTheReadModelsAggregate() = runTest {
+        graph.today = T71
+        trackedAsset("ups", daysBack = 10, name = "UPS")
+        val vm = collectedList()
+        val nominal = vm.rowsOnce("10 days") { it["ups"]?.band() == HealthBand.NOMINAL }.getValue("ups")
+        assertEquals("the very view forAsset gives", graph.assetHealthReadModel.forAsset(AssetId("ups")), nominal.health)
+
+        graph.today = T71.plusDays(40)
+        vm.refresh()
+        vm.rowsOnce("50 days, after a refresh") { it["ups"]?.band() == HealthBand.WARNING }
+
+        graph.today = T71.plusDays(90)
+        vm.refresh()
+        vm.rowsOnce("100 days, after the next") { it["ups"]?.band() == HealthBand.CRITICAL }
+    }
+
+    /** AC 12: NOT TRACKED draws nothing — no subject, every subject archived, a screened TRACK_ONE primary. */
+    @Test fun notTrackedDrawsNoHealth() = runTest {
+        graph.today = T71
+        trackedAsset("ctl", daysBack = 10, name = "Control")
+        graph.assets.upsert(assetRow("bare", name = "Bare"))
+        trackedAsset("shelved", daysBack = 10, name = "Shelved")
+        graph.healthSubjects.upsert(subjectRow("h-shelved", "shelved", name = "Shelved age", archivedAt = dayMillis("2026-04-01")))
+        graph.assets.upsert(assetRow("tub", name = "Tub", aggregation = HealthAggregation.TRACK_ONE, primary = "h-bad"))
+        graph.events.upsert(replacementOf("e-tub", "tub", "2026-01-15"))
+        graph.healthSubjects.upsert(subjectRow("h-bad", "tub", name = "Heater age", nominalUntilDays = 50, warningFromDays = 40, criticalFromDays = 75))
+        graph.healthSubjects.upsert(subjectRow("h-good", "tub", name = "Pump age", sortOrder = 1))
+
+        val rows = collectedList().rowsOnce("the control's band") { it["ctl"]?.band() == HealthBand.NOMINAL }
+
+        listOf("bare", "shelved", "tub").forEach { id -> assertEquals("$id is not tracked", null, rows.getValue(id).health) }
+    }
+
+    /** AC 13: condition never becomes health — DOWN alone draws none, DOWN beside a NOMINAL subject stays NOMINAL. */
+    @Test fun conditionNeverBecomesHealth() = runTest {
+        graph.today = T71
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.conditions.insert(conditionRow("c1", "gen", OperationalCondition.DOWN, "2026-04-10"))
+        trackedAsset("ups", daysBack = 10, name = "UPS")
+        graph.conditions.insert(conditionRow("c2", "ups", OperationalCondition.DOWN, "2026-04-11"))
+
+        val rows = collectedList().rowsOnce("the tracked DOWN row") { it["ups"]?.band() != null }
+
+        assertEquals("DOWN beside a NOMINAL subject is NOMINAL", HealthBand.NOMINAL, rows.getValue("ups").band())
+        assertEquals("DOWN with no subject draws no health", null, rows.getValue("gen").health)
+    }
+
+    /** R71-10: a retired or an archived asset draws no health on the list, whatever its subjects score. */
+    @Test fun aRetiredOrArchivedAssetDrawsNoHealth() = runTest {
+        graph.today = T71
+        trackedAsset("ups", daysBack = 10, name = "UPS")
+        trackedAsset("old", daysBack = 100, name = "Old", retiredOn = "2026-01-01")
+        trackedAsset("gone", daysBack = 100, name = "Gone", status = AssetStatus.ARCHIVED)
+        assertEquals("the retired asset would score", HealthBand.CRITICAL, graph.assetHealthReadModel.forAsset(AssetId("old")).result.aggregate?.band)
+        val vm = collectedList()
+        vm.toggleArchived()
+
+        val rows = vm.rowsOnce("every row, the control scored") { it.size == 3 && it["ups"]?.band() == HealthBand.NOMINAL }
+
+        assertEquals("retired", null, rows.getValue("old").health)
+        assertEquals("archived", null, rows.getValue("gone").health)
+    }
+
+    /** E6, inv. 119: a DOWN asset's row that shows health carries its condition in the same view. */
+    @Test fun aDownRowCarriesItsConditionBesideHealth() = runTest {
+        graph.today = T71
+        trackedAsset("ups", daysBack = 10, name = "UPS")
+        graph.conditions.insert(conditionRow("c1", "ups", OperationalCondition.DOWN, "2026-04-11", reason = "Won't start"))
+
+        val ups = collectedList().rowsOnce("health") { it["ups"]?.band() != null }.getValue("ups")
+
+        assertEquals(HealthBand.NOMINAL, ups.band())
+        assertEquals(OperationalCondition.DOWN, ups.health?.condition?.condition)
+        assertEquals("Won't start", ups.health?.condition?.reason)
+    }
+
+    /** E6, inv. 119: a CRITICAL subject behind a NOMINAL average is listed on the row, in S109's words. */
+    @Test fun aCriticalContributorBehindANominalAggregateIsListed() = runTest {
+        graph.today = T71
+        graph.assets.upsert(assetRow("ups", name = "UPS", aggregation = HealthAggregation.AVERAGE))
+        graph.events.upsert(replacementOf("e1", "ups", "2026-01-15"))
+        graph.healthSubjects.upsert(subjectRow("h1", "ups", name = "Battery age", sortOrder = 0))
+        graph.healthSubjects.upsert(subjectRow("h2", "ups", name = "Fan age", nominalUntilDays = 1000, warningFromDays = 2000, criticalFromDays = 3000, sortOrder = 1))
+        graph.healthSubjects.upsert(subjectRow("h3", "ups", name = "Case age", nominalUntilDays = 1000, warningFromDays = 2000, criticalFromDays = 3000, sortOrder = 2))
+
+        val health = collectedList().rowsOnce("health") { it["ups"]?.band() != null }.getValue("ups").health!!
+
+        assertEquals("the average is NOMINAL", HealthBand.NOMINAL, health.result.aggregate?.band)
+        val critical = healthBlocksOf(health).filterIsInstance<HealthBlock.Critical>().single()
+        assertEquals("Battery age", critical.subject.subject.name)
+        val score = (critical.subject.value as SubjectValue.Scored).score
+        assertEquals(listOf("Critical: Battery age $score"), rowHealthLines(health))
+    }
+
+    /** E6, inv. 119: a DOWN in-service component is listed on its parent's row, in S27's words; retired, it is not. */
+    @Test fun aDownInServiceComponentIsListedOnTheParentRow() = runTest {
+        graph.today = T71
+        trackedAsset("gen", daysBack = 10, name = "Generator")
+        graph.assets.upsert(assetRow("pack", name = "Battery pack", parent = "gen"))
+        graph.conditions.insert(conditionRow("c1", "pack", OperationalCondition.DOWN, "2026-04-11", reason = "Won't hold charge"))
+        val vm = collectedList()
+
+        val gen = vm.rowsOnce("the parent's health") { it["gen"]?.band() != null }.getValue("gen").health!!
+        assertEquals(listOf(AssetId("pack")), healthBlocksOf(gen).filterIsInstance<HealthBlock.Component>().map { it.component.assetId })
+        assertEquals(listOf("Battery pack DOWN — Won't hold charge"), rowHealthLines(gen))
+
+        graph.assets.upsert(assetRow("pack", name = "Battery pack", parent = "gen", retiredOn = "2026-04-12"))
+        val after = vm.rowsOnce("the component retired") { it["gen"]?.health?.components?.isEmpty() == true }.getValue("gen").health!!
+        assertEquals(emptyList<String>(), rowHealthLines(after))
+    }
+
+    /** E2, R71-11: a row that shows no health shows none of the group — untracked, or retired — even DOWN. */
+    @Test fun noHealthNoGroup() = runTest {
+        graph.today = T71
+        trackedAsset("ctl", daysBack = 10, name = "Control")
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.conditions.insert(conditionRow("c1", "gen", OperationalCondition.DOWN, "2026-04-10"))
+        trackedAsset("old", daysBack = 10, name = "Old", retiredOn = "2026-01-01")
+        graph.conditions.insert(conditionRow("c2", "old", OperationalCondition.DOWN, "2026-04-10"))
+
+        val rows = collectedList().rowsOnce("the control's band") { it["ctl"]?.band() == HealthBand.NOMINAL }
+
+        assertEquals("DOWN, untracked", null, rows.getValue("gen").health)
+        assertEquals("DOWN, tracked, retired", null, rows.getValue("old").health)
+    }
+
+    /**
+     * Review MINOR-1: coming back to the list after the subscription grace restarts its flows, and the
+     * health group already drawn must not blink off while the restarted pass runs. The pass is held
+     * shut across the restart, so the first list after it is built from the kept views, never from
+     * the read model's empty first emission. An asset retired while the list was away shows no health
+     * from the kept views: the row's own asset gates them.
+     */
+    @Test fun aRestartAfterTheGraceKeepsTheHealthAlreadyDrawn() = runTest {
+        graph.today = T71
+        trackedAsset("ups", daysBack = 10, name = "UPS")
+        trackedAsset("old", daysBack = 10, name = "Old")
+        val open = MutableStateFlow(true)
+        val held = object : HealthSubjectRepository by graph.healthSubjects {
+            override suspend fun forAsset(assetId: AssetId): List<HealthSubject> {
+                open.first { it }
+                return graph.healthSubjects.forAsset(assetId)
+            }
+        }
+        val health = AssetHealthReadModel(
+            graph.assets, held, graph.schedules, graph.scheduleStates, graph.events, graph.profiles,
+            graph.seasonActivations, graph.conditions, graph.recomputeSchedules, graph.todayPort, zone = { ZoneOffset.UTC },
+        )
+        val vm = AssetsViewModel(graph.assets, graph.categories, graph.seasonActivations, graph.tags, health, graph.todayPort)
+        val watching = backgroundScope.launch { vm.state.collect() }
+        vm.rowsOnce("the group drawn") { it["ups"]?.band() == HealthBand.NOMINAL && it["old"]?.band() == HealthBand.NOMINAL }
+
+        watching.cancel()
+        advanceTimeBy(PAST_THE_GRACE_MS)
+        open.value = false
+        graph.assets.upsert(assetRow("old", name = "Old", retiredOn = "2026-04-14"))
+        backgroundScope.launch { vm.state.collect() }
+
+        val restarted = vm.rowsOnce("the first list after the restart") { it["old"]?.asset?.retiredOn != null }
+        assertEquals("the kept health, with the pass still held", HealthBand.NOMINAL, restarted.getValue("ups").band())
+        assertEquals("a row retired meanwhile shows none of the kept health", null, restarted.getValue("old").health)
+
+        open.value = true
+        val passed = vm.rowsOnce("the restarted pass") { it["old"]?.asset?.retiredOn != null && it["ups"]?.band() == HealthBand.NOMINAL }
+        assertEquals(null, passed.getValue("old").health)
+    }
+
+    /**
+     * Review MINOR-2: the row's gate alone (E2, E4), on synthetic views — the read model never hands
+     * it an out-of-service view today, so each clause is pinned here: the row's own asset in service,
+     * the view in service, and the view tracked.
+     */
+    @Test fun theRowGateShowsHealthOnlyForAnInServiceTrackedRow() {
+        val active = assetRow("ups", name = "UPS")
+        val tracked = gateView(inService = true, band = HealthBand.NOMINAL)
+
+        assertEquals("in service and tracked: the view itself", tracked, rowHealthOf(active, tracked))
+        assertEquals("no view", null, rowHealthOf(active, null))
+        assertEquals("the view is not tracked", null, rowHealthOf(active, gateView(inService = true, band = null)))
+        assertEquals("the view is out of service", null, rowHealthOf(active, gateView(inService = false, band = HealthBand.NOMINAL)))
+        assertEquals("the row is retired", null, rowHealthOf(assetRow("ups", name = "UPS", retiredOn = "2026-01-01"), tracked))
+        assertEquals("the row is archived", null, rowHealthOf(assetRow("ups", name = "UPS", status = AssetStatus.ARCHIVED), tracked))
+    }
+
+    private fun gateView(inService: Boolean, band: HealthBand?) = AssetHealthView(
+        assetId = AssetId("ups"),
+        computedForOn = T71,
+        condition = null,
+        aggregation = HealthAggregation.WORST,
+        result = AssetHealthResult(
+            subjects = emptyList(),
+            aggregate = band?.let { SubjectValue.Scored(80, it, null) },
+            fallback = false,
+            critical = emptyList(),
+        ),
+        components = emptyList(),
+        inService = inService,
+    )
 
     // ------------------------------------------------------------------------------------------
     // 1.4 (B14) — asset detail's condition, health and season, and the list's season phase.
@@ -2250,5 +2612,16 @@ class AssetViewModelsTest {
         assertEquals(NOT_TIED_TO_SEASON.replace("<n>", "2"), notTiedToSeason(2))
         assertEquals("Review maintenance schedules", REVIEW_MAINTENANCE_SCHEDULES)
         assertEquals("Keep schedules as-is", KEEP_SCHEDULES_AS_IS)
+    }
+
+    private companion object {
+        /** #71's `T`. */
+        val T71: LocalDate = LocalDate.parse("2026-04-15")
+
+        /** A real-time bound on each #71 wait: Room answers the list's flows on its own threads. */
+        const val WAIT_MS = 5_000L
+
+        /** Past the list's 5s subscription grace, on the virtual clock the view model's scope runs on. */
+        const val PAST_THE_GRACE_MS = 6_000L
     }
 }

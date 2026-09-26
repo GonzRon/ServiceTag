@@ -183,7 +183,7 @@ class FakeGraph(
      * fields by name (master plan §1). UTC, as the recompute above, so the pin floor is stable.
      */
     val assetHealthReadModel: AssetHealthReadModel = AssetHealthReadModel(
-        assets, healthSubjects, schedules, events, profiles, seasonActivations, conditions,
+        assets, healthSubjects, schedules, scheduleStates, events, profiles, seasonActivations, conditions,
         recomputeSchedules, todayPort, zone = { ZoneOffset.UTC },
     )
     val attentionReadModel: AttentionReadModel =
