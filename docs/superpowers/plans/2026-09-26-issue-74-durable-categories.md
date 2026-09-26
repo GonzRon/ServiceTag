@@ -477,3 +477,13 @@ filter itself (it consumes C3 and C4 when it lands).
   `import_merge` and `status` docstrings still say "format 1–8" / "fourteen tables" — a docstring-only
   follow-up outside #74 by R74-8.
 - **Deferred tidy:** `SentenceSectionHeader` and `ConfirmDialog` move to `ui/components` later (B3's review N5).
+- **Out-of-list files the task reviews accepted:** `ReferenceMigrationTest` (the new table subtracted as the v8
+  tables are), the two version tests renamed and re-anchored (`theSchemaIsNineAndTheFormatIsNine`,
+  `statusReportsNineAndNineAndFourNewCounts` or as the branch names them), `SettingsBackupEntryTest` (the
+  required `onCategories`), `AppSmokeTest.clearInstall()` (wipes `asset_category`); a test-only `BackupInstall`
+  harness in `core/src/test`; `CategoryRoundTripTest` (two JVM end-to-end cases from the whole-branch review).
+- **The format-5 preserved-set restore** (`PreservedSetRestoreTest`) passes at the merge tip with the set staged
+  on the emulator; its assumption fails, not the code, when the staged file is missing (an emulator restart
+  loses it — re-push `noteNFC-backups/pre-2.7-20260918/`'s export to `/data/local/tmp/servicetag-proof-data.zip`).
+- **Deferred to #73 (whole-branch review N7/N8):** `CategoryCatalog.resolve` has no caller yet; the dashboard's
+  own category filter keeps a renamed category's old name until the dashboard is changed.
