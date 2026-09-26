@@ -336,6 +336,19 @@ class MergePlannerCategoryTest {
         assertEquals(0, phone.rebuilds)
     }
 
+    /** Review N6: a spelling-only rename between plan and apply changes no decision; the apply writes the new spelling. */
+    @Test
+    fun aSpellingRenameBetweenPlanAndApplyIsWrittenInTheNewSpelling() = runBlocking<Unit> {
+        val phone = BackupInstall()
+        phone.categories.upsert(row("appliance", "Appliance"))
+        val planned = phone.build.run(archiveOf(data(assets = listOf(asset("n1", "appliance"))), formatVersion = 8))
+        RenameCategory(phone.categories, phone.assets, phone.uow, Clock { 9_000L }).run("appliance", "APPLIANCE")
+
+        phone.apply.run(planned)
+
+        assertEquals(mapOf("n1" to "APPLIANCE"), phone.assets.all().associate { it.id.value to it.category })
+    }
+
     /** `MergeWrites.categories` is the first field, so the apply writes categories before any asset. */
     @Test
     fun theApplyWritesCategoriesFirst() = runBlocking<Unit> {
@@ -366,7 +379,9 @@ class MergePlannerCategoryTest {
 
     /**
      * An archive made before a **new-key rename** re-inserts the old key as an unused row: the rename
-     * was a delete and an insert, and nothing in the archive says the old key was retired.
+     * was a delete and an insert, and nothing in the archive says the old key was retired. "Unused" is
+     * the only form this cost can take: had the archive carried an asset the rename rewrote, the rename
+     * moved that asset's `updatedAt`, so it is `CONTENT_DIFFERS` and the plan writes nothing at all.
      */
     @Test
     fun anArchiveFromBeforeANewKeyRenameReInsertsTheOldKey() = runBlocking<Unit> {

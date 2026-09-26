@@ -70,9 +70,11 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * **It writes [com.loosecannon.servicetag.core.merge.MergeWrites] and nothing else** — #74's
  * categories included. The promotions a merge makes (the category rows its accepted assets need,
  * and each asset's canonical spelling) are *planned* by the rebuilt plan, so they are in its
- * decisions, its tallies and its fingerprint; nothing is promoted here after the writes. A category
- * a local save added between the plan and this apply therefore changes a decision, and the apply is
- * refused as stale rather than writing a spelling nobody reviewed.
+ * decisions, its tallies and its fingerprint; nothing is promoted here after the writes. A local save
+ * between the plan and this apply that adds a key the plan inserts or synthesises therefore changes a
+ * decision, and the apply is refused as stale. A spelling-only rename in that window changes no
+ * decision: the apply writes the fresh local spelling, which the report never showed — the catalog's
+ * spelling (R74-3), not an incoming one.
  */
 class ApplyBackupMergePlan(
     private val assets: AssetRepository,
