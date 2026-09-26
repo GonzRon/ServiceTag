@@ -15,9 +15,10 @@ import org.junit.Test
  *
  * The claims, one per case: every v8 row reads back identical in every column except an asset's
  * `category` where the plan rewrites it; the migrated file is the same schema as a fresh v9 install;
- * the seeded variant set yields exactly the planned rows and spellings; no `updated_at` moves; the
- * rows read back through the Room adapter; and an install with no assets gets an empty catalog.
- * Every expected key, spelling and timestamp is written out by hand.
+ * the seeded variant set yields exactly the planned rows and spellings — a non-ASCII case pair and a
+ * decomposed spelling among them, which SQLite's ASCII-only lowering would split; no `updated_at`
+ * moves; the rows read back through the Room adapter; and an install with no assets gets an empty
+ * catalog. Every expected key, spelling and timestamp is written out by hand.
  */
 class Migration8To9Test {
 
@@ -82,15 +83,20 @@ class Migration8To9Test {
 
     /**
      * `appliance`, `Appliance` and ` APPLIANCE` make one row spelled as the oldest (`Appliance`); two
-     * spellings of a water heater make one collapsed row; `hot tub` becomes the built-in label with no
-     * row; `RO system` is already a label; the blank stays blank.
+     * spellings of a water heater make one collapsed row; `Éclairage`, `éclairage` and a decomposed
+     * `É` make one row keyed `éclairage` and spelled as the oldest, precomposed; `hot tub` becomes the
+     * built-in label with no row; `RO system` is already a label; the blank stays blank.
      */
     @Test
     fun theSeededVariantSetYieldsExactlyThePlannedRowsAndRewrites() = runTest {
         migrating(::seedV8) { file, _ ->
             withConnection(file) { c ->
                 assertEquals(
-                    listOf("appliance|Appliance|1000|1000", "water heater|Water heater|6000|6000"),
+                    listOf(
+                        "appliance|Appliance|1000|1000",
+                        "water heater|Water heater|6000|6000",
+                        "\u00e9clairage|\u00c9clairage|500|500",
+                    ),
                     c.lines("SELECT `key`, display, created_at, updated_at FROM asset_category ORDER BY `key`"),
                 )
                 assertEquals(CATEGORY_AFTER, c.pairs("SELECT id, category FROM asset"))
@@ -124,6 +130,7 @@ class Migration8To9Test {
                     listOf(
                         AssetCategory("appliance", "Appliance", 1_000L, 1_000L),
                         AssetCategory("water heater", "Water heater", 6_000L, 6_000L),
+                        AssetCategory("\u00e9clairage", "\u00c9clairage", 500L, 500L),
                     ),
                     RoomCategoryRepository(db.assetCategoryDao()).all(),
                 )
@@ -210,6 +217,9 @@ class Migration8To9Test {
             "a-water" to "Water heater",
             "a-ro" to "RO system",
             "a-arch" to "Water heater",
+            "a-light-upper" to "\u00c9clairage",
+            "a-light-lower" to "\u00c9clairage",
+            "a-light-nfd" to "\u00c9clairage",
         )
 
         /** Every asset's `updated_at` as seeded — distinct from its `created_at`, so a move shows. */
@@ -222,6 +232,9 @@ class Migration8To9Test {
             "a-water" to 6_500L,
             "a-ro" to 7_500L,
             "a-arch" to 9_500L,
+            "a-light-upper" to 550L,
+            "a-light-lower" to 650L,
+            "a-light-nfd" to 750L,
         )
 
         /** Every row [seedV8] writes, as `(table, id, key column)`. */
@@ -234,6 +247,9 @@ class Migration8To9Test {
             Seeded("asset", "a-water"),
             Seeded("asset", "a-ro"),
             Seeded("asset", "a-arch"),
+            Seeded("asset", "a-light-upper"),
+            Seeded("asset", "a-light-lower"),
+            Seeded("asset", "a-light-nfd"),
             Seeded("nfc_tag", "t1"),
             Seeded("external_link", "l1"),
             Seeded("measurement_definition", "d1"),
@@ -275,8 +291,11 @@ class Migration8To9Test {
         /**
          * What a 1.4 install can hold: the plan's variant set (`appliance` / `Appliance` / ` APPLIANCE`,
          * `hot tub`, a blank), a double-spaced and an archived, retired variant of one more category, a
-         * built-in already spelled as its label, and one row in every other kind of table the assets
-         * carry — the 2.6 tombstone `external_link` included — so "every v8 row" has something behind it.
+         * non-ASCII trio (`Éclairage` oldest, `éclairage`, and `E` + U+0301 + `clairage`), a built-in
+         * already spelled as its label, and one row in each other table [SEEDED] names — the 2.6
+         * tombstone `external_link` among them — so every row the cases compare has something behind it.
+         * The attachment, journal-child and derived tables are not seeded: the migration reads `asset`
+         * and writes `asset` and `asset_category` only, and the fresh-schema case covers every table.
          */
         fun seedV8(c: SQLiteConnection) {
             insertAsset(c, "a-old", "Appliance", 1_000, 1_500)
@@ -287,6 +306,9 @@ class Migration8To9Test {
             insertAsset(c, "a-water", "Water  heater", 6_000, 6_500)
             insertAsset(c, "a-ro", "RO system", 7_000, 7_500)
             insertAsset(c, "a-arch", "WATER HEATER", 9_000, 9_500, status = "ARCHIVED", retiredOn = "2025-01-01")
+            insertAsset(c, "a-light-upper", "\u00c9clairage", 500, 550)
+            insertAsset(c, "a-light-lower", "\u00e9clairage", 600, 650)
+            insertAsset(c, "a-light-nfd", "E\u0301clairage", 700, 750)
             c.execSQL(
                 "INSERT INTO nfc_tag (id,payload_format,payload_key,asset_id,link_id,status,label,physical_uid," +
                     "written_at,last_scanned_at,created_at,updated_at) " +

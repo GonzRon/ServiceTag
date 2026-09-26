@@ -64,5 +64,6 @@ class CreateAssetTest {
         }
         assertTrue(h.categories.rows.isEmpty())
         assertTrue(h.assets.rows.isEmpty())
+        assertEquals(0, h.assets.upserts, "nothing was written and then rolled back")
     }
 }
