@@ -1,12 +1,18 @@
 package com.loosecannon.servicetag.ui.api
 
+import android.content.ContextWrapper
+import android.content.Intent
 import android.provider.Settings
+import android.system.ErrnoException
+import android.system.OsConstants
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -389,5 +395,55 @@ class DeveloperApiListenerTest {
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, intent.action)
         assertEquals("package:${app.packageName}", intent.dataString)
         assertNotNull("nothing on this build opens an app's details page", intent.resolveActivity(app.packageManager))
+    }
+
+    /**
+     * Review F1: the button's own fallback, with no callback passed. A recording context stands in
+     * for the activity's `startActivity`, so the click is observed without leaving the app and
+     * without espresso-intents.
+     */
+    @Test fun theButtonWithNoCallbackOpensThisAppsDetailsPage() {
+        val refusing = factory { _, _, _ -> throw SocketException("socket failed: EACCES (Permission denied)") }
+        val (owner, _) = seededModel {
+            DeveloperApiViewModel(app.graph, networkPermissionGranted = { false }, port = 0, serverSocketFactory = refusing)
+        }
+        val captured = mutableListOf<Intent>()
+        rule.setContent {
+            val activity = LocalContext.current
+            val recorder = remember(activity) {
+                object : ContextWrapper(activity) {
+                    override fun startActivity(intent: Intent) {
+                        captured += intent
+                    }
+                }
+            }
+            ServiceTagTheme {
+                CompositionLocalProvider(LocalContext provides recorder, LocalViewModelStoreOwner provides owner) {
+                    DeveloperApiScreen(graph = app.graph, onBack = {})
+                }
+            }
+        }
+
+        rule.awaitText(P1A_2)
+        rule.onNodeWithText(P1A_2).performClick()
+        rule.runOnIdle {
+            assertEquals(1, captured.size)
+            assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, captured.single().action)
+            assertEquals("package:${app.packageName}", captured.single().dataString)
+        }
+    }
+
+    /**
+     * Review F2: the adapter's other arms, over real `ErrnoException`s — only a device has them; on
+     * the JVM they are stubs and every errno reads 0.
+     */
+    @Test fun theAdapterReadsEveryErrnoArm() {
+        fun wrapped(errno: Int) = SocketException("socket failed").apply { initCause(ErrnoException("socket", errno)) }
+        assertEquals(BindErrno.ACCESS_DENIED, bindErrnoOf(wrapped(OsConstants.EACCES)))
+        assertEquals(BindErrno.ACCESS_DENIED, bindErrnoOf(wrapped(OsConstants.EPERM)))
+        assertEquals(BindErrno.OTHER, bindErrnoOf(wrapped(OsConstants.EMFILE)))
+        assertEquals(BindErrno.UNKNOWN, bindErrnoOf(SocketException("socket failed")))
+        val twoDeep = IOException("outer", SocketException("middle").apply { initCause(ErrnoException("bind", OsConstants.EADDRINUSE)) })
+        assertEquals(BindErrno.ADDRESS_IN_USE, bindErrnoOf(twoDeep))
     }
 }
