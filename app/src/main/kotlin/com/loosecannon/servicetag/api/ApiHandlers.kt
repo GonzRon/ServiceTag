@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
@@ -45,7 +46,9 @@ import com.loosecannon.servicetag.di.AppGraph
  * endpoints are [ReferenceHandlers]', and 1.4's fourteen season, condition, health and attention
  * rows are [SeasonHealthHandlers]'**; all three hold the same rule: every write there is one use
  * case call too. This class keeps the shipped surface plus the seven counts [status] gained, which
- * it asks those three collaborators for.
+ * it asks those three collaborators for — and #74's `assetCategories` count, which it reads itself
+ * from [categories]. There is still no categories route (R74-8): a category is written only by an
+ * asset save, and the API's asset create and update promote through core like the editor's.
  *
  * The asset `PATCH` keeps 1.3's exact command (spec §9.3): its `MM-DD` pair is the one
  * compatibility input, and `UpdateAsset` refuses what the pair cannot represent — a different pair
@@ -53,7 +56,7 @@ import com.loosecannon.servicetag.di.AppGraph
  * schedule 409 `SEASON_MODE_STRANDS_POLICY` — which [mapDomainFailure] names. Condition is never in
  * it (#61 AC 9).
  *
- * **Twenty-two collaborators plus two values, named one by one, with a `constructor(graph)` beside
+ * **Twenty-three collaborators plus two values, named one by one, with a `constructor(graph)` beside
  * them.** That is this app's pattern, stated at `AssetViewModels.kt:59`–`61`: *"Each takes the `AppGraph` members it
  * actually uses — the secondary constructor is what the Compose entry calls, the primary one is
  * what a test builds on a Room-backed fake graph."* It is the reason `ApiRouterTest` can drive the
@@ -84,6 +87,8 @@ internal class ApiHandlers(
     private val profiles: ProfileRepository,
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
+    /** #74 — read for the `assetCategories` status count only; nothing here writes a category. */
+    private val categories: CategoryRepository,
     private val createAsset: CreateAsset,
     private val updateAsset: UpdateAsset,
     private val retireAsset: RetireAsset,
@@ -121,7 +126,7 @@ internal class ApiHandlers(
 ) {
     constructor(graph: AppGraph) : this(
         graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles, graph.events,
-        graph.attachments,
+        graph.attachments, graph.categories,
         graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
         graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
         graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
@@ -150,6 +155,9 @@ internal class ApiHandlers(
                 "attachments" to attachments.count(),
                 // Format 7's own table, under the name the archive spells it with.
                 "assetReferences" to references.count(),
+                // Format 9's (#74), under the archive's own list name: the owner's rows, never the
+                // compiled built-ins.
+                "assetCategories" to categories.all().size,
             ) + maintenance.counts() + seasonHealth.counts(),
         ),
     )

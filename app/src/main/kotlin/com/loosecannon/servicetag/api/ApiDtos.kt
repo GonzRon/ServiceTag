@@ -50,14 +50,15 @@ internal data class StatusResponse(
     /**
      * One key per table — assets, **groups**, definitions, profiles, **schedules**, **closures**,
      * links, tags, events, attachments, **references**, **seasonActivations**, **assetConditions**,
-     * **healthSubjects** — listed here in `MergeTable`'s write order for reading, which is **not**
-     * the JSON's key order and is not contract; a client reads by key. (The sentence claimed that
-     * order before 1.3 and the list was not in it: `tags` and `links` sat ahead of `definitions`
+     * **healthSubjects**, **assetCategories** — listed here in `MergeTable`'s order for reading, which
+     * is **not** the JSON's key order and is not contract; a client reads by key. (The sentence claimed
+     * that order before 1.3 and the list was not in it: `tags` and `links` sat ahead of `definitions`
      * and `profiles`. Only the prose moved.)
      *
      * Three of those in bold arrived with 1.2's maintenance tables; **references** arrived with
      * 1.3's `asset_reference`, and its key is `assetReferences` — the name the archive's own table
-     * carries; the last three arrived with 1.4, under the archive's own list names. `schedule_state`
+     * carries; three arrived with 1.4, under the archive's own list names; and **assetCategories**
+     * with #74 (format 9) — the owner's own categories, never the compiled built-ins. `schedule_state`
      * and `schedule_local_delivery` are **not** here, because derived and device-local rows are not
      * tables a client counts, and no health value is here because none is stored anywhere.
      */
@@ -142,10 +143,12 @@ internal data class MergeReportResponse(
     val formatVersion: Int,
     val backupSetId: String,
     val applicable: Boolean,
-    // Write order, which is also `MergeTable`'s own order and the conflict sort key: a group's
-    // members reference assets, a schedule references an asset or a group, a closure references a
-    // schedule, a reference an asset; an activation and a condition reference an asset, and a health
-    // subject an asset and, softly, a schedule. Fourteen tables since format 8.
+    // `MergeTable`'s own order, which is also the conflict sort key and — for the first fourteen —
+    // the write order: a group's members reference assets, a schedule references an asset or a
+    // group, a closure references a schedule, a reference an asset; an activation and a condition
+    // reference an asset, and a health subject an asset and, softly, a schedule. #74's `categories`
+    // is last here, as in the enum, though a merge writes categories **first** (`MergeWrites`).
+    // Fifteen tables since format 9.
     val assets: MergeTallyDto,
     val groups: MergeTallyDto,
     val definitions: MergeTallyDto,
@@ -160,6 +163,8 @@ internal data class MergeReportResponse(
     val seasonActivations: MergeTallyDto,
     val conditions: MergeTallyDto,
     val healthSubjects: MergeTallyDto,
+    /** #74 — the archive's rows and the synthesised rows its accepted assets need (C13). */
+    val categories: MergeTallyDto,
     /** Deterministic: table order, then id. Empty when [applicable]. */
     val conflicts: List<MergeDecisionDto>,
     val duplicateCandidates: List<DuplicateCandidateDto>,
@@ -191,6 +196,7 @@ internal fun MergeReport.toResponse() = MergeReportResponse(
     seasonActivations = seasonActivations.dto(),
     conditions = conditions.dto(),
     healthSubjects = healthSubjects.dto(),
+    categories = categories.dto(),
     conflicts = conflicts.map { it.dto() },
     duplicateCandidates = duplicateCandidates.map { it.dto() },
 )

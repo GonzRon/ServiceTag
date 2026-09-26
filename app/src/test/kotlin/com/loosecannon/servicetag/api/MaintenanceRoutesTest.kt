@@ -81,7 +81,7 @@ class MaintenanceRoutesTest {
     private fun router(): ApiRouter = ApiRouter(
         ApiHandlers(
             graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles,
-            graph.events, graph.attachments,
+            graph.events, graph.attachments, graph.categories,
             graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
             graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
@@ -1175,17 +1175,21 @@ class MaintenanceRoutesTest {
      * rather than failing to compile — and `ignoreUnknownKeys = false` cannot catch it either,
      * because a field missing from both the DTO and the JSON is nothing for the parser to object to.
      *
-     * So the serialised field names are pinned as a list, in write order, and the value of the one
-     * this release adds is read off a **live route response** rather than off a constructed DTO.
+     * So the serialised field names are pinned as a list, in `MergeTable` order — which is the write
+     * order for the first fourteen and **not** for #74's `categories`, listed last and written first
+     * (`MergeWrites`) — and the values of the ones the releases add are read off a **live route
+     * response** rather than off a constructed DTO.
      */
-    @Test fun theMergeReportWireMirrorCarriesEveryTallyInWriteOrder() {
+    @Test fun theMergeReportWireMirrorCarriesEveryTallyInTableOrder() {
         assertEquals(
             listOf(
                 "formatVersion", "backupSetId", "applicable",
                 "assets", "groups", "definitions", "profiles", "schedules", "closures",
                 "links", "tags", "events", "attachments", "references",
-                // 1.4 (B09): tables 12–14, in write order after the references.
+                // 1.4 (B09): tables 12–14, after the references.
                 "seasonActivations", "conditions", "healthSubjects",
+                // #74 (format 9): table 15, appended, though its rows are written first.
+                "categories",
                 "conflicts", "duplicateCandidates",
             ),
             MergeReportResponse.serializer().descriptor.elementNames.toList(),
@@ -1202,12 +1206,14 @@ class MaintenanceRoutesTest {
         // The key is really on the wire, not merely on the Kotlin type: read it out of the JSON
         // before decoding, so a mirror that stopped emitting it fails here.
         assertTrue(planned.text(), "\"references\"" in planned.text())
-        for (key in listOf("seasonActivations", "conditions", "healthSubjects")) {
+        for (key in listOf("seasonActivations", "conditions", "healthSubjects", "categories")) {
             assertTrue("$key is on the wire: ${planned.text()}", "\"$key\"" in planned.text())
         }
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.references)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.healthSubjects)
+        // The donor's one category row, which this phone does not hold.
+        assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.categories)
     }
 
     // --- 1.4 (B09): derived state, status and the fourteen-table merge ---------------------------
@@ -1368,14 +1374,16 @@ class MaintenanceRoutesTest {
         assertEquals(1, status.counts["assetConditions"])
         assertEquals(1, status.counts["healthSubjects"])
         assertEquals(1, status.counts["assets"])
+        // #74: the asset's saved category ("Water", from `createAsset`) is the one row counted.
+        assertEquals(1, status.counts["assetCategories"])
     }
 
     /**
-     * Import-merge reads a **format-8** archive and reports **fourteen** tables: the donor's
-     * activation, condition and health subject each tally one INSERT on the wire, and the apply
-     * writes each of them — an INSERT, never an update (spec §8.4).
+     * Import-merge reads a **format-9** archive and reports **fifteen** tables: the donor's
+     * activation, condition and health subject each tally one INSERT on the wire, and so does its
+     * category (#74), and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
-    @Test fun importMergeReadsFormat8AndReportsFourteenTables() {
+    @Test fun importMergeReadsFormat9AndReportsFifteenTables() {
         val archive = donorArchive()
         fun post(path: String) = router().handle(
             ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
@@ -1385,7 +1393,7 @@ class MaintenanceRoutesTest {
         assertEquals(planned.text(), 200, planned.status)
         val wire = ApiJson.parseToJsonElement(planned.text()).jsonObject
         val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
-        assertEquals(14, tallies.size)
+        assertEquals(15, tallies.size)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
         assertEquals(9, report.formatVersion)
         assertTrue(report.text(), report.applicable)
@@ -1393,12 +1401,14 @@ class MaintenanceRoutesTest {
         assertEquals(one, report.seasonActivations)
         assertEquals(one, report.conditions)
         assertEquals(one, report.healthSubjects)
+        assertEquals(one, report.categories)
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
         runBlocking {
             assertEquals(1, graph.seasonActivations.all().size)
             assertEquals(1, graph.conditions.all().size)
             assertEquals(1, graph.healthSubjects.all().size)
+            assertEquals(listOf("Test gear"), graph.categories.all().map { it.display })
         }
     }
 
@@ -1427,7 +1437,7 @@ class MaintenanceRoutesTest {
             )
             runBlocking {
                 val asset = createAsset.run(
-                    com.loosecannon.servicetag.core.usecase.AssetCommand(name = "Donor pump"), null,
+                    com.loosecannon.servicetag.core.usecase.AssetCommand(name = "Donor pump", category = "Test gear"), null,
                 )
                 val group = saveGroup.run(
                     null,

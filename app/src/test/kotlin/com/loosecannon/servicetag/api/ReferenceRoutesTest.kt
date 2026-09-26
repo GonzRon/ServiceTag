@@ -41,7 +41,7 @@ class ReferenceRoutesTest {
     private fun router(): ApiRouter = ApiRouter(
         ApiHandlers(
             graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles,
-            graph.events, graph.attachments,
+            graph.events, graph.attachments, graph.categories,
             graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
             graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
@@ -469,6 +469,8 @@ class ReferenceRoutesTest {
                 "groups", "schedules", "closures", "assetReferences",
                 // 1.4's three, under the archive's own list names.
                 "seasonActivations", "assetConditions", "healthSubjects",
+                // #74's, under the archive's own list name (format 9).
+                "assetCategories",
             ),
             counts.keys,
         )
@@ -477,7 +479,7 @@ class ReferenceRoutesTest {
     /**
      * Hazard: `FORMAT_VERSION` not carried through leaves the API refusing an archive the app can
      * read, or accepting one it cannot. That a **format-7** archive is accepted on a live route is
-     * proved by `MaintenanceRoutesTest.theMergeReportWireMirrorCarriesEveryTallyInWriteOrder`; this
+     * proved by `MaintenanceRoutesTest.theMergeReportWireMirrorCarriesEveryTallyInTableOrder`; this
      * is the other side — a manifest claiming a format this build does not know is a 409, and the
      * gate fires before a single row is read.
      */
