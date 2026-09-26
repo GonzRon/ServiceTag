@@ -51,8 +51,9 @@ import kotlin.math.abs
  * the rule under test, so a broken rule cannot mirror itself into the oracle.
  *
  * A label is read from the unmerged tree (its button merges it), and whether any of it was cut is its
- * own `TextLayoutResult`'s overflow flags. The label's box lying inside its button's box is checked too,
- * but only as containment: a label squeezed into a box too short for it is still inside that box.
+ * own `TextLayoutResult`: `didOverflowHeight`, and each line's right edge against the label's width. The
+ * label's box lying inside its button's box is checked too, but only as containment: a label squeezed
+ * into a box too short for it is still inside that box.
  *
  * Emulator only (`emulator-5554`), never a phone.
  */
@@ -143,7 +144,14 @@ class ActionGridTest {
         }
     }
 
-    /** AC 5: one-line labels keep today's 44dp buttons, 54dp row pitch, half widths and 48dp touch height. */
+    /**
+     * AC 5: one-line labels keep today's 44dp buttons, 54dp row pitch, half widths and 48dp touch height.
+     *
+     * `Set up from template` stands in the plan's list as a short label, but half of 380dp leaves its
+     * label 111dp and on the emulator's face it takes two lines there (the fixed 44dp cut its second
+     * line too). So it is held to what every label keeps (whole, at least 44dp, half width, left) and the
+     * four one-line labels carry the 44dp height and the pitch.
+     */
     @Test fun shortLabelsKeepTheirHeightRhythmAndTaps() {
         draw(
             PHONE_412,
@@ -153,7 +161,9 @@ class ActionGridTest {
         val labels = listOf(WRITE_TAG, EDIT, BACKUP, HISTORY, SET_UP)
         val all = labels.map(::bounds)
 
-        all.forEachIndexed { i, b -> assertEquals("${labels[i]} is 44dp tall", 44f, heightOf(b), HALF) }
+        all.take(4).forEachIndexed { i, b -> assertEquals("${labels[i]} is 44dp tall", 44f, heightOf(b), HALF) }
+        assertTrue("$SET_UP is at least 44dp tall, was ${heightOf(all[4])}", heightOf(all[4]) >= 44f - HALF)
+        labels.forEach(::assertWhole)
         assertEquals("two per row", listOf(2, 2, 1), columnsPerRow(labels))
         all.forEachIndexed { i, b -> assertEquals("${labels[i]} keeps half the width", HALF_OF_PHONE_412, widthOf(b), HALF) }
         assertEquals("a 54dp row pitch", 54f, (all[2].top - all[0].top).value, HALF)
@@ -226,7 +236,15 @@ class ActionGridTest {
     private fun assertWhole(label: String) {
         val layout = textLayout(label)
         assertFalse("'$label' is cut vertically", layout.didOverflowHeight)
-        assertFalse("'$label' is cut horizontally", layout.didOverflowWidth)
+        // The node rebuilds this result at its incoming maximum width, so its didOverflowWidth calls a
+        // one-line label narrower than its column cut. Each line's right edge against the label's own
+        // laid-out width is the horizontal reading (a label that ran past its box would end beyond it).
+        (0 until layout.lineCount).forEach { line ->
+            assertTrue(
+                "'$label' is cut horizontally on line $line",
+                layout.getLineRight(line) <= layout.size.width + HALF,
+            )
+        }
         val text = labelNode(label).getUnclippedBoundsInRoot()
         val outer = bounds(label)
         assertTrue(
