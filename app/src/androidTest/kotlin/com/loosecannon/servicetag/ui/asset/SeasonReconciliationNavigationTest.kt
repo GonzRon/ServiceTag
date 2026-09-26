@@ -11,15 +11,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.loosecannon.servicetag.core.model.HealthAggregation
-import com.loosecannon.servicetag.core.model.RecurrenceUnit
-import com.loosecannon.servicetag.core.model.SeasonMode
-import com.loosecannon.servicetag.core.usecase.AssetCommand
-import com.loosecannon.servicetag.core.usecase.AssetSettingsCommand
-import com.loosecannon.servicetag.core.usecase.BreakCommand
-import com.loosecannon.servicetag.core.usecase.HealthPolicyCommand
-import com.loosecannon.servicetag.core.usecase.ScheduleCommand
-import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
@@ -28,12 +19,10 @@ import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.nav.ServiceTagRoot
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.time.LocalDate
 
 /** How long a navigation and its effects are given to settle. */
 private const val SETTLE_MILLIS = 10_000L
@@ -63,35 +52,16 @@ class SeasonReconciliationNavigationTest {
     @Before fun freshInstall() = clearInstall()
 
     /**
-     * An existing YEAR_ROUND asset with one CONTINUOUS schedule, opened from the Assets list and
-     * edited into "Started and ended by hand", out of season. Review lands on the asset's schedules,
-     * in view without a scroll; one back press returns to the list the asset was opened from, never
-     * to a second, stale detail of the same asset.
+     * An existing YEAR_ROUND asset with one CONTINUOUS schedule and a page taller than the screen
+     * ([tallAssetWithAWeeklyCheck]), opened from the Assets list and edited into "Started and ended by
+     * hand", out of season. Review lands on the asset's schedules, in view without a scroll; one back
+     * press returns to the list the asset was opened from, never to a second, stale detail of it.
      */
     @Test fun reviewMaintenanceSchedulesLandsOnTheAssetsSchedulesOnce() {
         val graph = app.graph
-        runBlocking {
-            val gen = graph.saveAssetSettings.run(
-                null,
-                AssetSettingsCommand(
-                    asset = AssetCommand(name = "Generator", category = "Power"),
-                    seasonMode = SeasonModeCommand(SeasonMode.YEAR_ROUND),
-                    maintenanceBreak = BreakCommand(null, null),
-                    healthPolicy = HealthPolicyCommand(HealthAggregation.WORST),
-                ),
-            ).id
-            graph.saveSchedule.run(
-                null,
-                ScheduleCommand(
-                    targetAssetId = gen,
-                    targetGroupId = null,
-                    title = "Weekly check",
-                    timeInterval = 1,
-                    timeUnit = RecurrenceUnit.WEEK,
-                    anchorOn = LocalDate.now().toString(),
-                ),
-            )
-        }
+        // Taller than the screen, still YEAR_ROUND: the schedules start below the fold, so seeing them
+        // after Review proves the root handed the detail its section and the detail scrolled to it.
+        tallAssetWithAWeeklyCheck(graph)
         rule.setContent {
             ServiceTagTheme {
                 ServiceTagRoot(graph = graph, deepLinks = deepLinks, snackbars = snackbars)
