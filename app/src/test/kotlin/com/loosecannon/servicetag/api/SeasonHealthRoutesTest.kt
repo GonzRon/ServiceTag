@@ -245,32 +245,50 @@ class SeasonHealthRoutesTest {
     }
 
     /**
-     * Spec §9.2: a malformed `MM-DD`, `occurredTime` or `tzId` — and a break with one bound — keeps
-     * the shipped validation shape: 422, the `…_validation` code, `problems` naming the field.
+     * Spec §9.2: a malformed `MM-DD`, `occurredOn`, `occurredTime` or `tzId` — and a break with one
+     * bound — keeps the shipped validation shape: 422, the `…_validation` code and its message,
+     * `problems` naming the field. Since #52 the envelope's `field` names it too.
      */
     @Test fun aMalformedValueKeepsTheShippedValidationShape() {
         val mower = api.asset("Mower")
         val mmdd = refused(
             call("POST", "/v1/assets/$mower/season-mode", """{"seasonMode":"CALENDAR","seasonStartMmdd":"13-45","seasonEndMmdd":"10-31"}"""),
-            422, "season_validation",
+            422, "season_validation", "seasonStartMmdd",
         )
         assertEquals(listOf("BadDate(field=seasonStartMmdd)"), mmdd.problems)
+        assertEquals("the season command was refused", mmdd.message)
+        val bound = refused(
+            call("POST", "/v1/assets/$mower/maintenance-break", """{"blackoutStartMmdd":"13-45","blackoutEndMmdd":"02-28"}"""),
+            422, "season_validation", "blackoutStartMmdd",
+        )
+        assertEquals(listOf("BadDate(field=blackoutStartMmdd)"), bound.problems)
+        assertEquals("the season command was refused", bound.message)
+        // Phase 1A K7 (ruled 2026-09-25, corrected the same day): a break with one bound answers `blackoutStartMmdd`, the pair's first key on this route.
         val half = refused(
             call("POST", "/v1/assets/$mower/maintenance-break", """{"blackoutStartMmdd":"12-01","blackoutEndMmdd":null}"""),
-            422, "season_validation",
+            422, "season_validation", "blackoutStartMmdd",
         )
         assertEquals(listOf("BothOrNeither"), half.problems)
+        assertEquals("the season command was refused", half.message)
 
+        val date = refused(
+            call("POST", "/v1/assets/$mower/conditions", """{"condition":"DOWN","tzId":"UTC","occurredOn":"not a date"}"""),
+            422, "condition_validation", "occurredOn",
+        )
+        assertEquals(listOf("BadDate(field=occurredOn)"), date.problems)
+        assertEquals("the condition was refused", date.message)
         val time = refused(
             call("POST", "/v1/assets/$mower/conditions", """{"condition":"DOWN","tzId":"UTC","occurredTime":"25:00"}"""),
-            422, "condition_validation",
+            422, "condition_validation", "occurredTime",
         )
         assertEquals(listOf("BadTime(field=occurredTime)"), time.problems)
+        assertEquals("the condition was refused", time.message)
         val zone = refused(
             call("POST", "/v1/assets/$mower/conditions", """{"condition":"DOWN","tzId":"not a zone"}"""),
-            422, "condition_validation",
+            422, "condition_validation", "tzId",
         )
         assertEquals(listOf("BadTimeZone(field=tzId)"), zone.problems)
+        assertEquals("the condition was refused", zone.message)
         assertTrue(runBlocking { graph.conditions.all() }.isEmpty())
     }
 

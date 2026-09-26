@@ -60,14 +60,26 @@ def _not_answering(exception_class_name: str) -> str:
 
 
 class ApiError(RuntimeError):
-    """The phone answered, and the answer was a refusal."""
+    """The phone answered, and the answer was a refusal.
 
-    def __init__(self, status: int, code: str, message: str, problems: list[str]) -> None:
+    `field` is the envelope's `field`: the one body key the refusal is about, or `None` when it is
+    not about exactly one key, when the app predates the key, or when the body was no envelope.
+    """
+
+    def __init__(
+        self,
+        status: int,
+        code: str,
+        message: str,
+        problems: list[str],
+        field: str | None = None,
+    ) -> None:
         super().__init__(f"{status} {code}: {message}")
         self.status = status
         self.code = code
         self.message = message
         self.problems = problems
+        self.field = field
 
 
 class NotPaired(RuntimeError):
@@ -233,8 +245,8 @@ class Device:
                 return payload
             # Not a report after all (fix 3): fall through to the ordinary error mapping.
         if response.status_code >= 400:
-            code, message, problems = _detail(response)
-            raise ApiError(response.status_code, code, message, problems)
+            code, message, problems, field = _detail(response)
+            raise ApiError(response.status_code, code, message, problems, field)
         if response.status_code == 204 or not response.content:
             return {}
         return response.json()
@@ -258,8 +270,11 @@ Python 3.12's stdlib reports RFC 9110's renamed `"Content Too Large"`, and the a
 and every reader of this tool's messages — still calls it `413 Payload Too Large` (R2)."""
 
 
-def _detail(response: httpx.Response) -> tuple[str, str, list[str]]:
+def _detail(response: httpx.Response) -> tuple[str, str, list[str], str | None]:
     """The error envelope, or something honest when the body is not one.
+
+    `field` is kept only when the envelope carries it as a string; an absent key, a `null` and
+    anything else read as `None`, never as an error, and so does every body that is not an envelope.
 
     A few refusals — the app's 413 chief among them — answer with a **zero-byte body by design**
     (`HttpWire.kt`'s cap and framing refusals never echo anything back), so `response.text[:200]`
@@ -271,21 +286,23 @@ def _detail(response: httpx.Response) -> tuple[str, str, list[str]]:
     """
     try:
         error = response.json()["error"]
+        field = error.get("field")
         return (
             str(error.get("code", "unknown")),
             str(error.get("message", "")),
             [str(p) for p in error.get("problems", [])],
+            field if isinstance(field, str) else None,
         )
     except (ValueError, KeyError, TypeError, json.JSONDecodeError):
         text = response.text[:200]
         if text:
-            return ("unknown", text, [])
+            return ("unknown", text, [], None)
         named = _EMPTY_BODY_DETAIL.get(response.status_code)
         if named is not None:
             code, message = named
-            return (code, message, [])
+            return (code, message, [], None)
         try:
             reason = http.HTTPStatus(response.status_code).phrase
         except ValueError:
             reason = str(response.status_code)
-        return (reason, "the phone answered with no body", [])
+        return (reason, "the phone answered with no body", [], None)

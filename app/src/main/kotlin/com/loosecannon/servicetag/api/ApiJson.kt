@@ -88,12 +88,16 @@ internal val ApiJson: Json = Json {
 internal data class ApiErrorBody(val error: ApiErrorDetail)
 
 /**
- * [code] is stable and machine-readable; [message] is for a person; [problems] names bad fields.
+ * [code] is stable and machine-readable; [message] is for a person; [problems] lists every problem by
+ * the domain's own name, and on a validation failure [code], [message] and [field] describe the first.
  *
- * [field] (1.4, spec §9.2) is the one body key a 1.4 refusal is about, for the codes master plan
- * §11.3 names — `POLICY_OFFSET_INVALID` is `policyOffsetDays`, `HEALTH_SUBJECT_NAME_REQUIRED` is
- * `name`, and so on — and null on every other answer, the shipped ones included. It is encoded like
- * every other field, so a client reads `null` rather than an absent key.
+ * [field] is the one body key a refusal is about, and null where a refusal is not about exactly one
+ * key. The 1.4 codes master plan §11.3 names fill it (1.4, spec §9.2) — `POLICY_OFFSET_INVALID` is
+ * `policyOffsetDays`, `HEALTH_SUBJECT_NAME_REQUIRED` is `name`, and so on — and so do the four 1.1.0
+ * validation families (#52, `ValidationRefusals.kt`) and the 1.4 malformed-value rows, from the key
+ * their problem already carries. One key names that key, a pair names its first key, and a reading's
+ * id without the request key that sent it answers null. It is encoded like every other field, so a
+ * client reads `null` rather than an absent key.
  */
 @Serializable
 internal data class ApiErrorDetail(
@@ -202,8 +206,9 @@ internal fun <T> decodeOr400(serializer: DeserializationStrategy<T>, text: Strin
 /**
  * Every refusal `:core` can raise, given the status it means.
  *
- * 422 is a *validation* failure — the caller sent a bad field, and `problems` names each one, using
- * the sealed problem types' own `toString()` so the names in the JSON are the names in the code.
+ * 422 is a *validation* failure — the body is wrong, and `problems` lists every problem, using the
+ * sealed problem types' own `toString()` so the names in the JSON are the names in the code; `code`,
+ * `message` and `field` describe the first.
  * 409 is a refusal about *state*: the row is fine and the store will not have it (a cycle, a
  * definition that already has measurements, a derived reading that would break). 404 is a row that
  * is not there. 400 is a caller error that is not about a field. Anything left is a 500 carrying
@@ -211,20 +216,24 @@ internal fun <T> decodeOr400(serializer: DeserializationStrategy<T>, text: Strin
  * one place a path or a value could leak into a response.
  */
 internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
-    is AssetValidation -> errorResponse(
-        422, "Unprocessable Content", "asset_validation", "the asset was refused",
+    // #52: the four 1.1.0 families keep their code and their `problems`, and describe the first
+    // problem in `message` and `field` (`ValidationRefusals.kt`). The shipped sentence is kept only
+    // as the fallback for a refusal that named no problem, unreachable as `SCHEDULE_INVALID` is:
+    // `mapDomainFailure` runs inside the router's `catch`, so a throw here would escape `handle`.
+    is AssetValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::assetRefusal) ?: Refusal(ASSET_VALIDATION, "the asset was refused"),
         e.problems.map { it.toString() },
     )
-    is EventValidation -> errorResponse(
-        422, "Unprocessable Content", "event_validation", "the event was refused",
+    is EventValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::eventRefusal) ?: Refusal(EVENT_VALIDATION, "the event was refused"),
         e.problems.map { it.toString() },
     )
-    is DefinitionValidation -> errorResponse(
-        422, "Unprocessable Content", "definition_validation", "the reading was refused",
+    is DefinitionValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::definitionRefusal) ?: Refusal(DEFINITION_VALIDATION, "the reading was refused"),
         e.problems.map { it.toString() },
     )
-    is ProfileValidation -> errorResponse(
-        422, "Unprocessable Content", "profile_validation", "the quick action was refused",
+    is ProfileValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::profileRefusal) ?: Refusal(PROFILE_VALIDATION, "the quick action was refused"),
         e.problems.map { it.toString() },
     )
     // --- 1.2, the maintenance domain (master plan §9.3's status split) ---------------------
@@ -504,7 +513,8 @@ private fun strandedName(schedule: StrandedSchedule): String =
  * The code a malformed value answers with: **the shipped validation shape** (spec §9.2) — 1.1.0's
  * `…_validation` family, whose `problems` name the field (`BadDate(field=seasonStartMmdd)`,
  * `BadTime(field=occurredTime)`, `BadTimeZone(field=tzId)`). Spec §9.2 gives these no code of their
- * own and its 1.4 set is closed, so none is invented for them.
+ * own and its 1.4 set is closed, so none is invented for them. Their message stays the family's
+ * shipped sentence; since #52 the envelope's `field` carries the key the problem already names.
  */
 internal const val SEASON_VALIDATION: String = "season_validation"
 internal const val CONDITION_VALIDATION: String = "condition_validation"
@@ -526,8 +536,10 @@ internal fun seasonRefusal(problem: SeasonProblem): Refusal = when (problem) {
     SeasonProblem.ManualPhaseForbidden -> Refusal(
         "MANUAL_PHASE_FORBIDDEN", "manualPhase is taken only on a switch into MANUAL from another mode", "manualPhase",
     )
-    is SeasonProblem.BadDate -> Refusal(SEASON_VALIDATION, "the season command was refused")
-    SeasonProblem.BothOrNeither -> Refusal(SEASON_VALIDATION, "the season command was refused")
+    is SeasonProblem.BadDate -> Refusal(SEASON_VALIDATION, "the season command was refused", problem.field)
+    // Phase 1A K7 (ruled 2026-09-25, corrected the same day): the maintenance break is the only route that
+    // raises this value, and its pair's first key is `blackoutStartMmdd`; the message stays the shipped one.
+    SeasonProblem.BothOrNeither -> Refusal(SEASON_VALIDATION, "the season command was refused", "blackoutStartMmdd")
     SeasonProblem.BlackoutCoversTheYear -> Refusal(
         "BLACKOUT_COVERS_THE_YEAR", "that break leaves some year, common or leap, with no day outside it",
     )
@@ -548,9 +560,9 @@ internal fun conditionRefusal(problem: ConditionProblem): Refusal = when (proble
         "CONDITION_REASON_TOO_LONG", "reason may hold at most ${problem.limit} characters", "reason",
     )
     is ConditionProblem.ForeignEvent -> Refusal("FOREIGN_EVENT", "eventId must name an event of this asset", "eventId")
-    is ConditionProblem.BadDate -> Refusal(CONDITION_VALIDATION, "the condition was refused")
-    is ConditionProblem.BadTime -> Refusal(CONDITION_VALIDATION, "the condition was refused")
-    is ConditionProblem.BadTimeZone -> Refusal(CONDITION_VALIDATION, "the condition was refused")
+    is ConditionProblem.BadDate -> Refusal(CONDITION_VALIDATION, "the condition was refused", problem.field)
+    is ConditionProblem.BadTime -> Refusal(CONDITION_VALIDATION, "the condition was refused", problem.field)
+    is ConditionProblem.BadTimeZone -> Refusal(CONDITION_VALIDATION, "the condition was refused", problem.field)
 }
 
 /**
