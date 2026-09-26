@@ -442,3 +442,38 @@ classes: `Format7RestoreContractTest`, `CategoriesScreenTest`, `AssetEditorCateg
 No API or MCP category routes (R74-8); no bulk reclassification; no change to the dashboard filter
 (R74-9), the plate icon, the template hints' set or the built-in list; no version bump; #73's Type
 filter itself (it consumes C3 and C4 when it lands).
+
+## 11. Errata and decisions from the build (2026-09-26; the contract stands)
+
+- **R74-14 (B2, from B2's review N5).** `BackupContentCheck` also refuses a category row whose `display` is not
+  in `CategoryKey.display` form (untrimmed, a run of whitespace, or not NFC) — landed with format 9 itself,
+  because a restore check tightened later would refuse archives an earlier build accepted.
+- **A fifth refusal, `NoSuchCategory(key)`** (B1): a rename or delete aimed at a key with no row; no user-visible
+  words — the screen closes the dialog and the list refreshes. **`CategoryIsBuiltIn` carries the built-in's
+  label**, so P74-12 reads "Hot tub is a built-in category." rather than echoing the typed text.
+- **The template lookup runs before any write** in `CreateAsset` and `SaveAssetSettings`'s create path (B1), so
+  "the category row is written after every refusal" is literally true; pinned by `aRefusedCreateAddsNoRow`.
+- **The codec refuses a format-8-or-older archive that carries a category row** (B2): no shipped writer can
+  produce one; the `BackupViewModelTest.asFormatFour` helper strips the list and recomputes `dataSha256`.
+- **`LegacyArchive` is untouched and `LAST_LEGACY_FORMAT` stays 7** (the plan's re-review N1); a format-8
+  archive with a MANUAL asset, a break, health rows and the three 1.4 lists decodes unchanged under format 9.
+- **One chooser for a new key's display** (B1's review N6): `CategoryBackfill.plan(rows, existing)`; the
+  migration, the replace and the planner all use it, existing local and accepted archive rows winning.
+- **Re-plan proofs read "applicable, zero INSERT", not "every verdict IDENTICAL"** (B2's review N4): a category
+  row a built-in or a differently spelled local row holds re-plans SKIPPED (`CATEGORY_KEY_HELD` /
+  `CATEGORY_IS_BUILT_IN`) on every re-plan; `docs/api/v1.md` Table 15 says so. The owner's release proofs and
+  the dev→prod merge should use that reading.
+- **The MCP figure in §9 is stale:** the suite is 338 tests (56 tools) since #83's tests, not 324; `tools/` is
+  untouched by #74.
+- **`clearInstall()` wipes `asset_category`** (B3's review B-1): connected suites that saved an asset with a
+  category left catalog rows that `StoreIsEmpty` now counts; `EmptyStoreRestorePromptTest` and
+  `SettingsBackupEntryTest` join the integrated gate.
+- **Open, for the owner (not blocking the merge):** (a) two sentences for unexpected storage failures on the
+  Categories screen, in the setup screen's form — P74-18 `Could not rename that category.` and P74-19
+  `Could not delete that category.` — implemented only if ratified, else "silent on storage failure" stands
+  (today a failed rename leaves the dialog open, a failed delete closes silently); (b) the ratified key rule
+  does not strip zero-width or other Unicode format characters (a pasted one makes a second, identical-looking
+  category) — one line before format 9 ships, a migration plus a format bump after; (c) the MCP's
+  `import_merge` and `status` docstrings still say "format 1–8" / "fourteen tables" — a docstring-only
+  follow-up outside #74 by R74-8.
+- **Deferred tidy:** `SentenceSectionHeader` and `ConfirmDialog` move to `ui/components` later (B3's review N5).
