@@ -128,6 +128,7 @@ setup screen's per-row overflow menu with "Delete" and its confirm dialogs ("Del
   `CategoryKey.display(text)`: NFC, trim and collapse only (the spelling kept). Blank → no key (never
   promoted). A built-in's key is `CategoryKey.of(label)`. **The rule is persisted** (a Room primary
   key and an archive field): changing it later is a migration plus a format bump.
+  *Errata (owner, 2026-09-26, before format 9 shipped):* `display` — and so `of` — also removes the non-semantic invisible characters and keeps the meaningful ones (ZWJ/ZWNJ, variation selectors, combining marks); the exact sets and the order are `2026-09-26-issue-74-followups.md` §2 (K1–K5).
 - **C3, the catalog read model.** `CategoryCatalog` (core): `choices(custom: List<AssetCategory>):
   List<CategoryChoice>` where `CategoryChoice(display, key, builtIn: Boolean, templateKey: String?)`
   = the built-ins in compiled order (with their hints) followed by the rows ordered by

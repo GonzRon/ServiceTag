@@ -82,4 +82,112 @@ class CategoryKeyTest {
         assertEquals("οδοσ", CategoryKey.of("οδοσ"))
         assertNotEquals(CategoryKey.of("ΟΔΟΣ"), CategoryKey.of("οδοσ"))
     }
+
+    // --- The follow-ups (owner, 2026-09-26; follow-ups plan §2, K1–K3): the invisible characters -------
+
+    /** A pasted invisible character makes no second category: the spelling is the visible text, the key follows. */
+    @Test
+    fun invisibleCharactersAreRemovedFromTheSpellingAndTheKey() {
+        for (pasted in listOf(
+            "App​liance", // ZERO WIDTH SPACE
+            "﻿Appliance", // ZERO WIDTH NO-BREAK SPACE (a byte-order mark)
+            "Appli­ance", // SOFT HYPHEN
+            "‎Appliance‏", // LEFT-TO-RIGHT MARK, RIGHT-TO-LEFT MARK
+            "App⁠liance", // WORD JOINER
+            "Appliance󠁡󠁢󠁿", // U+E0061, U+E0062, U+E007F: tag a, tag b, cancel tag
+        )) {
+            assertEquals("appliance", CategoryKey.of(pasted), codePoints(pasted))
+            assertEquals("Appliance", CategoryKey.display(pasted), codePoints(pasted))
+        }
+    }
+
+    /** Every code point of K1, one by one, written out here rather than asked of the rule. */
+    @Test
+    fun everyRemovedCharacterIsRemoved() {
+        val removed = listOf(0x00AD, 0x034F, 0x180E, 0x200B, 0x200E, 0x200F) +
+            (0x202A..0x202E) + (0x2060..0x2064) + (0x2066..0x2069) + (0x206A..0x206F) +
+            listOf(0xFEFF) + (0xE0000..0xE007F)
+        assertEquals(155, removed.size)
+        for (cp in removed) {
+            val text = "Pu" + String(Character.toChars(cp)) + "mp"
+            assertEquals("pump", CategoryKey.of(text), codePoints(text))
+            assertEquals("Pump", CategoryKey.display(text), codePoints(text))
+        }
+    }
+
+    /** A bidi override, embedding or isolate inside a name is removed, with its closing pop. */
+    @Test
+    fun bidiControlsInsideANameAreRemoved() {
+        assertEquals("appliance", CategoryKey.of("Appl‮iance‬"))
+        assertEquals("Appliance", CategoryKey.display("Appl‮iance‬"))
+        assertEquals("Appliance", CategoryKey.display("Appl‪iance‬"))
+        assertEquals("Appliance", CategoryKey.display("⁧Appliance⁩"))
+    }
+
+    /** Nothing but removed characters and whitespace is blank: no key, never promoted. */
+    @Test
+    fun onlyInvisibleCharactersIsBlank() {
+        assertNull(CategoryKey.of("​​"))
+        assertEquals("", CategoryKey.display("​​"))
+        assertNull(CategoryKey.of("​ ﻿\t­"))
+        assertEquals("", CategoryKey.display("​ ﻿\t­"))
+    }
+
+    /** The removal comes before trim and collapse: what it leaves at an edge is trimmed, a run is one space. */
+    @Test
+    fun theRemovalComesBeforeTrimAndCollapse() {
+        assertEquals("Appliance", CategoryKey.display("​ Appliance ​"))
+        assertEquals("Water heater", CategoryKey.display("Water ​ heater"))
+        assertEquals("water heater", CategoryKey.of("Water⁠ ⁠heater"))
+    }
+
+    /** NFC still holds after the removal: a mark a zero-width space kept from its letter composes with it. */
+    @Test
+    fun nfcStillAppliesAfterTheRemoval() {
+        assertEquals("é", CategoryKey.of("E​́"))
+        assertEquals("É", CategoryKey.display("E​́"))
+        assertEquals("éclairage", CategoryKey.of("E​́clairage"))
+        assertEquals("Éclairage", CategoryKey.display("E​́clairage"))
+        assertEquals("á", CategoryKey.of("a͏́"))
+    }
+
+    /**
+     * K2: the joiners that carry meaning are kept, so the key with one differs from the key without it —
+     * a ZERO WIDTH NON-JOINER inside a Persian word, a ZERO WIDTH JOINER inside an emoji sequence.
+     */
+    @Test
+    fun meaningfulJoinersAreKept() {
+        val books = "کتاب‌ها" // "books", with its non-joiner
+        assertEquals("کتاب‌ها", CategoryKey.display(books))
+        assertEquals("کتاب‌ها", CategoryKey.of(books))
+        assertEquals("کتابها", CategoryKey.of("کتابها"))
+        assertNotEquals(CategoryKey.of("کتابها"), CategoryKey.of(books))
+
+        val mechanic = "👩‍🔧 Tools" // U+1F469 ZWJ U+1F527, then a word
+        assertEquals("👩‍🔧 Tools", CategoryKey.display(mechanic))
+        assertEquals("👩‍🔧 tools", CategoryKey.of(mechanic))
+        assertEquals("👩🔧 tools", CategoryKey.of("👩🔧 Tools"))
+        assertNotEquals(CategoryKey.of("👩🔧 Tools"), CategoryKey.of(mechanic))
+    }
+
+    /**
+     * K2: variation selectors (both blocks), combining marks and every `Cf` outside the removed set are
+     * kept — the rule is an explicit list, never the whole format category.
+     */
+    @Test
+    fun variationSelectorsCombiningMarksAndOtherFormatCharactersAreKept() {
+        assertEquals("☕️ coffee", CategoryKey.of("☕️ Coffee"))
+        assertNotEquals(CategoryKey.of("☕ Coffee"), CategoryKey.of("☕️ Coffee"))
+        assertEquals("a︀b", CategoryKey.of("A︀B"))
+        assertEquals("葛󠄀", CategoryKey.display("葛󠄀")) // U+E0100
+        assertEquals("葛󠇯", CategoryKey.display("葛󠇯")) // U+E01EF
+
+        assertEquals("q̇", CategoryKey.of("Q̇")) // no precomposed form: the mark stays
+        assertEquals("क्ष", CategoryKey.display("क्ष")) // a virama
+
+        assertEquals("؀١", CategoryKey.display("؀١")) // ARABIC NUMBER SIGN, a visible Cf
+    }
+
+    private fun codePoints(text: String): String =
+        text.codePoints().toArray().joinToString(" ") { "U+%04X".format(it) }
 }

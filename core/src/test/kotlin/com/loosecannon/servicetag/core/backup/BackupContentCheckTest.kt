@@ -279,6 +279,23 @@ class BackupContentCheckTest {
     }
 
     /**
+     * The follow-ups' K4 (owner, 2026-09-26): a display that carries a removed invisible character is
+     * not in `CategoryKey.display` form. Refused both when keyed by the visible text (the fourth clause)
+     * and when keyed with the character, the row the rule before the follow-ups would have written.
+     */
+    @Test
+    fun aDisplayCarryingAZeroWidthSpaceIsRefused() {
+        assertRefused(
+            data(categories = listOf(AssetCategoryDto("appliance", "App\u200Bliance", 1L, 1L))),
+            "assetCategories: category appliance", "has a display not in its stored form",
+        )
+        assertRefused(
+            data(categories = listOf(AssetCategoryDto("app\u200Bliance", "App\u200Bliance", 1L, 1L))),
+            "assetCategories: category app\u200Bliance", "is not keyed by its display",
+        )
+    }
+
+    /**
      * A row filed under a **built-in's** key is never refused: a built-in added by a later release
      * must not make an older archive unrestorable (MAJOR by `versioning.md`). The planner and the
      * replace drop it instead. A well-formed row of the owner's own decodes beside it.

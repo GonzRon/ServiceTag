@@ -68,4 +68,26 @@ class PromoteCategoryTest {
         assertEquals("hot_tub", CategorySuggestions.templateFor("hot  tub"))
         assertEquals("hot_tub", CategorySuggestions.templateFor("HOT TUB"))
     }
+
+    /**
+     * The follow-ups' K1 (owner, 2026-09-26): a pasted zero-width space is not a new category — the
+     * text resolves to the row already saved, and nothing is added.
+     */
+    @Test
+    fun aZeroWidthSpaceAfterTheRowReusesIt() = runBlocking<Unit> {
+        promote.write(promote.resolve("Appliance", 700L))
+        val pasted = promote.resolve("App\u200Bliance", 900L)
+        assertEquals(Promotion("Appliance", null), pasted)
+        promote.write(pasted)
+        assertEquals(mapOf("appliance" to AssetCategory("appliance", "Appliance", 700L, 700L)), categories.rows.toMap())
+    }
+
+    /** A first save of a pasted text keeps its visible spelling only: the row carries no invisible character. */
+    @Test
+    fun aNewRowIsStoredWithoutItsInvisibleCharacters() = runBlocking<Unit> {
+        assertEquals(
+            Promotion("Water heater", AssetCategory("water heater", "Water heater", 500L, 500L)),
+            promote.resolve("\uFEFFWater\u200B heater\u2060", 500L),
+        )
+    }
 }
