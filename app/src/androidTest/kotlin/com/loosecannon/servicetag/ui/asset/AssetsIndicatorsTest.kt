@@ -73,9 +73,10 @@ import org.junit.runner.RunWith
  * row's own frame, 16dp padding included, so 360dp is a 360dp phone's full width — under a
  * [LocalDensity] whose font scale stands in for the Android font-size setting (the #68 technique,
  * `ActionGridTest`). Words and the disc are read from the unmerged tree, since the row merges them; a
- * badge's box is its `Surface`, the traversal group around its label; whether any text was cut is its
- * own `TextLayoutResult`. Every word and description expected here is written out, never read from the
- * code under test.
+ * badge's box is its `Surface`'s layout box, the label's second layout ancestor (a `Surface` adds no
+ * semantics node; see [pill]); whether any text was cut is read from its own `TextLayoutResult` and
+ * line extents ([assertUnclipped]). Every word and description expected here is written out, never
+ * read from the code under test.
  *
  * Emulator only (`emulator-5554`), never a phone. Nothing here touches the app's data.
  */
