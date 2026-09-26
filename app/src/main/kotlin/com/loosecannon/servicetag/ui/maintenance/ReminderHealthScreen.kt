@@ -1,9 +1,7 @@
 package com.loosecannon.servicetag.ui.maintenance
 
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,6 +41,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
+import com.loosecannon.servicetag.ui.components.appDetails
+import com.loosecannon.servicetag.ui.components.open
 import com.loosecannon.servicetag.ui.theme.LocalServiceTagSemanticColors
 
 /**
@@ -205,23 +205,3 @@ private fun severityTint(severity: ReminderHealthSeverity): Color {
 private fun notificationSettings(context: Context): Intent =
     Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
         .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-
-/**
- * The app's own details page: where an OEM's background restriction is turned off, and a screen
- * every Android build has. Deliberately **not** a battery-exemption request (#24).
- */
-private fun appDetails(context: Context): Intent =
-    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
-
-/**
- * A settings screen an OEM has removed is a dead button, not a crash: the finding stays on screen
- * and still explains what is wrong, which is more than a stack trace would.
- */
-private fun Context.open(intent: Intent) {
-    try {
-        startActivity(intent)
-    } catch (_: ActivityNotFoundException) {
-        // Nothing to do and nothing to say: §17 ratifies no message for "this phone has no such
-        // screen", and the finding the owner is looking at already explains the problem.
-    }
-}

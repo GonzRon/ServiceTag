@@ -67,6 +67,16 @@ That means:
 
 ServiceTag is also distinct from [NoteTag](https://github.com/GonzRon/NoteTag). ServiceTag tags identify physical Assets. NoteTag handles the separate tag-to-note/link use case.
 
+### Permissions
+
+- **Notifications** (`POST_NOTIFICATIONS`) — asked at the point of need since 1.2, never at launch.
+- **NFC** and **RECEIVE_BOOT_COMPLETED** — declared, with no runtime request: NFC reads and writes tags, and the boot broadcast re-arms the daily reminder check.
+- **INTERNET** — used only by the Developer API, because Android gates creating even a loopback socket on it. On stock Android it is install-time and cannot be denied; some hardened Android builds let the user revoke it. There is no runtime request: the Developer API screen explains a denial and links to the app's settings page. ServiceTag makes no outbound connections.
+- **The attachments folder** — not a permission but a folder-picker grant, for the folder you choose and nothing else.
+- **A shared file** — not a permission but a temporary read grant that comes with the share.
+- **Merged from libraries** — `FOREGROUND_SERVICE`, `WAKE_LOCK` and `ACCESS_NETWORK_STATE` (WorkManager's backstop for reminders), and AndroidX's signature-level `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`. None is requested at runtime.
+- **ACCESS_LOCAL_NETWORK** — Android 17 adds and grants it implicitly to an app that declares INTERNET and targets API 36, as ServiceTag does; ServiceTag never requests it.
+
 ## Build
 
 ServiceTag is an Android/Compose application with a pure-Kotlin `:core` domain module and the shared `nfc-tag-core` library as a git submodule.

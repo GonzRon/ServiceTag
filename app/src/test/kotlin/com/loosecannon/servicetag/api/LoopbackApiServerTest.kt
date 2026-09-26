@@ -6,10 +6,17 @@ import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.IOException
 import java.net.InetAddress
+import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import javax.net.ServerSocketFactory
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -57,8 +64,8 @@ class LoopbackApiServerTest {
     )
 
     @Before fun startOnAFreePort() {
-        server = LoopbackApiServer(router(), port = 0)
-        assertTrue("the listener did not bind", server.start())
+        server = LoopbackApiServer(router(), networkPermissionGranted = { true }, port = 0)
+        assertEquals("the listener did not bind", StartOutcome.Bound, server.start())
     }
 
     @After fun stopAndClose() {
@@ -67,7 +74,7 @@ class LoopbackApiServerTest {
     }
 
     /** Sends [raw] verbatim and reads the whole answer back, as a workstation's client would. */
-    private fun speak(raw: String): String = Socket("127.0.0.1", server.boundPort).use { socket ->
+    private fun speak(raw: String, port: Int = server.boundPort): String = Socket("127.0.0.1", port).use { socket ->
         socket.soTimeout = 5_000
         socket.getOutputStream().apply {
             write(raw.toByteArray())
@@ -171,8 +178,8 @@ class LoopbackApiServerTest {
      * costs 200 ms rather than five seconds; the production default is [SOCKET_TIMEOUT_MILLIS].
      */
     @Test fun aHalfOpenClientDoesNotHoldTheWorker() {
-        val impatient = LoopbackApiServer(router(), port = 0, readTimeoutMillis = 200)
-        assertTrue(impatient.start())
+        val impatient = LoopbackApiServer(router(), networkPermissionGranted = { true }, port = 0, readTimeoutMillis = 200)
+        assertEquals(StartOutcome.Bound, impatient.start())
         // N13: declared here, not inside the `try`, so the `finally` below can always close it —
         // previously a failed assertion inside the `try` would leak this socket for the rest of the
         // JVM's life.
@@ -214,8 +221,8 @@ class LoopbackApiServerTest {
      * than the roughly one `readTimeoutMillis` window the deadline should cut it off within.
      */
     @Test fun aTricklingClientCannotHoldTheDrainOpenIndefinitely() {
-        val impatient = LoopbackApiServer(router(), port = 0, readTimeoutMillis = 200)
-        assertTrue(impatient.start())
+        val impatient = LoopbackApiServer(router(), networkPermissionGranted = { true }, port = 0, readTimeoutMillis = 200)
+        assertEquals(StartOutcome.Bound, impatient.start())
         var trickler: Socket? = null
         try {
             val big = MAX_BODY_BYTES + 1
@@ -308,8 +315,8 @@ class LoopbackApiServerTest {
             ),
             TOKEN,
         )
-        val blockingServer = LoopbackApiServer(blockingRouter, port = 0)
-        assertTrue(blockingServer.start())
+        val blockingServer = LoopbackApiServer(blockingRouter, networkPermissionGranted = { true }, port = 0)
+        assertEquals(StartOutcome.Bound, blockingServer.start())
         var client: Socket? = null
         try {
             client = Socket("127.0.0.1", blockingServer.boundPort)
@@ -329,6 +336,247 @@ class LoopbackApiServerTest {
         } finally {
             client?.close()
             blockingServer.stop()
+        }
+    }
+
+    // ---- #66: the typed start outcome ------------------------------------------------------------
+
+    /** The bind seam: hands out whatever [make] builds, counting the binds it was asked for. */
+    private class ScriptedFactory(
+        private val make: (port: Int, backlog: Int, address: InetAddress?) -> ServerSocket,
+    ) : ServerSocketFactory() {
+        val binds = AtomicInteger()
+        override fun createServerSocket(port: Int): ServerSocket = createServerSocket(port, 50, null)
+        override fun createServerSocket(port: Int, backlog: Int): ServerSocket = createServerSocket(port, backlog, null)
+        override fun createServerSocket(port: Int, backlog: Int, ifAddress: InetAddress?): ServerSocket {
+            binds.incrementAndGet()
+            return make(port, backlog, ifAddress)
+        }
+    }
+
+    /**
+     * A real, bound socket that records the worker parked in its `accept()`. With [failWhenReleased]
+     * it fails that `accept()` — on a socket nobody closed — once the latch opens, the way `EMFILE`
+     * or `ECONNABORTED` would; without it, it accepts normally.
+     */
+    private class WatchedServerSocket(
+        port: Int,
+        backlog: Int,
+        address: InetAddress?,
+        private val failWhenReleased: CountDownLatch? = null,
+    ) : ServerSocket(port, backlog, address) {
+        @Volatile var worker: Thread? = null
+        val entered = CountDownLatch(1)
+        override fun accept(): Socket {
+            worker = Thread.currentThread()
+            entered.countDown()
+            val release = failWhenReleased ?: return super.accept()
+            release.await()
+            throw IOException("accept failed on an open socket")
+        }
+    }
+
+    /** A bounded wait on the flow — never a lone sleep — then the value, so a miss names what it saw. */
+    private fun LoopbackApiServer.awaitState(expected: ListenerState) {
+        runBlocking { withTimeoutOrNull(5_000) { state.first { it == expected } } }
+        assertEquals(expected, state.value)
+    }
+
+    private fun Thread.joinWithin(millis: Long) {
+        join(millis)
+        assertFalse("the worker never finished", isAlive)
+    }
+
+    /**
+     * Every combination of the three inputs, and the outcome each one must give. The shape to
+     * notice: no row where the permission reads as granted gives the denial, so on stock Android —
+     * where INTERNET is install-time — the denial sentence can never be drawn.
+     */
+    @Test fun theBindFailureTableIsConservative() {
+        val table = listOf(
+            // errno, is a BindException, permission granted -> outcome
+            Triple(BindErrno.ADDRESS_IN_USE, false, false) to StartOutcome.PortInUse,
+            Triple(BindErrno.ADDRESS_IN_USE, false, true) to StartOutcome.PortInUse,
+            Triple(BindErrno.ADDRESS_IN_USE, true, false) to StartOutcome.PortInUse,
+            Triple(BindErrno.ADDRESS_IN_USE, true, true) to StartOutcome.PortInUse,
+            Triple(BindErrno.ACCESS_DENIED, false, false) to StartOutcome.NetworkPermissionDenied,
+            Triple(BindErrno.ACCESS_DENIED, false, true) to StartOutcome.Other,
+            Triple(BindErrno.ACCESS_DENIED, true, false) to StartOutcome.NetworkPermissionDenied,
+            Triple(BindErrno.ACCESS_DENIED, true, true) to StartOutcome.Other,
+            Triple(BindErrno.OTHER, false, false) to StartOutcome.Other,
+            Triple(BindErrno.OTHER, false, true) to StartOutcome.Other,
+            Triple(BindErrno.OTHER, true, false) to StartOutcome.Other,
+            Triple(BindErrno.OTHER, true, true) to StartOutcome.Other,
+            Triple(BindErrno.UNKNOWN, false, false) to StartOutcome.NetworkPermissionDenied,
+            Triple(BindErrno.UNKNOWN, false, true) to StartOutcome.Other,
+            Triple(BindErrno.UNKNOWN, true, false) to StartOutcome.NetworkPermissionDenied,
+            Triple(BindErrno.UNKNOWN, true, true) to StartOutcome.PortInUse,
+        )
+        assertEquals("every combination, each once", BindErrno.entries.size * 2 * 2, table.map { it.first }.toSet().size)
+        assertEquals(table.size, table.map { it.first }.toSet().size)
+        table.forEach { (input, outcome) ->
+            val (errno, isBind, granted) = input
+            assertEquals("$errno, bind=$isBind, granted=$granted", outcome, classifyBindFailure(errno, isBind, granted))
+        }
+    }
+
+    /** A real squatter on the JVM: a `BindException` with no errno in its chain, rule 3. */
+    @Test fun aTakenPortIsPortInUse() {
+        ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { squatter ->
+            val late = LoopbackApiServer(router(), networkPermissionGranted = { true }, port = squatter.localPort)
+            assertEquals(StartOutcome.PortInUse, late.start())
+            assertEquals(ListenerState.CouldNotStart(StartOutcome.PortInUse), late.state.value)
+            assertEquals(0, late.boundPort)
+            late.stop()
+            assertEquals(ListenerState.Stopped, late.state.value)
+        }
+    }
+
+    /**
+     * The failure the owner's hardened build produces, injected through the seam: a
+     * `SocketException` with no errno the JVM can show. Only a permission that reads as denied turns
+     * it into the denial; the same exception with the permission granted is merely "other".
+     */
+    @Test fun aDeniedBindIsDeniedOnlyWhenThePermissionSaysSo() {
+        val refusing = ScriptedFactory { _, _, _ -> throw SocketException("socket failed: EACCES (Permission denied)") }
+
+        val denied = LoopbackApiServer(router(), { false }, port = 0, serverSocketFactory = refusing)
+        assertEquals(StartOutcome.NetworkPermissionDenied, denied.start())
+        assertEquals(ListenerState.CouldNotStart(StartOutcome.NetworkPermissionDenied), denied.state.value)
+        assertEquals(0, denied.boundPort)
+
+        val granted = LoopbackApiServer(router(), { true }, port = 0, serverSocketFactory = refusing)
+        assertEquals(StartOutcome.Other, granted.start())
+        assertEquals(ListenerState.CouldNotStart(StartOutcome.Other), granted.state.value)
+    }
+
+    /** A build that refuses the socket with a `SecurityException` gets a notice, not a crash. */
+    @Test fun aSecurityExceptionFromTheBindIsClassified() {
+        val forbidding = ScriptedFactory { _, _, _ -> throw SecurityException("no network for this app") }
+
+        val denied = LoopbackApiServer(router(), { false }, port = 0, serverSocketFactory = forbidding)
+        assertEquals(StartOutcome.NetworkPermissionDenied, denied.start())
+        assertEquals(ListenerState.CouldNotStart(StartOutcome.NetworkPermissionDenied), denied.state.value)
+
+        val granted = LoopbackApiServer(router(), { true }, port = 0, serverSocketFactory = forbidding)
+        assertEquals(StartOutcome.Other, granted.start())
+        assertEquals(ListenerState.CouldNotStart(StartOutcome.Other), granted.state.value)
+    }
+
+    @Test fun startWhileListeningBindsNothingNew() {
+        val factory = ScriptedFactory { port, backlog, address -> ServerSocket(port, backlog, address) }
+        val twice = LoopbackApiServer(router(), { true }, port = 0, serverSocketFactory = factory)
+        try {
+            assertEquals(StartOutcome.Bound, twice.start())
+            val port = twice.boundPort
+            assertEquals(StartOutcome.Bound, twice.start())
+            assertEquals("binds", 1, factory.binds.get())
+            assertEquals(port, twice.boundPort)
+            assertEquals(ListenerState.Listening, twice.state.value)
+        } finally {
+            twice.stop()
+        }
+    }
+
+    // ---- #51: a listener that dies ---------------------------------------------------------------
+
+    /**
+     * `accept()` fails on a socket `stop()` never closed. Before #51 the worker returned and left the
+     * socket bound: `boundPort` still read a port, the kernel kept completing handshakes nobody read,
+     * and the screen kept showing a healthy listener. Now it is closed, forgotten and reported.
+     */
+    @Test fun anAcceptFailureOnAnOpenSocketIsTerminal() {
+        val release = CountDownLatch(1)
+        val sockets = mutableListOf<WatchedServerSocket>()
+        val factory = ScriptedFactory { port, backlog, address ->
+            WatchedServerSocket(port, backlog, address, failWhenReleased = release).also { sockets += it }
+        }
+        val dying = LoopbackApiServer(router(), { true }, port = 0, serverSocketFactory = factory)
+        try {
+            assertEquals(StartOutcome.Bound, dying.start())
+            assertEquals(ListenerState.Listening, dying.state.value)
+            val port = dying.boundPort
+            val watched = sockets.single()
+            assertTrue("the worker never reached accept()", watched.entered.await(5, TimeUnit.SECONDS))
+
+            release.countDown()
+
+            dying.awaitState(ListenerState.Died)
+            assertEquals(0, dying.boundPort)
+            assertTrue("the dead listener's socket was left open", watched.isClosed)
+            try {
+                Socket("127.0.0.1", port).use { it.getInputStream().read() }
+                fail("the dead listener's port still accepts connections")
+            } catch (e: IOException) {
+                // Refused: nothing is left on the port.
+            }
+        } finally {
+            release.countDown()
+            dying.stop()
+        }
+    }
+
+    /** `stop()` closing the socket is the intended exit, and says "stopped", never "died". */
+    @Test fun anAcceptFailureAfterStopIsSilent() {
+        val sockets = mutableListOf<WatchedServerSocket>()
+        val factory = ScriptedFactory { port, backlog, address ->
+            WatchedServerSocket(port, backlog, address).also { sockets += it }
+        }
+        val stopping = LoopbackApiServer(router(), { true }, port = 0, serverSocketFactory = factory)
+        try {
+            assertEquals(StartOutcome.Bound, stopping.start())
+            val watched = sockets.single()
+            assertTrue("the worker never reached accept()", watched.entered.await(5, TimeUnit.SECONDS))
+
+            stopping.stop() // closes the socket: the parked accept() throws, and the worker runs its catch
+
+            watched.worker!!.joinWithin(5_000)
+            assertEquals(ListenerState.Stopped, stopping.state.value)
+            assertEquals(0, stopping.boundPort)
+        } finally {
+            stopping.stop() // N13: never leave a bound listener behind a failed assertion; a second stop is harmless
+        }
+    }
+
+    /**
+     * Review S1's compare-and-clear, applied to the socket. Generation 1's worker is still parked in
+     * `accept()` when `stop()` and a quick `start()` bring up generation 2; its `accept()` failing
+     * *then* must not close, null or re-label generation 2.
+     */
+    @Test fun aStaleWorkerCannotTouchTheNextGeneration() {
+        val release = CountDownLatch(1)
+        val sockets = mutableListOf<WatchedServerSocket>()
+        val factory = ScriptedFactory { port, backlog, address ->
+            // Generation 1 fails its accept() when released; generation 2 is an ordinary listener.
+            val gate = if (sockets.isEmpty()) release else null
+            WatchedServerSocket(port, backlog, address, failWhenReleased = gate).also { sockets += it }
+        }
+        val restarted = LoopbackApiServer(router(), { true }, port = 0, serverSocketFactory = factory)
+        try {
+            assertEquals(StartOutcome.Bound, restarted.start())
+            val first = sockets[0]
+            assertTrue("generation 1 never reached accept()", first.entered.await(5, TimeUnit.SECONDS))
+
+            restarted.stop()
+            assertEquals(StartOutcome.Bound, restarted.start())
+            val second = sockets[1]
+            val secondPort = restarted.boundPort
+            assertNotEquals(0, secondPort)
+
+            release.countDown() // generation 1's accept() fails now, with generation 2 listening
+            first.worker!!.joinWithin(5_000)
+
+            assertEquals(ListenerState.Listening, restarted.state.value)
+            assertEquals(secondPort, restarted.boundPort)
+            assertFalse("generation 2's socket was closed by a stale worker", second.isClosed)
+            val answer = speak(
+                "GET /v1/status HTTP/1.1\r\nAuthorization: Bearer $TOKEN\r\n\r\n",
+                port = secondPort,
+            )
+            assertTrue(answer, answer.startsWith("HTTP/1.1 200 OK\r\n"))
+        } finally {
+            release.countDown()
+            restarted.stop()
         }
     }
 }
