@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.health
 
+import android.util.Log
 import com.loosecannon.servicetag.core.condition.ConditionHistory
 import com.loosecannon.servicetag.core.health.AssetHealthEngine
 import com.loosecannon.servicetag.core.health.AssetHealthResult
@@ -30,6 +31,7 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.schedule.ScheduleRecompute
@@ -37,6 +39,13 @@ import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.onStart
 
 /**
  * An asset's **current** condition as every health surface shows it (spec §5.1, §10.1): the word,
@@ -130,11 +139,15 @@ data class AssetHealthView(
  * [NotTrackedReason.UNSCORABLE] with **no driver line** (S98 alone). Commands
  * and the format-8 content pass keep such rows out, so this is the belt that keeps one bad merged
  * row from taking a whole screen down.
+ *
+ * [states] is read by nothing but [observeRowHealth], as one of its change signals: every state a
+ * computation reads still comes through [RecomputeSchedules.readState].
  */
 class AssetHealthReadModel(
     private val assets: AssetRepository,
     private val subjects: HealthSubjectRepository,
     private val schedules: ScheduleRepository,
+    private val states: ScheduleStateRepository,
     private val events: EventRepository,
     private val profiles: ProfileRepository,
     private val activations: SeasonActivationRepository,
@@ -163,9 +176,80 @@ class AssetHealthReadModel(
             condition = conditionOf(assetId),
             aggregation = asset?.healthAggregation ?: HealthAggregation.WORST,
             result = asset?.let { resultFor(it, t) } ?: NO_HEALTH,
-            components = asset?.let { componentsOf(it, all) }.orEmpty(),
+            components = asset?.let { a ->
+                // The histories are read only when there is a component to look up, as before.
+                if (AssetTree.descendants(all, a.id).isEmpty()) emptyList() else componentsOf(a, all, conditionHistories())
+            }.orEmpty(),
             inService = asset?.inService == true,
         )
+    }
+
+    /**
+     * #71 (plan E3): the Assets list's health, live — one [AssetHealthView] per asset **in service**
+     * (its own lifecycle: active and not retired, E1), keyed by id, each equal to [forAsset] for that
+     * asset on the same day. Nothing here gates on tracking: a row's own gate (in service and a
+     * non-null aggregate, E2) is the view model's.
+     *
+     * The signals are the asset, subject, schedule, schedule-state and condition tables and
+     * [refreshes]; events, activations, profiles and the passing of midnight are not observed, so the
+     * list catches up on the next [refreshes] emission — the attention list's accepted staleness.
+     * The first emission is an empty map, so the list never waits for a pass, and a newer signal
+     * cancels a pass still running. One pass reads the asset table once and the condition histories
+     * once, then builds each view from [resultFor], [conditionViewOf] and the component picker, as
+     * [forAsset] does.
+     *
+     * One asset that fails is absent from the map and logged — never the whole list (the belt the
+     * class KDoc describes). A pass whose own table reads fail emits an empty map, logged, and the
+     * next signal tries again: the list never dies with its health. Cancellation is not a failure
+     * and is rethrown. Nothing is written.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeRowHealth(refreshes: Flow<*>): Flow<Map<AssetId, AssetHealthView>> =
+        combine(
+            listOf<Flow<Any?>>(
+                assets.observeAll(),
+                subjects.observeAll(),
+                schedules.observeAll(),
+                states.observeAll(),
+                conditions.observeAll(),
+                refreshes,
+            ),
+        ) { }
+            .mapLatest {
+                runCatching { rowHealth() }.getOrElse { failure ->
+                    if (failure is CancellationException) throw failure
+                    Log.w(TAG, "the Assets list's health could not be read; no row shows any until the next signal", failure)
+                    emptyMap()
+                }
+            }
+            .conflate()
+            .onStart { emit(emptyMap()) }
+
+    /** One pass of [observeRowHealth]: every asset in service, each alone (the failure belt). */
+    private suspend fun rowHealth(): Map<AssetId, AssetHealthView> {
+        val t = today.localDate()
+        val all = assets.all()
+        val histories = conditionHistories()
+        return buildMap {
+            for (asset in all.filter { it.inService }) {
+                runCatching {
+                    AssetHealthView(
+                        assetId = asset.id,
+                        computedForOn = t,
+                        condition = histories[asset.id]?.let { conditionViewOf(it) },
+                        aggregation = asset.healthAggregation,
+                        result = resultFor(asset, t),
+                        components = componentsOf(asset, all, histories),
+                        inService = asset.inService,
+                    )
+                }
+                    .onSuccess { put(asset.id, it) }
+                    .onFailure { failure ->
+                        if (failure is CancellationException) throw failure
+                        Log.w(TAG, "one asset's health could not be read; its row shows none", failure)
+                    }
+            }
+        }
     }
 
     /**
@@ -265,10 +349,13 @@ class AssetHealthReadModel(
         )
     }
 
-    private suspend fun componentsOf(asset: Asset, all: List<Asset>): List<ComponentCondition> {
+    private fun componentsOf(
+        asset: Asset,
+        all: List<Asset>,
+        histories: Map<AssetId, ConditionHistory>,
+    ): List<ComponentCondition> {
         val under = AssetTree.descendants(all, asset.id)
         if (under.isEmpty()) return emptyList()
-        val histories = conditionHistories()
         return all.filter { it.id in under && it.inService }
             .mapNotNull { component ->
                 histories[component.id]?.current
@@ -291,6 +378,8 @@ class AssetHealthReadModel(
     )
 
     private companion object {
+        const val TAG = "AssetHealthReadModel"
+
         val NO_HEALTH = AssetHealthResult(subjects = emptyList(), aggregate = null, fallback = false, critical = emptyList())
 
         /**

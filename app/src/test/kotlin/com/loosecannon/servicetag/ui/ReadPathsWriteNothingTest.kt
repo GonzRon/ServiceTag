@@ -21,6 +21,10 @@ import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.model.PayloadFormat
+import com.loosecannon.servicetag.core.model.TagBinding
+import com.loosecannon.servicetag.core.model.TagId
+import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
@@ -34,6 +38,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.testing.FakeGraph
@@ -45,6 +50,7 @@ import com.loosecannon.servicetag.testing.replacementOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.testing.subjectRow
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
+import com.loosecannon.servicetag.ui.health.AssetHealthView
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.ScanRoundMembership
@@ -52,7 +58,15 @@ import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
 import com.loosecannon.servicetag.ui.maintenance.scanSheetContentFor
 import java.time.LocalDate
 import java.time.ZoneOffset
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -113,7 +127,7 @@ class ReadPathsWriteNothingTest {
             zone = { ZoneOffset.UTC },
         )
         val health = AssetHealthReadModel(
-            assets, subjects, schedules, events, profiles, activations, conditions, recompute, graph.todayPort,
+            assets, subjects, schedules, states, events, profiles, activations, conditions, recompute, graph.todayPort,
             zone = { ZoneOffset.UTC },
         )
         val attention = AttentionReadModel(assets, health, graph.todayPort)
@@ -138,6 +152,53 @@ class ReadPathsWriteNothingTest {
         assertEquals(3, listed.size)
         assertTrue(rows.isNotEmpty())
         assertTrue(opens)
+    }
+
+    /**
+     * #71 (plan C2, E3): the Assets list's two new flows — the row health and every tag row — read
+     * over the same stale world, through a refresh, and write nothing: the stale state row is read
+     * through `readState`, never rebuilt.
+     */
+    @Test fun observeRowHealthWritesNothing() = runTest {
+        seedAStaleWorld()
+        graph.tags.upsert(
+            TagBinding(
+                id = TagId("t1"), payloadFormat = PayloadFormat.V1, payloadKey = "key-t1",
+                target = TagTarget.AssetTarget(AssetId("mow")), writtenAt = 1L, createdAt = 1L, updatedAt = 1L,
+            ),
+        )
+        val statesBefore = graph.scheduleStates.all()
+        val recompute = RecomputeSchedules(
+            schedules, states, events, closures, groups, assets, activations, graph.todayPort, graph.clock,
+            zone = { ZoneOffset.UTC },
+        )
+        val health = AssetHealthReadModel(
+            assets, subjects, schedules, states, events, profiles, activations, conditions, recompute, graph.todayPort,
+            zone = { ZoneOffset.UTC },
+        )
+        val refreshes = MutableStateFlow(0)
+        val passes = MutableStateFlow(emptyList<Map<AssetId, AssetHealthView>>())
+        val tagRows = MutableStateFlow<List<TagBinding>?>(null)
+        backgroundScope.launch { health.observeRowHealth(refreshes).collect { map -> passes.update { it + listOf(map) } } }
+        backgroundScope.launch { tags.observeAll().collect { tagRows.value = it } }
+
+        passes.await("the first pass") { seen -> seen.lastOrNull()?.containsKey(AssetId("mow")) == true }
+        tagRows.await("the tag row") { it?.size == 1 }
+        val before = passes.value.size
+        refreshes.update { it + 1 }
+        passes.await("a refreshed pass") { it.size > before }
+
+        assertEquals("zero writes anywhere", emptyList<String>(), writes)
+        assertEquals("the stale row is untouched", statesBefore, graph.scheduleStates.all())
+        // The pass did real work over the stale world: the mower's health, and its DOWN component.
+        val mow = passes.value.last().getValue(AssetId("mow"))
+        assertTrue(mow.result.aggregate != null)
+        assertEquals(listOf(AssetId("pack")), mow.components.map { it.assetId })
+    }
+
+    private suspend fun <T> StateFlow<T>.await(what: String, until: (T) -> Boolean) {
+        withContext(Dispatchers.Default) { withTimeoutOrNull(5_000L) { first(until) } }
+            ?: throw AssertionError("$what: never emitted; the last emission was $value")
     }
 
     /**
@@ -224,6 +285,11 @@ class ReadPathsWriteNothingTest {
     }
     private val subjects = object : HealthSubjectRepository by graph.healthSubjects {
         override suspend fun upsert(subject: HealthSubject) = write("subject.upsert").also { graph.healthSubjects.upsert(subject) }
+    }
+    private val tags = object : TagRepository by graph.tags {
+        override suspend fun upsert(tag: TagBinding) = write("tag.upsert").also { graph.tags.upsert(tag) }
+        override suspend fun delete(id: TagId) = write("tag.delete").also { graph.tags.delete(id) }
+        override suspend fun deleteAll() = write("tag.deleteAll").also { graph.tags.deleteAll() }
     }
     private val delivery = object : ScheduleLocalDeliveryRepository by graph.scheduleLocalDelivery {
         override suspend fun upsert(row: ScheduleLocalDelivery) = write("delivery.upsert").also { graph.scheduleLocalDelivery.upsert(row) }

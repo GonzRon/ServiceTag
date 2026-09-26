@@ -597,7 +597,7 @@ class AppGraph(private val context: Context) {
      * snooze (inv. 131). The zone is the recompute's, so the pin floor it reads is the same day.
      */
     val assetHealthReadModel: AssetHealthReadModel = AssetHealthReadModel(
-        assets, healthSubjects, schedules, events, profiles, seasonActivations, conditions,
+        assets, healthSubjects, schedules, scheduleStates, events, profiles, seasonActivations, conditions,
         recomputeSchedules, today, zone = { ZoneId.systemDefault() },
     )
 
