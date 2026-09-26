@@ -1710,6 +1710,8 @@ class AssetViewModelsTest {
                 "tied-only", SeasonMode.YEAR_ROUND, SeasonMode.MANUAL,
                 weekly("t1", "tied-only", ServicePolicy.IN_SERVICE_AT_START),
                 weekly("t2", "tied-only", ServicePolicy.IN_SERVICE_RESUME_CLAMPED),
+                // PRE_SERVICE on a YEAR_ROUND asset with no break has no boundary: the merge-only state
+                // the engine evaluates as CONTINUOUS. R-1 counts by policy name, so it is not counted.
                 weekly("t3", "tied-only", ServicePolicy.PRE_SERVICE),
             ),
             "archived-only" to trigger(
