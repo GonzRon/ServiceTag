@@ -79,6 +79,8 @@ class RoomTagRepository(private val dao: NfcTagDao) : TagRepository {
 
     override fun observeForAsset(assetId: AssetId): Flow<List<TagBinding>> =
         dao.observeForAsset(assetId.value).map { list -> list.map { it.toDomain() } }
+
+    override fun observeAll(): Flow<List<TagBinding>> = dao.observeAll().map { list -> list.map { it.toDomain() } }
 }
 
 /**

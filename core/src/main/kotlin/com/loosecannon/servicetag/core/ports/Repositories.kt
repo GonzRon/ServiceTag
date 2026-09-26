@@ -57,6 +57,9 @@ interface TagRepository {
     suspend fun delete(id: TagId)
     suspend fun deleteAll()
     fun observeForAsset(assetId: AssetId): Flow<List<TagBinding>>
+
+    /** #71: every tag row, live, oldest first — the Assets list folds it once into its tagged set. */
+    fun observeAll(): Flow<List<TagBinding>>
 }
 
 /**
@@ -310,6 +313,9 @@ interface ConditionRepository {
     suspend fun forAsset(assetId: AssetId): List<AssetCondition>
     suspend fun all(): List<AssetCondition>
     fun observeForAsset(assetId: AssetId): Flow<List<AssetCondition>>
+
+    /** #71: every condition row, live, in the list order above — a trigger of the Assets list's health. */
+    fun observeAll(): Flow<List<AssetCondition>>
 }
 
 /**
@@ -323,6 +329,9 @@ interface HealthSubjectRepository {
     suspend fun forSchedule(id: ScheduleId): List<HealthSubject>
     suspend fun all(): List<HealthSubject>
     fun observeForAsset(assetId: AssetId): Flow<List<HealthSubject>>
+
+    /** #71: every subject, live, by `(sortOrder, id)` — a trigger of the Assets list's health. */
+    fun observeAll(): Flow<List<HealthSubject>>
 }
 
 /**

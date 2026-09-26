@@ -173,6 +173,8 @@ class InMemoryTagRepository : TagRepository, Rollbackable, Witnessed {
     override fun observeForAsset(assetId: AssetId): Flow<List<TagBinding>> = version.map {
         rows.values.filter { (it.target as? TagTarget.AssetTarget)?.assetId == assetId }
     }
+
+    override fun observeAll(): Flow<List<TagBinding>> = version.map { rows.values.toList() }
 }
 
 class InMemoryLinkRepository : LinkRepository, Rollbackable, Witnessed {
@@ -744,6 +746,8 @@ class InMemoryConditionRepository : ConditionRepository, Rollbackable, Witnessed
     override fun observeForAsset(assetId: AssetId): Flow<List<AssetCondition>> =
         version.map { rows.values.filter { it.assetId == assetId }.sortedWith(ORDER) }
 
+    override fun observeAll(): Flow<List<AssetCondition>> = version.map { rows.values.sortedWith(ORDER) }
+
     private companion object {
         val ORDER = compareBy<AssetCondition>({ it.occurredOn }, { it.occurredTime }, { it.createdAt }, { it.id })
     }
@@ -780,6 +784,8 @@ class InMemoryHealthSubjectRepository : HealthSubjectRepository, Rollbackable, W
 
     override fun observeForAsset(assetId: AssetId): Flow<List<HealthSubject>> =
         version.map { rows.values.filter { it.assetId == assetId }.sortedWith(ORDER) }
+
+    override fun observeAll(): Flow<List<HealthSubject>> = version.map { rows.values.sortedWith(ORDER) }
 
     private companion object {
         val ORDER = compareBy<HealthSubject>({ it.sortOrder }, { it.id.value })

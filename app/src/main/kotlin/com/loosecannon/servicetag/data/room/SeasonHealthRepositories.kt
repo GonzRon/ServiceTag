@@ -41,6 +41,8 @@ class RoomConditionRepository(private val dao: AssetConditionDao) : ConditionRep
 
     override fun observeForAsset(assetId: AssetId): Flow<List<AssetCondition>> =
         dao.observeForAsset(assetId.value).map { rows -> rows.map { it.toDomain() } }
+
+    override fun observeAll(): Flow<List<AssetCondition>> = dao.observeAll().map { rows -> rows.map { it.toDomain() } }
 }
 
 class RoomHealthSubjectRepository(private val dao: HealthSubjectDao) : HealthSubjectRepository {
@@ -58,4 +60,6 @@ class RoomHealthSubjectRepository(private val dao: HealthSubjectDao) : HealthSub
 
     override fun observeForAsset(assetId: AssetId): Flow<List<HealthSubject>> =
         dao.observeForAsset(assetId.value).map { rows -> rows.map { it.toDomain() } }
+
+    override fun observeAll(): Flow<List<HealthSubject>> = dao.observeAll().map { rows -> rows.map { it.toDomain() } }
 }
