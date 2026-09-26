@@ -109,9 +109,11 @@ class AssetsFiltersTest {
 
         val chips = CHIPS.map(::bounds)
         val row = rule.onNodeWithTag(ROW).getUnclippedBoundsInRoot()
-        val tops = chips.map { it.top.value }.sorted()
-        val lines = 1 + tops.zipWithNext().count { (a, b) -> b - a > HALF }
-        assertTrue("the row wraps onto at least two lines, tops were $tops", lines >= 2)
+        // A second line, not merely a taller chip: some chip starts at or below another's bottom.
+        assertTrue(
+            "the row wraps onto a second line, chips were $chips",
+            chips.any { below -> chips.any { above -> below.top.value >= above.bottom.value - HALF } },
+        )
         chips.forEachIndexed { i, b -> assertInside(CHIPS[i], b, row) }
         CHIPS.forEach { assertOneWholeLine(it) }
     }
