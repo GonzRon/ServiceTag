@@ -1,11 +1,12 @@
-# #68 — the asset quick-action grid keeps every word of its labels: plan and brief (rev 2, reviewed 2026-09-26)
+# #68 — the asset quick-action grid keeps every word of its labels: plan and brief (rev 2, reviewed and RATIFIED 2026-09-26)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development under the
 > review budget in `docs/superpowers/planning-policy.md`. One brief (§8), one implementer, one task
 > review, one batched fix round, at most one scoped re-review. Planned from issue #68's body under the
 > owner's GO of 2026-09-26; rev 2 folds in the independent brief review (two blockers: Compose's
 > non-linear font scaling and Material's 48dp minimum interactive box) and one controller finding
-> (the one-pixel width split of an intrinsic row). Nothing is dispatched until the owner has read §6.
+> (the one-pixel width split of an intrinsic row). Owner ruling 2026-09-26: R68-2 K = 6 ems and R68-6 the
+> 44dp/54dp rhythm RATIFIED; R68-1, R68-3, R68-4, R68-5 stand as written; no strings to ratify; GO.
 
 **Goal:** every quick action on the asset detail screen renders its whole label — a data-driven
 profile name such as `Log Descale and flush`, the utility label `Readings & actions`, or a much
@@ -198,7 +199,9 @@ No new user-visible string; every existing label verbatim. Nothing to ratify.
   two-column three-word label would already need three lines. Alternative **K = 5.8** keeps a 412dp
   phone on two columns at 1.3 (by 3.9dp). Either is one named constant with the arithmetic in its
   KDoc; the tests' hard-coded expectations do not change between the two (their cases avoid the
-  margins). **Owner: confirm 6 or say 5.8.**
+  margins). **RATIFIED 2026-09-26: K = 6** — the owner: at 412dp and scale 1.3, K = 5.8 keeps two
+  columns by only 3.9dp; prefer the full-width fallback there, since #68's objective is legibility
+  under larger text, not two-column persistence.
 - **R68-3, no maximum.** A very long profile name makes a tall button, never a truncated one.
 - **R68-4, the 44dp.** G1's "44dp" is read as the height of a one-line action and becomes the floor;
   the G1 report is a historical gate record and is not edited.
@@ -209,7 +212,8 @@ No new user-visible string; every existing label verbatim. Nothing to ratify.
   buttons' layout boxes stay their visible 44dp and the 10dp rhythm of G1 is kept exactly as today;
   touch targets stay 48dp through Compose's touch expansion (C6, asserted). Alternative: accept
   48dp boxes — then the pitch becomes 58dp and C4, G1's rhythm and the short-label case change to
-  say so. **Owner: confirm the 44dp/54dp rhythm.**
+  say so. **RATIFIED 2026-09-26: the existing 44dp visible button / 54dp row pitch**, with the 48dp
+  effective touch target through Compose's touch-target expansion, as specified and tested.
 
 ## 7. What this plan does not do
 
