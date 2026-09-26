@@ -218,6 +218,8 @@ class AssetViewModelsTest {
         vm.onName("Compressor")
         vm.onCategory("Appliance")
         vm.onCategory("Large appliance")
+        // Anything the typing started has run to the end before the catalog is read.
+        advanceUntilIdle()
         assertTrue(graph.categories.all().isEmpty())
         assertTrue(graph.assets.all().isEmpty())
 
@@ -225,6 +227,7 @@ class AssetViewModelsTest {
         val edit = editModel(stored.id)
         edit.state.first { it.name == "Blower" }
         edit.onCategory("Appliance")
+        advanceUntilIdle()
         assertTrue(graph.categories.all().isEmpty())
         assertEquals("Pump", graph.assets.get(stored.id)!!.category)
     }
