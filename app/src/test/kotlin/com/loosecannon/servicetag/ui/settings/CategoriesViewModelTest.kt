@@ -96,10 +96,10 @@ class CategoriesViewModelTest {
         assertEquals(CategorySuggestions.all.map { it.label }, state.builtIns)
 
         // The list follows the store: a category saved elsewhere is here without reopening the screen.
-        graph.createAsset.run(AssetCommand(name = "Unit C", category = "Bench"))
+        graph.createAsset.run(AssetCommand(name = "Unit C", category = "Tooling"))
         advanceUntilIdle()
         assertEquals(
-            listOf("Appliance", "Bench", "Machine", "Spare"),
+            listOf("Appliance", "Machine", "Spare", "Tooling"),
             screen.model.state.value!!.own.map(OwnCategory::display),
         )
     }
