@@ -2,11 +2,15 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.toDomain
+import com.loosecannon.servicetag.core.journal.AssetRow
+import com.loosecannon.servicetag.core.journal.CategoryBackfill
+import com.loosecannon.servicetag.core.journal.CategoryCatalog
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
@@ -47,6 +51,16 @@ data class ImportReport(
  * takes `schedule_state` with it through the CASCADE, and [rebuildAll] fills it again from the
  * history the file brought, inside this transaction, after the last insert. Derived state is
  * rebuilt after **any** import, and a restore is the import that replaces the most.
+ *
+ * **The categories (#74, C12).** The archive's own category rows go in **first** — any filed under a
+ * built-in's key dropped, never refused (a built-in added by a later release must not make an older
+ * archive unrestorable) — and then **every** restored asset is promoted in this same transaction by
+ * [CategoryBackfill.plan], the one chooser: a built-in's key takes the label, a key the archive's
+ * rows hold takes that row's display, and any other key gets a new row spelled as its oldest asset
+ * spells it. Each asset is written in that canonical spelling **with its own `updatedAt`** — a restore
+ * is not an owner's edit. So a format-9 archive whose rows are complete adds nothing, and a format
+ * ≤8 archive, or one whose assets name a category it does not carry, gets the rows it needs: a
+ * restore always leaves every non-blank asset category in the catalog.
  */
 class ImportBackupReplace(
     private val assets: AssetRepository,
@@ -64,6 +78,8 @@ class ImportBackupReplace(
     private val seasonActivations: SeasonActivationRepository,
     private val conditions: ConditionRepository,
     private val healthSubjects: HealthSubjectRepository,
+    /** #74 — the owner's own categories: wiped, restored first, completed by the promotion. */
+    private val categories: CategoryRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -77,6 +93,20 @@ class ImportBackupReplace(
     suspend fun run(bytes: ByteArray): ImportReport {
         val backup = BackupCodec.decode(bytes) // outside the transaction: refuse before touching data
         val data = backup.data
+
+        // The categories this restore lands, decided from the file alone — pure, so outside the
+        // transaction like the decode. Built-in-keyed rows are dropped; the rest win for their keys.
+        val restoredCategories = data.assetCategories.map { it.toDomain() }
+            .filter { CategoryCatalog.builtIn(it.key) == null }
+        val restoredAssets = data.assets.map { it.toDomain() }
+        val promotion = CategoryBackfill.plan(
+            restoredAssets.map { AssetRow(it.id, it.category, it.createdAt) },
+            existing = restoredCategories,
+        )
+        // Canonical spellings only; `updatedAt` stays the file's.
+        val canonicalAssets = restoredAssets.map { asset ->
+            promotion.rewrites[asset.id]?.let { asset.copy(category = it) } ?: asset
+        }
 
         val orphaned = uow.write {
             // The bytes of everything about to be replaced, read before the wipe.
@@ -101,6 +131,9 @@ class ImportBackupReplace(
             // asset and subjects at an asset or a schedule, all ON DELETE CASCADE, and neither fact
             // table has a delete of its own because its rows are immutable.
             assets.deleteAll()
+            // Nothing points at a category and a category points at nothing, so its place in the
+            // wipe is free; it goes with the assets it classified.
+            categories.deleteAll()
 
             // insert in reference order so foreign keys are satisfied at every step. Assets go
             // in parents-first order (AssetTree.parentsFirst) regardless of the file's own list
@@ -108,7 +141,11 @@ class ImportBackupReplace(
             // shuffled file. Within measurementDefinitions, ENTERED rows go first and DERIVED
             // rows after, so a DERIVED definition's source_a_id/source_b_id foreign keys
             // (schema v3) resolve at insert time regardless of the file's own id ordering.
-            AssetTree.parentsFirst(data.assets.map { it.toDomain() }).forEach { assets.upsert(it) }
+            // The archive's categories first (#74, C12), then the assets in their canonical
+            // spellings, then the rows the promotion adds for the keys the archive did not carry.
+            restoredCategories.forEach { categories.upsert(it) }
+            AssetTree.parentsFirst(canonicalAssets).forEach { assets.upsert(it) }
+            promotion.newRows.forEach { categories.upsert(it) }
             // Straight after the assets: `asset_id` is a reference's only foreign key, so this is
             // the earliest point at which every one of them resolves.
             data.assetReferences.forEach { references.upsert(it.toDomain()) }

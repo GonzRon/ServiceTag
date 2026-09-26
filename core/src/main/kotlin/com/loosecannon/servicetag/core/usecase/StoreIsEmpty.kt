@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
@@ -15,9 +16,11 @@ import com.loosecannon.servicetag.core.ports.TagRepository
  * does not exist. So "empty" has to mean *nothing at all*, and a single row of any kind is enough
  * to make the answer false.
  *
- * **Five kinds, and exactly five.** Assets, tag bindings, journal events, attachment rows, and the
- * 2.6 tombstone link rows — the last because nothing in ServiceTag displays a link any more, and a
- * row nobody can see is still a record a restore would delete. `MeasurementDefinition` and
+ * **Six kinds, and exactly six.** Assets, tag bindings, journal events, attachment rows, the 2.6
+ * tombstone link rows — because nothing in ServiceTag displays a link any more, and a row nobody can
+ * see is still a record a restore would delete — and, since #74, the owner's own categories: a
+ * category row exists **without any asset by design** (it outlives the last asset that used it),
+ * so [assets] cannot answer for it, and a restore deletes it like any other record. `MeasurementDefinition` and
  * `EventProfile` are deliberately not read: both carry a non-null `assetId` and the schema's
  * foreign key enforces it, so neither can exist without the asset it names and [assets] already
  * answers for them.
@@ -29,12 +32,12 @@ import com.loosecannon.servicetag.core.ports.TagRepository
  * `CHECK`, so an owner-less row is representable.
  *
  * **Cheapest query each, and short-circuiting.** [AttachmentRepository.count] is a count; the other
- * four ports expose no count at all, so `all()` it is — and for [LinkRepository], narrowed to four
+ * five ports expose no count at all, so `all()` it is — and for [LinkRepository], narrowed to four
  * members in 2.6, `all()` is the only row-returning member there is. The `&&` chain means the usual
- * answer on a populated phone is one query that comes back non-empty and four that never run.
+ * answer on a populated phone is one query that comes back non-empty and five that never run.
  *
  * There is no read transaction: the question is asked once, on a store nothing else is writing to,
- * and no invariant spans the five reads. A transaction would force all five and buy nothing.
+ * and no invariant spans the six reads. A transaction would force all six and buy nothing.
  */
 class StoreIsEmpty(
     private val assets: AssetRepository,
@@ -42,11 +45,13 @@ class StoreIsEmpty(
     private val events: EventRepository,
     private val attachments: AttachmentRepository,
     private val links: LinkRepository,
+    private val categories: CategoryRepository,
 ) {
     suspend fun run(): Boolean =
         assets.all().isEmpty() &&
             tags.all().isEmpty() &&
             events.all().isEmpty() &&
             attachments.count() == 0 &&
-            links.all().isEmpty()
+            links.all().isEmpty() &&
+            categories.all().isEmpty()
 }

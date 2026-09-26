@@ -21,6 +21,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -38,6 +39,9 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -78,7 +82,7 @@ class BackupViewModelTest {
 
     private fun viewModel() = BackupViewModel(
         graph.exportBackupSet, graph.importBackupReplace, graph.restoreArtifacts,
-        StoreIsEmpty(graph.assets, graph.tags, graph.events, graph.attachments, graph.links),
+        StoreIsEmpty(graph.assets, graph.tags, graph.events, graph.attachments, graph.links, graph.categories),
         graph.attachmentStorage, graph.prefs, graph.clock,
     )
 
@@ -273,9 +277,10 @@ class BackupViewModelTest {
     }
 
     /**
-     * The same data archive as a format-4 file: the version goes back one and the four fields
-     * format 4 never had come out of the manifest. `data.json` is untouched, so the manifest's
-     * `dataSha256` still seals it.
+     * The same data archive as a format-4 file: the version goes back, the four fields format 4
+     * never had come out of the manifest, and format 9's `assetCategories` comes out of `data.json`
+     * — a format ≤8 file never carried one, and the codec refuses one that does (#74). The
+     * manifest's `dataSha256` is resealed over the edited `data.json`.
      */
     private fun asFormatFour(data: ByteArray): ByteArray {
         val entries = LinkedHashMap<String, ByteArray>()
@@ -285,6 +290,10 @@ class BackupViewModelTest {
                 entries[entry.name] = zin.readBytes()
             }
         }
+        val tree = Json.parseToJsonElement(String(entries.getValue("data.json"), Charsets.UTF_8)).jsonObject
+        val dataBytes = Json.encodeToString(JsonObject.serializer(), JsonObject(tree - "assetCategories"))
+            .toByteArray(Charsets.UTF_8)
+        val sealedWith = MessageDigest.getInstance("SHA-256").digest(dataBytes).joinToString("") { "%02x".format(it) }
         val dropped = setOf("backupSetId", "artifactFormatVersion", "artifactCount", "artifactBytes")
         val manifest = String(entries.getValue("manifest.json"), Charsets.UTF_8)
             .lines()
@@ -294,6 +303,7 @@ class BackupViewModelTest {
                 Regex(""""formatVersion"\s*:\s*${BackupCodec.FORMAT_VERSION}"""),
                 "\"formatVersion\": 4",
             )
+            .replace(Regex(""""dataSha256"\s*:\s*"[0-9a-f]{64}""""), "\"dataSha256\": \"$sealedWith\"")
             .replace(Regex(""",(\s*})"""), "$1") // the comma the dropped fields left behind
         val out = ByteArrayOutputStream()
         ZipOutputStream(out).use { zos ->
@@ -301,7 +311,7 @@ class BackupViewModelTest {
             zos.write(manifest.toByteArray(Charsets.UTF_8))
             zos.closeEntry()
             zos.putNextEntry(ZipEntry("data.json"))
-            zos.write(entries.getValue("data.json"))
+            zos.write(dataBytes)
             zos.closeEntry()
         }
         return out.toByteArray()

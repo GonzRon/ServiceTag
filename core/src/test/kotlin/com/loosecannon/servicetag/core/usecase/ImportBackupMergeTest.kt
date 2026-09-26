@@ -44,6 +44,7 @@ import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentStore
+import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
@@ -95,9 +96,10 @@ class ImportBackupMergeTest {
         val closures = InMemoryClosureRepository()
         val schedules = InMemoryScheduleRepository(closures)
         val references = InMemoryReferenceRepository()
+        val categories = InMemoryCategoryRepository()
         val uow = FakeUnitOfWork(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, references,
+            events, attachments, references, categories,
         )
 
         /** How many times the apply asked for a total recompute, and what it had written by then. */
@@ -204,7 +206,7 @@ class ImportBackupMergeTest {
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
             f.closures, f.events, f.attachments, f.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
+            f.categories, f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
             appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
     }

@@ -34,6 +34,7 @@ import com.loosecannon.servicetag.core.usecase.ImportReport
 import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
+import com.loosecannon.servicetag.data.room.RoomCategoryRepository
 import com.loosecannon.servicetag.data.room.RoomClosureRepository
 import com.loosecannon.servicetag.data.room.RoomConditionRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
@@ -86,6 +87,7 @@ class RestoreProofTest {
         val seasonActivations = RoomSeasonActivationRepository(db.seasonActivationDao())
         val conditions = RoomConditionRepository(db.assetConditionDao())
         val healthSubjects = RoomHealthSubjectRepository(db.healthSubjectDao())
+        val categories = RoomCategoryRepository(db.assetCategoryDao())
         val uow = RoomUnitOfWork(db)
         // The restore's rebuild seam, wired to the real engine over the same database: the proof
         // is about the canonical rows, and derived state is rebuilt after any import.
@@ -97,12 +99,12 @@ class RestoreProofTest {
         // bytes are what `BackupViewModelTest` and `ArtifactsCodecTest` prove.
         val export = ExportBackupSet(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, references, seasonActivations, conditions, healthSubjects, uow,
+            attachments, references, seasonActivations, conditions, healthSubjects, categories, uow,
             IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
         )
         val import = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, references, seasonActivations, conditions, healthSubjects,
+            attachments, references, seasonActivations, conditions, healthSubjects, categories,
             FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
             rebuildAll = { recompute.all() },
         )

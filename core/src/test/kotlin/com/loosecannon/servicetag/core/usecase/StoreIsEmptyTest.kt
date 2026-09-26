@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.Attachment
@@ -19,6 +20,7 @@ import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
+import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
@@ -32,10 +34,10 @@ import kotlin.test.assertTrue
  *
  * One case per kind of record, each on its own, because the question the Backup screen asks is
  * whether *anything at all* is here: a phone holding one tombstone link row and nothing else has
- * something to lose, and offering it a plain confirm would be a lie. The five kinds are the five
+ * something to lose, and offering it a plain confirm would be a lie. The six kinds are the six
  * the use case reads; definitions and profiles are not among them because neither can exist
  * without the asset it names (`Journal.kt:10`, `Journal.kt:30`), so the asset check answers for
- * both.
+ * both. #74's category row is the sixth: it exists without any asset by design.
  */
 class StoreIsEmptyTest {
 
@@ -44,7 +46,8 @@ class StoreIsEmptyTest {
     private val events = InMemoryEventRepository()
     private val attachments = InMemoryAttachmentRepository()
     private val links = InMemoryLinkRepository()
-    private val storeIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links)
+    private val categories = InMemoryCategoryRepository()
+    private val storeIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links, categories)
 
     /** An invented canonical UUID, the same one `ResolveTagTest` uses. Never a real tag's id. */
     private val tagKey = "123e4567-e89b-12d3-a456-426614174000"
@@ -118,6 +121,15 @@ class StoreIsEmptyTest {
     /** 2.6's tombstone: nothing displays it, and it is still a record this phone holds. */
     @Test fun oneTombstoneLinkRowIsEnoughToMakeItNotEmpty() = runTest {
         links.upsert(link)
+        assertFalse(storeIsEmpty.run())
+    }
+
+    /**
+     * #74: a category outlives the last asset that used it, so one row with no asset anywhere is a
+     * record this phone holds — and one a restore would delete.
+     */
+    @Test fun oneCategoryRowIsEnoughToMakeItNotEmpty() = runTest {
+        categories.upsert(AssetCategory("appliance", "Appliance", 1L, 1L))
         assertFalse(storeIsEmpty.run())
     }
 }

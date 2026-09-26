@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.activationOf
 import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.conditionOf
@@ -20,6 +21,7 @@ import com.loosecannon.servicetag.core.testing.subjectOf
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.descriptors.elementNames
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -125,6 +127,26 @@ class BackupFormat9Test {
         val refusal = assertFailsWith<BackupCorrupt> { BackupCodec.decode(archiveOf(twice)) }
 
         assertEquals("assetCategories: duplicate id appliance", refusal.message)
+    }
+
+    // --- AC 4: export, then replace ---------------------------------------------------------------
+
+    /**
+     * AC 4: the owner's categories survive a backup and a restore — through the production export
+     * and the production replace, into an install that held other rows — the unused one included.
+     */
+    @Test
+    fun anExportThenReplaceCarriesTheCategories() = runBlocking<Unit> {
+        val source = BackupInstall(setId = "set-source")
+        source.assets.upsert(compressor)
+        rows.forEach { source.categories.upsert(it) }
+        val target = BackupInstall()
+        target.categories.upsert(AssetCategory("old key", "Old key", 1L, 1L))
+
+        target.replace.run(source.export.run().data)
+
+        assertEquals(rows, target.categories.all())
+        assertEquals(listOf(compressor), target.assets.all())
     }
 
     // --- format 8's 1.4 data under format 9 --------------------------------------------------------

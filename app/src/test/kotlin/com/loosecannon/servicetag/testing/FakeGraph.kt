@@ -326,12 +326,13 @@ class FakeGraph(
     /** Both halves of a set: `run().data` for the data archive, `run().plan` for the other one. */
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, seasonActivations, conditions, healthSubjects,
+        attachments, references, seasonActivations, conditions, healthSubjects, categories,
         uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
     )
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, categories,
+        attachmentStorage, uow,
         // The real engine: "once, inside the transaction, after the last insert" is proved against
         // the seam in `:core`, so there is no counter to keep here.
         rebuildAll = { recomputeSchedules.all() },

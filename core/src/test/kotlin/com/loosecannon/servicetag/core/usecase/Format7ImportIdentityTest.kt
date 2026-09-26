@@ -20,6 +20,7 @@ import com.loosecannon.servicetag.core.testing.GOLDEN_FORMAT_7
 import com.loosecannon.servicetag.core.testing.GOLDEN_FORMAT_7_EXPECTED
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
+import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
@@ -102,19 +103,20 @@ class Format7ImportIdentityTest {
         val schedules = InMemoryScheduleRepository(closures)
         val references = InMemoryReferenceRepository()
         val storage = FakeAttachmentStorage()
+        val categories = InMemoryCategoryRepository()
         val uow = FakeUnitOfWork(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, references, activations, conditions, subjects,
+            attachments, references, activations, conditions, subjects, categories,
         )
         val export = ExportBackupSet(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, references, activations, conditions, subjects,
+            attachments, references, activations, conditions, subjects, categories,
             uow, IdGenerator { "set-format-8" }, Clock { 1_758_700_000_000L },
             appVersion = "1.4.0", schemaVersion = 8,
         )
         val replace = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, references, activations, conditions, subjects, storage, uow, rebuildAll = { },
+            attachments, references, activations, conditions, subjects, categories, storage, uow, rebuildAll = { },
         )
         val build = BuildBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
