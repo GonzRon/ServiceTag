@@ -170,7 +170,7 @@ enum class EmptyReason {
     NO_ACTIVE_ASSETS,
     /** A blank query, Type All, and every asset the Archived control admits is a component. */
     ONLY_COMPONENTS,
-    /** Nothing matches the query and the type together, and no match of another type explains it. */
+    /** Nothing matches the query and the type together, and no query match of another type explains it. */
     NOTHING_MATCHES,
     /** The query has matches, and none of them is of the chosen type. */
     TYPE_HIDDEN,

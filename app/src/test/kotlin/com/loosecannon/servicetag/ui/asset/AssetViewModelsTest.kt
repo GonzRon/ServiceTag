@@ -1079,7 +1079,7 @@ class AssetViewModelsTest {
         assertEquals("Hot tub", narrowed.items.single().parentName)
     }
 
-    /** B07 — a blank query lists the assets exactly as the screen always has. */
+    /** B07, under #73's controls: a blank query with every control at its default lists every active root, by name. */
     @Test fun blankQueryListsAssetsAsBefore() = runTest {
         graph.createAsset.run("Zebra mower", "Yard")
         graph.createAsset.run("apple press", "Kitchen")

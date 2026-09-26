@@ -63,7 +63,7 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
  *
  * The search box (#39) moved here from the Dashboard by the owner's 2026-09-23 instruction: the
  * Dashboard's category and maintenance-status dropdowns now serve as its navigation aids, and the
- * quick filter belongs on the screen that lists every asset and component.
+ * quick filter belongs on the screen that lists every asset and component under its controls.
  *
  * Under it, #73's one row of controls — Type, Components, Archived ([AssetsFilterRow]) — narrows
  * what the box searches. An empty list always says why ([EmptyReason], the view model's decision).
