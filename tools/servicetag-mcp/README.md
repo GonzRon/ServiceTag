@@ -82,7 +82,9 @@ Fifty-six: `pair` plus one per API operation.
 
 `create_schedule` without `providers` sends the row the app's own editor stores — one `LOCAL`
 provider, enabled exactly when `reminders_enabled` is — rather than leaving it to the app; pass
-`providers=[]` to store none.
+`providers=[]` to store none. `update_schedule` mirrors the same rule on an edit: `reminders_enabled`
+supplied with `providers` neither given nor cleared sets every stored `LOCAL` row's `enabled` to
+match, so turning reminders back on never re-sends a `LOCAL` row this tool left disabled (#83).
 
 **References (needs ServiceTag 1.3.0)** — `list_references`, `add_reference`, `update_reference`.
 A reference is a URI on an asset — a manual on the web, a note in Joplin — with no bytes of its
