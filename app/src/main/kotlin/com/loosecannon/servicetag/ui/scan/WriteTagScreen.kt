@@ -41,6 +41,7 @@ import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.nfc.ReaderMode
 import com.loosecannon.servicetag.ui.nfc.TagSinkEffect
 import com.loosecannon.servicetag.ui.theme.ControlShape
+import com.loosecannon.servicetag.ui.theme.MonoText
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import com.loosecannon.servicetag.ui.theme.PlateShape
 
@@ -224,6 +225,10 @@ private fun VerifiedLine() {
 /**
  * "Overwrite?" as its own sheet (G1 §1.4): one warning line in the due-soon family naming what is
  * on the tag, Overwrite filled and Keep it outlined. Brick is not used — nothing here is an error.
+ *
+ * The warning block carries the [subject]'s line and, for a ServiceTag id, the quiet mono line
+ * under it — the shortened id and any placement — in the surface's own content colour (#70 C5):
+ * secondary identity, never the explanation.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -249,8 +254,9 @@ internal fun OverwriteSheet(
                 shape = PlateShape,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(text = subject.line, style = MaterialTheme.typography.bodyMedium)
+                    subject.identifier?.let { Text(text = it, style = MonoText) }
                 }
             }
             Text(
