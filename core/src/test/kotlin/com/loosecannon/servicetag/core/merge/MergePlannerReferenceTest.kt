@@ -333,13 +333,13 @@ class MergePlannerReferenceTest {
      * dropped from the type stops compiling, one wired to the wrong table fails on its value, and
      * one left out of `report()` fails as an empty tally where a populated one belongs.
      *
-     * The archive is shaped so the fourteen expectations are not all the same value: only
+     * The archive is shaped so the fifteen expectations are not all the same value: only
      * `references` and `assets` carry rows, so a report that read `attachments` where it meant
      * `references` — the drift a positional mirror invites — fails here rather than passing on a
      * row of zeroes.
      */
     @Test
-    fun `the report carries a tally per table in write order`() {
+    fun `the report carries a tally per table in MergeTable order`() {
         val plan = mergePlanOf(
             backupOf(assets = listOf(asset("a1")), references = listOf(reference("r1"))),
             snapshotOf(),
@@ -361,6 +361,8 @@ class MergePlannerReferenceTest {
             MergeTable.SEASON_ACTIVATIONS to report.seasonActivations,
             MergeTable.CONDITIONS to report.conditions,
             MergeTable.HEALTH_SUBJECTS to report.healthSubjects,
+            // #74: appended last, in enum order, though categories are written first.
+            MergeTable.CATEGORIES to report.categories,
         )
         assertEquals(MergeTable.entries.toList(), byName.map { it.first })
         assertEquals(MergeTable.entries.map { plan.tally(it) }, byName.map { it.second })

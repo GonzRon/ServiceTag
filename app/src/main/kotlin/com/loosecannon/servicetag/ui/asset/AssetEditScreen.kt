@@ -53,7 +53,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.loosecannon.servicetag.core.journal.CategorySuggestions
+import com.loosecannon.servicetag.core.journal.CategoryChoice
 import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.SeasonMode
@@ -327,7 +327,8 @@ private fun IdentityBlock(state: AssetEditState, model: AssetEditViewModel) {
         label = "Name",
         problem = state.problems[AssetField.NAME],
     )
-    CategoryField(value = state.category, onValueChange = model::onCategory)
+    val choices by model.categoryChoices.collectAsStateWithLifecycle()
+    CategoryField(value = state.category, choices = choices, onValueChange = model::onCategory)
     FormField(value = state.manufacturer, onValueChange = model::onManufacturer, label = "Manufacturer")
     FormField(value = state.model, onValueChange = model::onModel, label = "Model")
     FormField(value = state.serialNumber, onValueChange = model::onSerialNumber, label = "Serial number")
@@ -650,13 +651,16 @@ private fun FormField(
  * Category is free text with the catalog of spec §8 behind it: an editable field whose menu
  * narrows by prefix as you type, so typing something the catalog never heard of is no harder
  * than picking a suggestion. Picking one is what the creation-time template hint listens to.
+ *
+ * #74 (C16): [choices] is the durable catalog — the built-ins, then the owner's own categories — and
+ * one of the owner's reads exactly like a built-in. Nothing here writes it; a save does.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CategoryField(value: String, onValueChange: (String) -> Unit) {
+private fun CategoryField(value: String, choices: List<CategoryChoice>, onValueChange: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    val matches = CategorySuggestions.all.filter {
-        value.isBlank() || it.label.startsWith(value.trim(), ignoreCase = true)
+    val matches = choices.filter {
+        value.isBlank() || it.display.startsWith(value.trim(), ignoreCase = true)
     }
     val open = expanded && matches.isNotEmpty()
     ExposedDropdownMenuBox(expanded = open, onExpandedChange = { expanded = it }) {
@@ -672,10 +676,10 @@ private fun CategoryField(value: String, onValueChange: (String) -> Unit) {
                 .fillMaxWidth(),
         )
         ExposedDropdownMenu(expanded = open, onDismissRequest = { expanded = false }) {
-            matches.forEach { suggestion ->
+            matches.forEach { choice ->
                 DropdownMenuItem(
-                    text = { Text(suggestion.label) },
-                    onClick = { onValueChange(suggestion.label); expanded = false },
+                    text = { Text(choice.display) },
+                    onClick = { onValueChange(choice.display); expanded = false },
                 )
             }
         }

@@ -47,6 +47,10 @@ data class AssetSettingsCommand(
  *   does. No event, closure or schedule column is touched (inv. 86).
  * - **`id == null` creates the asset**, seeding [templateKey]'s definitions and quick actions in the
  *   same transaction, as [CreateAsset] does.
+ * - **The category is promoted** (#74, C5): `next` carries the catalog's spelling
+ *   ([PromoteCategory.resolve]), so the unchanged comparison sees it, and a first-use category's row
+ *   is written beside the asset upsert — after the early return and after every refusal, so an
+ *   unchanged save and a refused one add no row.
  */
 class SaveAssetSettings(
     private val assets: AssetRepository,
@@ -59,6 +63,7 @@ class SaveAssetSettings(
     private val today: Today,
     private val recompute: RecomputeSchedules,
     private val applyTemplate: ApplyTemplate,
+    private val promoteCategory: PromoteCategory,
 ) {
     suspend fun run(id: AssetId?, cmd: AssetSettingsCommand, templateKey: String? = null): Asset = uow.write {
         val all = assets.all()
@@ -78,10 +83,18 @@ class SaveAssetSettings(
             all,
             id,
         )
+        // A create's template is looked up before anything is written, so an unknown one is refused
+        // with the other 422s rather than after the asset and its category.
+        val template = if (current == null) {
+            templateKey?.let { key -> SeedTemplates.byKey(key) ?: throw UnknownTemplate(key) }
+        } else {
+            null
+        }
 
         val now = clock.nowMillis()
+        val promotion = promoteCategory.resolve(asset.category, now)
         val base = current ?: Asset(id = AssetId(ids.newId()), name = asset.name, createdAt = now, updatedAt = now)
-        val next = base.applying(asset, now).copy(
+        val next = base.applying(asset.copy(category = promotion.spelling), now).copy(
             seasonMode = mode.seasonMode,
             seasonStartMmdd = mode.seasonStartMmdd,
             seasonEndMmdd = mode.seasonEndMmdd,
@@ -107,12 +120,11 @@ class SaveAssetSettings(
         }
 
         assets.upsert(next)
+        promoteCategory.write(promotion)
         manualSwitchActivation(next.id, modeBefore, mode, today.localDate(), now, ids)
             ?.let { activations.insert(it) }
         if (current == null) {
-            templateKey?.let { key ->
-                applyTemplate.applyInTransaction(next.id, SeedTemplates.byKey(key) ?: throw UnknownTemplate(key))
-            }
+            template?.let { applyTemplate.applyInTransaction(next.id, it) }
         } else if (current.seasonChangedTo(next)) {
             recompute.forAsset(next.id)
         }

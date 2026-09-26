@@ -25,6 +25,7 @@ import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentStore
+import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
@@ -63,9 +64,10 @@ class ArtifactsUseCasesTest {
     private val closures = InMemoryClosureRepository()
     private val schedules = InMemoryScheduleRepository(closures)
     private val references = InMemoryReferenceRepository()
+    private val categories = InMemoryCategoryRepository()
     private val uow = FakeUnitOfWork(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references,
+        attachments, references, categories,
     )
     private val storage = FakeAttachmentStorage()
     private val store: InMemoryAttachmentStore get() = storage.store
@@ -74,7 +76,7 @@ class ArtifactsUseCasesTest {
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references,
         InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-        uow,
+        categories, uow,
         IdGenerator { "set-1" }, Clock { 1_726_000_000_000L }, appVersion = "2.4", schemaVersion = 5,
     )
     private val restore = RestoreArtifacts(attachments, storage)

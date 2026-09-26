@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.ports
 
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
@@ -322,4 +323,22 @@ interface HealthSubjectRepository {
     suspend fun forSchedule(id: ScheduleId): List<HealthSubject>
     suspend fun all(): List<HealthSubject>
     fun observeForAsset(assetId: AssetId): Flow<List<HealthSubject>>
+}
+
+/**
+ * #74. The owner's own Asset categories, keyed by `CategoryKey.of(display)` (C4). The compiled
+ * built-ins are never rows here. Written by the promotion of a successful Asset save, by a rename, by
+ * a delete of an unused row, by the replace import (its wipe — `deleteAll` — the archive's rows, and
+ * the promotion of every restored Asset, C12) and by the merge apply (the rows its plan accepted or
+ * synthesised, C13). There is no query by Asset, and no list derived from Assets: the catalog is
+ * this table, and a row outlives its Assets.
+ */
+interface CategoryRepository {
+    suspend fun upsert(row: AssetCategory)
+    suspend fun get(key: String): AssetCategory?
+    /** Ordered by key. */
+    suspend fun all(): List<AssetCategory>
+    suspend fun delete(key: String)
+    suspend fun deleteAll()
+    fun observeAll(): Flow<List<AssetCategory>>
 }

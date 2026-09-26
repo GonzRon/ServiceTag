@@ -18,6 +18,7 @@ import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
@@ -61,6 +62,7 @@ import com.loosecannon.servicetag.core.usecase.CompletionCommand
 import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAttachment
+import com.loosecannon.servicetag.core.usecase.DeleteCategory
 import com.loosecannon.servicetag.core.usecase.DeleteDefinition
 import com.loosecannon.servicetag.core.usecase.DeleteEvent
 import com.loosecannon.servicetag.core.usecase.DeleteProfile
@@ -71,11 +73,13 @@ import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.PauseSchedule
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
+import com.loosecannon.servicetag.core.usecase.PromoteCategory
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RemoveReference
+import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
 import com.loosecannon.servicetag.core.usecase.ReorderProfiles
 import com.loosecannon.servicetag.core.usecase.ResolveTag
@@ -104,8 +108,10 @@ import com.loosecannon.servicetag.data.room.MIGRATION_4_5
 import com.loosecannon.servicetag.data.room.MIGRATION_5_6
 import com.loosecannon.servicetag.data.room.MIGRATION_6_7
 import com.loosecannon.servicetag.data.room.MIGRATION_7_8
+import com.loosecannon.servicetag.data.room.MIGRATION_8_9
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
+import com.loosecannon.servicetag.data.room.RoomCategoryRepository
 import com.loosecannon.servicetag.data.room.RoomClosureRepository
 import com.loosecannon.servicetag.data.room.RoomConditionRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
@@ -183,7 +189,7 @@ class AppGraph(private val context: Context) {
         .setQueryCoroutineContext(Dispatchers.IO)
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-            MIGRATION_6_7, MIGRATION_7_8,
+            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
         )
         .build()
 
@@ -212,6 +218,14 @@ class AppGraph(private val context: Context) {
     val seasonActivations: SeasonActivationRepository = RoomSeasonActivationRepository(db.seasonActivationDao())
     val conditions: ConditionRepository = RoomConditionRepository(db.assetConditionDao())
     val healthSubjects: HealthSubjectRepository = RoomHealthSubjectRepository(db.healthSubjectDao())
+
+    /**
+     * #74's one data port: the owner's own categories, beside the compiled built-ins. Written by a
+     * successful asset save's promotion, a rename, an unused delete, the replace import and the merge
+     * apply — the last two promote the assets they insert — and once by `MIGRATION_8_9`'s backfill.
+     * Never derived from assets.
+     */
+    val categories: CategoryRepository = RoomCategoryRepository(db.assetCategoryDao())
 
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
@@ -412,14 +426,15 @@ class AppGraph(private val context: Context) {
      */
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, seasonActivations, conditions, healthSubjects,
+        attachments, references, seasonActivations, conditions, healthSubjects, categories,
         uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
     )
 
     /** Wipe-and-load import. Replace is the only mode Phase 1A ships (D7 1A). */
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, categories,
+        attachmentStorage, uow,
         // Derived state is rebuilt after any import, and the wipe took it with the schedule rows.
         rebuildAll = { recomputeSchedules.all() },
     )
@@ -432,11 +447,13 @@ class AppGraph(private val context: Context) {
      */
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, categories,
+        attachmentStorage, uow,
     )
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, categories,
+        attachmentStorage, uow,
         // The total post-apply recompute, wired to the engine: an imported event, membership row,
         // closure or meter reading can each move a due date, and rebuilding every schedule inside
         // the apply's own transaction is cheaper than enumerating which.
@@ -448,9 +465,10 @@ class AppGraph(private val context: Context) {
     /**
      * #40 — is there anything on this phone a restore would replace? The Backup screen asks once,
      * per picked file, and the answer chooses the confirmation. Definitions and profiles are not
-     * read: neither can exist without its asset, so `assets` answers for both.
+     * read: neither can exist without its asset, so `assets` answers for both. A category row can
+     * (#74: it outlives its assets), so `categories` is the sixth kind.
      */
-    val storeIsEmpty: StoreIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links)
+    val storeIsEmpty: StoreIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links, categories)
 
     /** Process-wide scope for work that must outlive a finishing activity (e.g. abandoning a row). */
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -472,12 +490,20 @@ class AppGraph(private val context: Context) {
     val bindTag: BindTag = BindTag(tags, assets, uow, clock)
     val provisionTag: ProvisionTag = ProvisionTag(tags, assets, uow, ids, clock)
     val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
-    val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)
+
+    // #74 — durable categories (C5–C7). The three asset commands share one promotion, which stores the
+    // catalog's spelling and writes a first-use row beside the asset, after every refusal; rename and
+    // delete are the Categories screen's two writes.
+    val promoteCategory: PromoteCategory = PromoteCategory(categories)
+    val renameCategory: RenameCategory = RenameCategory(categories, assets, uow, clock)
+    val deleteCategory: DeleteCategory = DeleteCategory(categories, assets, uow)
+
+    val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate, promoteCategory)
 
     // Phase 1C — the asset form. Archive-first: no hard delete for an asset in Phase 1 (R-9).
     // 1.4: a changed season pair goes through the season-mode rules, which read the asset's schedules
     // (the strands rule) and rebuild them (spec §3.2).
-    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules)
+    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules, promoteCategory)
 
     // 1.4 — the season model's commands (master plan §7.2). One use case per write, so the editors,
     // the API and the offers refuse the same things; each season or break write rebuilds the asset's
@@ -504,6 +530,7 @@ class AppGraph(private val context: Context) {
     val setHealthPolicy: SetHealthPolicy = SetHealthPolicy(assets, healthSubjects, uow, clock)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, today, recomputeSchedules, applyTemplate,
+        promoteCategory,
     )
 
     val archiveAsset: ArchiveAsset =
@@ -724,6 +751,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 8
+        const val SCHEMA_VERSION = 9
     }
 }

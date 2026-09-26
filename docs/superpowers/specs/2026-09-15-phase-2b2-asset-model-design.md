@@ -122,6 +122,9 @@ suggestion pre-selects its template only while the user has not explicitly chose
 (`templateTouched == false` in the form state); once they have, category edits never change the
 template. Editing an existing asset never shows or changes the template. Nothing reads the
 category string after creation. No equipment-type key.
+*Superseded in part by #74 (2026-09-26, `docs/superpowers/plans/2026-09-26-issue-74-durable-categories.md`):
+a saved category is promoted to a durable catalog row and offered beside these suggestions, the
+stored string is the catalog's spelling, and the hint matches by normalised key.*
 
 ## 9. Screens
 

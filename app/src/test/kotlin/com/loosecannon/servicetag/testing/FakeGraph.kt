@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
@@ -43,6 +44,7 @@ import com.loosecannon.servicetag.core.usecase.CompleteSchedule
 import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAttachment
+import com.loosecannon.servicetag.core.usecase.DeleteCategory
 import com.loosecannon.servicetag.core.usecase.DeleteDefinition
 import com.loosecannon.servicetag.core.usecase.DeleteEvent
 import com.loosecannon.servicetag.core.usecase.DeleteProfile
@@ -53,10 +55,12 @@ import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.PauseSchedule
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
+import com.loosecannon.servicetag.core.usecase.PromoteCategory
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
+import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
 import com.loosecannon.servicetag.core.usecase.ReorderProfiles
 import com.loosecannon.servicetag.core.usecase.RestoreArtifacts
@@ -77,6 +81,7 @@ import com.loosecannon.servicetag.core.usecase.UpdateEvent
 import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
+import com.loosecannon.servicetag.data.room.RoomCategoryRepository
 import com.loosecannon.servicetag.data.room.RoomClosureRepository
 import com.loosecannon.servicetag.data.room.RoomConditionRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
@@ -159,6 +164,8 @@ class FakeGraph(
     val seasonActivations: SeasonActivationRepository = RoomSeasonActivationRepository(db.seasonActivationDao())
     val conditions: ConditionRepository = RoomConditionRepository(db.assetConditionDao())
     val healthSubjects: HealthSubjectRepository = RoomHealthSubjectRepository(db.healthSubjectDao())
+    /** #74's catalog rows, mirroring `AppGraph`'s field by name. */
+    val categories: CategoryRepository = RoomCategoryRepository(db.assetCategoryDao())
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
 
     /** `T`, injected: a test says which day it is and the engine answers the same way every run. */
@@ -229,8 +236,14 @@ class FakeGraph(
         Thumbnails(File(System.getProperty("java.io.tmpdir"), "servicetag-jvm-thumbs"), attachmentStorage)
 
     val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
-    val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)
-    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules)
+
+    /** #74 — promotion, rename and delete, mirroring `AppGraph`'s three fields by name (C14). */
+    val promoteCategory: PromoteCategory = PromoteCategory(categories)
+    val renameCategory: RenameCategory = RenameCategory(categories, assets, uow, clock)
+    val deleteCategory: DeleteCategory = DeleteCategory(categories, assets, uow)
+
+    val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate, promoteCategory)
+    val updateAsset: UpdateAsset = UpdateAsset(assets, schedules, uow, clock, recomputeSchedules, promoteCategory)
 
     /** 1.4 — the season model's commands, mirroring `AppGraph`'s five fields by name (master plan §1). */
     val setSeasonMode: SetSeasonMode =
@@ -252,7 +265,7 @@ class FakeGraph(
     val setHealthPolicy: SetHealthPolicy = SetHealthPolicy(assets, healthSubjects, uow, clock)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
-        applyTemplate,
+        applyTemplate, promoteCategory,
     )
     val archiveAsset: ArchiveAsset =
         ArchiveAsset(assets, uow, clock) { recomputeSchedules.forAsset(it) }
@@ -313,19 +326,21 @@ class FakeGraph(
     /** Both halves of a set: `run().data` for the data archive, `run().plan` for the other one. */
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, seasonActivations, conditions, healthSubjects,
+        attachments, references, seasonActivations, conditions, healthSubjects, categories,
         uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
     )
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, categories,
+        attachmentStorage, uow,
         // The real engine: "once, inside the transaction, after the last insert" is proved against
         // the seam in `:core`, so there is no counter to keep here.
         rebuildAll = { recomputeSchedules.all() },
     )
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, categories,
+        attachmentStorage, uow,
     )
 
     /** How many times an apply asked for the total recompute. Mirrors `AppGraph`'s no-op seam. */
@@ -333,7 +348,8 @@ class FakeGraph(
 
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-        attachments, references, seasonActivations, conditions, healthSubjects, attachmentStorage, uow,
+        attachments, references, seasonActivations, conditions, healthSubjects, categories,
+        attachmentStorage, uow,
         rebuildAll = { rebuilds += 1 },
     )
     val importBackupMerge: ImportBackupMerge =

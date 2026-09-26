@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.backup
 
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
@@ -432,6 +433,20 @@ data class HealthSubjectDto(
     val updatedAt: Long,
 )
 
+/**
+ * Format 9 (#74, C11). One of the owner's own Asset categories: the `asset_category` table's four
+ * columns, in column order. [key] is the identity — `CategoryKey.of(display)` — and [display] is in
+ * `CategoryKey.display` form; the content check holds a row to both. The compiled built-ins are never
+ * rows, here or in the table.
+ */
+@Serializable
+data class AssetCategoryDto(
+    val key: String,
+    val display: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
 /** The canonical tables. Everything derived is rebuilt after an import. */
 @Serializable
 data class BackupData(
@@ -456,6 +471,11 @@ data class BackupData(
     val assetConditions: List<AssetConditionDto> = emptyList(),
     /** Format 8; configuration only. Empty on every format ≤7 archive. */
     val healthSubjects: List<HealthSubjectDto> = emptyList(),
+    /**
+     * Format 9 (#74); the owner's own categories, ordered by key. Empty on every format ≤8 archive,
+     * which never carries a **row** — the codec refuses one that does (an empty list is accepted).
+     */
+    val assetCategories: List<AssetCategoryDto> = emptyList(),
 )
 
 /** A decoded archive: what it claims about itself, and what it holds. */
@@ -1070,6 +1090,22 @@ fun HealthSubjectDto.toDomain(): HealthSubject = HealthSubject(
     weight = weight,
     sortOrder = sortOrder,
     archivedAt = archivedAt,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+// --- format 9: the owner's own categories ---------------------------------------------------------
+
+fun AssetCategory.toDto(): AssetCategoryDto = AssetCategoryDto(
+    key = key,
+    display = display,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+fun AssetCategoryDto.toDomain(): AssetCategory = AssetCategory(
+    key = key,
+    display = display,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )

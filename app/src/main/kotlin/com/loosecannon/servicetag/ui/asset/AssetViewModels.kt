@@ -6,6 +6,8 @@ import com.loosecannon.servicetag.core.condition.ConditionHistory
 import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.health.SubjectHealth
 import com.loosecannon.servicetag.core.health.SubjectValue
+import com.loosecannon.servicetag.core.journal.CategoryCatalog
+import com.loosecannon.servicetag.core.journal.CategoryChoice
 import com.loosecannon.servicetag.core.journal.CategorySuggestions
 import com.loosecannon.servicetag.core.journal.LatestReadings
 import com.loosecannon.servicetag.core.journal.RangeState
@@ -37,6 +39,7 @@ import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
@@ -1280,18 +1283,25 @@ sealed interface EditPrompt {
  * existing asset from YEAR_ROUND into a season and the asset has live CONTINUOUS schedules, the editor
  * holds [saved] back and raises [prompt] instead. The answer finishes the editor through [saved] (keep
  * the schedules as they are) or [review] (open them). Nothing is remembered: the transition is the gate.
+ *
+ * **#74: the Category field offers the catalog.** [categories] is read, never written: [categoryChoices]
+ * follows it. The owner's way in here is a successful save, inside [SaveAssetSettings] (C5); a restore
+ * or a merge also adds rows, for the assets it brings.
  */
 class AssetEditViewModel(
     private val assets: AssetRepository,
     private val healthSubjects: HealthSubjectRepository,
     private val saveAssetSettings: SaveAssetSettings,
     private val schedules: ScheduleRepository,
+    categories: CategoryRepository,
     private val id: AssetId?,
     presetParentId: String? = null,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph, id: String?, parentId: String? = null) :
-        this(graph.assets, graph.healthSubjects, graph.saveAssetSettings, graph.schedules, id?.let(::AssetId), parentId)
+    constructor(graph: AppGraph, id: String?, parentId: String? = null) : this(
+        graph.assets, graph.healthSubjects, graph.saveAssetSettings, graph.schedules, graph.categories,
+        id?.let(::AssetId), parentId,
+    )
 
     private val _state = MutableStateFlow(
         AssetEditState(
@@ -1321,6 +1331,16 @@ class AssetEditViewModel(
     /** What has no room under a field: the refused reparent, named (spec §9). One line, once. */
     private val _messages = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
+
+    /**
+     * #74 (C16): what the Category field offers — the built-ins in compiled order, then the owner's own
+     * categories (R74-10) — straight from the catalog, never from the categories Assets happen to hold.
+     * It follows the store, so a category another editor saved is offered here without reopening this
+     * one; before the first read it is the built-ins alone, which is what the field offered until #74.
+     */
+    val categoryChoices: StateFlow<List<CategoryChoice>> = categories.observeAll()
+        .map(CategoryCatalog::choices)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), CategoryCatalog.builtIns)
 
     init {
         viewModelScope.launch {

@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
@@ -58,8 +59,10 @@ internal class SeasonCommandHarness(today: String = "2026-06-10") {
     val definitions = InMemoryDefinitionRepository()
     val profiles = InMemoryProfileRepository()
     val healthSubjects = InMemoryHealthSubjectRepository()
+    val categories = InMemoryCategoryRepository()
     val uow = FakeUnitOfWork(
         assets, events, activations, closures, states, schedules, groups, definitions, profiles, healthSubjects,
+        categories,
     )
 
     private var seq = 0
@@ -79,8 +82,11 @@ internal class SeasonCommandHarness(today: String = "2026-06-10") {
         RecordSeasonActivation(assets, events, activations, uow, ids, clock, todayPort, recompute)
     val getAssetSeason = GetAssetSeason(assets, activations, uow, todayPort)
     val acceptSeasonOffer = AcceptSeasonOffer(activations, recordSeasonActivation, uow, todayPort)
-    val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute)
-    val createAsset = CreateAsset(assets, uow, ids, clock, ApplyTemplate(definitions, profiles, assets, uow, ids, clock))
+    val promoteCategory = PromoteCategory(categories)
+    val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute, promoteCategory)
+    val createAsset = CreateAsset(
+        assets, uow, ids, clock, ApplyTemplate(definitions, profiles, assets, uow, ids, clock), promoteCategory,
+    )
     val saveSchedule =
         SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, healthSubjects)
     val logEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock, recompute)

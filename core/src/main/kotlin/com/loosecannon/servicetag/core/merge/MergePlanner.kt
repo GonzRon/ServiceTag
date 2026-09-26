@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.merge
 
+import com.loosecannon.servicetag.core.backup.AssetDto
 import com.loosecannon.servicetag.core.backup.AssetEventDto
 import com.loosecannon.servicetag.core.backup.Backup
 import com.loosecannon.servicetag.core.backup.EventProfileDto
@@ -7,7 +8,12 @@ import com.loosecannon.servicetag.core.backup.MaintenanceGroupDto
 import com.loosecannon.servicetag.core.backup.MaintenanceScheduleDto
 import com.loosecannon.servicetag.core.backup.toDomain
 import com.loosecannon.servicetag.core.backup.toDto
+import com.loosecannon.servicetag.core.journal.AssetRow
+import com.loosecannon.servicetag.core.journal.CategoryBackfill
+import com.loosecannon.servicetag.core.journal.CategoryCatalog
+import com.loosecannon.servicetag.core.journal.CategoryKey
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetReference
@@ -26,6 +32,7 @@ import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStore
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
@@ -49,7 +56,8 @@ import java.security.MessageDigest
  * ### How it decides
  *
  * Table by table, in [MergeTable] order, so that every reference a row makes points at a table
- * already decided. For each incoming row:
+ * already decided — except #74's categories, decided before everything (see below). For each
+ * incoming row:
  *
  * 1. **Its own id.** Absent here → `INSERT`. Present with identical content → `IDENTICAL`. Present
  *    with any difference → `CONFLICT` / `CONTENT_DIFFERS`.
@@ -83,13 +91,35 @@ import java.security.MessageDigest
  *
  * It never writes a row, never removes one, never chooses a winner by any single field, never
  * treats a name or a physical UID as identity, and never produces a partial write set: one conflict
- * anywhere empties [MergePlan.writes].
+ * anywhere empties [MergePlan.writes]. **One amendment (#74):** a category's identity *is* its
+ * normalised name — `CategoryKey.of(display)` is the row's primary key on every phone (R74-2) — so
+ * the categories table is the one place a name is identity, by design; no other table's is.
  *
  * **Canonical content is every backup-format field**, `createdAt` and the last-modified stamp
- * included, compared as `incoming == local.toDto()` in every pass and in the same direction. The
- * only normalisation is that the two aggregate tables' child lists are read in `(sortOrder, id)`
+ * included, compared as `incoming == local.toDto()` in every pass and in the same direction. There
+ * are two normalisations. The aggregate tables' child lists are read in `(sortOrder, id)`
  * order: `sortOrder` is the order the format writes them in (`BackupCodec.kt:85`–`96`) and the id
  * makes the key total, because the format does not promise `sortOrder` is unique within a parent.
+ * And (#74, C13) an asset's `category` is read through `CategoryKey.of` on **both** sides, so a
+ * pre-upgrade export's `appliance` against this phone's canonical `Appliance` is `IDENTICAL`: the
+ * two are one classification, and a spelling the catalog canonicalised is not a disagreement.
+ *
+ * ### Categories (#74, C13)
+ *
+ * Decided **first**, listed last ([MergeTable.CATEGORIES] is appended to keep the pinned ordinals),
+ * written first ([MergeWrites.categories]). An incoming row: a built-in's key → `SKIPPED`
+ * `CATEGORY_IS_BUILT_IN`; its key held here with the same display → `IDENTICAL` (key and display
+ * only — `createdAt` and `updatedAt` are never compared); held here under another display, or by an
+ * earlier row of the same archive → `SKIPPED` `CATEGORY_KEY_HELD`, the local spelling winning; else
+ * `INSERT`. Never a `CONFLICT`. Then, after the assets, **the promotions are planned**: every
+ * accepted asset's key goes through `CategoryBackfill.plan` — the one chooser the migration and the
+ * replace use — with this install's rows and the accepted archive rows winning their keys; a key
+ * no built-in, local row or accepted row holds becomes a synthesised `INSERT` decision and a
+ * [MergeWrites.categories] row, and every accepted asset is written in its canonical spelling with
+ * the archive's `updatedAt`. The report, the tallies and the fingerprint all see the promotion, and
+ * the apply writes [MergeWrites] and nothing else. Two costs of key-as-identity are accepted
+ * (R74-2): an archive made before a new-key rename re-inserts the old key as an unused row, and a
+ * deleted category comes back from an archive that holds it.
  *
  * ### Not total, and only for a hand-built [Backup]
  *
@@ -186,6 +216,35 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
             Triple(it.scheduleId!!.value, it.occurrenceOn!!, it.assetId.value) to it.id.value
         }
 
+    // --- categories (#74, C13) -----------------------------------------------------------------
+    // Decided **first**, though `CATEGORIES` is listed last: an accepted asset is written in the
+    // spelling an accepted row gives its key, so the rows are settled before any asset is. Identity is
+    // the key, and nothing here is ever a CONFLICT — a spelling is never worth refusing an archive.
+    val localCategories = snapshot.categories.associateBy { it.key }
+    val categoryWrites = mutableListOf<AssetCategory>()
+    val acceptedCategoryKeys = mutableSetOf<String>()
+    for (dto in data.assetCategories) {
+        val key = dto.key
+        val local = localCategories[key]
+        decisions += when {
+            CategoryCatalog.builtIn(key) != null ->
+                MergeDecision(MergeTable.CATEGORIES, key, MergeVerdict.SKIPPED, MergeReason.CATEGORY_IS_BUILT_IN, key)
+            // Key and display only: two phones that typed the same category agree about its
+            // timestamps never, and that is not a disagreement about the category.
+            local != null && local.display == dto.display ->
+                MergeDecision(MergeTable.CATEGORIES, key, MergeVerdict.IDENTICAL)
+            // The local spelling wins; a second row of one archive under the same key is reachable
+            // only from a hand-built `Backup`, because the codec refuses a duplicate key.
+            local != null || key in acceptedCategoryKeys ->
+                MergeDecision(MergeTable.CATEGORIES, key, MergeVerdict.SKIPPED, MergeReason.CATEGORY_KEY_HELD, key)
+            else -> {
+                categoryWrites += dto.toDomain()
+                acceptedCategoryKeys += key
+                MergeDecision(MergeTable.CATEGORIES, key, MergeVerdict.INSERT)
+            }
+        }
+    }
+
     // --- assets -----------------------------------------------------------------------------
     // Decided parents-first, so a child always sees whether its parent was accepted.
     // `parentsFirst` gives indegree 0 to an asset whose parent is outside the collection
@@ -199,7 +258,8 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
         val local = localAssets[id]
         val parent = row.parentAssetId?.value
         decisions += when {
-            local != null && dto == local.toDto() ->
+            // The second normalisation (#74): `category` by its key, on both sides.
+            local != null && dto.keyed() == local.toDto().keyed() ->
                 MergeDecision(MergeTable.ASSETS, id, MergeVerdict.IDENTICAL)
             local != null ->
                 MergeDecision(MergeTable.ASSETS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
@@ -214,6 +274,24 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
                 MergeDecision(MergeTable.ASSETS, id, MergeVerdict.INSERT)
             }
         }
+    }
+
+    // --- category promotions (#74, C13) ------------------------------------------------------
+    // Planned here, never applied behind the plan: the one chooser (`CategoryBackfill.plan`, N6)
+    // resolves every accepted asset's key — a built-in's label, then a local row's display, then an
+    // accepted archive row's — and a key none of them holds becomes a synthesised INSERT, spelled by
+    // C9's rule over the accepted assets. The assets are written in those canonical spellings, each
+    // with the archive's own `updatedAt`.
+    val promotion = CategoryBackfill.plan(
+        assetWrites.map { AssetRow(it.id, it.category, it.createdAt) },
+        existing = snapshot.categories + categoryWrites,
+    )
+    promotion.newRows.forEach { row ->
+        categoryWrites += row
+        decisions += MergeDecision(MergeTable.CATEGORIES, row.key, MergeVerdict.INSERT)
+    }
+    val canonicalAssetWrites = assetWrites.map { asset ->
+        promotion.rewrites[asset.id]?.let { asset.copy(category = it) } ?: asset
     }
 
     /** True when a reference to an asset resolves — to a local row, or to one this plan inserts. */
@@ -791,7 +869,8 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
             MergeWrites()
         } else {
             MergeWrites(
-                assets = assetWrites,
+                categories = categoryWrites.sortedBy { it.key },
+                assets = canonicalAssetWrites,
                 groups = groupWrites,
                 definitions = definitionWrites,
                 profiles = profileWrites,
@@ -864,6 +943,12 @@ private fun MaintenanceGroupDto.ordered() = copy(
     members = members.sortedWith(compareBy({ it.sortOrder }, { it.id })),
 )
 
+/**
+ * #74 (C13): an asset with its `category` read by key — the second normalisation, applied to both
+ * sides. Blank is `""` on both, as a blank category has no key.
+ */
+private fun AssetDto.keyed() = copy(category = CategoryKey.of(category).orEmpty())
+
 /** A schedule's providers, by the only key they have — which the encoder also sorts on. */
 private fun MaintenanceScheduleDto.ordered() = copy(providers = providers.sortedBy { it.provider })
 
@@ -928,7 +1013,7 @@ internal suspend fun storedBytesOf(
 }
 
 /**
- * Fourteen reads. **The caller owns the transaction** — see each use case for which one.
+ * Fifteen reads. **The caller owns the transaction** — see each use case for which one.
  *
  * Schema 8's other two tables are deliberately not among them, and are named nowhere in this
  * package: derived due state never appears in a plan, and device-local delivery state is never
@@ -949,6 +1034,7 @@ internal suspend fun mergeSnapshotOf(
     seasonActivations: SeasonActivationRepository,
     conditions: ConditionRepository,
     healthSubjects: HealthSubjectRepository,
+    categories: CategoryRepository,
     storedBytes: Map<String, StoredBytes>,
     attachmentStoreConfigured: Boolean,
 ): MergeSnapshot = MergeSnapshot(
@@ -966,6 +1052,7 @@ internal suspend fun mergeSnapshotOf(
     seasonActivations = seasonActivations.all(),
     conditions = conditions.all(),
     healthSubjects = healthSubjects.all(),
+    categories = categories.all(),
     storedBytes = storedBytes,
     attachmentStoreConfigured = attachmentStoreConfigured,
 )

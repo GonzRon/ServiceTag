@@ -3,6 +3,9 @@ package com.loosecannon.servicetag.data.room
 import androidx.room3.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
+import com.loosecannon.servicetag.core.journal.AssetRow
+import com.loosecannon.servicetag.core.journal.CategoryBackfill
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.LegacySeasonMapping
 import com.loosecannon.servicetag.core.model.SeasonBehavior
 
@@ -541,6 +544,66 @@ private fun copySchedulesThroughTheLegacyMapping(connection: SQLiteConnection) {
                 write.step()
                 write.reset()
             }
+        }
+    }
+}
+
+/**
+ * Schema v8 -> v9: the `asset_category` table (#74, C10; R74-4), and then **the backfill, in Kotlin,
+ * row by row**, on the [MIGRATION_7_8] precedent: the promotion rule applied once, retroactively, to
+ * the saves made before the catalog existed.
+ *
+ *  1. `CREATE TABLE`, copied verbatim from the exported `9.json`, so Room validates it on open.
+ *  2. [backfillCategories]: every asset's `id`, `category` and `created_at` read into a list, the
+ *     statement closed, [CategoryBackfill.plan] — the pure core rule, the app's own key and never
+ *     SQLite's ASCII-only lowercase function — and then one `INSERT` per new row and one `UPDATE` per
+ *     rewritten spelling.
+ *
+ * Atomic with the schema step and before any DAO read, so no editor or API save can race it, and it
+ * never runs again: rows it adds outlive their assets like any other. **No `updated_at` is written**:
+ * the `UPDATE` sets `category` and nothing else, so a pre-upgrade export still re-plans IDENTICAL.
+ */
+val MIGRATION_8_9: Migration = object : Migration(8, 9) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `asset_category` (`key` TEXT NOT NULL, `display` TEXT NOT NULL, " +
+                "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`key`))",
+        )
+        backfillCategories(connection)
+    }
+}
+
+/**
+ * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
+ * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
+ */
+private fun backfillCategories(connection: SQLiteConnection) {
+    val rows = connection.prepare("SELECT `id`, `category`, `created_at` FROM `asset`").use { read ->
+        buildList {
+            while (read.step()) add(AssetRow(AssetId(read.getText(0)), read.getText(1), read.getLong(2)))
+        }
+    }
+    val plan = CategoryBackfill.plan(rows)
+    connection.prepare(
+        "INSERT INTO `asset_category` (`key`, `display`, `created_at`, `updated_at`) VALUES (?, ?, ?, ?)",
+    ).use { insert ->
+        for (row in plan.newRows) {
+            insert.clearBindings()
+            insert.bindText(1, row.key)
+            insert.bindText(2, row.display)
+            insert.bindLong(3, row.createdAt)
+            insert.bindLong(4, row.updatedAt)
+            insert.step()
+            insert.reset()
+        }
+    }
+    connection.prepare("UPDATE `asset` SET `category` = ? WHERE `id` = ?").use { update ->
+        for ((id, spelling) in plan.rewrites) {
+            update.clearBindings()
+            update.bindText(1, spelling)
+            update.bindText(2, id.value)
+            update.step()
+            update.reset()
         }
     }
 }

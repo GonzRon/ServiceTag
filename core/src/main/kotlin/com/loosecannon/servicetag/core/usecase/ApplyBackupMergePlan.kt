@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.merge.storedBytesOf
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
@@ -65,6 +66,15 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * call to the recompute function because the derived state that it writes never appears in a plan
  * and the engine that computes it is not this layer's concern: what belongs here is that it is
  * invoked once, inside, and last.
+ *
+ * **It writes [com.loosecannon.servicetag.core.merge.MergeWrites] and nothing else** — #74's
+ * categories included. The promotions a merge makes (the category rows its accepted assets need,
+ * and each asset's canonical spelling) are *planned* by the rebuilt plan, so they are in its
+ * decisions, its tallies and its fingerprint; nothing is promoted here after the writes. A local save
+ * between the plan and this apply that adds a key the plan inserts or synthesises therefore changes a
+ * decision, and the apply is refused as stale. A spelling-only rename in that window changes no
+ * decision: the apply writes the fresh local spelling, which the report never showed — the catalog's
+ * spelling (R74-3), not an incoming one.
  */
 class ApplyBackupMergePlan(
     private val assets: AssetRepository,
@@ -82,6 +92,8 @@ class ApplyBackupMergePlan(
     private val seasonActivations: SeasonActivationRepository,
     private val conditions: ConditionRepository,
     private val healthSubjects: HealthSubjectRepository,
+    /** #74 — the owner's own categories: read into the snapshot, written first. */
+    private val categories: CategoryRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -105,7 +117,7 @@ class ApplyBackupMergePlan(
                 mergeSnapshotOf(
                     assets, groups, tags, links, definitions, profiles, schedules, closures,
                     events, attachments, references, seasonActivations, conditions, healthSubjects,
-                    stored, configured,
+                    categories, stored, configured,
                 ),
             )
             // Order matters — see the class KDoc.
@@ -113,6 +125,7 @@ class ApplyBackupMergePlan(
             if (fresh.fingerprint != plan.fingerprint) throw MergePlanStale(fresh.report())
 
             // Field order is write order, and every list is ordered within itself.
+            fresh.writes.categories.forEach { categories.upsert(it) }
             fresh.writes.assets.forEach { assets.upsert(it) }
             fresh.writes.groups.forEach { groups.upsert(it) }
             fresh.writes.definitions.forEach { definitions.upsert(it) }

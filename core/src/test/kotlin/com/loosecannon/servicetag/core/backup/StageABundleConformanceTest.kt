@@ -86,12 +86,13 @@ class StageABundleConformanceTest {
         // a *new* table added there tomorrow would never be emitted by the generator and would
         // decode away silently unless the root's own key set is pinned here too. The fixture is a
         // **format-5** archive and the generator writes format 5, so the three format-6 tables, the
-        // one format-7 table and the three format-8 tables are subtracted by name — which keeps the
-        // guard live: a further table added to BackupData without a thought for the generator still
-        // fails here.
+        // one format-7 table, the three format-8 tables and format 9's categories are subtracted by
+        // name — which keeps the guard live: a further table added to BackupData without a thought
+        // for the generator still fails here. (A restore of the bundle promotes its assets'
+        // categories itself, so the generator needs no category list.)
         assertEquals(
             BackupData.serializer().descriptor.elementNames.toSet() -
-                FORMAT_6_TABLES - FORMAT_7_TABLES - FORMAT_8_TABLES,
+                FORMAT_6_TABLES - FORMAT_7_TABLES - FORMAT_8_TABLES - FORMAT_9_TABLES,
             data.keys,
             "data.json root",
         )
@@ -190,6 +191,7 @@ class StageABundleConformanceTest {
 
         /** What format 8 added, named for the same reason. */
         private val FORMAT_8_TABLES = setOf("seasonActivations", "assetConditions", "healthSubjects")
+        private val FORMAT_9_TABLES = setOf("assetCategories")
         private val FORMAT_8_ASSET_FIELDS = setOf(
             "seasonMode", "blackoutStartMmdd", "blackoutEndMmdd", "healthAggregation",
             "healthPrimarySubjectId",

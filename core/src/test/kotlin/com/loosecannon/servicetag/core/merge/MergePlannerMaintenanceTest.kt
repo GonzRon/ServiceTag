@@ -243,9 +243,10 @@ class MergePlannerMaintenanceTest {
     // --- write order ------------------------------------------------------------------------
 
     /**
-     * Hazard: merge order breaks a reference. The fourteen members are asserted **as a list**, and a
+     * Hazard: merge order breaks a reference. The fifteen members are asserted **as a list**, and a
      * plan over an archive whose group, schedule, closure and event all arrive together writes them
-     * in that order.
+     * in that order. #74's `CATEGORIES` is appended last, keeping every other ordinal: it references
+     * nothing and is referenced by nothing, and it is decided and written first (`MergeWrites`).
      *
      * A member appended at the end instead of in dependency position would have a schedule decided
      * before its group, and the group would then be neither local nor accepted — so the schedule's
@@ -260,6 +261,8 @@ class MergePlannerMaintenanceTest {
                 MergeTable.EVENTS, MergeTable.ATTACHMENTS, MergeTable.REFERENCES,
                 // 1.4's three, after REFERENCES (format 8; `MergePlannerSeasonHealthTest`).
                 MergeTable.SEASON_ACTIVATIONS, MergeTable.CONDITIONS, MergeTable.HEALTH_SUBJECTS,
+                // #74 (format 9; `MergePlannerCategoryTest`): appended, never inserted.
+                MergeTable.CATEGORIES,
             ),
             MergeTable.entries.toList(),
         )

@@ -24,7 +24,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
 /**
- * Backup format v8: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
+ * Backup format v9: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
  * backup set pairs it with an artifacts archive, and `backupSetId` is what ties the two together.
  *
  * ```
@@ -34,10 +34,12 @@ import kotlinx.serialization.json.JsonObject
  *                    measurementDefinitions: [...], eventProfiles: [...], assetEvents: [...],
  *                    attachments: [...], maintenanceGroups: [...], maintenanceSchedules: [...],
  *                    occurrenceClosures: [...], assetReferences: [...],
- *                    seasonActivations: [...], assetConditions: [...], healthSubjects: [...] }
+ *                    seasonActivations: [...], assetConditions: [...], healthSubjects: [...],
+ *                    assetCategories: [...] }
  * ```
  *
- * IDs are written verbatim, lists are sorted by id (children by sortOrder within their parent),
+ * IDs are written verbatim, lists are sorted by id (children by sortOrder within their parent, and
+ * format 9's categories by their key, which is their id),
  * and the manifest carries the SHA-256 of the data entry, so the same input always produces the
  * same bytes and an edited file is refused. A format-1 file (the three original lists only), a
  * format-2 file (measurementDefinitions without kind/formula/sourceAId/sourceBId — every DERIVED
@@ -55,6 +57,15 @@ import kotlinx.serialization.json.JsonObject
  * a native format-8 file: one DTO set, and one place that reads a legacy season field. Format 8
  * itself is decoded as it stands, so a legacy field in it is an unknown key and corrupt (inv. 124).
  *
+ * **Format 9 (#74, C11) adds one list and no upgrade.** `assetCategories` defaults to empty, so a
+ * format-8 archive decodes through the same strict decode with no categories and every 1.4 field as
+ * it stands — [LegacyArchive.LAST_LEGACY_FORMAT] stays 7, deliberately: raising it would route every
+ * format-8 archive through the ≤7 rewrite, which strips the three 1.4 lists and resets season, break,
+ * health and policy. No shipped writer ever put a category into a format ≤8 archive, so one that
+ * carries a row is a hand-built file and is refused, as a format-8 build refuses the unknown key.
+ * A row whose key is a **built-in's** is not refused (a built-in added by a later release must never
+ * make an older archive unrestorable); the replace and the merge planner drop it.
+ *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
@@ -62,9 +73,12 @@ import kotlinx.serialization.json.JsonObject
  * at read time (inv. 111).
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 8
+    const val FORMAT_VERSION = 9
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
+
+    /** The first format that can carry the owner's categories (#74). */
+    private const val FIRST_CATEGORY_FORMAT = 9
 
     /** Lowercase hex, 64 chars — the shape every attachment row promises for its bytes. */
     private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
@@ -127,6 +141,8 @@ object BackupCodec {
             seasonActivations = data.seasonActivations.sortedBy { it.id },
             assetConditions = data.assetConditions.sortedBy { it.id },
             healthSubjects = data.healthSubjects.sortedBy { it.id },
+            // Format 9: the key is the row's identity, so it is the sort key too.
+            assetCategories = data.assetCategories.sortedBy { it.key },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
         // The artifact tallies are derived here, in one place, from the rows themselves: a MANAGED
@@ -158,6 +174,7 @@ object BackupCodec {
                 "seasonActivations" to sorted.seasonActivations.size,
                 "assetConditions" to sorted.assetConditions.size,
                 "healthSubjects" to sorted.healthSubjects.size,
+                "assetCategories" to sorted.assetCategories.size,
             ),
             dataSha256 = sha256Hex(dataBytes),
             backupSetId = backupSetId,
@@ -214,6 +231,14 @@ object BackupCodec {
 
         val data = readData(String(dataBytes, Charsets.UTF_8), manifest.formatVersion)
 
+        // No shipped writer put a category into a format ≤8 archive: one that carries a row was
+        // built by hand, and a format-8 build would have refused the key outright.
+        if (manifest.formatVersion < FIRST_CATEGORY_FORMAT && data.assetCategories.isNotEmpty()) {
+            throw BackupCorrupt(
+                "assetCategories: a format ${manifest.formatVersion} archive cannot carry categories",
+            )
+        }
+
         // Every row must be nameable in the domain, otherwise the caller would only find out
         // halfway through a destructive import. Result discarded; this is a validation pass.
         data.assets.forEach { it.toDomain() }
@@ -230,6 +255,7 @@ object BackupCodec {
         data.seasonActivations.forEach { it.toDomain() }
         data.assetConditions.forEach { it.toDomain() }
         data.healthSubjects.forEach { it.toDomain() }
+        data.assetCategories.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
         // replays the insert loops in one transaction: a duplicate id or a reference to a row
@@ -245,7 +271,7 @@ object BackupCodec {
     }
 
     /**
-     * The version dispatch: format 8 decodes strictly as it stands; formats 1–7 are rewritten as a
+     * The version dispatch: formats 8 and 9 decode strictly as they stand; formats 1–7 are rewritten as a
      * tree by [LegacyArchive] first and then go through the very same strict decode.
      * `SerializationException` is an `IllegalArgumentException`, and so is the malformed-number
      * failure a tree decode can raise, so one catch covers both.
@@ -536,6 +562,13 @@ object BackupCodec {
                 )
             }
         }
+
+        // --- categories (format 9) -----------------------------------------------------------------
+        // The key is the row's identity and the table's primary key. Nothing points at a category and
+        // a category points at nothing, so uniqueness is the whole graph check; what makes a row
+        // malformed is `BackupContentCheck`'s.
+
+        uniqueIds("assetCategories", data.assetCategories.map { it.key })
 
         // --- events ------------------------------------------------------------------------------
 

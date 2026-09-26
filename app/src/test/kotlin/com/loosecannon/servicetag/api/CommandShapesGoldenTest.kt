@@ -7,6 +7,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -22,7 +23,8 @@ private val SerialDescriptor.names: List<String>
  * asserted equal to its request DTO's serializer descriptor, in order.
  *
  * **`docs/api/v1.md`** is the contract: it must name the archive formats this build imports, the
- * fourteen merge tables and every 1.4 code a client can receive.
+ * fifteen merge tables (#74's format 9 added the categories) and every 1.4 code a client can
+ * receive, and #74's two category reasons.
  */
 class CommandShapesGoldenTest {
 
@@ -75,17 +77,24 @@ class CommandShapesGoldenTest {
         assertEquals((keys + legacy).toSet(), row.map { rename[it] ?: it }.filter { it in command }.toSet())
     }
 
-    @Test fun theContractDocumentNamesFormat8AndFourteenTables() {
+    @Test fun theContractDocumentNamesFormat9AndFifteenTables() {
         val doc = repoFile("docs/api/v1.md").readText()
         val lines = doc.lines()
-        assertTrue("the import range reads 1–8", lines.count { "1–8" in it } >= 2)
+        assertTrue("the import range reads 1–9", lines.count { "1–9" in it } >= 2)
         assertEquals(
-            "a shipped spelling of the old import range survives",
+            "a shipped spelling of an old import range survives",
             emptyList<String>(),
-            lines.filter { "format **1–7**" in it || "**format 1–7**" in it },
+            lines.filter { line ->
+                listOf("1–7", "1–8").any { "format **$it**" in line || "**format $it**" in line }
+            },
         )
         assertEquals(emptyList<String>(), lines.filter { "the eleven tables" in it.lowercase() })
-        assertTrue("the report's fourteen tables", "fourteen tables" in doc.lowercase())
+        assertTrue("the report's fifteen tables", "fifteen tables" in doc.lowercase())
+        assertFalse("the report's old fourteen tables", "fourteen tables" in doc.lowercase())
+        // #74: the two reasons a category row can be declined with, and the new status key and tally.
+        for (name in listOf("CATEGORY_KEY_HELD", "CATEGORY_IS_BUILT_IN", "assetCategories", "categories")) {
+            assertTrue("docs/api/v1.md does not name $name", "`$name`" in doc)
+        }
 
         for (code in listOf(
             "LEGACY_WRITE_CANNOT_REPRESENT", "LEGACY_AND_CURRENT_FIELDS_MIXED", "SEASON_POLICY_NEEDS_A_TIME_RULE",

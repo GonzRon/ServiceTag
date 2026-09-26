@@ -42,6 +42,8 @@ class RouteTest {
      * Neither is the Developer API screen (1.1.0, #46): it holds a socket, not a tag, and adding it
      * here would turn reader mode on over a screen with no sink.
      *
+     * Nor is Categories (#74): a list and a rename dialog, with nothing to read.
+     *
      * Nor is any of 1.2's destinations. `Maintenance` and its four surfaces are lists,
      * `ScheduleDetail` and `ScheduleEdit` are a screen and a form, and `MaintenanceSheet` opens
      * *after* a read has resolved — the hold for that read belongs to `Route.Scan`. Adding one
@@ -58,6 +60,7 @@ class RouteTest {
         assertFalse(Route.AssetDetail("a1").readsTags())
         assertFalse(Route.Settings.readsTags())
         assertFalse(Route.DeveloperApi.readsTags())
+        assertFalse(Route.Categories.readsTags())
         assertFalse(Route.Maintenance.readsTags())
         assertFalse(Route.ScheduleDetail("s1").readsTags())
         assertFalse(Route.ScheduleEdit(null, targetAssetId = "a1").readsTags())

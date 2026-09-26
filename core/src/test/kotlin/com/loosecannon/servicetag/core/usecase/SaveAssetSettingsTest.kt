@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthSubjectId
@@ -189,5 +190,58 @@ class SaveAssetSettingsTest {
             "exactly one row, the phase it was created in",
         )
         assertTrue(h.profiles.rows.values.any { it.assetId == created.id }, "the template seeded its quick actions")
+    }
+
+    private fun AssetSettingsCommand.category(typed: String) = copy(asset = asset.copy(category = typed))
+
+    /** #74 (C5): the editor's save stores the catalog's spelling, and a first-use category becomes a row. */
+    @Test
+    fun aSavedCategoryIsStoredInTheCatalogSpellingAndPromoted() = runBlocking<Unit> {
+        val created = h.saveAssetSettings.run(null, settings("Compressor").category("  Water  heater "))
+        assertEquals("Water heater", created.category)
+        assertEquals(created, h.stored(created.id.value))
+        assertEquals(
+            mapOf("water heater" to AssetCategory("water heater", "Water heater", created.createdAt, created.createdAt)),
+            h.categories.rows.toMap(),
+        )
+
+        h.now += 1_000L
+        val other = h.saveAssetSettings.run(null, settings("Heat exchanger").category("WATER HEATER"))
+        assertEquals("Water heater", other.category, "a variant stores the row's spelling")
+        assertEquals("Hot tub", h.saveAssetSettings.run(null, settings("Spa").category("hot  tub")).category)
+        assertEquals(listOf("water heater"), h.categories.rows.keys.toList(), "no second row, and no built-in row")
+    }
+
+    /**
+     * An unchanged save writes nothing — no asset, no row — even when its category predates the
+     * catalog and so has no row yet: the promotion sits after the early return.
+     */
+    @Test
+    fun anUnchangedSaveAddsNoRow() = runBlocking<Unit> {
+        h.assets.rows["a1"] = h.asset("a1", name = "Compressor").copy(category = "Water")
+        val result = h.saveAssetSettings.run(AssetId("a1"), settings("Compressor").category("Water"))
+
+        assertEquals(h.stored("a1"), result)
+        assertEquals(0, h.assets.upserts)
+        assertTrue(h.categories.rows.isEmpty())
+    }
+
+    /** Every refusal comes before the row: a 422 of each part and a 409 add no category. */
+    @Test
+    fun aRefusedSaveAddsNoRow() = runBlocking<Unit> {
+        assertFailsWith<AssetValidation> { h.saveAssetSettings.run(null, settings("  ").category("Appliance")) }
+        assertFailsWith<SeasonValidation> {
+            h.saveAssetSettings.run(null, settings("Compressor", SeasonMode.CALENDAR).category("Appliance"))
+        }
+        assertFailsWith<UnknownTemplate> {
+            h.saveAssetSettings.run(null, settings("Compressor").category("Appliance"), templateKey = "no_such_template")
+        }
+        withPreService("a2", SeasonMode.YEAR_ROUND, pause = "06-01" to "06-30")
+        assertFailsWith<BreakStrandsPolicy> {
+            h.saveAssetSettings.run(AssetId("a2"), settings("Generator a2").category("Appliance"))
+        }
+
+        assertTrue(h.categories.rows.isEmpty())
+        assertEquals(0, h.assets.upserts)
     }
 }

@@ -19,6 +19,10 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * CALENDAR, none makes it YEAR_ROUND. A component is created here too, so the same holds for it. A
  * new asset has no schedule for a season to strand and none to recompute, and it starts with no
  * break and no activation: those have their own commands.
+ *
+ * #74 (C5): the category is promoted. The row is built **inside** the write, with the catalog's
+ * spelling of the typed category ([PromoteCategory.resolve]), and that canonical row is what is
+ * returned; a first-use category's row is written beside the asset, after every refusal.
  */
 class CreateAsset(
     private val assets: AssetRepository,
@@ -26,25 +30,27 @@ class CreateAsset(
     private val ids: IdGenerator,
     private val clock: Clock,
     private val applyTemplate: ApplyTemplate,
+    private val promoteCategory: PromoteCategory,
 ) {
     suspend fun run(cmd: AssetCommand, templateKey: String? = null): Asset {
         // A row that does not exist yet cannot be anyone's ancestor, so `null` here: no cycle
         // is reachable on create, only an unknown parent.
         val clean = validateAsset(cmd, assets.all(), id = null)
+        val template = templateKey?.let { key -> SeedTemplates.byKey(key) ?: throw UnknownTemplate(key) }
         val now = clock.nowMillis()
-        val asset = Asset(
-            id = AssetId(ids.newId()),
-            name = clean.name,
-            createdAt = now,
-            updatedAt = now,
-        ).applying(clean, now).copy(seasonMode = clean.legacyPairMode())
-        uow.write {
+        return uow.write {
+            val promotion = promoteCategory.resolve(clean.category, now)
+            val asset = Asset(
+                id = AssetId(ids.newId()),
+                name = clean.name,
+                createdAt = now,
+                updatedAt = now,
+            ).applying(clean.copy(category = promotion.spelling), now).copy(seasonMode = clean.legacyPairMode())
             assets.upsert(asset)
-            templateKey?.let { key ->
-                applyTemplate.applyInTransaction(asset.id, SeedTemplates.byKey(key) ?: throw UnknownTemplate(key))
-            }
+            promoteCategory.write(promotion)
+            template?.let { applyTemplate.applyInTransaction(asset.id, it) }
+            asset
         }
-        return asset
     }
 
     /**

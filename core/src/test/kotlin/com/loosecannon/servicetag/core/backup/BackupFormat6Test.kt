@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.testing.FakeAttachmentStorage
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
+import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
@@ -179,22 +180,23 @@ class BackupFormat6Test {
         val references = InMemoryReferenceRepository()
         val schedules = InMemoryScheduleRepository(closures)
         val storage = FakeAttachmentStorage()
+        val categories = InMemoryCategoryRepository()
         val uow = FakeUnitOfWork(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, references,
+            events, attachments, references, categories,
         )
         val export = ExportBackupSet(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            uow, IdGenerator { "set-format-6" },
+            categories, uow, IdGenerator { "set-format-6" },
             Clock { 1_758_400_000_000L }, appVersion = "1.2.0", schemaVersion = 6,
         )
         val restore = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            storage, uow, rebuildAll = { },
+            categories, storage, uow, rebuildAll = { },
         )
     }
 
@@ -269,13 +271,13 @@ class BackupFormat6Test {
         assertEquals(listOf("scheduleId", "occurrenceOn", "detailsPending"), eventFields.takeLast(3))
         assertEquals(18, eventFields.size)
         val tables = BackupData.serializer().descriptor.elementNames.toList()
-        // By position, not `takeLast`: formats 7 and 8 append their tables after these three, and
+        // By position, not `takeLast`: formats 7, 8 and 9 append their tables after these three, and
         // where format 6's tables sit is the claim this line makes.
         assertEquals(
             listOf("maintenanceGroups", "maintenanceSchedules", "occurrenceClosures"),
             tables.subList(7, 10),
         )
-        assertEquals(14, tables.size)
+        assertEquals(15, tables.size)
         // and neither derived nor delivery state is a table of this format
         assertTrue(tables.none { it.startsWith("scheduleState") || it.startsWith("scheduleLocal") })
     }
@@ -345,8 +347,8 @@ class BackupFormat6Test {
         // That is what makes the assertion above a statement about ordering and not about the row.
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(unreadable)) }
 
-        // What a 1.1.x build sees: 8 is greater than the 5 it supported, so its gate fires too.
-        assertEquals(8, BackupCodec.FORMAT_VERSION)
+        // What a 1.1.x build sees: 9 is greater than the 5 it supported, so its gate fires too.
+        assertEquals(9, BackupCodec.FORMAT_VERSION)
         assertTrue(BackupCodec.FORMAT_VERSION > LAST_1_1_X_FORMAT)
     }
 
@@ -377,10 +379,12 @@ class BackupFormat6Test {
                 "assetReferences" to 0,
                 // Format 8's three keys, at zero here because this class pins the whole map.
                 "seasonActivations" to 0, "assetConditions" to 0, "healthSubjects" to 0,
+                // Format 9's key, at zero here because this class pins the whole map.
+                "assetCategories" to 0,
             ),
             manifest.counts,
         )
-        assertEquals(20, manifest.counts.size)
+        assertEquals(21, manifest.counts.size)
     }
 
     // --- determinism -----------------------------------------------------------------------------

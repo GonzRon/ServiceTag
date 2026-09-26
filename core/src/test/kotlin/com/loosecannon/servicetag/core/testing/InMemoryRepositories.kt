@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.core.testing
 
 import com.loosecannon.servicetag.core.journal.EventChronology
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
@@ -34,6 +35,7 @@ import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
@@ -782,4 +784,42 @@ class InMemoryHealthSubjectRepository : HealthSubjectRepository, Rollbackable, W
     private companion object {
         val ORDER = compareBy<HealthSubject>({ it.sortOrder }, { it.id.value })
     }
+}
+
+/**
+ * #74's catalog rows, keyed by `key` as the table's primary key is. Lists order by key, as the Room
+ * adapter's do. [failOnUpsert] rigs the Nth upsert to throw, so an all-or-nothing claim can be made.
+ */
+class InMemoryCategoryRepository : CategoryRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, AssetCategory>()
+    override var witness: TransactionWitness? = null
+    private val rig = UpsertRig("category")
+    private val version = MutableStateFlow(0)
+    var failOnUpsert: Int?
+        get() = rig.failOnUpsert
+        set(value) { rig.failOnUpsert = value }
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun upsert(row: AssetCategory) {
+        rig.check()
+        rows[row.key] = row
+        version.value += 1
+    }
+
+    override suspend fun get(key: String): AssetCategory? = rows[key]
+
+    override suspend fun all(): List<AssetCategory> {
+        witness?.observeAll()
+        return rows.values.sortedBy { it.key }
+    }
+
+    override suspend fun delete(key: String) { rows.remove(key); version.value += 1 }
+
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeAll(): Flow<List<AssetCategory>> = version.map { rows.values.sortedBy { it.key } }
 }

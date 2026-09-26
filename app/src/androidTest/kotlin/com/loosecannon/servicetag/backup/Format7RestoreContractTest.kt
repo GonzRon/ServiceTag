@@ -3,7 +3,9 @@ package com.loosecannon.servicetag.backup
 import androidx.test.platform.app.InstrumentationRegistry
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.merge.MergeReason
+import com.loosecannon.servicetag.core.merge.MergeTable
 import com.loosecannon.servicetag.core.merge.MergeVerdict
+import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.LegacySeasonMapping
 import com.loosecannon.servicetag.core.model.SeasonBehavior
@@ -36,8 +38,9 @@ import org.junit.Test
  * **no navigation**. B01's committed golden format-7 archive (fictional: a CALENDAR and a YEAR_ROUND
  * asset; IGNORE and FOLLOW_ASSET schedules with null, `AT_START`, `RESUME_CLAMPED` and `MM-DD`
  * re-entries and out-of-range offsets) is restored in process through the production
- * `importBackupReplace` into the real Room schema 8, and exported again through the production
- * `exportBackupSet`.
+ * `importBackupReplace` into the real Room schema (9 since #74), and exported again through the
+ * production `exportBackupSet` (format 9 since #74). Its two assets share the category `Yard`, which
+ * the restore promotes into the catalog (#74, C12).
  *
  * The archive is read from this APK's assets, which `app/build.gradle.kts` points at
  * `core/src/test/resources/golden` — the one committed copy, never a second one. Every expectation
@@ -76,7 +79,9 @@ class Format7RestoreContractTest {
      * Restored, the golden archive keeps its counts; each asset is CALENDAR exactly when both of its
      * `MM-DD` bounds were set, with no break, WORST and no primary; each schedule is spec §4.1's
      * mapping of its own triple — and the committed expected file's — with the floor at its own
-     * `updatedAt` and no `updatedAt` moved; and the three new tables are empty.
+     * `updatedAt` and no `updatedAt` moved; and the three new tables are empty. And (#74) the restore
+     * promotes the assets' shared category: one row, spelled and dated as the oldest asset has it,
+     * with every asset's spelling and `updatedAt` as the file had them.
      */
     @Test fun restoringTheGoldenArchiveKeepsCountsAndMapsEveryRow() {
         val bytes = golden()
@@ -134,22 +139,30 @@ class Format7RestoreContractTest {
             assertTrue(graph.seasonActivations.all().isEmpty())
             assertTrue(graph.conditions.all().isEmpty())
             assertTrue(graph.healthSubjects.all().isEmpty())
+            assertEquals(
+                listOf(AssetCategory("yard", "Yard", 1_750_000_000_000L, 1_750_000_000_000L)),
+                graph.categories.all(),
+            )
         }
+        assertEquals(listOf("Yard", "Yard"), assets.values.map { it.category })
     }
 
     /**
-     * Exported again, the restored estate is **format 8** — no legacy season field anywhere in its
-     * `data.json` — and it plans IDENTICAL, row for row, against the store it came from; and so does
-     * the original format-7 archive (inv. 125 on the device's own schema).
+     * Exported again, the restored estate is **format 9** — no legacy season field anywhere in its
+     * `data.json`, and the category the restore promoted carried as a row — and it plans IDENTICAL,
+     * row for row, against the store it came from; and so does the original format-7 archive (inv. 125
+     * on the device's own schema). The re-export's plan is the golden's eleven decisions plus the
+     * promoted category's; the golden has no category row, and its assets, already here, need none.
      */
-    @Test fun reExportIsFormat8AndPlansIdentical() {
+    @Test fun reExportIsFormat9AndPlansIdentical() {
         val bytes = golden()
         val graph = app.graph
         runBlocking { graph.importBackupReplace.run(bytes) }
 
         val reexported = runBlocking { graph.exportBackupSet.run() }.data
         val decoded = BackupCodec.decode(reexported)
-        assertEquals(8, decoded.manifest.formatVersion)
+        assertEquals(9, decoded.manifest.formatVersion)
+        assertEquals(1, decoded.manifest.counts["assetCategories"])
         val json = dataJson(reexported)
         for (legacy in listOf("seasonBehavior", "seasonReentry", "seasonReentryOffsetDays")) {
             assertFalse(legacy, json.contains("\"$legacy\""))
@@ -158,9 +171,13 @@ class Format7RestoreContractTest {
         assertEquals(0, decoded.manifest.counts["assetConditions"])
         assertEquals(0, decoded.manifest.counts["healthSubjects"])
 
-        for ((label, archive) in listOf("re-export" to reexported, "golden format 7" to bytes)) {
+        for ((label, archive, decisions) in listOf(
+            Triple("re-export", reexported, 12),
+            Triple("golden format 7", bytes, 11),
+        )) {
             val plan = runBlocking { graph.buildBackupMergePlan.run(archive) }
-            assertEquals(label, 11, plan.decisions.size)
+            assertEquals(label, decisions, plan.decisions.size)
+            assertEquals(label, decisions - 11, plan.decisions.count { it.table == MergeTable.CATEGORIES })
             assertEquals(
                 label,
                 emptyList<Any>(),

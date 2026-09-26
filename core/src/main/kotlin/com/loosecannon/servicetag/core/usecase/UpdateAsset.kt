@@ -29,6 +29,10 @@ class NoSuchAsset(id: AssetId) : IllegalArgumentException("no asset ${id.value}"
  *
  * Everything is validated before anything is written, and the row and the recompute its new season
  * needs commit in one transaction. A 1.4-only field — the break, the health policy — is never reset.
+ *
+ * #74 (C5): the category is stored in the catalog's spelling ([PromoteCategory.resolve]), and a
+ * first-use category's row is written beside the upsert — after the 422 and the 409 — which this
+ * command always makes.
  */
 class UpdateAsset(
     private val assets: AssetRepository,
@@ -36,16 +40,20 @@ class UpdateAsset(
     private val uow: UnitOfWork,
     private val clock: Clock,
     private val recompute: RecomputeSchedules,
+    private val promoteCategory: PromoteCategory,
 ) {
     suspend fun run(id: AssetId, cmd: AssetCommand): Asset = uow.write {
         val all = assets.all()
         val current = all.firstOrNull { it.id == id } ?: throw NoSuchAsset(id)
         val clean = validateAsset(cmd, all, id)
-        val edited = current.applying(clean, clock.nowMillis())
+        val now = clock.nowMillis()
+        val promotion = promoteCategory.resolve(clean.category, now)
+        val edited = current.applying(clean.copy(category = promotion.spelling), now)
         val pairChanged = clean.seasonStartMmdd != current.seasonStartMmdd ||
             clean.seasonEndMmdd != current.seasonEndMmdd
         val saved = if (pairChanged) translated(current, edited, clean) else edited
         assets.upsert(saved)
+        promoteCategory.write(promotion)
         if (pairChanged) recompute.forAsset(id)
         saved
     }

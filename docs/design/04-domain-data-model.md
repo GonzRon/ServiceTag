@@ -191,6 +191,10 @@ other text is equally valid and nothing branches on the chosen string afterwards
 not modelling the type is that a taxonomy brings its own problems (portable vs inverter
 generator; inverter vs inverter/charger vs energy storage; a UPS battery as a battery or a
 component) without improving the core workflow, and some assets belong to more than one class.
+*Superseded in part by #74 (2026-09-26, `docs/superpowers/plans/2026-09-26-issue-74-durable-categories.md`):
+a category saved on an asset becomes a durable catalog row (`asset_category`, keyed by its
+normalised name, carried by backup format 9 and the merge), and the stored string is that row's
+spelling; `category` is still the one classification and still no equipment-type key.*
 
 Hierarchy guidance: the UPS/battery question is answered without child assets in the common case
 (a completion-relative "replace batteries every 4 years" schedule gives the battery age as

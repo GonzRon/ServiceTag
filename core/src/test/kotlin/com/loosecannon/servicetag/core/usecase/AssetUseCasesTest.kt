@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
@@ -29,7 +30,8 @@ import kotlin.test.assertTrue
  */
 class AssetUseCasesTest {
     private val assets = InMemoryAssetRepository()
-    private val uow = FakeUnitOfWork(assets)
+    private val categories = InMemoryCategoryRepository()
+    private val uow = FakeUnitOfWork(assets, categories)
     private var now = 1_000L
     private val clock = Clock { now }
     // 1.4: an edit whose season pair changed checks the asset's schedules and rebuilds them, so the
@@ -41,7 +43,7 @@ class AssetUseCasesTest {
         schedules, states, InMemoryEventRepository(), closures, InMemoryGroupRepository(), assets,
         InMemorySeasonActivationRepository(), Today { LocalDate.parse("2026-01-01") }, clock,
     ) { ZoneOffset.UTC }
-    private val update = UpdateAsset(assets, schedules, uow, clock, recompute)
+    private val update = UpdateAsset(assets, schedules, uow, clock, recompute, PromoteCategory(categories))
     // No scheduling fakes here, so the lifecycle rebuild is explicitly nothing: the seam has
     // no default, so a graph that forgot to wire it would not compile.
     private val archive = ArchiveAsset(assets, uow, clock) { }

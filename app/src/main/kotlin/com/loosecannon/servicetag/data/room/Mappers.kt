@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.data.room
 
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.Attachment
@@ -21,6 +22,7 @@ import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.data.room.entities.AssetCategoryEntity
 import com.loosecannon.servicetag.data.room.entities.AssetEntity
 import com.loosecannon.servicetag.data.room.entities.AttachmentEntity
 import com.loosecannon.servicetag.data.room.entities.ExternalLinkEntity
@@ -197,6 +199,21 @@ fun Attachment.toEntity(): AttachmentEntity = AttachmentEntity(
     storageLocator = storageLocator,
     capturedOn = capturedOn,
     notes = notes,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+// #74: a catalog row passes through unchanged in both directions; its key rule lives in core.
+fun AssetCategoryEntity.toDomain(): AssetCategory = AssetCategory(
+    key = key,
+    display = display,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+fun AssetCategory.toEntity(): AssetCategoryEntity = AssetCategoryEntity(
+    key = key,
+    display = display,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )

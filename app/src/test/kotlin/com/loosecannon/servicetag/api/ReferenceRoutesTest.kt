@@ -41,7 +41,7 @@ class ReferenceRoutesTest {
     private fun router(): ApiRouter = ApiRouter(
         ApiHandlers(
             graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles,
-            graph.events, graph.attachments,
+            graph.events, graph.attachments, graph.categories,
             graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
             graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
@@ -469,6 +469,8 @@ class ReferenceRoutesTest {
                 "groups", "schedules", "closures", "assetReferences",
                 // 1.4's three, under the archive's own list names.
                 "seasonActivations", "assetConditions", "healthSubjects",
+                // #74's, under the archive's own list name (format 9).
+                "assetCategories",
             ),
             counts.keys,
         )
@@ -477,7 +479,7 @@ class ReferenceRoutesTest {
     /**
      * Hazard: `FORMAT_VERSION` not carried through leaves the API refusing an archive the app can
      * read, or accepting one it cannot. That a **format-7** archive is accepted on a live route is
-     * proved by `MaintenanceRoutesTest.theMergeReportWireMirrorCarriesEveryTallyInWriteOrder`; this
+     * proved by `MaintenanceRoutesTest.theMergeReportWireMirrorCarriesEveryTallyInTableOrder`; this
      * is the other side — a manifest claiming a format this build does not know is a 409, and the
      * gate fires before a single row is read.
      */
@@ -522,13 +524,14 @@ class ReferenceRoutesTest {
         val text = repoFile("docs/api/v1.md").readText()
 
         // 1.4 (B09): format 8 made the report fourteen tables, the import range 1–8 and the asset
-        // sub-resources sixteen; these pins moved with the document.
-        assertFalse("the merge report is fourteen tables now", "eleven tables" in text)
-        assertTrue("the merge report must say fourteen tables", "fourteen tables" in text)
+        // sub-resources sixteen; #74's format 9 made them fifteen and 1–9. These pins moved with the
+        // document.
+        assertFalse("the merge report is fifteen tables now", "eleven tables" in text || "fourteen tables" in text)
+        assertTrue("the merge report must say fifteen tables", "fifteen tables" in text)
         // The bare string, both sites: the document spells the emphasis two ways, and a pattern
         // pinned to one asterisk placement would leave the other stale and still report clean.
-        assertFalse("the import endpoints read format 1–8 now", "1–7" in text)
-        assertTrue("the import endpoints must say 1–8", "1–8" in text)
+        assertFalse("the import endpoints read format 1–9 now", "1–7" in text || "1–8" in text)
+        assertTrue("the import endpoints must say 1–9", "1–9" in text)
 
         assertFalse(
             "there are sixteen asset sub-resources now",

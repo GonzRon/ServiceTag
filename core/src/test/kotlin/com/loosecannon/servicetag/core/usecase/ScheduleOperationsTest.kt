@@ -29,6 +29,7 @@ import com.loosecannon.servicetag.core.testing.FakeAttachmentStorage
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
+import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
@@ -751,11 +752,12 @@ class ScheduleOperationsTest {
         val schedule = save.run(null, quarterlyCommand(assetId))
         assertEquals("2026-04-01", states.get(schedule.id)!!.computedDueOn)
 
+        val categories = InMemoryCategoryRepository()
         val bytes = ExportBackupSet(
             assets, groups, tags, links, defs, profiles, schedules, closures, events, attachments,
             references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(),
-            InMemoryHealthSubjectRepository(),
+            InMemoryHealthSubjectRepository(), categories,
             uow, IdGenerator { "set-1" }, clock, appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
 
@@ -763,7 +765,7 @@ class ScheduleOperationsTest {
             assets, groups, tags, links, defs, profiles, schedules, closures, events, attachments,
             references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(),
-            InMemoryHealthSubjectRepository(),
+            InMemoryHealthSubjectRepository(), categories,
             storage, uow, rebuildAll = rebuildAll,
         )
 

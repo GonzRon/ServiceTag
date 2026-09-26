@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
@@ -58,6 +59,8 @@ class ExportBackupSet(
     private val seasonActivations: SeasonActivationRepository,
     private val conditions: ConditionRepository,
     private val healthSubjects: HealthSubjectRepository,
+    /** #74 — the owner's own categories (format 9). The compiled built-ins are never rows. */
+    private val categories: CategoryRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -89,6 +92,8 @@ class ExportBackupSet(
                 seasonActivations = seasonActivations.all().map { it.toDto() },
                 assetConditions = conditions.all().map { it.toDto() },
                 healthSubjects = healthSubjects.all().map { it.toDto() },
+                // Format 9: every row, used or not — a category outlives the last Asset using it.
+                assetCategories = categories.all().map { it.toDto() },
             ) to rows
         }
         val plan = ArtifactsPlan(

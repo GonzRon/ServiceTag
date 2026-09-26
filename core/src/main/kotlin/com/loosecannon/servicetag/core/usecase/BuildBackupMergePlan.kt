@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.merge.storedBytesOf
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
@@ -28,12 +29,14 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * Four steps and no more: decode — which refuses a corrupt or future-format file before anything
  * else happens — ask whether there is an attachment folder at all, hash and size whatever that
- * folder holds for the locators the archive names, and read the fourteen canonical tables in one
- * `uow.read` so the planner sees a single consistent point in time rather than fourteen. The decision
+ * folder holds for the locators the archive names, and read the fifteen canonical tables in one
+ * `uow.read` so the planner sees a single consistent point in time rather than fifteen. The decision
  * itself is `mergePlanOf`, a pure function.
  *
- * The same sixteen collaborators, in the same order, as [ImportBackupReplace] — because the two are
+ * The same seventeen collaborators, in the same order, as [ImportBackupReplace] — because the two are
  * the two halves of the same question, and a reader comparing them should have nothing to subtract.
+ * The seventeenth, #74's [categories], is read like the rest: the planner decides the archive's
+ * category rows against it and plans the rows its accepted assets need.
  */
 class BuildBackupMergePlan(
     private val assets: AssetRepository,
@@ -51,6 +54,8 @@ class BuildBackupMergePlan(
     private val seasonActivations: SeasonActivationRepository,
     private val conditions: ConditionRepository,
     private val healthSubjects: HealthSubjectRepository,
+    /** #74 — the owner's own categories, the fifteenth table the snapshot reads. */
+    private val categories: CategoryRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
 ) {
@@ -67,7 +72,7 @@ class BuildBackupMergePlan(
             mergeSnapshotOf(
                 assets, groups, tags, links, definitions, profiles, schedules, closures,
                 events, attachments, references, seasonActivations, conditions, healthSubjects,
-                stored, configured,
+                categories, stored, configured,
             )
         }
         return mergePlanOf(backup, snapshot)

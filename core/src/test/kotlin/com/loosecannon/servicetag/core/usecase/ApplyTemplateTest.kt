@@ -12,7 +12,8 @@ class ApplyTemplateTest {
     private val assets = InMemoryAssetRepository()
     private val defs = InMemoryDefinitionRepository()
     private val profiles = InMemoryProfileRepository()
-    private val uow = FakeUnitOfWork(assets, defs, profiles)
+    private val categories = InMemoryCategoryRepository()
+    private val uow = FakeUnitOfWork(assets, defs, profiles, categories)
     private var seq = 0
     private val ids = IdGenerator { "id-${++seq}" }
     private val apply = ApplyTemplate(defs, profiles, assets, uow, ids, Clock { 1_000L })
@@ -73,7 +74,7 @@ class ApplyTemplateTest {
     }
 
     @Test fun createAssetWithTemplateSeedsInTheSameTransaction() = runTest {
-        val create = CreateAsset(assets, uow, ids, Clock { 1_000L }, apply)
+        val create = CreateAsset(assets, uow, ids, Clock { 1_000L }, apply, PromoteCategory(categories))
         val a = create.run("UPS", templateKey = "ups")
         assertEquals(4, defs.forAsset(a.id).size)
         assertEquals("ups", assets.get(a.id)!!.templateKey)

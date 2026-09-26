@@ -75,6 +75,8 @@ internal fun clearInstall() {
             graph.tags.deleteAll()
             graph.links.deleteAll()
             graph.assets.deleteAll()
+            // #74: a category row outlives its assets, so it needs a line of its own.
+            graph.categories.deleteAll()
         }
     }
     // A thumbnail is keyed by id and sha256 prefix, so a stale one cannot normally be served — but

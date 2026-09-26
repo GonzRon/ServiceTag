@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.core.testing.FakeAttachmentStorage
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
+import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
@@ -119,18 +120,20 @@ class MergePlannerSeasonHealthTest {
     // --- order -----------------------------------------------------------------------------------
 
     /**
-     * Hazard: merge order. The fourteen members are asserted as a list, the three new ones after
-     * `REFERENCES`; and an archive whose asset, schedule, facts and subject arrive together inserts
-     * every row, because each owner is an INSERT of this same plan by the time its row is decided.
+     * Hazard: merge order. The fifteen members are asserted as a list, the three 1.4 ones after
+     * `REFERENCES` and #74's `CATEGORIES` appended after them (listed last, written first); and an
+     * archive whose asset, schedule, facts and subject arrive together inserts every row, because
+     * each owner is an INSERT of this same plan by the time its row is decided.
      */
     @Test
-    fun theFourteenTablesAreInWriteOrder() {
+    fun theFifteenTablesAreInTheirPinnedOrder() {
         assertEquals(
             listOf(
                 MergeTable.ASSETS, MergeTable.GROUPS, MergeTable.DEFINITIONS, MergeTable.PROFILES,
                 MergeTable.SCHEDULES, MergeTable.CLOSURES, MergeTable.LINKS, MergeTable.TAGS,
                 MergeTable.EVENTS, MergeTable.ATTACHMENTS, MergeTable.REFERENCES,
                 MergeTable.SEASON_ACTIVATIONS, MergeTable.CONDITIONS, MergeTable.HEALTH_SUBJECTS,
+                MergeTable.CATEGORIES,
             ),
             MergeTable.entries.toList(),
         )
@@ -489,17 +492,18 @@ class MergePlannerSeasonHealthTest {
         val conditions = LoggingConditions(InMemoryConditionRepository(), log)
         val subjects = LoggingSubjects(InMemoryHealthSubjectRepository(), log)
         val storage = FakeAttachmentStorage()
+        val categories = InMemoryCategoryRepository()
         val uow = FakeUnitOfWork(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-            references, activations, conditions, subjects,
+            references, activations, conditions, subjects, categories,
         )
         val build = BuildBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-            references, activations, conditions, subjects, storage, uow,
+            references, activations, conditions, subjects, categories, storage, uow,
         )
         val apply = ApplyBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-            references, activations, conditions, subjects, storage, uow,
+            references, activations, conditions, subjects, categories, storage, uow,
             rebuildAll = { log += "rebuild" },
         )
         val bytes = archiveOf(

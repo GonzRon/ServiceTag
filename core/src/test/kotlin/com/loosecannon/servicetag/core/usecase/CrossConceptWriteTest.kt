@@ -1,13 +1,21 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.backup.BackupData
+import com.loosecannon.servicetag.core.backup.toDto
+import com.loosecannon.servicetag.core.merge.MergePlan
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
+import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubject
@@ -19,6 +27,7 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
@@ -26,7 +35,11 @@ import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.model.TagBinding
+import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.AttachmentRepository
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.ConditionRepository
@@ -35,27 +48,38 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
+import com.loosecannon.servicetag.core.testing.FakeAttachmentStorage
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.HealthFixtures
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
+import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
 import com.loosecannon.servicetag.core.testing.InMemoryConditionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
 import com.loosecannon.servicetag.core.testing.InMemoryHealthSubjectRepository
+import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
+import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
+import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.SeasonFixtures
+import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.dayMillis
+import com.loosecannon.servicetag.core.testing.plainAssetOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -75,6 +99,12 @@ import org.junit.jupiter.api.Test
  * - No activation, season, break, policy, subject or guarded schedule write touches `asset_event` or
  *   `occurrence_closure`; a policy write touches only the asset row; a subject write only its own table.
  * - The journal's own writers — an event and a completion — write no condition (inv. 81).
+ * - #74: `asset_category` is written by the three Asset commands only when they save a category
+ *   nobody has saved before, by a rename and a delete, and by the two imports of backup format 9 —
+ *   the merge apply (the rows its plan accepted and synthesised) and the replace (its wipe, the
+ *   archive's rows and the promotion); the merge **plan** writes nothing at all, and nothing else
+ *   here writes `asset_category`. The imports' other stores are recorded too, so their sets are
+ *   whole.
  */
 class CrossConceptWriteTest {
 
@@ -92,9 +122,14 @@ class CrossConceptWriteTest {
     private val groupRows = InMemoryGroupRepository()
     private val definitionRows = InMemoryDefinitionRepository()
     private val profileRows = InMemoryProfileRepository()
+    private val categoryRows = InMemoryCategoryRepository()
+    private val tagRows = InMemoryTagRepository()
+    private val linkRows = InMemoryLinkRepository()
+    private val attachmentRows = InMemoryAttachmentRepository()
+    private val referenceRows = InMemoryReferenceRepository()
     private val uow = FakeUnitOfWork(
         assetRows, eventRows, activationRows, conditionRows, subjectRows, closureRows, stateRows, scheduleRows,
-        groupRows, definitionRows, profileRows,
+        groupRows, definitionRows, profileRows, categoryRows, tagRows, linkRows, attachmentRows, referenceRows,
     )
 
     private val assets = object : AssetRepository by assetRows {
@@ -142,6 +177,31 @@ class CrossConceptWriteTest {
             definitionRows.delete(id).also { writes += "measurement_definition" }
         override suspend fun deleteAll() = definitionRows.deleteAll().also { writes += "measurement_definition" }
     }
+    private val categories = object : CategoryRepository by categoryRows {
+        override suspend fun upsert(row: AssetCategory) = categoryRows.upsert(row).also { writes += "asset_category" }
+        override suspend fun delete(key: String) = categoryRows.delete(key).also { writes += "asset_category" }
+        override suspend fun deleteAll() = categoryRows.deleteAll().also { writes += "asset_category" }
+    }
+    private val tags = object : TagRepository by tagRows {
+        override suspend fun upsert(tag: TagBinding) = tagRows.upsert(tag).also { writes += "nfc_tag" }
+        override suspend fun delete(id: TagId) = tagRows.delete(id).also { writes += "nfc_tag" }
+        override suspend fun deleteAll() = tagRows.deleteAll().also { writes += "nfc_tag" }
+    }
+    private val links = object : LinkRepository by linkRows {
+        override suspend fun upsert(link: ExternalLink) = linkRows.upsert(link).also { writes += "external_link" }
+        override suspend fun deleteAll() = linkRows.deleteAll().also { writes += "external_link" }
+    }
+    private val attachments = object : AttachmentRepository by attachmentRows {
+        override suspend fun upsert(a: Attachment) = attachmentRows.upsert(a).also { writes += "attachment" }
+        override suspend fun delete(id: AttachmentId) = attachmentRows.delete(id).also { writes += "attachment" }
+        override suspend fun deleteAll() = attachmentRows.deleteAll().also { writes += "attachment" }
+    }
+    private val references = object : ReferenceRepository by referenceRows {
+        override suspend fun upsert(reference: AssetReference) =
+            referenceRows.upsert(reference).also { writes += "asset_reference" }
+        override suspend fun delete(id: ReferenceId) = referenceRows.delete(id).also { writes += "asset_reference" }
+        override suspend fun deleteAll() = referenceRows.deleteAll().also { writes += "asset_reference" }
+    }
     private val profiles = object : ProfileRepository by profileRows {
         override suspend fun upsert(p: EventProfile) = profileRows.upsert(p).also { writes += "event_profile" }
         override suspend fun delete(id: ProfileId) = profileRows.delete(id).also { writes += "event_profile" }
@@ -170,12 +230,41 @@ class CrossConceptWriteTest {
     private val saveSchedule =
         SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, subjects)
     private val archiveSchedule = ArchiveSchedule(schedules, uow, recompute, subjects, assets, clock)
+    private val promoteCategory = PromoteCategory(categories)
     private val saveAssetSettings = SaveAssetSettings(
         assets, schedules, subjects, activations, uow, ids, clock, today, recompute,
-        ApplyTemplate(definitions, profiles, assets, uow, ids, clock),
+        ApplyTemplate(definitions, profiles, assets, uow, ids, clock), promoteCategory,
     )
+    private val createAsset =
+        CreateAsset(assets, uow, ids, clock, ApplyTemplate(definitions, profiles, assets, uow, ids, clock), promoteCategory)
+    private val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute, promoteCategory)
+    private val renameCategory = RenameCategory(categories, assets, uow, clock)
+    private val deleteCategory = DeleteCategory(categories, assets, uow)
     private val logEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock, recompute)
     private val completeSchedule = CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recompute)
+    private val storage = FakeAttachmentStorage()
+    private val buildMergePlan = BuildBackupMergePlan(
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
+        activations, conditions, subjects, categories, storage, uow,
+    )
+    private val applyMergePlan = ApplyBackupMergePlan(
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
+        activations, conditions, subjects, categories, storage, uow, rebuildAll = { recompute.all() },
+    )
+    private val importBackupReplace = ImportBackupReplace(
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
+        activations, conditions, subjects, categories, storage, uow, rebuildAll = { recompute.all() },
+    )
+
+    /** A pre-upgrade (format 8) archive with one asset under a category this install has never saved. */
+    private val donorArchive = archiveOf(
+        BackupData(
+            assets = listOf(plainAssetOf("d1").copy(category = "Test gear").toDto()),
+            nfcTags = emptyList(),
+            externalLinks = emptyList(),
+        ),
+        formatVersion = 8,
+    )
 
     private fun seed() {
         for ((id, mode) in listOf("a1" to SeasonMode.YEAR_ROUND, "a2" to SeasonMode.MANUAL, "a3" to SeasonMode.YEAR_ROUND)) {
@@ -222,6 +311,9 @@ class CrossConceptWriteTest {
             nominalUntilDays = 365, warningFromDays = 1095, criticalFromDays = 1460,
         )
         var created: HealthSubject? = null
+        var compressor: Asset? = null
+        var planned: MergePlan? = null
+        var keysBeforeTheImports: List<String> = emptyList()
         val s1 = scheduleRows.rows.getValue("s1")
         val cmdS1 = ScheduleCommand(
             targetAssetId = AssetId("a1"), targetGroupId = null, title = s1.title, timeInterval = s1.timeInterval,
@@ -287,6 +379,33 @@ class CrossConceptWriteTest {
                 )
             },
             wrote("CompleteSchedule") { completeSchedule.run(ScheduleId("s1"), CompletionCommand("2026-09-24", tzId = "UTC")) },
+            wrote("CreateAsset, a new category") { compressor = createAsset.run(AssetCommand(name = "Compressor", category = "Appliance")) },
+            wrote("CreateAsset, a built-in") { createAsset.run(AssetCommand(name = "Spare mower", category = "lawn  MOWER")) },
+            wrote("SaveAssetSettings, a new category") {
+                saveAssetSettings.run(
+                    compressor!!.id,
+                    AssetSettingsCommand(
+                        AssetCommand(name = "Compressor", category = "Backup power"),
+                        SeasonModeCommand(SeasonMode.YEAR_ROUND),
+                        BreakCommand(null, null),
+                        HealthPolicyCommand(HealthAggregation.WORST),
+                    ),
+                )
+            },
+            wrote("UpdateAsset, a saved category") {
+                updateAsset.run(AssetId("a3"), AssetCommand(name = "Generator a3", category = " APPLIANCE "))
+            },
+            wrote("UpdateAsset, a new category") {
+                updateAsset.run(AssetId("a3"), AssetCommand(name = "Generator a3", category = "Water heater"))
+            },
+            wrote("RenameCategory") { renameCategory.run("backup power", "Standby power") },
+            wrote("DeleteCategory") { deleteCategory.run("appliance") },
+            wrote("BuildBackupMergePlan") {
+                keysBeforeTheImports = categoryRows.rows.keys.sorted()
+                planned = buildMergePlan.run(donorArchive)
+            },
+            wrote("ApplyBackupMergePlan, a new category") { applyMergePlan.run(planned!!) },
+            wrote("ImportBackupReplace") { importBackupReplace.run(donorArchive) },
         )
 
         val derived = "schedule_state"
@@ -308,10 +427,43 @@ class CrossConceptWriteTest {
             "SaveAssetSettings" to setOf("asset", "asset_season_activation", derived),
             "LogEvent" to setOf("asset_event", derived),
             "CompleteSchedule" to setOf("asset_event", derived),
+            "CreateAsset, a new category" to setOf("asset", "asset_category"),
+            "CreateAsset, a built-in" to setOf("asset"),
+            "SaveAssetSettings, a new category" to setOf("asset", "asset_category"),
+            "UpdateAsset, a saved category" to setOf("asset"),
+            "UpdateAsset, a new category" to setOf("asset", "asset_category"),
+            "RenameCategory" to setOf("asset_category", "asset"),
+            "DeleteCategory" to setOf("asset_category"),
+            "BuildBackupMergePlan" to emptySet(),
+            "ApplyBackupMergePlan, a new category" to setOf("asset_category", "asset", derived),
+            "ImportBackupReplace" to REPLACE_WRITES,
         )
         assertEquals(expected, cases.toMap())
+        assertEquals(
+            setOf(
+                "CreateAsset, a new category", "SaveAssetSettings, a new category", "UpdateAsset, a new category",
+                "RenameCategory", "DeleteCategory", "ApplyBackupMergePlan, a new category", "ImportBackupReplace",
+            ),
+            cases.filter { (_, tables) -> "asset_category" in tables }.map { it.first }.toSet(),
+            "only a new category's save, a rename, a delete, a merge apply and a replace write asset_category",
+        )
+        for (what in listOf(
+            "CreateAsset, a new category", "SaveAssetSettings, a new category", "UpdateAsset, a new category",
+            "ApplyBackupMergePlan, a new category",
+        )) {
+            assertEquals(1, counts.getValue(what)["asset_category"], "$what writes exactly one category row")
+        }
+        // The replace's two: the wipe, then the one row its promotion adds.
+        assertEquals(2, counts.getValue("ImportBackupReplace")["asset_category"])
+        assertEquals(
+            listOf("standby power", "water heater"),
+            keysBeforeTheImports,
+            "the rename moved the key; the delete took the unused row",
+        )
+        assertEquals(listOf("test gear"), categoryRows.rows.keys.sorted(), "the replace left the archive's one category")
 
-        val onePointFour = cases.filter { (what, _) -> what != "LogEvent" && what != "CompleteSchedule" }
+        // The replace is the one case that wipes the journal: it is every table's writer by definition.
+        val onePointFour = cases.filter { (what, _) -> what !in setOf("LogEvent", "CompleteSchedule", "ImportBackupReplace") }
         onePointFour.forEach { (what, tables) ->
             assertTrue("asset_event" !in tables && "occurrence_closure" !in tables, "$what wrote $tables")
         }
@@ -328,5 +480,17 @@ class CrossConceptWriteTest {
         for (what in listOf("RecordCondition", "AcceptOperationalOffer")) {
             assertEquals(1, counts.getValue(what)["asset_condition"], "$what writes exactly one condition")
         }
+    }
+
+    private companion object {
+        /**
+         * Every canonical store a replace wipes, and the two it loads here (an asset and its promoted
+         * category). No `schedule_state`: the wipe clears it through the schedule rows, and the
+         * archive brings no schedule for the rebuild to write a state for.
+         */
+        val REPLACE_WRITES = setOf(
+            "attachment", "asset_event", "maintenance_schedule", "maintenance_group", "event_profile",
+            "measurement_definition", "nfc_tag", "external_link", "asset_reference", "asset", "asset_category",
+        )
     }
 }

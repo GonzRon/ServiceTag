@@ -50,7 +50,7 @@ class ApiRouterTest {
     private fun router(): ApiRouter = ApiRouter(
         ApiHandlers(
             graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles,
-            graph.events, graph.attachments,
+            graph.events, graph.attachments, graph.categories,
             graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
             graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
@@ -232,6 +232,23 @@ class ApiRouterTest {
         assertEquals("Hot tub", assetIn(fetched).name)
         assertEquals("Water", assetIn(fetched).category)
         assertEquals(AssetStatus.ACTIVE.name, assetIn(fetched).status)
+    }
+
+    /**
+     * #74 (C15): `category` is stored in its catalog spelling, so a create's response can differ from
+     * its request by case or spacing — a `POST` of `water` after `Water` answers `Water`, and so does
+     * a later `GET`; and a built-in's key answers its label. The first save keeps the typed spelling.
+     */
+    @Test fun aCategoryIsAnsweredInItsCatalogSpelling() {
+        assertEquals("Water", assetIn(call("POST", "/v1/assets", """{"name":"Hot tub","category":"Water"}""")).category)
+
+        val variant = call("POST", "/v1/assets", """{"name":"Unit two","category":"  water "}""")
+        assertEquals(201, variant.status)
+        assertEquals("Water", assetIn(variant).category)
+        assertEquals("Water", assetIn(call("GET", "/v1/assets/${assetIn(variant).id}")).category)
+
+        assertEquals("Hot tub", assetIn(call("POST", "/v1/assets", """{"name":"Unit three","category":"HOT  TUB"}""")).category)
+        assertEquals(listOf("Water"), runBlocking { graph.categories.all().map { it.display } })
     }
 
     /** The list is the dashboard's shape: systems, and each system's components under its id. */
@@ -562,7 +579,7 @@ class ApiRouterTest {
         val brokenRouter = ApiRouter(
             ApiHandlers(
                 ThrowingAssetRepository(), graph.tags, graph.links, graph.definitions, graph.profiles,
-                graph.events, graph.attachments,
+                graph.events, graph.attachments, graph.categories,
                 graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
                 graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
                 graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
@@ -604,7 +621,7 @@ class ApiRouterTest {
             var n = 0
             val disjoint = IdGenerator { "00000000-0000-4000-8000-9000%08d".format(++n) }
             val createAsset = CreateAsset(
-                donor.assets, donor.uow, disjoint, donor.clock, donor.applyTemplate,
+                donor.assets, donor.uow, disjoint, donor.clock, donor.applyTemplate, donor.promoteCategory,
             )
             runBlocking {
                 names.forEach { createAsset.run(it, "Power") }
