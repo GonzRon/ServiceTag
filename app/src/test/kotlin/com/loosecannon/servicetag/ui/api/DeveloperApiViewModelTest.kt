@@ -157,10 +157,10 @@ class DeveloperApiViewModelTest {
             ListenerState.Died to DeveloperApiNotice.CouldNotStart,
         )
         expected.forEach { (state, notice) -> assertEquals("$state", notice, developerApiNotice(state)) }
-        // Only the denial outcome reaches the denial notice.
+        // Only the denial outcome reaches the denial notice, as the production mapping answers it.
         assertEquals(
             listOf(ListenerState.CouldNotStart(StartOutcome.NetworkPermissionDenied)),
-            expected.filterValues { it == DeveloperApiNotice.NetworkPermissionDenied }.keys.toList(),
+            expected.keys.filter { developerApiNotice(it) == DeveloperApiNotice.NetworkPermissionDenied },
         )
     }
 }

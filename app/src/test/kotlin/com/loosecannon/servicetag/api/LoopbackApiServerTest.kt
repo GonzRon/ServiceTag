@@ -523,15 +523,19 @@ class LoopbackApiServerTest {
             WatchedServerSocket(port, backlog, address).also { sockets += it }
         }
         val stopping = LoopbackApiServer(router(), { true }, port = 0, serverSocketFactory = factory)
-        assertEquals(StartOutcome.Bound, stopping.start())
-        val watched = sockets.single()
-        assertTrue("the worker never reached accept()", watched.entered.await(5, TimeUnit.SECONDS))
+        try {
+            assertEquals(StartOutcome.Bound, stopping.start())
+            val watched = sockets.single()
+            assertTrue("the worker never reached accept()", watched.entered.await(5, TimeUnit.SECONDS))
 
-        stopping.stop() // closes the socket: the parked accept() throws, and the worker runs its catch
+            stopping.stop() // closes the socket: the parked accept() throws, and the worker runs its catch
 
-        watched.worker!!.joinWithin(5_000)
-        assertEquals(ListenerState.Stopped, stopping.state.value)
-        assertEquals(0, stopping.boundPort)
+            watched.worker!!.joinWithin(5_000)
+            assertEquals(ListenerState.Stopped, stopping.state.value)
+            assertEquals(0, stopping.boundPort)
+        } finally {
+            stopping.stop() // N13: never leave a bound listener behind a failed assertion; a second stop is harmless
+        }
     }
 
     /**
