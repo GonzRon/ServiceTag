@@ -408,7 +408,7 @@ def pair(code: str) -> str:
 def status() -> dict[str, Any]:
     """The app's version, the contract version, its `schemaVersion` and `backupFormatVersion`, and a
     row count per table (since 1.4 also `seasonActivations`, `assetConditions` and
-    `healthSubjects`). Every write tool reads `schemaVersion` once per pairing and refuses with
+    `healthSubjects`; since the durable category catalog also `assetCategories`). Every write tool reads `schemaVersion` once per pairing and refuses with
     `APP_SCHEMA_TOO_OLD` below 8 (ServiceTag 1.4.0)."""
     return _call("GET", "/v1/status")
 
@@ -1033,8 +1033,9 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a `ServiceTag-data-*.zip` of format 1–8 (format 8, from ServiceTag
-    1.4.0, adds season activations, conditions and health subjects). The phone decides, per row, whether
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–9 (format 8, from ServiceTag
+    1.4.0, adds season activations, conditions and health subjects; format 9 adds the owner's own
+    asset categories). The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
     only ever inserted: an id already on the phone is never overwritten and nothing is ever deleted.
@@ -1043,7 +1044,7 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     `plan_only=True`, or when the plan does have conflicts, it stops and returns the plan — whose
     `conflicts` list names each one by table, id and a stable reason code, in a deterministic order.
     Read `applicable` to know which happened. The report tallies `{insert, identical, conflict,
-    skipped}` for each of fourteen tables.
+    skipped}` for each of fifteen tables.
 
     The plan writes nothing, so it is asked of any app. The apply is a write: against an app below
     schema 8 (older than ServiceTag 1.4.0) it is refused after the plan with `APP_SCHEMA_TOO_OLD`
