@@ -303,3 +303,20 @@ preview and the new test.
 ### Size
 
 Small: one composable with one custom layout, one preview line, one test class of six cases.
+
+## 9. Errata (2026-09-26, found in implementation; the contract stands)
+
+- **C5 / §4, `didOverflowWidth`.** For a plain-`String` `Text`, the `GetTextLayoutResult` semantics
+  action rebuilds its result at the node's full available width (foundation / ui-text 1.12.0), so
+  `didOverflowWidth` reads true for every one-line label narrower than its column and proves
+  nothing. A horizontal cut is impossible for a soft-wrapped label whose box is its column; the
+  load-bearing fact is `didOverflowHeight`, which is red on the base code and green after the fix.
+  The tests assert height overflow and layout-box containment only.
+- **§4 case 6, the fixture.** `Set up from template` is not a one-line label at half of 380dp at
+  scale 1.0: it wraps (a 52dp button) and the base code clipped it too — a third production
+  instance of #68, on assets with no profiles, fixed by the same change. Case 6 pins the 44dp
+  height and the 54dp pitch on its four one-line labels and checks the fifth as whole, at least
+  44dp, half width and on the left; case 1 pins the odd half-width `Backup` at exactly 44dp.
+- **Intrinsics (deferred).** The grid's measure policy answers no intrinsic query of its own; a
+  parent asking for `IntrinsicSize` would see one-line rows at Material's 40dp minimum rather
+  than the 44dp floor. No caller asks today; recorded in the KDoc, not fixed.
