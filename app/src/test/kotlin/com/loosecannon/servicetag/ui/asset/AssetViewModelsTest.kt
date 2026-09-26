@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.core.journal.CategoryCatalog
 import com.loosecannon.servicetag.core.journal.CategoryChoice
 import com.loosecannon.servicetag.core.journal.RangeState
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.DefinitionId
@@ -112,8 +113,9 @@ class AssetViewModelsTest {
         graph.applyTemplate, graph.uow, graph.clock, graph.todayPort, id,
     )
 
-    /** The list, reading the season phase on the graph's injected `T`. */
-    private fun listModel() = AssetsViewModel(graph.assets, graph.seasonActivations, graph.todayPort)
+    /** The list, reading the season phase on the graph's injected `T` and the catalog off the graph. */
+    private fun listModel() =
+        AssetsViewModel(graph.assets, graph.categories, graph.seasonActivations, graph.todayPort)
 
     /**
      * Create ([id] null) or edit one asset; [parentId] is the "+ Add component" preset. Suspends
@@ -1022,9 +1024,9 @@ class AssetViewModelsTest {
     }
 
     /**
-     * A row says whose component it is and whether today is outside its window (spec §6, §9).
-     * Restored as it was (B07 fix round 1, controller ruling): the Assets screen never hid
-     * components — B07 only moved the search box here, it did not change what a blank query lists.
+     * A row says whose component it is and whether today is outside its window (spec §6, §9). A
+     * component is listed once the Components control is on (#73: it is off by default), and it
+     * still names its system when it is.
      */
     @Test fun assetsRowsCarryPartOf() = runTest {
         val generator = graph.createAsset.run("Generator", "Power")
@@ -1042,6 +1044,7 @@ class AssetViewModelsTest {
 
         val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
+        vm.toggleComponents()
 
         val rows = vm.state.first { it.items.size == 2 }.items.associateBy { it.asset.name }
         assertEquals("Generator", rows.getValue("Starter battery").parentName)
@@ -1052,16 +1055,16 @@ class AssetViewModelsTest {
     }
 
     /**
-     * B07 fix round 1 (controller ruling) — the search box's move did not change the list: a
-     * component is on it under a blank query exactly as before, naming its system, and a search
-     * for its name only narrows the same list down to it.
+     * #73 — with the Components control on, a component is listed under a blank query beside its
+     * system, naming it, and a search for its name only narrows that same list down to it.
      */
-    @Test fun aComponentIsListedUnderABlankQueryAndASearchNarrowsToIt() = runTest {
+    @Test fun aComponentIsListedWithComponentsOnAndASearchNarrowsToIt() = runTest {
         val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
         graph.createAsset.run(AssetCommand(name = "Circulation pump", parentAssetId = tub.id))
 
         val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
+        vm.toggleComponents()
 
         // Blank query: both rows, the component already naming its system.
         val blank = vm.state.first { it.items.size == 2 }
@@ -1076,7 +1079,7 @@ class AssetViewModelsTest {
         assertEquals("Hot tub", narrowed.items.single().parentName)
     }
 
-    /** B07 — a blank query lists the assets exactly as the screen always has. */
+    /** B07, under #73's controls: a blank query with every control at its default lists every active root, by name. */
     @Test fun blankQueryListsAssetsAsBefore() = runTest {
         graph.createAsset.run("Zebra mower", "Yard")
         graph.createAsset.run("apple press", "Kitchen")
@@ -1124,6 +1127,7 @@ class AssetViewModelsTest {
 
         val vm = listModel()
         backgroundScope.launch { vm.state.collect() }
+        vm.toggleComponents()
         vm.state.first { it.items.size == 2 }
 
         vm.onQueryChange("circ")
@@ -1137,7 +1141,7 @@ class AssetViewModelsTest {
         assertEquals(listOf("Circulation pump", "Hot tub"), cleared.items.map { it.asset.name })
     }
 
-    /** B07 — "Show archived" and the search box narrow independently, exactly like F2 did. */
+    /** B07 — the Archived control and the search box narrow independently, exactly like F2 did. */
     @Test fun showArchivedStillComposesWithAQuery() = runTest {
         val mower = graph.createAsset.run("Mower", "Yard")
         graph.createAsset.run("Zebra mower", "Yard")
@@ -1216,13 +1220,11 @@ class AssetViewModelsTest {
     }
 
     /**
-     * Owner ruling §18.23 (B07 fix round 5, controller ruling Q4) — the archived-only hint's exact
-     * condition is the view model's to decide, not the screen's: `showArchivedOnlyHint` is `true`
-     * only for a non-blank query, "Show archived" off, no active row matching, at least one
-     * archived row that does — self-sufficient, so the screen needs no `items.isEmpty()` check of
-     * its own to be correct.
+     * Owner ruling §18.23 (B07 fix round 5, controller ruling Q4), carried into #73's [EmptyReason]
+     * — why the list is empty is the view model's to decide, not the screen's: a query that matches
+     * only an archived row, with Archived off, reads ARCHIVED_HIDDEN.
      */
-    @Test fun showArchivedOnlyHintIsTrueWhenOnlyAnArchivedRowMatches() = runTest {
+    @Test fun emptyReasonIsArchivedHiddenWhenOnlyAnArchivedRowMatches() = runTest {
         val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
         graph.archiveAsset.run(tub.id)
 
@@ -1234,11 +1236,11 @@ class AssetViewModelsTest {
         val state = vm.state.first { it.query == "hot" }
         assertTrue("no active row matches", state.items.isEmpty())
         assertFalse(state.showArchived)
-        assertTrue(state.showArchivedOnlyHint)
+        assertEquals(EmptyReason.ARCHIVED_HIDDEN, state.emptyReason)
     }
 
-    /** Negative — a blank query never sets the hint; nothing was asked. */
-    @Test fun showArchivedOnlyHintIsFalseUnderABlankQuery() = runTest {
+    /** A blank query is never answered as a search: the archived-only store reads NO_ACTIVE_ASSETS. */
+    @Test fun emptyReasonIsNoActiveAssetsUnderABlankQuery() = runTest {
         val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
         graph.archiveAsset.run(tub.id)
 
@@ -1247,17 +1249,17 @@ class AssetViewModelsTest {
 
         val state = vm.state.first { it.archivedCount == 1 }
         assertEquals("", state.query)
-        assertFalse(state.showArchivedOnlyHint)
+        assertEquals(EmptyReason.NO_ACTIVE_ASSETS, state.emptyReason)
     }
 
     /**
      * Negative — an active row matching the query is the ordinary case, not the archived-only one,
      * even when an archived row matches the same query: a formula that only ever counted archived
-     * matches would say `true` here and pass for the wrong reason (Q4). The fixture makes both
-     * halves match "water" on purpose, so this only passes if the view model itself checks whether
-     * an active row matched too.
+     * matches would say ARCHIVED_HIDDEN here and pass for the wrong reason (Q4). The fixture makes
+     * both halves match "water" on purpose, so this only passes if the view model itself checks
+     * whether an active row matched too.
      */
-    @Test fun showArchivedOnlyHintIsFalseWhenAnActiveRowAlsoMatches() = runTest {
+    @Test fun emptyReasonIsNoneWhenAnActiveRowAlsoMatches() = runTest {
         graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
         val heater = graph.createAsset.run(AssetCommand(name = "Water heater", category = "Kitchen"))
         graph.archiveAsset.run(heater.id)
@@ -1269,11 +1271,11 @@ class AssetViewModelsTest {
         vm.onQueryChange("water")
         val state = vm.state.first { it.query == "water" }
         assertEquals(listOf("Hot tub"), state.items.map { it.asset.name })
-        assertFalse(state.showArchivedOnlyHint)
+        assertEquals(EmptyReason.NONE, state.emptyReason)
     }
 
     /** Negative — a query that matches nothing anywhere stays "Nothing matches that.", not the hint. */
-    @Test fun showArchivedOnlyHintIsFalseWhenNothingMatchesAnywhere() = runTest {
+    @Test fun emptyReasonIsNothingMatchesWhenNothingMatchesAnywhere() = runTest {
         val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
         graph.archiveAsset.run(tub.id)
 
@@ -1284,14 +1286,14 @@ class AssetViewModelsTest {
         vm.onQueryChange("zzz")
         val state = vm.state.first { it.query == "zzz" }
         assertTrue(state.items.isEmpty())
-        assertFalse(state.showArchivedOnlyHint)
+        assertEquals(EmptyReason.NOTHING_MATCHES, state.emptyReason)
     }
 
     /**
-     * Negative — once "Show archived" is on, the matching archived row is listed, not held back,
-     * and the hint clears (the `|| archived` half Q4 also named).
+     * Negative — once Archived is on, the matching archived row is listed, not held back, and the
+     * reason clears (the `|| archived` half Q4 also named).
      */
-    @Test fun showArchivedOnlyHintIsFalseOnceShowArchivedIsOn() = runTest {
+    @Test fun emptyReasonIsNoneOnceArchivedIsOn() = runTest {
         val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
         graph.archiveAsset.run(tub.id)
 
@@ -1303,7 +1305,307 @@ class AssetViewModelsTest {
         vm.onQueryChange("hot")
         val state = vm.state.first { it.showArchived && it.query == "hot" }
         assertEquals(listOf("Hot tub"), state.items.map { it.asset.name })
-        assertFalse(state.showArchivedOnlyHint)
+        assertEquals(EmptyReason.NONE, state.emptyReason)
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // #73 — the Type, Components and Archived controls (plan 2026-09-26-issue-73-assets-filters §3).
+
+    /** AC 3–5: Type All, Components off, Archived off — only the active root is listed. */
+    @Test fun theFiltersDefaultToAllOffOff() = runTest {
+        val system = graph.createAsset.run(AssetCommand(name = "Pool pump", category = "Pump"))
+        graph.createAsset.run(AssetCommand(name = "Pump seal", category = "Pump", parentAssetId = system.id))
+        val old = graph.createAsset.run(AssetCommand(name = "Old heater", category = "Pump"))
+        graph.archiveAsset.run(old.id)
+
+        val vm = listModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.archivedCount == 1 }
+        assertEquals("Type defaults to All", null, state.filters.type)
+        assertFalse("Components defaults off", state.filters.showComponents)
+        assertFalse("Archived defaults off", state.filters.showArchived)
+        assertFalse("the mirror agrees", state.showArchived)
+        assertEquals(null, state.typeLabel)
+        assertEquals(listOf("Pool pump"), state.items.map { it.asset.name })
+        assertEquals(EmptyReason.NONE, state.emptyReason)
+    }
+
+    /**
+     * AC 7: the four predicates AND together. The walk visits all sixteen combinations of (query,
+     * Type, Components, Archived) one change at a time — a Gray code with Archived changing most
+     * often — so every control is toggled with the query non-blank and with another control on,
+     * and each step proves the other two controls and the query are exactly as they were. Every
+     * expected list is written down here, sorted as the list sorts: active by name, then archived.
+     */
+    @Test fun theFourPredicatesCompose() = runTest {
+        val pump = graph.createAsset.run(AssetCommand(name = "Pool pump", category = "Water"))
+        graph.createAsset.run(AssetCommand(name = "Pump seal", category = "Water", parentAssetId = pump.id))
+        val mower = graph.createAsset.run(AssetCommand(name = "Old mower", category = "Yard"))
+        val blade = graph.createAsset.run(AssetCommand(name = "Mower blade", category = "Yard", parentAssetId = pump.id))
+        graph.createAsset.run(AssetCommand(name = "Hedge trimmer", category = "Yard"))
+        graph.archiveAsset.run(mower.id)
+        graph.archiveAsset.run(blade.id)
+
+        val vm = listModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        data class Combo(val query: String, val type: String?, val components: Boolean, val archived: Boolean)
+        val walk = listOf(
+            Combo("", null, false, false) to listOf("Hedge trimmer", "Pool pump"),
+            Combo("", null, false, true) to listOf("Hedge trimmer", "Pool pump", "Old mower"),
+            Combo("", null, true, true) to listOf("Hedge trimmer", "Pool pump", "Pump seal", "Mower blade", "Old mower"),
+            Combo("", null, true, false) to listOf("Hedge trimmer", "Pool pump", "Pump seal"),
+            Combo("", "yard", true, false) to listOf("Hedge trimmer"),
+            Combo("", "yard", true, true) to listOf("Hedge trimmer", "Mower blade", "Old mower"),
+            Combo("", "yard", false, true) to listOf("Hedge trimmer", "Old mower"),
+            Combo("", "yard", false, false) to listOf("Hedge trimmer"),
+            Combo("mower", "yard", false, false) to emptyList(),
+            Combo("mower", "yard", false, true) to listOf("Old mower"),
+            Combo("mower", "yard", true, true) to listOf("Mower blade", "Old mower"),
+            Combo("mower", "yard", true, false) to emptyList(),
+            Combo("mower", null, true, false) to emptyList(),
+            Combo("mower", null, true, true) to listOf("Mower blade", "Old mower"),
+            Combo("mower", null, false, true) to listOf("Old mower"),
+            Combo("mower", null, false, false) to emptyList(),
+        )
+
+        val start = vm.state.first { it.archivedCount == 2 }
+        assertEquals(walk.first().second, start.items.map { it.asset.name })
+        walk.zipWithNext().forEach { (before, after) ->
+            val (from, _) = before
+            val (to, rows) = after
+            val state = when {
+                from.archived != to.archived -> {
+                    vm.toggleArchived()
+                    vm.state.first { it.filters.showArchived == to.archived }
+                }
+                from.components != to.components -> {
+                    vm.toggleComponents()
+                    vm.state.first { it.filters.showComponents == to.components }
+                }
+                from.type != to.type -> {
+                    vm.pickType(to.type)
+                    vm.state.first { it.filters.type == to.type }
+                }
+                else -> {
+                    vm.onQueryChange(to.query)
+                    vm.state.first { it.query == to.query }
+                }
+            }
+            assertEquals("$to: the controls", AssetFilters(to.type, to.components, to.archived), state.filters)
+            assertEquals("$to: the query", to.query, state.query)
+            assertEquals("$to: the rows", rows, state.items.map { it.asset.name })
+        }
+    }
+
+    /**
+     * AC 3, 9; R73-5: Type matches by the catalog key, so a spelling stored before promotion (seeded
+     * straight into the repository, as no write path can any more) is still of its type.
+     */
+    @Test fun typeFiltersByTheCatalogKey() = runTest {
+        graph.createAsset.run(AssetCommand(name = "Main spa", category = "Hot tub"))
+        graph.assets.upsert(assetRow("seeded", name = "Backyard spa").copy(category = "hot TUB"))
+        graph.createAsset.run(AssetCommand(name = "Sump pump", category = "Pump"))
+
+        val vm = listModel()
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.items.size == 3 }
+
+        vm.pickType("hot tub")
+        val spas = vm.state.first { it.filters.type == "hot tub" }
+        assertEquals(listOf("Backyard spa", "Main spa"), spas.items.map { it.asset.name })
+        assertEquals("Hot tub", spas.typeLabel)
+
+        vm.pickType(null)
+        val all = vm.state.first { it.filters.type == null }
+        assertEquals(listOf("Backyard spa", "Main spa", "Sump pump"), all.items.map { it.asset.name })
+        assertEquals(null, all.typeLabel)
+    }
+
+    /**
+     * C4, R73-3: a chosen category renamed to a new key, or deleted, writes the control back to All —
+     * and it stays All when the key comes back (#74's accepted resurrection, or the owner typing the
+     * category again), because the control itself was reset rather than an "effective type" derived.
+     */
+    @Test fun aRenamedOrDeletedTypeResetsToAllAndStaysThere() = runTest {
+        graph.createAsset.run(AssetCommand(name = "Deck heater", category = "Patio"))
+        graph.createAsset.run(AssetCommand(name = "Sump pump", category = "Pump"))
+        graph.categories.upsert(AssetCategory(key = "shed", display = "Shed", createdAt = 1L, updatedAt = 1L))
+
+        val vm = listModel()
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.items.size == 2 }
+
+        vm.pickType("patio")
+        val picked = vm.state.first { it.filters.type == "patio" }
+        assertEquals("Patio", picked.typeLabel)
+        assertEquals(listOf("Deck heater"), picked.items.map { it.asset.name })
+
+        // Renamed to a new key: the control is written back to All.
+        graph.renameCategory.run("patio", "Terrace")
+        val renamed = vm.state.first { state -> state.typeChoices.none { it.key == "patio" } }
+        assertEquals(null, renamed.filters.type)
+        assertEquals(null, renamed.typeLabel)
+        assertEquals(listOf("Deck heater", "Sump pump"), renamed.items.map { it.asset.name })
+
+        // The key comes back: Type stays All until the owner picks again.
+        graph.createAsset.run(AssetCommand(name = "Patio lamp", category = "Patio"))
+        val back = vm.state.first { state -> state.typeChoices.any { it.key == "patio" } }
+        assertEquals(null, back.filters.type)
+        assertEquals(null, back.typeLabel)
+        val listed = vm.state.first { it.items.size == 3 }
+        assertEquals(null, listed.filters.type)
+        assertEquals(listOf("Deck heater", "Patio lamp", "Sump pump"), listed.items.map { it.asset.name })
+
+        // Deleted (only an unused category can be): the control is written back to All as well.
+        vm.pickType("shed")
+        val shed = vm.state.first { it.filters.type == "shed" }
+        assertEquals("Shed", shed.typeLabel)
+        assertTrue(shed.items.isEmpty())
+        graph.deleteCategory.run("shed")
+        val deleted = vm.state.first { state -> state.typeChoices.none { it.key == "shed" } }
+        assertEquals(null, deleted.filters.type)
+        assertEquals(null, deleted.typeLabel)
+        assertEquals(3, deleted.items.size)
+    }
+
+    /**
+     * AC 9: the menu is the durable catalog (#74) — the built-ins in compiled order, then the owner's
+     * rows by name — never the categories the Assets happen to hold: a row no asset uses is offered,
+     * a spelling only an asset holds is not, and a row under a built-in's key is not offered twice.
+     */
+    @Test fun typeChoicesAreTheCatalogInItsOrder() = runTest {
+        graph.createAsset.run(AssetCommand(name = "Tool bench", category = "Workshop"))
+        graph.createAsset.run(AssetCommand(name = "Door opener", category = "garage"))
+        graph.createAsset.run(AssetCommand(name = "Spare pump", category = "Pump"))
+        graph.assets.upsert(assetRow("seeded", name = "Backyard spa").copy(category = "hot TUB"))
+        graph.categories.upsert(AssetCategory(key = "attic", display = "Attic", createdAt = 1L, updatedAt = 1L))
+        graph.categories.upsert(AssetCategory(key = "pump", display = "PUMP", createdAt = 1L, updatedAt = 1L))
+
+        val vm = listModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.items.size == 4 }
+        assertEquals(
+            listOf(
+                "Generator", "Lawn mower", "Snowblower", "UPS", "Battery", "Inverter / charger",
+                "Solar charge controller", "RO system", "Hot tub", "HVAC", "Pump", "Other",
+                "Attic", "garage", "Workshop",
+            ),
+            state.typeChoices.map { it.display },
+        )
+        val keys = state.typeChoices.map { it.key }
+        assertEquals("no key twice", keys.distinct(), keys)
+    }
+
+    /**
+     * R73-1: a query searches the admitted set and never widens it. With Components off, a query that
+     * matches only a component lists nothing, names Components as the control in the way, and leaves
+     * every control as it was; turning Components on lists the match.
+     */
+    @Test fun aSearchNeverWidensTheAdmittedSet() = runTest {
+        val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
+        graph.createAsset.run(AssetCommand(name = "Circulation pump", parentAssetId = tub.id))
+
+        val vm = listModel()
+        backgroundScope.launch { vm.state.collect() }
+        assertEquals(listOf("Hot tub"), vm.state.first { it.items.isNotEmpty() }.items.map { it.asset.name })
+
+        vm.onQueryChange("circ")
+        val hidden = vm.state.first { it.query == "circ" }
+        assertTrue("the component stays hidden", hidden.items.isEmpty())
+        assertEquals(EmptyReason.COMPONENTS_HIDDEN, hidden.emptyReason)
+        assertEquals(AssetFilters(type = null, showComponents = false, showArchived = false), hidden.filters)
+
+        vm.toggleComponents()
+        val shown = vm.state.first { it.filters.showComponents }
+        assertEquals(listOf("Circulation pump"), shown.items.map { it.asset.name })
+        assertEquals("Hot tub", shown.items.single().parentName)
+        assertEquals("circ", shown.query)
+        assertEquals(EmptyReason.NONE, shown.emptyReason)
+    }
+
+    /**
+     * C5, R73-7: every empty list says why, and the reason is the **union** of the controls hiding
+     * the matches — never a precedence, so a mix of an active component and an archived root names
+     * both. The blank-query reasons come first (one store grown step by step); the query and Type
+     * reasons after, over the same store; the one combination no write path can produce last.
+     */
+    @Test fun theEmptyReasonIsTheUnionOfTheControlsInTheWay() = runTest {
+        val vm = listModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        // Blank query, Type All: nothing at all.
+        assertEquals(EmptyReason.NO_ASSETS, vm.state.first { it.typeChoices.isNotEmpty() }.emptyReason)
+
+        // Only archived rows.
+        val array = graph.createAsset.run(AssetCommand(name = "Solar array"))
+        graph.archiveAsset.run(array.id)
+        assertEquals(EmptyReason.NO_ACTIVE_ASSETS, vm.state.first { it.archivedCount == 1 }.emptyReason)
+
+        // An archived root with two active components (AssetModelDeviceProofTest's fixture).
+        graph.createAsset.run(AssetCommand(name = "Inverter", parentAssetId = array.id))
+        graph.createAsset.run(AssetCommand(name = "Battery bank", parentAssetId = array.id))
+        vm.toggleComponents()
+        val listed = vm.state.first { it.filters.showComponents && it.items.size == 2 }
+        assertEquals(listOf("Battery bank", "Inverter"), listed.items.map { it.asset.name })
+        assertEquals(EmptyReason.NONE, listed.emptyReason)
+        vm.toggleComponents()
+        val parts = vm.state.first { !it.filters.showComponents }
+        assertTrue(parts.items.isEmpty())
+        assertEquals(EmptyReason.ONLY_COMPONENTS, parts.emptyReason)
+
+        // The query and Type reasons, over a store none of the rows above matches.
+        val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
+        graph.createAsset.run(AssetCommand(name = "Circulation pump", category = "Pump", parentAssetId = tub.id))
+        val heater = graph.createAsset.run(AssetCommand(name = "Old heater", category = "Water"))
+        graph.archiveAsset.run(heater.id)
+        val filter = graph.createAsset.run(AssetCommand(name = "Spare filter", category = "Water", parentAssetId = tub.id))
+        graph.archiveAsset.run(filter.id)
+        graph.createAsset.run(AssetCommand(name = "Mixer valve", category = "Water", parentAssetId = tub.id))
+        val tank = graph.createAsset.run(AssetCommand(name = "Mixer tank", category = "Water"))
+        graph.archiveAsset.run(tank.id)
+        vm.state.first { it.archivedCount == 4 && it.items.size == 1 }
+
+        suspend fun reasonFor(query: String): EmptyReason {
+            vm.onQueryChange(query)
+            return vm.state.first { it.query == query }.emptyReason
+        }
+        assertEquals("components only", EmptyReason.COMPONENTS_HIDDEN, reasonFor("circ"))
+        assertEquals("archived only", EmptyReason.ARCHIVED_HIDDEN, reasonFor("heater"))
+        assertEquals("an archived component", EmptyReason.BOTH_HIDDEN, reasonFor("spare"))
+        assertEquals("an active component and an archived root", EmptyReason.BOTH_HIDDEN, reasonFor("mixer"))
+        assertEquals("no hit", EmptyReason.NOTHING_MATCHES, reasonFor("zzz"))
+
+        vm.pickType("water")
+        vm.state.first { it.filters.type == "water" }
+        assertEquals("a match of another type", EmptyReason.TYPE_HIDDEN, reasonFor("circ"))
+        assertEquals("no hit, with a type", EmptyReason.NOTHING_MATCHES, reasonFor("zzz"))
+
+        vm.onQueryChange("")
+        vm.pickType("hvac")
+        val noneOfType = vm.state.first { it.filters.type == "hvac" && it.query.isEmpty() }
+        assertEquals("a blank query, a type nothing has", EmptyReason.NOTHING_MATCHES, noneOfType.emptyReason)
+        vm.pickType("pump")
+        val componentsOfType = vm.state.first { it.filters.type == "pump" }
+        assertEquals("a blank query, a type only components have", EmptyReason.COMPONENTS_HIDDEN, componentsOfType.emptyReason)
+
+        // Archived on, and every row a component: only a store no write path produces (a parent chain
+        // with no root, seeded straight into a second database) can hold it, and it is still not "No
+        // active assets" — that sentence is about what the Archived control hides, not about status.
+        val rootless = FakeGraph(queryContext = StandardTestDispatcher(scheduler))
+        try {
+            rootless.assets.upsert(assetRow("loop", name = "Loose part", parent = "loop", status = AssetStatus.ARCHIVED))
+            val alone = AssetsViewModel(rootless.assets, rootless.categories, rootless.seasonActivations, rootless.todayPort)
+            val collecting = launch { alone.state.collect() }
+            assertEquals(EmptyReason.NO_ACTIVE_ASSETS, alone.state.first { it.archivedCount == 1 }.emptyReason)
+            alone.toggleArchived()
+            assertEquals(EmptyReason.ONLY_COMPONENTS, alone.state.first { it.showArchived }.emptyReason)
+            collecting.cancel()
+        } finally {
+            rootless.close()
+        }
     }
 
     // ------------------------------------------------------------------------------------------

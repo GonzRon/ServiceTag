@@ -71,7 +71,7 @@ class SeasonReconciliationNavigationTest {
 
         // The Assets tab, then the asset's row, then its Edit action.
         rule.onNode(hasText("Assets") and isSelectable()).performClick()
-        rule.awaitText("Show archived")
+        rule.awaitText("Archived")
         rule.onNodeWithText("Generator").performClick()
         rule.awaitText("Readings & actions")
         rule.onNodeWithText("Edit").performScrollTo().performClick()
@@ -95,7 +95,7 @@ class SeasonReconciliationNavigationTest {
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
         rule.onAllNodesWithText("Readings & actions").assertCountEquals(0)
-        rule.onNodeWithText("Show archived").assertIsDisplayed()
+        rule.onNodeWithText("Archived").assertIsDisplayed()
         rule.onNodeWithText("Generator").assertIsDisplayed()
     }
 }

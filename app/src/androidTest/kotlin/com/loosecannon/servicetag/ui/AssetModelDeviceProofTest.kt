@@ -181,15 +181,21 @@ class AssetModelDeviceProofTest {
 
         openApp().use {
             rule.openAssetsTab()
+            // The default list hides the archived parent and, Components being off, both children:
+            // what is left says so rather than claiming there is nothing active.
+            rule.awaitText("Only components here. Turn on Components to see them.")
+            rule.onAllNodesWithText("Inverter").assertCountEquals(0)
+
+            // Components on: both children, still active and unbadged, and still no parent.
+            rule.onNodeWithText("Components").performClick()
             rule.awaitText("Inverter")
-            // The default list hides the archived parent and shows both children, unbadged.
             rule.onNodeWithText("Inverter").assertIsDisplayed()
             rule.onNodeWithText("Battery bank").assertIsDisplayed()
             rule.onAllNodesWithText("ARCHIVED").assertCountEquals(0)
             rule.onAllNodesWithText("Solar system").assertCountEquals(0)
 
             // With the archived tail shown, the badge is on the parent and on neither child.
-            rule.onNodeWithText("Show archived").performClick()
+            rule.onNodeWithText("Archived").performClick()
             rule.awaitText("Solar system")
             rule.onNode(hasText("Solar system") and hasText("ARCHIVED")).assertIsDisplayed()
             rule.onAllNodesWithText("ARCHIVED").assertCountEquals(1)

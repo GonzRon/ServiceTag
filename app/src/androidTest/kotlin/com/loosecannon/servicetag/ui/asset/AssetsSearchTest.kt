@@ -27,9 +27,9 @@ import org.junit.runner.RunWith
  * that the list redraws from it, and that the clear glyph puts it all back. Carries the two
  * scenarios `DashboardSearchTest` proved before the box moved, re-targeted at `AssetsScreen`.
  *
- * **Fix round 1 (controller ruling):** the box's move did not change what the screen lists — a
- * component is on the list under a blank query exactly as it always was, naming its system; a
- * search only narrows that same list.
+ * **#73:** the box searches only what the Type, Components and Archived controls admit. Components
+ * is off by default, so a component is listed once the owner turns it on, still naming its system;
+ * a search that matches only a hidden row says which control is in the way and turns nothing on.
  *
  * Emulator only — the suite wipes app data.
  */
@@ -58,16 +58,21 @@ class AssetsSearchTest {
     @Test fun aComponentIsListedAndNamesItsSystemAndASearchNarrowsToIt() {
         aSystemWithOnePart()
 
-        // Both rows are on the list under a blank query; the component already names its system.
-        // The box itself is named by the ratified placeholder, which only shows while it is empty.
+        // Under a blank query only the system is listed: Components is off by default. The box
+        // itself is named by the ratified placeholder, which only shows while it is empty.
         rule.awaitText("Hot tub")
-        rule.awaitText("Circulation pump")
-        rule.awaitText("Part of Hot tub")
-        rule.awaitText("Search assets and components")
+        rule.awaitText("Search assets")
+        rule.onAllNodesWithText("Circulation pump").assertCountEquals(0)
 
-        // One keystroke away. The hit stays, and the system it does not name drops out — which is
-        // what proves the list is filtered and not merely reordered.
+        // One keystroke away, the only match is the hidden component: the list says which control
+        // is in the way, and the search turns nothing on by itself.
         rule.onNode(hasSetTextAction()).performTextInput("circ")
+        rule.awaitText("Matching assets are components. Turn on Components to see them.")
+        rule.onAllNodesWithText("Circulation pump").assertCountEquals(0)
+
+        // Components on: the hit is listed, naming its system, and the system it does not name
+        // stays out — which is what proves the list is filtered and not merely reordered.
+        rule.onNodeWithText("Components").performClick()
         rule.awaitText("Circulation pump")
         rule.awaitText("Part of Hot tub")
         rule.onAllNodesWithText("Hot tub").assertCountEquals(0)
@@ -111,8 +116,8 @@ class AssetsSearchTest {
 
     /**
      * Owner ruling §18.23 (B07 fix round 4) — a query that matches only an archived row, with the
-     * chip off, gets the archived-only hint instead of "Nothing matches that."; turning the chip
-     * on then lists the match, same as any other query.
+     * Archived chip off, gets the archived-only hint (#73's wording) instead of "Nothing matches
+     * that."; turning the chip on then lists the match, same as any other query.
      */
     @Test fun anArchivedOnlyMatchShowsTheHintAndTheChipListsIt() {
         val graph = app.graph
@@ -127,13 +132,13 @@ class AssetsSearchTest {
         }
 
         rule.onNode(hasSetTextAction()).performTextInput("hot")
-        rule.awaitText("Matching assets are archived. Turn on Show archived to see them.")
+        rule.awaitText("Matching assets are archived. Turn on Archived to see them.")
         rule.onAllNodesWithText("Hot tub").assertCountEquals(0)
         rule.onAllNodesWithText("Nothing matches that.").assertCountEquals(0)
 
-        rule.onNodeWithText("Show archived").performClick()
+        rule.onNodeWithText("Archived").performClick()
         rule.awaitText("Hot tub")
-        rule.onAllNodesWithText("Matching assets are archived. Turn on Show archived to see them.")
+        rule.onAllNodesWithText("Matching assets are archived. Turn on Archived to see them.")
             .assertCountEquals(0)
     }
 }

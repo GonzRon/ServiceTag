@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.health.SubjectHealth
 import com.loosecannon.servicetag.core.health.SubjectValue
 import com.loosecannon.servicetag.core.journal.CategoryCatalog
 import com.loosecannon.servicetag.core.journal.CategoryChoice
+import com.loosecannon.servicetag.core.journal.CategoryKey
 import com.loosecannon.servicetag.core.journal.CategorySuggestions
 import com.loosecannon.servicetag.core.journal.LatestReadings
 import com.loosecannon.servicetag.core.journal.RangeState
@@ -145,36 +146,77 @@ data class AssetRow(
     val outOfSeason: Boolean = false,
 )
 
-data class AssetsState(
-    val items: List<AssetRow> = emptyList(),
+/**
+ * The Assets list's three controls (#73, C1): the category it is narrowed to — a [CategoryKey], null
+ * for All — and whether components and archived rows are admitted. One value, updated by `copy`, so
+ * changing one control can never reset another. Session state (R73-2): the view model holds it across
+ * a rotation, and nothing persists it.
+ */
+data class AssetFilters(
+    val type: String? = null,
+    val showComponents: Boolean = false,
     val showArchived: Boolean = false,
-    /** How many rows the chip is hiding, so an empty list can say why it is empty. */
-    val archivedCount: Int = 0,
-    /** What the search box holds, verbatim. Blank leaves the list exactly as it was before B07. */
-    val query: String = "",
-    /**
-     * The archived-only hint's exact condition (owner ruling §18.23; the view model's to decide,
-     * not the screen's — B07 fix round 5, controller ruling Q4): a non-blank [query], [showArchived]
-     * off, no active row matching, and at least one archived row that does. Self-sufficient — it
-     * already implies [items] is empty, so the screen needs no `items.isEmpty()` check of its own
-     * to show the hint correctly.
-     */
-    val showArchivedOnlyHint: Boolean = false,
 )
 
 /**
- * The list. Three decisions live here: whether the archived tail is shown at all — archive is not
- * delete (R-9), but a list that keeps showing everything you archived is no better than never
- * archiving — the order, which is active, then retired, then archived, by name within each group
- * (spec §9) — and, since the owner's 2026-09-23 instruction moved #39's quick filter here from the
- * Dashboard, what the search box narrows the list to. The order is the ViewModel's rather than the
- * query's because "retired" is a date column, not a status, and sorting by it in SQL would say
- * nothing about lifecycle.
+ * Why the list is empty (#73, C5; owner ruling §18.23, extended to every control by R73-7). The view
+ * model decides it and the screen only switches on it. [NONE] whenever the list has a row.
+ */
+enum class EmptyReason {
+    NONE,
+    /** A blank query, Type All, and no asset at all. */
+    NO_ASSETS,
+    /** A blank query, Type All, and no asset the Archived control admits. */
+    NO_ACTIVE_ASSETS,
+    /** A blank query, Type All, and every asset the Archived control admits is a component. */
+    ONLY_COMPONENTS,
+    /** Nothing matches the query and the type together, and no query match of another type explains it. */
+    NOTHING_MATCHES,
+    /** The query has matches, and none of them is of the chosen type. */
+    TYPE_HIDDEN,
+    /** Every match of the chosen type is hidden, and only Components hides any of them. */
+    COMPONENTS_HIDDEN,
+    /** Every match of the chosen type is hidden, and only Archived hides any of them. */
+    ARCHIVED_HIDDEN,
+    /** Every match of the chosen type is hidden, and both controls hide at least one of them. */
+    BOTH_HIDDEN,
+}
+
+data class AssetsState(
+    val items: List<AssetRow> = emptyList(),
+    /** The three controls, exactly as the owner left them. */
+    val filters: AssetFilters = AssetFilters(),
+    /** How many rows are archived, so the blank-query empty state can say how many are behind it. */
+    val archivedCount: Int = 0,
+    /** What the search box holds, verbatim. */
+    val query: String = "",
+    /** The chosen category's display, or null while Type is All. */
+    val typeLabel: String? = null,
+    /** What the Type menu offers after All: the durable category catalog, in its own order (#74). */
+    val typeChoices: List<CategoryChoice> = emptyList(),
+    /** Why [items] is empty; [EmptyReason.NONE] while it is not. */
+    val emptyReason: EmptyReason = EmptyReason.NONE,
+) {
+    /** The Archived control, mirrored for the callers that only ever asked about it. */
+    val showArchived: Boolean get() = filters.showArchived
+}
+
+/**
+ * The list. Three decisions live here: which rows the controls admit, the order — active, then
+ * retired, then archived, by name within each group (spec §9) — and why an empty list is empty. The
+ * order is the ViewModel's rather than the query's because "retired" is a date column, not a status,
+ * and sorting by it in SQL would say nothing about lifecycle.
  *
- * **The Assets screen does not adopt the Dashboard's hide-components-until-searched behaviour**
- * (controller ruling, B07 fix round 1): a blank query leaves the list exactly as it was before this
- * brief — every asset, components included, each still naming its system — and a non-blank query
- * only ever narrows that same list. Only the box's *location* moved; what the screen lists did not.
+ * **#73: the list is four predicates ANDed together** — the Archived control (archive is not delete,
+ * R-9, but a list that keeps showing everything you archived is no better than never archiving), the
+ * Components control, the chosen Type, and the search query. Components is off by default, so a blank
+ * query lists root assets only and a component appears once the owner turns Components on, still
+ * naming its system. A query searches **within** the admitted set and never widens it or touches a
+ * control (R73-1); when the controls hide every match, [EmptyReason] names the ones in the way.
+ *
+ * **Type** is the durable category catalog (#74) matched by [CategoryKey], so a spelling stored before
+ * promotion still matches (R73-5). A category renamed to a new key, or deleted, while it is the chosen
+ * Type writes the control back to All, and it stays All until the owner picks again (C4).
  *
  * **1.4 (B14).** A row's out-of-season mark is the asset's **season phase** on [today] (spec §3.1),
  * read from [SeasonContext] like every other season surface — so a MANUAL asset after an END reads
@@ -185,13 +227,14 @@ data class AssetsState(
 @OptIn(ExperimentalCoroutinesApi::class)
 class AssetsViewModel(
     assets: AssetRepository,
+    categories: CategoryRepository,
     activations: SeasonActivationRepository,
     private val today: Today,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph) : this(graph.assets, graph.seasonActivations, graph.today)
+    constructor(graph: AppGraph) : this(graph.assets, graph.categories, graph.seasonActivations, graph.today)
 
-    private val showArchived = MutableStateFlow(false)
+    private val filters = MutableStateFlow(AssetFilters())
     private val queries = MutableStateFlow("")
 
     /**
@@ -215,13 +258,20 @@ class AssetsViewModel(
     }
 
     val state: StateFlow<AssetsState> =
-        combine(seasonal, showArchived, queries) { (rows, activationsOf), archived, query ->
+        combine(seasonal, filters, categories.observeAll(), queries) { (rows, activationsOf), picked, custom, query ->
+            val choices = CategoryCatalog.choices(custom)
+            val stale = picked.type?.takeIf { key -> choices.none { it.key == key } }
+            // C4: a chosen category the catalog no longer holds (renamed to a new key, or deleted)
+            // writes the control itself back to All — compare-and-set, so a type picked since this
+            // emission began is never erased — and this state is already built with All. Never a
+            // derived "effective type": that would silently re-apply if the key came back.
+            if (stale != null) filters.update { if (it.type == stale) it.copy(type = null) else it }
+            val controls = if (stale != null) picked.copy(type = null) else picked
             val day = today.localDate()
             val byId = rows.associateBy { it.id }
-            val visible = if (archived) rows else rows.filter { it.status == AssetStatus.ACTIVE }
-            // A blank query leaves the list exactly as it was before B07 (components included);
-            // a non-blank query only ever narrows it (#39's six-field predicate, unchanged).
-            val matching = visible.filter { it.matches(query) }
+            // The four predicates, ANDed: the three controls admit a row, and the query searches only
+            // what they admitted (R73-1) — #39's six-field predicate, unchanged.
+            val matching = rows.filter { controls.admits(it) && it.matches(query) }
             AssetsState(
                 items = matching
                     .sortedWith(compareBy({ lifecycleRank(it) }, { it.name.lowercase() }))
@@ -235,20 +285,23 @@ class AssetsViewModel(
                             outOfSeason = outOfSeasonOn(row, activationsOf[row.id].orEmpty(), day),
                         )
                     },
-                showArchived = archived,
+                filters = controls,
                 archivedCount = rows.count { it.status != AssetStatus.ACTIVE },
                 query = query,
-                // Checked directly against `rows`, not against `matching`/`items`: a formula that
-                // only ever counted archived matches would say `true` even when an active row also
-                // matched (Q4), so this asks both halves itself rather than trusting the screen's
-                // `items.isEmpty()` to have ruled the active half out already.
-                showArchivedOnlyHint = query.isNotBlank() && !archived &&
-                    rows.none { it.status == AssetStatus.ACTIVE && it.matches(query) } &&
-                    rows.any { it.status != AssetStatus.ACTIVE && it.matches(query) },
+                typeLabel = controls.type?.let { key -> choices.first { it.key == key }.display },
+                typeChoices = choices,
+                emptyReason = emptyReason(rows, controls, query, listed = matching.isNotEmpty()),
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), AssetsState())
 
-    fun toggleArchived() = showArchived.update { !it }
+    /** The Archived control. */
+    fun toggleArchived() = filters.update { it.copy(showArchived = !it.showArchived) }
+
+    /** The Components control. */
+    fun toggleComponents() = filters.update { it.copy(showComponents = !it.showComponents) }
+
+    /** The Type control: a category key from [AssetsState.typeChoices], or null for All. */
+    fun pickType(key: String?) = filters.update { it.copy(type = key) }
 
     /**
      * What the search box holds. Filtering is a pass over rows the store flow already produced, so
@@ -261,6 +314,47 @@ class AssetsViewModel(
 
     /** The asset rows and, keyed by asset, the activation rows of the MANUAL ones. */
     private data class Seasonal(val rows: List<Asset>, val activationsOf: Map<AssetId, List<SeasonActivation>>)
+}
+
+/** The Archived control's predicate: archived rows only while it is on. */
+private fun AssetFilters.admitsStatus(asset: Asset): Boolean = showArchived || asset.status == AssetStatus.ACTIVE
+
+/** The Components control's predicate: a component's admission is this and its own status, never its parent's. */
+private fun AssetFilters.admitsPlace(asset: Asset): Boolean = showComponents || asset.parentAssetId == null
+
+/** The Type control's predicate, by key (R73-5): a spelling stored before promotion still matches. */
+private fun AssetFilters.admitsType(asset: Asset): Boolean = type == null || CategoryKey.of(asset.category) == type
+
+private fun AssetFilters.admits(asset: Asset): Boolean = admitsStatus(asset) && admitsPlace(asset) && admitsType(asset)
+
+/**
+ * C5's ordered table. [listed] is whether the list has a row at all; `hits` are the rows the query
+ * matches with no control applied, and `ofType` the hits the chosen Type admits. When the controls
+ * hide every one of those, the reason is the **union** of the controls hiding them — never a
+ * precedence — so a mix of an active component and an archived root names both controls, and no
+ * sentence is false for one of its rows.
+ */
+internal fun emptyReason(rows: List<Asset>, filters: AssetFilters, query: String, listed: Boolean): EmptyReason {
+    if (listed) return EmptyReason.NONE
+    if (query.isBlank() && filters.type == null) {
+        return when {
+            rows.isEmpty() -> EmptyReason.NO_ASSETS
+            rows.none { filters.admitsStatus(it) } -> EmptyReason.NO_ACTIVE_ASSETS
+            else -> EmptyReason.ONLY_COMPONENTS
+        }
+    }
+    val hits = rows.filter { it.matches(query) }
+    val ofType = hits.filter { filters.admitsType(it) }
+    if (ofType.isEmpty()) {
+        return if (query.isNotBlank() && hits.isNotEmpty()) EmptyReason.TYPE_HIDDEN else EmptyReason.NOTHING_MATCHES
+    }
+    val byComponents = ofType.any { !filters.admitsPlace(it) }
+    val byArchived = ofType.any { !filters.admitsStatus(it) }
+    return when {
+        byComponents && byArchived -> EmptyReason.BOTH_HIDDEN
+        byComponents -> EmptyReason.COMPONENTS_HIDDEN
+        else -> EmptyReason.ARCHIVED_HIDDEN
+    }
 }
 
 /**
