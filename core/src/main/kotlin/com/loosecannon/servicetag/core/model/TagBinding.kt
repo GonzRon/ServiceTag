@@ -23,3 +23,11 @@ data class TagBinding(
     val createdAt: Long,
     val updatedAt: Long,
 )
+
+/**
+ * #71 (plan C1, R71-1): whether this row is a written, active ServiceTag tag for [assetId] — it
+ * targets that asset, it is ACTIVE, and `ProvisionTag.complete` stamped [TagBinding.writtenAt] after
+ * the verified write. A row provisioned but never written, an UNBOUND spare, and a LOST or RETIRED tag
+ * that still names the asset do not count. The one home of the rule; one qualifying row is enough.
+ */
+fun TagBinding.isWrittenFor(assetId: AssetId): Boolean = target == TagTarget.AssetTarget(assetId) && status == TagStatus.ACTIVE && writtenAt != null
