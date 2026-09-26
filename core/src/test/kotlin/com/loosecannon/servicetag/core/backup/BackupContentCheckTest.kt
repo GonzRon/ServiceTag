@@ -259,6 +259,26 @@ class BackupContentCheckTest {
     }
 
     /**
+     * Ruling R74-14 (review N5): a display not in `CategoryKey.display` form — untrimmed, a run of
+     * spaces, or decomposed (NFD) — is malformed too, even when its key is the key rule's own: no
+     * promotion, rename or backfill writes one. It lands with format 9, because tightening a restore
+     * check later would refuse archives this build once accepted.
+     */
+    @Test
+    fun aDisplayNotInItsStoredFormIsRefused() {
+        for ((key, display) in listOf(
+            "appliance" to " Appliance",
+            "water heater" to "Water  heater",
+            "\u00e9clairage" to "E\u0301clairage",
+        )) {
+            assertRefused(
+                data(categories = listOf(AssetCategoryDto(key, display, 1L, 1L))),
+                "assetCategories: category $key", "has a display not in its stored form",
+            )
+        }
+    }
+
+    /**
      * A row filed under a **built-in's** key is never refused: a built-in added by a later release
      * must not make an older archive unrestorable (MAJOR by `versioning.md`). The planner and the
      * replace drop it instead. A well-formed row of the owner's own decodes beside it.

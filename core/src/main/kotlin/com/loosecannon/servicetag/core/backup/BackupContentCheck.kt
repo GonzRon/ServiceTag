@@ -27,8 +27,11 @@ import com.loosecannon.servicetag.core.usecase.wellFormedZone
  * - a condition's date, time, zone and reason — the zone by its form alone, never by this device's zone
  *   data (the controller's ruling on B06-F7); an activation's date.
  *
- * - a category (#74, C11) that is **malformed**: a blank display, or a key that is not
- *   `CategoryKey.of(display)` — the row a promotion could never have written. Nothing else about a
+ * - a category (#74, C11) that is **malformed**: a blank display, a key that is not
+ *   `CategoryKey.of(display)`, or (ruling R74-14) a display not in `CategoryKey.display` form —
+ *   untrimmed, a run of whitespace, or not NFC — the row a promotion, a rename or the backfill could
+ *   never have written. It lands with format 9 itself, because tightening a restore check later would
+ *   refuse archives an earlier build accepted. Nothing else about a
  *   category is refused: a row filed under a **built-in's** key decodes, because a built-in added by a
  *   later release must never make an older archive unrestorable, and the replace and the merge
  *   planner drop it. (A duplicate key is the graph check's `uniqueIds`, which runs first.)
@@ -92,7 +95,10 @@ internal object BackupContentCheck {
         checkCategories(data)
     }
 
-    /** A promotion writes `key = CategoryKey.of(display)` and never a blank display (C2, C5). */
+    /**
+     * A promotion writes `key = CategoryKey.of(display)` with `display` already in
+     * `CategoryKey.display` form, and never a blank display (C2, C5; R74-14).
+     */
     private fun checkCategories(data: BackupData) {
         data.assetCategories.forEach { row ->
             if (row.display.isBlank()) {
@@ -103,6 +109,9 @@ internal object BackupContentCheck {
                 throw BackupCorrupt(
                     "assetCategories: category ${row.key} is not keyed by its display (its key is \"$expected\")",
                 )
+            }
+            if (row.display != CategoryKey.display(row.display)) {
+                throw BackupCorrupt("assetCategories: category ${row.key} has a display not in its stored form")
             }
         }
     }

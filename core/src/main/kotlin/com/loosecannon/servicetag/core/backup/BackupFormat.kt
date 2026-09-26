@@ -435,8 +435,9 @@ data class HealthSubjectDto(
 
 /**
  * Format 9 (#74, C11). One of the owner's own Asset categories: the `asset_category` table's four
- * columns, in column order. [key] is the identity — `CategoryKey.of(display)`, which the content check
- * holds it to — and the compiled built-ins are never rows, here or in the table.
+ * columns, in column order. [key] is the identity — `CategoryKey.of(display)` — and [display] is in
+ * `CategoryKey.display` form; the content check holds a row to both. The compiled built-ins are never
+ * rows, here or in the table.
  */
 @Serializable
 data class AssetCategoryDto(
@@ -472,7 +473,7 @@ data class BackupData(
     val healthSubjects: List<HealthSubjectDto> = emptyList(),
     /**
      * Format 9 (#74); the owner's own categories, ordered by key. Empty on every format ≤8 archive,
-     * which never carries the key — the codec refuses one that does.
+     * which never carries a **row** — the codec refuses one that does (an empty list is accepted).
      */
     val assetCategories: List<AssetCategoryDto> = emptyList(),
 )
