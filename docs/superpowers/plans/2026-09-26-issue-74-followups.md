@@ -35,7 +35,7 @@ open with no line and a failed delete closes silently.
 ## 2. The invisible-character hazard in the key rule (owner, 2026-09-26)
 
 The ratified `CategoryKey` rule (NFC, trim, whitespace collapsed, `lowercase(Locale.ROOT)`) does not remove
-zero-width and other invisible format characters, so a pasted `App​liance` makes a second category that
+zero-width and other invisible format characters, so a pasted `AppU+200Bliance` makes a second category that
 looks identical to `Appliance`. The rule is persisted (a Room primary key and a format-9 archive field), so
 this closes **before** format 9 ships. The owner's constraint: **do not strip every Unicode `FORMAT`
 character** — some carry meaning; strip or reject only the non-semantic invisible characters that can create
@@ -57,13 +57,13 @@ visually duplicate identities, with explicit tests.
   and no format bump: format 9 has not shipped and no phone holds schema 9.
 - **K5, docs:** `CategoryKey`'s KDoc names the removed set and the kept set with the reason; the #74 plan's C2
   gets an errata line pointing here.
-- **Tests.** `CategoryKeyTest` · a table: `App​liance` / `﻿Appliance` / `Appli­ance` /
-  `‎Appliance‏` / `App⁠liance` / a tag-character sequence → all `appliance` with display
+- **Tests.** `CategoryKeyTest` · a table: `AppU+200Bliance` / `U+FEFFAppliance` / `AppliU+00ADance` /
+  `U+200EApplianceU+200F` / `AppU+2060liance` / a tag-character sequence → all `appliance` with display
   `Appliance`; a ZWNJ inside a Persian word and a ZWJ emoji sequence keep their joiner (the key with the
-  joiner differs from the key without it); `​​` → blank, no key; a bidi override inside a name is
+  joiner differs from the key without it); `U+200BU+200B` → blank, no key; a bidi override inside a name is
   removed; NFC still applies after removal (`E` + U+0301 with a ZWSP between → `é`). RED: drop the removal.
   `BackupContentCheckTest` · a category row with a ZWSP in its display is refused. `PromoteCategoryTest` ·
-  `App​liance` after `Appliance` reuses the row.
+  `AppU+200Bliance` after `Appliance` reuses the row.
 
 ## 3. The brief (one implementer)
 
@@ -79,3 +79,37 @@ category."` → 1; `git grep -nE 'Cf|FORMAT|getType\(' -- core/src/main/kotlin/c
 → 0 (an explicit set, never the whole category); the assert sweep empty; gitlink `7e0377a`; `git status` clean.
 **Must NOT.** Strip ZWJ/ZWNJ, variation selectors or combining marks; use `Character.getType == FORMAT` as the
 rule; add a string beyond P74-18/19; touch the dashboard, the planner, the migration or the API.
+
+## 4. Errata (2026-09-26, from the build and its reviews; the final rule)
+
+The task review overturned two rulings with evidence and the fix round applied the final sets below;
+the plan's §2 K1–K2 read as superseded by this section. Every code point is written as `U+XXXX` here
+and in every test source: the tool that wrote §2 turned escapes into the characters themselves, which is
+the Trojan-Source hazard this brief exists to close.
+
+- **Removed** (an explicit list, never a whole Unicode category): U+00AD; U+034F; U+061C; U+17B4–U+17B5
+  (zero-width, deprecated — a controller ruling for the owner's knowledge: Khmer text never needs them);
+  U+180E; U+200B; U+200E–U+200F; U+202A–U+202E; U+2060–U+206F (word joiner, invisible operators, the
+  unassigned U+2065, the bidi isolates, the deprecated format characters); U+FEFF; U+FFF0–U+FFF8;
+  U+1D173–U+1D17A; U+E0000–U+E001F (unassigned, and the deprecated language tag U+E0001); the tag
+  characters U+E0020–U+E007F except inside a subdivision flag; U+E0080–U+E00FF and U+E01F0–U+E0FFF
+  (unassigned).
+- **Space-like, replaced by a space** (they take visible width; dropping them would join two words the
+  owner saw apart): U+115F, U+1160, U+3164, U+FFA0, U+2800. Trade-off for the owner: in old-Hangul jamo
+  spelling U+115F/U+1160 stand for a missing letter, so a category typed that way would split at them.
+- **Kept, because they carry meaning:** U+200C and U+200D (the joiners); the variation selectors
+  U+FE00–U+FE0F and U+E0100–U+E01EF; every other combining mark; whitespace (collapsed); every other
+  format character; and a subdivision flag's tags — a run of U+E0020–U+E007E closed by U+E007F that
+  directly follows U+1F3F4 in the text as given (England, Scotland, Wales). Judged on the text as given:
+  a removed character pasted between the flag and its tags leaves the bare flag, which is what such a
+  text shows; the U+FE0F variant form is not kept (no standard flag uses it).
+- **Order:** NFC; step 2 (remove / space-like); NFC again (a removed character may have held a mark
+  apart from its letter); trim and collapse. `of` lowercases the result with `Locale.ROOT`.
+- **Why tags are not simply kept:** a tag after a letter has zero width in HarfBuzz, so a name plus tags
+  looks identical to the name and keys apart, and tags are an ASCII-smuggling channel toward the MCP's
+  LLM clients. Why fillers are not simply removed: they are 920–1500 units wide in common fonts.
+- **The failure mapping (S5):** a rename maps every exception that is not `CategoryExists`,
+  `CategoryIsBuiltIn`, `CategoryValidation`, `NoSuchCategory` or a cancellation to P74-18; a delete maps
+  every exception that is not `CategoryInUse`, `NoSuchCategory` or a cancellation to P74-19; each pinned
+  by its own RED test.
+- **`docs/api/v1.md`** describes the first-save spelling as the rule above, in two sentences.
