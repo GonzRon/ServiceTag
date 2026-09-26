@@ -24,6 +24,8 @@ import org.junit.runner.RunWith
  * 1.1.0 (#46) adds a third row, Developer API, and the same reasoning applies twice over: that
  * screen *is* the automation API's lifetime, so a Settings edit that dropped the row would remove
  * the only way to start the listener at all — there is deliberately no deep link to it.
+ *
+ * #74 adds a fourth, Categories: the one way to rename or delete the owner's own categories.
  */
 @RunWith(AndroidJUnit4::class)
 class SettingsBackupEntryTest {
@@ -42,6 +44,7 @@ class SettingsBackupEntryTest {
                     onReadTag = {},
                     onBackup = { backupTapped++ },
                     onDeveloperApi = {},
+                    onCategories = {},
                 )
             }
         }
@@ -65,6 +68,7 @@ class SettingsBackupEntryTest {
                     onReadTag = {},
                     onBackup = {},
                     onDeveloperApi = { apiTapped++ },
+                    onCategories = {},
                 )
             }
         }
@@ -77,5 +81,30 @@ class SettingsBackupEntryTest {
         rule.onNodeWithText("Developer API").performScrollTo().performClick()
 
         assertEquals(1, apiTapped)
+    }
+
+    @Test fun categoriesRowIsPresentAndInvokesOnCategories() {
+        val graph = AppGraph(ApplicationProvider.getApplicationContext())
+        var categoriesTapped = 0
+
+        rule.setContent {
+            ServiceTagTheme {
+                SettingsScreen(
+                    graph = graph,
+                    onBack = {},
+                    onReadTag = {},
+                    onBackup = {},
+                    onDeveloperApi = {},
+                    onCategories = { categoriesTapped++ },
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        // The fourth Utilities row, after Developer API: below the fold, so scrolled to first.
+        rule.onNodeWithText("Categories").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Categories").performScrollTo().performClick()
+
+        assertEquals(1, categoriesTapped)
     }
 }

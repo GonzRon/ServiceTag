@@ -23,7 +23,6 @@ import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
@@ -52,15 +51,7 @@ class AssetEditorCategoryPickerTest {
     /** The ids the editor finished with, as its host is told them. */
     private val saved = mutableListOf<String>()
 
-    /** `clearInstall` predates the catalog, so the category rows are wiped here as well, before and after. */
-    @Before fun freshInstall() {
-        clearInstall()
-        wipeCategories()
-    }
-
-    @After fun leaveNoCategories() = wipeCategories()
-
-    private fun wipeCategories() = runBlocking { graph.uow.write { graph.categories.deleteAll() } }
+    @Before fun freshInstall() = clearInstall()
 
     /** The editor on [initial]; the returned setter switches it to another asset (null is a new one). */
     private fun editor(initial: String?): (String?) -> Unit {

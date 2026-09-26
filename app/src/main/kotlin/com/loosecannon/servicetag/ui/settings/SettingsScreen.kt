@@ -92,7 +92,7 @@ fun SettingsScreen(
     onReadTag: () -> Unit,
     onBackup: () -> Unit,
     onDeveloperApi: () -> Unit,
-    onCategories: () -> Unit = {},
+    onCategories: () -> Unit,
 ) {
     val activity = LocalActivity.current
     val prefs = graph.prefs
