@@ -357,3 +357,17 @@ consent test still green; the inert, cancelled and hanging cases genuinely red u
 
 Medium: two core files modified and one created, two app files, five test files touched, two test
 classes new.
+
+## 9. Errata (2026-09-26, found in implementation; the contract stands)
+
+- **§8 Gate, the retired-sentence grep.** `git grep -nE '"a different ServiceTag tag \('` matches the
+  plan documents that record the retirement, so it can never read 0 unscoped; it is scoped to
+  `-- core app` (as the implementer ran it), where it reads 0.
+- **Choices left to the implementer, upheld by the task review:** a pre-split link row is a known row
+  and keeps its placement on the quiet line (pinned by test); a revoked row that is not LOST reads
+  P70-3b, the inspect sheet's own LOST/else split; the quiet line sits 2dp under the warning line, the
+  `TargetLine` spacing; `LOOKUP_BOUND` stays private and the hanging test hard-codes two seconds,
+  which pins the value; the no-identifier sheet case also checks that no empty mono line is drawn.
+- **The bound and a blocking query.** `withTimeoutOrNull` cuts the lookup off only where it
+  suspends; a query blocked inside SQLite is not interrupted, merely no longer waited for (noted in
+  the controller's KDoc).
