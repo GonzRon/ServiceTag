@@ -6,6 +6,10 @@ data class CategorySuggestion(val label: String, val suggestedTemplateKey: Strin
 /**
  * The category catalog (spec §8). Category is free text; these are suggestions, never authority
  * — typing anything else is equally valid, and nothing reads the category string after creation.
+ *
+ * Superseded in part by #74 (`docs/superpowers/plans/2026-09-26-issue-74-durable-categories.md`):
+ * these are now the compiled **built-ins** of a durable catalog ([CategoryCatalog]) whose other half
+ * is the owner's saved categories, and a save stores the catalog's spelling of the category.
  */
 object CategorySuggestions {
 
@@ -24,7 +28,12 @@ object CategorySuggestions {
         CategorySuggestion("Other", "generic"),
     )
 
-    /** Exact label match, case-insensitive; null for free text that matches nothing in the catalog. */
-    fun templateFor(category: String): String? =
-        all.firstOrNull { it.label.equals(category, ignoreCase = true) }?.suggestedTemplateKey
+    /**
+     * A built-in's hint, matched by key (#74, R74-12): `hot  tub` and `HOT TUB` carry the Hot tub hint
+     * as `ro SYSTEM` does. Null for text that is no built-in's key — an owner's category never has one.
+     */
+    fun templateFor(category: String): String? {
+        val key = CategoryKey.of(category) ?: return null
+        return all.firstOrNull { CategoryKey.of(it.label) == key }?.suggestedTemplateKey
+    }
 }
