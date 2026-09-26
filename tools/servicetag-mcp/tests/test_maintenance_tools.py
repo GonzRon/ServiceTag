@@ -562,6 +562,81 @@ def test_the_schedule_fields_that_cannot_be_cleared_are_refused_by_name(paired) 
     assert paired.requests == []
 
 
+# --- update_schedule: mirroring reminders_enabled onto the stored LOCAL row (#83) -----------------
+
+
+def test_update_schedule_turning_reminders_on_enables_the_local_row(paired) -> None:
+    """A schedule stored with reminders off (`[LOCAL, enabled=False]`) turned back on must not
+    re-send the disabled row verbatim, or the phone ends up with reminders on and delivery off."""
+    paired.reply(
+        "GET", "/v1/schedules/s1", 200,
+        _schedule_row(providers=[{"provider": "LOCAL", "enabled": False}]),
+    )
+    server_module.update_schedule(schedule_id="s1", reminders_enabled=True)
+    assert body_of(paired.last())["providers"] == [{"provider": "LOCAL", "enabled": True}]
+
+
+def test_update_schedule_turning_reminders_off_disables_the_local_row(paired) -> None:
+    paired.reply(
+        "GET", "/v1/schedules/s1", 200,
+        _schedule_row(providers=[{"provider": "LOCAL", "enabled": True}]),
+    )
+    server_module.update_schedule(schedule_id="s1", reminders_enabled=False)
+    assert body_of(paired.last())["providers"] == [{"provider": "LOCAL", "enabled": False}]
+
+
+def test_update_schedule_with_an_explicit_providers_list_sends_it_as_given(paired) -> None:
+    """A caller who states `providers` themselves is trusted over the mirror, even when it
+    disagrees with `reminders_enabled` in the same call."""
+    paired.reply(
+        "GET", "/v1/schedules/s1", 200,
+        _schedule_row(providers=[{"provider": "LOCAL", "enabled": True}]),
+    )
+    server_module.update_schedule(
+        schedule_id="s1", reminders_enabled=True,
+        providers=[{"provider": "LOCAL", "enabled": False}],
+    )
+    assert body_of(paired.last())["providers"] == [{"provider": "LOCAL", "enabled": False}]
+
+
+def test_update_schedule_clearing_providers_sends_an_empty_list_even_with_reminders_on(paired) -> None:
+    paired.reply(
+        "GET", "/v1/schedules/s1", 200,
+        _schedule_row(providers=[{"provider": "LOCAL", "enabled": False}]),
+    )
+    server_module.update_schedule(
+        schedule_id="s1", reminders_enabled=True, clear_fields=["providers"],
+    )
+    assert body_of(paired.last())["providers"] == []
+
+
+def test_update_schedule_without_reminders_enabled_leaves_the_row_alone(paired) -> None:
+    """An edit that never mentions `reminders_enabled` must not touch the stored providers row."""
+    paired.reply(
+        "GET", "/v1/schedules/s1", 200,
+        _schedule_row(providers=[{"provider": "LOCAL", "enabled": False}]),
+    )
+    server_module.update_schedule(schedule_id="s1", title="Filter swap")
+    assert body_of(paired.last())["providers"] == [{"provider": "LOCAL", "enabled": False}]
+
+
+def test_update_schedule_mirrors_only_local_rows(paired) -> None:
+    """`LOCAL` is the only provider the mirror touches; a row for any other provider name is sent
+    as stored."""
+    paired.reply(
+        "GET", "/v1/schedules/s1", 200,
+        _schedule_row(providers=[
+            {"provider": "LOCAL", "enabled": False},
+            {"provider": "OTHER", "enabled": False},
+        ]),
+    )
+    server_module.update_schedule(schedule_id="s1", reminders_enabled=True)
+    assert body_of(paired.last())["providers"] == [
+        {"provider": "LOCAL", "enabled": True},
+        {"provider": "OTHER", "enabled": False},
+    ]
+
+
 # --- postpone_schedule: the case the whole audit exists for --------------------------------------
 
 
