@@ -59,7 +59,10 @@ const val YOUR_CATEGORIES = "Your categories"
 /** P74-4, the built-ins' section. */
 const val BUILT_IN = "Built-in"
 
-/** P74-5, under P74-3 when the owner has no categories: the one way in is a save. */
+/**
+ * P74-5, under P74-3 when the owner has no categories: a save is the owner's way in. A restore or a
+ * merge also adds rows, for the assets it brings.
+ */
 const val NO_CATEGORIES_YET = "No categories of your own yet. Save an asset with a new category to add one."
 
 /** P74-7, under P74-4. */
@@ -77,7 +80,8 @@ const val DELETE_THIS_CATEGORY = "Delete this category?"
 /**
  * Settings → Categories (#74, C17): the owner's own categories with how many assets use each, then the
  * built-ins as quiet rows with no menu — they are compiled, not rows, and cannot be renamed or deleted.
- * There is no "Add": a successful asset save is the one way a category comes in, and P74-5 says so.
+ * There is no "Add": a successful asset save is the owner's way in, and P74-5 says so; a restore or a
+ * merge also adds rows, for the assets it brings.
  *
  * A row's overflow renames it (a dialog whose refusals are drawn under its field, the dialog staying)
  * or deletes it: an unused one after P74-15/16, one in use not at all, with P74-17 on the snackbar.

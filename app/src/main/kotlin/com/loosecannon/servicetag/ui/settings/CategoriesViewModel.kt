@@ -90,7 +90,8 @@ data class DeleteAsk(val key: String, val display: String)
 /**
  * Settings → Categories (#74, C17). The owner's own categories, each with how many assets use it, and
  * the built-ins beside them; the two writes are [RenameCategory] and [DeleteCategory], and nothing here
- * adds a category — a successful asset save is the one way in (P74-5 says so).
+ * adds a category. A successful asset save is the owner's way in (P74-5 says so); a restore or a merge
+ * also adds rows, for the assets it brings.
  *
  * Where each answer is said:
  * - a refused rename (a name another category or a built-in holds) is drawn under the rename field and

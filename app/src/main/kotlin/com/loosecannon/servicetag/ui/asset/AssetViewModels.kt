@@ -1285,7 +1285,8 @@ sealed interface EditPrompt {
  * the schedules as they are) or [review] (open them). Nothing is remembered: the transition is the gate.
  *
  * **#74: the Category field offers the catalog.** [categories] is read, never written: [categoryChoices]
- * follows it, and the one way into it is a successful save, inside [SaveAssetSettings] (C5).
+ * follows it. The owner's way in here is a successful save, inside [SaveAssetSettings] (C5); a restore
+ * or a merge also adds rows, for the assets it brings.
  */
 class AssetEditViewModel(
     private val assets: AssetRepository,

@@ -221,7 +221,9 @@ class AppGraph(private val context: Context) {
 
     /**
      * #74's one data port: the owner's own categories, beside the compiled built-ins. Written by a
-     * successful asset save's promotion, a rename and an unused delete — never derived from assets.
+     * successful asset save's promotion, a rename, an unused delete, the replace import and the merge
+     * apply — the last two promote the assets they insert — and once by `MIGRATION_8_9`'s backfill.
+     * Never derived from assets.
      */
     val categories: CategoryRepository = RoomCategoryRepository(db.assetCategoryDao())
 
