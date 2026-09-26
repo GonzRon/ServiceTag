@@ -6,13 +6,16 @@ import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.usecase.ActivationCommand
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
+import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.replacementOf
+import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.testing.subjectRow
 import com.loosecannon.servicetag.ui.health.ConditionView
 import com.loosecannon.servicetag.ui.health.HealthPlurals
@@ -28,6 +31,11 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
@@ -45,6 +53,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -109,7 +119,9 @@ class AssetViewModelsTest {
      * a ViewModel left mid-load outlives the test that made it and then meets a closed database.
      */
     private suspend fun editModel(id: AssetId? = null, parentId: String? = null): AssetEditViewModel {
-        val model = AssetEditViewModel(graph.assets, graph.healthSubjects, graph.saveAssetSettings, id, parentId)
+        val model = AssetEditViewModel(
+            graph.assets, graph.healthSubjects, graph.saveAssetSettings, graph.schedules, id, parentId,
+        )
         model.state.first { it.parentChoices.isNotEmpty() }
         return model
     }
@@ -1566,5 +1578,300 @@ class AssetViewModelsTest {
         val nothingToShow = loaded("gen").healthWords()
         assertEquals(listOf(NOT_TRACKED, "Belt age", NOT_TRACKED, "No replacement recorded yet", HEALTH_FOOTER), nothingToShow)
         assertFalse(loaded("fan").healthWords().contains(FALLBACK_TO_WORST))
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // #78: the one question a save asks when an asset becomes seasonal (plan §2, §8 C1–C6)
+    // ---------------------------------------------------------------------------------------------
+
+    /** What one editor did after one Save: the question it raised, and where it said to go. */
+    private class EditorAnswer(val model: AssetEditViewModel) {
+        val saved = mutableListOf<AssetId>()
+        val review = mutableListOf<AssetId>()
+    }
+
+    /**
+     * An editor on [id], its two one-shot signals collected eagerly — they have no replay, so a
+     * collector that subscribes after the emission would record nothing.
+     */
+    private suspend fun TestScope.editorOn(id: AssetId): EditorAnswer {
+        val answer = EditorAnswer(editModel(id))
+        val eager = UnconfinedTestDispatcher(testScheduler)
+        backgroundScope.launch(eager) { answer.model.saved.collect { answer.saved += it } }
+        backgroundScope.launch(eager) { answer.model.review.collect { answer.review += it } }
+        return answer
+    }
+
+    /** Chooses [mode] the way the screen does — a window under S30, S35 answered on a switch into S31 — and saves. */
+    private suspend fun AssetEditViewModel.saveAs(mode: SeasonMode) {
+        onSeasonMode(mode)
+        if (mode == SeasonMode.CALENDAR) {
+            onSeasonStart("05-01")
+            onSeasonEnd("09-30")
+        }
+        if (state.value.asksManualPhase) onManualPhase(SeasonPhase.OUT_OF_SEASON)
+        save()
+        state.first { !it.saving }
+    }
+
+    /** A weekly schedule on [assetId] with [policy]'s own offset rule, so every row is one the API would accept. */
+    private fun weekly(id: String, assetId: String, policy: ServicePolicy, status: ScheduleStatus = ScheduleStatus.ACTIVE) =
+        scheduleOf(
+            id,
+            assetId = assetId,
+            title = "Check $id",
+            timeInterval = 1,
+            timeUnit = RecurrenceUnit.WEEK,
+            leadDays = 1,
+            servicePolicy = policy,
+            policyOffsetDays = when (policy) {
+                ServicePolicy.IN_SERVICE_AT_START -> 0
+                ServicePolicy.PRE_SERVICE -> -7
+                else -> null
+            },
+            status = status,
+        )
+
+    /**
+     * One row of the trigger table: an existing asset stored in [from] with [rows] as its schedules,
+     * saved into [to] (renamed, so a save that keeps the season is still a real write). Returns the
+     * editor after the save has settled.
+     */
+    private suspend fun TestScope.trigger(
+        assetId: String,
+        from: SeasonMode,
+        to: SeasonMode,
+        vararg rows: MaintenanceSchedule,
+    ): EditorAnswer {
+        graph.assets.upsert(
+            if (from == SeasonMode.CALENDAR) {
+                assetRow(assetId, seasonMode = from, seasonStart = "05-01", seasonEnd = "09-30")
+            } else {
+                assetRow(assetId, seasonMode = from)
+            },
+        )
+        rows.forEach { graph.schedules.upsert(it) }
+        val editor = editorOn(AssetId(assetId))
+        editor.model.onName("$assetId renamed")
+        editor.model.saveAs(to)
+        return editor
+    }
+
+    /**
+     * C1 and R-1: only YEAR_ROUND → CALENDAR or MANUAL asks, and only about live CONTINUOUS rows —
+     * ACTIVE and PAUSED counted, ARCHIVED, IN_SERVICE and PRE_SERVICE not. A save that asks holds
+     * `saved` back; every save that does not ask finishes as it always did; a refused save asks nothing.
+     */
+    @Test fun theSeasonPromptTriggerTable() = runTest {
+        val asked = mapOf(
+            "active" to trigger(
+                "active", SeasonMode.YEAR_ROUND, SeasonMode.MANUAL,
+                weekly("a1", "active", ServicePolicy.CONTINUOUS),
+            ),
+            "paused" to trigger(
+                "paused", SeasonMode.YEAR_ROUND, SeasonMode.MANUAL,
+                weekly("p1", "paused", ServicePolicy.CONTINUOUS, ScheduleStatus.PAUSED),
+            ),
+            "calendar" to trigger(
+                "calendar", SeasonMode.YEAR_ROUND, SeasonMode.CALENDAR,
+                weekly("c1", "calendar", ServicePolicy.CONTINUOUS),
+            ),
+            "mixed" to trigger(
+                "mixed", SeasonMode.YEAR_ROUND, SeasonMode.MANUAL,
+                weekly("m1", "mixed", ServicePolicy.CONTINUOUS),
+                weekly("m2", "mixed", ServicePolicy.CONTINUOUS, ScheduleStatus.PAUSED),
+                weekly("m3", "mixed", ServicePolicy.IN_SERVICE_AT_START),
+            ),
+        )
+        assertEquals(
+            mapOf(
+                "active" to EditPrompt.ReconcileSchedules(1),
+                "paused" to EditPrompt.ReconcileSchedules(1),
+                "calendar" to EditPrompt.ReconcileSchedules(1),
+                "mixed" to EditPrompt.ReconcileSchedules(2),
+            ),
+            asked.mapValues { it.value.model.prompt.value },
+        )
+        asked.forEach { (case, editor) ->
+            assertEquals("$case: the save is written before the question", "$case renamed", graph.assets.get(AssetId(case))!!.name)
+            assertTrue("$case: the editor waits for the answer", editor.saved.isEmpty() && editor.review.isEmpty())
+        }
+
+        val notAsked = mapOf(
+            "calendar-to-manual" to trigger(
+                "calendar-to-manual", SeasonMode.CALENDAR, SeasonMode.MANUAL,
+                weekly("cm1", "calendar-to-manual", ServicePolicy.CONTINUOUS),
+            ),
+            "manual-stays" to trigger(
+                "manual-stays", SeasonMode.MANUAL, SeasonMode.MANUAL,
+                weekly("mm1", "manual-stays", ServicePolicy.CONTINUOUS),
+            ),
+            "tied-only" to trigger(
+                "tied-only", SeasonMode.YEAR_ROUND, SeasonMode.MANUAL,
+                weekly("t1", "tied-only", ServicePolicy.IN_SERVICE_AT_START),
+                weekly("t2", "tied-only", ServicePolicy.IN_SERVICE_RESUME_CLAMPED),
+                // PRE_SERVICE on a YEAR_ROUND asset with no break has no boundary: the merge-only state
+                // the engine evaluates as CONTINUOUS. R-1 counts by policy name, so it is not counted.
+                weekly("t3", "tied-only", ServicePolicy.PRE_SERVICE),
+            ),
+            "archived-only" to trigger(
+                "archived-only", SeasonMode.YEAR_ROUND, SeasonMode.MANUAL,
+                weekly("x1", "archived-only", ServicePolicy.CONTINUOUS, ScheduleStatus.ARCHIVED),
+            ),
+            "year-round-stays" to trigger(
+                "year-round-stays", SeasonMode.YEAR_ROUND, SeasonMode.YEAR_ROUND,
+                weekly("y1", "year-round-stays", ServicePolicy.CONTINUOUS),
+            ),
+        )
+        notAsked.forEach { (case, editor) ->
+            assertEquals("$case asks nothing", null, editor.model.prompt.value)
+            assertEquals("$case finishes as it always did", listOf(AssetId(case)), editor.saved)
+            assertEquals("$case: the save was written", "$case renamed", graph.assets.get(AssetId(case))!!.name)
+        }
+
+        // A refused save: S55, because the break's pre-service work would be stranded by the calendar.
+        graph.assets.upsert(assetRow("refused", breakStart = "07-01", breakEnd = "07-15"))
+        graph.schedules.upsert(weekly("r1", "refused", ServicePolicy.CONTINUOUS))
+        graph.schedules.upsert(weekly("r2", "refused", ServicePolicy.PRE_SERVICE))
+        val refused = editorOn(AssetId("refused"))
+        refused.model.saveAs(SeasonMode.CALENDAR)
+        assertTrue("the save was refused", refused.model.state.value.seasonRefusal != null)
+        assertEquals(SeasonMode.YEAR_ROUND, graph.assets.get(AssetId("refused"))!!.seasonMode)
+        assertEquals("a refused save asks nothing", null, refused.model.prompt.value)
+        assertTrue(refused.saved.isEmpty() && refused.review.isEmpty())
+
+        // A new asset has no schedules: made seasonal on its first save, it finishes as it always did.
+        val created = EditorAnswer(editModel())
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { created.model.saved.collect { created.saved += it } }
+        created.model.onName("Generator")
+        created.model.saveAs(SeasonMode.MANUAL)
+        assertEquals(null, created.model.prompt.value)
+        assertEquals(1, created.saved.size)
+    }
+
+    /**
+     * C1's read is advisory: the save is already written when the schedules are read, so a read that
+     * fails finishes the editor through `saved` as a save that asked nothing — no question, no stuck
+     * Save, no crash out of `viewModelScope`.
+     */
+    @Test fun aScheduleReadThatFailsAfterTheSaveStillFinishesTheEditor() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.schedules.upsert(weekly("s1", "gen", ServicePolicy.CONTINUOUS))
+        val unreadable = object : ScheduleRepository by graph.schedules {
+            override suspend fun forAsset(assetId: AssetId): List<MaintenanceSchedule> =
+                throw IllegalStateException("the schedule read failed")
+        }
+        val model = AssetEditViewModel(graph.assets, graph.healthSubjects, graph.saveAssetSettings, unreadable, AssetId("gen"))
+        model.state.first { it.parentChoices.isNotEmpty() }
+        val saved = mutableListOf<AssetId>()
+        val review = mutableListOf<AssetId>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.saved.collect { saved += it } }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.review.collect { review += it } }
+
+        model.saveAs(SeasonMode.MANUAL)
+
+        assertEquals("the save stands", SeasonMode.MANUAL, graph.assets.get(AssetId("gen"))!!.seasonMode)
+        assertEquals(null, model.prompt.value)
+        assertEquals(listOf(AssetId("gen")), saved)
+        assertTrue(review.isEmpty())
+    }
+
+    /** C2: "Keep schedules as-is" finishes the editor through `saved`, never `review`, and the question goes. */
+    @Test fun keepSchedulesFinishesTheEditor() = runTest {
+        val editor = trigger("gen", SeasonMode.YEAR_ROUND, SeasonMode.MANUAL, weekly("s1", "gen", ServicePolicy.CONTINUOUS))
+        assertEquals(EditPrompt.ReconcileSchedules(1), editor.model.prompt.value)
+        assertTrue(editor.saved.isEmpty())
+
+        editor.model.keepSchedules()
+        advanceUntilIdle()
+        assertEquals(null, editor.model.prompt.value)
+        assertEquals(listOf(AssetId("gen")), editor.saved)
+        assertTrue("no navigation hint", editor.review.isEmpty())
+
+        // The question is gone, so a second answer (a back gesture racing the button) does nothing.
+        editor.model.keepSchedules()
+        editor.model.reviewSchedules()
+        advanceUntilIdle()
+        assertEquals(listOf(AssetId("gen")), editor.saved)
+        assertTrue(editor.review.isEmpty())
+    }
+
+    /** C2: "Review maintenance schedules" finishes the editor through `review`, never `saved`. */
+    @Test fun reviewSchedulesOpensTheSchedules() = runTest {
+        val editor = trigger("gen", SeasonMode.YEAR_ROUND, SeasonMode.CALENDAR, weekly("s1", "gen", ServicePolicy.CONTINUOUS))
+        assertEquals(EditPrompt.ReconcileSchedules(1), editor.model.prompt.value)
+
+        editor.model.reviewSchedules()
+        advanceUntilIdle()
+        assertEquals(null, editor.model.prompt.value)
+        assertEquals(listOf(AssetId("gen")), editor.review)
+        assertTrue("the editor is not finished twice", editor.saved.isEmpty())
+
+        editor.model.reviewSchedules()
+        editor.model.keepSchedules()
+        advanceUntilIdle()
+        assertEquals(listOf(AssetId("gen")), editor.review)
+        assertTrue(editor.saved.isEmpty())
+    }
+
+    /**
+     * C5 (AC 7, AC 8): the question and both answers write nothing. Every schedule row — its policy,
+     * status, profile, `[LOCAL]` provider row and `updatedAt` — is what it was before the save, and the
+     * event, closure and activation counts do not move from the moment the question is asked.
+     */
+    @Test fun theSeasonPromptWritesNothing() = runTest {
+        val gen = graph.createAsset.run("Generator", "Power", templateKey = "power_equipment").id
+        val profile = graph.profiles.forAsset(gen).first()
+        graph.schedules.upsert(
+            weekly("s-form", gen.value, ServicePolicy.CONTINUOUS)
+                .copy(completionMode = CompletionMode.FORM, profileId = profile.id, updatedAt = 4_242L),
+        )
+        graph.schedules.upsert(weekly("s-paused", gen.value, ServicePolicy.CONTINUOUS, ScheduleStatus.PAUSED))
+        graph.schedules.upsert(weekly("s-tied", gen.value, ServicePolicy.IN_SERVICE_AT_START))
+        val before = graph.schedules.forAsset(gen).sortedBy { it.id.value }
+        assertTrue(before.all { row -> row.providers.any { it.provider == "LOCAL" } })
+
+        suspend fun counts() = listOf(graph.events.all().size, graph.closures.all().size, graph.seasonActivations.all().size)
+
+        // Keep schedules as-is, on a switch into MANUAL.
+        val keep = editorOn(gen)
+        keep.model.saveAs(SeasonMode.MANUAL)
+        assertEquals(EditPrompt.ReconcileSchedules(2), keep.model.prompt.value)
+        val asked = counts()
+        keep.model.keepSchedules()
+        advanceUntilIdle()
+        assertEquals(before, graph.schedules.forAsset(gen).sortedBy { it.id.value })
+        assertEquals(asked, counts())
+
+        // Back to year-round (which asks nothing), then Review, on a switch into a calendar season.
+        editorOn(gen).model.saveAs(SeasonMode.YEAR_ROUND)
+        val review = editorOn(gen)
+        review.model.saveAs(SeasonMode.CALENDAR)
+        assertEquals(EditPrompt.ReconcileSchedules(2), review.model.prompt.value)
+        val askedAgain = counts()
+        review.model.reviewSchedules()
+        advanceUntilIdle()
+        assertEquals(before, graph.schedules.forAsset(gen).sortedBy { it.id.value })
+        assertEquals(askedAgain, counts())
+    }
+
+    /** C6: the ratified words (plan §5), verbatim — P78-1b for one schedule, P78-1a with its count otherwise. */
+    @Test fun theSeasonPromptWordsAreTheRatifiedOnes() {
+        assertEquals(
+            "This asset has 1 maintenance schedule that is not tied to its operating season. When active, it can " +
+                "become or remain due while the asset is out of season unless you change when that maintenance " +
+                "should be done.",
+            notTiedToSeason(1),
+        )
+        assertEquals(
+            "This asset has 3 maintenance schedules that are not tied to its operating season. When active, they " +
+                "can become or remain due while the asset is out of season unless you change when that " +
+                "maintenance should be done.",
+            notTiedToSeason(3),
+        )
+        assertEquals(notTiedToSeason(1), NOT_TIED_TO_SEASON_ONE)
+        assertEquals(NOT_TIED_TO_SEASON.replace("<n>", "2"), notTiedToSeason(2))
+        assertEquals("Review maintenance schedules", REVIEW_MAINTENANCE_SCHEDULES)
+        assertEquals("Keep schedules as-is", KEEP_SCHEDULES_AS_IS)
     }
 }

@@ -44,6 +44,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -52,6 +53,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -139,6 +142,10 @@ import java.time.LocalDate
 import java.time.MonthDay
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
+
+/** #78 — the [AssetDetailScreen] `section` that opens it with its maintenance sections in view. Never drawn. */
+const val SECTION_SCHEDULES = "schedules"
 
 /**
  * One asset, as the Apollo Service Binder draws it (D12 §8, G1 §1.1): identity plate, the current
@@ -172,6 +179,11 @@ fun AssetDetailScreen(
     /** 1.2 — a schedule row opens the schedule; a group row opens the group (#55's two directions). */
     onOpenSchedule: (String) -> Unit,
     onOpenGroup: (String) -> Unit,
+    /**
+     * #78 — [SECTION_SCHEDULES] opens the screen scrolled so the maintenance sections are in view: the
+     * asset editor's "Review maintenance schedules" lands here. Read once per entry; null is the top.
+     */
+    section: String? = null,
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -186,6 +198,23 @@ fun AssetDetailScreen(
     // S99's `<age>` and S102 through B12's day forms, read from this screen's own resources.
     val resources = LocalResources.current
     val plurals: HealthPlurals = remember(resources) { AndroidHealthPlurals(resources) }
+    // #78 (C4): whether this entry has already been taken to its maintenance sections, and where they
+    // start in the scroll. The flag is saveable — the entry's own saveable state — so a rotation or a
+    // recreated activity never scrolls the owner a second time; the scroll position itself is restored
+    // by the saveable scroll state. Only an entry still on its way there measures anything, so an
+    // ordinary visit does not recompose when the page above the sections changes height.
+    val scroll = rememberScrollState()
+    var sectionShown by rememberSaveable { mutableStateOf(false) }
+    val seekingSchedules = section == SECTION_SCHEDULES && !sectionShown
+    var maintenanceTop by remember { mutableIntStateOf(-1) }
+    if (seekingSchedules) {
+        LaunchedEffect(maintenanceTop) {
+            if (maintenanceTop >= 0) {
+                scroll.scrollTo(maintenanceTop)
+                sectionShown = true
+            }
+        }
+    }
 
     // A deep link, a restored back stack or a replacing import can name an asset that is not there
     // any more. Leaving is the honest answer; an empty plate would pretend it still exists.
@@ -267,10 +296,21 @@ fun AssetDetailScreen(
         Column(
             modifier = Modifier
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scroll)
                 .padding(vertical = 8.dp),
         ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    // The maintenance sections follow this block directly: its bottom is their top.
+                    .then(
+                        if (seekingSchedules) {
+                            Modifier.onPlaced { maintenanceTop = (it.positionInParent().y + it.size.height).roundToInt() }
+                        } else {
+                            Modifier
+                        },
+                    ),
+            ) {
                 AssetPlate(current)
                 current.parentName?.let { parent ->
                     PartOfLine(parent) { current.parentId?.let(onOpenAsset) }

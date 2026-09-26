@@ -25,11 +25,13 @@ import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.Season as SeasonWindow
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.isRetired
@@ -109,6 +111,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -1249,6 +1252,18 @@ data class AssetEditState(
 const val NO_PARENT = "None"
 
 /**
+ * #78 — what the editor asks after a save has been written and before it closes. It writes nothing
+ * and decides nothing: the answer only chooses where the editor goes next.
+ */
+sealed interface EditPrompt {
+    /**
+     * The asset went from YEAR_ROUND into a season and [count] of its live schedules (ACTIVE or
+     * PAUSED, never ARCHIVED) are CONTINUOUS, which keep coming due out of season (P78-1a/1b).
+     */
+    data class ReconcileSchedules(val count: Int) : EditPrompt
+}
+
+/**
  * Create ([id] null) or edit one asset. Every rule lives in the use cases — this turns the form's
  * text into one [AssetCommand], hands it over, and turns whatever comes back into marks under
  * fields or a line for the snackbar.
@@ -1260,17 +1275,23 @@ const val NO_PARENT = "None"
  * [SaveAssetSettings] as one [AssetSettingsCommand], in one transaction: a refusal of any part writes
  * none of them (spec §10.4; master §10.1). A season or break change that would strand pre-service
  * work is said by name — S55 or S64 with the schedules' titles — and the form stays as typed.
+ *
+ * **#78: one question after the save.** [schedules] is read, never written: when a save takes an
+ * existing asset from YEAR_ROUND into a season and the asset has live CONTINUOUS schedules, the editor
+ * holds [saved] back and raises [prompt] instead. The answer finishes the editor through [saved] (keep
+ * the schedules as they are) or [review] (open them). Nothing is remembered: the transition is the gate.
  */
 class AssetEditViewModel(
     private val assets: AssetRepository,
     private val healthSubjects: HealthSubjectRepository,
     private val saveAssetSettings: SaveAssetSettings,
+    private val schedules: ScheduleRepository,
     private val id: AssetId?,
     presetParentId: String? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String?, parentId: String? = null) :
-        this(graph.assets, graph.healthSubjects, graph.saveAssetSettings, id?.let(::AssetId), parentId)
+        this(graph.assets, graph.healthSubjects, graph.saveAssetSettings, graph.schedules, id?.let(::AssetId), parentId)
 
     private val _state = MutableStateFlow(
         AssetEditState(
@@ -1288,6 +1309,14 @@ class AssetEditViewModel(
      */
     private val _saved = MutableSharedFlow<AssetId>(replay = 0, extraBufferCapacity = 1)
     val saved: SharedFlow<AssetId> = _saved.asSharedFlow()
+
+    /** #78: the question a written save asks before the editor closes; null when nothing is asked. */
+    private val _prompt = MutableStateFlow<EditPrompt?>(null)
+    val prompt: StateFlow<EditPrompt?> = _prompt.asStateFlow()
+
+    /** #78: the editor is done and the owner asked to see the asset's schedules. One shot, as [saved] is. */
+    private val _review = MutableSharedFlow<AssetId>(replay = 0, extraBufferCapacity = 1)
+    val review: SharedFlow<AssetId> = _review.asSharedFlow()
 
     /** What has no room under a field: the refused reparent, named (spec §9). One line, once. */
     private val _messages = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
@@ -1404,6 +1433,23 @@ class AssetEditViewModel(
     fun onTemplate(key: String?) = _state.update { it.copy(templateKey = key, templateTouched = true) }
 
     /**
+     * #78, P78-3 and the back gesture (C2): the season is already saved and the schedules stay as they
+     * are, so the editor finishes exactly as a save that asked nothing. Writes nothing, and does nothing
+     * once the question has been answered.
+     */
+    fun keepSchedules() {
+        answered()?.let { _saved.tryEmit(it) }
+    }
+
+    /** #78, P78-2 (C2): the editor finishes onto the asset's schedules. Writes nothing either. */
+    fun reviewSchedules() {
+        answered()?.let { _review.tryEmit(it) }
+    }
+
+    /** Takes the question down; the asset it was about, or null when none was up. Only an edit ever asks. */
+    private fun answered(): AssetId? = id?.takeIf { _prompt.getAndUpdate { null } != null }
+
+    /**
      * Builds the command, saves, and then names the asset the screen should show, once, on
      * [saved]. A failure leaves the form exactly as the user typed it and only adds marks: an
      * [AssetValidation] one per field, an [AssetCycle] as a line naming the parent, because "that
@@ -1444,8 +1490,21 @@ class AssetEditViewModel(
         _state.update { it.copy(seasonRefusal = null, breakRefusal = null) }
         when (val failure = result.exceptionOrNull()) {
             null -> {
+                // The question goes up before the form stops saving, so whoever waits on `saving`
+                // finds either the question or, as before, the finished editor — never neither. The
+                // question is advisory and the save is already written: a schedule read that fails
+                // finishes the editor as a save that asked nothing.
+                val written = result.getOrNull()
+                // A failed read finishes the editor as a save that asked nothing; a cancellation is not a
+                // failed read and goes back out the way it came (the backup model's own rule).
+                val ask = written?.let {
+                    runCatching { reconcilePromptFor(form) }
+                        .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+                        .getOrNull()
+                }
+                ask?.let { _prompt.value = it }
                 _state.update { it.copy(saving = false, problems = emptyMap()) }
-                result.getOrNull()?.let { saved -> _saved.tryEmit(saved.id) }
+                if (ask == null) written?.let { _saved.tryEmit(it.id) }
             }
             is SeasonModeStrandsPolicy -> _state.update {
                 it.copy(saving = false, seasonRefusal = seasonStrands(failure.schedules.map(StrandedSchedule::title)))
@@ -1473,6 +1532,23 @@ class AssetEditViewModel(
                 _messages.tryEmit("Could not save this asset.")
             }
         }
+    }
+
+    /**
+     * #78, C1: the one question a written save may ask. Only an existing asset the form loaded as
+     * YEAR_ROUND and saved into CALENDAR or MANUAL asks — the form's own fields, never a re-read of
+     * the row the save just wrote — and only when some of its live schedules (ACTIVE or PAUSED, R-1)
+     * are CONTINUOUS: those are the ones that keep coming due out of season. Nothing else asks, so
+     * a seasonal asset that stays seasonal is never asked again (AC 5, R-3).
+     */
+    private suspend fun reconcilePromptFor(form: AssetEditState): EditPrompt? {
+        val asset = id ?: return null
+        val intoSeason = form.seasonMode == SeasonMode.CALENDAR || form.seasonMode == SeasonMode.MANUAL
+        if (form.storedSeasonMode != SeasonMode.YEAR_ROUND || !intoSeason) return null
+        val continuous = schedules.forAsset(asset).count {
+            it.status != ScheduleStatus.ARCHIVED && it.servicePolicy == ServicePolicy.CONTINUOUS
+        }
+        return if (continuous > 0) EditPrompt.ReconcileSchedules(continuous) else null
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.asset
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,11 +10,14 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasNoClickAction
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -29,6 +33,7 @@ import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
@@ -39,6 +44,7 @@ import com.loosecannon.servicetag.core.usecase.ConditionCommand
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.HealthPolicyCommand
 import com.loosecannon.servicetag.core.usecase.HealthSubjectCommand
+import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.app
@@ -52,6 +58,7 @@ import com.loosecannon.servicetag.ui.condition.MARK_OPERATIONAL_TITLE
 import com.loosecannon.servicetag.ui.condition.START_SEASON
 import com.loosecannon.servicetag.ui.condition.WHEN_DID_THIS_CHANGE
 import com.loosecannon.servicetag.ui.condition.displayDate
+import com.loosecannon.servicetag.ui.maintenance.SCHEDULES_SECTION
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -88,8 +95,8 @@ class AssetDetailConditionHealthSeasonTest {
     private val today: LocalDate = LocalDate.now()
     private val zone: String get() = ZoneId.systemDefault().id
 
-    /** Asset detail on [initial]; the returned setter switches it to another asset. */
-    private fun detail(initial: AssetId): (AssetId) -> Unit {
+    /** Asset detail on [initial], opened on [section]; the returned setter switches it to another asset. */
+    private fun detail(initial: AssetId, section: String? = null): (AssetId) -> Unit {
         var shown by mutableStateOf(initial)
         rule.setContent {
             ServiceTagTheme {
@@ -99,7 +106,7 @@ class AssetDetailConditionHealthSeasonTest {
                     onBack = {}, onEdit = {}, onSetup = {}, onWriteTag = {}, onBackup = {},
                     onLogEvent = { _, _ -> }, onOpenEvent = {}, onOpenAsset = {}, onAddComponent = {},
                     onAddSchedule = {}, onLogOutcome = { _, _ -> }, onOpenSettings = {},
-                    onOpenSchedule = {}, onOpenGroup = {},
+                    onOpenSchedule = {}, onOpenGroup = {}, section = section,
                 )
             }
         }
@@ -357,7 +364,106 @@ class AssetDetailConditionHealthSeasonTest {
         rule.onAllNodesWithText(MAINTENANCE_BREAK).assertCountEquals(0)
     }
 
+    /** The detail as the nav entry composes it, opened on [section]. */
+    @Composable
+    private fun DetailOn(assetId: AssetId, section: String?) {
+        ServiceTagTheme {
+            AssetDetailScreen(
+                graph = graph,
+                assetId = assetId.value,
+                onBack = {}, onEdit = {}, onSetup = {}, onWriteTag = {}, onBackup = {},
+                onLogEvent = { _, _ -> }, onOpenEvent = {}, onOpenAsset = {}, onAddComponent = {},
+                onAddSchedule = {}, onLogOutcome = { _, _ -> }, onOpenSettings = {},
+                onOpenSchedule = {}, onOpenGroup = {}, section = section,
+            )
+        }
+    }
+
+    /**
+     * The plate's own copy of the asset's name: inside the page's scroll (not the app bar's title) and
+     * not a control (a schedule row names its asset too, merged into one clickable node).
+     */
+    private fun plateName(name: String) =
+        rule.onNode(hasText(name) and hasAnyAncestor(hasScrollAction()) and hasNoClickAction())
+
+    /**
+     * #78 (C4): opened with [SECTION_SCHEDULES] — where "Review maintenance schedules" lands — the
+     * screen shows its maintenance sections without a tap. The page is tall on purpose
+     * ([tallAssetWithAWeeklyCheck]), so the sections start below the fold and only the scroll can
+     * bring them into view.
+     */
+    @Test fun theSchedulesSectionScrollsIntoViewWhenAsked() {
+        val gen = tallAssetWithAWeeklyCheck(graph)
+        detail(gen, section = SECTION_SCHEDULES)
+        rule.awaitText("Weekly check")
+
+        rule.onNodeWithText(SCHEDULES_SECTION).assertIsDisplayed()
+        rule.onNodeWithText("Weekly check").assertIsDisplayed()
+    }
+
+    /**
+     * #78 (C4): the scroll happens **once per entry**. The owner lands on the schedules, scrolls back
+     * up to the plate, and the activity's state is saved and restored (a rotation, a recreated
+     * activity): the page comes back where the owner left it, not on the schedules a second time,
+     * because the "already scrolled" flag is saveable state.
+     */
+    @Test fun theSchedulesScrollIsNotRepeatedWhenTheStateIsRestored() {
+        val gen = tallAssetWithAWeeklyCheck(graph)
+        val restoration = StateRestorationTester(rule)
+        restoration.setContent { DetailOn(gen, SECTION_SCHEDULES) }
+        rule.awaitText("Weekly check")
+        rule.waitForIdle()
+        rule.onNodeWithText(SCHEDULES_SECTION).assertIsDisplayed()
+
+        plateName("Generator").performScrollTo()
+        rule.waitForIdle()
+        plateName("Generator").assertIsDisplayed()
+        rule.onNodeWithText(SCHEDULES_SECTION).assertIsNotDisplayed()
+
+        restoration.emulateSavedInstanceStateRestore()
+        rule.awaitText("Weekly check")
+        rule.waitForIdle()
+        plateName("Generator").assertIsDisplayed()
+        rule.onNodeWithText(SCHEDULES_SECTION).assertIsNotDisplayed()
+    }
+
     private companion object {
         const val TIMEOUT_MS = 10_000L
     }
+}
+
+/**
+ * #78 — a YEAR_ROUND asset whose page is taller than the screen, with one weekly CONTINUOUS schedule
+ * ("Weekly check") below the fold: a template's readings and quick actions, every detail filled and
+ * two health subjects above the maintenance sections. Shared with `SeasonReconciliationNavigationTest`,
+ * so the scroll is proven on the same page through the real back stack.
+ */
+internal fun tallAssetWithAWeeklyCheck(graph: AppGraph): AssetId = runBlocking {
+    fun age(name: String, t2: Int, t3: Int) = HealthSubjectCommand(
+        name = name, kind = HealthSubjectKind.PART, driver = HealthDriver.AGE,
+        nominalUntilDays = 0, warningFromDays = t2, criticalFromDays = t3,
+    )
+    val id = graph.createAsset.run(
+        AssetCommand(
+            name = "Generator", category = "Power", description = "Standby unit", notes = "Serviced yearly",
+            manufacturer = "Maker", model = "M-1", serialNumber = "SN-1", purchaseOn = "2024-01-15",
+            inServiceOn = "2024-02-01", vendor = "Vendor", location = "Outside",
+            warrantyExpiresOn = "2029-01-15", warrantyNotes = "Parts only",
+        ),
+        templateKey = "power_equipment",
+    ).id
+    graph.saveHealthSubject.create(id, age("Battery age", 700, 1000))
+    graph.saveHealthSubject.create(id, age("Belt age", 300, 600))
+    graph.saveSchedule.run(
+        null,
+        ScheduleCommand(
+            targetAssetId = id,
+            targetGroupId = null,
+            title = "Weekly check",
+            timeInterval = 1,
+            timeUnit = RecurrenceUnit.WEEK,
+            anchorOn = LocalDate.now().toString(),
+        ),
+    )
+    id
 }

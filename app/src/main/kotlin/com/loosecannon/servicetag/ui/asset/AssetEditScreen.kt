@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -151,6 +152,30 @@ const val COMBINE_HEALTH_OPTIONS = "Worst subject · One subject · Average · W
 /** S134, field under "One subject". */
 const val WHICH_SUBJECT = "Which subject?"
 
+// #78's reconciliation prompt (plan §5), RATIFIED 2026-09-25, verbatim. The dialog has no title (R-2).
+
+/** P78-1a, the dialog's body when the count is not 1; `<n>` is the count — see [notTiedToSeason]. */
+const val NOT_TIED_TO_SEASON =
+    "This asset has <n> maintenance schedules that are not tied to its operating season. " +
+        "When active, they can become or remain due while the asset is out of season " +
+        "unless you change when that maintenance should be done."
+
+/** P78-1b, the dialog's body when the count is 1. */
+const val NOT_TIED_TO_SEASON_ONE =
+    "This asset has 1 maintenance schedule that is not tied to its operating season. " +
+        "When active, it can become or remain due while the asset is out of season " +
+        "unless you change when that maintenance should be done."
+
+/** P78-2, the dialog's confirm button: the editor closes onto the asset's schedules. */
+const val REVIEW_MAINTENANCE_SCHEDULES = "Review maintenance schedules"
+
+/** P78-3, the dialog's dismiss button: the editor closes and the schedules stay as they are. */
+const val KEEP_SCHEDULES_AS_IS = "Keep schedules as-is"
+
+/** P78-1b for one schedule, otherwise P78-1a with its one substitution: the live CONTINUOUS count. */
+fun notTiedToSeason(count: Int): String =
+    if (count == 1) NOT_TIED_TO_SEASON_ONE else NOT_TIED_TO_SEASON.replace("<n>", count.toString())
+
 /** S132's four words, each with the aggregation it names, in the ratified order. */
 internal val COMBINE_CHOICES: List<Pair<HealthAggregation, String>> =
     listOf(
@@ -179,6 +204,11 @@ internal fun ratifiedParts(words: String): List<String> = words.split(" · ")
  * one save. Save is held, in the app bar and at the foot, while an answer the owner must give is
  * missing; the fields that hold it carry an asterisk, and no sentence is drawn for it (master dec. 46).
  * Leaving without Save writes nothing: opening a subject writes nothing either.
+ *
+ * **#78:** a save that takes an existing asset from year-round into a season, while it has live
+ * schedules set to "Whenever it is due", asks once before the editor closes (P78-1a/1b, no title). The
+ * season is already saved; "Keep schedules as-is" and the back gesture finish through [onDone], and
+ * "Review maintenance schedules" through [onReviewSchedules]. Neither answer writes anything.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -190,6 +220,7 @@ fun AssetEditScreen(
     parentId: String? = null,
     onAddSubject: (assetId: String) -> Unit = {},
     onOpenSubject: (assetId: String, subjectId: String) -> Unit = { _, _ -> },
+    onReviewSchedules: (assetId: String) -> Unit = {},
 ) {
     // The key carries the parent as well as the id: "+ Add component" on two different parents
     // must not share one half-filled form, and neither must a plain "Add asset" and a component.
@@ -197,11 +228,29 @@ fun AssetEditScreen(
         AssetEditViewModel(graph, assetId, parentId)
     }
     val state by model.state.collectAsStateWithLifecycle()
+    val prompt by model.prompt.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
 
     // The save itself belongs to the ViewModel; this only listens for where it says to go next.
     LaunchedEffect(model) { model.saved.collect { id -> onDone(id.value) } }
+    LaunchedEffect(model) { model.review.collect { id -> onReviewSchedules(id.value) } }
     LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
+
+    // #78 (C3): the question over the saved form. Dismissing it any other way — the back gesture, a
+    // tap outside — is "Keep schedules as-is", so the owner is never left without an answer.
+    when (val ask = prompt) {
+        is EditPrompt.ReconcileSchedules -> AlertDialog(
+            onDismissRequest = model::keepSchedules,
+            text = { Text(notTiedToSeason(ask.count)) },
+            confirmButton = {
+                TextButton(onClick = model::reviewSchedules) { Text(REVIEW_MAINTENANCE_SCHEDULES) }
+            },
+            dismissButton = {
+                TextButton(onClick = model::keepSchedules) { Text(KEEP_SCHEDULES_AS_IS) }
+            },
+        )
+        null -> Unit
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbars) },

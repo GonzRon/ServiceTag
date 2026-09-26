@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
@@ -14,8 +15,10 @@ import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -23,12 +26,14 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.AnnotatedString
+import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
+import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.usecase.AssetCommand
@@ -36,6 +41,7 @@ import com.loosecannon.servicetag.core.usecase.AssetSettingsCommand
 import com.loosecannon.servicetag.core.usecase.BreakCommand
 import com.loosecannon.servicetag.core.usecase.HealthPolicyCommand
 import com.loosecannon.servicetag.core.usecase.HealthSubjectCommand
+import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.app
@@ -48,6 +54,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.LocalDate
 
 /**
  * The asset editor's season, break and health sections on a real Compose tree (spec §10.4; B10).
@@ -71,7 +78,7 @@ class AssetEditorSeasonAndHealthTest {
 
     @Before fun freshInstall() = clearInstall()
 
-    /** What the screen asked its host to do: a saved id, or a subject editor to open. */
+    /** What the screen asked its host to do: a saved id, a subject editor to open, or schedules to review. */
     private val asked = mutableListOf<String>()
 
     /** The editor on [initial]; the returned setter switches it to another asset (null is a new one). */
@@ -86,6 +93,7 @@ class AssetEditorSeasonAndHealthTest {
                     onBack = { asked += "back" },
                     onAddSubject = { asked += "add:$it" },
                     onOpenSubject = { asset, subject -> asked += "open:$asset:$subject" },
+                    onReviewSchedules = { asked += "review:$it" },
                 )
             }
         }
@@ -279,5 +287,100 @@ class AssetEditorSeasonAndHealthTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("11-01")))
         rule.onAllNodesWithText("Off means this asset is only in use", substring = true).assertCountEquals(0)
         rule.onAllNodesWithText("Set both season dates or neither").assertCountEquals(0)
+    }
+
+    /**
+     * #78: a YEAR_ROUND asset with one schedule set to "Whenever it is due" (CONTINUOUS), whose
+     * editor is open on it. Returns the asset's id.
+     */
+    private fun yearRoundWithOneContinuousSchedule(graph: AppGraph): String {
+        val gen = runBlocking {
+            val asset = graph.saveAssetSettings.run(null, settings("Generator", SeasonModeCommand(SeasonMode.YEAR_ROUND))).id
+            graph.saveSchedule.run(
+                null,
+                ScheduleCommand(
+                    targetAssetId = asset,
+                    targetGroupId = null,
+                    title = "Weekly check",
+                    timeInterval = 1,
+                    timeUnit = RecurrenceUnit.WEEK,
+                    anchorOn = LocalDate.now().toString(),
+                ),
+            )
+            asset.value
+        }
+        editor(graph, gen)
+        rule.awaitText("Generator")
+        return gen
+    }
+
+    /** S31 with S35 answered "Out of season", then Save: the switch the owner made in #78. */
+    private fun switchToManualOutOfSeasonAndSave() {
+        rule.onNodeWithText(STARTED_AND_ENDED_BY_HAND).performScrollTo().performClick()
+        rule.onNodeWithText(OUT_OF_SEASON_NOW).performScrollTo().performClick()
+        saveAsset().assertIsEnabled().performClick()
+        rule.awaitText(NOT_TIED_TO_SEASON_ONE)
+    }
+
+    /** Every word drawn inside the dialog, in the merged tree: the body and the two buttons. */
+    private fun dialogWords(): List<String> =
+        rule.onAllNodes(hasAnyAncestor(isDialog())).fetchSemanticsNodes()
+            .flatMap { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } }
+            .sorted()
+
+    /** The event, closure and activation counts: what a fabricated row would move. */
+    private fun historyCounts(graph: AppGraph): List<Int> = runBlocking {
+        listOf(graph.events.all().size, graph.closures.all().size, graph.seasonActivations.all().size)
+    }
+
+    /**
+     * #78 (C3, R-2): the switch is saved first, then P78-1b is drawn over the form with both buttons
+     * and nothing else — no title, no third line — and the editor waits. "Keep schedules as-is" then
+     * finishes it exactly as a save that asked nothing.
+     */
+    @Test fun switchingAYearRoundAssetToManualAsksAboutItsContinuousSchedules() {
+        val graph = app.graph
+        val gen = yearRoundWithOneContinuousSchedule(graph)
+        switchToManualOutOfSeasonAndSave()
+
+        rule.onNodeWithText(NOT_TIED_TO_SEASON_ONE).assertIsDisplayed()
+        rule.onNodeWithText(REVIEW_MAINTENANCE_SCHEDULES).assertIsDisplayed()
+        rule.onNodeWithText(KEEP_SCHEDULES_AS_IS).assertIsDisplayed()
+        check(dialogWords() == listOf(KEEP_SCHEDULES_AS_IS, REVIEW_MAINTENANCE_SCHEDULES, NOT_TIED_TO_SEASON_ONE).sorted()) {
+            "the dialog draws more than its ratified words: ${dialogWords()}"
+        }
+        check(asked.isEmpty()) { "the editor finished before the owner answered: $asked" }
+        check(runBlocking { graph.assets.get(AssetId(gen)) }?.seasonMode == SeasonMode.MANUAL) {
+            "the season was not saved before the question"
+        }
+
+        rule.onNodeWithText(KEEP_SCHEDULES_AS_IS).performClick()
+        rule.waitUntil(10_000) { asked.isNotEmpty() }
+        rule.waitForIdle()
+        check(asked == listOf("saved:$gen")) { "Keep schedules as-is did not finish the editor: $asked" }
+        rule.onAllNodesWithText(NOT_TIED_TO_SEASON_ONE).assertCountEquals(0)
+    }
+
+    /**
+     * #78 (C3, C5): the system back gesture on the question is "Keep schedules as-is" — the editor
+     * finishes through `saved`, never `review` — and nothing is written: the schedule row is what it
+     * was before the save, and no event, closure or activation appears after the question.
+     */
+    @Test fun theBackGestureOnTheSeasonPromptKeepsTheSchedules() {
+        val graph = app.graph
+        val gen = yearRoundWithOneContinuousSchedule(graph)
+        val before = runBlocking { graph.schedules.forAsset(AssetId(gen)) }
+        switchToManualOutOfSeasonAndSave()
+        val counts = historyCounts(graph)
+
+        // The dialog is its own window, with its own back dispatcher: the key goes to it, as a
+        // gesture does, rather than to the activity's dispatcher underneath.
+        Espresso.pressBack()
+        rule.waitUntil(10_000) { asked.isNotEmpty() }
+        rule.waitForIdle()
+        check(asked == listOf("saved:$gen")) { "back did not answer Keep schedules as-is: $asked" }
+        rule.onAllNodesWithText(NOT_TIED_TO_SEASON_ONE).assertCountEquals(0)
+        check(runBlocking { graph.schedules.forAsset(AssetId(gen)) } == before) { "a schedule row was written" }
+        check(historyCounts(graph) == counts) { "a history row was written: $counts → ${historyCounts(graph)}" }
     }
 }
