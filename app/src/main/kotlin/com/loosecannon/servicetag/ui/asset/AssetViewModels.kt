@@ -385,7 +385,7 @@ class AssetsViewModel(
 
 /** #71 (R71-1): the assets some tag row [isWrittenFor] — one fold of every tag row, the predicate its one home. */
 private fun writtenTagsOf(tags: List<TagBinding>): Set<AssetId> =
-    tags.mapNotNullTo(HashSet()) { tag -> (tag.target as? TagTarget.AssetTarget)?.assetId?.takeIf(tag::isWrittenFor) }
+    tags.mapNotNullTo(HashSet()) { tag -> (tag.target as? TagTarget.AssetTarget)?.assetId?.takeIf { tag.isWrittenFor(it) } }
 
 /** The Archived control's predicate: archived rows only while it is on. */
 private fun AssetFilters.admitsStatus(asset: Asset): Boolean = showArchived || asset.status == AssetStatus.ACTIVE
