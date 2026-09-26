@@ -151,6 +151,30 @@ const val COMBINE_HEALTH_OPTIONS = "Worst subject · One subject · Average · W
 /** S134, field under "One subject". */
 const val WHICH_SUBJECT = "Which subject?"
 
+// #78's reconciliation prompt (plan §5), RATIFIED 2026-09-25, verbatim. The dialog has no title (R-2).
+
+/** P78-1a, the dialog's body when the count is not 1; `<n>` is the count — see [notTiedToSeason]. */
+const val NOT_TIED_TO_SEASON =
+    "This asset has <n> maintenance schedules that are not tied to its operating season. " +
+        "When active, they can become or remain due while the asset is out of season " +
+        "unless you change when that maintenance should be done."
+
+/** P78-1b, the dialog's body when the count is 1. */
+const val NOT_TIED_TO_SEASON_ONE =
+    "This asset has 1 maintenance schedule that is not tied to its operating season. " +
+        "When active, it can become or remain due while the asset is out of season " +
+        "unless you change when that maintenance should be done."
+
+/** P78-2, the dialog's confirm button: the editor closes onto the asset's schedules. */
+const val REVIEW_MAINTENANCE_SCHEDULES = "Review maintenance schedules"
+
+/** P78-3, the dialog's dismiss button: the editor closes and the schedules stay as they are. */
+const val KEEP_SCHEDULES_AS_IS = "Keep schedules as-is"
+
+/** P78-1b for one schedule, otherwise P78-1a with its one substitution: the live CONTINUOUS count. */
+fun notTiedToSeason(count: Int): String =
+    if (count == 1) NOT_TIED_TO_SEASON_ONE else NOT_TIED_TO_SEASON.replace("<n>", count.toString())
+
 /** S132's four words, each with the aggregation it names, in the ratified order. */
 internal val COMBINE_CHOICES: List<Pair<HealthAggregation, String>> =
     listOf(

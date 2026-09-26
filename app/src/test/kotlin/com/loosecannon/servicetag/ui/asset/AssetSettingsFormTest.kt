@@ -79,7 +79,7 @@ class AssetSettingsFormTest {
 
     /** Create ([id] null) or edit; suspends until the form has read the stored row and the picker. */
     private suspend fun form(id: String? = null): AssetEditViewModel {
-        val model = AssetEditViewModel(graph.assets, graph.healthSubjects, saveSettings, id?.let(::AssetId))
+        val model = AssetEditViewModel(graph.assets, graph.healthSubjects, saveSettings, graph.schedules, id?.let(::AssetId))
         model.state.first { it.parentChoices.isNotEmpty() }
         return model
     }
