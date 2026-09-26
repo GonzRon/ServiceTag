@@ -11,7 +11,8 @@ import java.util.Locale
  * [display], in this order:
  * 1. Unicode NFC;
  * 2. every removed code point below dropped, and every space-like blank below replaced by a space;
- * 3. NFC again — a no-op unless step 2 brought a mark next to its letter (`E`, U+200B, U+0301 → `É`);
+ * 3. NFC again, for whatever step 2 joined that composes or reorders — a mark and its letter (`E`,
+ *    U+200B, U+0301 → `É`), conjoining jamo, marks of different classes; otherwise a no-op;
  * 4. trimmed, and every run of `Char.isWhitespace()` characters collapsed to one space.
  *
  * [of]: [display], then `lowercase(Locale.ROOT)`, and **no further case folding** — `ß` and the final
@@ -27,8 +28,8 @@ import java.util.Locale
  * U+2065, the bidi isolates, the deprecated format characters); U+FEFF ZERO WIDTH NO-BREAK SPACE; the
  * unassigned U+FFF0–U+FFF8; the musical beam, tie, slur and phrase controls U+1D173–U+1D17A;
  * U+E0000–U+E001F (unassigned, and the deprecated U+E0001 LANGUAGE TAG); the tag characters
- * U+E0020–U+E007F **except in a subdivision flag** (below); the unassigned U+E0080–U+E00FF and
- * U+E01F0–U+E0FFF.
+ * U+E0020–U+E007F **except in the three standard subdivision flags** (below); the unassigned
+ * U+E0080–U+E00FF and U+E01F0–U+E0FFF.
  *
  * **Space-like**, replaced by a space and so trimmed and collapsed like one: the Hangul fillers U+115F,
  * U+1160, U+3164 and U+FFA0, and U+2800 BRAILLE PATTERN BLANK. They take visible width, so dropping them
@@ -38,10 +39,12 @@ import java.util.Locale
  * and Indic spelling, emoji sequences — the accepted residual being that `App` U+200D `liance` still keys
  * apart from `Appliance`); the variation selectors U+FE00–U+FE0F and U+E0100–U+E01EF; every combining mark
  * but the grapheme joiner and the two Khmer vowels; every whitespace character (collapsed); every other
- * format character; and a subdivision flag's tags — a run of U+E0020–U+E007E closed by U+E007F CANCEL TAG
- * that directly follows U+1F3F4 WAVING BLACK FLAG in the text as given (England, Scotland, Wales). A tag
- * run anywhere else, left open, or broken by any other code point is removed, and the flag reads as the
- * bare U+1F3F4 — which is what such a text shows.
+ * format character; and the tags of the three standard subdivision flags — exactly the tag letters
+ * `gbeng` (England), `gbsct` (Scotland) or `gbwls` (Wales), closed by U+E007F CANCEL TAG, directly after
+ * U+1F3F4 WAVING BLACK FLAG in the text as given. Any other tag run is removed — anywhere else, after the
+ * flag but spelling anything else (hidden words, a subdivision outside the three), left open, or broken
+ * by any other code point (U+FE0F included) — and the flag reads as the bare U+1F3F4, which is what such
+ * a text shows.
  *
  * Blank text — including text that is nothing but removed characters, space-like blanks and whitespace —
  * has no key and is never promoted.
@@ -67,10 +70,16 @@ object CategoryKey {
         0xE01F0..0xE0FFF, // unassigned
     )
 
-    /** The tag characters a subdivision flag spells with; dropped anywhere else (step 2). */
-    private val TAG_SPEC = 0xE0020..0xE007E
-    private const val CANCEL_TAG = 0xE007F
+    /** The tag characters: dropped (step 2) except in one of [FLAG_TAGS] after [WAVING_BLACK_FLAG]. */
+    private val TAGS = 0xE0020..0xE007F
     private const val WAVING_BLACK_FLAG = 0x1F3F4
+
+    /** The allow-list: the three standard subdivision flags' tags, each closed by U+E007F CANCEL TAG. */
+    private val FLAG_TAGS: List<IntArray> = listOf(
+        intArrayOf(0xE0067, 0xE0062, 0xE0065, 0xE006E, 0xE0067, 0xE007F), // gbeng: England
+        intArrayOf(0xE0067, 0xE0062, 0xE0073, 0xE0063, 0xE0074, 0xE007F), // gbsct: Scotland
+        intArrayOf(0xE0067, 0xE0062, 0xE0077, 0xE006C, 0xE0073, 0xE007F), // gbwls: Wales
+    )
 
     /** Blanks with visible width, each replaced by a space (step 2). */
     private val SPACE_LIKE: Set<Int> = setOf(0x115F, 0x1160, 0x2800, 0x3164, 0xFFA0)
@@ -84,7 +93,7 @@ object CategoryKey {
      */
     fun display(text: String): String {
         val visible = visible(Normalizer.normalize(text, Normalizer.Form.NFC))
-        // NFC again: a removed character may have kept a mark apart from its letter (`E`, U+200B, U+0301).
+        // NFC again, for whatever step 2 joined that composes or reorders (`E`, U+200B, U+0301 → `É`).
         val normal = Normalizer.normalize(visible, Normalizer.Form.NFC).trim()
         return buildString(normal.length) {
             var inRun = false
@@ -107,7 +116,7 @@ object CategoryKey {
         var i = 0
         while (i < cps.size) {
             val cp = cps[i]
-            if (cp in TAG_SPEC || cp == CANCEL_TAG) {
+            if (cp in TAGS) {
                 val end = flagTagsEnd(cps, i)
                 for (k in i until end) out.appendCodePoint(cps[k])
                 // A flag's tags are kept whole; a stray tag character is dropped.
@@ -124,13 +133,14 @@ object CategoryKey {
     }
 
     /**
-     * The end (exclusive) of a subdivision flag's tags starting at [start]: a run of [TAG_SPEC] closed by
-     * [CANCEL_TAG], directly after [WAVING_BLACK_FLAG] in the text as given. [start] when there is none.
+     * The end (exclusive) of a standard flag's tags starting at [start]: exactly one of [FLAG_TAGS],
+     * directly after [WAVING_BLACK_FLAG] in the text as given. [start] when there is none.
      */
     private fun flagTagsEnd(cps: IntArray, start: Int): Int {
         if (start == 0 || cps[start - 1] != WAVING_BLACK_FLAG) return start
-        var k = start
-        while (k < cps.size && cps[k] in TAG_SPEC) k++
-        return if (k > start && k < cps.size && cps[k] == CANCEL_TAG) k + 1 else start
+        val tags = FLAG_TAGS.firstOrNull { flag ->
+            start + flag.size <= cps.size && flag.indices.all { cps[start + it] == flag[it] }
+        }
+        return if (tags == null) start else start + tags.size
     }
 }

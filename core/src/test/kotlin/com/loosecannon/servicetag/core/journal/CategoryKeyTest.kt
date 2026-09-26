@@ -220,6 +220,44 @@ class CategoryKeyTest {
     }
 
     /**
+     * Fix round 2 (S7): only the three standard subdivision flags keep their tags. Any other tag run after
+     * U+1F3F4 — hidden words such as `ignore` or `ignore all`, a real but non-standard subdivision `usca`, or
+     * a run that starts like England and goes on — reads as the bare flag and keys as it.
+     */
+    @Test
+    fun onlyTheThreeStandardFlagsKeepTheirTags() {
+        val ignore = cps(0xE0069, 0xE0067, 0xE006E, 0xE006F, 0xE0072, 0xE0065) // tag letters "ignore"
+        val all = cps(0xE0020, 0xE0061, 0xE006C, 0xE006C) // tag space, then tag letters "all"
+        val usca = cps(0xE0075, 0xE0073, 0xE0063, 0xE0061) // tag letters "usca"
+        val longer = cps(0xE0067, 0xE0062, 0xE0065, 0xE006E, 0xE0067, 0xE0078) // tag letters "gbengx"
+        for (run in listOf(ignore, ignore + all, usca, longer)) {
+            val text = blackFlag + run + cps(0xE007F)
+            assertEquals(blackFlag, CategoryKey.display(text), codePoints(text))
+            assertEquals(blackFlag, CategoryKey.of(text), codePoints(text))
+        }
+        assertEquals("$blackFlag pump", CategoryKey.of(blackFlag + ignore + cps(0xE007F) + " Pump"))
+    }
+
+    /**
+     * Fix round 2 (N8): a tag run at the very start of the text is dropped; two flags in a row keep what
+     * each spells; the U+FE0F form before the tags is not a standard flag, so its tags go and the selector
+     * stays — the bare flag plus the selector.
+     */
+    @Test
+    fun tagRunsAtTheStartFlagsInARowAndTheSelectorForm() {
+        assertEquals("Appliance", CategoryKey.display(cps(0xE0067, 0xE0062, 0xE007F) + "Appliance"))
+        assertEquals("", CategoryKey.display(cps(0xE0067, 0xE0062, 0xE0065, 0xE006E, 0xE0067, 0xE007F)))
+
+        assertEquals(blackFlag + england, CategoryKey.display(blackFlag + england))
+        assertEquals(england + wales, CategoryKey.display(england + wales))
+        assertEquals(england + wales, CategoryKey.of(england + wales))
+
+        val selectorForm = cps(0x1F3F4, 0xFE0F, 0xE0067, 0xE0062, 0xE0065, 0xE006E, 0xE0067, 0xE007F)
+        assertEquals(cps(0x1F3F4, 0xFE0F), CategoryKey.display(selectorForm))
+        assertEquals(cps(0x1F3F4, 0xFE0F), CategoryKey.of(selectorForm))
+    }
+
+    /**
      * K2: the joiners that carry meaning are kept, so the key with one differs from the key without it —
      * a ZERO WIDTH NON-JOINER inside a Persian word, a ZERO WIDTH JOINER inside an emoji sequence.
      */
