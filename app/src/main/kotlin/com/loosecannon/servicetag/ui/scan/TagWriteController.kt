@@ -210,6 +210,8 @@ class TagWriteController(
      * than [LOOKUP_BOUND] (C7). `withTimeoutOrNull`, not `withTimeout`: running out of time must
      * still ask. A cancellation is rethrown, never turned into a sheet: `onTag`'s `finally` frees
      * the tap. No io hop — Room keeps its own threads, as `provisionTag.begin` already relies on.
+     * The bound cuts the lookup off only where it suspends; a query blocked inside SQLite is not
+     * interrupted, it is merely no longer waited for.
      */
     private suspend fun lookUp(existing: TagPayload): Resolution? =
         try {

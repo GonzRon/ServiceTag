@@ -91,6 +91,11 @@ class OverwriteSubjectsTest {
             ),
             OverwriteSubjects.of(v1Question, Resolution.PreSplitLink(row(TagTarget.LinkTarget(LinkId("l1"))))),
         )
+        // A pre-split row is a known row, so its placement rides the quiet line like any other.
+        assertEquals(
+            "a0c19962 · v1 · Pump house",
+            OverwriteSubjects.of(v1Question, Resolution.PreSplitLink(row(TagTarget.LinkTarget(LinkId("l1")), label = "Pump house"))).identifier,
+        )
     }
 
     /** R70-5: a failed lookup is "not checked just now", never "not in the records". */
