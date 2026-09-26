@@ -1,6 +1,5 @@
 package com.loosecannon.servicetag.ui.asset
 
-import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -183,7 +182,7 @@ class AssetsIndicatorsTest {
      * CRITICAL and the disc; (ii) out of service: RETIRED, OUT OF SEASON, ARCHIVED and the disc; (iii) in
      * service: OUT OF SEASON, DOWN, CRITICAL, two S109 lines, one S27 line and the disc. Every word whole,
      * every badge and line inside the name column, the disc inside the row, nothing overlapping, and the
-     * name column at least 200dp. Each measurement is logged under [TAG] for the report.
+     * name column at least 200dp.
      */
     @Test fun nothingClipsAtNarrowWidthOrLargeFont() {
         val cases = listOf(
@@ -226,14 +225,6 @@ class AssetsIndicatorsTest {
                 all.forEachIndexed { i, a ->
                     all.forEachIndexed { j, b -> if (i < j) assertFalse("$where: boxes $i $a and $j $b overlap", overlap(a, b)) }
                 }
-                val badgeLines = pills.map { it.top.value }.distinctBy { (it / HALF).toInt() }.size
-                val lineHeights = case.lines.map { textLayout(it).lineCount }
-                Log.i(
-                    TAG,
-                    "$where: row ${width(row)}x${height(row)}dp, column ${width(column)}dp, badges " +
-                        case.badges.zip(pills).joinToString { (w, p) -> "$w ${width(p)}dp" } +
-                        " on $badgeLines line(s), text lines $lineHeights, disc ${width(disc)}dp",
-                )
             }
         }
     }
@@ -386,15 +377,12 @@ class AssetsIndicatorsTest {
         assertFalse("$where: '$text' is cut vertically", layout.didOverflowHeight)
         val box = with(rule.density) { width(bounds(text)).dp.toPx() }
         val widest = (0 until layout.lineCount).maxOf { layout.getLineRight(it) - layout.getLineLeft(it) }
-        Log.i(TAG, "$where: '$text' lines ${layout.lineCount}, widest ${widest}px in a ${box}px box, didOverflowWidth ${layout.didOverflowWidth}")
         assertTrue("$where: '$text' runs ${widest}px in a ${box}px box", widest <= box + 1f)
     }
 
     private fun Rect.toDp(): DpRect = with(rule.density) { DpRect(left.toDp(), top.toDp(), right.toDp(), bottom.toDp()) }
 
     private fun width(r: DpRect): Float = (r.right - r.left).value
-
-    private fun height(r: DpRect): Float = (r.bottom - r.top).value
 
     private fun centreY(r: DpRect): Float = (r.top.value + r.bottom.value) / 2
 
@@ -413,7 +401,6 @@ class AssetsIndicatorsTest {
     }
 
     private companion object {
-        const val TAG = "AssetsIndicatorsTest"
         const val FRAME = "frame"
         const val ROW = "row-"
         const val HALF = 0.5f

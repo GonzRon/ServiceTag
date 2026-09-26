@@ -308,11 +308,6 @@ class AssetsViewModel(
     }
 
     /**
-     * #71 (plan C1–C3): the rows beside the two facts each row reads by its own id — the assets that
-     * carry a written tag, folded once per emission of every tag row, and the row health, whose
-     * first emission is empty so the list never waits for a health pass.
-     */
-    /**
      * The row health a pass last delivered (review MINOR-1). [state] stops its upstream after the
      * subscription grace, and a restarted read model begins with its synthetic empty map — made so the
      * list's first open never waits, never to erase groups already drawn. So a restart shows these
@@ -336,6 +331,12 @@ class AssetsViewModel(
         }
     }
 
+    /**
+     * #71 (plan C1–C3): the rows beside the two facts each row reads by its own id — the assets that
+     * carry a written tag, folded from every tag row on each emission here, and the row health, whose
+     * first emission never waits for a pass: empty on the list's first open, the kept views on a
+     * restart ([rowHealth]).
+     */
     private val facts: Flow<Facts> =
         combine(seasonal, tags.observeAll(), rowHealth) { (rows, activationsOf), tagRows, views ->
             Facts(rows, activationsOf, writtenTagsOf(tagRows), views)
