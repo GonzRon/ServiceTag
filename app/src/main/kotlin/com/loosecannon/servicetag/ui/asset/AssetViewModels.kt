@@ -1495,7 +1495,13 @@ class AssetEditViewModel(
                 // question is advisory and the save is already written: a schedule read that fails
                 // finishes the editor as a save that asked nothing.
                 val written = result.getOrNull()
-                val ask = written?.let { runCatching { reconcilePromptFor(form) }.getOrNull() }
+                // A failed read finishes the editor as a save that asked nothing; a cancellation is not a
+                // failed read and goes back out the way it came (the backup model's own rule).
+                val ask = written?.let {
+                    runCatching { reconcilePromptFor(form) }
+                        .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+                        .getOrNull()
+                }
                 ask?.let { _prompt.value = it }
                 _state.update { it.copy(saving = false, problems = emptyMap()) }
                 if (ask == null) written?.let { _saved.tryEmit(it.id) }
