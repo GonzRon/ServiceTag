@@ -23,12 +23,16 @@ object OverwriteReasons {
     fun decide(existing: TagPayload, intended: TagId): OverwriteDecision =
         OverwritePolicy.decide(existing(existing), isSameIdentity = existing is TagPayload.V1 && existing.tagId == intended)
 
-    /** The five sentences the confirmation sheet has always shown; the token picks, the detail fills. */
+    /**
+     * The three non-v1 sentences the confirmation sheet has always shown; the token picks, the
+     * detail fills. A different v1 identity is worded by `OverwriteSubjects` (core/usecase), which
+     * knows what that id means on this phone (#70, R70-4) — so it has no sentence here.
+     */
     fun sentence(c: OverwriteDecision.Confirm): String = when (c.reason) {
-        OverwriteReason.OTHER_TAG_SAME_PRODUCT -> "a different ServiceTag tag (${c.detail})"
         OverwriteReason.SAME_PRODUCT_UNSUPPORTED -> "a ServiceTag tag written by a newer app (format ${c.detail})"
         OverwriteReason.FOREIGN -> "foreign NDEF content (${c.detail})"
         OverwriteReason.UNREADABLE -> "unreadable NDEF content (${c.detail})"
+        OverwriteReason.OTHER_TAG_SAME_PRODUCT -> error("${c.reason} is worded by OverwriteSubjects, which resolves the id")
         OverwriteReason.EMPTY_TAG, OverwriteReason.SAME_TAG -> error("${c.reason} never asks a question")
     }
 }

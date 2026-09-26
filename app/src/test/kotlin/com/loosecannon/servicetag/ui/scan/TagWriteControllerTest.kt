@@ -2,29 +2,48 @@ package com.loosecannon.servicetag.ui.scan
 
 import androidx.room3.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import com.loosecannon.nfc.tagcore.NdefEnvelope
 import com.loosecannon.nfc.tagcore.NdefRecordData
+import com.loosecannon.nfc.tagcore.OverwriteDecision
 import com.loosecannon.nfc.tagcore.android.TagHandle
 import com.loosecannon.nfc.tagcore.android.TagInspection
 import com.loosecannon.nfc.tagcore.android.TagIo
 import com.loosecannon.nfc.tagcore.android.TagRead
 import com.loosecannon.nfc.tagcore.android.WriteResult
+import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
+import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.nfc.OverwriteReasons
+import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.usecase.OverwriteSubject
+import com.loosecannon.servicetag.core.usecase.OverwriteSubjects
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
+import com.loosecannon.servicetag.core.usecase.Resolution
+import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.IOException
 import kotlin.test.assertIs
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -70,7 +89,11 @@ class TagWriteControllerTest {
      * scope nobody is watching. Still the one dispatcher, so `advanceUntilIdle()` still settles
      * provision, inspect, write and complete together.
      */
-    private fun TestScope.controller(target: TagTarget = TagTarget.None, label: String? = null): TagWriteController {
+    private fun TestScope.controller(
+        target: TagTarget = TagTarget.None,
+        label: String? = null,
+        resolveTag: ResolveTag = ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock),
+    ): TagWriteController {
         val scope = CoroutineScope(backgroundScope.coroutineContext + dispatcher)
         return TagWriteController(
             provisionTag = ProvisionTag(provision, graph.assets, graph.uow, graph.ids, graph.clock),
@@ -80,6 +103,7 @@ class TagWriteControllerTest {
             target = target,
             label = label,
             scope = scope,
+            resolveTag = resolveTag,
             ioDispatcher = dispatcher,
         )
     }
@@ -147,7 +171,7 @@ class TagWriteControllerTest {
         controller.onTag(handle); advanceUntilIdle()
 
         val asked = controller.state.value as WriteState.Confirm
-        assertTrue("the question names what is on the tag: ${asked.reason}", "foreign" in asked.reason)
+        assertTrue("the question names what is on the tag: ${asked.subject.line}", "foreign" in asked.subject.line)
         assertEquals(0, io.writeAttempts)
 
         controller.keepIt(); advanceUntilIdle()
@@ -276,7 +300,10 @@ class TagWriteControllerTest {
         controller = controller()
         io.inspection = TagInspection("04a1", TagRead.Unreadable("NDEF on tag could not be parsed", null), maxSize = 137, writable = true, needsFormat = false, canLock = true)
         controller.onTag(handle); advanceUntilIdle()
-        assertEquals(WriteState.Confirm("unreadable NDEF content (NDEF on tag could not be parsed)"), controller.state.value)
+        assertEquals(
+            WriteState.Confirm(OverwriteSubject("The tag already holds unreadable NDEF content (NDEF on tag could not be parsed).", null)),
+            controller.state.value,
+        )
         assertEquals(0, io.writeAttempts)
     }
 
@@ -362,7 +389,248 @@ class TagWriteControllerTest {
         assertEquals(2, io.inspectCount); assertIs<WriteState.Written>(controller.state.value)
     }
 
+    // --- #70: the question names what the tag already identifies --------------------------------
+
+    @Test fun aTagBoundToAnAssetIsNamedInTheQuestion() = runTest(dispatcher) {
+        seedKnownRow()
+        controller = controller()
+        io.inspection = holdingOtherTag
+
+        controller.onTag(handle); advanceUntilIdle()
+
+        val asked = assertIs<WriteState.Confirm>(controller.state.value)
+        assertEquals("This tag currently identifies Pump 3.", asked.subject.line)
+        assertEquals("11111111 · v1", asked.subject.identifier)
+        assertEquals(identityLine(OTHER_TAG), asked.subject.identifier)
+        assertEquals(0, io.writeAttempts)
+    }
+
+    @Test fun aPlacementRidesOnTheIdentifierLine() = runTest(dispatcher) {
+        seedKnownRow(label = "Pump house")
+        controller = controller()
+        io.inspection = holdingOtherTag
+
+        controller.onTag(handle); advanceUntilIdle()
+
+        assertEquals(
+            WriteState.Confirm(OverwriteSubject("This tag currently identifies Pump 3.", "11111111 · v1 · Pump house")),
+            controller.state.value,
+        )
+    }
+
+    @Test fun anUnknownV1TagIsSaidToBeNotInTheRecords() = runTest(dispatcher) {
+        controller = controller()
+        io.inspection = holdingOtherTag
+
+        controller.onTag(handle); advanceUntilIdle()
+
+        assertEquals(
+            WriteState.Confirm(OverwriteSubject("This ServiceTag tag is not in this phone's records.", "11111111 · v1")),
+            controller.state.value,
+        )
+        assertEquals(0, io.writeAttempts)
+    }
+
+    /** The row still targets an asset that exists; the question must not name it (AC 3). */
+    @Test fun aLostTagIsSaidToBeLost() = runTest(dispatcher) {
+        seedKnownRow(status = TagStatus.LOST)
+        controller = controller()
+        io.inspection = holdingOtherTag
+
+        controller.onTag(handle); advanceUntilIdle()
+
+        val asked = assertIs<WriteState.Confirm>(controller.state.value)
+        assertEquals(OverwriteSubject("This tag was marked lost and taken out of service.", "11111111 · v1"), asked.subject)
+        assertFalse(ASSET_NAME in asked.subject.line)
+    }
+
+    @Test fun aNewerTagKeepsTheNewerAppLine() = runTest(dispatcher) {
+        controller = controller()
+        io.inspection = readable(NdefEnvelope.encode(graph.tagIdentity, byteArrayOf(2, 0)))
+
+        controller.onTag(handle); advanceUntilIdle()
+
+        assertEquals(
+            WriteState.Confirm(OverwriteSubject("The tag already holds a ServiceTag tag written by a newer app (format 2).", null)),
+            controller.state.value,
+        )
+        assertEquals(0, io.writeAttempts)
+    }
+
+    /** AC 5: a lookup that throws still asks, and "Keep it" still leaves everything as it was. */
+    @Test fun aFailedLookupStillAsksAndKeepItWritesNothing() = runTest(dispatcher) {
+        seedKnownRow()
+        val seeded = graph.tags.all()
+        val lookup = ScriptedLookup(graph.tags).apply { failure = IllegalStateException("store unavailable") }
+        controller = controller(resolveTag = lookup.resolver())
+        io.inspection = holdingOtherTag
+
+        controller.onTag(handle); advanceUntilIdle()
+
+        assertEquals(WriteState.Confirm(OverwriteSubject(COULD_NOT_CHECK, "11111111 · v1")), controller.state.value)
+        val whileAsking = graph.tags.all()
+        controller.keepIt(); advanceUntilIdle()
+        assertEquals(WriteState.Idle("Not written. The tag was left as it was."), controller.state.value)
+        assertEquals(0, io.writeAttempts)
+        assertEquals(whileAsking, graph.tags.all())
+        assertEquals(seeded, graph.tags.all().filter { it.id.value != rowId })
+    }
+
+    /** AC 5: the failed lookup's sheet is an ordinary question — confirm, lift, retap, written. */
+    @Test fun aFailedLookupStillAsksAndOverwriteWritesOnTheRetap() = runTest(dispatcher) {
+        seedKnownRow()
+        val lookup = ScriptedLookup(graph.tags).apply { failure = IllegalStateException("store unavailable") }
+        controller = controller(resolveTag = lookup.resolver())
+        io.inspection = holdingOtherTag
+
+        controller.onTag(handle); advanceUntilIdle()
+        assertEquals(WriteState.Confirm(OverwriteSubject(COULD_NOT_CHECK, "11111111 · v1")), controller.state.value)
+
+        controller.confirmOverwrite(); advanceUntilIdle()
+        assertEquals(WriteState.Idle("Overwrite confirmed. Hold the same tag to the phone again to write."), controller.state.value)
+        io.writeResult = WriteResult.Written(intended, 95, locked = false)
+        controller.onTag(FakeHandle(uid = handle.uid)); advanceUntilIdle()
+
+        assertIs<WriteState.Written>(controller.state.value)
+        assertEquals("a confirmed overwrite asks once and writes once", 1, io.writeAttempts)
+        assertEquals("the retap consumes consent without asking again", 1, lookup.lookups)
+    }
+
+    /** C7: a cancelled lookup shows no sheet, writes nothing, leaves no consent and frees the tap. */
+    @Test fun aCancelledLookupAsksNothingAndReleasesTheTap() = runTest(dispatcher) {
+        seedKnownRow()
+        val lookup = ScriptedLookup(graph.tags).apply { failure = CancellationException("the lookup was cancelled") }
+        controller = controller(resolveTag = lookup.resolver())
+        io.inspection = holdingOtherTag
+
+        controller.onTag(handle); advanceUntilIdle()
+
+        assertEquals(nothingYet, controller.state.value)
+        assertEquals(0, io.writeAttempts)
+        controller.confirmOverwrite(); controller.keepIt(); advanceUntilIdle()
+        assertEquals("no question was recorded, so there is nothing to answer", nothingYet, controller.state.value)
+
+        lookup.failure = null
+        controller.onTag(handle); advanceUntilIdle()
+        assertEquals("the next tap is handled", 2, io.inspectCount)
+        assertEquals(WriteState.Confirm(OverwriteSubject("This tag currently identifies Pump 3.", "11111111 · v1")), controller.state.value)
+        assertEquals(0, io.writeAttempts)
+    }
+
+    /** C2/C7: until the question is on screen there is nothing to answer, and the tap keeps `busy`. */
+    @Test fun answeringWhileTheLookupRunsIsInert() = runTest(dispatcher) {
+        seedKnownRow()
+        val gate = CompletableDeferred<Unit>()
+        val lookup = ScriptedLookup(graph.tags).apply { this.gate = gate }
+        controller = controller(resolveTag = lookup.resolver())
+        io.inspection = holdingOtherTag
+
+        controller.onTag(handle); runCurrent()
+        assertEquals("the lookup is under way", 1, lookup.lookups)
+        assertEquals(nothingYet, controller.state.value)
+
+        controller.keepIt(); controller.confirmOverwrite(); runCurrent()
+        assertEquals("answering before the question is shown does nothing", nothingYet, controller.state.value)
+        controller.onTag(FakeHandle(uid = "04a1-second-discovery")); runCurrent()
+        assertEquals("the tap in flight still owns busy", 1, io.inspectCount)
+
+        gate.complete(Unit); runCurrent()
+        assertEquals(WriteState.Confirm(OverwriteSubject("This tag currently identifies Pump 3.", "11111111 · v1")), controller.state.value)
+
+        controller.keepIt(); runCurrent()
+        assertEquals(WriteState.Idle("Not written. The tag was left as it was."), controller.state.value)
+        assertEquals(0, io.writeAttempts)
+    }
+
+    /** R70-6: a lookup that never answers is given two seconds, then the honest line asks anyway. */
+    @Test fun aHangingLookupIsBoundedToTheHonestLine() = runTest(dispatcher) {
+        seedKnownRow()
+        val lookup = ScriptedLookup(graph.tags).apply { gate = CompletableDeferred() }   // never completed
+        controller = controller(resolveTag = lookup.resolver())
+        io.inspection = holdingOtherTag
+
+        controller.onTag(handle); runCurrent()
+        advanceTimeBy(2.seconds - 1.milliseconds); runCurrent()
+        assertEquals("inside the bound the question waits for its words", nothingYet, controller.state.value)
+
+        advanceTimeBy(2.milliseconds); runCurrent()
+        assertEquals(WriteState.Confirm(OverwriteSubject(COULD_NOT_CHECK, "11111111 · v1")), controller.state.value)
+        controller.keepIt(); runCurrent()
+        assertEquals(WriteState.Idle("Not written. The tag was left as it was."), controller.state.value)
+        assertEquals(0, io.writeAttempts)
+    }
+
+    /** C6: asking — then keeping, then overwriting on the retap — leaves every other row as it was. */
+    @Test fun askingWritesNothingToTheStore() = runTest(dispatcher) {
+        seedKnownRow(label = "Pump house")
+        val before = graph.tags.all()
+        assertNull(before.single().lastScannedAt)
+        controller = controller()
+        io.inspection = holdingOtherTag
+        suspend fun others() = graph.tags.all().filter { it.id.value != rowId }
+
+        controller.onTag(handle); advanceUntilIdle()
+        assertIs<WriteState.Confirm>(controller.state.value)
+        assertEquals(before, others())
+
+        controller.keepIt(); advanceUntilIdle()
+        assertEquals(before, others())
+
+        controller.onTag(handle); advanceUntilIdle()
+        controller.confirmOverwrite(); advanceUntilIdle()
+        io.writeResult = WriteResult.Written(intended, 95, locked = false)
+        controller.onTag(FakeHandle(uid = handle.uid)); advanceUntilIdle()
+        assertIs<WriteState.Written>(controller.state.value)
+        assertEquals(before, others())
+    }
+
+    /** The write flow's words for these states are the inspect sheet's words, not a second copy that drifts. */
+    @Test fun theOverwriteWordsMatchTheScanWords() {
+        assertEquals(PRE_SPLIT_LINK_SENTENCE, OverwriteSubjects.PRE_SPLIT_LINK)
+        // The inspect sheet's literal, itself pinned on the emulator by NfcIdentityDeviceProofTest.
+        assertEquals("This ServiceTag tag is not in this phone's records.", OverwriteSubjects.NOT_IN_RECORDS)
+
+        val unlabelled = TagBinding(TagId(OTHER_TAG), PayloadFormat.V1, OTHER_TAG, TagTarget.None, TagStatus.UNBOUND, createdAt = 1L, updatedAt = 1L)
+        val asked = OverwriteReasons.decide(TagPayload.V1(TagId(OTHER_TAG)), TagId(rowId)) as OverwriteDecision.Confirm
+        val subject = OverwriteSubjects.of(asked, Resolution.Unbound(unlabelled))
+        assertEquals(identityLine(OTHER_TAG), subject.identifier)
+        assertEquals(unlabelled.identityLine(), subject.identifier)
+    }
+
     // --- the fixture ---------------------------------------------------------------------------
+
+    /** What the screen shows before any tap has been answered. */
+    private val nothingYet = WriteState.Idle("Hold a blank or reusable tag to the back of the phone.")
+
+    /** An asset this phone knows and a row for [OTHER_TAG], as `BindTag` would have left them. */
+    private suspend fun seedKnownRow(status: TagStatus = TagStatus.ACTIVE, label: String? = null) {
+        graph.assets.upsert(Asset(AssetId(ASSET_ID), ASSET_NAME, createdAt = 1L, updatedAt = 1L))
+        graph.tags.upsert(
+            TagBinding(
+                TagId(OTHER_TAG), PayloadFormat.V1, OTHER_TAG, TagTarget.AssetTarget(AssetId(ASSET_ID)), status,
+                label = label, createdAt = 1L, updatedAt = 1L,
+            ),
+        )
+    }
+
+    /**
+     * The real Room store, except that the payload lookup can be made to throw or to wait on a
+     * gate. Only [ResolveTag] is given this; `ProvisionTag` keeps its own repository.
+     */
+    private inner class ScriptedLookup(private val delegate: TagRepository) : TagRepository by delegate {
+        var failure: Throwable? = null
+        var gate: CompletableDeferred<Unit>? = null
+        var lookups = 0
+
+        override suspend fun findByPayload(format: PayloadFormat, key: String): TagBinding? {
+            lookups++
+            failure?.let { throw it }
+            gate?.await()
+            return delegate.findByPayload(format, key)
+        }
+
+        fun resolver() = ResolveTag(this, graph.assets, graph.uow, graph.clock)
+    }
 
     /** Two distinct handles can be told apart: the consent rule is about which one does the write. */
     private class FakeHandle(override val uid: String?) : TagHandle
@@ -457,5 +725,10 @@ class TagWriteControllerTest {
     private companion object {
         const val OTHER_TAG = "11111111-1111-4111-8111-111111111111"
         const val THIRD_TAG = "22222222-2222-4222-8222-222222222222"
+        const val ASSET_ID = "a1"
+        const val ASSET_NAME = "Pump 3"
+
+        /** P70-6, written out: the failure paths must say exactly this. */
+        const val COULD_NOT_CHECK = "This is a ServiceTag tag, but its record could not be checked just now."
     }
 }

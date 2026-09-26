@@ -35,25 +35,42 @@ class ResolveTag(
     private val uow: UnitOfWork,
     private val clock: Clock,
 ) {
-    suspend fun run(payload: TagPayload): Resolution = when (payload) {
+    /** A scan. Lookup is by (format, key) — never by row id (D4 §3). A hit records the scan. */
+    suspend fun run(payload: TagPayload): Resolution = resolve(payload) { format, key ->
+        uow.write {
+            val row = tags.findByPayload(format, key) ?: return@write null
+            val tag = row.copy(lastScannedAt = clock.nowMillis())
+            tags.upsert(tag)
+            classify(tag)
+        }
+    }
+
+    /**
+     * A question, not a scan (#70 C1, R70-1): the same classification as [run], read inside one
+     * read transaction, with no `lastScannedAt` stamp and no upsert — asking what a tag already
+     * identifies before overwriting it leaves the store exactly as it was.
+     */
+    suspend fun peek(payload: TagPayload): Resolution = resolve(payload) { format, key ->
+        uow.read { tags.findByPayload(format, key)?.let { classify(it) } }
+    }
+
+    private suspend fun resolve(
+        payload: TagPayload,
+        known: suspend (format: PayloadFormat, key: String) -> Resolution?,
+    ): Resolution = when (payload) {
         is TagPayload.V1 -> known(PayloadFormat.V1, payload.tagId.value) ?: Resolution.UnknownV1(payload.tagId)
         is TagPayload.NewerVersion -> Resolution.NeedsNewerApp(payload.version)
         is TagPayload.Foreign, is TagPayload.Malformed, TagPayload.Empty -> Resolution.NotOurs(payload)
     }
 
-    /** Lookup is by (format, key) — never by row id (D4 §3). A hit records the scan. */
-    private suspend fun known(format: PayloadFormat, key: String): Resolution? = uow.write {
-        val row = tags.findByPayload(format, key) ?: return@write null
-        val tag = row.copy(lastScannedAt = clock.nowMillis())
-        tags.upsert(tag)
-        when {
-            tag.status == TagStatus.LOST || tag.status == TagStatus.RETIRED -> Resolution.Revoked(tag)
-            tag.status == TagStatus.UNBOUND -> Resolution.Unbound(tag)
-            else -> when (val t = tag.target) {
-                is TagTarget.AssetTarget -> assets.get(t.assetId)?.let { Resolution.OpenAsset(tag, it) } ?: Resolution.Unbound(tag)
-                is TagTarget.LinkTarget -> Resolution.PreSplitLink(tag)
-                TagTarget.None -> Resolution.Unbound(tag)
-            }
+    /** The one interpretation of a known row; [run] and [peek] both end here. */
+    private suspend fun classify(tag: TagBinding): Resolution = when {
+        tag.status == TagStatus.LOST || tag.status == TagStatus.RETIRED -> Resolution.Revoked(tag)
+        tag.status == TagStatus.UNBOUND -> Resolution.Unbound(tag)
+        else -> when (val t = tag.target) {
+            is TagTarget.AssetTarget -> assets.get(t.assetId)?.let { Resolution.OpenAsset(tag, it) } ?: Resolution.Unbound(tag)
+            is TagTarget.LinkTarget -> Resolution.PreSplitLink(tag)
+            TagTarget.None -> Resolution.Unbound(tag)
         }
     }
 }
