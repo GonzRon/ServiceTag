@@ -99,10 +99,12 @@ the Trojan-Source hazard this brief exists to close.
   spelling U+115F/U+1160 stand for a missing letter, so a category typed that way would split at them.
 - **Kept, because they carry meaning:** U+200C and U+200D (the joiners); the variation selectors
   U+FE00–U+FE0F and U+E0100–U+E01EF; every other combining mark; whitespace (collapsed); every other
-  format character; and a subdivision flag's tags — a run of U+E0020–U+E007E closed by U+E007F that
-  directly follows U+1F3F4 in the text as given (England, Scotland, Wales). Judged on the text as given:
-  a removed character pasted between the flag and its tags leaves the bare flag, which is what such a
-  text shows; the U+FE0F variant form is not kept (no standard flag uses it).
+  format character; and the tags of the **three standard subdivision flags only** — England, Scotland and Wales: the
+  exact tag sequences spelling `gbeng`, `gbsct` and `gbwls`, each closed by U+E007F, directly after U+1F3F4
+  in the text as given (the scoped re-review's S7: keeping *any* tag run after a flag left a hidden-text
+  channel behind a bare-looking flag). Any other tag run after a flag is removed like a stray one and the
+  flag reads bare; a removed character pasted between the flag and its tags leaves the bare flag, which is
+  what such a text shows; the U+FE0F variant form is not kept (no standard flag uses it).
 - **Order:** NFC; step 2 (remove / space-like); NFC again (a removed character may have held a mark
   apart from its letter); trim and collapse. `of` lowercases the result with `Locale.ROOT`.
 - **Why tags are not simply kept:** a tag after a letter has zero width in HarfBuzz, so a name plus tags
