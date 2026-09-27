@@ -9,10 +9,17 @@ import androidx.core.app.NotificationManagerCompat
  * §5.5). A channel id is permanent once created — Android never lets an app rename or delete one
  * from under the user — so [CHANNELS] is exhaustive, not a starting point. No `supplies` and no
  * `sync_problems` channel exists anywhere in this module.
+ *
+ * **#79 (R79-14b) amends invariant 53 with a third:** [WARRANTY], at the default importance, so an
+ * owner who mutes maintenance still hears about a warranty and one who mutes warranties still hears
+ * about maintenance.
  */
 object NotificationChannels {
     const val DUE = "maintenance_due"
     const val OVERDUE = "maintenance_overdue"
+
+    /** #79 (R79-14b): the warranty warning's own channel, so muting maintenance never mutes it. */
+    const val WARRANTY = "warranty_reminders"
 
     /** One channel's fixed shape: an id, an importance and the two ratified system-settings strings. */
     internal data class Spec(
@@ -36,10 +43,17 @@ object NotificationChannels {
             name = "Maintenance overdue",
             description = "Reminders for maintenance that is past due.",
         ),
+        // #79, P79-13 and P79-14 (RATIFIED verbatim, R79-21).
+        Spec(
+            id = WARRANTY,
+            importance = NotificationManagerCompat.IMPORTANCE_DEFAULT,
+            name = "Warranty reminders",
+            description = "Reminders before a warranty expires.",
+        ),
     )
 
     /**
-     * Creates both channels against the real `NotificationManagerCompat`, called once at process
+     * Creates every channel against the real `NotificationManagerCompat`, called once at process
      * start (`ServiceTagApp.onCreate`) and safe to call on every start: the platform call below is
      * a no-op for an id that already exists and never rewrites an importance the user has changed.
      * That platform guarantee only holds if the importance this brief passes never varies —

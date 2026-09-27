@@ -3,8 +3,11 @@ package com.loosecannon.servicetag.reminders
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.ports.DeadlineLocalDelivery
 import com.loosecannon.servicetag.core.ports.ScheduleLocalDelivery
 import com.loosecannon.servicetag.core.reminders.ContentHash
+import com.loosecannon.servicetag.core.reminders.DeadlineKind
+import com.loosecannon.servicetag.core.reminders.DeadlineRepeat
 import com.loosecannon.servicetag.core.reminders.ReminderSubject
 import com.loosecannon.servicetag.core.reminders.RuleFacts
 import com.loosecannon.servicetag.core.reminders.SubjectKey
@@ -13,6 +16,8 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -54,6 +59,33 @@ internal object Fixture {
         groupTargeted: Boolean = false,
     ) = DeliveryFacts(ownerName, status, meter, groupTargeted)
 
+    /** #79: a warranty subject exactly as `BuildDeadlineSubjects` builds one. */
+    fun warranty(assetId: String, expiresOn: String, lead: Int = 30): ReminderSubject {
+        val due = LocalDate.parse(expiresOn)
+        return ReminderSubject(
+            key = SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, assetId),
+            title = "Warranty",
+            body = "",
+            dueOn = due,
+            leadDays = lead,
+            state = SubjectState.Active,
+            rule = null,
+            contentHash = ContentHash.of("Warranty", "", due, lead, SubjectState.Active, null, DeadlineRepeat.ONCE),
+            repeat = DeadlineRepeat.ONCE,
+        )
+    }
+
+    fun warrantyFacts(today: LocalDate, ownerName: String = "Example Heater") = DeadlineFacts(ownerName, today)
+
+    /** The stamp a warning leaves once it has been announced in [boot]. */
+    fun stamp(subject: ReminderSubject, boot: Int? = 1) = DeadlineLocalDelivery(
+        kind = "WARRANTY_EXPIRY",
+        subjectId = (subject.key as SubjectKey.Deadline).subjectId,
+        announcedHash = subject.contentHash,
+        announcedBoot = boot,
+        updatedAt = NOW,
+    )
+
     fun row(
         id: String,
         snoozedUntilAt: Long? = null,
@@ -81,12 +113,13 @@ internal object Fixture {
 class DigestPolicyTest {
 
     private fun decide(
-        inputs: List<DeliveryInput>,
+        inputs: List<DigestInput>,
         standing: Set<String> = emptySet(),
         standingSummary: String? = null,
         now: Long = Fixture.NOW,
         muted: Set<String> = emptySet(),
-    ) = DigestPolicy.decide(inputs, standing, standingSummary, now) { it !in muted }
+        boot: Int? = 1,
+    ) = DigestPolicy.decide(inputs, standing, standingSummary, now, boot) { it !in muted }
 
     /**
      * The matrix's "the digest shouting" row, and #21 AC 1's off-device half. A schedule due
@@ -494,9 +527,194 @@ class DigestPolicyTest {
         assertEquals(listOf("Done", "Snooze 1 day", "Open"), asset.actions)
     }
 
+    // #79 (C4, K2): one tag codec for both families, the schedule half byte-identical to 1.2's.
+
+    /** The shipped form, `<scheduleId>|<hash16>`, exactly: a moved schedule tag re-posts every reminder. */
+    @Test
+    fun aScheduleTagIsByteIdenticalToTheBaseForm() {
+        val hash = "0123456789abcdef0123456789abcdef"
+        assertEquals("sched-1|0123456789abcdef", itemTag(SubjectKey.Schedule(ScheduleId("sched-1")), hash))
+        assertEquals(
+            "$UUID_1|0123456789abcdef",
+            itemTag(SubjectKey.Schedule(ScheduleId(UUID_1)), hash),
+        )
+    }
+
+    /** `keyOfTag` is `itemTag`'s only reader, and reads back exactly the key it was written from. */
+    @Test
+    fun everyKeyRoundTripsThroughItsTag() {
+        listOf(
+            SubjectKey.Schedule(ScheduleId(UUID_1)),
+            SubjectKey.Schedule(ScheduleId("sched-1")),
+            SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, UUID_2),
+            SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, "a1"),
+        ).forEach { key -> assertEquals(key, keyOfTag(itemTag(key, "fedcba9876543210ffff"))) }
+    }
+
+    /** A warning's tag carries its kind, so it is never read as a schedule's. */
+    @Test
+    fun aDeadlineTagNeverReadsAsASchedule() {
+        val key = SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, "a1")
+        val tag = itemTag(key, "0123456789abcdef0123")
+
+        assertEquals("WARRANTY_EXPIRY:a1|0123456789abcdef", tag)
+        assertEquals(key, keyOfTag(tag))
+        assertNull("a tag with no separator is nobody's", keyOfTag("no-separator"))
+    }
+
+    // #79 (C7, R79-14a): a warranty warning, once per content on entering its window.
+
+    /** Lead 30: nothing the day before the window opens, one warning the day it opens, and none after. */
+    @Test
+    fun aWarrantyIsPostedOnceOnEnteringItsWindow() {
+        val subject = Fixture.warranty("a1", "2031-06-30", lead = 30)
+        var standing = emptySet<String>()
+        var row: DeadlineLocalDelivery? = null
+
+        val postsByDay = (-31..0).associateWith { offset ->
+            val decision = decide(
+                listOf(DeadlineInput(subject, Fixture.warrantyFacts(EXPIRY.plusDays(offset.toLong())), row)),
+                standing = standing,
+            )
+            standing = standing - decision.cancelTags.toSet() + decision.posts.map { it.tag }
+            row = decision.deadlineRows.singleOrNull() ?: row.takeUnless { subject.key in decision.deadlineForgotten }
+            decision.posts.size
+        }
+
+        assertEquals(0, postsByDay.getValue(-31))
+        assertEquals(1, postsByDay.getValue(-30))
+        assertEquals(0, postsByDay.getValue(-29))
+        assertEquals("one warning in the whole run of days", 1, postsByDay.values.sum())
+        assertEquals(setOf(itemTag(subject.key, subject.contentHash)), standing)
+    }
+
+    /**
+     * Standing: held and counted unchanged. Swiped in the same boot: nothing — the stamp says this
+     * content was announced, and the owner took it away.
+     */
+    @Test
+    fun aStandingOrSwipedWarningIsNotReposted() {
+        val subject = Fixture.warranty("a1", "2031-06-30")
+        val facts = Fixture.warrantyFacts(EXPIRY.minusDays(10))
+        val tag = itemTag(subject.key, subject.contentHash)
+
+        val standing = decide(listOf(DeadlineInput(subject, facts, Fixture.stamp(subject))), standing = setOf(tag))
+        assertEquals(emptyList<ItemPost>(), standing.posts)
+        assertEquals(emptyList<String>(), standing.cancelTags)
+        assertEquals(ReconcileCounters(0, 0, 1), standing.report.counters())
+        assertEquals(emptyList<DeadlineLocalDelivery>(), standing.deadlineRows)
+
+        val swiped = decide(listOf(DeadlineInput(subject, facts, Fixture.stamp(subject))))
+        assertEquals(emptyList<ItemPost>(), swiped.posts)
+        assertEquals(ReconcileCounters(0, 0, 0), swiped.report.counters())
+        assertEquals(emptyList<DeadlineLocalDelivery>(), swiped.deadlineRows)
+        assertEquals(emptyList<SubjectKey.Deadline>(), swiped.deadlineForgotten)
+    }
+
+    /** A moved lead or date is new content: the old warning is cancelled and the new one posted and stamped. */
+    @Test
+    fun aMovedDateOrLeadReplacesIt() {
+        val before = Fixture.warranty("a1", "2031-06-30", lead = 30)
+        val oldTag = itemTag(before.key, before.contentHash)
+        val facts = Fixture.warrantyFacts(EXPIRY.minusDays(10))
+
+        listOf(Fixture.warranty("a1", "2031-06-30", lead = 20), Fixture.warranty("a1", "2031-07-05", lead = 30))
+            .forEach { moved ->
+                val decision = decide(listOf(DeadlineInput(moved, facts, Fixture.stamp(before))), standing = setOf(oldTag))
+
+                assertEquals(listOf(itemTag(moved.key, moved.contentHash)), decision.posts.map { it.tag })
+                assertEquals(listOf(oldTag), decision.cancelTags)
+                assertEquals(listOf(moved.contentHash), decision.deadlineRows.map { it.announcedHash })
+                assertEquals("re-shown, not let go of", ReconcileCounters(1, 0, 0), decision.report.counters())
+            }
+    }
+
+    /**
+     * Added beside the matrix: before its window, or with its asset gone, a warning is taken down
+     * and its stamp forgotten, so a later entry announces again.
+     */
+    @Test
+    fun outsideItsWindowOrWithoutItsAssetAWarningIsTakenDownAndForgotten() {
+        val before = Fixture.warranty("a1", "2031-06-30", lead = 30)
+        val oldTag = itemTag(before.key, before.contentHash)
+        val shortened = Fixture.warranty("a1", "2031-06-30", lead = 5)
+
+        listOf(
+            DeadlineInput(shortened, Fixture.warrantyFacts(EXPIRY.minusDays(10)), Fixture.stamp(before)),
+            DeadlineInput(before, null, Fixture.stamp(before)),
+        ).forEach { input ->
+            val decision = decide(listOf(input), standing = setOf(oldTag))
+
+            assertEquals(emptyList<ItemPost>(), decision.posts)
+            assertEquals(listOf(oldTag), decision.cancelTags)
+            assertEquals(listOf(input.key), decision.deadlineForgotten)
+            assertEquals(ReconcileCounters(0, 1, 0), decision.report.counters())
+        }
+    }
+
+    /** P79-10, P79-11, P79-13's channel and C8's one action, on the warning the digest builds. */
+    @Test
+    fun theRatifiedTitleBodyWordChannelAndOneOpenAction() {
+        val post = decide(
+            listOf(DeadlineInput(Fixture.warranty("a1", "2031-06-30"), Fixture.warrantyFacts(EXPIRY.minusDays(3)), null)),
+        ).posts.single()
+
+        assertEquals(SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, "a1"), post.key)
+        assertEquals("Example Heater — Warranty", post.title)
+        assertEquals("Warranty expires ${EXPIRY.format(Fixture.DISPLAY)}.", post.body)
+        assertEquals("EXPIRES SOON", post.statusWord)
+        assertEquals("warranty_reminders", post.channelId)
+        assertEquals(listOf("Open"), post.actions)
+        assertFalse("a date, not a meter: the clock icon", post.meter)
+    }
+
+    // #79 (C7, K3): never maintenance.
+
+    /** A warning is never counted in the summary, alone or beside a schedule. */
+    @Test
+    fun aWarrantyNeverCountsInTheMaintenanceSummary() {
+        val warranty = DeadlineInput(Fixture.warranty("a1", "2031-06-30"), Fixture.warrantyFacts(EXPIRY.minusDays(3)), null)
+
+        val alone = decide(listOf(warranty))
+        assertEquals(1, alone.posts.size)
+        assertNull("nothing needs maintenance", alone.summary)
+
+        val beside = decide(listOf(DeliveryInput(Fixture.subject("s1", "2026-06-15"), Fixture.facts(DueStatus.DUE), null), warranty))
+        assertEquals(2, beside.posts.size)
+        assertEquals("1 maintenance items need attention", beside.summary?.title)
+        assertEquals("1 due.", beside.summary?.body)
+    }
+
+    /** The kept set covers both families: the schedule rules never take a standing warning down. */
+    @Test
+    fun theScheduleBranchNeverCancelsAStandingWarranty() {
+        val warranty = Fixture.warranty("a1", "2031-06-30")
+        val warrantyTag = itemTag(warranty.key, warranty.contentHash)
+        val warrantyInput = DeadlineInput(warranty, Fixture.warrantyFacts(EXPIRY.minusDays(3)), Fixture.stamp(warranty))
+        val schedule = Fixture.subject("s1", "2026-06-15")
+        val scheduleTag = itemTag(schedule.key, schedule.contentHash)
+
+        val both = decide(
+            listOf(DeliveryInput(schedule, Fixture.facts(DueStatus.DUE), null), warrantyInput),
+            standing = setOf(scheduleTag, warrantyTag),
+        )
+        assertEquals(emptyList<String>(), both.cancelTags)
+        assertEquals(ReconcileCounters(0, 0, 2), both.report.counters())
+
+        val scheduleGone = decide(listOf(warrantyInput), standing = setOf(scheduleTag, warrantyTag))
+        assertEquals("only the schedule's own tag goes", listOf(scheduleTag), scheduleGone.cancelTags)
+        assertEquals(ReconcileCounters(0, 1, 1), scheduleGone.report.counters())
+    }
+
     /** The counters, as a value, so a report can be compared in one assertion. */
     private data class ReconcileCounters(val posted: Int, val cleared: Int, val unchanged: Int)
 
     private fun com.loosecannon.servicetag.core.reminders.ReconcileReport.counters() =
         ReconcileCounters(posted, cleared, unchanged)
+
+    private companion object {
+        val EXPIRY: LocalDate = LocalDate.parse("2031-06-30")
+        const val UUID_1 = "8f14e45f-ceea-467a-9575-3f1c2e5d6a7b"
+        const val UUID_2 = "c9f0f895-fb98-4b91-99f5-1d5a2e7c0b3e"
+    }
 }

@@ -16,6 +16,7 @@ private class FakePlatformState(
     override fun channelImportance(channelId: String): ChannelImportance =
         importances[channelId] ?: ChannelImportance.ABSENT
     override fun appRestricted(): AppRestriction = restriction
+    override fun bootCount(): Int? = null
 }
 
 class PlatformStateTest {
@@ -84,7 +85,11 @@ class PlatformStateTest {
     fun deniedNotificationsDisablesNothingThisBriefOwns() {
         val created = mutableListOf<NotificationChannels.Spec>()
         NotificationChannels.ensure { created += it }
-        assertEquals(setOf(NotificationChannels.DUE, NotificationChannels.OVERDUE), created.map { it.id }.toSet())
+        assertEquals(
+            // #79 (R79-14b) amends invariant 53 with the third, `warranty_reminders`.
+            setOf(NotificationChannels.DUE, NotificationChannels.OVERDUE, NotificationChannels.WARRANTY),
+            created.map { it.id }.toSet(),
+        )
 
         listOf(
             "reminders/NotificationChannels.kt" to sourceFile("kotlin/com/loosecannon/servicetag/reminders/NotificationChannels.kt"),

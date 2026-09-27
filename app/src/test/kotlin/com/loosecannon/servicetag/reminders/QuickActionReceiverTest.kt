@@ -264,7 +264,7 @@ class QuickActionReceiverTest {
             assertTrue("every PendingIntent is FLAG_IMMUTABLE on its own line: ${line.trim()}", "FLAG_IMMUTABLE" in line)
         }
         assertEquals("one broadcast site for the two writes", 1, calls.count { "PendingIntent.getBroadcast" in it })
-        assertEquals("one activity site for the two navigations", 1, calls.count { "PendingIntent.getActivity" in it })
+        assertEquals("one activity site for the navigations", 1, calls.count { "PendingIntent.getActivity" in it })
         assertEquals("nothing here starts a service", 0, calls.count { "PendingIntent.getService" in it })
 
         val codes = listOf(
@@ -272,8 +272,10 @@ class QuickActionReceiverTest {
             AndroidQuickActionIntents.REQUEST_SNOOZE,
             AndroidQuickActionIntents.REQUEST_COMPLETION_FORM,
             AndroidQuickActionIntents.REQUEST_OPEN,
+            // #79 (C8): a warranty warning's "Open", the fifth kind.
+            AndroidQuickActionIntents.REQUEST_OPEN_ASSET,
         )
-        assertEquals("four actions, four request codes: a shared code would be one pending intent", 4, codes.distinct().size)
+        assertEquals("five actions, five request codes: a shared code would be one pending intent", 5, codes.distinct().size)
         assertTrue(
             "the broadcasts name their own component, so the non-exported receiver is reachable at all",
             lines.any { "QuickActionReceiver::class.java" in it },

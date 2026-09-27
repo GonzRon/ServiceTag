@@ -16,6 +16,11 @@ import java.time.LocalDate
  * explicit marker for every absent value. The separator is the reason `title` and `body` cannot be
  * confused for one another by concatenation, and the markers are the reason a null date and the
  * empty string do not collide.
+ *
+ * **#79 (C4, K2): the repeat fact is appended only when it is there.** A schedule subject carries
+ * none, so its canonical form — and so its hash, and the tag built from it — is byte-for-byte the
+ * one 1.2 shipped. Appending an absent marker instead would move every schedule's hash on upgrade,
+ * and every standing maintenance reminder would be posted again.
  */
 object ContentHash {
 
@@ -29,16 +34,18 @@ object ContentHash {
         leadDays: Int,
         state: SubjectState,
         rule: RuleFacts?,
-    ): String = sha256(
-        listOf(
+        repeat: DeadlineRepeat? = null,
+    ): String {
+        val fields = listOf(
             title,
             body,
             dueOn?.toString() ?: ABSENT,
             leadDays.toString(),
             render(state),
             rule?.let(::render) ?: ABSENT,
-        ).joinToString(SEP.toString()),
-    )
+        )
+        return sha256((if (repeat == null) fields else fields + repeat.name).joinToString(SEP.toString()))
+    }
 
     /**
      * States render by name, and a parked one by name **and** re-entry date: two parked subjects
