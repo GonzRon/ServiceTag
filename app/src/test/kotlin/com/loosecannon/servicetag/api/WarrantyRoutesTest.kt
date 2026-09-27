@@ -82,9 +82,10 @@ class WarrantyRoutesTest {
 
     /**
      * The write answers the row as stored and the warranty now; a lead has no upper bound; `null`
-     * turns it off; the key is required, so `{}` is a 400 and never a reminder silently cleared; and
-     * the write runs no sweep — no device-local delivery row appears (it settles at the next digest or
-     * the 12-hour backstop, R79-15).
+     * turns it off; the key is required, so `{}` is a 400 and never a reminder silently cleared, and a
+     * lead that is not a whole number is the decoder's 400. The write can run no sweep — it settles at
+     * the next digest or the 12-hour backstop (R79-15) — and that is structural: the handler holds no
+     * reconcile, provider or graph to reach one, which the last lines check by reflection.
      */
     @Test fun postWarrantyReminderAnswersAssetAndWarranty() {
         val heater = assetWith("Example Heater", "2026-06-30")
@@ -108,13 +109,17 @@ class WarrantyRoutesTest {
         assertEquals(forgot.bodyText(), 400, forgot.status)
         val misspelt = api.call("POST", "/v1/assets/$heater/warranty-reminder", """{"leadDays":14,"lead":3}""")
         assertEquals(misspelt.bodyText(), 400, misspelt.status)
+        val fractional = api.call("POST", "/v1/assets/$heater/warranty-reminder", """{"leadDays":1.5}""")
+        assertEquals(fractional.bodyText(), 400, fractional.status)
         assertEquals("a refused body writes nothing", 14, stored(heater).warrantyReminderLeadDays)
 
         val missing = setLead("no-such-asset", "5")
         assertEquals(404, missing.status)
         assertEquals("no_such_asset", missing.errorDetail().code)
 
-        assertEquals("no sweep ran", emptyList<Any>(), runBlocking { graph.deadlineLocalDelivery.all() })
+        val held = WarrantyHandlers::class.java.declaredFields.filterNot { Modifier.isStatic(it.modifiers) }.map { it.type.simpleName }
+        assertTrue("reflection sees the collaborators: $held", "SetWarrantyReminder" in held)
+        assertTrue("no sweep is reachable: $held", held.none { Regex("Reconcile|ReminderRuns|ReminderProvider|AppGraph").containsMatchIn(it) })
     }
 
     /**
