@@ -18,13 +18,18 @@ the one body key it is about, then the `problems` in parentheses.
   The seventeen maintenance tools need **1.2.0 or later**, the three reference tools need
   **1.3.0 or later**, the fourteen season, condition and health tools need **1.4.0 or later** and
   `repair_schedule_providers` needs **1.4.1 or later**; on an older build their routes are not there
-  and every call answers 404.
+  and every call answers 404. The two warranty tools need an app whose `schemaVersion` is **11 or
+  later**, and check it themselves (below).
 - **Every write needs ServiceTag 1.4.0.** Before its first write under a pairing, the server reads
   `/v1/status` once and refuses to write to an app whose `schemaVersion` is below 8 — a `ToolError`
   carrying `APP_SCHEMA_TOO_OLD`, with nothing sent. The answer is kept for that pairing, and a new
   code reads it again. Reads keep working against an older app, and so does `import_merge` with
   `plan_only=True` (the plan writes nothing); `repair_schedule_providers`' plan, which writes nothing
   either, is not schema-checked for the same reason.
+- **The warranty tools need schema 11.** `get_warranty` and `set_warranty_reminder` — the read as well
+  as the write — refuse an app whose `schemaVersion` is below 11 the same way, with `APP_SCHEMA_TOO_OLD`
+  and nothing sent, from the same one `/v1/status` read per pairing. Every other tool keeps the
+  minimum of 8.
 
 ## Using it
 
@@ -67,7 +72,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Fifty-six: `pair` plus one per API operation.
+Fifty-eight: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -109,6 +114,15 @@ each ACTIVE, providerless one a single enabled `LOCAL` provider. The default is 
 writes nothing; the apply plans again on the phone inside its own write, skips a paused schedule and
 a disabled provider, and a second apply repairs nothing. `docs/api/v1.md`'s **Repairs** section is
 the contract.
+
+**Warranty (needs schema 11)** — `get_warranty`, `set_warranty_reminder`. `get_warranty` answers
+the asset's warranty status — `IN_WARRANTY`, `OUT_OF_WARRANTY` or `NOT_RECORDED` — derived on the
+phone for today and stored nowhere, with the date and the reminder lead beside it.
+`set_warranty_reminder` sets the lead in whole days (1 or more) or clears it with `None`; the asset
+needs a warranty date first. The lead is in no asset command, so `update_asset` never sends it: an
+edit keeps it while the date stays, and clearing `warranty_expires_on` clears it too. The warning is
+the phone's own and has no tool; a lead set here takes effect at the phone's next digest or its
+12-hour backstop. `docs/api/v1.md`'s **Warranty reminders (#79)** section is the contract.
 
 ### The schedule's two forms, and the deprecated season arguments
 
@@ -221,10 +235,11 @@ the new target **and** clearing the old one in the same call.
 
 ### `import_merge`
 
-Takes a local path to a `ServiceTag-data-*.zip` of format **1–8** and merges it into the phone. A
+Takes a local path to a `ServiceTag-data-*.zip` of format **1–11** and merges it into the phone. A
 format-6 archive adds the maintenance groups, the schedules and the occurrence closures, format 7 the
-references, and format 8 the season activations, the conditions and the health subjects; an older
-archive simply has none of them. **It plans before it writes**, and it never overwrites or
+references, format 8 the season activations, the conditions and the health subjects, format 9 the
+owner's own categories, format 10 each attachment's document role and format 11 each asset's warranty
+reminder lead; an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
 - a row whose id is not on the phone is **inserted**, with its UUID preserved exactly;
@@ -238,9 +253,10 @@ deletes anything:
   that closed the same round on the same day merge cleanly and a genuine disagreement about *when*
   a round was closed is a conflict for a person.
 
-The report carries a `{insert, identical, conflict, skipped}` tally for each of **fourteen**
+The report carries a `{insert, identical, conflict, skipped}` tally for each of **fifteen**
 tables — `assets`, `groups`, `definitions`, `profiles`, `schedules`, `closures`, `links`, `tags`,
-`events`, `attachments`, `references`, `seasonActivations`, `conditions`, `healthSubjects`. A season
+`events`, `attachments`, `references`, `seasonActivations`, `conditions`, `healthSubjects`,
+`categories`. A season
 activation and a condition are immutable facts: each is only ever inserted or found identical.
 
 The tool asks for the plan and applies it only when the plan has no conflicts. Pass
