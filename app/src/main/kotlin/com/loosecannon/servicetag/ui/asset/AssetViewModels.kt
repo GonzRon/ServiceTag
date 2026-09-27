@@ -626,7 +626,7 @@ data class AssetDetailState(
     val groups: List<AssetGroupRow> = emptyList(),
     /**
      * #67 (R67-5): the newest purchase invoice or receipt's display name, for the Details fact
-     * "Purchase document" — text, not a link; null when the asset has none.
+     * (P67-11) — text, not a link; null when the asset has none.
      */
     val purchaseDocument: String? = null,
 ) {

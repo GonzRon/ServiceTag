@@ -66,7 +66,7 @@ internal fun DocumentRole?.label(): String = when (this) {
 /** #67 (P67-5, ratified verbatim): the header over the role chips, in the edit sheet and the share intake. */
 internal const val ROLE_HEADER = "Role"
 
-/** #67: the Role chips, in the order the edit sheet and the share intake draw them — "No role" first. */
+/** #67: the role chips, in the order the edit sheet and the share intake draw them — no role first. */
 internal val ROLE_CHOICES: List<DocumentRole?> = listOf<DocumentRole?>(null) + DocumentRole.entries
 
 /**

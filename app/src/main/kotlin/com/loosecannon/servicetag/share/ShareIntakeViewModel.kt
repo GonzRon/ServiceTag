@@ -99,7 +99,7 @@ internal data class ShareIntakeState(
     val name: String = "",
     val description: String = "",
     val kind: AttachmentKind = AttachmentKind.OTHER,
-    /** #67 (R67-9): the chosen document role, on a byte share only; null is "No role". */
+    /** #67 (R67-9): the chosen document role, on a byte share only; null is the no-role chip. */
     val role: DocumentRole? = null,
     val storeReady: Boolean = true,
     /** A ratified sentence drawn beside the form; the person can still act. */
