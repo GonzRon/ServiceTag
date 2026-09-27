@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -50,10 +51,17 @@ class ChangeConditionSheetTest {
         graph.createAsset.run(AssetCommand(name = "Generator", category = "Power")).id
     }
 
+    /** #82: every draft P82-3 handed to the host, in order. */
+    private val drafts = mutableListOf<PendingCondition>()
+
     private fun sheetFor(graph: AppGraph, assetId: AssetId): MutableList<String> {
         val trail = mutableListOf<String>()
         rule.setContent {
-            ServiceTagTheme { ChangeConditionSheet(graph = graph, assetId = assetId.value) { trail += "done" } }
+            ServiceTagTheme {
+                ChangeConditionSheet(graph = graph, assetId = assetId.value, onLogIncidentDetails = { drafts += it }) {
+                    trail += "done"
+                }
+            }
         }
         return trail
     }
@@ -85,6 +93,15 @@ class ChangeConditionSheetTest {
         field("What is wrong? (optional)").performTextInput("Will not start")
         rule.onNodeWithText("Save condition").assertIsEnabled().performClick()
 
+        // #82 (row 11a): DOWN on an asset in service asks P82-1 first, and nothing is written yet.
+        rule.awaitText("Log incident details?")
+        rule.onNodeWithText("Generator is DOWN. Record what went wrong in the service record?").assertIsDisplayed()
+        rule.onNodeWithText("Log incident details").assertIsDisplayed()
+        rule.onNodeWithText("Save condition only").assertIsDisplayed()
+        assertEquals(0, runBlocking { graph.conditions.all().size })
+        assertEquals(emptyList<String>(), trail)
+        rule.onNodeWithText("Save condition only").performClick()
+
         rule.waitUntil(TIMEOUT_MS) { trail.isNotEmpty() }
         assertEquals(listOf("done"), trail)
         val row = runBlocking { graph.conditions.all().single() }
@@ -109,6 +126,70 @@ class ChangeConditionSheetTest {
         rule.waitUntil(TIMEOUT_MS) { trail.isNotEmpty() }
         assertEquals(listOf("done"), trail)
         assertEquals(0, runBlocking { graph.conditions.all().size })
+    }
+
+    /** Row 18 (AC 1, 2): DEGRADED asks P82-1; "Save condition only" records one unlinked row and no event. */
+    @Test fun downAsksTheQuestionAndSaveConditionOnlyRecordsOneRow() {
+        val graph = app.graph
+        val generator = generator(graph)
+        val trail = sheetFor(graph, generator)
+
+        rule.awaitText("Save condition")
+        rule.onNodeWithText("Degraded").performClick()
+        field("What is wrong? (optional)").performTextInput("Runs rough")
+        rule.onNodeWithText("Save condition").performClick()
+        rule.awaitText("Log incident details?")
+        rule.onNodeWithText("Generator is DEGRADED. Record what went wrong in the service record?").assertIsDisplayed()
+        assertEquals("nothing written while it asks", 0, runBlocking { graph.conditions.all().size })
+
+        rule.onNodeWithText("Save condition only").performClick()
+        rule.waitUntil(TIMEOUT_MS) { trail.isNotEmpty() }
+        assertEquals(listOf("done"), trail)
+        val row = runBlocking { graph.conditions.all().single() }
+        assertEquals(OperationalCondition.DEGRADED, row.condition)
+        assertEquals("Runs rough", row.reason)
+        assertNull(row.eventId)
+        assertEquals(0, runBlocking { graph.events.forAsset(generator).size })
+        assertEquals(emptyList<PendingCondition>(), drafts)
+    }
+
+    /** Row 18: "Log incident details" hands the held draft to the host and writes nothing. */
+    @Test fun logIncidentDetailsReachesTheHostAndWritesNothing() {
+        val graph = app.graph
+        val generator = generator(graph)
+        val trail = sheetFor(graph, generator)
+
+        rule.awaitText("Save condition")
+        rule.onNodeWithText("Down").performClick()
+        field("What is wrong? (optional)").performTextInput("Will not start")
+        rule.onNodeWithText("Save condition").performClick()
+        rule.awaitText("Log incident details?")
+        rule.onNodeWithText("Log incident details").performClick()
+
+        rule.waitUntil(TIMEOUT_MS) { drafts.isNotEmpty() }
+        val draft = drafts.single()
+        assertEquals(OperationalCondition.DOWN, draft.condition)
+        assertEquals(LocalDate.now().toString(), draft.occurredOn)
+        assertEquals("Will not start", draft.reason)
+        assertEquals(0, runBlocking { graph.conditions.all().size })
+        assertEquals(0, runBlocking { graph.events.forAsset(generator).size })
+        assertEquals("the sheet waits for the entry", emptyList<String>(), trail)
+    }
+
+    /** Row 18: OPERATIONAL records at once and asks nothing. */
+    @Test fun operationalAsksNothing() {
+        val graph = app.graph
+        val generator = generator(graph)
+        val trail = sheetFor(graph, generator)
+
+        rule.awaitText("Save condition")
+        rule.onNodeWithText("Operational").performClick()
+        rule.onNodeWithText("Save condition").performClick()
+
+        rule.waitUntil(TIMEOUT_MS) { trail.isNotEmpty() }
+        assertEquals(listOf("done"), trail)
+        assertEquals(OperationalCondition.OPERATIONAL, runBlocking { graph.conditions.all().single() }.condition)
+        rule.onAllNodesWithText("Log incident details?").assertCountEquals(0)
     }
 
     private companion object {

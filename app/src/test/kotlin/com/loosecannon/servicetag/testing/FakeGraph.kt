@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
 import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
 import com.loosecannon.servicetag.core.usecase.AddAttachment
@@ -59,6 +60,7 @@ import com.loosecannon.servicetag.core.usecase.PromoteCategory
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.RecordCondition
+import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
@@ -258,6 +260,11 @@ class FakeGraph(
     /** 1.4 — condition and health configuration, mirroring `AppGraph`'s six fields by name (master plan §1). */
     val recordCondition: RecordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, todayPort)
     val acceptOperationalOffer: AcceptOperationalOffer = AcceptOperationalOffer(conditions, recordCondition, uow)
+    // #82: the combined write (Workflow A) and the impairment offer's accept (Workflow B), as `AppGraph` wires them.
+    val recordConditionWithIncident: RecordConditionWithIncident = RecordConditionWithIncident(
+        events, definitions, profiles, assets, uow, ids, clock, recomputeSchedules, conditions, todayPort, recordCondition,
+    )
+    val acceptImpairmentOffer: AcceptImpairmentOffer = AcceptImpairmentOffer(conditions, recordCondition, uow)
     val saveHealthSubject: SaveHealthSubject =
         SaveHealthSubject(healthSubjects, assets, schedules, profiles, uow, ids, clock)
     val archiveHealthSubject: ArchiveHealthSubject =

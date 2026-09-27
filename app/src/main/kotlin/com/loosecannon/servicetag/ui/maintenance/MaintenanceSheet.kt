@@ -46,6 +46,7 @@ import com.loosecannon.servicetag.ui.condition.ChangeConditionSheet
 import com.loosecannon.servicetag.ui.condition.ConditionBadge
 import com.loosecannon.servicetag.ui.condition.MARK_OPERATIONAL
 import com.loosecannon.servicetag.ui.condition.MarkOperationalDialog
+import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.condition.componentLine
 import com.loosecannon.servicetag.ui.condition.conditionColors
 import com.loosecannon.servicetag.ui.condition.conditionGlyph
@@ -94,6 +95,8 @@ fun MaintenanceSheet(
     onReviewSchedule: (String) -> Unit,
     onLogForm: (assetId: String, profileId: String?) -> Unit,
     onDismiss: () -> Unit,
+    /** #82 — Change condition's P82-3: the held DOWN or DEGRADED, for the host's Incident entry. */
+    onLogIncidentDetails: (PendingCondition) -> Unit = {},
 ) {
     val model: MaintenanceSheetViewModel = viewModel(key = "sheet/$assetId/$tagId") {
         MaintenanceSheetViewModel(graph, assetId, tagId)
@@ -198,7 +201,7 @@ fun MaintenanceSheet(
     }
 
     if (changingCondition) {
-        ChangeConditionSheet(graph = graph, assetId = assetId) {
+        ChangeConditionSheet(graph = graph, assetId = assetId, onLogIncidentDetails = onLogIncidentDetails) {
             changingCondition = false
             model.refresh()
         }

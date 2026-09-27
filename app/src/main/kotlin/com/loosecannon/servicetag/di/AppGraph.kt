@@ -41,6 +41,7 @@ import com.loosecannon.servicetag.core.ports.UuidGenerator
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.references.StreamSourcePolicy
 import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
+import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
 import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
 import com.loosecannon.servicetag.core.usecase.AddAttachment
@@ -77,6 +78,7 @@ import com.loosecannon.servicetag.core.usecase.PromoteCategory
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.RecordCondition
+import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.RenameCategory
@@ -524,6 +526,13 @@ class AppGraph(private val context: Context) {
     // asset editor's one transaction over the asset, its season, its break and its policy.
     val recordCondition: RecordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, today)
     val acceptOperationalOffer: AcceptOperationalOffer = AcceptOperationalOffer(conditions, recordCondition, uow)
+    // #82 — the two answers that write a condition row besides S16 and S7, each only on the owner's
+    // choice: the Incident entry's Save in the combined flow (the Incident and its linked row in one
+    // transaction, Workflow A) and "Mark down" / "Mark degraded" after a new Incident (Workflow B).
+    val recordConditionWithIncident: RecordConditionWithIncident = RecordConditionWithIncident(
+        events, definitions, profiles, assets, uow, ids, clock, recomputeSchedules, conditions, today, recordCondition,
+    )
+    val acceptImpairmentOffer: AcceptImpairmentOffer = AcceptImpairmentOffer(conditions, recordCondition, uow)
     val saveHealthSubject: SaveHealthSubject =
         SaveHealthSubject(healthSubjects, assets, schedules, profiles, uow, ids, clock)
     val archiveHealthSubject: ArchiveHealthSubject =

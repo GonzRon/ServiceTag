@@ -112,6 +112,7 @@ import com.loosecannon.servicetag.ui.condition.ConditionBadge
 import com.loosecannon.servicetag.ui.condition.END_SEASON
 import com.loosecannon.servicetag.ui.condition.MARK_OPERATIONAL
 import com.loosecannon.servicetag.ui.condition.MarkOperationalDialog
+import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.condition.START_SEASON
 import com.loosecannon.servicetag.ui.condition.WHEN_DID_THIS_CHANGE
 import com.loosecannon.servicetag.ui.condition.conditionColors
@@ -184,6 +185,8 @@ fun AssetDetailScreen(
      * asset editor's "Review maintenance schedules" lands here. Read once per entry; null is the top.
      */
     section: String? = null,
+    /** #82 — Change condition's P82-3: the held DOWN or DEGRADED, for the host's Incident entry. */
+    onLogIncidentDetails: (PendingCondition) -> Unit = {},
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -284,7 +287,9 @@ fun AssetDetailScreen(
         )
         // The page redraws from the condition flow when either closes: nothing to refresh by hand.
         if (changingCondition) {
-            ChangeConditionSheet(graph = graph, assetId = assetId) { changingCondition = false }
+            ChangeConditionSheet(graph = graph, assetId = assetId, onLogIncidentDetails = onLogIncidentDetails) {
+                changingCondition = false
+            }
         }
         markingOperational?.let { condition ->
             MarkOperationalDialog(graph = graph, assetId = assetId, current = condition) { markingOperational = null }
