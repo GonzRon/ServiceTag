@@ -95,7 +95,9 @@ import org.junit.jupiter.api.Test
  * wrote. The real recompute sits behind them, so "derived state" is `schedule_state`, written by the
  * rebuild and by nothing else.
  *
- * - The two condition writers write `asset_condition` and nothing else, and nothing else writes it.
+ * - The four condition writers write `asset_condition`, one row each, and nothing else writes it. Two
+ *   of them write nothing else; #82's combined write also writes its one Incident and that event's
+ *   derived state, and #82's impairment accept writes only its row.
  * - No activation, season, break, policy, subject or guarded schedule write touches `asset_event` or
  *   `occurrence_closure`; a policy write touches only the asset row; a subject write only its own table.
  * - The journal's own writers — an event and a completion — write no condition (inv. 81).
@@ -219,6 +221,10 @@ class CrossConceptWriteTest {
 
     private val recordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, today)
     private val acceptOperationalOffer = AcceptOperationalOffer(conditions, recordCondition, uow)
+    private val recordConditionWithIncident = RecordConditionWithIncident(
+        events, definitions, profiles, assets, uow, ids, clock, recompute, conditions, today, recordCondition,
+    )
+    private val acceptImpairmentOffer = AcceptImpairmentOffer(conditions, recordCondition, uow)
     private val recordSeasonActivation =
         RecordSeasonActivation(assets, events, activations, uow, ids, clock, today, recompute)
     private val acceptSeasonOffer = AcceptSeasonOffer(activations, recordSeasonActivation, uow, today)
@@ -291,6 +297,8 @@ class CrossConceptWriteTest {
         )
         eventRows.rows["e-0"] = HealthFixtures.eventOf("e-0", "a1", EventKind.REPLACEMENT, "Battery replaced", "2026-09-22")
         eventRows.rows["e-season"] = HealthFixtures.eventOf("e-season", "a2", EventKind.SEASON_START, "Opened", "2026-09-23")
+        eventRows.rows["e-incident"] =
+            HealthFixtures.eventOf("e-incident", "a1", EventKind.INCIDENT, "Only producing reduced output", "2026-09-24")
     }
 
     /** Each use case's writes, table by table, with how many each table took. */
@@ -325,6 +333,20 @@ class CrossConceptWriteTest {
                 recordCondition.run(AssetId("a1"), ConditionCommand(OperationalCondition.DEGRADED, tzId = "UTC"))
             },
             wrote("AcceptOperationalOffer") { acceptOperationalOffer.run(AssetId("a1"), eventRows.rows.getValue("e-0")) },
+            wrote("RecordConditionWithIncident") {
+                recordConditionWithIncident.run(
+                    AssetId("a1"),
+                    "c-82",
+                    ConditionCommand(OperationalCondition.DOWN, tzId = "UTC", reason = "Pump will not start"),
+                    EventCommand(
+                        AssetId("a1"), null, EventKind.INCIDENT, "Pump will not start", "2026-09-24", null, "UTC", "",
+                        emptyMap(), emptyList(),
+                    ),
+                )
+            },
+            wrote("AcceptImpairmentOffer") {
+                acceptImpairmentOffer.run(AssetId("a1"), eventRows.rows.getValue("e-incident"), OperationalCondition.DEGRADED)
+            },
             wrote("RecordSeasonActivation") {
                 recordSeasonActivation.run(AssetId("a2"), ActivationCommand(SeasonAction.START, "2026-09-20"))
             },
@@ -412,6 +434,8 @@ class CrossConceptWriteTest {
         val expected = mapOf(
             "RecordCondition" to setOf("asset_condition"),
             "AcceptOperationalOffer" to setOf("asset_condition"),
+            "RecordConditionWithIncident" to setOf("asset_event", "asset_condition", derived),
+            "AcceptImpairmentOffer" to setOf("asset_condition"),
             "RecordSeasonActivation" to setOf("asset_season_activation", derived),
             "AcceptSeasonOffer" to setOf("asset_season_activation", derived),
             "SetSeasonMode into MANUAL" to setOf("asset", "asset_season_activation", derived),
@@ -463,23 +487,28 @@ class CrossConceptWriteTest {
         assertEquals(listOf("test gear"), categoryRows.rows.keys.sorted(), "the replace left the archive's one category")
 
         // The replace is the one case that wipes the journal: it is every table's writer by definition.
-        val onePointFour = cases.filter { (what, _) -> what !in setOf("LogEvent", "CompleteSchedule", "ImportBackupReplace") }
+        // #82's combined write is the one condition writer that also logs its Incident.
+        val journalWriters = setOf("LogEvent", "CompleteSchedule", "ImportBackupReplace", "RecordConditionWithIncident")
+        val onePointFour = cases.filter { (what, _) -> what !in journalWriters }
         onePointFour.forEach { (what, tables) ->
             assertTrue("asset_event" !in tables && "occurrence_closure" !in tables, "$what wrote $tables")
         }
+        val conditionWriters =
+            setOf("RecordCondition", "AcceptOperationalOffer", "RecordConditionWithIncident", "AcceptImpairmentOffer")
         assertEquals(
-            setOf("RecordCondition", "AcceptOperationalOffer"),
+            conditionWriters,
             cases.filter { (_, tables) -> "asset_condition" in tables }.map { it.first }.toSet(),
-            "only the two condition writers write asset_condition",
+            "only the four condition writers write asset_condition",
         )
         val activationWriters =
             listOf("SetSeasonMode into MANUAL", "SaveAssetSettings", "RecordSeasonActivation", "AcceptSeasonOffer")
         for (what in activationWriters) {
             assertEquals(1, counts.getValue(what)["asset_season_activation"], "$what writes exactly one activation")
         }
-        for (what in listOf("RecordCondition", "AcceptOperationalOffer")) {
+        for (what in conditionWriters) {
             assertEquals(1, counts.getValue(what)["asset_condition"], "$what writes exactly one condition")
         }
+        assertEquals(1, counts.getValue("RecordConditionWithIncident")["asset_event"], "the combined write logs one Incident")
     }
 
     private companion object {
