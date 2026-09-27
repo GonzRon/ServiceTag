@@ -82,9 +82,11 @@ sealed interface SheetBlock {
 
     /**
      * 3. S7 "Mark operational" and S6 "Change condition" for a DOWN or DEGRADED asset — [markOperational]
-     * is then that condition, for S18 — otherwise S6 alone.
+     * is then that condition, for S18 — otherwise S6 alone. #82 (R82-8): [logIncident] adds P82-10
+     * "Log incident" after S6 when the asset needs an Incident for its current failure — navigation
+     * only, and never a reason to open the sheet.
      */
-    data class ConditionActions(val markOperational: OperationalCondition?) : SheetBlock
+    data class ConditionActions(val markOperational: OperationalCondition?, val logIncident: Boolean) : SheetBlock
 
     /** 4. Every DOWN or DEGRADED in-service component, as S27. */
     data class Components(val components: List<ComponentCondition>) : SheetBlock
@@ -110,8 +112,12 @@ sealed interface SheetBlock {
 /**
  * Spec §10.1's order over one [content]; [hasItems] is whether the maintenance block has rows. Before
  * the first load there is no content, and only the asset's name and the way out are drawn.
+ *
+ * [logIncident] is [IncidentNeed]'s answer, taken apart from [content] on purpose (#82, C11): it only
+ * adds "Log incident" to block 3, and only where the content already offers S7 — so it can never open
+ * the sheet or draw anything the one predicate did not.
  */
-fun sheetBlocks(content: ScanSheetContent?, hasItems: Boolean): List<SheetBlock> {
+fun sheetBlocks(content: ScanSheetContent?, hasItems: Boolean, logIncident: Boolean): List<SheetBlock> {
     if (content == null) return listOf(SheetBlock.Identity, SheetBlock.OpenAsset)
     return buildList {
         add(SheetBlock.Identity)
@@ -119,6 +125,7 @@ fun sheetBlocks(content: ScanSheetContent?, hasItems: Boolean): List<SheetBlock>
         add(
             SheetBlock.ConditionActions(
                 markOperational = content.condition?.condition?.takeIf { content.offersMarkOperational },
+                logIncident = content.offersMarkOperational && logIncident,
             ),
         )
         if (content.components.isNotEmpty()) add(SheetBlock.Components(content.components))
@@ -185,6 +192,18 @@ fun interface ReminderReconcile {
  */
 fun interface ScanRoundMembership {
     suspend fun roundFor(scheduleId: ScheduleId): GroupOccurrence?
+}
+
+/**
+ * Whether the scanned asset needs an Incident for its current failure — in service, DOWN or DEGRADED,
+ * and no Incident for it (core's `needsIncident`) — **read** (#82, C11, R82-8).
+ *
+ * A one-method seam in the shape of the sheet's other read-only ones: `AppGraph` builds it over the
+ * condition rows and the journal, so the sheet reaches no write through it. The answer decides only
+ * whether block 3 draws "Log incident"; it never opens the sheet ([sheetBlocks]).
+ */
+fun interface IncidentNeed {
+    suspend fun of(assetId: AssetId): Boolean
 }
 
 /**
@@ -336,12 +355,14 @@ data class MaintenanceSheetState(
      * Null until the first load.
      */
     val content: ScanSheetContent? = null,
+    /** #82 (C11): [IncidentNeed]'s last answer, read on every load and every resume (`onShown`). */
+    val needsIncident: Boolean = false,
 ) {
     /** "Complete selected" acts on an explicit selection and never on "everything shown". */
     val canComplete: Boolean get() = selected.isNotEmpty()
 
     /** The seven blocks, in spec §10.1's order, for the sheet to draw as they come. */
-    val blocks: List<SheetBlock> get() = sheetBlocks(content, hasItems = items.isNotEmpty())
+    val blocks: List<SheetBlock> get() = sheetBlocks(content, hasItems = items.isNotEmpty(), logIncident = needsIncident)
 }
 
 /**
@@ -372,6 +393,7 @@ class MaintenanceSheetViewModel(
     private val readings: LastCompletionReadings,
     private val lastCompletionEventId: LastCompletionEventId,
     private val rounds: ScanRoundMembership,
+    private val incidentNeed: IncidentNeed,
     private val snoozer: ScheduleSnooze,
     private val postponeSchedule: PostponeSchedule,
     private val reconcile: ReminderReconcile,
@@ -383,7 +405,7 @@ class MaintenanceSheetViewModel(
 
     constructor(graph: AppGraph, assetId: String, tagId: String?) : this(
         graph.dueReadModel, graph.assetHealthReadModel, graph.assets, graph.tags, graph.lastCompletionReadings,
-        graph.lastCompletionEventId, graph.scanRoundMembership, graph.scheduleSnooze,
+        graph.lastCompletionEventId, graph.scanRoundMembership, graph.incidentNeed, graph.scheduleSnooze,
         graph.postponeSchedule, graph.reminderReconcile, graph.clock, graph.completionFlow,
         AssetId(assetId), tagId?.let(::TagId),
     )
@@ -449,11 +471,25 @@ class MaintenanceSheetViewModel(
         }
     }
 
+    /**
+     * #82 (C11, NOTE 1): re-reads **only** [IncidentNeed] — called by the sheet on every resume, so the
+     * flag drops as soon as the owner is back from the Incident entry "Log incident" opened, whatever
+     * the shipped resume guard skips. The list, the selection and the form queue are left alone, and
+     * nothing is written.
+     */
+    fun onShown() {
+        viewModelScope.launch {
+            val need = incidentNeed.of(assetId)
+            _state.update { it.copy(needsIncident = need) }
+        }
+    }
+
     private suspend fun load() {
         val asset = assets.get(assetId)
         val placement = tagId?.let { tags.get(it) }?.label?.takeIf { it.isNotBlank() }
         // The one predicate: what opened the scan here is what the sheet lists (inv. 123).
         val content = scanSheetContentFor(assetId, due, rounds, health)
+        val need = incidentNeed.of(assetId)
         val rows = content.maintenance.map { item(it) }
         val shown = rows.map { it.scheduleId.value }.toSet()
         val first = !_state.value.loaded
@@ -469,6 +505,7 @@ class MaintenanceSheetViewModel(
                 loaded = true,
                 emptyOnArrival = if (first) !content.opens else previous.emptyOnArrival,
                 content = content,
+                needsIncident = need,
             )
         }
     }

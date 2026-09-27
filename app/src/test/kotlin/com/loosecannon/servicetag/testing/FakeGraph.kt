@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.testing
 import com.loosecannon.nfc.tagcore.TagIdentity
 import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.servicetag.attachments.Thumbnails
+import com.loosecannon.servicetag.core.condition.needsIncident
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -111,8 +112,10 @@ import com.loosecannon.servicetag.prefs.KeyValueStore
 import com.loosecannon.servicetag.reminders.ReminderSnooze
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
+import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
+import com.loosecannon.servicetag.ui.maintenance.IncidentNeed
 import com.loosecannon.servicetag.ui.maintenance.LastCompletionEventId
 import com.loosecannon.servicetag.ui.maintenance.ScanRoundMembership
 import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
@@ -221,6 +224,12 @@ class FakeGraph(
     }
     val scanSheetOffer: ScanSheetOffer = ScanSheetOffer { assetId ->
         scanSheetContentFor(assetId, dueReadModel, scanRoundMembership, assetHealthReadModel).opens
+    }
+
+    /** #82 — the scan sheet's Incident flag, mirroring `AppGraph`'s field (C11). */
+    val incidentNeed: IncidentNeed = IncidentNeed { assetId ->
+        val asset = assets.get(assetId) ?: return@IncidentNeed false
+        needsIncident(asset.inService, conditions.forAsset(assetId), events.forAsset(assetId))
     }
 
     /**
