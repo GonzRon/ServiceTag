@@ -460,3 +460,41 @@ intake's lift, scheme or security code; touch the editor; use any device but `em
   question decided from the pre-write mode and held while anything is staged; the sheet-owned
   `UpdateAttachmentCommand.role` with `AttachmentRowState.role` from Task 1; `writtenForm` as defined; the
   single-document launcher over the application context's resolver; the R67-12 documentation line.
+
+## 13. Errata after implementation (controller, 2026-09-27; recorded against the task reviews and the reports)
+
+- **C1/C4, where the role checks live:** in `AttachmentDto.toDomain()` (owner, then the role name, then
+  R67-11), all raised as `BackupCorrupt`; `validateGraph` does not duplicate them because the decode runs
+  `toDomain()` first. `UpdateAttachment` also refuses a role on an event owner (the same `require`, before
+  any write). `BackupCodec.FIRST_ROLE_FORMAT = 10` names the boundary.
+- **R67-12 option B, refined at the branch gate:** giving an existing document a role goes through
+  `UpdateAttachment`, which moves `updatedAt`; so for an archive below format 10 the comparison ignores
+  both the role and `updatedAt` whenever the local row carries a role (every other field still compares —
+  a rename on the phone is still a CONFLICT); a local row without a role compares as before; format-10
+  archives compare plainly. Pinned through the real `UpdateAttachment` path; `docs/api/v1.md`, the MCP
+  docstring and the planner KDoc state it; the 8 → 10 release gate re-plans the pre-upgrade export AFTER
+  roles are given.
+- **The label home** is `DocumentRole?.label()` in `ui/attachments/AttachmentsSectionViewModel.kt`, beside the
+  section's `AttachmentRowState` (not beside `AttachmentKind.label()` in `DocumentsSection.kt`); `No role`
+  is the null receiver's label. `KEY_DOCUMENTS` and `FieldLabel` live in `ui/asset/AssetEditScreen.kt` and
+  the detail imports them.
+- **The sentences** are one internal mapping (`AttachmentFailure` and its sentence) in the section view
+  model, called by both the section and the editor; `NoAttachmentFolderCard` and `NO_APP_CAN_PICK_FILES`
+  are the card's and the picker sentence's homes in `DocumentsSection.kt`.
+- **C5/C6 as built:** a pick or a Remove during the copies is ignored (the plan's "second tap ignored,
+  close and back held"); the copy loop reads the live staged list; Save is also held while a picked file's
+  name and size are still being looked up (`picksInFlight`); a copy that succeeds before a later failure
+  is dropped from the staged list and never copied again on retry; the attached list refreshes after the
+  copies; the held #78 question is re-decided on an edited retry.
+- **C7 as built:** `ShareIntakeActivity.kt` gained the one line that wires the stateless screen's `onRole`;
+  the intake spec §7/§10 carry the Role section as an amendment (92b9d053). `ROLE_CHOICES` and
+  `newestFirst` are shared by the block, the sheet and the fact.
+- **C8 as built:** the detail view model takes the attachment repository for the `Purchase document` fact
+  (the accepted second read).
+- **Known shapes, not defects:** the attachment edit sheet does not scroll and is taller with the Role
+  section (a pre-existing shape; #84); a role-tagged row's "More for <name>" is announced in both Key
+  documents and Documents (R67-4); a provider lookup that throws at pick time propagates as before #67.
+- **Gradle:** RED-evidence and mutation runs, and the integrated gate, run with `--no-build-cache
+  --rerun-tasks` after cache- and file-watch-served stale results during Task 2a.
+- **#85** (materialising document links into attachments with source provenance) is a deliberately
+  separate follow-up; §8 stands.
