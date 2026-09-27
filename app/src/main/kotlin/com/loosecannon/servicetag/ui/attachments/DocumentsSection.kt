@@ -96,19 +96,32 @@ fun DocumentsSection(
             ActionButton("Take photo", ServiceTagIcons.Photo, onTakePhoto)
         }
     } else {
-        StatusBlock(
-            kind = ServiceTagTheme.semanticColors.seasonInactive,
-            headline = "Attachment storage",
-            title = "Attachment storage not set up",
-            detail = "Choose a folder in Settings",
-            icon = ServiceTagIcons.CloudOff,
-            leftRule = false,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        TextButton(onClick = onOpenSettings) { Text("Open settings") }
+        NoAttachmentFolderCard(onOpenSettings)
     }
     state.progress?.let { QuietLine(it) }
 }
+
+/**
+ * The card a surface that adds attachments draws in place of its add actions when there is no
+ * folder, and the way to Settings under it. The one home of these words: DOCUMENTS draws it here,
+ * and the asset editor's Key documents block draws it too (#67, R67-13), so it is never spelled twice.
+ */
+@Composable
+internal fun NoAttachmentFolderCard(onOpenSettings: () -> Unit) {
+    StatusBlock(
+        kind = ServiceTagTheme.semanticColors.seasonInactive,
+        headline = "Attachment storage",
+        title = "Attachment storage not set up",
+        detail = "Choose a folder in Settings",
+        icon = ServiceTagIcons.CloudOff,
+        leftRule = false,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    TextButton(onClick = onOpenSettings) { Text("Open settings") }
+}
+
+/** Said when nothing on the device can hand a file over; DOCUMENTS and the asset editor both say it. */
+internal const val NO_APP_CAN_PICK_FILES = "No app can pick files"
 
 /**
  * The wrapper both detail screens call: it owns the ViewModel, the pickers and the sheet. The
@@ -146,7 +159,7 @@ fun AttachmentsSection(
         onPicked = model::add,
         onNoViewer = { scope.launch { snackbars.showSnackbar("No app can open this file") } },
         onNoCamera = { scope.launch { snackbars.showSnackbar("No camera app on this device") } },
-        onNoFilePicker = { scope.launch { snackbars.showSnackbar("No app can pick files") } },
+        onNoFilePicker = { scope.launch { snackbars.showSnackbar(NO_APP_CAN_PICK_FILES) } },
     )
 
     DocumentsSection(

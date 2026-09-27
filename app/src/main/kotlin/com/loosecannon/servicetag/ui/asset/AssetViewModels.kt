@@ -1714,13 +1714,19 @@ class AssetEditViewModel(
     /** null selects "None · set up later"; either way the choice was the user's from now on (§8). */
     fun onTemplate(key: String?) = _state.update { it.copy(templateKey = key, templateTouched = true) }
 
-    /** #67, C5: the picker or the camera hands over a file. Nothing is copied until Save's write lands. */
-    fun stage(role: DocumentRole, file: PickedFile) =
-        _state.update { it.copy(staged = it.staged + StagedDocument(role, file)) }
+    /**
+     * #67, C5: the picker hands over a file. Nothing is copied until Save's write lands. Held while
+     * saving (C6, R67-8): the staged list is the one the copies are working through, so a pick that
+     * lands then is ignored, as a second Save tap is — the screen does not open the picker then either.
+     */
+    fun stage(role: DocumentRole, file: PickedFile) = _state.update {
+        if (it.saving) it else it.copy(staged = it.staged + StagedDocument(role, file))
+    }
 
-    /** #67, C5: forgets one staged file — Remove, on a line that has not been copied yet. */
-    fun unstage(document: StagedDocument) =
-        _state.update { it.copy(staged = it.staged - document) }
+    /** #67, C5: forgets one staged file — Remove, on a line not copied yet. Held while saving, as [stage] is. */
+    fun unstage(document: StagedDocument) = _state.update {
+        if (it.saving) it else it.copy(staged = it.staged - document)
+    }
 
     /**
      * #67, R67-13: re-reads the folder. The screen calls this on entering composition and on
@@ -1738,8 +1744,8 @@ class AssetEditViewModel(
      * #78, P78-3 and the back gesture (C2): the season is already saved and the schedules stay as they
      * are, so the editor finishes exactly as a save that asked nothing. Writes nothing, and does nothing
      * once the question has been answered. #67 (C6 step 3): never finishes over a file still staged —
-     * the answer still takes the question down, but the next Save is what raises it again once the
-     * staged list is empty.
+     * the answer takes the question down for good, and the next Save copies what is staged and then
+     * finishes without asking again.
      */
     fun keepSchedules() {
         val asset = answered() ?: return
@@ -1790,8 +1796,10 @@ class AssetEditViewModel(
      *
      * On success the #78 question is decided from the *pre-write* stored mode and held in
      * [pendingPrompt] rather than raised immediately — [copyStaged] raises it, and only once
-     * nothing is staged. `savedId` becomes the id this and every later retry addresses (B1): a new
-     * asset is minted once, and a retry after a failed copy never mints a second one.
+     * nothing is staged. Every write re-decides what is held: a write that leaves the asset
+     * year-round drops it, whatever an earlier write decided. `savedId` becomes the id this and every
+     * later retry addresses (B1): a new asset is minted once, and a retry after a failed copy never
+     * mints a second one.
      */
     private suspend fun commit(form: AssetEditState, priceMinor: Long?) {
         val snapshot = form.writtenSnapshot()
@@ -1811,7 +1819,10 @@ class AssetEditViewModel(
                     val ask = runCatching { reconcilePromptFor(form) }
                         .onFailure { if (it is CancellationException) throw it }
                         .getOrNull()
-                    if (ask != null) pendingPrompt = ask
+                    // Re-decided by every write: a year-round asset has nothing to be asked about, and
+                    // an edited retry that stays in a season keeps what the write out of year-round
+                    // decided (its own pre-write mode is already seasonal, so it decides nothing).
+                    pendingPrompt = if (written.seasonMode == SeasonMode.YEAR_ROUND) null else ask ?: pendingPrompt
                     savedId = written.id
                     writtenForm = snapshot
                     _state.update { it.copy(storedSeasonMode = written.seasonMode, editing = true) }
@@ -1867,75 +1878,95 @@ class AssetEditViewModel(
                 }
             }
         }
-        copyStaged(form.staged)
+        copyStaged()
     }
 
     /**
      * #67, C6 step 2: the staged files, straight after the write and before any #78 question, in
-     * staged order on [io]. Each success drops its line; the first failure sentences its line
-     * through the extracted mapping ([AttachmentFailure]) and stops — the rest stay staged, and the
-     * asset is never undone. Step 3: only once the staged list is empty does the write's own #78
-     * question — held in [pendingPrompt] since [commit] — go up, or [saved] emit.
+     * staged order on [io]. The loop works on the **live** staged list, never on the one the tap saw:
+     * [stage] and [unstage] are held while saving, so this is the only hand on it, and each success
+     * drops its own line there and then. The first failure sentences its line through the extracted
+     * mapping ([AttachmentFailure]) and stops, the rest staying staged; the asset is never undone.
+     * When anything landed the asset's key documents are read again, so a file copied before a
+     * failure is listed under its role while the editor stays open, and is not picked a second time.
+     *
+     * Step 3: only once the live staged list is empty does the write's own #78 question — held in
+     * [pendingPrompt] since [commit] — go up, or [saved] emit.
      */
-    private suspend fun copyStaged(staged: List<StagedDocument>) {
+    private suspend fun copyStaged() {
         val assetId = savedId
-        val (remaining, offersDocuments) = if (assetId == null || staged.isEmpty()) {
-            staged to _state.value.offersDocuments
-        } else {
+        var attached: List<AttachedDocument>? = null
+        var offersDocuments = _state.value.offersDocuments
+        if (assetId != null && _state.value.staged.isNotEmpty()) {
             withContext(io) {
                 val capturedOn = today.localDate().toString()
-                var stoppedAt = staged.size
-                var sentence: String? = null
-                for ((index, doc) in staged.withIndex()) {
-                    val outcome = try {
-                        addAttachment.run(
-                            AttachmentOwner.OfAsset(assetId),
-                            AddAttachmentCommand(
-                                displayName = doc.file.displayName,
-                                mimeType = doc.file.mimeType,
-                                sizeBytes = doc.file.sizeBytes,
-                                kind = null,
-                                capturedOn = capturedOn,
-                                role = doc.role,
-                            ),
-                            ByteSource { doc.file.open() },
-                        )
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Throwable) {
-                        sentence = AttachmentFailure.CopyFailed(doc.file.displayName).sentence()
-                        stoppedAt = index
-                        break
-                    }
-                    if (outcome is AttachmentResult.Refused) {
-                        sentence = AttachmentFailure.Refused(outcome.problem).sentence()
-                        stoppedAt = index
+                val tried = mutableListOf<StagedDocument>()
+                var landed = false
+                while (true) {
+                    val doc = _state.value.staged.firstOrNull { line -> tried.none { it === line } } ?: break
+                    tried += doc
+                    val stopped = copyOne(assetId, doc, capturedOn)
+                    if (stopped == null) {
+                        landed = true
+                        _state.update { form -> form.copy(staged = form.staged.filterNot { it === doc }) }
+                    } else {
+                        _state.update { form ->
+                            form.copy(staged = form.staged.map { if (it === doc) doc.copy(problem = stopped.sentence) else it })
+                        }
                         break
                     }
                 }
-                val left = if (stoppedAt >= staged.size) {
-                    emptyList()
-                } else {
-                    listOf(staged[stoppedAt].copy(problem = sentence)) + staged.drop(stoppedAt + 1)
+                if (landed) {
+                    attached = runCatching { attachedDocumentsOf(attachments.forOwner(AttachmentOwner.OfAsset(assetId))) }
+                        .onFailure { if (it is CancellationException) throw it }
+                        .getOrNull()
                 }
                 // A refusal is itself news about the folder — the same reasoning
                 // `AttachmentsSectionViewModel.scan` bumps its own store read for: don't wait for the
                 // screen to come back around to learn the tree just went away mid-copy.
-                left to (storage.state() is StoreState.Ready)
+                offersDocuments = storage.state() is StoreState.Ready
             }
+        }
+        // The question goes up before the form stops saving, so whoever waits on `saving` finds the
+        // question, a staged line to act on, or the finished editor — never none of them.
+        val done = _state.value.staged.isEmpty()
+        val prompt = pendingPrompt?.takeIf { done }
+        if (prompt != null) {
+            pendingPrompt = null
+            _prompt.value = prompt
         }
         _state.update {
-            it.copy(saving = false, staged = remaining, problems = emptyMap(), offersDocuments = offersDocuments)
+            it.copy(
+                saving = false,
+                problems = emptyMap(),
+                offersDocuments = offersDocuments,
+                attached = attached ?: it.attached,
+            )
         }
-        if (remaining.isEmpty()) {
-            val prompt = pendingPrompt
-            if (prompt != null) {
-                pendingPrompt = null
-                _prompt.value = prompt
-            } else {
-                assetId?.let { _saved.tryEmit(it) }
-            }
+        if (done && prompt == null) assetId?.let { _saved.tryEmit(it) }
+    }
+
+    /** One staged file onto [assetId]: null when it landed, else why its line stops the copies. */
+    private suspend fun copyOne(assetId: AssetId, doc: StagedDocument, capturedOn: String): CopyStopped? {
+        val outcome = try {
+            addAttachment.run(
+                AttachmentOwner.OfAsset(assetId),
+                AddAttachmentCommand(
+                    displayName = doc.file.displayName,
+                    mimeType = doc.file.mimeType,
+                    sizeBytes = doc.file.sizeBytes,
+                    kind = null,
+                    capturedOn = capturedOn,
+                    role = doc.role,
+                ),
+                ByteSource { doc.file.open() },
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            return CopyStopped(AttachmentFailure.CopyFailed(doc.file.displayName).sentence())
         }
+        return (outcome as? AttachmentResult.Refused)?.let { CopyStopped(AttachmentFailure.Refused(it.problem).sentence()) }
     }
 
     /**
@@ -2088,6 +2119,9 @@ private sealed interface Priced {
     data class Ok(val minor: Long?) : Priced
     data class Bad(val problems: Map<String, String>) : Priced
 }
+
+/** #67, C6: a staged copy that did not land, and the sentence its line shows instead of P67-10. */
+private class CopyStopped(val sentence: String?)
 
 /** #67, C6: [AssetEditViewModel.writtenSnapshot]'s shape — see there for what it deliberately omits. */
 private data class WrittenForm(

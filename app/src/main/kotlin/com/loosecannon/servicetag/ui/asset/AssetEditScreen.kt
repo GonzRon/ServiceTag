@@ -53,6 +53,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -62,20 +64,19 @@ import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.SeasonMode
-import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.attachments.NO_APP_CAN_PICK_FILES
+import com.loosecannon.servicetag.ui.attachments.NoAttachmentFolderCard
 import com.loosecannon.servicetag.ui.attachments.label
 import com.loosecannon.servicetag.ui.attachments.rememberDocumentPicker
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
-import com.loosecannon.servicetag.ui.components.StatusBlock
 import com.loosecannon.servicetag.ui.health.RESTORE_SUBJECT
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.MonoText
-import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -328,8 +329,8 @@ fun AssetEditScreen(
                     onOpenSubject = { subjectId -> onOpenSubject(assetId, subjectId) },
                 )
             }
-            // #67, C5: reused verbatim, exactly as `AttachmentPickers`' own `onNoFilePicker` says it.
-            val onNoFilePicker: () -> Unit = { scope.launch { snackbars.showSnackbar("No app can pick files") } }
+            // #67, C5: reused from its home, exactly as DOCUMENTS says it.
+            val onNoFilePicker: () -> Unit = { scope.launch { snackbars.showSnackbar(NO_APP_CAN_PICK_FILES) } }
             PurchaseBlock(state, model, onNoFilePicker)
             WarrantyBlock(state, model)
             KeyDocumentsBlock(state, model, onOpenSettings, onNoFilePicker)
@@ -600,7 +601,7 @@ private fun WarrantyBlock(state: AssetEditState, model: AssetEditViewModel) {
  * #67, C5: the two manual affordances and the asset's existing manuals, read-only under their role
  * labels. With no attachment folder the three document affordances across this screen (here and in
  * [PurchaseBlock]) are **hidden**, never disabled, and this block alone carries the one status card
- * (R67-13) — the same words `DocumentsSection` uses for DOCUMENTS.
+ * (R67-13) — DOCUMENTS' own card, drawn from its home.
  */
 @Composable
 private fun KeyDocumentsBlock(
@@ -624,25 +625,15 @@ private fun KeyDocumentsBlock(
         model = model,
         onNoFilePicker = onNoFilePicker,
     )
-    if (!state.offersDocuments) {
-        StatusBlock(
-            kind = ServiceTagTheme.semanticColors.seasonInactive,
-            headline = "Attachment storage",
-            title = "Attachment storage not set up",
-            detail = "Choose a folder in Settings",
-            icon = ServiceTagIcons.CloudOff,
-            leftRule = false,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        TextButton(onClick = onOpenSettings) { Text("Open settings") }
-    }
+    if (!state.offersDocuments) NoAttachmentFolderCard(onOpenSettings)
 }
 
 /**
  * One role's affordance, its staged lines, and its existing files under [role]'s own label — the
  * button is hidden (never disabled) without a folder (R67-13); the staged lines and the existing
  * files draw either way, so a file already there or already picked is never hidden by a folder
- * that later went away.
+ * that later went away. While the copies run (C6, R67-8) a tap on the button or on Remove is
+ * ignored, as close and back are held: the picker is not opened, and no line changes under the copy.
  */
 @Composable
 private fun DocumentRoleBlock(
@@ -657,14 +648,17 @@ private fun DocumentRoleBlock(
             onPicked = { file -> model.stage(role, file) },
             onNoFilePicker = onNoFilePicker,
         )
-        TextButton(onClick = picker.pick) {
+        TextButton(onClick = { if (!model.state.value.saving) picker.pick() }) {
             Icon(ServiceTagIcons.AttachFile, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text(buttonText)
         }
     }
     state.staged.filter { it.role == role }.forEach { document ->
-        StagedDocumentRow(document = document, onRemove = { model.unstage(document) })
+        StagedDocumentRow(
+            document = document,
+            onRemove = { if (!model.state.value.saving) model.unstage(document) },
+        )
     }
     val existing = state.attached.filter { it.role == role }
     if (existing.isNotEmpty()) {
@@ -673,7 +667,11 @@ private fun DocumentRoleBlock(
     }
 }
 
-/** P67-10/12: one staged file — its name, [ATTACHED_WHEN_YOU_SAVE] or the failed copy's sentence, Remove. */
+/**
+ * P67-10/12: one staged file — its name, [ATTACHED_WHEN_YOU_SAVE] or the failed copy's sentence, and
+ * the reused visible `Remove` (the references' word; it has no shared home to draw from), whose
+ * content description P67-12 names the file, since a screen reader cannot see which line it is on.
+ */
 @Composable
 private fun StagedDocumentRow(document: StagedDocument, onRemove: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -682,8 +680,9 @@ private fun StagedDocumentRow(document: StagedDocument, onRemove: () -> Unit) {
             val problem = document.problem
             if (problem != null) RefusalLine(problem) else QuietLine(ATTACHED_WHEN_YOU_SAVE)
         }
-        IconButton(onClick = onRemove) {
-            Icon(Icons.Outlined.Close, contentDescription = "Remove ${document.file.displayName}")
+        val removeLabel = "Remove ${document.file.displayName}"
+        TextButton(onClick = onRemove, modifier = Modifier.semantics { contentDescription = removeLabel }) {
+            Text("Remove")
         }
     }
 }

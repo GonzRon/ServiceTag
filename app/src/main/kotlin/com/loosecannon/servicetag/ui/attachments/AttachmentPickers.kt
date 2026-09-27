@@ -47,8 +47,11 @@ fun rememberDocumentPicker(
     onNoFilePicker: () -> Unit,
 ): DocumentPicker {
     val resolver = LocalContext.current.applicationContext.contentResolver
+    val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) onPicked(resolver.pickedFile(uri))
+        // The name and size are a provider query, and a cloud provider may take its time over it:
+        // the callback lands on the main thread, so the asking does not stay there (as `addFiles`).
+        if (uri != null) scope.launch { onPicked(withContext(Dispatchers.IO) { resolver.pickedFile(uri) }) }
     }
     return DocumentPicker(
         pick = { runCatching { launcher.launch(arrayOf("*/*")) }.onFailure { onNoFilePicker() } },
