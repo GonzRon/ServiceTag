@@ -760,8 +760,9 @@ private fun PartOfLine(parentName: String, onClick: () -> Unit) {
 
 /**
  * The fields that are neither identity nor journal: what it cost, who from, which document proves
- * it (#67), and what the warranty says (spec §9). Only the ones that are actually set appear, and the section is absent rather
- * than empty when none are — a list of five dashes tells nobody anything.
+ * it (#67), and what the warranty says (spec §9). Only the ones that are actually set appear, and
+ * the section is absent rather than empty when none are — a list of five dashes tells nobody
+ * anything.
  */
 @Composable
 private fun DetailsSection(state: AssetDetailState) {
