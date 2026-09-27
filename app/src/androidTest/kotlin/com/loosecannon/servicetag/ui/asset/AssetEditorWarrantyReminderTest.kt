@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.ui.asset
 
+import android.Manifest
+import android.service.notification.StatusBarNotification
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -12,13 +14,19 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.rule.GrantPermissionRule
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.reminders.DeadlineKind
+import com.loosecannon.servicetag.core.reminders.SubjectKey
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.reminders.AndroidReminderNotifications
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.reminders.WARRANTY_NOTIFICATION_RATIONALE
+import com.loosecannon.servicetag.reminders.keyOfTag
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
@@ -47,12 +55,20 @@ private const val WAIT_MS = 10_000L
  * to drive. The editor it draws is planted in the activity's store under the screen's own key with a
  * fake permission that is never granted, so the rationale is up whatever the installer granted.
  *
+ * The production wiring has a case of its own: with the permission granted, a lead saved through
+ * `AssetEditScreen(graph = app.graph)` — the editor's secondary constructor, which hands it the
+ * graph's permission and sweep — posts the warning and stamps it once, so the hop editor →
+ * `reminderReconcile` → `ReminderRuns` → provider → shade is proved end to end.
+ *
  * Emulator only (`emulator-5554`) — the suite wipes app data.
  */
 @RunWith(AndroidJUnit4::class)
 class AssetEditorWarrantyReminderTest {
 
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
+
+    @get:Rule val notificationPermission: GrantPermissionRule =
+        GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS)
 
     @Before fun freshInstall() = clearInstall()
 
@@ -71,6 +87,12 @@ class AssetEditorWarrantyReminderTest {
     private fun top(label: String) = field(label).getUnclippedBoundsInRoot().top
 
     private fun storedAssets() = runBlocking { app.graph.assets.all() }
+
+    /** The shade's one per-item post for [key], read back by its tag, as the platform proof reads it. */
+    private fun warningFor(key: SubjectKey.Deadline): StatusBarNotification? =
+        NotificationManagerCompat.from(app).activeNotifications.firstOrNull {
+            it.id == AndroidReminderNotifications.ITEM_ID && it.tag?.let(::keyOfTag) == key
+        }
 
     @Test fun theLeadFieldHelperAndRefusal() {
         editor(null)
@@ -140,5 +162,39 @@ class AssetEditorWarrantyReminderTest {
         assertTrue("\"Not now\" requests nothing", requests.isEmpty())
         assertEquals("and writes nothing more", listOf(atTheQuestion), storedAssets())
         rule.onAllNodesWithText(WARRANTY_NOTIFICATION_RATIONALE).assertCountEquals(0)
+    }
+
+    /**
+     * m1 of the #79a branch review: the editor's graph wiring. A dated, in-service asset 10 days from
+     * expiry takes a lead of 30 in the real editor — no planted view model — so the save sweeps through
+     * `graph.reminderReconcile`, the permission (granted by the rule) asks nothing, and the warning is in
+     * the shade under its `WARRANTY_EXPIRY:<id>|…` tag with exactly one device-local stamp behind it.
+     */
+    @Test fun aLeadSavedInTheRealEditorSweepsThroughTheGraphAndPostsTheWarning() {
+        NotificationManagerCompat.from(app).cancelAll()
+        val expiry = app.graph.today.localDate().plusDays(10).toString()
+        val id = runBlocking {
+            app.graph.createAsset.run(AssetCommand(name = "Example Heater", warrantyExpiresOn = expiry)).id.value
+        }
+        val key = SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, id)
+        var done: String? = null
+        editor(id) { done = it }
+        rule.awaitText("WARRANTY")
+
+        field(REMIND_ME_N_DAYS_EARLY).performScrollTo().performTextReplacement("30")
+        saveAsset().performClick()
+        rule.waitUntil(WAIT_MS) { done != null }
+        assertEquals(30, storedAssets().single().warrantyReminderLeadDays)
+        rule.onAllNodesWithText(WARRANTY_NOTIFICATION_RATIONALE).assertCountEquals(0)
+
+        val posted = runCatching { rule.waitUntil(WAIT_MS) { warningFor(key) != null } }.isSuccess
+        assertTrue("the editor's save swept through the graph and posted the warning", posted)
+        assertEquals(key, keyOfTag(warningFor(key)!!.tag))
+        assertEquals(
+            "and stamped it, once, in the device-local table",
+            listOf(id),
+            runBlocking { app.graph.deadlineLocalDelivery.all() }.map { it.subjectId },
+        )
+        NotificationManagerCompat.from(app).cancelAll()
     }
 }
