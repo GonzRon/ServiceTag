@@ -1,6 +1,8 @@
 package com.loosecannon.servicetag.ui.condition
 
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -355,8 +357,10 @@ fun EventOfferDialog(offer: EventOffer, onAccept: () -> Unit, onDecline: () -> U
 /**
  * #82's three answers on screen (C8): P82-6 over S53, then P82-7 and P82-8 — each records its
  * condition — and P82-9, which records nothing, as dismissing does. All three disable once an answer
- * is tapped, so a double tap never writes twice.
+ * is tapped, so a double tap never writes twice. The two recording answers share the confirm slot
+ * in a [FlowRow], so at large text sizes they wrap onto two lines instead of squeezing one of them.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun IncidentOfferDialog(
     offer: ImpairmentOfferPrompt,
@@ -369,7 +373,7 @@ fun IncidentOfferDialog(
         title = { Text(offer.title) },
         text = { Text(offer.body, style = MaterialTheme.typography.bodyMedium) },
         confirmButton = {
-            Row {
+            FlowRow(horizontalArrangement = Arrangement.End) {
                 TextButton(enabled = !offer.accepting, onClick = onMarkDegraded) { Text(offer.alternateLabel) }
                 TextButton(enabled = !offer.accepting, onClick = onMarkDown) { Text(offer.acceptLabel) }
             }
