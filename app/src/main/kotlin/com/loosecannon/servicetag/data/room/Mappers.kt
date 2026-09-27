@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.HealthAggregation
@@ -183,6 +184,7 @@ fun AttachmentEntity.toDomain(): Attachment = Attachment(
     notes = notes,
     createdAt = createdAt,
     updatedAt = updatedAt,
+    role = documentRole?.let(DocumentRole::valueOf),
 )
 
 fun Attachment.toEntity(): AttachmentEntity = AttachmentEntity(
@@ -201,6 +203,7 @@ fun Attachment.toEntity(): AttachmentEntity = AttachmentEntity(
     notes = notes,
     createdAt = createdAt,
     updatedAt = updatedAt,
+    documentRole = role?.name,
 )
 
 // #74: a catalog row passes through unchanged in both directions; its key rule lives in core.

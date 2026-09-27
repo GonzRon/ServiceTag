@@ -372,6 +372,7 @@ class AttachmentsSectionViewModel(
         // than not, and dimming every row for the first frame of every visit would be a lie.
         present = present[attachment.id.value] ?: true,
         thumbnail = thumbnails[attachment.id.value],
+        role = attachment.role,
     )
 
     /** One line per refusal. `Unchanged` is silent: the sheet simply closes (spec §8.1). */

@@ -20,6 +20,10 @@ import androidx.room3.PrimaryKey
  * at-most-one-target rule.
  *
  * `(storage_provider, storage_locator)` is unique: two rows must never claim the same bytes.
+ *
+ * Schema v10 (#67, C3) appends `document_role`: nullable, no default, never backfilled — a row
+ * written before it has no role. Asset-owned rows only, which the use cases and the backup reader
+ * enforce; there is no `CHECK` here, for the reason above.
  */
 @Entity(
     tableName = "attachment",
@@ -59,4 +63,5 @@ data class AttachmentEntity(
     val notes: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "document_role") val documentRole: String?,
 )

@@ -77,7 +77,8 @@ class Migration4To5Test {
             withConnection(file) { c ->
                 assertTrue("attachment" in c.tableNames())
                 assertTrue(c.tableNames().containsAll(JOURNAL_TABLES))
-                assertEquals(V5_ATTACHMENT_COLUMNS, c.columnNamesOf("attachment"))
+                // The chain runs on to v10, whose one new attachment column `Migration9To10Test` owns.
+                assertEquals(V5_ATTACHMENT_COLUMNS, c.columnNamesOf("attachment") - V10_ATTACHMENT_COLUMNS)
                 assertTrue(
                     "v5's indexes must exist, found ${c.indexNamesOn("attachment")}",
                     c.indexNamesOn("attachment").containsAll(V5_ATTACHMENT_INDEXES),

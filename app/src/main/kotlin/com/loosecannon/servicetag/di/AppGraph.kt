@@ -109,6 +109,7 @@ import com.loosecannon.servicetag.data.room.MIGRATION_5_6
 import com.loosecannon.servicetag.data.room.MIGRATION_6_7
 import com.loosecannon.servicetag.data.room.MIGRATION_7_8
 import com.loosecannon.servicetag.data.room.MIGRATION_8_9
+import com.loosecannon.servicetag.data.room.MIGRATION_9_10
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomCategoryRepository
@@ -189,7 +190,7 @@ class AppGraph(private val context: Context) {
         .setQueryCoroutineContext(Dispatchers.IO)
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
         )
         .build()
 
@@ -751,6 +752,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 9
+        const val SCHEMA_VERSION = 10
     }
 }

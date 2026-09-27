@@ -69,7 +69,7 @@ import com.loosecannon.servicetag.data.room.entities.ScheduleStateEntity
         HealthSubjectEntity::class,
         AssetCategoryEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

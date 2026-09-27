@@ -10,6 +10,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.ports.StoreIoException
 import com.loosecannon.servicetag.core.ports.AttachmentStore
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
@@ -337,6 +338,40 @@ class AttachmentsSectionViewModelTest {
         assertEquals("Guide.pdf", rows.single().displayName)
         assertFalse(rows.single().present)
         assertNull(rows.single().thumbnail)
+        clearModels()
+    }
+
+    /**
+     * #67, C2: every row carries its attachment's role — written through the use case, read back
+     * through Room and both mappers — so the sheet can hand it back and a rename never clears it.
+     */
+    @Test fun theRowsCarryTheRole() = runTest {
+        hotTub()
+        val owner = AttachmentOwner.OfAsset(assetId)
+        listOf(
+            "Receipt.pdf" to DocumentRole.PURCHASE_INVOICE_OR_RECEIPT,
+            "Guide.pdf" to DocumentRole.USER_MANUAL,
+            "Notes.pdf" to null,
+        ).forEach { (name, role) ->
+            graph.addAttachment.run(
+                owner,
+                AddAttachmentCommand(displayName = name, mimeType = "application/pdf", role = role),
+                ByteSource { "x".byteInputStream() },
+            )
+        }
+
+        val vm = model(owner)
+        backgroundScope.launch { vm.state.collect() }
+
+        val rows = vm.state.first { it.rows.size == 3 }.rows
+        assertEquals(
+            mapOf(
+                "Guide.pdf" to DocumentRole.USER_MANUAL,
+                "Notes.pdf" to null,
+                "Receipt.pdf" to DocumentRole.PURCHASE_INVOICE_OR_RECEIPT,
+            ),
+            rows.associate { it.displayName to it.role },
+        )
         clearModels()
     }
 

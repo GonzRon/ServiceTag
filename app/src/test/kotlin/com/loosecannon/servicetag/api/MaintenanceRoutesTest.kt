@@ -1349,9 +1349,10 @@ class MaintenanceRoutesTest {
     /**
      * Master plan §11.3: `/v1/status` reports the schema and the format, and counts the three 1.4 tables
      * under the archive's own list names beside every shipped key. #74 moved the schema to 9 (its
-     * `asset_category` table) and then the format to 9 (the archive that carries the categories).
+     * `asset_category` table) and then the format to 9 (the archive that carries the categories);
+     * #67 moves the schema to 10 (`attachment.document_role`) ahead of its format.
      */
-    @Test fun statusReports9And9AndTheNewCounts() {
+    @Test fun statusReports10And9AndTheNewCounts() {
         val tub = createAsset("Hot tub")
         assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
         assertEquals(
@@ -1368,7 +1369,7 @@ class MaintenanceRoutesTest {
         )
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
-        assertEquals(9, status.schemaVersion)
+        assertEquals(10, status.schemaVersion)
         assertEquals(9, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
