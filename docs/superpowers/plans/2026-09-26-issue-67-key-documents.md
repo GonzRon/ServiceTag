@@ -434,3 +434,29 @@ one `observeForOwner` observation in the detail view model is the accepted secon
 Role picker on an event attachment or a LINK/NOTE share; change the Documents row text; change the
 intake's lift, scheme or security code; touch the editor; use any device but `emulator-5554`.
 **Size:** medium.
+
+## 12. Owner rulings (2026-09-26; binding on every brief)
+
+- **§6:** all twelve strings P67-1 … P67-12 RATIFIED verbatim, with the treatments stated.
+- **R67-1** confirmed (orthogonal nullable `DocumentRole` beside `AttachmentKind`). **R67-2** confirmed
+  (stage the `PickedFile`, copy only after the settings write; no cache, no sweep). **R67-3** confirmed
+  (many per role; no preferred flag; newest by `capturedOn` then `createdAt` first and named by the fact).
+  **R67-4** confirmed (Key documents above Documents inside the attachments section, only when present;
+  Documents rows unchanged). **R67-5** confirmed (`Purchase document`, text only). **R67-6** confirmed
+  (receipts in Purchase; manuals in the editor's Key documents block; reclassification in the sheet).
+  **R67-7** confirmed. **R67-8** confirmed with both subordinate choices: close and back held throughout
+  the copies; stop on the first failed copy. **R67-9** confirmed (Role chips for BYTES shares only).
+  **R67-10** confirmed (schema 10 / format 10 on master under `versionName` 1.4.1, emulator only; bundle
+  tool stays at format 5; the next signed release proves the direct schema 8 → 10 upgrade, old
+  attachments arriving with `document_role = null`, a pre-upgrade archive re-planning IDENTICAL, then a
+  format-10 role round trip). **R67-11** confirmed. **R67-13** confirmed (hide the three affordances, one
+  `StatusBlock`, re-read the store state on return from Settings). **R67-14** confirmed ("replace" = add
+  another; newest first; nothing deleted or overwritten).
+- **R67-12 = OPTION B.** For an archive of `formatVersion ≤ 9` the attachment comparison ignores the role
+  (an incoming absent role against a local role is IDENTICAL), so every pre-format-10 archive keeps
+  re-planning IDENTICAL. For a format-10 archive the role compares normally: same → IDENTICAL; different,
+  or null against a role → CONFLICT. No merge-update path in #67. `docs/api/v1.md:1022` states this rule.
+- The rev 2.1 corrections that closed the scoped re-review's R1–R9 are part of the contract: the #78
+  question decided from the pre-write mode and held while anything is staged; the sheet-owned
+  `UpdateAttachmentCommand.role` with `AttachmentRowState.role` from Task 1; `writtenForm` as defined; the
+  single-document launcher over the application context's resolver; the R67-12 documentation line.
