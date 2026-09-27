@@ -652,3 +652,36 @@ none; pytest green at 63 tools. **Greps:**
 `docs/versioning.md`, SPEC12. **Must NOT:** route a delete or an entry amendment; let `update_service_case` send status
 or `closedOn`; lower the global MCP minimum; bump `versionName`. **Size:** about 300 production, 400 test, 50 docs lines.
 **One-issue reading:** folded into A4.
+
+## 16. Owner rulings (2026-09-27; binding on every brief)
+
+- **R79-scope = SPLIT**, on coherence: #79a = A1 → A4 on schema/format 11, then #79b = B1 → B3 on
+  schema/format 12, **back to back** — #72 is NOT inserted between them (the split is an implementation
+  boundary, not a roadmap reorder); no release between them unless separately ruled; both stay under
+  `versionName` 1.4.1 and ship together in the next feature-bearing MINOR; the final release proof is the
+  direct production 1.4.1 (schema 8) → current schema.
+- **R79-1** the aggregate (`service_case` + append-only `service_case_entry`). **R79-2** documents stay on
+  the Asset, the originating Incident and the resolution event (no `AttachmentOwner.OfCase`). **R79-3**
+  phone-UI cases originate from an Incident; the core/API accept an Incident-less case. **R79-4** Incident
+  deletion allowed: a readable dangling link + P79-60 in the warning. **R79-5** stored status moved only by
+  immutable status entries; six statuses; CANCELLED distinct from CLOSED; note-only entries never touch
+  the header. **R79-6 = FOUR coverage values: IN_WARRANTY, OUT_OF_WARRANTY, UNKNOWN, PARTLY_COVERED**
+  (P79-35 active); the suggestion uses the Incident's date. **R79-7** minor units + ISO currency, the
+  asset's currency by default, any coverage, null = none, 0 = no charge. **R79-8** immutable entries.
+  **R79-9** close/reopen by status entry; no condition/event/completion write; no delete (CANCELLED is
+  the exit). **R79-10 link-only**: the resolution event is canonical; no "Log repair record" in #79.
+  **R79-11** the lead as an asset column outside `AssetCommand`; merge option B on the #67 shape with
+  its stamp rule. **R79-12** off by default; whole days ≥ 1, no upper bound; clearing the date clears the
+  lead; zero refused — **P79-63 does not ship**. **R79-13** `SubjectKey.Deadline(kind, subjectId)`,
+  `DeadlineKind.WARRANTY_EXPIRY`, `DeadlineRepeat.ONCE`. **R79-14** (a)(b)(c) as recommended: once per
+  content on entering the window, never in the maintenance summary, Open only, the device-local table,
+  the dedicated `warranty_reminders` channel (P79-13/14 active), the boot-count behaviour with its
+  disclosed swipe-then-restart repeat. **R79-15** confirmed; **an out-of-season asset still warns**.
+  **R79-16** no health finding; the asset editor is the second permission requester (decision 23 / SPEC12
+  §5.1 amended). **R79-17** the Warranty section and notification treatments as recommended. **R79-18**
+  full parity: seven routes and seven tools; the derived status in its own response, never on the backup
+  DTO. **R79-19** exclusions confirmed. **R79-20** no `versionName` bump in #79a or #79b; the vehicle is
+  the next feature-bearing MINOR, number deferred. **R79-21** strings ratified verbatim; P79-13/14, P79-35
+  and P79-60 ACTIVE; P79-63 OMITTED; **P79-38 = `Open`**.
+- Rev 2.1 is the implementation contract; the scoped re-review's APPROVE stands; the PARTLY_COVERED path is
+  the plan's conditional branch, so no further planning or review cycle.
