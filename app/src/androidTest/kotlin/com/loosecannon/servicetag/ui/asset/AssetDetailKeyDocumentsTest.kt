@@ -1,18 +1,23 @@
 package com.loosecannon.servicetag.ui.asset
 
 import android.content.Context
+import android.content.res.Configuration
+import android.view.ContextThemeWrapper
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -41,6 +46,7 @@ import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.io.File
+import kotlin.math.abs
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -70,7 +76,8 @@ private val ROLE_CHIPS = listOf("No role", "Purchase invoice or receipt", "User 
 @RunWith(AndroidJUnit4::class)
 class AssetDetailKeyDocumentsTest {
 
-    @get:Rule val rule = createComposeRule()
+    /** An activity rule, not the plain one, so the 360 dp phone case can hand the activity its own view. */
+    @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
 
     private fun row(
         id: String,
@@ -262,6 +269,58 @@ class AssetDetailKeyDocumentsTest {
 
         rule.awaitText("KEY DOCUMENTS")
         rule.onAllNodesWithText("Hot tub receipt.pdf").assertCountEquals(3)
+    }
+
+    /**
+     * m-1: the sheet's content scrolls, so Save stays reachable on a 360 dp-wide phone at font scale
+     * 2.0, where the Role section pushes the Delete / Cancel / Save row past the window.
+     *
+     * The sheet is a window of its own, which takes its density from the view that opened it and
+     * not from `LocalDensity`, so the phone is a `ComposeView` whose context overrides the
+     * configuration: font scale 2.0 and a density at which this display is 360 dp wide. The first
+     * two checks prove the sheet really drew at that size before Save is looked for.
+     */
+    @Test fun saveIsReachableOnA360dpPhoneAtDoubleTextSize() {
+        val saved = mutableListOf<UpdateAttachmentCommand>()
+        rule.runOnUiThread {
+            val activity = rule.activity
+            val metrics = activity.resources.displayMetrics
+            val phone = Configuration(activity.resources.configuration).apply {
+                fontScale = 2f
+                densityDpi = metrics.widthPixels * 160 / 360
+                screenWidthDp = 360
+                screenHeightDp = metrics.heightPixels * 360 / metrics.widthPixels
+            }
+            val context = ContextThemeWrapper(activity, activity.theme).apply { applyOverrideConfiguration(phone) }
+            activity.setContentView(
+                ComposeView(context).apply {
+                    setContent {
+                        ServiceTagTheme {
+                            AttachmentEditSheet(
+                                row = row("a1", "Pump manual.pdf", DocumentRole.USER_MANUAL),
+                                rolesOffered = true,
+                                onSave = { saved += it },
+                                onDelete = {},
+                                onDismiss = {},
+                            )
+                        }
+                    }
+                },
+            )
+        }
+        rule.awaitText("KIND")
+
+        val name = rule.onNode(hasSetTextAction() and hasText("Name")).getUnclippedBoundsInRoot()
+        check(abs((name.right - name.left).value - 328f) < 1f) {
+            "the sheet is 360 dp wide: its Name field spans ${name.right - name.left}, not 328 dp"
+        }
+        val kind = rule.onNodeWithText("KIND").getUnclippedBoundsInRoot()
+        check(kind.bottom - kind.top > 20.dp) { "the sheet draws double-size text: KIND is ${kind.bottom - kind.top} tall" }
+
+        rule.onNodeWithText("Save").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        rule.onNodeWithText("Save").performClick()
+        rule.waitUntil(WAIT_MS) { saved.isNotEmpty() }
+        assertEquals(DocumentRole.USER_MANUAL, saved.single().role)
     }
 
     private fun top(text: String) = rule.onNodeWithText(text).getUnclippedBoundsInRoot().top
