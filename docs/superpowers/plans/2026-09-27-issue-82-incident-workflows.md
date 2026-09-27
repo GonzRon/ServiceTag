@@ -476,3 +476,34 @@ device but `emulator-5554`. **Size:** about 220 production, 380 test, 20 docs li
   vehicle is the next feature-bearing MINOR release, numbered when its feature set closes.
 - Rev 2.1 is the implementation contract; the scoped re-review's APPROVE stands; no further planning or
   review cycle. Related: #86 (whole-asset succession) has its own semantics and is outside #82.
+
+## 13. Errata after implementation (controller, 2026-09-27 onward)
+
+- **C4 / R82-6, "unlinked":** clause (b) of the current-Incident rule counts an INCIDENT event only when
+  **no condition row names it** (any row, not only the stretch's) — §12's ruling and the implementer's own
+  KDoc said so; C4's text had dropped the word. Fixed in B1's fix round with the case
+  `anIncidentLinkedToAnEarlierFailureNeverCountsForThisOne`; the spec's §10.3 amendment carries the same words.
+- **The Room rollback proof** (`IncidentWorkflowRoomTest`) is B2's, as §3 row 2 and §10 say; B1's evidence
+  is the in-memory fakes plus the nested `uow.write` on the `AcceptOperationalOffer` precedent.
+- **`IncidentNeed`** (the app's read-only seam) is B3's; core provides the pure `currentIncident` and
+  `needsIncident(inService, rows, events)`.
+- **Row 8's mutation** needed the harness to hand `LogEvent` a condition store; the test was unchanged.
+- **§12 appears twice** (":438 Errata" from the planner's rev 2.1 and ":445 Owner rulings" appended at the
+  gate); the ratified text is not renumbered — this section is §13 by count.
+- **C6's `HeldCondition` was folded into `PendingCondition`** (the same four fields; also the type handed
+  through the route).
+- **C8 grew three named things the plan did not:** the `EntryOffers` interface (so a recording double can
+  count accepts); `ImpairmentOffers` as `EventOffers`' third required constructor parameter (both graphs);
+  the `keepable` date/zone helper extracted from `operationalOfferShown` with identical behaviour.
+- **C11's seam also reads `assets.get`** (`needsIncident` needs `inService`); the sheet exposes the answer
+  as `MaintenanceSheetState.needsIncident`; the detail's `offersLogIncident` is a getter over
+  `health.inService`.
+- **At the branch gate:** the incident dialog's two answers wrap in a `FlowRow` (they squeezed at ≥ 1.5×
+  text); the API recipe says Workflow B is two transactions.
+- **Known shapes, not defects:** the scan seam loads the asset's journal before it can answer false; one
+  extra condition read per offer; a held condition is lost if the app is killed while the question is up
+  (R82-2 b); if the app is killed with the combined entry open, reopening and saving records both facts
+  once and the Change condition sheet behind it may reopen empty.
+- **At the merge gate (first attempt, tip 7cb0d272, dropped):** `AttachmentsDeviceProofTest.theSheetRenamesAndReKindsTheRow`
+  failed consistently after the rename and re-kind (the quiet line `Manual · 2.0 KB · <date>` not found); root cause and fix:
+  not a #82 regression — with the emulator's stylus-handwriting onboarding now turned off by `tools/emulator/prepare-emulator.sh`, the soft keyboard rises after typing and shrinks the scrollable sheet, clipping Save; the test tapped Save without scrolling to it (the base commit fails the same way). Fixed test-only at 30d8b583 (`performScrollTo()` before the tap, the #67 pattern); a #84 candidate: `awaitText(RENAMED)` is a weak wait there. The gate templates now keep every class's JUnit XML so a failing case is never lost again.
