@@ -357,8 +357,9 @@ class AssetDetailConditionHealthSeasonTest {
         // On the plate and in the section (spec §10.6), the break notwithstanding.
         rule.onAllNodesWithText(IN_SEASON_WORD).assertCountEquals(2)
         rule.onNodeWithText(MAINTENANCE_BREAK).performScrollTo().assertIsDisplayed()
-        rule.onNodeWithText(BREAK_STARTS).assertIsDisplayed()
-        rule.onNodeWithText(BREAK_ENDS).assertIsDisplayed()
+        // #79: the Warranty section above Season moved the page down, so each line is scrolled to.
+        rule.onNodeWithText(BREAK_STARTS).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText(BREAK_ENDS).performScrollTo().assertIsDisplayed()
         rule.onAllNodesWithText(SEASON_HISTORY).assertCountEquals(0)
 
         show(snow)
