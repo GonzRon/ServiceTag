@@ -96,7 +96,7 @@ class AssetEditorKeyDocumentsTest {
     /** C5 (AC 1, AC 2): the three affordances each stage a file, and Remove forgets one of them. */
     @Test fun theThreeAffordancesStageAndRemove() {
         openNewAsset()
-        rule.awaitText("Purchase")
+        rule.awaitText("PURCHASE")
 
         rule.onNodeWithText(ADD_PURCHASE_INVOICE_OR_RECEIPT).performScrollTo().performClick()
         rule.awaitText("pick-0.pdf")
@@ -115,7 +115,7 @@ class AssetEditorKeyDocumentsTest {
     /** C5 (AC 1): Cancel leaves no row and no file — nothing was ever copied. */
     @Test fun cancelLeavesNoRowAndNoFile() {
         openNewAsset()
-        rule.awaitText("Purchase")
+        rule.awaitText("PURCHASE")
 
         rule.onNodeWithText(ADD_USER_MANUAL).performScrollTo().performClick()
         rule.awaitText("pick-0.pdf")
