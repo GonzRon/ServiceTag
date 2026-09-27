@@ -230,6 +230,8 @@ fun ServiceTagRoot(
                                 backStack.add(schedules)
                             }
                         },
+                        // #67, R67-13: the Key documents block's status card, with no folder yet.
+                        onOpenSettings = { backStack.add(Route.Settings) },
                     )
                 }
                 entry<Route.HealthSubjectEdit> { key ->

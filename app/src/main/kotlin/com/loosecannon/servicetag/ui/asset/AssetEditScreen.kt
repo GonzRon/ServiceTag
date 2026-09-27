@@ -1,12 +1,15 @@
 package com.loosecannon.servicetag.ui.asset
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -45,20 +48,28 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.journal.CategoryChoice
 import com.loosecannon.servicetag.core.journal.SeedTemplates
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.attachments.NO_APP_CAN_PICK_FILES
+import com.loosecannon.servicetag.ui.attachments.NoAttachmentFolderCard
+import com.loosecannon.servicetag.ui.attachments.label
+import com.loosecannon.servicetag.ui.attachments.rememberDocumentPicker
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
@@ -70,6 +81,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 // The asset editor's season, break and health words (spec §10.7), RATIFIED, each by its S-number and
 // verbatim. S132 is one ratified set of words, split only at its "·" separators.
@@ -188,6 +200,23 @@ internal val COMBINE_CHOICES: List<Pair<HealthAggregation, String>> =
 /** One ratified set of words, split only at its "·" separators (spec §10.7). */
 internal fun ratifiedParts(words: String): List<String> = words.split(" · ")
 
+// #67's document intake (plan §6), RATIFIED verbatim.
+
+/** P67-1, a `SectionHeader` drawn upper-case like DOCUMENTS. */
+const val KEY_DOCUMENTS = "Key documents"
+
+/** P67-7, Purchase block. */
+const val ADD_PURCHASE_INVOICE_OR_RECEIPT = "Add purchase invoice or receipt"
+
+/** P67-8, Key documents block. */
+const val ADD_USER_MANUAL = "Add user manual"
+
+/** P67-9, Key documents block. */
+const val ADD_SERVICE_MANUAL = "Add service manual"
+
+/** P67-10, a staged file's quiet line; replaced by the problem sentence after a failed copy. */
+const val ATTACHED_WHEN_YOU_SAVE = "Attached when you save"
+
 /**
  * Create ([assetId] null) or edit one asset: the grouped form of spec §9 — IDENTITY, PLACEMENT,
  * PURCHASE, WARRANTY, NOTES, and on a new asset only, TEMPLATE. Save sits in the app bar and
@@ -221,6 +250,8 @@ fun AssetEditScreen(
     onAddSubject: (assetId: String) -> Unit = {},
     onOpenSubject: (assetId: String, subjectId: String) -> Unit = { _, _ -> },
     onReviewSchedules: (assetId: String) -> Unit = {},
+    // #67, R67-13: the Key documents block's status card, with no attachment folder configured.
+    onOpenSettings: () -> Unit = {},
 ) {
     // The key carries the parent as well as the id: "+ Add component" on two different parents
     // must not share one half-filled form, and neither must a plain "Add asset" and a component.
@@ -230,11 +261,19 @@ fun AssetEditScreen(
     val state by model.state.collectAsStateWithLifecycle()
     val prompt by model.prompt.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     // The save itself belongs to the ViewModel; this only listens for where it says to go next.
     LaunchedEffect(model) { model.saved.collect { id -> onDone(id.value) } }
     LaunchedEffect(model) { model.review.collect { id -> onReviewSchedules(id.value) } }
     LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
+    // #67, R67-13: entering composition is how this screen learns the person went to Settings,
+    // chose a folder and came back — the ViewModel outlives the push, so nothing else would tell
+    // it (mirrors `AttachmentsSection`'s own `refreshStore` call).
+    LaunchedEffect(model) { model.refreshStore() }
+
+    // #67, R67-8 (C6): close and back are held throughout the copies.
+    BackHandler(enabled = state.saving) { }
 
     // #78 (C3): the question over the saved form. Dismissing it any other way — the back gesture, a
     // tap outside — is "Keep schedules as-is", so the owner is never left without an answer.
@@ -258,7 +297,8 @@ fun AssetEditScreen(
             TopAppBar(
                 title = { Text(if (state.editing) "Edit asset" else "New asset") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    // #67, R67-8 (C6): held throughout the copies, same as the back gesture above.
+                    IconButton(onClick = onBack, enabled = !state.saving) {
                         Icon(Icons.Outlined.Close, contentDescription = "Cancel")
                     }
                 },
@@ -289,8 +329,11 @@ fun AssetEditScreen(
                     onOpenSubject = { subjectId -> onOpenSubject(assetId, subjectId) },
                 )
             }
-            PurchaseBlock(state, model)
+            // #67, C5: reused from its home, exactly as DOCUMENTS says it.
+            val onNoFilePicker: () -> Unit = { scope.launch { snackbars.showSnackbar(NO_APP_CAN_PICK_FILES) } }
+            PurchaseBlock(state, model, onNoFilePicker)
             WarrantyBlock(state, model)
+            KeyDocumentsBlock(state, model, onOpenSettings, onNoFilePicker)
 
             SectionHeader(title = "Notes")
             FormField(
@@ -480,9 +523,19 @@ private fun HealthBlock(
     }
 }
 
-/** What it cost and when it arrived. A price is text until [priceHint]'s currency resolves it. */
+/**
+ * What it cost and when it arrived. A price is text until [priceHint]'s currency resolves it.
+ *
+ * #67, C5, R67-6: the receipt affordance and the asset's existing receipts, read-only under their
+ * role label — the Purchase block's own document, never a link (R67-5 is the Details fact, not
+ * this).
+ */
 @Composable
-private fun PurchaseBlock(state: AssetEditState, model: AssetEditViewModel) {
+private fun PurchaseBlock(
+    state: AssetEditState,
+    model: AssetEditViewModel,
+    onNoFilePicker: () -> Unit,
+) {
     SectionHeader(title = "Purchase")
     DateField(
         value = state.purchaseOn,
@@ -517,6 +570,13 @@ private fun PurchaseBlock(state: AssetEditState, model: AssetEditViewModel) {
         )
     }
     FormField(value = state.vendor, onValueChange = model::onVendor, label = "Vendor")
+    DocumentRoleBlock(
+        role = DocumentRole.PURCHASE_INVOICE_OR_RECEIPT,
+        buttonText = ADD_PURCHASE_INVOICE_OR_RECEIPT,
+        state = state,
+        model = model,
+        onNoFilePicker = onNoFilePicker,
+    )
 }
 
 /** When the cover runs out, and whatever the paperwork says about it. */
@@ -535,6 +595,102 @@ private fun WarrantyBlock(state: AssetEditState, model: AssetEditViewModel) {
         label = "Warranty notes",
         minLines = 2,
     )
+}
+
+/**
+ * #67, C5: the two manual affordances and the asset's existing manuals, read-only under their role
+ * labels. With no attachment folder the three document affordances across this screen (here and in
+ * [PurchaseBlock]) are **hidden**, never disabled, and this block alone carries the one status card
+ * (R67-13) — DOCUMENTS' own card, drawn from its home.
+ */
+@Composable
+private fun KeyDocumentsBlock(
+    state: AssetEditState,
+    model: AssetEditViewModel,
+    onOpenSettings: () -> Unit,
+    onNoFilePicker: () -> Unit,
+) {
+    SectionHeader(title = KEY_DOCUMENTS)
+    DocumentRoleBlock(
+        role = DocumentRole.USER_MANUAL,
+        buttonText = ADD_USER_MANUAL,
+        state = state,
+        model = model,
+        onNoFilePicker = onNoFilePicker,
+    )
+    DocumentRoleBlock(
+        role = DocumentRole.SERVICE_MANUAL,
+        buttonText = ADD_SERVICE_MANUAL,
+        state = state,
+        model = model,
+        onNoFilePicker = onNoFilePicker,
+    )
+    if (!state.offersDocuments) NoAttachmentFolderCard(onOpenSettings)
+}
+
+/**
+ * One role's affordance, its staged lines, and its existing files under [role]'s own label — the
+ * button is hidden (never disabled) without a folder (R67-13); the staged lines and the existing
+ * files draw either way, so a file already there or already picked is never hidden by a folder
+ * that later went away. While the copies run (C6, R67-8) a tap on the button or on Remove is
+ * ignored, as close and back are held: the picker is not opened, and no line changes under the copy.
+ */
+@Composable
+private fun DocumentRoleBlock(
+    role: DocumentRole,
+    buttonText: String,
+    state: AssetEditState,
+    model: AssetEditViewModel,
+    onNoFilePicker: () -> Unit,
+) {
+    if (state.offersDocuments) {
+        val picker = rememberDocumentPicker(
+            onPicked = { lookup -> model.stagePicked(role, lookup) },
+            onNoFilePicker = onNoFilePicker,
+        )
+        TextButton(onClick = { if (!model.state.value.saving) picker.pick() }) {
+            Icon(ServiceTagIcons.AttachFile, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(buttonText)
+        }
+    }
+    state.staged.filter { it.role == role }.forEach { document ->
+        StagedDocumentRow(
+            document = document,
+            onRemove = { if (!model.state.value.saving) model.unstage(document) },
+        )
+    }
+    val existing = state.attached.filter { it.role == role }
+    if (existing.isNotEmpty()) {
+        FieldLabel(role.label())
+        existing.forEach { AttachedDocumentRow(it) }
+    }
+}
+
+/**
+ * P67-10/12: one staged file — its name, [ATTACHED_WHEN_YOU_SAVE] or the failed copy's sentence, and
+ * the reused visible `Remove` (the references' word; it has no shared home to draw from), whose
+ * content description P67-12 names the file, since a screen reader cannot see which line it is on.
+ */
+@Composable
+private fun StagedDocumentRow(document: StagedDocument, onRemove: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = document.file.displayName, style = MaterialTheme.typography.bodyMedium)
+            val problem = document.problem
+            if (problem != null) RefusalLine(problem) else QuietLine(ATTACHED_WHEN_YOU_SAVE)
+        }
+        val removeLabel = "Remove ${document.file.displayName}"
+        TextButton(onClick = onRemove, modifier = Modifier.semantics { contentDescription = removeLabel }) {
+            Text("Remove")
+        }
+    }
+}
+
+/** R67-6: one of the asset's own role-tagged files, read-only — its name alone. */
+@Composable
+private fun AttachedDocumentRow(document: AttachedDocument) {
+    Text(text = document.displayName, style = MaterialTheme.typography.bodyMedium)
 }
 
 /**

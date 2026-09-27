@@ -15,6 +15,7 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
@@ -450,6 +451,86 @@ class ImportBackupMergeTest {
         val written = runBlocking { withBytes.merge.run(archive) }
         assertEquals(MergeTally(1, 0, 0, 0), written.attachments)
         runBlocking { assertEquals(1, withBytes.attachments.count()) }
+    }
+
+    /**
+     * #67 AC 6: a role travels by merge onto a **new** row, end to end — the production export, the
+     * real codec, the plan and the apply — and the same format-10 archive then re-plans IDENTICAL.
+     */
+    @Test
+    fun `a merged role lands on the new row`() {
+        val source = Fakes()
+        runBlocking {
+            source.assets.upsert(asset("a1", "Hot tub"))
+            source.attachments.upsert(attachment("att1", "a1").copy(role = DocumentRole.SERVICE_MANUAL))
+        }
+        val archive = exportOf(source)
+        val target = Fakes(
+            FakeAttachmentStorage(InMemoryAttachmentStore().also { it.files["assets/a1/att1.pdf"] = bytes }),
+        )
+
+        val report = runBlocking { target.merge.run(archive) }
+
+        assertEquals(MergeTally(1, 0, 0, 0), report.attachments)
+        runBlocking {
+            assertEquals(DocumentRole.SERVICE_MANUAL, target.attachments.get(AttachmentId("att1"))?.role)
+        }
+        assertEquals(MergeTally(0, 1, 0, 0), runBlocking { target.merge.plan(archive) }.attachments)
+    }
+
+    /**
+     * R67-12 B, end to end, through the path the app really takes: an export made before this phone
+     * gave its documents a role — a format-9 archive, exactly as a #74 build wrote it — still re-plans
+     * **applicable, with zero INSERT and every attachment IDENTICAL** after the roles are given the way
+     * the sheet gives them, through `UpdateAttachment`, whose save also moves the last-modified stamp.
+     * So it stays restorable by merge, and the dev → production path is not blocked by a role.
+     */
+    @Test
+    fun `a pre-format-10 export still re-plans IDENTICAL after roles are given through UpdateAttachment`() {
+        val phone = Fakes(
+            FakeAttachmentStorage(
+                InMemoryAttachmentStore().also {
+                    it.files["assets/a1/att1.pdf"] = bytes
+                    it.files["assets/a1/att2.pdf"] = bytes
+                },
+            ),
+        )
+        runBlocking {
+            phone.assets.upsert(asset("a1", "Hot tub"))
+            phone.attachments.upsert(attachment("att1", "a1"))
+            phone.attachments.upsert(attachment("att2", "a1"))
+        }
+        val before = BackupCodec.decode(exportOf(phone)).let { decoded ->
+            BackupCodec.encode(
+                decoded.data, appVersion = "1.4.1", schemaVersion = 9,
+                createdAt = 1_758_400_000_000L, backupSetId = "set-merge", formatVersion = 9,
+            )
+        }
+        val sheet = UpdateAttachment(phone.attachments, phone.uow, Clock { 1_758_500_000_000L })
+        runBlocking {
+            for ((id, role) in listOf("att1" to DocumentRole.USER_MANUAL, "att2" to DocumentRole.PURCHASE_INVOICE_OR_RECEIPT)) {
+                val row = phone.attachments.get(AttachmentId(id))!!
+                assertTrue(
+                    sheet.run(row.id, UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes, role))
+                        is AttachmentResult.Ok,
+                )
+            }
+            // the stamp moved with the role, as it does on the phone
+            assertEquals(listOf(1_758_500_000_000L, 1_758_500_000_000L), phone.attachments.all().map { it.updatedAt })
+        }
+
+        val report = runBlocking { phone.merge.plan(before) }
+
+        assertTrue(report.applicable, report.conflicts.toString())
+        assertEquals(MergeTally(0, 2, 0, 0), report.attachments)
+        assertEquals(MergeTally(0, 1, 0, 0), report.assets)
+        val tallies = listOf(
+            report.assets, report.groups, report.definitions, report.profiles, report.schedules,
+            report.closures, report.links, report.tags, report.events, report.attachments,
+            report.references, report.seasonActivations, report.conditions, report.healthSubjects,
+            report.categories,
+        )
+        assertEquals(0, tallies.sumOf { it.insert })
     }
 
     /**

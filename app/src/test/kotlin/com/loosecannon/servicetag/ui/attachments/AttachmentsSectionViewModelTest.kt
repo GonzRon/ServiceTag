@@ -7,9 +7,11 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.ports.StoreIoException
 import com.loosecannon.servicetag.core.ports.AttachmentStore
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
@@ -340,6 +342,191 @@ class AttachmentsSectionViewModelTest {
         clearModels()
     }
 
+    /**
+     * #67, C2: every row carries its attachment's role — written through the use case, read back
+     * through Room and both mappers — so the sheet can hand it back and a rename never clears it.
+     */
+    @Test fun theRowsCarryTheRole() = runTest {
+        hotTub()
+        val owner = AttachmentOwner.OfAsset(assetId)
+        listOf(
+            "Receipt.pdf" to DocumentRole.PURCHASE_INVOICE_OR_RECEIPT,
+            "Guide.pdf" to DocumentRole.USER_MANUAL,
+            "Notes.pdf" to null,
+        ).forEach { (name, role) ->
+            graph.addAttachment.run(
+                owner,
+                AddAttachmentCommand(displayName = name, mimeType = "application/pdf", role = role),
+                ByteSource { "x".byteInputStream() },
+            )
+        }
+
+        val vm = model(owner)
+        backgroundScope.launch { vm.state.collect() }
+
+        val rows = vm.state.first { it.rows.size == 3 }.rows
+        assertEquals(
+            mapOf(
+                "Guide.pdf" to DocumentRole.USER_MANUAL,
+                "Notes.pdf" to null,
+                "Receipt.pdf" to DocumentRole.PURCHASE_INVOICE_OR_RECEIPT,
+            ),
+            rows.associate { it.displayName to it.role },
+        )
+        clearModels()
+    }
+
+    /**
+     * #67, C8 (R67-3, R67-4): the role-tagged rows, grouped in the fixed order receipt → user
+     * manual → service manual, each newest first — `capturedOn` descending with the undated last,
+     * then `createdAt` descending — drawn from the very rows DOCUMENTS lists, which keeps every
+     * one of them. The names run against the expected order, so the name order the query hands
+     * back cannot pass for it, and the undated receipt is the last one written, so an order by
+     * `createdAt` alone cannot either.
+     */
+    @Test fun keyDocumentsGroupByRoleNewestFirst() = runTest {
+        hotTub()
+        val owner = AttachmentOwner.OfAsset(assetId)
+        suspend fun add(name: String, role: DocumentRole?, capturedOn: String?, at: Long) {
+            graph.now = at
+            graph.addAttachment.run(
+                owner,
+                AddAttachmentCommand(
+                    displayName = name,
+                    mimeType = "application/pdf",
+                    capturedOn = capturedOn,
+                    role = role,
+                ),
+                ByteSource { name.byteInputStream() },
+            )
+        }
+        add("A service manual.pdf", DocumentRole.SERVICE_MANUAL, "2026-01-01", at = 10L)
+        add("B receipt, undated.pdf", DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, null, at = 90L)
+        add("C receipt, older.pdf", DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, "2025-03-01", at = 80L)
+        add("D receipt, same day, written first.pdf", DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, "2026-02-01", at = 20L)
+        add("E receipt, same day, written last.pdf", DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, "2026-02-01", at = 30L)
+        add("F loose notes.pdf", null, "2026-09-01", at = 40L)
+        add("G user manual.pdf", DocumentRole.USER_MANUAL, "2026-03-01", at = 50L)
+
+        val vm = model(owner)
+        backgroundScope.launch { vm.state.collect() }
+        val state = vm.state.first { it.rows.size == 7 }
+
+        assertEquals(
+            listOf(
+                DocumentRole.PURCHASE_INVOICE_OR_RECEIPT to listOf(
+                    "E receipt, same day, written last.pdf",
+                    "D receipt, same day, written first.pdf",
+                    "C receipt, older.pdf",
+                    "B receipt, undated.pdf",
+                ),
+                DocumentRole.USER_MANUAL to listOf("G user manual.pdf"),
+                DocumentRole.SERVICE_MANUAL to listOf("A service manual.pdf"),
+            ),
+            state.keyDocuments.map { group -> group.role to group.rows.map { it.displayName } },
+        )
+        // R67-4: DOCUMENTS is unchanged — all seven, in its own order — and the block holds no
+        // row of its own: every one it draws is one of DOCUMENTS' rows, not a second copy.
+        assertEquals(
+            listOf("A", "B", "C", "D", "E", "F", "G"),
+            state.rows.map { it.displayName.take(1) },
+        )
+        state.keyDocuments.flatMap { it.rows }.forEach { keyed ->
+            assertTrue(keyed.displayName, state.rows.any { it === keyed })
+        }
+        clearModels()
+    }
+
+    /**
+     * #67, C8: the block exists only while at least one row carries a role — none at first, one
+     * group as soon as a row is tagged, and none again once the tag is cleared.
+     */
+    @Test fun noRoleNoBlock() = runTest {
+        hotTub()
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+        vm.add(listOf(picked("Guide.pdf"), picked("Receipt.pdf")))
+        val untagged = vm.state.first { it.rows.size == 2 }
+        assertEquals(emptyList<KeyDocumentGroup>(), untagged.keyDocuments)
+
+        val guide = untagged.rows.first { it.displayName == "Guide.pdf" }
+        vm.save(
+            guide.id,
+            UpdateAttachmentCommand(guide.displayName, guide.kind, guide.capturedOn, guide.notes, DocumentRole.USER_MANUAL),
+        )
+        val tagged = vm.state.first { state -> state.rows.any { it.role != null } }
+        assertEquals(
+            listOf(DocumentRole.USER_MANUAL to listOf("Guide.pdf")),
+            tagged.keyDocuments.map { group -> group.role to group.rows.map { it.displayName } },
+        )
+
+        vm.save(guide.id, UpdateAttachmentCommand(guide.displayName, guide.kind, guide.capturedOn, guide.notes, null))
+        val cleared = vm.state.first { state -> state.rows.none { it.role != null } }
+        assertEquals(emptyList<KeyDocumentGroup>(), cleared.keyDocuments)
+        clearModels()
+    }
+
+    /**
+     * #67, C7 (AC 3, AC 5): the sheet's Role is metadata on the one row. The row keeps its locator,
+     * sha256, size and bytes; the store is rigged to throw on any `put` at that locator, so a save
+     * that re-copied the file could not land at all; and the row moves into the Key documents
+     * block without a second row appearing anywhere.
+     */
+    @Test fun editingTheRoleUpdatesMetadataOnly() = runTest {
+        hotTub()
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+        vm.add(listOf(picked("Guide.pdf", body = "the whole guide")))
+        val before = vm.state.first { it.rows.size == 1 }.rows.single()
+        val stored = graph.attachments.get(AttachmentId(before.id))!!
+        val bytes = graph.attachmentStorage.store.files.mapValues { it.value.toList() }
+        graph.attachmentStorage.store.failOnPut = before.locator
+
+        val closed = async(Dispatchers.Main) { vm.saved.first() }
+        vm.save(
+            before.id,
+            UpdateAttachmentCommand(before.displayName, before.kind, before.capturedOn, before.notes, DocumentRole.USER_MANUAL),
+        )
+        assertEquals(before.id, closed.await())
+
+        val after = vm.state.first { it.rows.single().role == DocumentRole.USER_MANUAL }
+        val row = graph.attachments.get(AttachmentId(before.id))!!
+        assertEquals(stored.copy(role = DocumentRole.USER_MANUAL, updatedAt = row.updatedAt), row)
+        assertEquals(bytes, graph.attachmentStorage.store.files.mapValues { it.value.toList() })
+        assertEquals(1, after.rows.size)
+        assertEquals(
+            listOf(KeyDocumentGroup(DocumentRole.USER_MANUAL, after.rows)),
+            after.keyDocuments,
+        )
+        clearModels()
+    }
+
+    /**
+     * #67, C7 (R67-11): the section offers the sheet its Role chips for an asset's files and never
+     * for an event's — the owner decides, through the one statement of the rule.
+     */
+    @Test fun theRolesAreOfferedForAnAssetsFilesAndNeverForAnEvents() = runTest {
+        hotTub()
+        val event = graph.logEvent.run(
+            EventCommand(
+                assetId = assetId,
+                profileId = null,
+                kind = EventKind.MAINTENANCE,
+                title = "Filter change",
+                occurredOn = "2026-09-14",
+                occurredTime = null,
+                tzId = "UTC",
+                notes = "",
+                values = emptyMap(),
+                consumables = emptyList(),
+            ),
+        )
+
+        assertTrue(model().rolesOffered)
+        assertFalse(model(AttachmentOwner.OfEvent(event.id)).rolesOffered)
+        clearModels()
+    }
+
     @Test fun savingRenamesTheRowAndLeavesTheLocatorAlone() = runTest {
         hotTub()
         val vm = model()
@@ -349,7 +536,7 @@ class AttachmentsSectionViewModelTest {
 
         vm.save(
             before.id,
-            UpdateAttachmentCommand("Installation guide", AttachmentKind.MANUAL, "2026-09-14", ""),
+            UpdateAttachmentCommand("Installation guide", AttachmentKind.MANUAL, "2026-09-14", "", before.role),
         )
 
         val after = vm.state
@@ -382,8 +569,8 @@ class AttachmentsSectionViewModelTest {
         // badge case in `ReminderHealthViewModelTest`.
         val closed = async(Dispatchers.Main) { vm.saved.take(2).toList() }
 
-        vm.save(row.id, UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes))
-        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes))
+        vm.save(row.id, UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes, row.role))
+        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes, row.role))
 
         // Silent, but not stuck: nothing to write still closes the sheet.
         assertEquals(listOf(row.id, row.id), closed.await())
@@ -500,7 +687,7 @@ class AttachmentsSectionViewModelTest {
         backgroundScope.launch(Dispatchers.Main) { vm.saved.collect { closed += it } }
         val said = async(Dispatchers.Main) { vm.messages.first() }
 
-        vm.save(row.id, UpdateAttachmentCommand("Installation guide", row.kind, row.capturedOn, ""))
+        vm.save(row.id, UpdateAttachmentCommand("Installation guide", row.kind, row.capturedOn, "", row.role))
 
         assertEquals("Could not save Installation guide", said.await())
         assertEquals(emptyList<String>(), closed)
@@ -518,12 +705,12 @@ class AttachmentsSectionViewModelTest {
         backgroundScope.launch(Dispatchers.Main) { vm.saved.collect { closed += it } }
         val said = async(Dispatchers.Main) { vm.messages.first() }
 
-        vm.save(row.id, UpdateAttachmentCommand("   ", row.kind, row.capturedOn, row.notes))
+        vm.save(row.id, UpdateAttachmentCommand("   ", row.kind, row.capturedOn, row.notes, row.role))
         assertEquals("Give the file a name", said.await())
         assertEquals(emptyList<String>(), closed)
         assertEquals("guide.pdf", vm.state.value.rows.single().displayName)
 
-        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes))
+        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes, row.role))
         vm.state.first { it.rows.singleOrNull()?.displayName == "Renamed.pdf" }
         assertEquals(listOf(row.id), closed)
         clearModels()
@@ -603,7 +790,7 @@ class AttachmentsSectionViewModelTest {
         val row = vm.state.first { it.rows.size == 1 }.rows.single()
 
         val closed = async(Dispatchers.Main) { vm.saved.first() }
-        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes))
+        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes, row.role))
         closed.await()
 
         val gone = async(Dispatchers.Main) { vm.deleted.first() }
@@ -641,7 +828,7 @@ class AttachmentsSectionViewModelTest {
         val row = vm.state.first { it.rows.size == 1 }.rows.single()
 
         val closed = async(Dispatchers.Main) { vm.saved.first() }
-        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes))
+        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes, row.role))
         closed.await()
         val gone = async(Dispatchers.Main) { vm.deleted.first() }
         vm.delete(row.id)
@@ -673,7 +860,7 @@ class AttachmentsSectionViewModelTest {
             vm.saved.collect { closed += it }
         }
         runCurrent()
-        val same = UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes)
+        val same = UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes, row.role)
         vm.save(row.id, same)
         vm.save(row.id, same)
         advanceUntilIdle()

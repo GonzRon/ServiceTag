@@ -76,6 +76,7 @@ class ShareIntakeActivity : ComponentActivity() {
                     onName = model::name,
                     onDescribe = model::describe,
                     onKind = model::kind,
+                    onRole = model::role,
                     onSave = model::save,
                     onConfirm = model::confirmUnknownScheme,
                     onDismissConfirmation = model::dismissConfirmation,

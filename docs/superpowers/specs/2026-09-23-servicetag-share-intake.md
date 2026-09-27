@@ -456,6 +456,16 @@ whole message is that the bytes are gone should not also carry prose; and the li
 `Ellipsis`, since the description is capped at 2,000 characters and this is a compact row. Without it a
 shared PDF's description would be collected, stored and invisible forever, failing #43 AC 9.
 
+**Amendment (#67, owner ruling R67-9, 2026-09-26).** On a **byte share only**, the intake screen gains a
+**Role** section directly under the Type control: a `SectionHeader` "Role" (drawn upper-case, like
+TYPE) over four chips — "No role", "Purchase invoice or receipt", "User manual", "Service manual" —
+with "No role" chosen until the person picks. The chosen role reaches `AddAttachmentCommand.role` and is
+stored on the one attachment row the save writes, the same canonical role the asset editor and the
+attachment edit sheet set (#67 plan C1, C7). A link share and a note share draw no Role section and
+carry no role: a reference has no column for one, and the view model does not take a role off the byte
+path. The screen stays stateless (a new `onRole` callback beside `onKind`). Nothing in §3.3 (I-3, I-8,
+I-9) or §4 changes: the lift, the scheme policy and the stream, grant and security rules are untouched.
+
 ---
 
 ## 8. Hazards and test matrix (hazard classes, not permutations)
@@ -541,6 +551,12 @@ folder in Settings first", which implies an in-app affordance the share screen d
 
 **Type control labels** — "Photo" · "Label photo" · "Receipt" · "Manual" · "Warranty" · "Document" ·
 "Other" — all *(shipped, `DocumentsSection`)*.
+
+**Amendment (#67, 2026-09-26): Role control** — header "Role" · chips "No role" · "Purchase invoice or
+receipt" · "User manual" · "Service manual". Ratified by the owner as #67's P67-5, P67-6 and P67-2/3/4
+(#67 plan §6, §12), not re-spelled here: `IntakeStrings.ROLE` is initialised from the one home of
+"Role" in `ui/attachments`, and the chip labels are drawn through `DocumentRole?.label()`, as the Type
+labels are drawn through `AttachmentKind.label()`. Byte shares only (§7's amendment).
 
 **Unknown-scheme confirmation** — "Save this link?" · "ServiceTag does not recognise \"<scheme>\" links.
 It will be saved as written and opened with whatever app claims it." · "Save" · "Cancel".

@@ -574,6 +574,19 @@ val MIGRATION_8_9: Migration = object : Migration(8, 9) {
 }
 
 /**
+ * Schema v9 -> v10: `attachment` gains `document_role` (#67, C3). One nullable column with **no
+ * default and no backfill**: a row written before #67 has no role, and no timestamp moves, so a
+ * pre-upgrade export still re-plans IDENTICAL. No recreate and no copy — every existing column and
+ * row is untouched by construction. The type is the one `10.json` records, so Room validates it on
+ * open.
+ */
+val MIGRATION_9_10: Migration = object : Migration(9, 10) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `attachment` ADD COLUMN `document_role` TEXT")
+    }
+}
+
+/**
  * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
  * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
  */

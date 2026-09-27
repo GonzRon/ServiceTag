@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
 import com.loosecannon.servicetag.core.ports.ByteSource
@@ -383,6 +384,46 @@ class ShareIntakeViewModelTest {
         assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
     }
 
+    /**
+     * #67, C7 (R67-9): a byte share starts on "No role", and the role chosen in the Role control
+     * reaches `AddAttachmentCommand.role` and lands on the one row the save writes.
+     */
+    @Test fun aBytesShareCarriesTheChosenRole() = runTest(scheduler) {
+        val id = mower()
+        val vm = model(bytes(), source = { "pdf".byteInputStream() })
+        assertNull(vm.state.value.role)
+
+        vm.choose(id)
+        vm.role(DocumentRole.USER_MANUAL)
+        vm.saveAndSettle()
+
+        val row = graph.attachments.forOwner(AttachmentOwner.OfAsset(assetId)).single()
+        assertEquals(DocumentRole.USER_MANUAL, row.role)
+        assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
+    }
+
+    /**
+     * #67, C7 (R67-9): a link has no role — the reference model has no column for one, so the
+     * choice is not taken and the save writes a reference and nothing else. A note is the same.
+     */
+    @Test fun aLinkShareHasNoRole() = runTest(scheduler) {
+        val id = mower()
+        val vm = model(link(manualUrl))
+
+        vm.choose(id)
+        vm.role(DocumentRole.USER_MANUAL)
+        assertNull(vm.state.value.role)
+        vm.saveAndSettle()
+
+        assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
+        assertEquals(1, references())
+        assertEquals(0, attachments())
+
+        val note = model(ShareContent.PlainText("Replaced the drive belt, took an hour"))
+        note.role(DocumentRole.SERVICE_MANUAL)
+        assertNull(note.state.value.role)
+    }
+
     @Test fun theTypeControlIsPrefilledFromTheDeclaredType() = runTest(scheduler) {
         mower()
 
@@ -683,7 +724,7 @@ class ShareIntakeViewModelTest {
     @Test fun everyIntakeSentenceIsOneSpecTenRatifies() {
         val ratified = setOf(
             "Save to ServiceTag", "Received", "Attach to", "Choose asset", "Name",
-            "Description (optional)", "Type", "Save", "Cancel", "Close", "Save as a note",
+            "Description (optional)", "Type", "Role", "Save", "Cancel", "Close", "Save as a note",
             "That is not a link.", "Add an asset in ServiceTag first, then share this again.",
             "Choose an attachment folder in ServiceTag Settings, then share this again.",
             "That file cannot be accepted from the app that shared it.",
@@ -696,7 +737,7 @@ class ShareIntakeViewModelTest {
         val drawn = listOf(
             IntakeStrings.TITLE, IntakeStrings.RECEIVED, IntakeStrings.ATTACH_TO,
             IntakeStrings.CHOOSE_ASSET, IntakeStrings.NAME, IntakeStrings.DESCRIPTION,
-            IntakeStrings.TYPE, IntakeStrings.SAVE, IntakeStrings.CANCEL, IntakeStrings.CLOSE,
+            IntakeStrings.TYPE, IntakeStrings.ROLE, IntakeStrings.SAVE, IntakeStrings.CANCEL, IntakeStrings.CLOSE,
             IntakeStrings.SAVE_AS_NOTE, IntakeStrings.NOT_A_LINK, IntakeStrings.NO_ASSETS,
             IntakeStrings.NO_FOLDER, IntakeStrings.STREAM_REFUSED, IntakeStrings.UNREADABLE,
             IntakeStrings.URI_TOO_LONG, IntakeStrings.SCHEME_BLOCKED,

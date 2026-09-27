@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
 import com.loosecannon.servicetag.core.model.MimeTypes
+import com.loosecannon.servicetag.core.model.accepts
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
@@ -41,6 +42,9 @@ class AddAttachment(
         cmd: AddAttachmentCommand,
         source: ByteSource,
     ): AttachmentResult<Attachment> {
+        // #67, C1: first, so a role on an event can never reach `put`. Not a refusal the section
+        // draws — no screen offers a role on an event's file — but a caller's mistake.
+        require(owner.accepts(cmd.role)) { "a document role belongs on an asset's attachment, not an event's" }
         val name = cmd.displayName.trim()
         if (name.isEmpty()) return AttachmentResult.Refused(AttachmentProblem.BlankName)
         if (!ownerExists(owner)) return AttachmentResult.Refused(AttachmentProblem.OwnerMissing)
@@ -79,6 +83,7 @@ class AddAttachment(
             notes = cmd.notes.trim(),
             createdAt = now,
             updatedAt = now,
+            role = cmd.role,
         )
         try {
             uow.write { attachments.upsert(row) }

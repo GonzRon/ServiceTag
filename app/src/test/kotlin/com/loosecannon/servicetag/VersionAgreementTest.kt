@@ -59,8 +59,10 @@ class VersionAgreementTest {
      * The schema and format numbers. 1.3 bumped both together; 1.4 moved them in two steps — schema
      * 8 landed first, with the migration, and format 8 followed with the archive that carries the
      * new tables. #74 moves them in two steps again: schema 9 (`asset_category` and its backfill)
-     * lands first, and format 9 follows with the archive that carries the categories — so at this
-     * tip, with both steps landed, the schema is 9 and the format is 9.
+     * lands first, and format 9 follows with the archive that carries the categories. #67 does the
+     * same: schema 10 (`attachment.document_role`) lands first and format 10 follows with the archive
+     * that carries the role — so at this tip, with both steps landed, the schema is 10 and the format
+     * is 10.
      *
      * The expected numbers are this test's own, deliberately: they are what the schema and the
      * format are at this tip, and they move only when a release changes them. They are **not**
@@ -68,9 +70,9 @@ class VersionAgreementTest {
      * `versionName`/`versionCode` cases own — otherwise bumping the schema in one file only would
      * still pass here, which is the whole failure this class exists to catch.
      */
-    @Test fun theSchemaIsNineAndTheFormatIsNine() {
-        assertEquals(9, AppGraph.SCHEMA_VERSION)
-        assertEquals(9, BackupCodec.FORMAT_VERSION)
+    @Test fun theSchemaIsTenAndTheFormatIsTen() {
+        assertEquals(10, AppGraph.SCHEMA_VERSION)
+        assertEquals(10, BackupCodec.FORMAT_VERSION)
     }
 
     /**
@@ -133,8 +135,8 @@ class VersionAgreementTest {
             StatusResponse.serializer(), response.body.decodeToString(),
         )
         assertEquals("1.4.1", status.appVersion)
-        assertEquals(9, status.schemaVersion)
-        assertEquals(9, status.backupFormatVersion)
+        assertEquals(10, status.schemaVersion)
+        assertEquals(10, status.backupFormatVersion)
     }
 
     /**

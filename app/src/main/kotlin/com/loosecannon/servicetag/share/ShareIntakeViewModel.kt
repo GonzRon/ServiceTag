@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentKinds
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
@@ -24,6 +25,7 @@ import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.NoSuchAsset
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
 import com.loosecannon.servicetag.core.usecase.ReferenceResult
+import com.loosecannon.servicetag.ui.attachments.ROLE_HEADER
 import java.io.IOException
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
@@ -48,6 +50,9 @@ internal object IntakeStrings {
     const val NAME = "Name"
     const val DESCRIPTION = "Description (optional)"
     const val TYPE = "Type"
+
+    /** #67 (P67-5): the Role header, from its one home beside the role labels — never re-spelled. */
+    const val ROLE = ROLE_HEADER
     const val SAVE = "Save"
     const val CANCEL = "Cancel"
     const val CLOSE = "Close"
@@ -94,6 +99,8 @@ internal data class ShareIntakeState(
     val name: String = "",
     val description: String = "",
     val kind: AttachmentKind = AttachmentKind.OTHER,
+    /** #67 (R67-9): the chosen document role, on a byte share only; null is the no-role chip. */
+    val role: DocumentRole? = null,
     val storeReady: Boolean = true,
     /** A ratified sentence drawn beside the form; the person can still act. */
     val message: String? = null,
@@ -219,6 +226,14 @@ internal class ShareIntakeViewModel(
 
     fun kind(value: AttachmentKind) = _state.update { it.copy(kind = value, message = null) }
 
+    /**
+     * #67 (R67-9): a role is taken on a byte share only. A reference has no column for one and a
+     * note is a journal entry, so on those paths the choice is not recorded at all.
+     */
+    fun role(value: DocumentRole?) = _state.update {
+        if (it.path == IntakePath.BYTES) it.copy(role = value, message = null) else it
+    }
+
     /** Cancel, back and Close are the same fact: nothing was written and nothing will be. */
     fun cancel() = _state.update { it.copy(confirming = null, cancelled = true) }
 
@@ -321,6 +336,7 @@ internal class ShareIntakeViewModel(
                     sizeBytes = bytes.size,
                     kind = current.kind,
                     notes = current.description,
+                    role = current.role,
                 ),
                 open,
             )

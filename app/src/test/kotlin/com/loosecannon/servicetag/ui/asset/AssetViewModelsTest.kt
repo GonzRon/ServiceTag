@@ -53,6 +53,25 @@ import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.FakeAttachmentStorage
+import com.loosecannon.servicetag.testing.InMemoryAttachmentStore
+import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.AttachmentStore
+import com.loosecannon.servicetag.core.ports.ByteSource
+import com.loosecannon.servicetag.core.ports.StoreIoException
+import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.ports.StoredBytes
+import com.loosecannon.servicetag.core.usecase.AddAttachment
+import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
+import com.loosecannon.servicetag.core.usecase.SaveAssetSettings
+import com.loosecannon.servicetag.ui.attachments.PickedFile
+import kotlinx.coroutines.CompletableDeferred
+import java.io.ByteArrayInputStream
+import java.io.InputStream
 import com.loosecannon.servicetag.ui.journal.formatValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -75,6 +94,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -114,12 +134,12 @@ class AssetViewModelsTest {
         updatedAt = 1L,
     )
 
-    /** The detail model takes twenty-three collaborators; every test wants the same ones off the graph. */
+    /** The detail model takes twenty-four collaborators; every test wants the same ones off the graph. */
     private fun detailModel(id: AssetId) = AssetDetailViewModel(
         graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
         graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
-        graph.conditions, graph.seasonActivations, graph.healthSubjects,
+        graph.conditions, graph.seasonActivations, graph.healthSubjects, graph.attachments,
         graph.assetHealthReadModel, graph.getAssetSeason, graph.recordSeasonActivation,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
         graph.applyTemplate, graph.uow, graph.clock, graph.todayPort, id,
@@ -137,7 +157,8 @@ class AssetViewModelsTest {
      */
     private suspend fun editModel(id: AssetId? = null, parentId: String? = null): AssetEditViewModel {
         val model = AssetEditViewModel(
-            graph.assets, graph.healthSubjects, graph.saveAssetSettings, graph.schedules, graph.categories, id, parentId,
+            graph.assets, graph.healthSubjects, graph.saveAssetSettings, graph.schedules, graph.categories,
+            graph.attachments, graph.attachmentStorage, graph.addAttachment, graph.todayPort, id, parentId,
         )
         model.state.first { it.parentChoices.isNotEmpty() }
         return model
@@ -2110,6 +2131,39 @@ class AssetViewModelsTest {
     }
 
     /**
+     * #67, R67-5: DETAILS names the newest purchase invoice or receipt — by `capturedOn`, the
+     * undated last — and follows the asset's files as they land. A manual never stands in for it,
+     * however recent, and an asset with no receipt has no fact at all.
+     */
+    @Test fun theDetailsFactsNameThePurchaseDocument() = runTest {
+        graph.assets.upsert(assetRow("tub", name = "Hot tub"))
+        val vm = detailModel(AssetId("tub"))
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it != null }
+        suspend fun attach(name: String, role: DocumentRole, capturedOn: String?): String? {
+            graph.addAttachment.run(
+                AttachmentOwner.OfAsset(AssetId("tub")),
+                AddAttachmentCommand(
+                    displayName = name,
+                    mimeType = "application/pdf",
+                    capturedOn = capturedOn,
+                    role = role,
+                ),
+                ByteSource { name.byteInputStream() },
+            )
+            scheduler.advanceUntilIdle()
+            return vm.state.value!!.purchaseDocument
+        }
+        assertNull(vm.state.value!!.purchaseDocument)
+
+        assertNull(attach("Owner's manual.pdf", DocumentRole.USER_MANUAL, "2026-09-01"))
+        assertEquals("Receipt, undated.pdf", attach("Receipt, undated.pdf", DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, null))
+        assertEquals("Receipt 2025.pdf", attach("Receipt 2025.pdf", DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, "2025-05-01"))
+        assertEquals("Receipt 2026.pdf", attach("Receipt 2026.pdf", DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, "2026-02-01"))
+        assertEquals("Receipt 2026.pdf", attach("Receipt 2024.pdf", DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, "2024-01-01"))
+    }
+
+    /**
      * Review M-1: one edit of the asset row rebuilds the detail state **once** — the condition
      * watchers are not torn down and re-subscribed when the asset tree has not changed.
      */
@@ -2121,7 +2175,7 @@ class AssetViewModelsTest {
             graph.assets, graph.tags,
             graph.definitions, graph.profiles, graph.events,
             graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
-            graph.conditions, graph.seasonActivations, graph.healthSubjects,
+            graph.conditions, graph.seasonActivations, graph.healthSubjects, graph.attachments,
             graph.assetHealthReadModel, GetAssetSeason(graph.assets, reads, graph.uow, graph.todayPort),
             graph.recordSeasonActivation,
             graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
@@ -2499,7 +2553,8 @@ class AssetViewModelsTest {
                 throw IllegalStateException("the schedule read failed")
         }
         val model = AssetEditViewModel(
-            graph.assets, graph.healthSubjects, graph.saveAssetSettings, unreadable, graph.categories, AssetId("gen"),
+            graph.assets, graph.healthSubjects, graph.saveAssetSettings, unreadable, graph.categories,
+            graph.attachments, graph.attachmentStorage, graph.addAttachment, graph.todayPort, AssetId("gen"),
         )
         model.state.first { it.parentChoices.isNotEmpty() }
         val saved = mutableListOf<AssetId>()
@@ -2614,7 +2669,642 @@ class AssetViewModelsTest {
         assertEquals("Keep schedules as-is", KEEP_SCHEDULES_AS_IS)
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // #67: the editor's document intake — staging, and Save with staged files (plan §2 C5, C6)
+    // ---------------------------------------------------------------------------------------------
+
+    /** What one intake editor said: where it finished, and how many files were still staged when it did. */
+    private class IntakeEditor(val model: AssetEditViewModel) {
+        val saved = mutableListOf<AssetId>()
+        val stagedAtSaved = mutableListOf<Int>()
+    }
+
+    /** A picked file as `AttachmentPickers` hands one over: a name, a type, and bytes read on demand. */
+    private fun picked(
+        name: String,
+        mime: String = "application/pdf",
+        open: () -> InputStream = { ByteArrayInputStream(name.toByteArray()) },
+    ) = PickedFile(displayName = name, mimeType = mime, sizeBytes = name.length.toLong(), open = open)
+
+    /** The settings write over [assets], so a test can count its first read — one per `SaveAssetSettings.run`. */
+    private fun saveSettingsOver(assets: AssetRepository) = SaveAssetSettings(
+        assets, graph.schedules, graph.healthSubjects, graph.seasonActivations, graph.uow, graph.ids,
+        graph.clock, graph.todayPort, graph.recomputeSchedules, graph.applyTemplate, graph.promoteCategory,
+    )
+
+    /** `SaveAssetSettings.run` reads every asset first, and nothing else here goes through this port. */
+    private class CountingAssets(private val inner: AssetRepository) : AssetRepository by inner {
+        var reads = 0
+        override suspend fun all(): List<Asset> {
+            reads += 1
+            return inner.all()
+        }
+    }
+
+    /**
+     * An editor whose folder and settings write a test chooses, its copies on this test's scheduler, and
+     * its `saved` collected eagerly (no replay). Suspends until the form has loaded.
+     */
+    private suspend fun TestScope.intake(
+        id: AssetId? = null,
+        storage: AttachmentStorage = FakeAttachmentStorage(),
+        saveSettings: SaveAssetSettings = graph.saveAssetSettings,
+    ): IntakeEditor {
+        val add = AddAttachment(graph.attachments, graph.assets, graph.events, storage, graph.uow, graph.ids, graph.clock)
+        val model = AssetEditViewModel(
+            graph.assets, graph.healthSubjects, saveSettings, graph.schedules, graph.categories,
+            graph.attachments, storage, add, graph.todayPort, id,
+            io = StandardTestDispatcher(testScheduler),
+        )
+        model.state.first { it.parentChoices.isNotEmpty() }
+        val editor = IntakeEditor(model)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            model.saved.collect {
+                editor.saved += it
+                editor.stagedAtSaved += model.state.value.staged.size
+            }
+        }
+        return editor
+    }
+
+    private suspend fun AssetEditViewModel.saveAndWait() {
+        save()
+        state.first { !it.saving }
+    }
+
+    private fun AssetEditViewModel.stagedLines() = state.value.staged.map { it.file.displayName to it.problem }
+
+    /** A folder that holds every copy at the door until [gate] opens. */
+    private fun gatedStorage(gate: CompletableDeferred<Unit>): AttachmentStorage {
+        val inner = InMemoryAttachmentStore()
+        val store = object : AttachmentStore by inner {
+            override suspend fun put(locator: String, source: ByteSource): StoredBytes {
+                gate.await()
+                return inner.put(locator, source)
+            }
+        }
+        return object : AttachmentStorage {
+            override fun state(): StoreState = READY
+            override fun store(): AttachmentStore = store
+        }
+    }
+
+    /** C5 (AC 1): a pick is held, not copied — not at the pick, not on a refused Save. */
+    @Test fun stagingWritesNothingUntilSave() = runTest {
+        val storage = FakeAttachmentStorage()
+        val editor = intake(storage = storage)
+        editor.model.stage(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, picked("receipt.pdf"))
+        editor.model.stage(DocumentRole.USER_MANUAL, picked("manual.pdf"))
+        advanceUntilIdle()
+        assertEquals(listOf("receipt.pdf" to null, "manual.pdf" to null), editor.model.stagedLines())
+        assertEquals(0, graph.attachments.count())
+        assertTrue(storage.store.files.isEmpty())
+
+        // No name: the settings write is refused, so nothing is copied and the staged list stays.
+        editor.model.saveAndWait()
+        assertTrue(editor.model.state.value.problems.containsKey(AssetField.NAME))
+        assertEquals(listOf("receipt.pdf" to null, "manual.pdf" to null), editor.model.stagedLines())
+        assertTrue(graph.assets.all().isEmpty())
+        assertEquals(0, graph.attachments.count())
+        assertTrue(storage.store.files.isEmpty())
+        assertTrue(editor.saved.isEmpty())
+        // Cancel is this editor abandoned: nothing was written, so nothing is left behind.
+
+        // An existing asset has an id before any write, so only the order of the steps keeps its
+        // files back: a refused write copies nothing, and the staged list stays for the next Save.
+        graph.assets.upsert(assetRow("tub", name = "Hot tub"))
+        val existing = intake(AssetId("tub"), storage = storage)
+        existing.model.stage(DocumentRole.USER_MANUAL, picked("manual.pdf"))
+        existing.model.stage(DocumentRole.SERVICE_MANUAL, picked("service.pdf"))
+        existing.model.onName("")
+        existing.model.saveAndWait()
+        assertTrue(existing.model.state.value.problems.containsKey(AssetField.NAME))
+        assertEquals(listOf("manual.pdf" to null, "service.pdf" to null), existing.model.stagedLines())
+        assertEquals("Hot tub", graph.assets.get(AssetId("tub"))!!.name)
+        assertEquals(0, graph.attachments.count())
+        assertTrue(storage.store.files.isEmpty())
+        assertTrue(existing.saved.isEmpty())
+    }
+
+    /** C6 step 2: the written asset gets every staged file — its role, its kind inferred, today's date — and then `saved`. */
+    @Test fun savingANewAssetAttachesTheStagedFilesWithTheirRoles() = runTest {
+        val storage = FakeAttachmentStorage()
+        val editor = intake(storage = storage)
+        editor.model.onName("Hot tub")
+        editor.model.stage(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, picked("receipt.pdf"))
+        editor.model.stage(DocumentRole.USER_MANUAL, picked("manual.pdf"))
+        editor.model.stage(DocumentRole.SERVICE_MANUAL, picked("wiring.jpg", "image/jpeg"))
+        editor.model.saveAndWait()
+
+        val asset = graph.assets.all().single()
+        assertEquals(listOf(asset.id), editor.saved)
+        assertEquals("saved only once nothing is staged", listOf(0), editor.stagedAtSaved)
+        val rows = graph.attachments.forOwner(AttachmentOwner.OfAsset(asset.id)).associateBy { it.displayName }
+        assertEquals(
+            mapOf(
+                "receipt.pdf" to (DocumentRole.PURCHASE_INVOICE_OR_RECEIPT to AttachmentKind.DOCUMENT),
+                "manual.pdf" to (DocumentRole.USER_MANUAL to AttachmentKind.DOCUMENT),
+                "wiring.jpg" to (DocumentRole.SERVICE_MANUAL to AttachmentKind.PHOTO),
+            ),
+            rows.mapValues { (_, row) -> row.role to row.kind },
+        )
+        assertEquals(setOf("2026-02-10"), rows.values.map { it.capturedOn }.toSet())
+        assertEquals(3, storage.store.files.size)
+        assertTrue(editor.model.state.value.staged.isEmpty())
+    }
+
+    /** C5: Remove forgets a staged file, and Save copies only what is left. */
+    @Test fun removingAStagedFileForgetsIt() = runTest {
+        val storage = FakeAttachmentStorage()
+        val editor = intake(storage = storage)
+        editor.model.onName("Hot tub")
+        editor.model.stage(DocumentRole.USER_MANUAL, picked("old manual.pdf"))
+        editor.model.stage(DocumentRole.USER_MANUAL, picked("manual.pdf"))
+        editor.model.unstage(editor.model.state.value.staged.first())
+        assertEquals(listOf("manual.pdf" to null), editor.model.stagedLines())
+
+        editor.model.saveAndWait()
+        assertEquals(listOf("manual.pdf"), graph.attachments.all().map { it.displayName })
+        assertEquals(1, storage.store.files.size)
+    }
+
+    /**
+     * C6 (B1): a copy that fails after a new asset's write leaves one asset, and the retry addresses
+     * it by the id the write minted — an edited retry writes again, onto that id, never a second
+     * asset. From the write on the form is an edit: the title reads "Edit asset" and the template
+     * row hides, both keyed off `editing`.
+     */
+    @Test fun aRetryAfterAFailedCopyAddressesTheSavedAssetOnly() = runTest {
+        val storage = FakeAttachmentStorage(state = LOST)
+        val editor = intake(storage = storage)
+        editor.model.onName("Hot tub")
+        editor.model.stage(DocumentRole.USER_MANUAL, picked("manual.pdf"))
+        editor.model.saveAndWait()
+
+        val minted = graph.assets.all().single().id
+        assertTrue("an edit from the write on", editor.model.state.value.editing)
+        assertEquals(listOf("manual.pdf" to "The attachment folder is not available"), editor.model.stagedLines())
+        assertTrue(editor.saved.isEmpty())
+
+        // An edit after the failure: the retry runs the settings write again, addressed to the minted id.
+        editor.model.onName("Hot tub 2")
+        storage.state = READY
+        editor.model.saveAndWait()
+        assertEquals("one asset, never a second", 1, graph.assets.all().size)
+        assertEquals("Hot tub 2", graph.assets.get(minted)!!.name)
+        assertEquals(listOf(minted), editor.saved)
+        assertEquals(
+            listOf(AttachmentOwner.OfAsset(minted)),
+            graph.attachments.all().map { it.owner },
+        )
+        assertTrue(editor.model.state.value.staged.isEmpty())
+    }
+
+    /** C6: `saving` holds from the tap until the copies end, so a second tap writes and copies nothing twice. */
+    @Test fun aSecondTapDuringTheCopiesIsIgnored() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val reads = CountingAssets(graph.assets)
+        val editor = intake(storage = gatedStorage(gate), saveSettings = saveSettingsOver(reads))
+        editor.model.onName("Hot tub")
+        editor.model.stage(DocumentRole.USER_MANUAL, picked("manual.pdf"))
+        editor.model.save()
+        // Written, and the copy is waiting at the gate.
+        editor.model.state.first { it.editing }
+        advanceUntilIdle()
+        assertTrue(editor.model.state.value.saving)
+
+        editor.model.save()
+        advanceUntilIdle()
+        assertTrue("still the first save", editor.model.state.value.saving)
+
+        gate.complete(Unit)
+        editor.model.state.first { !it.saving }
+        assertEquals("one settings write", 1, reads.reads)
+        assertEquals(1, graph.assets.all().size)
+        assertEquals(1, graph.attachments.all().size)
+        assertEquals(1, editor.saved.size)
+    }
+
+    /**
+     * C6 (B-1, R67-8): the staged list is held with the form while the copies run. A pick that lands
+     * then is ignored, as a second Save tap is — never staged only to be dropped when the copies end —
+     * and `saved` never finishes over a staged file.
+     */
+    @Test fun aPickDuringTheCopiesIsIgnored() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val editor = intake(storage = gatedStorage(gate))
+        editor.model.onName("Hot tub")
+        editor.model.stage(DocumentRole.USER_MANUAL, picked("manual.pdf"))
+        editor.model.save()
+        editor.model.state.first { it.editing }
+        advanceUntilIdle()
+        assertTrue("the copy waits at the gate", editor.model.state.value.saving)
+
+        editor.model.stage(DocumentRole.SERVICE_MANUAL, picked("late.pdf"))
+        assertEquals("held while saving", listOf("manual.pdf" to null), editor.model.stagedLines())
+
+        gate.complete(Unit)
+        editor.model.state.first { !it.saving }
+        val asset = graph.assets.all().single().id
+        assertEquals(listOf(asset), editor.saved)
+        assertEquals("saved only once nothing is staged", listOf(0), editor.stagedAtSaved)
+        assertEquals(listOf("manual.pdf"), graph.attachments.all().map { it.displayName })
+    }
+
+    /**
+     * C6 (B-1, R67-8): Remove is held too while the copies run, so a line is copied exactly as it is
+     * shown — never hidden and attached anyway, never brought back by an earlier line's failure. Once
+     * the copies end Remove works again, and what it removed is never attached.
+     */
+    @Test fun aRemoveDuringTheCopiesIsIgnored() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val editor = intake(storage = gatedStorage(gate))
+        editor.model.onName("Hot tub")
+        editor.model.stage(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, picked("receipt.pdf"))
+        editor.model.stage(DocumentRole.USER_MANUAL, picked("revoked.pdf", open = { throw SecurityException("grant gone") }))
+        editor.model.stage(DocumentRole.SERVICE_MANUAL, picked("service.pdf"))
+        editor.model.save()
+        editor.model.state.first { it.editing }
+        advanceUntilIdle()
+        assertTrue("the first copy waits at the gate", editor.model.state.value.saving)
+
+        editor.model.state.value.staged.forEach(editor.model::unstage)
+        assertEquals(
+            "held while saving",
+            listOf("receipt.pdf" to null, "revoked.pdf" to null, "service.pdf" to null),
+            editor.model.stagedLines(),
+        )
+
+        gate.complete(Unit)
+        editor.model.state.first { !it.saving }
+        assertEquals(
+            listOf("revoked.pdf" to "Could not add revoked.pdf", "service.pdf" to null),
+            editor.model.stagedLines(),
+        )
+        assertEquals(listOf("receipt.pdf"), graph.attachments.all().map { it.displayName })
+        assertTrue(editor.saved.isEmpty())
+
+        // Not saving any more: Remove is honoured, and nothing it removed comes back or attaches.
+        editor.model.state.value.staged.forEach(editor.model::unstage)
+        assertTrue(editor.model.state.value.staged.isEmpty())
+        editor.model.saveAndWait()
+        assertEquals(listOf("receipt.pdf"), graph.attachments.all().map { it.displayName })
+        assertEquals(1, editor.saved.size)
+    }
+
+    /**
+     * C6 (M-2): a copy that lands before one that fails is done — its line goes, and its file shows
+     * under its role while the editor stays open — so the retry copies only what is still staged: no
+     * duplicate row, no duplicate bytes.
+     */
+    @Test fun aSecondFileFailingKeepsTheFirstAndRetriesOnlyTheRest() = runTest {
+        val inner = InMemoryAttachmentStore()
+        var puts = 0
+        val counting = object : AttachmentStore by inner {
+            override suspend fun put(locator: String, source: ByteSource): StoredBytes =
+                inner.put(locator, source).also { puts += 1 }
+        }
+        val storage = object : AttachmentStorage {
+            override fun state(): StoreState = READY
+            override fun store(): AttachmentStore = counting
+        }
+        var grantGone = true
+        val editor = intake(storage = storage)
+        editor.model.onName("Hot tub")
+        editor.model.stage(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, picked("receipt.pdf"))
+        editor.model.stage(
+            DocumentRole.USER_MANUAL,
+            picked("manual.pdf", open = {
+                if (grantGone) throw SecurityException("grant gone") else ByteArrayInputStream("manual".toByteArray())
+            }),
+        )
+        editor.model.stage(DocumentRole.SERVICE_MANUAL, picked("service.pdf"))
+        editor.model.saveAndWait()
+
+        val asset = graph.assets.all().single().id
+        assertEquals(
+            "the copied line is gone, the failed one says why, the rest wait",
+            listOf("manual.pdf" to "Could not add manual.pdf", "service.pdf" to null),
+            editor.model.stagedLines(),
+        )
+        assertEquals(listOf("receipt.pdf"), graph.attachments.all().map { it.displayName })
+        assertEquals(1, puts)
+        assertEquals(
+            "the copied file is listed under its role while the editor stays open",
+            listOf(AttachedDocument(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, "receipt.pdf")),
+            editor.model.state.value.attached,
+        )
+        assertTrue(editor.saved.isEmpty())
+
+        grantGone = false
+        editor.model.saveAndWait()
+        assertEquals(
+            "each file once: no duplicate row",
+            listOf("manual.pdf", "receipt.pdf", "service.pdf"),
+            graph.attachments.all().map { it.displayName }.sorted(),
+        )
+        assertEquals("no duplicate bytes", 3, puts)
+        assertEquals(3, inner.files.size)
+        assertEquals(listOf(asset), editor.saved)
+        assertTrue(editor.model.state.value.staged.isEmpty())
+    }
+
+    /**
+     * C6 (R-1): a picked file whose name and size are still being asked of the provider holds Save,
+     * so a tap in that moment cannot leave the file behind; once the answer lands and is staged, Save
+     * copies it.
+     */
+    @Test fun aPickStillBeingLookedUpHoldsSaveUntilItLands() = runTest {
+        val editor = intake()
+        editor.model.onName("Hot tub")
+        val answer = CompletableDeferred<Unit>()
+        editor.model.stagePicked(DocumentRole.USER_MANUAL) {
+            answer.await()
+            picked("manual.pdf")
+        }
+        advanceUntilIdle()
+        assertFalse("Save is held while the pick is looked up", editor.model.state.value.canSave)
+
+        editor.model.save()
+        advanceUntilIdle()
+        assertTrue("nothing written while the pick is looked up", graph.assets.all().isEmpty())
+        assertTrue(editor.saved.isEmpty())
+
+        answer.complete(Unit)
+        editor.model.state.first { it.canSave }
+        assertEquals(listOf("manual.pdf" to null), editor.model.stagedLines())
+
+        editor.model.saveAndWait()
+        val asset = graph.assets.all().single().id
+        assertEquals(listOf(asset), editor.saved)
+        assertEquals(listOf("manual.pdf"), graph.attachments.all().map { it.displayName })
+        assertTrue(editor.model.state.value.staged.isEmpty())
+    }
+
+    /**
+     * C6 (M1): a new MANUAL asset whose copy failed is saved again after an edit. The stored mode was
+     * refreshed from the written row, so MANUAL → MANUAL sends no phase and the save lands.
+     */
+    @Test fun aManualNewAssetWithAFailingCopyRetriesToCompletion() = runTest {
+        val storage = FakeAttachmentStorage(state = LOST)
+        val editor = intake(storage = storage)
+        editor.model.onName("Generator")
+        editor.model.onSeasonMode(SeasonMode.MANUAL)
+        editor.model.onManualPhase(SeasonPhase.IN_SEASON)
+        editor.model.stage(DocumentRole.SERVICE_MANUAL, picked("service.pdf"))
+        editor.model.saveAndWait()
+
+        val written = graph.assets.all().single()
+        assertEquals(SeasonMode.MANUAL, written.seasonMode)
+        assertEquals(SeasonMode.MANUAL, editor.model.state.value.storedSeasonMode)
+        assertFalse("S35 is not asked of an asset already MANUAL", editor.model.state.value.asksManualPhase)
+        assertTrue(editor.saved.isEmpty())
+
+        editor.model.onName("Generator 2")
+        storage.state = READY
+        editor.model.saveAndWait()
+        assertEquals(listOf(written.id), editor.saved)
+        assertEquals("Generator 2", graph.assets.get(written.id)!!.name)
+        assertEquals(1, graph.assets.all().size)
+        assertEquals(listOf("service.pdf"), graph.attachments.all().map { it.displayName })
+    }
+
+    /**
+     * C6 step 3 and #78: the question decided at the write waits while a file is staged, is asked
+     * once, and its answer never finishes the editor over a file still staged.
+     */
+    @Test fun theReconcileQuestionIsAskedOnceAndOnlyWhenNothingIsStaged() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.schedules.upsert(weekly("s1", "gen", ServicePolicy.CONTINUOUS))
+        val storage = FakeAttachmentStorage(state = LOST)
+        val editor = intake(AssetId("gen"), storage = storage)
+        editor.model.stage(DocumentRole.USER_MANUAL, picked("manual.pdf"))
+        editor.model.saveAs(SeasonMode.MANUAL)
+
+        // Written, the copy failed: the question is held, not asked.
+        assertEquals(SeasonMode.MANUAL, graph.assets.get(AssetId("gen"))!!.seasonMode)
+        assertEquals(null, editor.model.prompt.value)
+        assertTrue(editor.saved.isEmpty())
+
+        // Copied, nothing staged: now it is asked.
+        storage.state = READY
+        editor.model.saveAndWait()
+        assertEquals(EditPrompt.ReconcileSchedules(1), editor.model.prompt.value)
+        assertTrue(editor.saved.isEmpty())
+
+        // A file staged under the question: the answer takes the question down and does not finish over it.
+        editor.model.stage(DocumentRole.SERVICE_MANUAL, picked("service.pdf"))
+        editor.model.keepSchedules()
+        assertEquals(null, editor.model.prompt.value)
+        assertTrue(editor.saved.isEmpty())
+
+        // The next Save copies it and finishes, without asking again.
+        editor.model.saveAndWait()
+        assertEquals(null, editor.model.prompt.value)
+        assertEquals(listOf(AssetId("gen")), editor.saved)
+        assertEquals(2, graph.attachments.count())
+    }
+
+    /** C6 step 3 and #78: "Review maintenance schedules" never finishes onto the schedules over a staged file either. */
+    @Test fun reviewingTheSchedulesNeverFinishesOverAStagedFile() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.schedules.upsert(weekly("s1", "gen", ServicePolicy.CONTINUOUS))
+        val editor = intake(AssetId("gen"))
+        val reviews = mutableListOf<AssetId>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            editor.model.review.collect { reviews += it }
+        }
+        editor.model.saveAs(SeasonMode.MANUAL)
+        assertEquals(EditPrompt.ReconcileSchedules(1), editor.model.prompt.value)
+
+        // A file staged under the question: the answer takes the question down and does not finish over it.
+        editor.model.stage(DocumentRole.USER_MANUAL, picked("manual.pdf"))
+        editor.model.reviewSchedules()
+        assertEquals(null, editor.model.prompt.value)
+        assertTrue("never onto the schedules over a staged file", reviews.isEmpty())
+        assertTrue(editor.saved.isEmpty())
+
+        // The next Save copies it and finishes.
+        editor.model.saveAndWait()
+        assertEquals(listOf(AssetId("gen")), editor.saved)
+        assertTrue(reviews.isEmpty())
+        assertEquals(1, graph.attachments.count())
+    }
+
+    /**
+     * #78 over C6: each write re-decides the held question. A retry that takes the asset back to
+     * year-round has nothing left to ask about; a retry that keeps it in a season still asks, once.
+     */
+    @Test fun anEditedRetryReDecidesTheHeldQuestion() = runTest {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.schedules.upsert(weekly("s1", "gen", ServicePolicy.CONTINUOUS))
+        val storage = FakeAttachmentStorage(state = LOST)
+        val back = intake(AssetId("gen"), storage = storage)
+        back.model.stage(DocumentRole.USER_MANUAL, picked("manual.pdf"))
+        back.model.saveAs(SeasonMode.CALENDAR)
+        assertEquals(SeasonMode.CALENDAR, graph.assets.get(AssetId("gen"))!!.seasonMode)
+        assertEquals("held while staged", null, back.model.prompt.value)
+
+        back.model.onSeasonMode(SeasonMode.YEAR_ROUND)
+        storage.state = READY
+        back.model.saveAndWait()
+        assertEquals(SeasonMode.YEAR_ROUND, graph.assets.get(AssetId("gen"))!!.seasonMode)
+        assertEquals("nothing to ask of a year-round asset", null, back.model.prompt.value)
+        assertEquals(listOf(AssetId("gen")), back.saved)
+
+        graph.assets.upsert(assetRow("pump", name = "Pump"))
+        graph.schedules.upsert(weekly("s2", "pump", ServicePolicy.CONTINUOUS))
+        storage.state = LOST
+        val kept = intake(AssetId("pump"), storage = storage)
+        kept.model.stage(DocumentRole.USER_MANUAL, picked("pump manual.pdf"))
+        kept.model.saveAs(SeasonMode.CALENDAR)
+        assertEquals("held while staged", null, kept.model.prompt.value)
+
+        kept.model.onName("Pool pump")
+        storage.state = READY
+        kept.model.saveAndWait()
+        assertEquals("Pool pump", graph.assets.get(AssetId("pump"))!!.name)
+        assertEquals("still in a season: still asked", EditPrompt.ReconcileSchedules(1), kept.model.prompt.value)
+        assertTrue(kept.saved.isEmpty())
+    }
+
+    /** C6: a retry whose form has not changed since the write never runs the settings write again. */
+    @Test fun anUnchangedRetryNeverCallsSaveAssetSettings() = runTest {
+        val reads = CountingAssets(graph.assets)
+        val storage = FakeAttachmentStorage(state = LOST)
+        val editor = intake(storage = storage, saveSettings = saveSettingsOver(reads))
+        editor.model.onName("Hot tub")
+        editor.model.stage(DocumentRole.USER_MANUAL, picked("manual.pdf"))
+        editor.model.saveAndWait()
+        assertEquals(1, reads.reads)
+
+        storage.state = READY
+        editor.model.saveAndWait()
+        assertEquals("no second settings write", 1, reads.reads)
+        assertEquals(1, editor.saved.size)
+        assertEquals(1, graph.attachments.count())
+
+        // A seasonal asset: the write brings its mode back into the form as the stored mode. That is
+        // not an edit — the stored mode is not the person's to type — so the retry still writes nothing.
+        val seasonalReads = CountingAssets(graph.assets)
+        val seasonal = intake(storage = storage, saveSettings = saveSettingsOver(seasonalReads))
+        storage.state = LOST
+        seasonal.model.onName("Pool")
+        seasonal.model.onSeasonMode(SeasonMode.CALENDAR)
+        seasonal.model.onSeasonStart("05-01")
+        seasonal.model.onSeasonEnd("09-30")
+        seasonal.model.stage(DocumentRole.USER_MANUAL, picked("pool manual.pdf"))
+        seasonal.model.saveAndWait()
+        assertEquals(1, seasonalReads.reads)
+        assertEquals(SeasonMode.CALENDAR, seasonal.model.state.value.storedSeasonMode)
+
+        storage.state = READY
+        seasonal.model.saveAndWait()
+        assertEquals("no second settings write on a seasonal asset either", 1, seasonalReads.reads)
+        assertEquals(1, seasonal.saved.size)
+        assertEquals(2, graph.attachments.count())
+    }
+
+    /** C6: a lost folder says so on the staged line, in the section's own words, and the affordances go. */
+    @Test fun aLostFolderSentencesTheLine() = runTest {
+        val storage = FakeAttachmentStorage()
+        val editor = intake(storage = storage)
+        editor.model.onName("Hot tub")
+        editor.model.stage(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, picked("receipt.pdf"))
+        storage.state = LOST
+        editor.model.saveAndWait()
+
+        assertEquals(listOf("receipt.pdf" to "The attachment folder is not available"), editor.model.stagedLines())
+        assertFalse("the refusal is news about the folder", editor.model.state.value.offersDocuments)
+        assertEquals(0, graph.attachments.count())
+    }
+
+    /**
+     * C6: a copy that throws — a revoked grant at `open`, or a `put` that fails — names the file; the
+     * first failure stops the rest; Remove, then Save, finishes.
+     */
+    @Test fun aThrowingCopySentencesTheLine() = runTest {
+        val editor = intake()
+        editor.model.onName("Hot tub")
+        editor.model.stage(DocumentRole.USER_MANUAL, picked("revoked.pdf", open = { throw SecurityException("grant gone") }))
+        editor.model.stage(DocumentRole.SERVICE_MANUAL, picked("service.pdf"))
+        editor.model.saveAndWait()
+
+        assertEquals(
+            listOf("revoked.pdf" to "Could not add revoked.pdf", "service.pdf" to null),
+            editor.model.stagedLines(),
+        )
+        assertEquals("stopped at the first failure", 0, graph.attachments.count())
+        assertTrue(editor.saved.isEmpty())
+
+        editor.model.unstage(editor.model.state.value.staged.first())
+        editor.model.saveAndWait()
+        assertEquals(listOf("service.pdf"), graph.attachments.all().map { it.displayName })
+        assertEquals(1, editor.saved.size)
+
+        val broken = object : AttachmentStorage {
+            private val store = object : AttachmentStore by InMemoryAttachmentStore() {
+                override suspend fun put(locator: String, source: ByteSource): StoredBytes =
+                    throw StoreIoException("rigged put failure")
+            }
+            override fun state(): StoreState = READY
+            override fun store(): AttachmentStore = store
+        }
+        val second = intake(storage = broken)
+        second.model.onName("Pool pump")
+        second.model.stage(DocumentRole.USER_MANUAL, picked("manual.pdf"))
+        second.model.saveAndWait()
+        assertEquals(listOf("manual.pdf" to "Could not add manual.pdf"), second.model.stagedLines())
+    }
+
+    /** R67-13: with no folder the three affordances are hidden; the re-read on return from Settings brings them back. */
+    @Test fun withoutAFolderTheStateHidesTheAffordances() = runTest {
+        val storage = FakeAttachmentStorage(state = StoreState.NotConfigured)
+        val editor = intake(storage = storage)
+        assertFalse(editor.model.state.value.offersDocuments)
+
+        storage.state = LOST
+        editor.model.refreshStore()
+        advanceUntilIdle()
+        assertFalse(editor.model.state.value.offersDocuments)
+
+        storage.state = READY
+        editor.model.refreshStore()
+        advanceUntilIdle()
+        assertTrue(editor.model.state.value.offersDocuments)
+    }
+
+    /** R67-6: the asset's role-tagged files are listed read-only, newest first; a file without a role is not a key document. */
+    @Test fun theEditorListsTheAssetsKeyDocumentsByRole() = runTest {
+        graph.assets.upsert(assetRow("tub", name = "Hot tub"))
+        listOf(
+            Triple("old manual.pdf", DocumentRole.USER_MANUAL, "2024-01-01"),
+            Triple("manual.pdf", DocumentRole.USER_MANUAL, "2025-06-01"),
+            Triple("receipt.pdf", DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, null),
+            Triple("photo.jpg", null, "2025-01-01"),
+        ).forEach { (name, role, on) ->
+            graph.addAttachment.run(
+                AttachmentOwner.OfAsset(AssetId("tub")),
+                AddAttachmentCommand(displayName = name, mimeType = "application/pdf", capturedOn = on, role = role),
+                ByteSource { ByteArrayInputStream(name.toByteArray()) },
+            )
+        }
+
+        val editor = intake(AssetId("tub"))
+        assertEquals(
+            listOf(
+                AttachedDocument(DocumentRole.USER_MANUAL, "manual.pdf"),
+                AttachedDocument(DocumentRole.USER_MANUAL, "old manual.pdf"),
+                AttachedDocument(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, "receipt.pdf"),
+            ),
+            editor.model.state.value.attached,
+        )
+    }
+
     private companion object {
+        val READY = StoreState.Ready("Attachments", "com.example.provider")
+        val LOST = StoreState.AccessLost("Attachments")
+
         /** #71's `T`. */
         val T71: LocalDate = LocalDate.parse("2026-04-15")
 

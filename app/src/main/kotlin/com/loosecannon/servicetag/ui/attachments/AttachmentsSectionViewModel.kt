@@ -9,6 +9,8 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
+import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.accepts
 import com.loosecannon.servicetag.core.model.isImage
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
@@ -49,6 +51,44 @@ private const val SUBSCRIPTION_GRACE_MS = 5_000L
 /** "Adding 3 of 8…" — the line the section shows while a multi-select lands (spec §8.1). */
 internal fun addingProgressLine(index: Int, total: Int): String = "Adding $index of $total…"
 
+/**
+ * #67 (P67-2/3/4, P67-6, ratified verbatim): the one home of the role labels, beside
+ * [AttachmentKind.label]'s in this package. The receiver is nullable because "no role" is one of
+ * the choices the pickers offer, and its words live here too.
+ */
+internal fun DocumentRole?.label(): String = when (this) {
+    DocumentRole.PURCHASE_INVOICE_OR_RECEIPT -> "Purchase invoice or receipt"
+    DocumentRole.USER_MANUAL -> "User manual"
+    DocumentRole.SERVICE_MANUAL -> "Service manual"
+    null -> "No role"
+}
+
+/** #67 (P67-5, ratified verbatim): the header over the role chips, in the edit sheet and the share intake. */
+internal const val ROLE_HEADER = "Role"
+
+/** #67: the role chips, in the order the edit sheet and the share intake draw them — no role first. */
+internal val ROLE_CHOICES: List<DocumentRole?> = listOf<DocumentRole?>(null) + DocumentRole.entries
+
+/**
+ * #67 (R67-3): newest first within a role — `capturedOn` descending with the undated last, then
+ * `createdAt` descending. The one order, for the Key documents block and the Details fact alike.
+ */
+internal fun <T> newestFirst(capturedOn: (T) -> String?, createdAt: (T) -> Long): Comparator<T> =
+    compareBy(nullsLast(reverseOrder<String>()), capturedOn).thenByDescending { createdAt(it) }
+
+/**
+ * #67, C8: the role-tagged rows, one group per role in the order the roles are declared — receipt,
+ * user manual, service manual — each newest first; a role no row carries has no group. The rows are
+ * DOCUMENTS' own, never copies, so the block can hold nothing DOCUMENTS does not.
+ */
+internal fun keyDocumentsOf(rows: List<AttachmentRowState>): List<KeyDocumentGroup> =
+    DocumentRole.entries.mapNotNull { role ->
+        rows.filter { it.role == role }
+            .sortedWith(newestFirst({ it.capturedOn }, { it.createdAt }))
+            .takeIf { it.isNotEmpty() }
+            ?.let { KeyDocumentGroup(role, it) }
+    }
+
 /** One picked or captured file, as the section hands it to the use case. */
 data class PickedFile(
     val displayName: String,
@@ -71,14 +111,24 @@ data class AttachmentRowState(
     val isImage: Boolean,
     val present: Boolean,
     val thumbnail: File? = null,
+    /** #67: the row's document role, which the sheet hands back unchanged unless the person edits it. */
+    val role: DocumentRole? = null,
+    /** #67: when the row was written; the tie-break inside a role after `capturedOn` (R67-3). */
+    val createdAt: Long = 0L,
 )
+
+/** #67, C8: one role's documents, newest first, as the Key documents block draws them. */
+data class KeyDocumentGroup(val role: DocumentRole, val rows: List<AttachmentRowState>)
 
 data class AttachmentsSectionState(
     val store: StoreState = StoreState.NotConfigured,
     val rows: List<AttachmentRowState> = emptyList(),
     /** "Adding 3 of 8…" while a multi-select runs; null otherwise (spec §8.1). */
     val progress: String? = null,
-)
+) {
+    /** #67, C8: the role-tagged rows grouped by role; empty when no row carries a role. */
+    val keyDocuments: List<KeyDocumentGroup> get() = keyDocumentsOf(rows)
+}
 
 /**
  * The one ViewModel behind DOCUMENTS, keyed by its [owner], so asset detail and event detail draw
@@ -111,6 +161,12 @@ class AttachmentsSectionViewModel(
         graph.updateAttachment, graph.deleteAttachment, graph.thumbnails,
         viewUris = graph.attachmentStorage::viewUri,
     )
+
+    /**
+     * #67, C7: whether the edit sheet offers the Role chips — an asset's files only, decided by
+     * R67-11's one statement of the rule rather than restated here.
+     */
+    val rolesOffered: Boolean = DocumentRole.entries.all(owner::accepts)
 
     /** Already ordered by display name, collated case-insensitively, by the query itself. */
     private val rows: Flow<List<Attachment>> = attachments.observeForOwner(owner)
@@ -301,7 +357,7 @@ class AttachmentsSectionViewModel(
         } catch (e: Throwable) {
             // A broken provider or a folder that went away mid-copy. Name the file the person
             // picked — they chose eight, and "something failed" would not tell them which.
-            _messages.tryEmit("Could not add ${file.displayName}")
+            AttachmentFailure.CopyFailed(file.displayName).sentence()?.let { _messages.tryEmit(it) }
             return
         }
         if (outcome is AttachmentResult.Refused) say(outcome.problem)
@@ -357,21 +413,41 @@ class AttachmentsSectionViewModel(
         // than not, and dimming every row for the first frame of every visit would be a lie.
         present = present[attachment.id.value] ?: true,
         thumbnail = thumbnails[attachment.id.value],
+        role = attachment.role,
+        createdAt = attachment.createdAt,
     )
 
     /** One line per refusal. `Unchanged` is silent: the sheet simply closes (spec §8.1). */
     private fun say(problem: AttachmentProblem) {
-        val line = when (problem) {
-            AttachmentProblem.BlankName -> "Give the file a name"
-            AttachmentProblem.NoStore -> "Choose an attachment folder in Settings first"
-            AttachmentProblem.StoreUnavailable -> "The attachment folder is not available"
-            is AttachmentProblem.TooLarge -> "That file is larger than 256 MB"
-            // `UpdateAttachment` reports a vanished *attachment* row as `OwnerMissing` too, so the
-            // wording is about the file: the person never named an owner.
-            AttachmentProblem.OwnerMissing -> "That file is no longer here"
-            AttachmentProblem.Unchanged -> return
-        }
-        _messages.tryEmit(line)
+        AttachmentFailure.Refused(problem).sentence()?.let { _messages.tryEmit(it) }
+    }
+}
+
+/**
+ * #67: how an add or an update did not land, as [sentence] words it. The section's snackbar and the
+ * asset editor's staged lines both say these through the one mapping, so no sentence is spelled twice.
+ */
+internal sealed interface AttachmentFailure {
+    /** A use case refused, with its reason. */
+    data class Refused(val problem: AttachmentProblem) : AttachmentFailure
+
+    /** The copy itself threw: a broken provider, a folder gone mid-copy, a grant that no longer holds. */
+    data class CopyFailed(val displayName: String) : AttachmentFailure
+}
+
+/** The one line a failure is said with; null is silence (`Unchanged`: the sheet simply closes, spec §8.1). */
+internal fun AttachmentFailure.sentence(): String? = when (this) {
+    // Name the file the person picked: of several, "something failed" would not tell them which.
+    is AttachmentFailure.CopyFailed -> "Could not add $displayName"
+    is AttachmentFailure.Refused -> when (problem) {
+        AttachmentProblem.BlankName -> "Give the file a name"
+        AttachmentProblem.NoStore -> "Choose an attachment folder in Settings first"
+        AttachmentProblem.StoreUnavailable -> "The attachment folder is not available"
+        is AttachmentProblem.TooLarge -> "That file is larger than 256 MB"
+        // `UpdateAttachment` reports a vanished *attachment* row as `OwnerMissing` too, so the
+        // wording is about the file: the person never named an owner.
+        AttachmentProblem.OwnerMissing -> "That file is no longer here"
+        AttachmentProblem.Unchanged -> null
     }
 }
 

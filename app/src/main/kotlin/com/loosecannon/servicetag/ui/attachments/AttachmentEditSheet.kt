@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -16,6 +18,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,14 +34,16 @@ import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /**
- * Rename, re-kind, captured-on, notes, and Delete, in a [ModalBottomSheet] (spec §8.1). Delete is
- * a plain confirmation, not a typed one (spec §11.7): it removes one file from the owner's own
- * folder, which is not the weight of deleting an asset.
+ * Rename, re-kind, re-role (#67, an asset's files only), captured-on, notes, and Delete, in a
+ * [ModalBottomSheet] (spec §8.1). Delete is a plain confirmation, not a typed one (spec §11.7): it
+ * removes one file from the owner's own folder, which is not the weight of deleting an asset.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AttachmentEditSheet(
     row: AttachmentRowState,
+    /** #67, C7: the Role chips are drawn only when true — an asset's file, never an event's. */
+    rolesOffered: Boolean,
     onSave: (UpdateAttachmentCommand) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
@@ -47,14 +52,23 @@ fun AttachmentEditSheet(
     // reset the fields the person is still editing.
     var name by remember(row.id) { mutableStateOf(row.displayName) }
     var kind by remember(row.id) { mutableStateOf(row.kind) }
+    var role by remember(row.id) { mutableStateOf(row.role) }
     var capturedOn by remember(row.id) { mutableStateOf(row.capturedOn.orEmpty()) }
     var notes by remember(row.id) { mutableStateOf(row.notes) }
     var confirming by remember(row.id) { mutableStateOf(false) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    // Fully expanded and scrolling, as `ChangeConditionSheet` does: with the Role section, a narrow
+    // phone at a large text size has more sheet than window, and Save must still be reachable.
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp),
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
         ) {
             OutlinedTextField(
                 value = name,
@@ -74,6 +88,23 @@ fun AttachmentEditSheet(
                         onClick = { kind = option },
                         label = { Text(option.label()) },
                     )
+                }
+            }
+            // #67, C7: under Kind, and only for an asset's file (R67-11). Independent of the kind
+            // (R67-7): a receipt can be a photo, and a manual can be filed as a document.
+            if (rolesOffered) {
+                SectionHeader(title = ROLE_HEADER)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    ROLE_CHOICES.forEach { option ->
+                        FilterChip(
+                            selected = role == option,
+                            onClick = { role = option },
+                            label = { Text(option.label()) },
+                        )
+                    }
                 }
             }
             DateField(
@@ -105,6 +136,9 @@ fun AttachmentEditSheet(
                                 kind = kind,
                                 capturedOn = capturedOn.ifBlank { null },
                                 notes = notes,
+                                // #67, C2/C7: the chosen role, seeded from the row's own, so a
+                                // rename with the chips untouched never clears it.
+                                role = role,
                             ),
                         )
                     },

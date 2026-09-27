@@ -55,7 +55,8 @@ class CategoryRoundTripTest {
 
         assertEquals(listOf("appliance" to "Appliance", "spare" to "Spare"), target.categories.all().map { it.key to it.display })
         val picker = AssetEditViewModel(
-            target.assets, target.healthSubjects, target.saveAssetSettings, target.schedules, target.categories, null,
+            target.assets, target.healthSubjects, target.saveAssetSettings, target.schedules, target.categories,
+            target.attachments, target.attachmentStorage, target.addAttachment, target.todayPort, null,
         )
         backgroundScope.launch { picker.categoryChoices.collect() }
         advanceUntilIdle()

@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.DerivedFormula
 import com.loosecannon.servicetag.core.model.DerivedSpec
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
@@ -33,7 +34,14 @@ import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.ValueType
+import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.StoredBytes
+import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
+import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
+import com.loosecannon.servicetag.core.usecase.AttachmentResult
+import com.loosecannon.servicetag.core.usecase.UpdateAttachment
+import com.loosecannon.servicetag.core.usecase.UpdateAttachmentCommand
+import kotlinx.coroutines.runBlocking
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -210,9 +218,10 @@ class MergePlannerTest {
         profiles: List<EventProfile> = emptyList(),
         events: List<AssetEvent> = emptyList(),
         attachments: List<Attachment> = emptyList(),
+        formatVersion: Int = 5,
     ) = Backup(
         manifest = BackupManifest(
-            formatVersion = 5, appVersion = "1.1.0", schemaVersion = 5, createdAt = 1L,
+            formatVersion = formatVersion, appVersion = "1.1.0", schemaVersion = 5, createdAt = 1L,
             counts = emptyMap(), dataSha256 = "a".repeat(64), backupSetId = "set-incoming",
         ),
         data = BackupData(
@@ -1226,6 +1235,124 @@ class MergePlannerTest {
             ),
             plan.decision(MergeTable.ATTACHMENTS, "att1"),
         )
+    }
+
+    // --- #67: the document role, under R67-12 (option B) ---------------------------------------
+
+    private val tub = asset("a1", "Hot tub")
+
+    /** The one attachment these cases compare, with [role] and nothing else varied. */
+    private fun manual(role: DocumentRole?, name: String = "Manual.pdf") =
+        attachment("att1", "a1").copy(role = role, displayName = name)
+
+    /** An archive of [row] at [formatVersion] against a phone holding [local] and its bytes. */
+    private fun roleDecision(row: Attachment, formatVersion: Int, local: Attachment): MergeDecision =
+        mergePlanOf(
+            backupOf(assets = listOf(tub), attachments = listOf(row), formatVersion = formatVersion),
+            snapshotOf(
+                assets = listOf(tub), attachments = listOf(local),
+                storedBytes = mapOf("assets/a1/att1.pdf" to storedFour),
+            ),
+        ).decision(MergeTable.ATTACHMENTS, "att1")
+
+    private fun identical() = MergeDecision(MergeTable.ATTACHMENTS, "att1", MergeVerdict.IDENTICAL)
+
+    private fun differs() = MergeDecision(
+        MergeTable.ATTACHMENTS, "att1", MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, "att1",
+    )
+
+    /**
+     * [row] given [role] the way the app gives an existing document one: the sheet's save, through
+     * the real `UpdateAttachment`, at [at] — so the last-modified stamp moves with the role, as it does
+     * on the phone. [rename] makes the same save a rename too.
+     */
+    private fun taggedInTheApp(row: Attachment, role: DocumentRole, at: Long = 50L, rename: String? = null): Attachment =
+        runBlocking {
+            val here = InMemoryAttachmentRepository().also { it.upsert(row) }
+            val saved = UpdateAttachment(here, FakeUnitOfWork(here), Clock { at }).run(
+                row.id,
+                UpdateAttachmentCommand(rename ?: row.displayName, row.kind, row.capturedOn, row.notes, role),
+            )
+            (saved as AttachmentResult.Ok).value
+        }
+
+    /**
+     * R67-12 B: an archive older than format 10 cannot speak about roles, so a row given its role
+     * here since that export is compared **without the role and without the stamp giving it moved** —
+     * it stays IDENTICAL, and every pre-#67 export keeps re-planning IDENTICAL.
+     */
+    @Test
+    fun `a format-9 archive against a row tagged through UpdateAttachment is IDENTICAL`() {
+        val tagged = taggedInTheApp(manual(null), DocumentRole.USER_MANUAL)
+        assertEquals(50L, tagged.updatedAt)   // the sheet's save moved the stamp
+        for (format in listOf(9, 8, 5)) {
+            val plan = mergePlanOf(
+                backupOf(assets = listOf(tub), attachments = listOf(manual(null)), formatVersion = format),
+                snapshotOf(
+                    assets = listOf(tub), attachments = listOf(tagged),
+                    storedBytes = mapOf("assets/a1/att1.pdf" to storedFour),
+                ),
+            )
+            assertTrue(plan.applicable, "format $format")
+            assertEquals(identical(), plan.decision(MergeTable.ATTACHMENTS, "att1"), "format $format")
+            assertEquals(emptyList(), plan.writes.attachments)
+        }
+    }
+
+    /** Only the role and its stamp are set aside: a rename on the phone is still a rename. */
+    @Test
+    fun `a format-9 archive against a row tagged and renamed here is a CONFLICT`() {
+        val renamed = taggedInTheApp(manual(null), DocumentRole.USER_MANUAL, rename = "Guide.pdf")
+        assertEquals(differs(), roleDecision(manual(null), 9, renamed))
+        // and a rename on the archive's side, against a row only tagged here, is one too
+        assertEquals(differs(), roleDecision(manual(null, "Guide.pdf"), 9, taggedInTheApp(manual(null), DocumentRole.USER_MANUAL)))
+    }
+
+    /** Unchanged rule, pinned: with no role here, the stamp counts — it is not set aside wholesale. */
+    @Test
+    fun `a format-9 archive against a row with no role and a moved stamp is a CONFLICT`() {
+        assertEquals(differs(), roleDecision(manual(null), 9, manual(null).copy(updatedAt = 50L)))
+    }
+
+    /** Unchanged rule, pinned: a format-10 archive compares plainly, so the stamp counts there too. */
+    @Test
+    fun `a format-10 archive with the same role and the old stamp is a CONFLICT`() {
+        val tagged = taggedInTheApp(manual(null), DocumentRole.USER_MANUAL)
+        assertEquals(differs(), roleDecision(manual(DocumentRole.USER_MANUAL), 10, tagged))
+        assertEquals(identical(), roleDecision(tagged, 10, tagged))
+    }
+
+    /** R67-12 B, format 10: the role compares like any field, and the same role matches. */
+    @Test
+    fun `a format-10 archive with the same role is IDENTICAL`() {
+        assertEquals(identical(), roleDecision(manual(DocumentRole.USER_MANUAL), 10, manual(DocumentRole.USER_MANUAL)))
+        assertEquals(identical(), roleDecision(manual(null), 10, manual(null)))
+    }
+
+    /** R67-12 B, format 10: two roles disagree like two names do — a conflict, and nothing is written. */
+    @Test
+    fun `a format-10 archive with a different role is a CONFLICT`() {
+        assertEquals(
+            differs(),
+            roleDecision(manual(DocumentRole.SERVICE_MANUAL), 10, manual(DocumentRole.USER_MANUAL)),
+        )
+        // and a role on the incoming side against none here is a difference too: a merge never updates
+        assertEquals(differs(), roleDecision(manual(DocumentRole.USER_MANUAL), 10, manual(null)))
+    }
+
+    /** R67-12 B, format 10: an archive that says "no role" against a role here disagrees with it. */
+    @Test
+    fun `a format-10 archive with no role against a local role is a CONFLICT`() {
+        val plan = mergePlanOf(
+            backupOf(assets = listOf(tub), attachments = listOf(manual(null)), formatVersion = 10),
+            snapshotOf(
+                assets = listOf(tub), attachments = listOf(manual(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT)),
+                storedBytes = mapOf("assets/a1/att1.pdf" to storedFour),
+            ),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(differs(), plan.decision(MergeTable.ATTACHMENTS, "att1"))
     }
 
     // --- hints, and the shape of the report -------------------------------------------------

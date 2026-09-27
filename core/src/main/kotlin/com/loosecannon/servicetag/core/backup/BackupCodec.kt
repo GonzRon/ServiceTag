@@ -24,7 +24,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
 /**
- * Backup format v9: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
+ * Backup format v10: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
  * backup set pairs it with an artifacts archive, and `backupSetId` is what ties the two together.
  *
  * ```
@@ -66,6 +66,14 @@ import kotlinx.serialization.json.JsonObject
  * A row whose key is a **built-in's** is not refused (a built-in added by a later release must never
  * make an older archive unrestorable); the replace and the merge planner drop it.
  *
+ * **Format 10 (#67, C4) adds one attachment field and no upgrade.** `role` is a `DocumentRole` name or
+ * null, written as `"role": null` when unset, and defaults to null, so a format ≤9 archive — which
+ * never had the key — decodes through the same strict decode with no roles; `LAST_LEGACY_FORMAT`
+ * stays 7 for the reason above. No shipped writer put a role into a format ≤9 archive, so a
+ * **non-null** one there is a hand-built file and is refused; an explicit `"role": null` is what this
+ * build's own DTO reads anyway and is accepted, as an empty category list is. The merge planner
+ * compares a format ≤9 archive's attachments without the role (R67-12).
+ *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
@@ -73,12 +81,18 @@ import kotlinx.serialization.json.JsonObject
  * at read time (inv. 111).
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 9
+    const val FORMAT_VERSION = 10
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
     /** The first format that can carry the owner's categories (#74). */
     private const val FIRST_CATEGORY_FORMAT = 9
+
+    /**
+     * The first format that can carry a document role (#67). Internal, not private: the merge
+     * planner reads it too, because an older archive's attachments are compared without the role.
+     */
+    internal const val FIRST_ROLE_FORMAT = 10
 
     /** Lowercase hex, 64 chars — the shape every attachment row promises for its bytes. */
     private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
@@ -239,6 +253,17 @@ object BackupCodec {
             )
         }
 
+        // #67, the same rule for the role: the key did not exist before format 10, so a non-null one
+        // in an older archive was put there by hand. An explicit null is accepted.
+        if (manifest.formatVersion < FIRST_ROLE_FORMAT) {
+            data.attachments.firstOrNull { it.role != null }?.let { tagged ->
+                throw BackupCorrupt(
+                    "attachments: a format ${manifest.formatVersion} archive cannot carry a document role " +
+                        "(attachment ${tagged.id})",
+                )
+            }
+        }
+
         // Every row must be nameable in the domain, otherwise the caller would only find out
         // halfway through a destructive import. Result discarded; this is a validation pass.
         data.assets.forEach { it.toDomain() }
@@ -271,7 +296,7 @@ object BackupCodec {
     }
 
     /**
-     * The version dispatch: formats 8 and 9 decode strictly as they stand; formats 1–7 are rewritten as a
+     * The version dispatch: formats 8, 9 and 10 decode strictly as they stand; formats 1–7 are rewritten as a
      * tree by [LegacyArchive] first and then go through the very same strict decode.
      * `SerializationException` is an `IllegalArgumentException`, and so is the malformed-number
      * failure a tree decode can raise, so one catch covers both.
@@ -642,6 +667,8 @@ object BackupCodec {
         val locators = mutableSetOf<Pair<String, String>>()
         data.attachments.forEach { attachment ->
             // Already proven nameable in the enum-check pass above; this is how we get the owner.
+            // `toDomain` is also where a role is checked (#67): one of the three names, and only on
+            // an asset's file — so a row breaking either never reaches the checks below.
             val domain = attachment.toDomain()
             when (val owner = domain.owner) {
                 is AttachmentOwner.OfAsset -> if (owner.assetId.value !in assetIds) throw BackupCorrupt(

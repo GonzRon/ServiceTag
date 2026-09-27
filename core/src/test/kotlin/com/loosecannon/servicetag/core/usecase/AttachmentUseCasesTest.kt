@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventSource
@@ -33,6 +34,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AttachmentUseCasesTest {
@@ -255,6 +257,7 @@ class AttachmentUseCasesTest {
                     kind = AttachmentKind.MANUAL,
                     capturedOn = "2026-09-14",
                     notes = " keep ",
+                    role = row.role,
                 ),
             ) as AttachmentResult.Ok
             ).value
@@ -274,7 +277,7 @@ class AttachmentUseCasesTest {
     @Test fun updateRefusesBlankUnchangedAndUnknown() = runTest {
         val owner = AttachmentOwner.OfAsset(asset())
         val row = (add.run(owner, cmd(), source()) as AttachmentResult.Ok).value
-        val same = UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes)
+        val same = UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes, row.role)
 
         assertEquals(
             AttachmentResult.Refused(AttachmentProblem.Unchanged),
@@ -346,6 +349,136 @@ class AttachmentUseCasesTest {
         assertTrue(attachments.rows.isEmpty())   // the row went first, inside the transaction
         assertEquals(1, cancelling.deleteAttempts)
     }
+
+    // --- #67: the document role (C1, C2) -------------------------------------------------------
+
+    /**
+     * C1: a role belongs to an asset's document. On an event it is a programming error the UI and
+     * the codec never reach, and it is refused **before** a byte is copied: no `put`, no row.
+     */
+    @Test fun aRoleOnAnEventIsRejectedBeforeAnyCopy() = runTest {
+        asset()
+        val owner = AttachmentOwner.OfEvent(event())
+        val spy = RiggedStore()
+        val adder = AddAttachment(attachments, assets, events, OneStore(spy), uow, ids, Clock { now })
+
+        assertFailsWith<IllegalArgumentException> {
+            adder.run(owner, cmd().copy(role = DocumentRole.USER_MANUAL), source())
+        }
+
+        assertEquals(0, spy.puts)
+        assertTrue(spy.inner.files.isEmpty())
+        assertTrue(attachments.rows.isEmpty())
+        assertEquals(0, uow.commits)
+    }
+
+    /** The role rides the command onto the row; it never chooses the kind (R67-7). */
+    @Test fun addAttachmentCarriesTheRole() = runTest {
+        val owner = AttachmentOwner.OfAsset(asset())
+
+        val row = (
+            add.run(owner, cmd().copy(role = DocumentRole.USER_MANUAL), source()) as AttachmentResult.Ok
+            ).value
+
+        assertEquals(DocumentRole.USER_MANUAL, row.role)
+        assertEquals(AttachmentKind.DOCUMENT, row.kind)   // still inferred from application/pdf
+        assertEquals(row, attachments.rows[row.id.value])
+        val plain = (add.run(owner, cmd(name = "Other.pdf"), source()) as AttachmentResult.Ok).value
+        assertNull(plain.role)
+    }
+
+    /**
+     * AC 5: giving a document a role is metadata. The guarantee that no byte is copied or deleted is
+     * the use case's **shape**: `UpdateAttachment` is built without any attachment storage or store,
+     * so it has nothing to call `put` or `delete` on. That is asserted directly, over every
+     * constructor, so wiring a store in turns this case red. The row then changes in its role and its
+     * stamp only — the locator, the hash and the size are its own — and the bytes are still there.
+     */
+    @Test fun aRoleOnlyUpdateWritesNoBytes() = runTest {
+        val parameterTypes = UpdateAttachment::class.java.constructors.flatMap { it.parameterTypes.asList() }
+        assertTrue(parameterTypes.isNotEmpty(), "reflection saw no constructor parameters at all")
+        val storeTypes = listOf(AttachmentStorage::class.java, AttachmentStore::class.java)
+        assertEquals(
+            emptyList(),
+            parameterTypes.filter { type -> storeTypes.any { it.isAssignableFrom(type) } },
+            "UpdateAttachment must not be able to reach the bytes",
+        )
+
+        val owner = AttachmentOwner.OfAsset(asset())
+        val row = (add.run(owner, cmd(), source()) as AttachmentResult.Ok).value
+        now = 9_000L
+
+        val saved = (
+            update.run(
+                row.id,
+                UpdateAttachmentCommand(
+                    row.displayName, row.kind, row.capturedOn, row.notes,
+                    role = DocumentRole.PURCHASE_INVOICE_OR_RECEIPT,
+                ),
+            ) as AttachmentResult.Ok
+            ).value
+
+        assertEquals(row.copy(role = DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, updatedAt = 9_000L), saved)
+        assertEquals(row.storageLocator, saved.storageLocator)
+        assertEquals(row.sha256, saved.sha256)
+        assertEquals(row.sizeBytes, saved.sizeBytes)
+        assertEquals(saved, attachments.rows[row.id.value])
+        assertTrue(store.exists(row.storageLocator))
+        assertEquals(0, store.deletes)
+    }
+
+    /** C2: every caller passes the row's own role, so a rename keeps it. */
+    @Test fun anUpdateCarryingTheRowsRoleKeepsIt() = runTest {
+        val owner = AttachmentOwner.OfAsset(asset())
+        val row = (
+            add.run(owner, cmd().copy(role = DocumentRole.SERVICE_MANUAL), source()) as AttachmentResult.Ok
+            ).value
+
+        val renamed = (
+            update.run(
+                row.id,
+                UpdateAttachmentCommand("Service manual.pdf", row.kind, row.capturedOn, row.notes, row.role),
+            ) as AttachmentResult.Ok
+            ).value
+
+        assertEquals("Service manual.pdf", renamed.displayName)
+        assertEquals(DocumentRole.SERVICE_MANUAL, renamed.role)
+        assertEquals(renamed, attachments.rows[row.id.value])
+    }
+
+    /** C2: the command's null is "no role", so an update carrying it clears one — and is a change. */
+    @Test fun aNullRoleInAnUpdateClearsIt() = runTest {
+        val owner = AttachmentOwner.OfAsset(asset())
+        val row = (
+            add.run(owner, cmd().copy(role = DocumentRole.USER_MANUAL), source()) as AttachmentResult.Ok
+            ).value
+
+        val cleared = (
+            update.run(row.id, UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes, null))
+                as AttachmentResult.Ok
+            ).value
+
+        assertNull(cleared.role)
+        assertNull(attachments.rows.getValue(row.id.value).role)
+    }
+
+    /** C1, the update's half: an event's file cannot be given a role either, and nothing is written. */
+    @Test fun aRoleOnAnEventRowIsRejectedByAnUpdate() = runTest {
+        asset()
+        val row = (
+            add.run(AttachmentOwner.OfEvent(event()), cmd(), source()) as AttachmentResult.Ok
+            ).value
+
+        assertFailsWith<IllegalArgumentException> {
+            update.run(
+                row.id,
+                UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes, DocumentRole.USER_MANUAL),
+            )
+        }
+
+        assertEquals(row, attachments.rows[row.id.value])
+        assertEquals(1, uow.commits)   // only the add committed
+    }
 }
 
 /**
@@ -360,7 +493,12 @@ private class RiggedStore(
     var deleteAttempts = 0
         private set
 
+    /** Every copy anyone asked for, so "no bytes were written" is a count and not an inference. */
+    var puts = 0
+        private set
+
     override suspend fun put(locator: String, source: ByteSource): StoredBytes {
+        puts += 1
         val stored = inner.put(locator, source)
         return if (reportedSize == null) stored else stored.copy(sizeBytes = reportedSize)
     }

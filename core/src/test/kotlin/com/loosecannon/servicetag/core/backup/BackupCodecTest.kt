@@ -1,6 +1,11 @@
 package com.loosecannon.servicetag.core.backup
 
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentId
+import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -15,8 +20,12 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 
 class BackupCodecTest {
@@ -990,6 +999,159 @@ class BackupCodecTest {
         )
         assertContentEquals(encoded(data), encoded(data))
         assertEquals(listOf("att-1", "att-2"), BackupCodec.decode(encoded(data)).data.attachments.map { it.id })
+    }
+
+    // --- #67: the document role (format 10, C4) --------------------------------------------------
+
+    /** One asset and one entry, so an attachment can hang off either owner. */
+    private fun roleData(vararg attachments: AttachmentDto) = BackupData(
+        assets = listOf(assetDto("a1")), nfcTags = emptyList(), externalLinks = emptyList(),
+        assetEvents = listOf(assetEventDto("e1", "a1")),
+        attachments = attachments.toList(),
+    )
+
+    /** An archive of [data] stamped [formatVersion], exactly as that format's writer would stamp it. */
+    private fun archiveAt(formatVersion: Int, data: BackupData): ByteArray =
+        BackupCodec.encode(data, "1.4.1", 9, 1_726_000_000_000L, backupSetId = "set-1", formatVersion = formatVersion)
+
+    private fun dataTextOf(bytes: ByteArray) = String(unzip(bytes).getValue(BackupCodec.DATA_ENTRY), Charsets.UTF_8)
+
+    /** The attachment objects as the writer put them down, keys and all. */
+    private fun attachmentsWritten(bytes: ByteArray): List<JsonObject> =
+        Json.parseToJsonElement(dataTextOf(bytes)).jsonObject.getValue("attachments").jsonArray.map { it.jsonObject }
+
+    /** [bytes] with every attachment's `role` key removed, resealed: what a writer that never knew the key wrote. */
+    private fun withoutTheRoleKey(bytes: ByteArray): ByteArray {
+        val tree = Json.parseToJsonElement(dataTextOf(bytes)).jsonObject
+        val attachments = JsonArray(tree.getValue("attachments").jsonArray.map { JsonObject(it.jsonObject - "role") })
+        val stripped = Json.encodeToString(JsonObject.serializer(), JsonObject(tree + ("attachments" to attachments)))
+        assertFalse("\"role\"" in stripped, "the fixture still carries the role key")
+        return resealed(bytes, stripped.toByteArray(Charsets.UTF_8))
+    }
+
+    /** The numbers this tip carries: the format moved to 10, the legacy boundary did not. */
+    @Test
+    fun theFormatIsTenAndTheLegacyBoundaryStaysSeven() {
+        assertEquals(10, BackupCodec.FORMAT_VERSION)
+        assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
+    }
+
+    /**
+     * Hazard: a role dropped in transit. It is written as its name, an unset one as an explicit
+     * `"role": null` (never left out), and it reads back onto the domain row both ways round.
+     */
+    @Test
+    fun aRoleRoundTrips() {
+        val receipt = attachmentDto("att-1").copy(role = "PURCHASE_INVOICE_OR_RECEIPT")
+        val plain = attachmentDto("att-2", locator = "assets/a1/att-2.pdf")
+        val bytes = encoded(roleData(receipt, plain))
+
+        val decoded = BackupCodec.decode(bytes)
+
+        assertEquals(BackupCodec.FORMAT_VERSION, decoded.manifest.formatVersion)
+        assertEquals(listOf(receipt, plain), decoded.data.attachments)
+        assertEquals(
+            listOf(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, null),
+            decoded.data.attachments.map { it.toDomain().role },
+        )
+        val written = attachmentsWritten(bytes)
+        assertEquals("PURCHASE_INVOICE_OR_RECEIPT", written[0].getValue("role").jsonPrimitive.content)
+        assertEquals(JsonNull, written[1].getValue("role"))
+        for (role in DocumentRole.entries) {
+            val row = attachmentDto("att-1").copy(role = role.name)
+            assertEquals(role, row.toDomain().role)
+            assertEquals(row, row.toDomain().toDto())
+        }
+    }
+
+    /** R67-11: a role only ever belongs to an asset's file; one on an entry's file is a hand-built archive. */
+    @Test
+    fun aRoleOnAnEventAttachmentIsBackupCorrupt() {
+        val onAnEntry = attachmentDto("att-1", assetId = null, eventId = "e1", locator = "events/e1/att-1.pdf")
+            .copy(role = "USER_MANUAL")
+
+        val refusal = assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(roleData(onAnEntry))) }
+
+        assertTrue("att-1" in refusal.message!! && "role" in refusal.message!!, "unhelpful: ${refusal.message}")
+        assertFailsWith<BackupCorrupt> { onAnEntry.toDomain() }
+        // the same row with no role is an ordinary entry attachment
+        assertEquals(null, BackupCodec.decode(encoded(roleData(onAnEntry.copy(role = null)))).data.attachments.single().role)
+    }
+
+    /** Only the three names: a kind's name, a lower-case spelling and a blank are all refused. */
+    @Test
+    fun anUnknownRoleNameIsRefused() {
+        for (name in listOf("WARRANTY", "user_manual", "")) {
+            val refusal = assertFailsWith<BackupCorrupt>("\"$name\"") {
+                BackupCodec.decode(encoded(roleData(attachmentDto("att-1").copy(role = name))))
+            }
+            assertTrue("document role" in refusal.message!!, "unhelpful: ${refusal.message}")
+        }
+    }
+
+    /**
+     * No shipped writer put a role into a format ≤9 archive — the key did not exist — so one that
+     * carries a non-null role was built by hand and is refused, through the strict decode (9, 8)
+     * and through the ≤7 upgrade alike, before a row is named.
+     */
+    @Test
+    fun aFormat9ArchiveWithANonNullRoleIsRefused() {
+        for (format in listOf(9, 8, 7)) {
+            val bytes = archiveAt(format, roleData(attachmentDto("att-1").copy(role = "USER_MANUAL")))
+
+            val refusal = assertFailsWith<BackupCorrupt>("format $format") { BackupCodec.decode(bytes) }
+
+            assertTrue(refusal.message!!.startsWith("attachments:"), refusal.message)
+            assertTrue("format $format" in refusal.message!! && "role" in refusal.message!!, refusal.message)
+        }
+    }
+
+    /**
+     * An explicit `"role": null` in a format-9 archive is what this build's own DTO reads anyway,
+     * and is accepted, as an empty category list is; so is the shipped shape, with no key at all.
+     */
+    @Test
+    fun aFormat9ArchiveWithAnExplicitNullRoleRestores() {
+        val data = roleData(attachmentDto("att-1"), attachmentDto("att-2", assetId = null, eventId = "e1", locator = "events/e1/att-2.pdf"))
+        val explicit = archiveAt(9, data)
+        assertTrue(attachmentsWritten(explicit).all { it["role"] == JsonNull }, "the fixture must carry an explicit null")
+
+        for (bytes in listOf(explicit, withoutTheRoleKey(explicit))) {
+            val decoded = BackupCodec.decode(bytes)
+
+            assertEquals(9, decoded.manifest.formatVersion)
+            assertEquals(data, decoded.data)
+            assertEquals(listOf(null, null), decoded.data.attachments.map { it.toDomain().role })
+        }
+    }
+
+    /** Hazard: format 10 changing what an attachment without a role reads as. It reads exactly as before. */
+    @Test
+    fun aFormat10ArchiveWithoutRolesRestoresAsBefore() {
+        val data = roleData(attachmentDto("att-1"), attachmentDto("att-2", assetId = null, eventId = "e1", locator = "events/e1/att-2.pdf"))
+        val bytes = encoded(data)
+
+        val decoded = BackupCodec.decode(bytes)
+
+        assertEquals(10, decoded.manifest.formatVersion)
+        assertEquals(data, decoded.data)
+        assertEquals(2, decoded.manifest.counts["attachments"])
+        assertEquals(
+            data.attachments.map { dto ->
+                Attachment(
+                    id = AttachmentId(dto.id),
+                    owner = dto.assetId?.let { AttachmentOwner.OfAsset(AssetId(it)) }
+                        ?: AttachmentOwner.OfEvent(EventId(dto.eventId!!)),
+                    kind = AttachmentKind.DOCUMENT,
+                    displayName = "Manual.pdf", mimeType = "application/pdf", sizeBytes = 12L,
+                    sha256 = "a".repeat(64), storageLocator = dto.storageLocator, capturedOn = "2026-09-15",
+                    notes = "", createdAt = 1L, updatedAt = 2L,
+                )
+            },
+            decoded.data.attachments.map { it.toDomain() },
+        )
+        // and a format-10 file whose writer left the key out is the same file
+        assertEquals(data, BackupCodec.decode(withoutTheRoleKey(bytes)).data)
     }
 
     // --- random fixture generation (ids pre-sorted, so the identity is literal) -----------------

@@ -23,17 +23,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.ui.attachments.ROLE_CHOICES
 import com.loosecannon.servicetag.ui.attachments.label
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 
 /**
  * One scrolling column: what arrived, the asset chooser, Name, Description, and — on a byte share
- * only — a Type control (spec §7). It is a pure function of [ShareIntakeState], so every state it
- * can be in is one `setContent` away in a device test.
+ * only — a Type control and a Role control (spec §7, and its #67 amendment). It is a pure function
+ * of [ShareIntakeState], so every state it can be in is one `setContent` away in a device test.
  *
  * **Every word comes from [IntakeStrings]**, which carries spec §10 verbatim. The Type control's
- * seven labels are the shipped `AttachmentKind.label()` values, reused and never re-spelled.
+ * seven labels are the shipped `AttachmentKind.label()` values and the Role control's four are
+ * `DocumentRole?.label()`'s, reused and never re-spelled.
  */
 @Composable
 internal fun ShareIntakeScreen(
@@ -42,6 +45,7 @@ internal fun ShareIntakeScreen(
     onName: (String) -> Unit,
     onDescribe: (String) -> Unit,
     onKind: (AttachmentKind) -> Unit,
+    onRole: (DocumentRole?) -> Unit,
     onSave: () -> Unit,
     onConfirm: () -> Unit,
     onDismissConfirmation: () -> Unit,
@@ -74,7 +78,7 @@ internal fun ShareIntakeScreen(
                 }
             }
 
-            else -> IntakeForm(state, onChoose, onName, onDescribe, onKind, onSave, onCancel)
+            else -> IntakeForm(state, onChoose, onName, onDescribe, onKind, onRole, onSave, onCancel)
         }
         Spacer(Modifier.height(4.dp))
     }
@@ -105,6 +109,7 @@ private fun IntakeForm(
     onName: (String) -> Unit,
     onDescribe: (String) -> Unit,
     onKind: (AttachmentKind) -> Unit,
+    onRole: (DocumentRole?) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -162,6 +167,22 @@ private fun IntakeForm(
                 FilterChip(
                     selected = option == state.kind,
                     onClick = { onKind(option) },
+                    label = { Text(option.label()) },
+                )
+            }
+        }
+
+        // #67 (R67-9): the same canonical role the edit sheet sets, on the byte path only — a
+        // reference has no column for one.
+        SectionHeader(title = IntakeStrings.ROLE)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            ROLE_CHOICES.forEach { option ->
+                FilterChip(
+                    selected = option == state.role,
+                    onClick = { onRole(option) },
                     label = { Text(option.label()) },
                 )
             }

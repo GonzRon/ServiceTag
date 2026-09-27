@@ -1,15 +1,20 @@
 package com.loosecannon.servicetag.share
 
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -34,6 +39,7 @@ class ShareIntakeScreenTest {
     private var saved = 0
     private var cancelled = 0
     private var confirmed = 0
+    private val roles = mutableListOf<DocumentRole?>()
 
     private fun form(
         path: IntakePath = IntakePath.LINK,
@@ -56,15 +62,19 @@ class ShareIntakeScreenTest {
         confirming = confirming,
     )
 
-    private fun show(state: ShareIntakeState) {
+    private fun show(state: ShareIntakeState) = show(mutableStateOf(state))
+
+    /** The state is held, so a case can move the one composition from one share to another. */
+    private fun show(state: MutableState<ShareIntakeState>) {
         rule.setContent {
             ServiceTagTheme {
                 ShareIntakeScreen(
-                    state = state,
+                    state = state.value,
                     onChoose = {},
                     onName = {},
                     onDescribe = {},
                     onKind = {},
+                    onRole = { roles += it },
                     onSave = { saved += 1 },
                     onConfirm = { confirmed += 1 },
                     onDismissConfirmation = {},
@@ -161,6 +171,27 @@ class ShareIntakeScreenTest {
             .forEach { rule.onNodeWithText(it).assertIsDisplayed() }
     }
 
+    /**
+     * #67, C7 (R67-9): a byte share draws the Role control — the header and the four chips from
+     * their one home, "No role" chosen until the person picks — and a pick reaches `onRole`. The
+     * same composition moved onto a link draws none of it.
+     */
+    @Test fun theRoleControlIsDrawnOnBytesAndNeverOnALink() {
+        val state = mutableStateOf(form(path = IntakePath.BYTES, received = "manual.pdf"))
+        show(state)
+
+        rule.onNodeWithText("ROLE").performScrollTo().assertIsDisplayed()
+        ROLE_CHIPS.forEach { rule.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
+        rule.onNodeWithText("No role").assertIsSelected()
+        rule.onNodeWithText("Service manual").performScrollTo().performClick()
+        assertEquals(listOf<DocumentRole?>(DocumentRole.SERVICE_MANUAL), roles)
+
+        state.value = form(path = IntakePath.LINK)
+        rule.waitForIdle()
+        rule.onAllNodesWithText("ROLE").assertCountEquals(0)
+        ROLE_CHIPS.forEach { rule.onAllNodesWithText(it).assertCountEquals(0) }
+    }
+
     @Test fun aLinkShareHasNoTypeControl() {
         show(form(path = IntakePath.LINK))
 
@@ -231,3 +262,6 @@ class ShareIntakeScreenTest {
         rule.onAllNodesWithText("Choose asset").assertCountEquals(0)
     }
 }
+
+/** The four Role chips (P67-6, P67-2/3/4), reused from their one home and never re-spelled. */
+private val ROLE_CHIPS = listOf("No role", "Purchase invoice or receipt", "User manual", "Service manual")

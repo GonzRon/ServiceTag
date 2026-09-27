@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.attachments
 
 import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.DocumentRole
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -28,5 +29,14 @@ class DocumentsSectionTest {
             listOf("Photo", "Label photo", "Receipt", "Manual", "Warranty", "Document", "Other"),
             AttachmentKind.entries.map { it.label() },
         )
+    }
+
+    /** #67: the three role labels and "no role", ratified verbatim (P67-2/3/4, P67-6), in one home. */
+    @Test fun everyRoleHasItsRatifiedLabelAndNoRoleHasOneToo() {
+        assertEquals(
+            listOf("Purchase invoice or receipt", "User manual", "Service manual"),
+            DocumentRole.entries.map { it.label() },
+        )
+        assertEquals("No role", (null as DocumentRole?).label())
     }
 }

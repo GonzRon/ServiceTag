@@ -174,7 +174,7 @@ class AttachmentDaoTest {
             displayName = "x.pdf", mimeType = "application/pdf", sizeBytes = 12L,
             sha256 = "a".repeat(64), storageProvider = "SAF_TREE",
             storageLocator = "assets/a1/x.pdf", capturedOn = null, notes = "",
-            createdAt = 1L, updatedAt = 1L,
+            createdAt = 1L, updatedAt = 1L, documentRole = null,
         )
         assertThrows(IllegalArgumentException::class.java) { both.requireExactlyOneOwner() }
 

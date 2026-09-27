@@ -189,6 +189,9 @@ class AttachmentsDeviceProofTest {
         openAsset(id).use {
             rule.awaitText("DOCUMENTS · 1")
             rule.openRowSheet(MANUAL_NAME)
+            // #67 (R67-11): an asset's file is offered the Role section, through the real section.
+            rule.onNodeWithText("ROLE").assertExists()
+            rule.onNodeWithText("No role").assertExists()
 
             rule.field("Name").performTextReplacement(RENAMED)
             rule.onNodeWithText("Manual").performClick()
@@ -480,6 +483,13 @@ class AttachmentsDeviceProofTest {
             rule.onNode(hasText(RECEIPT_NAME) and hasText("Document · 2.0 KB · ${today()}"))
                 .performScrollTo()
                 .assertIsDisplayed()
+
+            // #67 (R67-11): an event entry's file is never offered a role, through the real section.
+            rule.openRowSheet(RECEIPT_NAME)
+            rule.onAllNodesWithText("ROLE").assertCountEquals(0)
+            rule.onAllNodesWithText("No role").assertCountEquals(0)
+            rule.onNodeWithText("Cancel").performScrollTo().performClick()
+            rule.awaitGone("KIND")
 
             // Delete the entry: the app bar's own overflow, not the row's.
             rule.onNodeWithContentDescription("More").performClick()

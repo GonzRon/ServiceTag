@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentProblem
+import com.loosecannon.servicetag.core.model.DocumentRole
 
 /**
  * Two outcomes, no exception, because every one of [AttachmentProblem]'s members is something the
@@ -27,12 +28,20 @@ data class AddAttachmentCommand(
     val capturedOn: String? = null,
     val notes: String = "",
     val fromCamera: Boolean = false,
+    /** #67: an asset-owned file only; a role on an event owner is a programming error. */
+    val role: DocumentRole? = null,
 )
 
-/** What the edit sheet can change. The locator is not here: a rename never moves bytes. */
+/**
+ * What the edit sheet can change. The locator is not here: a rename never moves bytes.
+ *
+ * [role] has **no default** (#67, C2): null means "no role" and clears one, so every caller has to
+ * say what the row's role is — the sheet passes the row's own, and a rename keeps it.
+ */
 data class UpdateAttachmentCommand(
     val displayName: String,
     val kind: AttachmentKind,
     val capturedOn: String? = null,
     val notes: String = "",
+    val role: DocumentRole?,
 )

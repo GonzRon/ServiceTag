@@ -18,6 +18,7 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.DerivedFormula
 import com.loosecannon.servicetag.core.model.DerivedSpec
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
@@ -60,6 +61,7 @@ import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.ValueType
+import com.loosecannon.servicetag.core.model.accepts
 import kotlinx.serialization.Serializable
 
 /**
@@ -340,7 +342,13 @@ data class OccurrenceClosureDto(
     val createdAt: Long,
 )
 
-/** Owner is `assetId` xor `eventId`; there is no SQL CHECK, so the readers are the rule (§11.5). */
+/**
+ * Owner is `assetId` xor `eventId`; there is no SQL CHECK, so the readers are the rule (§11.5).
+ *
+ * [role] is format 10's (#67, C4): a `DocumentRole` name or null, written as `"role": null` when
+ * unset (the codec encodes defaults). It defaults to null so a format ≤9 archive, which never had
+ * the key, still decodes; `BackupCodec` refuses a non-null one in such an archive.
+ */
 @Serializable
 data class AttachmentDto(
     val id: String,
@@ -358,6 +366,7 @@ data class AttachmentDto(
     val notes: String,
     val createdAt: Long,
     val updatedAt: Long,
+    val role: String? = null,
 )
 
 /**
@@ -828,16 +837,27 @@ fun Attachment.toDto(): AttachmentDto = AttachmentDto(
     notes = notes,
     createdAt = createdAt,
     updatedAt = updatedAt,
+    role = role?.name,
 )
 
+/**
+ * The owner and the role are checked first (#67, C1): a role must be one of [DocumentRole]'s names,
+ * and only an asset's file may carry one (R67-11). The decode's naming pass and `validateGraph` both
+ * run through here, so an archive breaking either rule is refused before anything is written.
+ */
 fun AttachmentDto.toDomain(): Attachment {
     if ((assetId == null) == (eventId == null)) {
         throw BackupCorrupt("attachment $id must name exactly one owner, an asset or an event")
     }
+    val owner = assetId?.let { AttachmentOwner.OfAsset(AssetId(it)) }
+        ?: AttachmentOwner.OfEvent(EventId(eventId!!))
+    val documentRole = role?.let { enumOrCorrupt<DocumentRole>(it, "document role", "attachment $id") }
+    if (!owner.accepts(documentRole)) {
+        throw BackupCorrupt("attachment $id is an entry's file and carries a document role; only an asset's may")
+    }
     return Attachment(
         id = AttachmentId(id),
-        owner = assetId?.let { AttachmentOwner.OfAsset(AssetId(it)) }
-            ?: AttachmentOwner.OfEvent(EventId(eventId!!)),
+        owner = owner,
         kind = enumOrCorrupt<AttachmentKind>(kind, "attachment kind", "attachment $id"),
         mode = enumOrCorrupt<AttachmentMode>(mode, "attachment mode", "attachment $id"),
         displayName = displayName,
@@ -852,6 +872,7 @@ fun AttachmentDto.toDomain(): Attachment {
         notes = notes,
         createdAt = createdAt,
         updatedAt = updatedAt,
+        role = documentRole,
     )
 }
 
