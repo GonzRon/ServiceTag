@@ -388,17 +388,24 @@ class AttachmentUseCasesTest {
     }
 
     /**
-     * AC 5: giving a document a role is metadata. The spy store sees no copy and no delete, and
-     * the locator, the hash and the size are the row's own; only the role and the stamp move.
+     * AC 5: giving a document a role is metadata. The guarantee that no byte is copied or deleted is
+     * the use case's **shape**: `UpdateAttachment` is built without any attachment storage or store,
+     * so it has nothing to call `put` or `delete` on. That is asserted directly, over every
+     * constructor, so wiring a store in turns this case red. The row then changes in its role and its
+     * stamp only — the locator, the hash and the size are its own — and the bytes are still there.
      */
     @Test fun aRoleOnlyUpdateWritesNoBytes() = runTest {
+        val parameterTypes = UpdateAttachment::class.java.constructors.flatMap { it.parameterTypes.asList() }
+        assertTrue(parameterTypes.isNotEmpty(), "reflection saw no constructor parameters at all")
+        val storeTypes = listOf(AttachmentStorage::class.java, AttachmentStore::class.java)
+        assertEquals(
+            emptyList(),
+            parameterTypes.filter { type -> storeTypes.any { it.isAssignableFrom(type) } },
+            "UpdateAttachment must not be able to reach the bytes",
+        )
+
         val owner = AttachmentOwner.OfAsset(asset())
-        val spy = RiggedStore()
-        val row = (
-            AddAttachment(attachments, assets, events, OneStore(spy), uow, ids, Clock { now })
-                .run(owner, cmd(), source()) as AttachmentResult.Ok
-            ).value
-        val putsBefore = spy.puts
+        val row = (add.run(owner, cmd(), source()) as AttachmentResult.Ok).value
         now = 9_000L
 
         val saved = (
@@ -411,14 +418,13 @@ class AttachmentUseCasesTest {
             ) as AttachmentResult.Ok
             ).value
 
-        assertEquals(putsBefore, spy.puts)
-        assertEquals(0, spy.deleteAttempts)
         assertEquals(row.copy(role = DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, updatedAt = 9_000L), saved)
         assertEquals(row.storageLocator, saved.storageLocator)
         assertEquals(row.sha256, saved.sha256)
         assertEquals(row.sizeBytes, saved.sizeBytes)
         assertEquals(saved, attachments.rows[row.id.value])
-        assertTrue(spy.inner.exists(row.storageLocator))
+        assertTrue(store.exists(row.storageLocator))
+        assertEquals(0, store.deletes)
     }
 
     /** C2: every caller passes the row's own role, so a rename keeps it. */

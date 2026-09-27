@@ -99,18 +99,19 @@ import java.security.MessageDigest
  *
  * **Canonical content is every backup-format field**, `createdAt` and the last-modified stamp
  * included, compared as `incoming == local.toDto()` in every pass and in the same direction. There
- * are two normalisations. The aggregate tables' child lists are read in `(sortOrder, id)`
+ * are three normalisations. The aggregate tables' child lists are read in `(sortOrder, id)`
  * order: `sortOrder` is the order the format writes them in (`BackupCodec.kt:85`–`96`) and the id
  * makes the key total, because the format does not promise `sortOrder` is unique within a parent.
  * And (#74, C13) an asset's `category` is read through `CategoryKey.of` on **both** sides, so a
  * pre-upgrade export's `appliance` against this phone's canonical `Appliance` is `IDENTICAL`: the
  * two are one classification, and a spelling the catalog canonicalised is not a disagreement.
- * And (#67, R67-12 option B) an archive older than format 10 has its attachments compared **without
- * the document role** on either side: it cannot speak about roles, so a role given on this phone
- * since that export keeps the row `IDENTICAL` and every pre-#67 export keeps re-planning `IDENTICAL`.
- * A format-10 archive compares the role like any field — the same role is `IDENTICAL`; another role,
- * or none against one here, is `CONFLICT` / `CONTENT_DIFFERS` — and there is no update path: a role
- * travels by merge only on a row the destination does not have.
+ * And the third (#67, R67-12 option B): an archive older than format 10 has its attachments compared
+ * **without the document role** on either side: it cannot speak about roles, so a role given on this
+ * phone since that export keeps the row `IDENTICAL` and every pre-#67 export keeps re-planning
+ * `IDENTICAL`. A format-10 archive compares the role like any field — the same role is `IDENTICAL`; a
+ * different role, a role against none here, or none against one here is `CONFLICT` /
+ * `CONTENT_DIFFERS` — and there is no update path: a role travels by merge only on a row the
+ * destination does not have.
  *
  * ### Categories (#74, C13)
  *
