@@ -60,6 +60,7 @@ import com.loosecannon.servicetag.core.usecase.SeasonProblem
 import com.loosecannon.servicetag.core.usecase.SeasonValidation
 import com.loosecannon.servicetag.core.usecase.StrandedSchedule
 import com.loosecannon.servicetag.core.usecase.UnknownTemplate
+import com.loosecannon.servicetag.core.usecase.WarrantyReminderValidation
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -492,6 +493,15 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
         "this subject is the one its asset's TRACK_ONE health follows; change the health policy first",
     )
     is NoSuchHealthSubject -> errorResponse(404, "Not Found", "NO_SUCH_HEALTH_SUBJECT", "no such health subject")
+    // --- #79, the warranty reminder (C12) ---------------------------------------------------
+    //
+    // The 1.1.0 families' shape (`ValidationRefusals.kt`): one lower-snake code, the first problem's
+    // sentence and key, every problem by name. The fallback is unreachable, as theirs is.
+    is WarrantyReminderValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::warrantyReminderRefusal)
+            ?: Refusal(WARRANTY_REMINDER_VALIDATION, "the warranty reminder was refused"),
+        e.problems.map { it.toString() },
+    )
     else -> errorResponse(
         500, "Internal Server Error", "internal", e.javaClass.simpleName,
     )

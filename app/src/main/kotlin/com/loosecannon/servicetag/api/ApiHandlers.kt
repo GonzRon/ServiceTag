@@ -43,10 +43,11 @@ import com.loosecannon.servicetag.di.AppGraph
  * export, an NFC write, an NFC bind or an attachment's bytes.
  *
  * **1.2's endpoints are [MaintenanceHandlers]', not this class's, 1.3's three reference
- * endpoints are [ReferenceHandlers]', and 1.4's fourteen season, condition, health and attention
- * rows are [SeasonHealthHandlers]'**; all three hold the same rule: every write there is one use
- * case call too. This class keeps the shipped surface plus the seven counts [status] gained, which
- * it asks those three collaborators for — and #74's `assetCategories` count, which it reads itself
+ * endpoints are [ReferenceHandlers]', 1.4's fourteen season, condition, health and attention
+ * rows are [SeasonHealthHandlers]', and #79's two warranty rows are [WarrantyHandlers]'**; all four
+ * hold the same rule: every write there is one use case call too. This class keeps the shipped
+ * surface plus the seven counts [status] gained, which it asks the first three of those collaborators
+ * for — and #74's `assetCategories` count, which it reads itself
  * from [categories]. There is still no categories route (R74-8): a category is written only by an
  * asset save, and the API's asset create and update promote through core like the editor's.
  *
@@ -56,7 +57,7 @@ import com.loosecannon.servicetag.di.AppGraph
  * schedule 409 `SEASON_MODE_STRANDS_POLICY` — which [mapDomainFailure] names. Condition is never in
  * it (#61 AC 9).
  *
- * **Twenty-three collaborators plus two values, named one by one, with a `constructor(graph)` beside
+ * **Twenty-four collaborators plus two values, named one by one, with a `constructor(graph)` beside
  * them.** That is this app's pattern, stated at `AssetViewModels.kt:59`–`61`: *"Each takes the `AppGraph` members it
  * actually uses — the secondary constructor is what the Compose entry calls, the primary one is
  * what a test builds on a Room-backed fake graph."* It is the reason `ApiRouterTest` can drive the
@@ -121,6 +122,12 @@ internal class ApiHandlers(
      * `handlers.seasonHealth.*`, and asked for the three counts `/v1/status` gained.
      */
     internal val seasonHealth: SeasonHealthHandlers,
+    /**
+     * #79's two warranty rows, on the same terms: one collaborator, reached from the router as
+     * `handlers.warranty.*`. No status count comes with it — the warranty's only new table,
+     * `deadline_local_delivery`, is device-local and counted nowhere.
+     */
+    internal val warranty: WarrantyHandlers,
     private val appVersion: String,
     private val schemaVersion: Int,
 ) {
@@ -133,6 +140,7 @@ internal class ApiHandlers(
         MaintenanceHandlers(graph),
         ReferenceHandlers(graph),
         SeasonHealthHandlers(graph),
+        WarrantyHandlers(graph),
         BuildConfig.VERSION_NAME, AppGraph.SCHEMA_VERSION,
     )
 

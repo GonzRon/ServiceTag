@@ -24,7 +24,7 @@ private val SerialDescriptor.names: List<String>
  *
  * **`docs/api/v1.md`** is the contract: it must name the archive formats this build imports, the
  * fifteen merge tables (#74's format 9 added the categories) and every 1.4 code a client can
- * receive, and #74's two category reasons.
+ * receive, #74's two category reasons, and #79's two warranty routes and their refusal family.
  */
 class CommandShapesGoldenTest {
 
@@ -37,7 +37,11 @@ class CommandShapesGoldenTest {
 
     @Test fun everyRequestDtoMatchesCommandShapesJson() {
         assertEquals(
-            listOf("asset", "schedule", "healthSubject", "seasonMode", "maintenanceBreak", "healthPolicy", "condition", "activation"),
+            listOf(
+                "asset", "schedule", "healthSubject", "seasonMode", "maintenanceBreak", "healthPolicy", "condition", "activation",
+                // #79 (C12): the lead's own command, never a key of the asset's.
+                "warrantyReminder",
+            ),
             shapes.keys.toList(),
         )
         assertEquals(keysOf("asset"), AssetCommandRequest.serializer().descriptor.names)
@@ -46,6 +50,8 @@ class CommandShapesGoldenTest {
         assertEquals(keysOf("healthPolicy"), HealthPolicyRequest.serializer().descriptor.names)
         assertEquals(keysOf("condition"), ConditionRequest.serializer().descriptor.names)
         assertEquals(keysOf("activation"), ActivationRequest.serializer().descriptor.names)
+        assertEquals(keysOf("warrantyReminder"), WarrantyReminderRequest.serializer().descriptor.names)
+        assertFalse("the asset command never carries the lead (K4)", "warrantyReminderLeadDays" in keysOf("asset"))
 
         // A subject is created with its asset and replaced without it (inv. 120).
         assertEquals(keysOf("healthSubject"), HealthSubjectCreateRequest.serializer().descriptor.names)
@@ -77,26 +83,32 @@ class CommandShapesGoldenTest {
         assertEquals((keys + legacy).toSet(), row.map { rename[it] ?: it }.filter { it in command }.toSet())
     }
 
-    @Test fun theContractDocumentNamesFormat10AndFifteenTables() {
+    @Test fun theContractDocumentNamesFormat11AndFifteenTables() {
         val doc = repoFile("docs/api/v1.md").readText()
         val lines = doc.lines()
         // Anchored to the two spellings: a bare "1–10" is also the health weight's range.
         assertEquals(
-            "the import range reads 1–10 at both sites",
+            "the import range reads 1–11 at both sites",
             2,
-            lines.count { "format **1–10**" in it || "**format 1–10**" in it },
+            lines.count { "format **1–11**" in it || "**format 1–11**" in it },
         )
         assertEquals(
             "a shipped spelling of an old import range survives",
             emptyList<String>(),
             lines.filter { line ->
-                listOf("1–7", "1–8", "1–9").any { "format **$it**" in line || "**format $it**" in line }
+                listOf("1–7", "1–8", "1–9", "1–10").any { "format **$it**" in line || "**format $it**" in line }
             },
         )
         // #67: the status line names the new numbers, and IDENTICAL states R67-12's rule for the role.
         assertTrue("the status line says 10 since #67", lines.count { "10 since #67" in it } >= 1)
+        // #79: and 11 since the warranty reminder lead, and IDENTICAL states R79-11b's rule for the lead.
+        assertTrue("the status line says 11 since #79", lines.count { "11 since #79 (warranty reminders)" in it } >= 1)
         val identical = lines.single { it.startsWith("| `IDENTICAL` |") }
         assertTrue("IDENTICAL must state the role rule: $identical", "document role" in identical && "format 10" in identical)
+        assertTrue(
+            "IDENTICAL must state the lead rule: $identical",
+            "`warrantyReminderLeadDays`" in identical && "format 11" in identical,
+        )
         assertEquals(emptyList<String>(), lines.filter { "the eleven tables" in it.lowercase() })
         assertTrue("the report's fifteen tables", "fifteen tables" in doc.lowercase())
         assertFalse("the report's old fourteen tables", "fourteen tables" in doc.lowercase())
@@ -116,6 +128,8 @@ class CommandShapesGoldenTest {
             "SEASON_ALREADY_ENDED", "SEASON_MODE_STRANDS_POLICY", "BREAK_STRANDS_POLICY", "PRE_SERVICE_NEEDS_DATES",
             "HEALTH_SCHEDULE_TAKEN", "HEALTH_SUBJECT_IS_PRIMARY", "NO_SUCH_HEALTH_SUBJECT",
             SEASON_VALIDATION, CONDITION_VALIDATION, "DEFERRED", "UNSCORABLE", "unlinkHealthSubject",
+            // #79: the lead's refusal family and the row field it writes.
+            "warranty_reminder_validation", "warrantyReminderLeadDays",
         )) {
             assertTrue("docs/api/v1.md does not name $code", "`$code`" in doc)
         }
@@ -126,6 +140,8 @@ class CommandShapesGoldenTest {
             "/v1/health-subjects/{id}/archive", "/v1/attention", "command-shapes.json",
             // 1.4.1 (#80): the provider repair's two routes.
             "/v1/repairs/schedule-providers/plan", "/v1/repairs/schedule-providers/apply",
+            // #79 (C12): the warranty and its reminder lead.
+            "/v1/assets/{id}/warranty", "/v1/assets/{id}/warranty-reminder",
         )) {
             assertTrue("docs/api/v1.md does not name $path", "`$path`" in doc || path in doc)
         }

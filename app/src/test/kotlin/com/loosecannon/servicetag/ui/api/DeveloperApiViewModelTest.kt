@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.api.StartOutcome
 import com.loosecannon.servicetag.api.maintenanceHandlersFor
 import com.loosecannon.servicetag.api.referenceHandlersFor
 import com.loosecannon.servicetag.api.seasonHealthHandlersFor
+import com.loosecannon.servicetag.api.warrantyHandlersFor
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.IOException
 import java.net.InetAddress
@@ -48,6 +49,7 @@ class DeveloperApiViewModelTest {
         maintenanceHandlersFor(graph),
         referenceHandlersFor(graph),
         seasonHealthHandlersFor(graph),
+        warrantyHandlersFor(graph),
         appVersion = "1.1.0",
         schemaVersion = 5,
     )

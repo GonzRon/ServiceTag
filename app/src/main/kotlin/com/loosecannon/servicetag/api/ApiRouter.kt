@@ -54,7 +54,7 @@ internal class ApiRouter(
     }
 
     /**
-     * The whole surface. Forty-nine path shapes over fifty-nine method-and-path rows; anything
+     * The whole surface. Fifty-one path shapes over sixty-one method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -82,6 +82,10 @@ internal class ApiRouter(
      * 1.4.1 added two rows over two shapes (#80): the provider repair's plan and apply, both `POST`,
      * both `{}`. The plan writes nothing; the apply adds one `LOCAL` provider row to each ACTIVE,
      * reminders-on, providerless schedule and to nothing else, and deletes nothing.
+     *
+     * #79 added two rows over two shapes, both `/v1/assets/{id}/…` sub-resources on the same 404
+     * convention: the warranty, derived for today and stored nowhere, and its reminder lead, written
+     * through `SetWarrantyReminder` alone. Neither runs a reminder sweep.
      */
     private suspend fun route(request: ApiRequest): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -135,6 +139,9 @@ internal class ApiRouter(
                 "conditions" to "POST" -> handlers.seasonHealth.recordCondition(rest[1], request)
                 "health" to "GET" -> handlers.seasonHealth.getHealth(rest[1])
                 "health-subjects" to "GET" -> handlers.seasonHealth.listSubjects(rest[1])
+                // #79 — two more, the seventeenth and eighteenth: the derived warranty, and the lead.
+                "warranty" to "GET" -> handlers.warranty.getWarranty(rest[1])
+                "warranty-reminder" to "POST" -> handlers.warranty.setWarrantyReminder(rest[1], request)
                 else -> throw ApiFailure.notFound(request.path)
             }
 

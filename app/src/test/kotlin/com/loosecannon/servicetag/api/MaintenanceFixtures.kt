@@ -89,6 +89,17 @@ internal fun seasonHealthHandlersFor(graph: FakeGraph): SeasonHealthHandlers = S
 )
 
 /**
+ * #79's two warranty routes over a [FakeGraph], on the same terms: `ApiHandlers` grew one more
+ * collaborator, and every call site gains this one line. The fake graph's `todayPort` is the `Today`
+ * the production wiring hands over as `graph.today`.
+ */
+internal fun warrantyHandlersFor(graph: FakeGraph): WarrantyHandlers = WarrantyHandlers(
+    assets = graph.assets,
+    setWarrantyReminder = graph.setWarrantyReminder,
+    today = graph.todayPort,
+)
+
+/**
  * 1.4 (B09): one `/v1` client over a [FakeGraph] for the new suites — the production router, the
  * production handlers (every collaborator above) and the production serializers, exactly as
  * `ApiRouterTest` builds them, written once rather than six times.
@@ -105,6 +116,7 @@ internal class V1Client(val graph: FakeGraph, private val token: String = "ABCD2
             maintenanceHandlersFor(graph),
             referenceHandlersFor(graph),
             seasonHealthHandlersFor(graph),
+            warrantyHandlersFor(graph),
             appVersion = "1.4.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),

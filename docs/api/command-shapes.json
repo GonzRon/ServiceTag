@@ -25,5 +25,8 @@
   },
   "activation": {
     "keys": ["action", "occurredOn", "eventId"]
+  },
+  "warrantyReminder": {
+    "keys": ["leadDays"]
   }
 }
