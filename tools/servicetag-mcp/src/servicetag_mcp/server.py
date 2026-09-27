@@ -952,6 +952,9 @@ def log_event(
     `values` is keyed by definition id, the text a person would type. `consumables` is
     `{"name", "quantity", "unit"}`. `kind` is one of MAINTENANCE, INSPECTION, MEASUREMENT,
     TREATMENT, INCIDENT, REPLACEMENT, SEASON_START, SEASON_END, NOTE, CUSTOM.
+
+    To record a failure with its Incident, log the `INCIDENT` here first, then pass the returned
+    event's `id` to `record_condition` as `event_id` — two calls, two transactions.
     """
     return _call(
         "POST",
@@ -2050,6 +2053,9 @@ def record_condition(
     `reason` is up to 500 characters, `""` for none (`CONDITION_REASON_TOO_LONG`); `event_id` names
     an event of this asset, or `None` (`FOREIGN_EVENT`). Answers `{condition, current}` — `current`
     read after the write, so a backdated row is never claimed as current.
+
+    To link a `DOWN` or `DEGRADED` row to the Incident that explains it, log the Incident with
+    `log_event(kind="INCIDENT", …)` first and pass its `id` here as `event_id`.
     """
     return _call(
         "POST",

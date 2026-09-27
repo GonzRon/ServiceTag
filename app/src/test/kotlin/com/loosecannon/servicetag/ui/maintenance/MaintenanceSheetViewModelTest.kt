@@ -2,9 +2,12 @@ package com.loosecannon.servicetag.ui.maintenance
 
 import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.links.DeepLinkRoute
+import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.LinkKind
@@ -27,6 +30,7 @@ import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
+import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.ProfileCommand
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.core.usecase.ResolveTag
@@ -122,7 +126,11 @@ class MaintenanceSheetViewModelTest {
         snoozedUntilOf = { null },
     )
 
-    private fun viewModel(assetId: AssetId, tagId: TagId? = null) = MaintenanceSheetViewModel(
+    private fun viewModel(
+        assetId: AssetId,
+        tagId: TagId? = null,
+        incidentNeed: IncidentNeed = graph.incidentNeed,
+    ) = MaintenanceSheetViewModel(
         due = readModel(),
         health = graph.assetHealthReadModel,
         assets = graph.assets,
@@ -132,6 +140,7 @@ class MaintenanceSheetViewModelTest {
             graph.scheduleStates.get(id)?.lastCompletionEventId
         },
         rounds = roundMembership(),
+        incidentNeed = incidentNeed,
         snoozer = graph.scheduleSnooze,
         postponeSchedule = graph.postponeSchedule,
         reconcile = ReminderReconcile { reconciles++ },
@@ -417,6 +426,118 @@ class MaintenanceSheetViewModelTest {
             OperationalCondition.DEGRADED,
             model.state.value.blocks.filterIsInstance<SheetBlock.ConditionActions>().single().markOperational,
         )
+    }
+
+    // ---------------------------------------------------------------- #82: Log incident (C11, R82-8)
+
+    /** Block 3's P82-10 flag: whether the sheet draws "Log incident" after S6. */
+    private fun MaintenanceSheetViewModel.logIncident(): Boolean =
+        state.value.blocks.filterIsInstance<SheetBlock.ConditionActions>().single().logIncident
+
+    /** A standalone INCIDENT row, logged the day it is dated. */
+    private fun incident(id: String, assetId: String, on: String) = AssetEvent(
+        id = EventId(id), assetId = AssetId(assetId), kind = EventKind.INCIDENT, title = "Cells swollen",
+        profileId = null, occurredOn = on, occurredTime = null, tzId = "UTC", notes = "",
+        source = EventSource.MANUAL, sourceRef = null, createdAt = dayMillis(on), updatedAt = dayMillis(on),
+        measurements = emptyList(), consumables = emptyList(),
+    )
+
+    /**
+     * R82-8: a DOWN or DEGRADED asset in service whose failure has no Incident draws "Log incident"
+     * beside S7 and S6, and the flag is on the sheet's read-only state.
+     */
+    @Test fun anImpairedAssetWithoutAnIncidentOffersLogIncident() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("pack", name = "Battery pack"))
+        graph.conditions.insert(conditionRow("c-pack", "pack", OperationalCondition.DOWN, "2026-04-10"))
+        graph.assets.upsert(assetRow("tub", name = "Hot tub"))
+        graph.conditions.insert(conditionRow("c-tub", "tub", OperationalCondition.DEGRADED, "2026-04-10"))
+
+        for (id in listOf("pack", "tub")) {
+            val model = viewModel(AssetId(id))
+            advanceUntilIdle()
+            assertTrue(id, model.logIncident())
+            assertTrue(id, model.state.value.needsIncident)
+        }
+    }
+
+    /** The failure already has its Incident — the row names it — so the sheet asks for none. */
+    @Test fun notWhenOneIsLinked() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("pack", name = "Battery pack"))
+        graph.events.upsert(incident("e-swollen", "pack", "2026-04-10"))
+        graph.conditions.insert(
+            conditionRow("c-pack", "pack", OperationalCondition.DOWN, "2026-04-10", eventId = "e-swollen"),
+        )
+
+        val model = viewModel(AssetId("pack"))
+        advanceUntilIdle()
+
+        assertFalse(model.logIncident())
+        assertEquals(
+            "S7 is still offered",
+            OperationalCondition.DOWN,
+            model.state.value.blocks.filterIsInstance<SheetBlock.ConditionActions>().single().markOperational,
+        )
+    }
+
+    /** An OPERATIONAL asset, and one with nothing recorded, opened by due work: no "Log incident". */
+    @Test fun notWhenOperational() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        graph.conditions.insert(conditionRow("c-ups", "ups", OperationalCondition.OPERATIONAL, "2026-04-01"))
+        graph.assets.upsert(assetRow("mower", name = "Mower"))
+        for (id in listOf("ups", "mower")) {
+            seed(scheduleOf("s-$id", assetId = id, title = "Battery self-test", anchorOn = "2026-01-01", leadDays = 0))
+        }
+
+        for (id in listOf("ups", "mower")) {
+            val model = viewModel(AssetId(id))
+            advanceUntilIdle()
+            assertTrue("$id: the due work opened it", model.state.value.content!!.opens)
+            assertFalse(id, model.logIncident())
+        }
+    }
+
+    /**
+     * The flag only draws; it never opens the sheet. Even a need that answers yes for an asset with
+     * nothing to open the sheet for — OPERATIONAL, nothing due — leaves it empty on arrival (so the
+     * screen goes on to the asset) with no "Log incident", and nothing is written.
+     */
+    @Test fun theFlagNeverOpensTheSheet() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("ups", name = "UPS"))
+        graph.conditions.insert(conditionRow("c-ups", "ups", OperationalCondition.OPERATIONAL, "2026-04-01"))
+
+        val model = viewModel(AssetId("ups"), incidentNeed = IncidentNeed { true })
+        advanceUntilIdle()
+
+        assertTrue("nothing opens it", model.state.value.emptyOnArrival)
+        assertFalse(model.logIncident())
+        assertEquals(0, graph.events.all().size)
+        assertEquals(1, graph.conditions.all().size)
+    }
+
+    /**
+     * NOTE 1: back from the Incident entry "Log incident" opened, [MaintenanceSheetViewModel.onShown]
+     * re-reads the flag, so it drops on the resume that brings the sheet back — whatever the shipped
+     * resume guard does. The standalone Incident wrote the event alone (R82-9).
+     */
+    @Test fun onShownReReadsTheFlagAfterAnIncidentIsLogged() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("pack", name = "Battery pack"))
+        graph.conditions.insert(conditionRow("c-pack", "pack", OperationalCondition.DOWN, "2026-04-10"))
+        val model = viewModel(AssetId("pack"))
+        advanceUntilIdle()
+        assertTrue(model.logIncident())
+
+        graph.logEvent.run(
+            EventCommand(
+                assetId = AssetId("pack"), profileId = null, kind = EventKind.INCIDENT, title = "Cells swollen",
+                occurredOn = "2026-04-15", occurredTime = null, tzId = "UTC", notes = "",
+                values = emptyMap(), consumables = emptyList(),
+            ),
+        )
+        model.onShown()
+        advanceUntilIdle()
+
+        assertFalse(model.logIncident())
+        assertEquals("the Incident wrote no condition", 1, graph.conditions.all().size)
     }
 
     /** A DOWN UPS (F1) with [titles] each overdue, and the sheet open on it with every row selected. */

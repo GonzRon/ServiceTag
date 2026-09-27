@@ -29,6 +29,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -110,8 +111,10 @@ import com.loosecannon.servicetag.ui.condition.CONDITION_TITLE
 import com.loosecannon.servicetag.ui.condition.ChangeConditionSheet
 import com.loosecannon.servicetag.ui.condition.ConditionBadge
 import com.loosecannon.servicetag.ui.condition.END_SEASON
+import com.loosecannon.servicetag.ui.condition.LOG_INCIDENT
 import com.loosecannon.servicetag.ui.condition.MARK_OPERATIONAL
 import com.loosecannon.servicetag.ui.condition.MarkOperationalDialog
+import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.condition.START_SEASON
 import com.loosecannon.servicetag.ui.condition.WHEN_DID_THIS_CHANGE
 import com.loosecannon.servicetag.ui.condition.conditionColors
@@ -184,6 +187,8 @@ fun AssetDetailScreen(
      * asset editor's "Review maintenance schedules" lands here. Read once per entry; null is the top.
      */
     section: String? = null,
+    /** #82 — Change condition's P82-3: the held DOWN or DEGRADED, for the host's Incident entry. */
+    onLogIncidentDetails: (PendingCondition) -> Unit = {},
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -284,7 +289,9 @@ fun AssetDetailScreen(
         )
         // The page redraws from the condition flow when either closes: nothing to refresh by hand.
         if (changingCondition) {
-            ChangeConditionSheet(graph = graph, assetId = assetId) { changingCondition = false }
+            ChangeConditionSheet(graph = graph, assetId = assetId, onLogIncidentDetails = onLogIncidentDetails) {
+                changingCondition = false
+            }
         }
         markingOperational?.let { condition ->
             MarkOperationalDialog(graph = graph, assetId = assetId, current = condition) { markingOperational = null }
@@ -338,6 +345,8 @@ fun AssetDetailScreen(
                     state = current,
                     onChangeCondition = { changingCondition = true },
                     onMarkOperational = { markingOperational = it },
+                    // #82 (C10): a new INCIDENT through the screen's one free-form entry; the tap writes nothing.
+                    onLogIncident = { onLogOutcome(assetId, EventKind.INCIDENT.name) },
                     onOpenEvent = onOpenEvent,
                 )
                 HealthSection(current.healthBlocks, plurals)
@@ -838,6 +847,9 @@ private fun ComponentsSection(
  * for a DOWN or DEGRADED asset and **S6**, then **S21** — every row, newest first, each with its day,
  * word, reason and link, or S24 where the linked record is gone. Each action only opens B12's own
  * surface; nothing here writes, and no history row can be edited or removed (inv. 89, 107, 110).
+ *
+ * #82 (C10, R82-7): **P82-10** "Log incident" on every asset in service — first and tonal while the
+ * current failure has no Incident, otherwise outlined after S6 — opens a new INCIDENT entry.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -845,6 +857,7 @@ private fun ConditionSection(
     state: AssetDetailState,
     onChangeCondition: () -> Unit,
     onMarkOperational: (OperationalCondition) -> Unit,
+    onLogIncident: () -> Unit,
     onOpenEvent: (String) -> Unit,
 ) {
     val current = state.condition
@@ -854,10 +867,16 @@ private fun ConditionSection(
         current?.let { QuietLine(reasonLine(it.reason)) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val condition = current?.condition
+            if (state.leadsWithLogIncident) {
+                FilledTonalButton(onClick = onLogIncident, shape = ControlShape) { Text(LOG_INCIDENT) }
+            }
             if (state.offersMarkOperational && condition != null) {
                 Button(onClick = { onMarkOperational(condition) }, shape = ControlShape) { Text(MARK_OPERATIONAL) }
             }
             OutlinedButton(onClick = onChangeCondition, shape = ControlShape) { Text(CHANGE_CONDITION) }
+            if (state.offersLogIncident && !state.leadsWithLogIncident) {
+                OutlinedButton(onClick = onLogIncident, shape = ControlShape) { Text(LOG_INCIDENT) }
+            }
         }
     }
     SentenceSectionHeader(CONDITION_HISTORY)

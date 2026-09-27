@@ -53,8 +53,13 @@ import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.condition.CHANGE_CONDITION
 import com.loosecannon.servicetag.ui.condition.CONDITION_TITLE
 import com.loosecannon.servicetag.ui.condition.END_SEASON
+import com.loosecannon.servicetag.ui.condition.LOG_INCIDENT
+import com.loosecannon.servicetag.ui.condition.LOG_INCIDENT_DETAILS
+import com.loosecannon.servicetag.ui.condition.LOG_INCIDENT_DETAILS_QUESTION
 import com.loosecannon.servicetag.ui.condition.MARK_OPERATIONAL
 import com.loosecannon.servicetag.ui.condition.MARK_OPERATIONAL_TITLE
+import com.loosecannon.servicetag.ui.condition.PendingCondition
+import com.loosecannon.servicetag.ui.condition.SAVE_CONDITION
 import com.loosecannon.servicetag.ui.condition.START_SEASON
 import com.loosecannon.servicetag.ui.condition.WHEN_DID_THIS_CHANGE
 import com.loosecannon.servicetag.ui.condition.displayDate
@@ -70,6 +75,7 @@ import org.junit.runner.RunWith
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.abs
 
 /**
  * Asset detail's Condition, Health and Season sections on a real Compose tree (spec §10.3; B14).
@@ -96,7 +102,12 @@ class AssetDetailConditionHealthSeasonTest {
     private val zone: String get() = ZoneId.systemDefault().id
 
     /** Asset detail on [initial], opened on [section]; the returned setter switches it to another asset. */
-    private fun detail(initial: AssetId, section: String? = null): (AssetId) -> Unit {
+    private fun detail(
+        initial: AssetId,
+        section: String? = null,
+        onLogIncidentDetails: (PendingCondition) -> Unit = {},
+        onLogOutcome: (assetId: String, kind: String) -> Unit = { _, _ -> },
+    ): (AssetId) -> Unit {
         var shown by mutableStateOf(initial)
         rule.setContent {
             ServiceTagTheme {
@@ -105,8 +116,9 @@ class AssetDetailConditionHealthSeasonTest {
                     assetId = shown.value,
                     onBack = {}, onEdit = {}, onSetup = {}, onWriteTag = {}, onBackup = {},
                     onLogEvent = { _, _ -> }, onOpenEvent = {}, onOpenAsset = {}, onAddComponent = {},
-                    onAddSchedule = {}, onLogOutcome = { _, _ -> }, onOpenSettings = {},
+                    onAddSchedule = {}, onLogOutcome = onLogOutcome, onOpenSettings = {},
                     onOpenSchedule = {}, onOpenGroup = {}, section = section,
+                    onLogIncidentDetails = onLogIncidentDetails,
                 )
             }
         }
@@ -425,6 +437,88 @@ class AssetDetailConditionHealthSeasonTest {
         rule.waitForIdle()
         plateName("Generator").assertIsDisplayed()
         rule.onNodeWithText(SCHEDULES_SECTION).assertIsNotDisplayed()
+    }
+
+    /**
+     * #82, §3 row 18: Change condition opened from asset detail holds DOWN and asks P82-1; "Log
+     * incident details" hands the draft to the screen's host — which opens the Incident entry — and
+     * nothing is written here.
+     */
+    @Test fun theDetailsSheetHandsTheDraftToItsHost() {
+        val gen = asset("Generator")
+        val drafts = mutableListOf<PendingCondition>()
+        detail(gen, onLogIncidentDetails = { drafts += it })
+
+        rule.awaitText(CHANGE_CONDITION)
+        rule.onNodeWithText(CHANGE_CONDITION).performScrollTo().performClick()
+        rule.awaitText(SAVE_CONDITION)
+        rule.onNodeWithText("Down").performClick()
+        rule.onNodeWithText(SAVE_CONDITION).performClick()
+        rule.awaitText(LOG_INCIDENT_DETAILS_QUESTION)
+        rule.onNodeWithText("Generator is DOWN. Record what went wrong in the service record?").assertIsDisplayed()
+        rule.onNodeWithText(LOG_INCIDENT_DETAILS).performClick()
+
+        rule.waitUntil(TIMEOUT_MS) { drafts.isNotEmpty() }
+        assertEquals(OperationalCondition.DOWN, drafts.single().condition)
+        assertEquals(today.toString(), drafts.single().occurredOn)
+        assertEquals("nothing written", emptyList<AssetCondition>(), conditionRows(gen))
+    }
+
+    /** Reading order: [first] sits on an earlier row than [second], or before it along the same row. */
+    private fun before(first: String, second: String): Boolean {
+        val a = rule.onNodeWithText(first).fetchSemanticsNode().positionInRoot
+        val b = rule.onNodeWithText(second).fetchSemanticsNode().positionInRoot
+        return if (abs(a.y - b.y) < 1f) a.x < b.x else a.y < b.y
+    }
+
+    /**
+     * #82 (C10, R82-7; §3 row 21): an asset in service with nothing missing offers "Log incident" after
+     * S6, and its tap is the screen's own free-form entry, of kind INCIDENT; the tap writes nothing.
+     */
+    @Test fun logIncidentOpensAnIncidentEntry() {
+        val ups = asset("UPS")
+        record(ups, OperationalCondition.OPERATIONAL, today.minusDays(1))
+        val outcomes = mutableListOf<Pair<String, String>>()
+        detail(ups, onLogOutcome = { asset, kind -> outcomes += asset to kind })
+
+        rule.awaitText(LOG_INCIDENT)
+        rule.onNodeWithText(LOG_INCIDENT).performScrollTo().assertIsDisplayed()
+        assertTrue("after S6 while nothing is missing", before(CHANGE_CONDITION, LOG_INCIDENT))
+        rule.onNodeWithText(LOG_INCIDENT).performClick()
+
+        rule.waitUntil(TIMEOUT_MS) { outcomes.isNotEmpty() }
+        assertEquals(listOf(ups.value to "INCIDENT"), outcomes)
+        assertEquals("the tap wrote no condition", 1, conditionRows(ups).size)
+        assertEquals("and no event", 0, runBlocking { graph.events.forAsset(ups) }.size)
+    }
+
+    /**
+     * #82 (C10, AC 9; §3 row 21): a DOWN asset in service whose failure has no Incident leads its
+     * Condition actions with "Log incident", ahead of S7 and S6. Once a standalone Incident is logged
+     * the page redraws by itself with it after S6, and the Incident wrote no condition (R82-9).
+     */
+    @Test fun aDownAssetWithoutAnIncidentLeadsWithLogIncident() {
+        val gen = asset("Generator")
+        record(gen, OperationalCondition.DOWN, today.minusDays(1), reason = "Won't start")
+        detail(gen)
+
+        rule.awaitText(LOG_INCIDENT)
+        rule.onNodeWithText(LOG_INCIDENT).performScrollTo().assertIsDisplayed()
+        assertTrue("ahead of S7", before(LOG_INCIDENT, MARK_OPERATIONAL))
+        assertTrue("ahead of S6", before(LOG_INCIDENT, CHANGE_CONDITION))
+
+        runBlocking {
+            graph.logEvent.run(
+                EventCommand(
+                    assetId = gen, profileId = null, kind = EventKind.INCIDENT, title = "Will not start",
+                    occurredOn = today.toString(), occurredTime = null, tzId = zone, notes = "",
+                    values = emptyMap(), consumables = emptyList(),
+                ),
+            )
+        }
+        rule.waitUntil(TIMEOUT_MS) { before(CHANGE_CONDITION, LOG_INCIDENT) }
+        rule.onAllNodesWithText(LOG_INCIDENT).assertCountEquals(1)
+        assertEquals("the Incident wrote no condition", 1, conditionRows(gen).size)
     }
 
     private companion object {

@@ -1,6 +1,8 @@
 package com.loosecannon.servicetag.ui.nav
 
 import androidx.navigation3.runtime.NavKey
+import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.ui.condition.PendingCondition
 import kotlinx.serialization.Serializable
 
 /**
@@ -43,12 +45,17 @@ sealed interface Route : NavKey {
      * New when [eventId] is null; [profileId] null is a free-form entry with no profile behind it.
      * [kind] presets the kind of such an entry — the retirement follow-on of spec §7 opens
      * REPLACEMENT or NOTE — and is the name of an `EventKind`, never an index.
+     *
+     * #82 (C7): [pending] is Change condition's held DOWN or DEGRADED, when "Log incident details"
+     * opened this entry; its Save then records the Incident and that row together. Absent — every
+     * back stack stored before #82, and every other way in — it is null and the entry is as before.
      */
     @Serializable data class EventEntry(
         val assetId: String,
         val profileId: String?,
         val eventId: String?,
         val kind: String? = null,
+        val pending: PendingConditionArgs? = null,
     ) : Route
     @Serializable data class EventDetail(val id: String) : Route
 
@@ -114,6 +121,28 @@ sealed interface Route : NavKey {
      * the sheet can say which tag it came from; it carries an id and never a payload.
      */
     @Serializable data class MaintenanceSheet(val assetId: String, val tagId: String? = null) : Route
+}
+
+/**
+ * #82 (C7): a held condition as [Route.EventEntry] carries it — the row's pre-allocated [id], the
+ * [condition] by its `OperationalCondition` name (never an index), the day and the reason as typed.
+ */
+@Serializable
+data class PendingConditionArgs(
+    val id: String,
+    val condition: String,
+    val occurredOn: String,
+    val reason: String,
+) {
+    /** The held condition again, or null for a name this build does not know — a plain entry then. */
+    fun toPending(): PendingCondition? {
+        val named = OperationalCondition.entries.firstOrNull { it.name == condition } ?: return null
+        return PendingCondition(id, named, occurredOn, reason)
+    }
+
+    companion object {
+        fun of(held: PendingCondition) = PendingConditionArgs(held.id, held.condition.name, held.occurredOn, held.reason)
+    }
 }
 
 /**

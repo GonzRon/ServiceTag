@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.attachments.AttachmentRoot
 import com.loosecannon.servicetag.attachments.DocumentTreeRoot
 import com.loosecannon.servicetag.attachments.SafAttachmentStorage
 import com.loosecannon.servicetag.attachments.Thumbnails
+import com.loosecannon.servicetag.core.condition.needsIncident
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -41,6 +42,7 @@ import com.loosecannon.servicetag.core.ports.UuidGenerator
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.references.StreamSourcePolicy
 import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
+import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
 import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
 import com.loosecannon.servicetag.core.usecase.AddAttachment
@@ -77,6 +79,7 @@ import com.loosecannon.servicetag.core.usecase.PromoteCategory
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.RecordCondition
+import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.RenameCategory
@@ -155,13 +158,16 @@ import com.loosecannon.servicetag.reminders.ScheduleDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.reminders.WorkManagerBackstop
 import com.loosecannon.servicetag.ui.condition.EventOffers
+import com.loosecannon.servicetag.ui.condition.ImpairmentOffers
 import com.loosecannon.servicetag.ui.condition.OperationalOffers
 import com.loosecannon.servicetag.ui.condition.SeasonOffers
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
+import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.HealthSummary
+import com.loosecannon.servicetag.ui.maintenance.IncidentNeed
 import com.loosecannon.servicetag.ui.maintenance.LastCompletionEventId
 import com.loosecannon.servicetag.ui.maintenance.LastCompletionReadings
 import com.loosecannon.servicetag.ui.maintenance.ReminderHealth
@@ -524,6 +530,13 @@ class AppGraph(private val context: Context) {
     // asset editor's one transaction over the asset, its season, its break and its policy.
     val recordCondition: RecordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, today)
     val acceptOperationalOffer: AcceptOperationalOffer = AcceptOperationalOffer(conditions, recordCondition, uow)
+    // #82 — the two answers that write a condition row besides S16 and S7, each only on the owner's
+    // choice: the Incident entry's Save in the combined flow (the Incident and its linked row in one
+    // transaction, Workflow A) and "Mark down" / "Mark degraded" after a new Incident (Workflow B).
+    val recordConditionWithIncident: RecordConditionWithIncident = RecordConditionWithIncident(
+        events, definitions, profiles, assets, uow, ids, clock, recomputeSchedules, conditions, today, recordCondition,
+    )
+    val acceptImpairmentOffer: AcceptImpairmentOffer = AcceptImpairmentOffer(conditions, recordCondition, uow)
     val saveHealthSubject: SaveHealthSubject =
         SaveHealthSubject(healthSubjects, assets, schedules, profiles, uow, ids, clock)
     val archiveHealthSubject: ArchiveHealthSubject =
@@ -665,12 +678,15 @@ class AppGraph(private val context: Context) {
 
     /**
      * 1.4 — the offers an event makes (spec §3.3, §5.4): "Mark operational?" and the season offer,
-     * each written only by its accept (B06's `AcceptOperationalOffer`, B04's `AcceptSeasonOffer`).
-     * Built here once; the completion flow and the journal entry both ask through it.
+     * each written only by its accept (B06's `AcceptOperationalOffer`, B04's `AcceptSeasonOffer`) —
+     * and #82's impairment offer after a new Incident, written only by "Mark down" or "Mark
+     * degraded" (`AcceptImpairmentOffer`). Built here once; the completion flow and the journal
+     * entry both ask through it.
      */
     val eventOffers: EventOffers = EventOffers(
         OperationalOffers(assets, conditions, acceptOperationalOffer, today),
         SeasonOffers(assets, seasonActivations, acceptSeasonOffer, today),
+        ImpairmentOffers(assets, conditions, acceptImpairmentOffer, today),
     )
 
     /**
@@ -746,6 +762,17 @@ class AppGraph(private val context: Context) {
         // The **same** call the sheet itself makes, so "does this scan open the sheet" and "what
         // does the sheet show" are one answer (the one predicate; O-8).
         scanSheetContentFor(assetId, dueReadModel, scanRoundMembership, assetHealthReadModel).opens
+    }
+
+    /**
+     * #82 (C11, R82-8) — whether the scanned asset needs an Incident for its current failure, **read**:
+     * core's `needsIncident` over its condition rows and its journal, with the app's one in-service
+     * rule. A one-method seam in the shape of the sheet's other read-only ones, so no write is
+     * reachable through it; the answer only decides whether "Log incident" is drawn.
+     */
+    val incidentNeed: IncidentNeed = IncidentNeed { assetId ->
+        val asset = assets.get(assetId) ?: return@IncidentNeed false
+        needsIncident(asset.inService, conditions.forAsset(assetId), events.forAsset(assetId))
     }
 
     internal companion object {

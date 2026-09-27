@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.testing
 import com.loosecannon.nfc.tagcore.TagIdentity
 import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.servicetag.attachments.Thumbnails
+import com.loosecannon.servicetag.core.condition.needsIncident
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -26,6 +27,7 @@ import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
 import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
 import com.loosecannon.servicetag.core.usecase.AddAttachment
@@ -59,6 +61,7 @@ import com.loosecannon.servicetag.core.usecase.PromoteCategory
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.RecordCondition
+import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
@@ -101,6 +104,7 @@ import com.loosecannon.servicetag.data.room.inMemoryDb
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.ui.condition.EventOffers
+import com.loosecannon.servicetag.ui.condition.ImpairmentOffers
 import com.loosecannon.servicetag.ui.condition.OperationalOffers
 import com.loosecannon.servicetag.ui.condition.SeasonOffers
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
@@ -108,8 +112,10 @@ import com.loosecannon.servicetag.prefs.KeyValueStore
 import com.loosecannon.servicetag.reminders.ReminderSnooze
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
+import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
+import com.loosecannon.servicetag.ui.maintenance.IncidentNeed
 import com.loosecannon.servicetag.ui.maintenance.LastCompletionEventId
 import com.loosecannon.servicetag.ui.maintenance.ScanRoundMembership
 import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
@@ -220,6 +226,12 @@ class FakeGraph(
         scanSheetContentFor(assetId, dueReadModel, scanRoundMembership, assetHealthReadModel).opens
     }
 
+    /** #82 — the scan sheet's Incident flag, mirroring `AppGraph`'s field (C11). */
+    val incidentNeed: IncidentNeed = IncidentNeed { assetId ->
+        val asset = assets.get(assetId) ?: return@IncidentNeed false
+        needsIncident(asset.inService, conditions.forAsset(assetId), events.forAsset(assetId))
+    }
+
     /**
      * The store a test drives by hand: `state` is a `var` and the bytes are a map, so a refusal
      * and a successful write are both one line away. `SafAttachmentStorage` itself is proved by
@@ -258,6 +270,11 @@ class FakeGraph(
     /** 1.4 — condition and health configuration, mirroring `AppGraph`'s six fields by name (master plan §1). */
     val recordCondition: RecordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, todayPort)
     val acceptOperationalOffer: AcceptOperationalOffer = AcceptOperationalOffer(conditions, recordCondition, uow)
+    // #82: the combined write (Workflow A) and the impairment offer's accept (Workflow B), as `AppGraph` wires them.
+    val recordConditionWithIncident: RecordConditionWithIncident = RecordConditionWithIncident(
+        events, definitions, profiles, assets, uow, ids, clock, recomputeSchedules, conditions, todayPort, recordCondition,
+    )
+    val acceptImpairmentOffer: AcceptImpairmentOffer = AcceptImpairmentOffer(conditions, recordCondition, uow)
     val saveHealthSubject: SaveHealthSubject =
         SaveHealthSubject(healthSubjects, assets, schedules, profiles, uow, ids, clock)
     val archiveHealthSubject: ArchiveHealthSubject =
@@ -389,12 +406,15 @@ class FakeGraph(
 
     /**
      * 1.4 — the offers an event makes (spec §3.3, §5.4): "Mark operational?" and the season offer,
-     * each written only by its accept (B06's `AcceptOperationalOffer`, B04's `AcceptSeasonOffer`).
-     * Built here once; the completion flow and the journal entry both ask through it.
+     * each written only by its accept (B06's `AcceptOperationalOffer`, B04's `AcceptSeasonOffer`) —
+     * and #82's impairment offer after a new Incident, written only by "Mark down" or "Mark
+     * degraded" (`AcceptImpairmentOffer`). Built here once; the completion flow and the journal
+     * entry both ask through it.
      */
     val eventOffers: EventOffers = EventOffers(
         OperationalOffers(assets, conditions, acceptOperationalOffer, todayPort),
         SeasonOffers(assets, seasonActivations, acceptSeasonOffer, todayPort),
+        ImpairmentOffers(assets, conditions, acceptImpairmentOffer, todayPort),
     )
 
     /** The one completion mechanism, over the real use cases — always UTC, so a `tzId` is stable. */

@@ -2,15 +2,25 @@ package com.loosecannon.servicetag.ui.journal
 
 import com.loosecannon.servicetag.core.journal.RangeState
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.FieldProblem
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.dayMillis
+import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
+import com.loosecannon.servicetag.ui.condition.EntryOffers
+import com.loosecannon.servicetag.ui.condition.EventOffer
+import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
+import com.loosecannon.servicetag.ui.condition.PendingCondition
+import com.loosecannon.servicetag.ui.condition.savingAlsoRecordsLine
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -78,12 +89,39 @@ class EventEntryViewModelTest {
         )
     }
 
-    private fun entryModel(assetId: AssetId, profileId: ProfileId?, eventId: EventId?) =
-        EventEntryViewModel(
-            graph.assets, graph.definitions, graph.profiles, graph.events,
-            graph.logEvent, graph.updateEvent, graph.clock,
-            assetId, profileId, eventId, offers = graph.eventOffers,
-        )
+    private fun entryModel(
+        assetId: AssetId,
+        profileId: ProfileId?,
+        eventId: EventId?,
+        offers: EntryOffers = graph.eventOffers,
+        kind: EventKind? = null,
+    ) = EventEntryViewModel(
+        graph.assets, graph.definitions, graph.profiles, graph.events,
+        graph.logEvent, graph.updateEvent, graph.clock,
+        assetId, profileId, eventId, presetKind = kind, offers = offers,
+    )
+
+    /** #82: counts what reaches the graph's one [EntryOffers], delegating everything to it. */
+    private class RecordingOffers(private val real: EntryOffers) : EntryOffers by real {
+        var asked = 0
+        var accepts = 0
+
+        override suspend fun offersAfter(event: AssetEvent): List<EventOffer> {
+            asked += 1
+            return real.offersAfter(event)
+        }
+
+        override suspend fun accept(offer: EventOffer) {
+            accepts += 1
+            real.accept(offer)
+        }
+    }
+
+    /** An asset in service with no condition recorded: a new Incident on it asks Workflow B's question. */
+    private suspend fun pump(): AssetId {
+        graph.assets.upsert(assetRow("pump", name = "Pump"))
+        return AssetId("pump")
+    }
 
     private fun detailModel(id: EventId) =
         EventDetailViewModel(graph.events, graph.definitions, graph.assets, graph.deleteEvent, id)
@@ -468,5 +506,253 @@ class EventEntryViewModelTest {
 
         assertTrue(vm.missing.first { it })
         assertNull(vm.state.value)
+    }
+
+    // ------------------------------------------------------------------ #82: Workflow B on the entry (C8)
+
+    /** Row 15: an edit never asks — it logged nothing new, and S53 says "You logged". */
+    @Test fun anEditNeverAsks() = runTest {
+        val pump = pump()
+        val logged = graph.logEvent.run(
+            EventCommand(
+                assetId = pump, profileId = null, kind = EventKind.INCIDENT, title = "Seized",
+                occurredOn = today(), occurredTime = null, tzId = "UTC", notes = "",
+                values = emptyMap(), consumables = emptyList(),
+            ),
+        )
+        val offers = RecordingOffers(graph.eventOffers)
+        val vm = entryModel(pump, null, logged.id, offers)
+        vm.state.first { it.loaded }
+        val saved = CompletableDeferred<EventId>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { saved.complete(vm.saved.first()) }
+
+        vm.onNotes("Bearing gone")
+        vm.save()
+
+        val settled = vm.state.first { !it.saving || it.offer != null }
+        assertNull("the edit never asks", settled.offer)
+        assertEquals(logged.id, saved.await())
+        assertEquals("the offers are never read for an edit", 0, offers.asked)
+        assertEquals(0, graph.conditions.all().size)
+        assertTrue(
+            "the same Incident, new, would have asked",
+            graph.eventOffers.offersAfter(graph.events.get(logged.id)!!).single() is ImpairmentOfferPrompt,
+        )
+    }
+
+    /**
+     * Row 16: a second tap on an answer is ignored at the view model — one accept reaches the offers
+     * and the screen leaves once. Rows cannot show it: the accept re-reads and would write nothing.
+     */
+    @Test fun aSecondTapOnAnAnswerIsIgnored() = runTest {
+        val pump = pump()
+        val offers = RecordingOffers(graph.eventOffers)
+        val vm = entryModel(pump, null, null, offers, kind = EventKind.INCIDENT)
+        vm.state.first { it.loaded }
+        val saved = mutableListOf<EventId>()
+        val left = CompletableDeferred<EventId>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            vm.saved.collect {
+                saved += it
+                left.complete(it)
+            }
+        }
+
+        vm.save()
+        advanceUntilIdle()
+        assertTrue("Workflow B asks", vm.state.value.offer is ImpairmentOfferPrompt)
+        vm.acceptImpairment(OperationalCondition.DOWN)
+        vm.acceptImpairment(OperationalCondition.DEGRADED)
+        left.await()
+        vm.state.first { it.offer == null && !it.saving }
+        advanceUntilIdle()
+
+        assertEquals("one accept reaches the offers", 1, offers.accepts)
+        assertEquals(1, saved.size)
+        assertEquals(OperationalCondition.DOWN, graph.conditions.forAsset(pump).single().condition)
+    }
+
+    // ------------------------------------------------------------------ #82: the pending entry (C7, R82-3)
+
+    /** The combined flow's Incident entry, opened with Change condition's held [held]. */
+    private fun pendingModel(assetId: AssetId, held: PendingCondition, offers: EntryOffers = graph.eventOffers) =
+        EventEntryViewModel(
+            graph.assets, graph.definitions, graph.profiles, graph.events,
+            graph.logEvent, graph.updateEvent, graph.clock,
+            assetId, null, null, presetKind = EventKind.INCIDENT, offers = offers,
+            pending = held, recordWithIncident = graph.recordConditionWithIncident,
+        )
+
+    /** Today is 2026-02-10 for the store and the entry alike; the held DOWN was on the 9th. */
+    private fun heldDown(reason: String = "Will not start\nStarter clicks") =
+        PendingCondition("c-held", OperationalCondition.DOWN, "2026-02-09", reason)
+
+    private fun onTheTenth() {
+        graph.today = java.time.LocalDate.parse("2026-02-10")
+        graph.now = dayMillis("2026-02-10") + 12 * 60 * 60 * 1000L
+    }
+
+    /**
+     * Row 14 (R82-3): the entry opens as an INCIDENT with no profile — the title the reason's first
+     * non-blank line (or the preset "Incident"), the notes its remaining lines, the held day and no
+     * time, all editable — and the data P82-5 is drawn from.
+     */
+    @Test fun aPendingEntryOpensAsAPrefilledIncident() = runTest {
+        onTheTenth()
+        val pump = pump()
+
+        val state = pendingModel(pump, heldDown("  \n Will not start \nStarter clicks\n\n  Smells of smoke \n"))
+            .state.first { it.loaded }
+        assertEquals("Will not start", state.title)
+        assertEquals("Starter clicks\n\n  Smells of smoke", state.notes)
+        assertEquals("2026-02-09", state.occurredOn)
+        assertNull("no time", state.occurredTime)
+        assertEquals("no profile", "", state.profileName)
+        assertEquals(OperationalCondition.DOWN, state.alsoRecords)
+        assertEquals("Saving also records Pump as DOWN.", savingAlsoRecordsLine(state.assetName, state.alsoRecords!!))
+
+        val blank = pendingModel(pump, heldDown("  \n ")).state.first { it.loaded }
+        assertEquals("Incident", blank.title)
+        assertEquals("", blank.notes)
+        val oneLine = pendingModel(pump, heldDown("Belt snapped")).state.first { it.loaded }
+        assertEquals("Belt snapped", oneLine.title)
+        assertEquals("", oneLine.notes)
+
+        // A plain Incident entry carries no condition line.
+        assertNull(entryModel(pump, null, null, kind = EventKind.INCIDENT).state.first { it.loaded }.alsoRecords)
+    }
+
+    /**
+     * Row 14 (AC 3): Save writes the Incident and the held row, linked, once — through the combined
+     * write, never LogEvent — asks nothing, and the screen leaves once.
+     */
+    @Test fun savingItWritesOnceLinkedAndAsksNothing() = runTest {
+        onTheTenth()
+        val pump = pump()
+        val held = heldDown()
+        val offers = RecordingOffers(graph.eventOffers)
+        val vm = pendingModel(pump, held, offers)
+        vm.state.first { it.loaded }
+        val saved = mutableListOf<EventId>()
+        val left = CompletableDeferred<EventId>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            vm.saved.collect {
+                saved += it
+                left.complete(it)
+            }
+        }
+
+        vm.save()
+        val leftFor = left.await()
+        advanceUntilIdle()
+
+        val event = graph.events.forAsset(pump).single()
+        assertEquals(event.id, leftFor)
+        assertEquals(EventKind.INCIDENT, event.kind)
+        assertEquals("Will not start", event.title)
+        assertEquals("Starter clicks", event.notes)
+        assertEquals("2026-02-09", event.occurredOn)
+        assertNull(event.occurredTime)
+        assertNull(event.profileId)
+        val row = graph.conditions.forAsset(pump).single()
+        assertEquals(held.id, row.id)
+        assertEquals(event.id, row.eventId)
+        assertEquals(OperationalCondition.DOWN, row.condition)
+        assertEquals("2026-02-09", row.occurredOn)
+        assertNull(row.occurredTime)
+        assertEquals(held.reason, row.reason)
+        assertNull(vm.state.value.offer)
+        assertEquals("the offers are never read in the combined flow", 0, offers.asked)
+        assertEquals(1, saved.size)
+    }
+
+    /** Row 14: leaving the entry — back, the close icon — writes nothing. */
+    @Test fun leavingItWritesNothing() = runTest {
+        onTheTenth()
+        val pump = pump()
+        val vm = pendingModel(pump, heldDown())
+        vm.state.first { it.loaded }
+
+        vm.onTitle("Starter motor")
+        advanceUntilIdle()
+
+        assertEquals(0, graph.events.forAsset(pump).size)
+        assertEquals(0, graph.conditions.forAsset(pump).size)
+    }
+
+    /** Row 14 (R82-3): an Incident dated after today refuses the whole Save with S25 and writes nothing. */
+    @Test fun aLaterIncidentDateSaysS25AndWritesNothing() = runTest {
+        onTheTenth()
+        val pump = pump()
+        val vm = pendingModel(pump, heldDown())
+        vm.state.first { it.loaded }
+        val saved = mutableListOf<EventId>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { vm.saved.collect { saved += it } }
+
+        vm.onDate("2026-02-11")
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+
+        assertEquals(DATE_NOT_LATER_THAN_TODAY, refused.firstProblem)
+        assertEquals(0, graph.events.forAsset(pump).size)
+        assertEquals(0, graph.conditions.forAsset(pump).size)
+        assertTrue(saved.isEmpty())
+    }
+
+    /** Row 14 (C7): a field row's problem is named before S25 — the form's own first line, as today. */
+    @Test fun fieldRowsWinOverS25() = runTest {
+        onTheTenth()
+        val spa = spa()
+        val vm = pendingModel(spa.id, heldDown())
+        vm.state.first { it.loaded }
+
+        vm.onValue(spa.def("ph").id, "abc")
+        vm.onDate("2026-02-11")
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+
+        assertEquals("pH is not a number", refused.firstProblem)
+        assertTrue(refused.fields.single { it.definition.id == spa.def("ph").id }.problem is FieldProblem.NotANumber)
+        assertEquals(0, graph.events.forAsset(spa.id).size)
+        assertEquals(0, graph.conditions.forAsset(spa.id).size)
+    }
+
+    /** C7: a refusal no row can explain — the asset gone — is the shipped "Could not save this entry." */
+    @Test fun aRefusalNoRowExplainsSaysCouldNotSave() = runTest {
+        onTheTenth()
+        val vm = pendingModel(AssetId("gone"), heldDown())
+        vm.state.first { it.loaded }
+
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+
+        assertEquals("Could not save this entry.", refused.firstProblem)
+        assertEquals(0, graph.conditions.all().size)
+    }
+
+    /**
+     * Row 14 (K5): a second Save on the same held id — a fresh view model on the same route, as after
+     * a lost pop — writes nothing more and still leaves.
+     */
+    @Test fun aSecondSaveAfterTheCommitWritesNothing() = runTest {
+        onTheTenth()
+        val pump = pump()
+        val held = heldDown()
+        suspend fun saveOnce(): EventId {
+            val vm = pendingModel(pump, held)
+            vm.state.first { it.loaded }
+            val left = CompletableDeferred<EventId>()
+            backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { left.complete(vm.saved.first()) }
+            vm.save()
+            return left.await()
+        }
+
+        val first = saveOnce()
+        val second = saveOnce()
+        advanceUntilIdle()
+
+        assertEquals(first, second)
+        assertEquals(1, graph.events.forAsset(pump).size)
+        assertEquals(listOf(held.id), graph.conditions.forAsset(pump).map { it.id })
     }
 }

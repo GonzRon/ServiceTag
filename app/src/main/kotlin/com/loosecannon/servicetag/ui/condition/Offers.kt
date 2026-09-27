@@ -1,5 +1,8 @@
 package com.loosecannon.servicetag.ui.condition
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -9,14 +12,17 @@ import com.loosecannon.servicetag.core.condition.ConditionHistory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
 import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
+import com.loosecannon.servicetag.core.usecase.impairmentOfferFor
 import com.loosecannon.servicetag.core.usecase.operationalOfferFor
 import com.loosecannon.servicetag.core.usecase.seasonOfferFor
 import com.loosecannon.servicetag.ui.health.inService
@@ -45,8 +51,23 @@ const val START_THE_SEASON_NOW = "Start the season now?"
 /** S52. */
 const val END_THE_SEASON_NOW = "End the season now?"
 
-/** S53, "You logged <event title>.": the season offer's body. */
+/**
+ * S53, "You logged <event title>.": the season offer's body — and, re-ratified for #82 (S53 (re)),
+ * the impairment offer's body too. One home for both.
+ */
 fun seasonOfferBody(eventTitle: String): String = "You logged $eventTitle."
+
+/** #82's P82-6: the impairment offer's question, after a new Incident (Workflow B). */
+const val DID_THIS_AFFECT_USE = "Did this affect whether the asset can be used?"
+
+/** P82-7: its first answer; lower case like S7, not the badge word. */
+const val MARK_DOWN = "Mark down"
+
+/** P82-8: its second answer. */
+const val MARK_DEGRADED = "Mark degraded"
+
+/** P82-9: its third answer, and what dismissing it means. It writes nothing. */
+const val NO_CHANGE = "No change"
 
 /**
  * An offer made after an event (spec §3.3, §5.4): a question, never an action. Nothing is written
@@ -88,6 +109,26 @@ data class SeasonOfferPrompt(
 }
 
 /**
+ * #82, Workflow B: "Did this affect whether the asset can be used?" after a **new** Incident on an
+ * asset in service whose condition is OPERATIONAL or not recorded. Three answers: [acceptLabel]
+ * records DOWN, [alternateLabel] records DEGRADED, [declineLabel] — and dismissing — records
+ * nothing. [chosen] is the answer tapped, set with [accepting] before the write; only an answer
+ * that names DOWN or DEGRADED is ever accepted ([EventOffers.accept]).
+ */
+data class ImpairmentOfferPrompt(
+    override val event: AssetEvent,
+    val assetName: String,
+    override val accepting: Boolean = false,
+    val chosen: OperationalCondition? = null,
+) : EventOffer {
+    override val title: String get() = DID_THIS_AFFECT_USE
+    override val body: String get() = seasonOfferBody(event.title)
+    override val acceptLabel: String get() = MARK_DOWN
+    val alternateLabel: String get() = MARK_DEGRADED
+    override val declineLabel: String get() = NO_CHANGE
+}
+
+/**
  * The offers already asked within one batch of completions — one "Complete selected" on the scan
  * sheet (the controller's rulings on B12's review, M-1 and RS-2). Each **asset** is asked each offer
  * **at most once per batch, whatever the item kinds**: after "Not yet" on the first of several items
@@ -106,12 +147,14 @@ class OfferBatch {
         get() = when (this) {
             is OperationalOfferPrompt -> "operational"
             is SeasonOfferPrompt -> "season-${action.name}"
+            is ImpairmentOfferPrompt -> "impairment"
         }
 }
 
 fun EventOffer.tapped(): EventOffer = when (this) {
     is OperationalOfferPrompt -> copy(accepting = true)
     is SeasonOfferPrompt -> copy(accepting = true)
+    is ImpairmentOfferPrompt -> copy(accepting = true)
 }
 
 /**
@@ -125,8 +168,15 @@ fun EventOffer.tapped(): EventOffer = when (this) {
  * - an event whose zone **does not resolve** on this device — the row takes the event's zone, which
  *   `RecordCondition` would refuse (the carry-forward from B06's review).
  */
-fun operationalOfferShown(current: AssetCondition?, event: AssetEvent, today: LocalDate): Boolean {
-    if (!operationalOfferFor(current, event)) return false
+fun operationalOfferShown(current: AssetCondition?, event: AssetEvent, today: LocalDate): Boolean =
+    operationalOfferFor(current, event) && keepable(event, today)
+
+/**
+ * The two conditions both condition offers add to their `:core` predicate, each a case in which the
+ * row the accept writes would be refused: [event] dated no later than [today], in a zone that
+ * resolves on this device.
+ */
+private fun keepable(event: AssetEvent, today: LocalDate): Boolean {
     val on = try {
         LocalDate.parse(event.occurredOn)
     } catch (_: DateTimeParseException) {
@@ -191,15 +241,56 @@ class SeasonOffers(
 }
 
 /**
+ * #82, Workflow B as the app makes it (R82-4): the impairment offer after [event] — `:core`'s
+ * [impairmentOfferFor] (a non-completion INCIDENT, the current condition OPERATIONAL or not recorded,
+ * no row naming it) and three more conditions, each a case in which accepting would be refused or
+ * the house rule says no: dated no later than today, in a zone this device resolves, and an asset in
+ * service. The accept is `:core`'s [AcceptImpairmentOffer]: dated `max(incident, current)`, empty
+ * reason, linked (R82-5).
+ */
+class ImpairmentOffers(
+    private val assets: AssetRepository,
+    private val conditions: ConditionRepository,
+    private val accept: AcceptImpairmentOffer,
+    private val today: Today,
+) {
+    /** The offer to make after [event], or null. Reads only. */
+    suspend fun offerFor(event: AssetEvent): ImpairmentOfferPrompt? {
+        val history = ConditionHistory.of(conditions.forAsset(event.assetId))
+        if (!impairmentOfferFor(history, event) || !keepable(event, today.localDate())) return null
+        val asset = assets.get(event.assetId)?.takeIf { it.inService } ?: return null
+        return ImpairmentOfferPrompt(event, asset.name)
+    }
+
+    /** The one write: [condition], DOWN or DEGRADED, linked to the Incident. */
+    suspend fun accept(offer: ImpairmentOfferPrompt, condition: OperationalCondition): AssetCondition =
+        accept.run(offer.event.assetId, offer.event, condition)
+}
+
+/**
+ * What the journal entry needs of the offers: what a just-logged event asks, and an accepted
+ * answer's write. [EventOffers] is the one implementation; a test can record through it.
+ */
+interface EntryOffers {
+    suspend fun offersAfter(event: AssetEvent): List<EventOffer>
+    suspend fun accept(offer: EventOffer)
+}
+
+/**
  * Every offer an event makes, in the order they are asked: "Mark operational?" first, then the
- * season offer. A journal entry makes at most one — its kind is either a MAINTENANCE or REPLACEMENT
+ * season offer, then #82's impairment offer (which only a new, non-completion INCIDENT makes, so it
+ * never shares a turn with the other two). A journal entry makes at most one — its kind is either a MAINTENANCE or REPLACEMENT
  * or a season kind — but a **completion** can make both: it counts for the operational offer whatever
  * its kind, and it takes its profile's kind (`CompleteSchedule`), so a season-start task completed on
  * a DOWN MANUAL asset that is out of season is asked both, one after the other (spec §3.3, §5.4).
  *
  * Built once, in the graph, and shared by the completion flow and the journal entry.
  */
-class EventOffers(private val operational: OperationalOffers, private val season: SeasonOffers) {
+class EventOffers(
+    private val operational: OperationalOffers,
+    private val season: SeasonOffers,
+    private val impairment: ImpairmentOffers,
+) : EntryOffers {
 
     /**
      * The batch a scan-sheet selection is running, from [open] to [close], or null. While it is open,
@@ -223,16 +314,23 @@ class EventOffers(private val operational: OperationalOffers, private val season
      * asset, which this call then counts as asked. The two offers touch different facts, so neither
      * answer changes the other.
      */
-    suspend fun offersAfter(event: AssetEvent): List<EventOffer> {
-        val asked = listOfNotNull(operational.offerFor(event), season.offerFor(event))
+    override suspend fun offersAfter(event: AssetEvent): List<EventOffer> {
+        val asked = listOfNotNull(operational.offerFor(event), season.offerFor(event), impairment.offerFor(event))
         val open = selection ?: return asked
         return asked.filter(open::firstTime)
     }
 
-    suspend fun accept(offer: EventOffer) {
+    override suspend fun accept(offer: EventOffer) {
         when (offer) {
             is OperationalOfferPrompt -> operational.accept(offer)
             is SeasonOfferPrompt -> season.accept(offer)
+            is ImpairmentOfferPrompt -> {
+                val chosen = offer.chosen
+                require(chosen == OperationalCondition.DOWN || chosen == OperationalCondition.DEGRADED) {
+                    "the impairment offer is accepted only with DOWN or DEGRADED, not $chosen"
+                }
+                impairment.accept(offer, chosen)
+            }
         }
     }
 }
@@ -252,6 +350,36 @@ fun EventOfferDialog(offer: EventOffer, onAccept: () -> Unit, onDecline: () -> U
         },
         dismissButton = {
             TextButton(enabled = !offer.accepting, onClick = onDecline) { Text(offer.declineLabel) }
+        },
+    )
+}
+
+/**
+ * #82's three answers on screen (C8): P82-6 over S53, then P82-7 and P82-8 — each records its
+ * condition — and P82-9, which records nothing, as dismissing does. All three disable once an answer
+ * is tapped, so a double tap never writes twice. The two recording answers share the confirm slot
+ * in a [FlowRow], so at large text sizes they wrap onto two lines instead of squeezing one of them.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun IncidentOfferDialog(
+    offer: ImpairmentOfferPrompt,
+    onMarkDown: () -> Unit,
+    onMarkDegraded: () -> Unit,
+    onNoChange: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { if (!offer.accepting) onNoChange() },
+        title = { Text(offer.title) },
+        text = { Text(offer.body, style = MaterialTheme.typography.bodyMedium) },
+        confirmButton = {
+            FlowRow(horizontalArrangement = Arrangement.End) {
+                TextButton(enabled = !offer.accepting, onClick = onMarkDegraded) { Text(offer.alternateLabel) }
+                TextButton(enabled = !offer.accepting, onClick = onMarkDown) { Text(offer.acceptLabel) }
+            }
+        },
+        dismissButton = {
+            TextButton(enabled = !offer.accepting, onClick = onNoChange) { Text(offer.declineLabel) }
         },
     )
 }

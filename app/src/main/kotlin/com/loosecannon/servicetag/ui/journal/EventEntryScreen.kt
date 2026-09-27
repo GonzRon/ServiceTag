@@ -44,14 +44,20 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.journal.Reading
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.InstrumentEntryHeader
 import com.loosecannon.servicetag.ui.components.InstrumentEntryRow
 import com.loosecannon.servicetag.ui.components.InstrumentList
 import com.loosecannon.servicetag.ui.components.InstrumentRow
+import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.condition.EventOfferDialog
+import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
+import com.loosecannon.servicetag.ui.condition.IncidentOfferDialog
+import com.loosecannon.servicetag.ui.condition.PendingCondition
+import com.loosecannon.servicetag.ui.condition.savingAlsoRecordsLine
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
@@ -78,9 +84,16 @@ fun EventEntryScreen(
     onBack: () -> Unit,
     /** The `EventKind` name a new, profile-less entry opens with (spec §7); ignored otherwise. */
     kind: String? = null,
+    /**
+     * #82 (C7): Change condition's held DOWN or DEGRADED, when "Log incident details" opened this
+     * entry — its Save records the Incident and that row together. The key names its id, so a
+     * second combined entry on the same asset is never handed this one's model.
+     */
+    pending: PendingCondition? = null,
 ) {
-    val model: EventEntryViewModel = viewModel(key = eventId ?: "new-$assetId-$profileId-$kind") {
-        EventEntryViewModel(graph, assetId, profileId, eventId, kind)
+    val modelKey = eventId ?: "new-$assetId-$profileId-$kind" + pending?.let { "-pending-${it.id}" }.orEmpty()
+    val model: EventEntryViewModel = viewModel(key = modelKey) {
+        EventEntryViewModel(graph, assetId, profileId, eventId, kind, pending)
     }
     val state by model.state.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
@@ -90,8 +103,18 @@ fun EventEntryScreen(
     LaunchedEffect(model) { model.saved.collect { onDone() } }
 
     // 1.4: a just-logged event's one question — "Mark operational?" or the season offer — asked
-    // before the screen leaves. Only its accept writes (spec §3.3, §5.4).
-    state.offer?.let { EventOfferDialog(it, onAccept = model::acceptOffer, onDecline = model::declineOffer) }
+    // before the screen leaves. Only its accept writes (spec §3.3, §5.4). #82's impairment offer has
+    // three answers, so it is drawn by its own dialog; the two-button one is unchanged.
+    when (val offer = state.offer) {
+        null -> Unit
+        is ImpairmentOfferPrompt -> IncidentOfferDialog(
+            offer,
+            onMarkDown = { model.acceptImpairment(OperationalCondition.DOWN) },
+            onMarkDegraded = { model.acceptImpairment(OperationalCondition.DEGRADED) },
+            onNoChange = model::declineOffer,
+        )
+        else -> EventOfferDialog(offer, onAccept = model::acceptOffer, onDecline = model::declineOffer)
+    }
     LaunchedEffect(state.firstProblem) { state.firstProblem?.let { snackbars.showSnackbar(it) } }
 
     // A profile-less entry has no name of its own in the bar, so it shows one part, not an orphan
@@ -134,6 +157,10 @@ fun EventEntryScreen(
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 24.dp),
         ) {
+            // #82: P82-5, once, under the eyebrow — this Save records the held condition too.
+            state.alsoRecords?.let { condition ->
+                QuietLine(savingAlsoRecordsLine(state.assetName, condition), Modifier.padding(top = 8.dp))
+            }
             LoggedBlock(
                 occurredOn = state.occurredOn,
                 occurredTime = state.occurredTime,

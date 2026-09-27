@@ -195,7 +195,9 @@ class AttachmentsDeviceProofTest {
 
             rule.field("Name").performTextReplacement(RENAMED)
             rule.onNodeWithText("Manual").performClick()
-            rule.onNodeWithText("Save").performClick()
+            // The keyboard is up after typing and the sheet scrolls under it: bring Save into view
+            // first, or the tap misses and the sheet's own Name field satisfies the wait below.
+            rule.onNodeWithText("Save").performScrollTo().performClick()
 
             rule.awaitText(RENAMED)
             rule.onNode(hasText(RENAMED) and hasText("Manual · 2.0 KB · ${today()}"))

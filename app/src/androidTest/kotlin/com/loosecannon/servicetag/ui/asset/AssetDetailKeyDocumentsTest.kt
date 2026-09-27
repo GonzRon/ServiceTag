@@ -148,7 +148,8 @@ class AssetDetailKeyDocumentsTest {
         sheet(row("a1", "Pump service manual.pdf", DocumentRole.SERVICE_MANUAL) to true) { saved += it }
 
         rule.onNode(hasSetTextAction() and hasText("Name")).performTextReplacement("Spa pump service manual.pdf")
-        rule.onNodeWithText("Save").performClick()
+        // The keyboard is up after typing: bring Save into view first, as the 360 dp case does.
+        rule.onNodeWithText("Save").performScrollTo().performClick()
         rule.waitUntil(WAIT_MS) { saved.isNotEmpty() }
 
         assertEquals("Spa pump service manual.pdf", saved.single().displayName)

@@ -149,4 +149,53 @@ class RecordConditionTest {
         assertEquals(back, history.since)
         assertEquals(dayMillis("2026-09-24") + 1_000L, back.createdAt)
     }
+
+    /**
+     * #82 C2, the one writer takes a row id: a supplied id is the stored row's id, and the id
+     * generator is not asked for one.
+     */
+    @Test
+    fun aSuppliedRowIdIsTheRowsId() = runBlocking<Unit> {
+        h.asset("a1")
+
+        val written = h.recordCondition.run(AssetId("a1"), cmd(reason = "Pump will not start"), rowId = "c-held")
+
+        assertEquals("c-held", written.id)
+        assertEquals(listOf(written), h.rows())
+        assertEquals("id-001", h.ids.newId(), "no id was minted")
+    }
+
+    /**
+     * Hazard (K5): a second commit of the same held row writes a duplicate or fails. A supplied id
+     * already stored for the asset is returned as it is, before the command is checked — so a retry
+     * whose body would now be refused still succeeds — and nothing is written.
+     */
+    @Test
+    fun aSuppliedIdAlreadyStoredWritesNothingEvenIfTheCommandIsNowInvalid() = runBlocking<Unit> {
+        h.asset("a1")
+        val first = h.recordCondition.run(AssetId("a1"), cmd(reason = "Pump will not start"), rowId = "c-held")
+        h.now += 60_000L
+
+        val again = h.recordCondition.run(AssetId("a1"), cmd(reason = "Pump will not start"), rowId = "c-held")
+        val nowInvalid = h.recordCondition.run(
+            AssetId("a1"), cmd(occurredOn = "2026-10-01", reason = "x".repeat(501), eventId = "e-gone"), rowId = "c-held",
+        )
+
+        assertEquals(first, again)
+        assertEquals(first, nowInvalid, "the stored id is answered before validation")
+        assertEquals(listOf(first), h.rows())
+    }
+
+    /** Without an id every call mints a fresh one, as before #82: two calls, two rows. */
+    @Test
+    fun withoutAnIdTheRowIsMintedAsBefore() = runBlocking<Unit> {
+        h.asset("a1")
+
+        val one = h.recordCondition.run(AssetId("a1"), cmd(reason = "Pump will not start"))
+        h.now += 60_000L
+        val two = h.recordCondition.run(AssetId("a1"), cmd(reason = "Pump will not start"))
+
+        assertEquals(listOf("id-001", "id-002"), listOf(one.id, two.id))
+        assertEquals(listOf(one, two), h.rows())
+    }
 }

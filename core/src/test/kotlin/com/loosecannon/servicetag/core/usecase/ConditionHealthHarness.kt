@@ -94,6 +94,10 @@ internal class ConditionHealthHarness(today: String = "2026-09-24") {
     val recordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, todayPort)
     val acceptOperationalOffer = AcceptOperationalOffer(conditions, recordCondition, uow)
     val logEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock, recompute)
+    val recordConditionWithIncident = RecordConditionWithIncident(
+        events, definitions, profiles, assets, uow, ids, clock, recompute, conditions, todayPort, recordCondition,
+    )
+    val acceptImpairmentOffer = AcceptImpairmentOffer(conditions, recordCondition, uow)
 
     val saveHealthSubject = SaveHealthSubject(healthSubjects, assets, schedules, profiles, uow, ids, clock)
     val archiveHealthSubject = ArchiveHealthSubject(healthSubjects, assets, schedules, uow, clock)

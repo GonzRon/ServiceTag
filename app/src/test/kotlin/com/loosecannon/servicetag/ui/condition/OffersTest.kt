@@ -506,4 +506,196 @@ class OffersTest {
         assertEquals(listOf("a-start"), graph.seasonActivations.all().map { it.id })
         assertEquals(1, graph.events.all().size)
     }
+
+    // ---------------------------------------------------------------- #82: the impairment offer (Workflow B)
+
+    private suspend fun operational(assetId: AssetId, on: String = "2026-04-01") = graph.conditions.insert(
+        conditionRow("c-ok-${assetId.value}", assetId.value, OperationalCondition.OPERATIONAL, on),
+    )
+
+    /**
+     * Row 15 (AC 4): a new Incident on an OPERATIONAL asset, and on one with nothing recorded, asks
+     * P82-6 over S53 with P82-7, P82-8 and P82-9, and the screen waits for the answer. Asked, not
+     * applied: nothing is written by the Incident itself.
+     */
+    @Test fun anIncidentOnAnOperationalOrUnrecordedAssetAsksTheImpairmentOffer() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("pump", name = "Pump"))
+        graph.assets.upsert(assetRow("fan", name = "Fan"))
+        operational(AssetId("pump"))
+
+        for (id in listOf("pump", "fan")) {
+            val (model, saved) = logged(AssetId(id), EventKind.INCIDENT, "Seized")
+            val asked = model.state.value.offer as ImpairmentOfferPrompt
+            assertEquals("Did this affect whether the asset can be used?", asked.title)
+            assertEquals("You logged Seized.", asked.body)
+            assertEquals("Mark down", asked.acceptLabel)
+            assertEquals("Mark degraded", asked.alternateLabel)
+            assertEquals("No change", asked.declineLabel)
+            assertEquals(AssetId(id), asked.event.assetId)
+            assertFalse(asked.accepting)
+            assertNull(asked.chosen)
+            assertEquals("$id: the screen waits for the answer", emptyList<EventId>(), saved)
+        }
+        assertEquals("asked, not applied", 1, graph.conditions.all().size)
+    }
+
+    /** Row 15: an archived or retired asset is never asked, whatever its condition. */
+    @Test fun anOutOfServiceAssetIsNeverAskedTheImpairmentOffer() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.assets.upsert(assetRow("old", name = "Old generator", status = AssetStatus.ARCHIVED))
+        graph.assets.upsert(assetRow("gone", name = "Retired generator", retiredOn = "2026-03-01"))
+
+        assertTrue(graph.eventOffers.offersAfter(eventOn("gen", EventKind.INCIDENT)).single() is ImpairmentOfferPrompt)
+        assertEquals(emptyList<EventOffer>(), graph.eventOffers.offersAfter(eventOn("old", EventKind.INCIDENT)))
+        assertEquals(emptyList<EventOffer>(), graph.eventOffers.offersAfter(eventOn("gone", EventKind.INCIDENT)))
+    }
+
+    /** Row 15: an Incident dated after today is never asked — the row would be refused. */
+    @Test fun anIncidentDatedAfterTodayIsNeverAskedTheImpairmentOffer() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+
+        val (model, saved) = logged(AssetId("gen"), EventKind.INCIDENT, "Smoke", on = "2026-04-16")
+
+        assertNull(model.state.value.offer)
+        assertEquals(1, saved.size)
+        assertEquals(0, graph.conditions.all().size)
+        assertTrue(
+            "the same Incident dated today is asked",
+            graph.eventOffers.offersAfter(eventOn("gen", EventKind.INCIDENT)).single() is ImpairmentOfferPrompt,
+        )
+    }
+
+    /** Row 15: an Incident in a zone this device cannot resolve is never asked — the row takes that zone. */
+    @Test fun anIncidentInAZoneThisDeviceCannotResolveIsNeverAskedTheImpairmentOffer() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        val event = eventOn("gen", EventKind.INCIDENT)
+
+        assertEquals(emptyList<EventOffer>(), graph.eventOffers.offersAfter(event.copy(tzId = "Mars/Olympus_Mons")))
+        assertTrue(graph.eventOffers.offersAfter(event).single() is ImpairmentOfferPrompt)
+    }
+
+    /** Row 15 (K1): an Incident a condition row already names is never asked again. */
+    @Test fun anIncidentARowAlreadyNamesIsNeverAskedTheImpairmentOffer() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        val event = eventOn("gen", EventKind.INCIDENT)
+        assertTrue(graph.eventOffers.offersAfter(event).single() is ImpairmentOfferPrompt)
+
+        graph.conditions.insert(
+            conditionRow("c-named", "gen", OperationalCondition.OPERATIONAL, "2026-04-15", eventId = event.id.value),
+        )
+
+        assertEquals(emptyList<EventOffer>(), graph.eventOffers.offersAfter(event))
+    }
+
+    /**
+     * Row 17 (AC 6, 7; R82-9): a standalone Incident on an asset already DOWN or DEGRADED writes only
+     * the event and asks nothing — not the impairment offer, and not "Mark operational?".
+     */
+    @Test fun anIncidentOnAnImpairedAssetAsksNothing() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("gen", name = "Generator"))
+        graph.assets.upsert(assetRow("fan", name = "Fan"))
+        down(AssetId("gen"))
+        graph.conditions.insert(conditionRow("c-fan", "fan", OperationalCondition.DEGRADED, "2026-04-01"))
+
+        for (id in listOf("gen", "fan")) {
+            val (model, saved) = logged(AssetId(id), EventKind.INCIDENT, "Smoke again")
+            assertNull("$id: nothing asked", model.state.value.offer)
+            assertEquals(1, saved.size)
+        }
+        assertEquals("only the event is written", 2, graph.conditions.all().size)
+        assertEquals(1, graph.events.forAsset(AssetId("gen")).size)
+    }
+
+    /**
+     * Row 16 (AC 4; R82-5): "Mark down" and "Mark degraded" each record one row — that answer, linked
+     * to the Incident, dated `max(incident, current)`, with an empty reason and the Incident's zone —
+     * and the screen leaves once.
+     */
+    @Test fun markDownAndMarkDegradedEachWriteOneLinkedRow() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("pump", name = "Pump"))
+        graph.assets.upsert(assetRow("fan", name = "Fan"))
+        // The pump's OPERATIONAL row is later than its Incident, so the new row takes that day.
+        operational(AssetId("pump"), on = "2026-04-14")
+
+        for ((id, answer, expectedOn) in listOf(
+            Triple("pump", OperationalCondition.DOWN, "2026-04-14"),
+            Triple("fan", OperationalCondition.DEGRADED, "2026-04-12"),
+        )) {
+            val assetId = AssetId(id)
+            val before = graph.conditions.forAsset(assetId).size
+            val (model, saved) = logged(assetId, EventKind.INCIDENT, "Seized", on = if (id == "pump") "2026-04-10" else "2026-04-12")
+            val incident = (model.state.value.offer as ImpairmentOfferPrompt).event
+
+            model.acceptImpairment(answer)
+            advanceUntilIdle()
+
+            val rows = graph.conditions.forAsset(assetId)
+            assertEquals("$id: one row added", before + 1, rows.size)
+            val row = ConditionHistory.of(rows).current!!
+            assertEquals(answer, row.condition)
+            assertEquals(incident.id, row.eventId)
+            assertEquals(expectedOn, row.occurredOn)
+            assertEquals("", row.reason)
+            assertEquals(incident.tzId, row.tzId)
+            assertEquals(listOf(incident.id), saved)
+            assertNull(model.state.value.offer)
+        }
+    }
+
+    /** Row 16 (AC 5): "No change" — and dismissing, which is the same call — writes nothing; the screen leaves. */
+    @Test fun noChangeAndDismissWriteNothing() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("pump", name = "Pump"))
+        val pump = AssetId("pump")
+        operational(pump)
+
+        val (model, saved) = logged(pump, EventKind.INCIDENT, "Seized")
+        assertTrue(model.state.value.offer is ImpairmentOfferPrompt)
+        model.declineOffer()
+        advanceUntilIdle()
+
+        assertEquals(1, saved.size)
+        assertNull(model.state.value.offer)
+        assertEquals(1, graph.conditions.all().size)
+        assertEquals(OperationalCondition.OPERATIONAL, current(pump)!!.condition)
+    }
+
+    /** Row 16 (C3): a completion of a task whose profile logs INCIDENT asks nothing and writes no row. */
+    @Test fun aCompletionOfAnIncidentKindTaskAsksNothing() = runTest(scheduler) {
+        val pump = graph.createAsset.run(AssetCommand(name = "Pump", category = "Water")).id
+        val schedule = taskLogging(pump, EventKind.INCIDENT, "Leak check")
+        val flow = graph.completionFlow
+
+        val outcome = async { flow.complete(schedule) }
+        flow.prompt.first { it != null }
+        assertTrue(flow.submit(CompletionAnswer(occurredOn = "2026-04-15")))
+        advanceUntilIdle()
+
+        assertNull("nothing is asked", flow.offer.value)
+        val event = (outcome.await() as CompletionOutcome.Completed).events.single()
+        assertEquals(EventKind.INCIDENT, event.kind)
+        assertEquals(0, graph.conditions.all().size)
+    }
+
+    /**
+     * Row 16 (C8): the generic accept ignores the impairment offer — it names no answer — and
+     * `EventOffers` refuses one that does not name DOWN or DEGRADED, writing nothing.
+     */
+    @Test fun theGenericAcceptIgnoresIt() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("pump", name = "Pump"))
+        val pump = AssetId("pump")
+
+        val (model, saved) = logged(pump, EventKind.INCIDENT, "Seized")
+        val asked = model.state.value.offer as ImpairmentOfferPrompt
+        model.acceptOffer()
+        advanceUntilIdle()
+
+        assertEquals("still asked, untouched", asked, model.state.value.offer)
+        assertEquals(emptyList<EventId>(), saved)
+        assertEquals(0, graph.conditions.all().size)
+        for (chosen in listOf(null, OperationalCondition.OPERATIONAL)) {
+            val refused = runCatching { graph.eventOffers.accept(asked.copy(accepting = true, chosen = chosen)) }
+            assertTrue("$chosen is refused", refused.exceptionOrNull() is IllegalArgumentException)
+        }
+        assertEquals(0, graph.conditions.all().size)
+    }
 }

@@ -406,6 +406,8 @@ No scan, health value, status, season, event or completion writes one (#61 AC 4,
 
 After a completion, or a MAINTENANCE or REPLACEMENT event, on a DOWN or DEGRADED asset, the app offers "Mark operational?". Accepting writes OPERATIONAL dated `max(event date, current row's date)`, with `event_id` set. "Not yet" writes nothing.
 
+**Amendment (#82, 2026-09-27).** Two more paths write a condition row, each through `RecordCondition` and only on the owner's answer: the combined flow (S16 with DOWN or DEGRADED on an in-service asset asks P82-1 first; the row is then written by P82-4 alone or, linked, by the Incident's Save in one transaction with it), and P82-7/P82-8 after a new Incident on an OPERATIONAL or unrecorded asset, linked to it and dated `max(Incident date, current row's date)` with the later known time that day. An INCIDENT's kind or text never writes one. `RecordCondition.run` takes an optional row id (an erratum to the 1.4 master plan's contract G): it is never part of the command, the API body or an MCP argument, and a row of the asset already holding it is returned before the body is checked, so a held row committed twice lands once. The P82 words are quoted in §10.7's amendment.
+
 ### 5.5 What condition does not do — RATIFIED (I-28, 2026-09-24)
 
 It pauses nothing, withholds no reminder, moves no health and notifies nobody. An OPERATIONAL asset may still show OVERDUE work (#61 AC 7).
@@ -786,6 +788,8 @@ On a valid asset tag (#50) the sheet shows, top to bottom:
 
 The aggregate never decides visibility (B-3).
 
+**Amendment (#82, 2026-09-27).** Item 3 gains "Log incident" (P82-10) after "Change condition" when the asset is in service, DOWN or DEGRADED, and its current failure has no Incident (§10.3's amendment). It only navigates, to a new INCIDENT entry: it never opens the sheet by itself, and the scan still writes nothing. The sheet's "Change condition" asks P82-1 as asset detail does (§5.4's amendment).
+
 **One predicate** routes and fills the sheet: `scanSheetContent(items, condition, components, subjects)` (`MaintenanceSheetViewModel.kt:114-166`).
 - The sheet opens for any D-18a item, a DOWN or DEGRADED asset, or a DOWN or DEGRADED component.
 - Health lines are **passengers**, like DUE SOON: a CRITICAL contributor alone never opens the sheet, and rides along when another reason opens it. Calculated health has no routing power in 1.4 (O-8).
@@ -820,6 +824,8 @@ The identity plate and every component row gain a condition badge (`AssetDetailS
 - **Condition:** current condition, "Change condition", and history (#61 AC 5).
 - **Health:** critical lines and DOWN/DEGRADED components first, then the aggregate, contributors and S107.
 - **Season:** the window or phase, Start/End (S42–S45) and history; the break.
+
+**Amendment (#82, 2026-09-27).** The Condition section gains "Log incident" (P82-10) on every in-service asset, opening a new INCIDENT entry; a retired or archived asset shows none. It leads the row as a tonal button while the asset is DOWN or DEGRADED and its current failure has no Incident — the failure being the latest unbroken run of DOWN and DEGRADED rows, which a worsening from DEGRADED to DOWN continues and an OPERATIONAL row ends; an Incident counts when a row of that run names it, or, when no condition row names it, when it is dated within the run or logged after the run began. Otherwise it is an outlined button after "Change condition". History rows and their links are unchanged.
 
 ### 10.4 Editors
 
@@ -1027,6 +1033,8 @@ The 143 ratified rows are 139 new plus 4 re-ratified (S29, S32, S33, S37); S123,
 
 Retired: "Pause with the asset's season", "Remind me year round", and "Off means this asset is only in use between two dates each year."
 
+**Amendment (#82, 2026-09-27): Incident workflows** — Workflow A's question "Log incident details?" (P82-1) · its body "<asset> is <DOWN/DEGRADED>. Record what went wrong in the service record?" (P82-2) · "Log incident details" (P82-3) · "Save condition only" (P82-4) · the Incident entry's line "Saving also records <asset> as <DOWN/DEGRADED>." (P82-5) · Workflow B's question "Did this affect whether the asset can be used?" (P82-6) · "Mark down" (P82-7) · "Mark degraded" (P82-8) · "No change" (P82-9) · the action "Log incident" (P82-10). Ratified by the owner as #82's P82-1 … P82-10 (#82 plan §6, §12), with no S-numbers, as #71, #73 and #74 kept their P-ids plan-local; <DOWN/DEGRADED> is drawn through S2/S3's home. Two ratified words take a new role: S53 (re) "You logged <event title>." is also Workflow B's body, and S25 (re) "The date cannot be later than today." is also the combined Save's refusal on the Incident entry. The table's 143 rows are unchanged.
+
 ---
 
 ## 11. Invariants
@@ -1049,6 +1057,9 @@ D5 §6's "nothing stored at season end" and "MANUAL_STARTUP deferred" are retire
 
 **Concepts.**
 81. Only an explicit condition write inserts an `asset_condition` row; no health value, status, phase, event, completion or scan does.
+
+**Amendment (#82, 2026-09-27).** Two more explicit writes, both through `RecordCondition` and only on the owner's answer: the combined Incident-and-condition Save (or P82-4 for the row alone), and Workflow B's P82-7/P82-8 after a new Incident. An INCIDENT's kind or text never inserts a row (§5.4's amendment). `CrossConceptWriteTest` pins the four writers: `RecordCondition`, `AcceptOperationalOffer`, `RecordConditionWithIncident`, `AcceptImpairmentOffer`.
+
 82. Health writes nothing: no condition, lifecycle, schedule, policy, season or reminder state.
 83. Condition changes nothing but its own history.
 84. The policy never changes `computedDueOn`: for the same history, every policy yields CONTINUOUS's `computedDueOn`.

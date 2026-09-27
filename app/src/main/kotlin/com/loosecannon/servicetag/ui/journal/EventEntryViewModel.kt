@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ValueType
@@ -25,17 +26,25 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.usecase.ConditionCommand
+import com.loosecannon.servicetag.core.usecase.ConditionProblem
 import com.loosecannon.servicetag.core.usecase.ConsumableInput
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.EventOwnership
 import com.loosecannon.servicetag.core.usecase.EventValidation
 import com.loosecannon.servicetag.core.usecase.FieldProblem
+import com.loosecannon.servicetag.core.usecase.IncidentConditionRefused
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.NoSuchEvent
+import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
+import com.loosecannon.servicetag.ui.condition.EntryOffers
 import com.loosecannon.servicetag.ui.condition.EventOffer
 import com.loosecannon.servicetag.ui.condition.EventOffers
+import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
+import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.condition.tapped
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -107,6 +116,11 @@ data class EventEntryState(
      * only asks, and only its accept writes.
      */
     val offer: EventOffer? = null,
+    /**
+     * #82 (C7): the held DOWN or DEGRADED this entry's Save also records — P82-5 is drawn from it
+     * and the asset's name. Null for every entry but the combined flow's.
+     */
+    val alsoRecords: OperationalCondition? = null,
 )
 
 /**
@@ -146,8 +160,21 @@ class EventEntryViewModel(
      * [EventOffers]. An edit never offers: S19 and S53 say "You logged", and an edit logged nothing
      * new.
      */
-    private val offers: EventOffers,
+    private val offers: EntryOffers,
+    /**
+     * #82 (C7, R82-3): Change condition's held DOWN or DEGRADED, when "Log incident details" opened
+     * this entry. The entry then opens as a prefilled INCIDENT, and its Save writes the Incident and
+     * that row in one transaction through [recordWithIncident] — never [logEvent], never an offer.
+     */
+    private val pending: PendingCondition? = null,
+    private val recordWithIncident: RecordConditionWithIncident? = null,
 ) : ViewModel() {
+
+    init {
+        require(pending == null || (recordWithIncident != null && eventId == null)) {
+            "a pending condition needs the combined write, and only a new entry carries one"
+        }
+    }
 
     constructor(
         graph: AppGraph,
@@ -155,12 +182,15 @@ class EventEntryViewModel(
         profileId: String?,
         eventId: String?,
         kind: String? = null,
+        pending: PendingCondition? = null,
     ) : this(
         graph.assets, graph.definitions, graph.profiles, graph.events,
         graph.logEvent, graph.updateEvent, graph.clock,
         AssetId(assetId), profileId?.let(::ProfileId), eventId?.let(::EventId),
         kind?.let { name -> runCatching { EventKind.valueOf(name) }.getOrNull() },
         graph.eventOffers,
+        pending,
+        graph.recordConditionWithIncident,
     )
 
     /** The zone the entry is being made in; stored on the event as `tzId` for the audit trail. */
@@ -203,7 +233,8 @@ class EventEntryViewModel(
             val existing = eventId?.let { events.get(it) }
             val profile = (existing?.profileId ?: profileId)?.let { profiles.get(it) }
             commandProfileId = profile?.id
-            kind = existing?.kind ?: profile?.eventKind ?: presetKind ?: EventKind.NOTE
+            kind = if (pending != null) EventKind.INCIDENT else existing?.kind ?: profile?.eventKind ?: presetKind ?: EventKind.NOTE
+            val draft = pending?.let { incidentDraft(it.reason) }
             val all = definitions.forAsset(assetId)
             sources = all.associateBy(MeasurementDefinition::id)
             derivedDefinitions = all
@@ -216,16 +247,22 @@ class EventEntryViewModel(
                     profileName = profile?.name.orEmpty(),
                     title = existing?.title
                         ?: profile?.defaultTitle
+                        ?: draft?.let { it.first ?: presetTitle(EventKind.INCIDENT) }
                         ?: presetKind?.let(::presetTitle).orEmpty(),
-                    occurredOn = existing?.occurredOn ?: current.occurredOn,
-                    occurredTime = if (existing != null) existing.occurredTime else current.occurredTime,
+                    occurredOn = existing?.occurredOn ?: pending?.occurredOn ?: current.occurredOn,
+                    occurredTime = when {
+                        existing != null -> existing.occurredTime
+                        pending != null -> null
+                        else -> current.occurredTime
+                    },
                     fields = fields,
                     derivedRows = derivedRows(fields),
                     suggestions = profile?.consumables.orEmpty(),
                     consumables = existing?.consumables.orEmpty().map {
                         ConsumableRow(it.name, formatNumber(it.quantity), it.unit)
                     },
-                    notes = existing?.notes.orEmpty(),
+                    notes = existing?.notes ?: draft?.second.orEmpty(),
+                    alsoRecords = pending?.condition,
                     loaded = true,
                 )
             }
@@ -417,6 +454,11 @@ class EventEntryViewModel(
                     .associate { it.definition.id to it.text },
                 consumables = submitted.map { it.second },
             )
+            val held = pending
+            if (held != null) {
+                saveWithCondition(held, cmd, submitted.map { it.first })
+                return@launch
+            }
             // Caught by name, not by runCatching: a cancelled `viewModelScope` must stay cancelled
             // rather than be reported to the user as a refused save.
             try {
@@ -432,12 +474,56 @@ class EventEntryViewModel(
                     _state.update { it.copy(offer = asked.first()) }
                 }
             } catch (e: EventValidation) {
-                markProblems(e, submitted.map { it.first })
+                markProblems(e.problems, submitted.map { it.first })
             } catch (e: EventOwnership) {
                 refuse(e)
             } catch (e: NoSuchEvent) {
                 refuse(e)
             }
+        }
+    }
+
+    /**
+     * #82 (C7): the combined flow's Save — the Incident and the held row in one transaction, under
+     * the row's pre-allocated id, so a Save repeated after a lost pop writes nothing more (C1). It
+     * asks nothing afterwards: the row it wrote already names the Incident. A refused Save writes
+     * nothing, and says why in the order the form has always used: a field row's line first, then
+     * S25 for a day later than today, then the shipped line for anything no row can explain.
+     */
+    private suspend fun saveWithCondition(held: PendingCondition, cmd: EventCommand, submittedRows: List<Int>) {
+        val writer = checkNotNull(recordWithIncident)
+        try {
+            val written = writer.run(
+                assetId,
+                held.id,
+                ConditionCommand(
+                    condition = held.condition,
+                    occurredOn = held.occurredOn,
+                    occurredTime = null,
+                    tzId = zone.id,
+                    reason = held.reason,
+                ),
+                cmd,
+            )
+            _state.update { it.copy(saving = false) }
+            // The event the screen leaves for: the Incident, or — a Save that found its row stored —
+            // the one that row names. The screen leaves either way.
+            _saved.tryEmit(written.incident?.id ?: written.condition.eventId ?: NO_EVENT)
+        } catch (refused: IncidentConditionRefused) {
+            when {
+                refused.eventProblems.isNotEmpty() -> markProblems(refused.eventProblems, submittedRows)
+                refused.incidentAfterToday || ConditionProblem.DateInFuture in refused.conditionProblems ->
+                    _state.update { it.copy(saving = false, firstProblem = DATE_NOT_LATER_THAN_TODAY) }
+                else -> {
+                    Log.w(TAG, "a combined save the form allowed was refused", refused)
+                    refuse(refused)
+                }
+            }
+        } catch (gone: IllegalArgumentException) {
+            // After the refusal above, which is one too: the asset gone, a profile that is not this
+            // asset's, or the row refused. Nothing the form can fix, and no ratified words for it.
+            Log.w(TAG, "the combined save was refused", gone)
+            refuse(gone)
         }
     }
 
@@ -449,7 +535,8 @@ class EventEntryViewModel(
      */
     fun acceptOffer() {
         val open = _state.value.offer ?: return
-        if (open.accepting) return
+        // #82: the impairment offer names its answer, so only [acceptImpairment] accepts it.
+        if (open.accepting || open is ImpairmentOfferPrompt) return
         _state.update { it.copy(offer = open.tapped()) }
         viewModelScope.launch {
             try {
@@ -463,7 +550,33 @@ class EventEntryViewModel(
         }
     }
 
-    /** "Not yet" or "Not now": nothing is written, and the next offer is asked or the screen leaves. */
+    /**
+     * #82, Workflow B's answer: P82-7 ([condition] DOWN) or P82-8 (DEGRADED). The answer and
+     * `accepting` are set **before** the write — which disables all three answers — and a second tap
+     * is ignored, so one accept reaches the offers. A refused accept (the Incident deleted meanwhile)
+     * has no ratified sentence; the entry stands either way, and the screen leaves as it would have.
+     */
+    fun acceptImpairment(condition: OperationalCondition) {
+        val open = _state.value.offer as? ImpairmentOfferPrompt ?: return
+        if (open.accepting) return
+        val answered = open.copy(accepting = true, chosen = condition)
+        _state.update { it.copy(offer = answered) }
+        viewModelScope.launch {
+            try {
+                offers.accept(answered)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (refused: Exception) {
+                Log.w(TAG, "an accepted offer was refused", refused)
+            }
+            nextAfter(answered)
+        }
+    }
+
+    /**
+     * "Not yet", "Not now" or #82's "No change" — and any offer dismissed: nothing is written, and the
+     * next offer is asked or the screen leaves.
+     */
     fun declineOffer() {
         val open = _state.value.offer ?: return
         if (open.accepting) return
@@ -482,9 +595,9 @@ class EventEntryViewModel(
     }
 
     /** Puts every [FieldProblem] back on the row it belongs to and names the first one out loud. */
-    private fun markProblems(failure: EventValidation, submittedRows: List<Int>) {
-        val byDefinition = failure.problems.mapNotNull { p -> p.definitionId?.let { it to p } }.toMap()
-        val badConsumables = failure.problems
+    private fun markProblems(problems: List<FieldProblem>, submittedRows: List<Int>) {
+        val byDefinition = problems.mapNotNull { p -> p.definitionId?.let { it to p } }.toMap()
+        val badConsumables = problems
             .filterIsInstance<FieldProblem.BadConsumable>()
             .mapNotNull { submittedRows.getOrNull(it.index) }
             .toSet()
@@ -494,7 +607,7 @@ class EventEntryViewModel(
                 saving = false,
                 fields = fields,
                 consumables = current.consumables.mapIndexed { i, row -> row.copy(problem = i in badConsumables) },
-                firstProblem = failure.problems.firstProblemText(fields),
+                firstProblem = problems.firstProblemText(fields),
             )
         }
     }
@@ -519,12 +632,25 @@ class EventEntryViewModel(
 
     private companion object {
         const val TAG = "EventEntry"
+        val NO_EVENT = EventId("")
         val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd")
         val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }
 
 private fun Long.at(zone: ZoneId) = Instant.ofEpochMilli(this).atZone(zone)
+
+/**
+ * #82 (R82-3): the combined flow's Incident from the held reason — its first non-blank line, trimmed,
+ * as the title (null when there is none, and the preset "Incident" stands), and every line after
+ * it, trimmed as a block, as the notes.
+ */
+private fun incidentDraft(reason: String): Pair<String?, String> {
+    val lines = reason.lines()
+    val first = lines.indexOfFirst { it.isNotBlank() }
+    if (first < 0) return null to ""
+    return lines[first].trim() to lines.drop(first + 1).joinToString("\n").trim()
+}
 
 /**
  * The problems that are not about a single row name themselves; anything else is a row, and the

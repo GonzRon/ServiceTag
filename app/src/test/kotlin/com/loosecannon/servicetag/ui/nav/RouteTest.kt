@@ -1,7 +1,11 @@
 package com.loosecannon.servicetag.ui.nav
 
+import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.ui.condition.PendingCondition
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -68,5 +72,38 @@ class RouteTest {
         assertFalse(Route.GroupEdit(null).readsTags())
         assertFalse(Route.ReminderHealth.readsTags())
         assertFalse(Route.MaintenanceSheet("a1", "t1").readsTags())
+    }
+
+    /**
+     * #82 (C7): the combined flow's Incident entry carries the held condition on its route, so a
+     * restored back stack reopens the same entry and its Save still commits the held row's own id.
+     */
+    @Test fun anEventEntryWithAPendingConditionRoundTrips() {
+        val held = PendingCondition("c-held", OperationalCondition.DOWN, "2026-04-15", "Will not start\nStarter clicks")
+        val route = Route.EventEntry("a1", null, null, kind = "INCIDENT", pending = PendingConditionArgs.of(held))
+
+        val stored = Json.encodeToString(Route.EventEntry.serializer(), route)
+        val restored = Json.decodeFromString(Route.EventEntry.serializer(), stored)
+
+        assertEquals(route, restored)
+        assertEquals(held, restored.pending!!.toPending())
+    }
+
+    /** #82 (C7): a back stack stored before #82 has no `pending`; it decodes as before, with none. */
+    @Test fun anEventEntryWithoutPendingDecodesAsBefore() {
+        val stored = """{"assetId":"a1","profileId":null,"eventId":null,"kind":"INCIDENT"}"""
+
+        val restored = Json.decodeFromString(Route.EventEntry.serializer(), stored)
+
+        assertEquals(Route.EventEntry("a1", null, null, kind = "INCIDENT"), restored)
+        assertNull(restored.pending)
+        assertFalse(
+            "an entry without one writes no pending key",
+            "pending" in Json.encodeToString(Route.EventEntry.serializer(), Route.EventEntry("a1", "p1", null)),
+        )
+        assertNull(
+            "an unknown condition name opens a plain entry",
+            PendingConditionArgs("c1", "BROKEN", "2026-04-15", "").toPending(),
+        )
     }
 }
