@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.accepts
 import com.loosecannon.servicetag.core.model.isImage
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
@@ -65,6 +66,29 @@ internal fun DocumentRole?.label(): String = when (this) {
 /** #67 (P67-5, ratified verbatim): the header over the role chips, in the edit sheet and the share intake. */
 internal const val ROLE_HEADER = "Role"
 
+/** #67: the Role chips, in the order the edit sheet and the share intake draw them — "No role" first. */
+internal val ROLE_CHOICES: List<DocumentRole?> = listOf<DocumentRole?>(null) + DocumentRole.entries
+
+/**
+ * #67 (R67-3): newest first within a role — `capturedOn` descending with the undated last, then
+ * `createdAt` descending. The one order, for the Key documents block and the Details fact alike.
+ */
+internal fun <T> newestFirst(capturedOn: (T) -> String?, createdAt: (T) -> Long): Comparator<T> =
+    compareBy(nullsLast(reverseOrder<String>()), capturedOn).thenByDescending { createdAt(it) }
+
+/**
+ * #67, C8: the role-tagged rows, one group per role in the order the roles are declared — receipt,
+ * user manual, service manual — each newest first; a role no row carries has no group. The rows are
+ * DOCUMENTS' own, never copies, so the block can hold nothing DOCUMENTS does not.
+ */
+internal fun keyDocumentsOf(rows: List<AttachmentRowState>): List<KeyDocumentGroup> =
+    DocumentRole.entries.mapNotNull { role ->
+        rows.filter { it.role == role }
+            .sortedWith(newestFirst({ it.capturedOn }, { it.createdAt }))
+            .takeIf { it.isNotEmpty() }
+            ?.let { KeyDocumentGroup(role, it) }
+    }
+
 /** One picked or captured file, as the section hands it to the use case. */
 data class PickedFile(
     val displayName: String,
@@ -103,7 +127,7 @@ data class AttachmentsSectionState(
     val progress: String? = null,
 ) {
     /** #67, C8: the role-tagged rows grouped by role; empty when no row carries a role. */
-    val keyDocuments: List<KeyDocumentGroup> get() = emptyList()
+    val keyDocuments: List<KeyDocumentGroup> get() = keyDocumentsOf(rows)
 }
 
 /**
@@ -138,8 +162,11 @@ class AttachmentsSectionViewModel(
         viewUris = graph.attachmentStorage::viewUri,
     )
 
-    /** #67, C7: whether the edit sheet offers the Role chips — an asset's files only (R67-11). */
-    val rolesOffered: Boolean = false
+    /**
+     * #67, C7: whether the edit sheet offers the Role chips — an asset's files only, decided by
+     * R67-11's one statement of the rule rather than restated here.
+     */
+    val rolesOffered: Boolean = DocumentRole.entries.all(owner::accepts)
 
     /** Already ordered by display name, collated case-insensitively, by the query itself. */
     private val rows: Flow<List<Attachment>> = attachments.observeForOwner(owner)
@@ -387,6 +414,7 @@ class AttachmentsSectionViewModel(
         present = present[attachment.id.value] ?: true,
         thumbnail = thumbnails[attachment.id.value],
         role = attachment.role,
+        createdAt = attachment.createdAt,
     )
 
     /** One line per refusal. `Unchanged` is silent: the sheet simply closes (spec §8.1). */

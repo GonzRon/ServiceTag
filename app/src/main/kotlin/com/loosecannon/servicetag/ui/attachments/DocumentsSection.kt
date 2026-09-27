@@ -46,6 +46,8 @@ import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.asset.FieldLabel
+import com.loosecannon.servicetag.ui.asset.KEY_DOCUMENTS
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
@@ -66,7 +68,8 @@ private const val MISSING_ALPHA = 0.38f
 /**
  * DOCUMENTS, as the Apollo Service Binder draws a list section (D12 §8): a [SectionHeader] with
  * the count in its title, a 56 dp leading thumbnail or kind glyph, a one-line ellipsised name, a
- * quiet `kind · size · captured-on` line, and a trailing overflow. No cards, no FAB.
+ * quiet `kind · size · captured-on` line, and a trailing overflow. No cards, no FAB. Above it, when
+ * any row carries a role, KEY DOCUMENTS regroups those same rows by role (#67, C8).
  */
 @Composable
 fun DocumentsSection(
@@ -77,6 +80,9 @@ fun DocumentsSection(
     onTakePhoto: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    // #67, C8 (R67-4): the role-tagged rows first, drawn from DOCUMENTS' own rows — every one of
+    // them still listed below, unchanged.
+    KeyDocumentsBlock(state.keyDocuments, onOpen, onEdit)
     SectionHeader(
         title = if (state.rows.isEmpty()) "Documents" else "Documents · ${state.rows.size}",
     )
@@ -184,6 +190,25 @@ fun AttachmentsSection(
             onDelete = { model.delete(row.id) },
             onDismiss = { editing = null },
         )
+    }
+}
+
+/**
+ * #67, C8: KEY DOCUMENTS — drawn only while at least one row carries a role, one group per role in
+ * its fixed order, each under its role label and each row the section's own [DocumentRow] with the
+ * same open and edit actions. No load of its own: the groups are the section's rows, regrouped.
+ */
+@Composable
+private fun KeyDocumentsBlock(
+    groups: List<KeyDocumentGroup>,
+    onOpen: (AttachmentRowState) -> Unit,
+    onEdit: (AttachmentRowState) -> Unit,
+) {
+    if (groups.isEmpty()) return
+    SectionHeader(title = KEY_DOCUMENTS)
+    groups.forEach { group ->
+        FieldLabel(group.role.label())
+        Column { group.rows.forEach { row -> DocumentRow(row, onOpen, onEdit) } }
     }
 }
 

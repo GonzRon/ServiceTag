@@ -759,8 +759,8 @@ private fun PartOfLine(parentName: String, onClick: () -> Unit) {
 }
 
 /**
- * The fields that are neither identity nor journal: what it cost, who from, and what the warranty
- * says (spec §9). Only the ones that are actually set appear, and the section is absent rather
+ * The fields that are neither identity nor journal: what it cost, who from, which document proves
+ * it (#67), and what the warranty says (spec §9). Only the ones that are actually set appear, and the section is absent rather
  * than empty when none are — a list of five dashes tells nobody anything.
  */
 @Composable
@@ -768,6 +768,8 @@ private fun DetailsSection(state: AssetDetailState) {
     val asset = state.asset
     val rows = buildList {
         asset.purchaseOn?.let { add("Purchase date" to it.asDayDate()) }
+        // #67 (R67-5): the newest purchase invoice or receipt, by name — text, not a link.
+        state.purchaseDocument?.let { add("Purchase document" to it) }
         priceLine(asset)?.let { add("Price" to it) }
         asset.vendor.takeIf { it.isNotBlank() }?.let { add("Vendor" to it) }
         asset.warrantyExpiresOn?.let { on ->

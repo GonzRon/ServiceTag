@@ -101,6 +101,7 @@ import com.loosecannon.servicetag.core.usecase.StrandedSchedule
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.attachments.AttachmentFailure
 import com.loosecannon.servicetag.ui.attachments.PickedFile
+import com.loosecannon.servicetag.ui.attachments.newestFirst
 import com.loosecannon.servicetag.ui.attachments.sentence
 import com.loosecannon.servicetag.ui.condition.componentLine
 import com.loosecannon.servicetag.ui.condition.displayDate
@@ -754,6 +755,15 @@ class AssetDetailViewModel(
         subjects.observeForAsset(id),
     ) { _, _, _ -> }
 
+    /**
+     * #67 (R67-5): the Details fact's one observation of this asset's files — the newest receipt's
+     * name, or null. It is folded in after the page's own combine, so a file landing re-derives this
+     * one line and never rebuilds the page.
+     */
+    private val purchaseDocument: Flow<String?> = attachments.observeForOwner(AttachmentOwner.OfAsset(id))
+        .map { files -> purchaseDocumentOf(files) }
+        .distinctUntilChanged()
+
     val state: StateFlow<AssetDetailState?> =
         combine(rows, tags.observeForAsset(id), journal, maintenance, facts) { all, tagRows, j, groupRows, _ ->
             val row = all.firstOrNull { it.id == id } ?: return@combine null
@@ -791,7 +801,8 @@ class AssetDetailViewModel(
                     .sortedWith(compareBy({ it.name.lowercase() }, { it.id.value }))
                     .map { AssetGroupRow(it.id, it.name) },
             )
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), null)
+        }.combine(purchaseDocument) { page, document -> page?.copy(purchaseDocument = document) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), null)
 
     val missing: StateFlow<Boolean> = asset
         .map { it == null }
@@ -2189,6 +2200,12 @@ private data class WrittenForm(
     val warrantyNotes: String,
     val notes: String,
 )
+
+/** #67 (R67-5): the newest purchase invoice or receipt, in R67-3's order, by name; null when there is none. */
+private fun purchaseDocumentOf(files: List<Attachment>): String? = files
+    .filter { it.role == DocumentRole.PURCHASE_INVOICE_OR_RECEIPT }
+    .minWithOrNull(newestFirst({ it.capturedOn }, { it.createdAt }))
+    ?.displayName
 
 /**
  * #67, R67-6: the asset's role-tagged attachments only, newest by `capturedOn` (nulls last) then by

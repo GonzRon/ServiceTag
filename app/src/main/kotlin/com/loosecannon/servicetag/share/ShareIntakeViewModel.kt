@@ -226,7 +226,13 @@ internal class ShareIntakeViewModel(
 
     fun kind(value: AttachmentKind) = _state.update { it.copy(kind = value, message = null) }
 
-    fun role(value: DocumentRole?) = _state.update { it.copy(role = value, message = null) }
+    /**
+     * #67 (R67-9): a role is taken on a byte share only. A reference has no column for one and a
+     * note is a journal entry, so on those paths the choice is not recorded at all.
+     */
+    fun role(value: DocumentRole?) = _state.update {
+        if (it.path == IntakePath.BYTES) it.copy(role = value, message = null) else it
+    }
 
     /** Cancel, back and Close are the same fact: nothing was written and nothing will be. */
     fun cancel() = _state.update { it.copy(confirming = null, cancelled = true) }
@@ -330,6 +336,7 @@ internal class ShareIntakeViewModel(
                     sizeBytes = bytes.size,
                     kind = current.kind,
                     notes = current.description,
+                    role = current.role,
                 ),
                 open,
             )
