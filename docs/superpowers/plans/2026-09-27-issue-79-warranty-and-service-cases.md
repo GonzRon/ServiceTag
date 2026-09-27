@@ -685,3 +685,50 @@ or `closedOn`; lower the global MCP minimum; bump `versionName`. **Size:** about
   and P79-60 ACTIVE; P79-63 OMITTED; **P79-38 = `Open`**.
 - Rev 2.1 is the implementation contract; the scoped re-review's APPROVE stands; the PARTLY_COVERED path is
   the plan's conditional branch, so no further planning or review cycle.
+
+## 17. Errata after implementation (#79a; controller, 2026-09-27 onward)
+
+- **A lead on a retired or archived asset is accepted** (`SetWarrantyReminder` does not refuse it): the lead is a
+  setting, and R79-15's subject rule already suppresses the reminder for an asset not in service; refusing would
+  have needed a new sentence. (A1 concern; controller ruling.)
+- **`DeadlineLocalDelivery.kind` is a `String`** holding the `DeadlineKind` name, because the enum belongs to A2's
+  reminders package and A1 may not touch it; A2 maps it at the boundary.
+- **The docs lag A1 by design:** asset GET responses carry `warrantyReminderLeadDays` from A1 (the API reuses
+  `AssetDto`) while `docs/api/v1.md` and the MCP docstring are A4's; the 8 → 11 release-gate paragraph is A4's too.
+- **Replace leaves the device-local deadline table alone** (it has no foreign key); A2's provider forgets any row
+  whose key is no longer an Active subject.
+- **Unlisted pins moved under the pin rule** (A1's report itemises them): `BackupFormat8Test:216`; the
+  asset-column filters in `Migration3To4Test`, `Migration7To8Test`, `Migration8To9Test`, `Migration9To10Test`;
+  `ReferenceMigrationTest` (asset columns and the `V11_TABLES` subtraction).
+- **A2, recorded shapes:** a schedule id literally beginning `WARRANTY_EXPIRY:` would be read as a warranty
+  tag — generated ids are UUIDs, so only a hand-edited archive could reach it; no tag namespace change now (KDoc
+  says so at the parse site). A replace restore with identical warranty content keeps its delivery stamp, so it
+  is not warned again in the same boot; a changed date or lead re-announces (R79-14 a). `LocalReminderProvider`'s
+  two new constructor parameters default to no-op posting; `AppGraph`, the only production caller, passes the
+  real facts and stamps; `DeliveryInput` implements `DigestInput` with a derived key that rejects a non-schedule
+  subject. The SPEC12 §5.1 amendment describes the editor's permission request before A3 built it (the plan's
+  assignment).
+- **A3, recorded shapes:** the Warranty section shows on every asset (C10); only its reminder line requires the
+  asset in service. The in-app sweep runs once, right after the save (C11): with notifications not yet allowed,
+  a warranty already inside its window is posted at the next digest or the 12-hour backstop after the grant. A
+  save that sets no lead never asks for notifications (pinned by `aSaveThatSetsNoLeadNeverAsks`). The warranty
+  badges carry no glyph (§6's treatment names none). The shipped `calendarSeasonLines` device case scrolls to
+  its break lines now that the section sits above them (the standing scroll rule). The editor's two new ports
+  are nullable defaults; `AppGraph` passes the real ones.
+- **A4, recorded shapes:** `get_warranty` refuses a phone below schema 11 although it is a read (C12: the route
+  does not exist there); the API's warranty answer is not gated on the asset being in service (C12), while the
+  phone warns only in service; a lead set through the API on a retired or archived asset is accepted (the
+  standing ruling); the MCP README's stale `import_merge` paragraph now says format 1–11 and the current fifteen
+  tables (Part B moves it to seventeen); the release gate says the pre-upgrade format-8 export re-plans with
+  every ROW IDENTICAL (stronger than #67's attachments-only wording) — the emulator gate proves it; the permitted
+  `NotificationPermission.kt` KDoc edit is two sentences on four wrapped lines, no code.
+- **From the whole-branch review:** the editor compares the saved date and lead against the pair it LAST SWEPT,
+  not the loaded pair (a retry restoring the loaded value still sweeps — stricter and correct); it sweeps on any
+  change to the date, lead or no lead (C11 read literally; harmless); the app refuses a lead without a date (P79-9)
+  while the `UpdateAsset` / API PATCH path clears the lead silently (R79-12); in-app retire, archive and delete run
+  no sweep — a standing warning stays until the next digest or backstop, as schedules do (`v1.md`'s "taken down
+  when … retired or archived" means at the next sweep); the stamp precedes the post; a rename does not re-title
+  a standing warning; the lead survives the expiry date and applies again if the date is extended; the editor's
+  two ports are nullable defaults, their production wiring proven at the branch gate by the editor → sweep device
+  case; the release gate's in-app step answers the notification question with "Not now" and seeds the date
+  through an overlay write; the unlisted pins A2 and A4 moved are itemised in their reports.
