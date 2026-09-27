@@ -99,7 +99,11 @@ import com.loosecannon.servicetag.core.usecase.SeasonProblem
 import com.loosecannon.servicetag.core.usecase.SeasonValidation
 import com.loosecannon.servicetag.core.usecase.SeasonView
 import com.loosecannon.servicetag.core.usecase.StrandedSchedule
+import com.loosecannon.servicetag.core.usecase.WarrantyReminderCommand
+import com.loosecannon.servicetag.core.usecase.WarrantyReminderProblem
+import com.loosecannon.servicetag.core.usecase.WarrantyReminderValidation
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.ui.attachments.AttachmentFailure
 import com.loosecannon.servicetag.ui.attachments.PickedFile
 import com.loosecannon.servicetag.ui.attachments.newestFirst
@@ -120,6 +124,8 @@ import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.health.needsAttention
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
+import com.loosecannon.servicetag.ui.maintenance.ENTER_THE_NUMBER_OF_DAYS
+import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -500,10 +506,6 @@ internal fun outOfSeasonOn(asset: Asset, activations: List<SeasonActivation>, to
     SeasonContext.of(asset.seasonInputs(if (asset.seasonMode == SeasonMode.MANUAL) activations else emptyList()))
         .phaseAt(today) == SeasonPhase.OUT_OF_SEASON
 
-/** A date the calendar has already passed. A string `LocalDate` refuses is not "expired". */
-internal fun expiredOn(date: String, today: LocalDate): Boolean =
-    runCatching { LocalDate.parse(date).isBefore(today) }.getOrDefault(false)
-
 /** The clock's instant as a calendar day in [zone] — the only place millis become a date here. */
 private fun Long.asLocalDate(zone: ZoneId): LocalDate =
     Instant.ofEpochMilli(this).atZone(zone).toLocalDate()
@@ -615,8 +617,6 @@ data class AssetDetailState(
     val parentName: String? = null,
     /** This asset's children, by name. The COMPONENTS section always renders, empty or not. */
     val components: List<ComponentRow> = emptyList(),
-    /** The warranty date has passed, so DETAILS says "(expired)" rather than making the user count. */
-    val warrantyExpired: Boolean = false,
     /**
      * 1.2 — the asset's **own** schedules, from the shared projection (master plan decision 38).
      * A group-targeted schedule it is a member of is not here: that obligation is counted once, on
@@ -636,6 +636,8 @@ data class AssetDetailState(
      * (`needsIncident`). Computed where [conditionHistory] is, from the same rows and [events].
      */
     val leadsWithLogIncident: Boolean = false,
+    /** #79 (C10): the Warranty section's facts, from the row already read and `Today`. */
+    val warranty: WarrantyFacts = WarrantyFacts(),
 ) {
     /** The current condition (S1–S3, or S4 when null), from the same read as [health]. */
     val condition: ConditionView? get() = health.condition
@@ -727,7 +729,7 @@ class AssetDetailViewModel(
         graph.applyTemplate, graph.uow, graph.clock, graph.today, AssetId(id),
     )
 
-    /** The zone the season window and the warranty date are read in: the user's calendar day. */
+    /** The zone the retirement dialog's today is read in: the user's calendar day. */
     private val zone: ZoneId = ZoneId.systemDefault()
 
     /** Every asset, because this screen needs its parent and its children as well as itself. */
@@ -782,7 +784,6 @@ class AssetDetailViewModel(
     val state: StateFlow<AssetDetailState?> =
         combine(rows, tags.observeForAsset(id), journal, maintenance, facts) { all, tagRows, j, groupRows, _ ->
             val row = all.firstOrNull { it.id == id } ?: return@combine null
-            val today = clock.nowMillis().asLocalDate(zone)
             val parent = row.parentAssetId?.let { parentId -> all.firstOrNull { it.id == parentId } }
             // A delete between the row above and this read leaves nothing to draw, not a crash.
             val season = try {
@@ -810,7 +811,8 @@ class AssetDetailViewModel(
                 parentId = parent?.id?.value,
                 parentName = parent?.name,
                 components = componentsOf(all, histories),
-                warrantyExpired = row.warrantyExpiresOn?.let { expiredOn(it, today) } == true,
+                // #79 (C10, K7): the `Today` port's date, the one the reminder sweep reads — never the clock.
+                warranty = warrantyFactsOf(row, today.localDate()),
                 // Asset-targeted only (decision 38). `forAsset` deliberately answers with the group
                 // schedules too, because the scan sheet wants both; this screen counts a group
                 // obligation once, on the group.
@@ -1331,6 +1333,9 @@ object AssetField {
     const val PRICE = "price"
     const val CURRENCY = "currency"
     const val WARRANTY_EXPIRES_ON = "warrantyExpiresOn"
+
+    /** #79 (C11): the warranty reminder's lead, "Remind me N days early". */
+    const val WARRANTY_LEAD = "warrantyLead"
 }
 
 /** One row of the asset editor's "Health subjects" (S111): the subject's name, archived ones marked. */
@@ -1442,9 +1447,13 @@ data class AssetEditState(
     val currency: String = "",
     val vendor: String = "",
     val warrantyExpiresOn: String = "",
+    /** #79 (C11): the warranty reminder's lead in whole days, as typed; blank is no reminder. */
+    val warrantyLead: String = "",
     val warrantyNotes: String = "",
     val notes: String = "",
     val editing: Boolean = false,
+    /** #79 (C11): P79-12 is up — after a save that first set a lead, while notifications are not granted. */
+    val askingForNotifications: Boolean = false,
     val saving: Boolean = false,
     /** Field key → the one line shown under that field. Empty until a save is refused. */
     val problems: Map<String, String> = emptyMap(),
@@ -1561,6 +1570,12 @@ sealed interface EditPrompt {
  * **#74: the Category field offers the catalog.** [categories] is read, never written: [categoryChoices]
  * follows it. The owner's way in here is a successful save, inside [SaveAssetSettings] (C5); a restore
  * or a merge also adds rows, for the assets it brings.
+ *
+ * **#79: the warranty reminder's lead** (C11) is the save's fifth part, never a field of [AssetCommand].
+ * A save that moved the date or the lead runs [reconcile] once. After a save that first sets a lead —
+ * after the copies and the #78 question — and only while notifications are not granted, the editor
+ * asks with P79-12 at most once and requests through [notifications] only after "OK": the asset
+ * editor is the permission's second requester (R79-16), and the request follows the write (D-22).
  */
 class AssetEditViewModel(
     private val assets: AssetRepository,
@@ -1580,12 +1595,21 @@ class AssetEditViewModel(
      * (mirrors `AttachmentsSectionViewModel`'s own `io`).
      */
     private val io: CoroutineContext = Dispatchers.IO,
+    /**
+     * #79 (C11, R79-16): the notification permission, taken from the graph as the schedule editor takes
+     * it. Null asks nothing — a test that is not about the warranty reminder.
+     */
+    private val notifications: NotificationPermission? = null,
+    /** #79 (C11): the shipped sweep, run once after a save that moved the warranty date or lead. Null runs none. */
+    private val reconcile: ReminderReconcile? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String?, parentId: String? = null) : this(
         graph.assets, graph.healthSubjects, graph.saveAssetSettings, graph.schedules, graph.categories,
         graph.attachments, graph.attachmentStorage, graph.addAttachment, graph.today,
         id?.let(::AssetId), parentId,
+        notifications = graph.notificationPermission,
+        reconcile = graph.reminderReconcile,
     )
 
     private val _state = MutableStateFlow(
@@ -1609,6 +1633,21 @@ class AssetEditViewModel(
 
     /** #67, C6 step 3: the #78 question decided at the write, held while anything is staged. */
     private var pendingPrompt: EditPrompt? = null
+
+    /** #79 (C11): the lead the form was opened on — none for a new asset. P79-12 follows a first lead only. */
+    private var leadAtLoad: Int? = null
+
+    /** #79 (C11): the lead the last successful write stored; the form's own until the first write. */
+    private var writtenLead: Int? = null
+
+    /** #79 (C11): the date and lead the reminder sweep last saw from this editor — the loaded ones at first. */
+    private var sweptWarranty: Pair<String?, Int?> = null to null
+
+    /** #79 (C11, R79-16): P79-12 is asked at most once per editor. */
+    private var rationaleAsked = false
+
+    /** #79 (C11): where the editor goes once P79-12 is answered — the save's own way out, or #78's. */
+    private var afterRationale: Pair<AssetId, Exit>? = null
 
     /**
      * One shot per successful save. A buffer of one and no replay: the screen that started the
@@ -1649,6 +1688,11 @@ class AssetEditViewModel(
             val attached = id?.let { existing -> attachments.forOwner(AttachmentOwner.OfAsset(existing)) }
                 .orEmpty()
                 .let(::attachedDocumentsOf)
+            if (row != null) {
+                leadAtLoad = row.warrantyReminderLeadDays
+                writtenLead = row.warrantyReminderLeadDays
+                sweptWarranty = row.warrantyExpiresOn to row.warrantyReminderLeadDays
+            }
             _state.update { form ->
                 val filled = if (row == null) form else form.filledFrom(row, subjects)
                 filled.copy(parentChoices = choicesIn(all), attached = attached)
@@ -1745,8 +1789,12 @@ class AssetEditViewModel(
 
     fun onVendor(value: String) = edit { it.copy(vendor = value) }
 
+    /** Editing the date also takes down the lead's line: P79-9 is about the date. */
     fun onWarrantyExpiresOn(value: String) =
-        edit(AssetField.WARRANTY_EXPIRES_ON) { it.copy(warrantyExpiresOn = value) }
+        edit(AssetField.WARRANTY_EXPIRES_ON, AssetField.WARRANTY_LEAD) { it.copy(warrantyExpiresOn = value) }
+
+    /** #79 (C11): the lead, as typed. */
+    fun onWarrantyLead(value: String) = edit(AssetField.WARRANTY_LEAD) { it.copy(warrantyLead = value) }
 
     fun onWarrantyNotes(value: String) = edit { it.copy(warrantyNotes = value) }
     fun onNotes(value: String) = edit { it.copy(notes = value) }
@@ -1816,13 +1864,65 @@ class AssetEditViewModel(
      */
     fun keepSchedules() {
         val asset = answered() ?: return
-        if (_state.value.staged.isEmpty()) _saved.tryEmit(asset)
+        if (_state.value.staged.isEmpty()) finish(asset, Exit.SAVED)
     }
 
     /** #78, P78-2 (C2): the editor finishes onto the asset's schedules. Writes nothing either. */
     fun reviewSchedules() {
         val asset = answered() ?: return
-        if (_state.value.staged.isEmpty()) _review.tryEmit(asset)
+        if (_state.value.staged.isEmpty()) finish(asset, Exit.REVIEW)
+    }
+
+    /**
+     * #79 (C11, R79-16): P79-12's "OK" — the only place this editor requests the permission, after the
+     * asset is written (D-22). The answer is a fact about the phone, not about the asset, so the editor
+     * finishes either way, the way the save (or #78's answer) chose.
+     */
+    fun requestNotifications() {
+        val (asset, exit) = afterRationale ?: return
+        afterRationale = null
+        viewModelScope.launch {
+            runCatching { notifications?.request() }.onFailure { if (it is CancellationException) throw it }
+            _state.update { it.copy(askingForNotifications = false) }
+            leave(asset, exit)
+        }
+    }
+
+    /** #79 (C11): P79-12's "Not now" and any other dismissal. Nothing is requested; the asset still stands. */
+    fun dismissNotifications() {
+        val (asset, exit) = afterRationale ?: return
+        afterRationale = null
+        _state.update { it.copy(askingForNotifications = false) }
+        leave(asset, exit)
+    }
+
+    /** The editor is done: through P79-12 first when [holdForRationale] says so, else straight out. */
+    private fun finish(asset: AssetId, exit: Exit) {
+        if (holdForRationale(asset, exit)) {
+            _state.update { it.copy(askingForNotifications = true) }
+        } else {
+            leave(asset, exit)
+        }
+    }
+
+    /**
+     * #79 (C11, R79-16): whether P79-12 goes up before the editor leaves — a lead first set in this editor
+     * (none when it opened, one stored now), notifications not granted, and not asked before. When it
+     * does, [asset] and [exit] wait for the answer.
+     */
+    private fun holdForRationale(asset: AssetId, exit: Exit): Boolean {
+        val permission = notifications ?: return false
+        if (rationaleAsked || leadAtLoad != null || writtenLead == null || permission.granted()) return false
+        rationaleAsked = true
+        afterRationale = asset to exit
+        return true
+    }
+
+    private fun leave(asset: AssetId, exit: Exit) {
+        when (exit) {
+            Exit.SAVED -> _saved.tryEmit(asset)
+            Exit.REVIEW -> _review.tryEmit(asset)
+        }
     }
 
     /** Takes the question down; the asset it was about, or null when none was up. Only an edit ever asks. */
@@ -1843,11 +1943,17 @@ class AssetEditViewModel(
         _state.update { it.copy(saving = true) }
         viewModelScope.launch {
             val form = _state.value
-            when (val priced = priceOf(form.price, form.currency)) {
-                // The price is text until Money says otherwise, and Money needs the currency to
-                // say anything at all, so this one pair is settled before the command is built.
-                is Priced.Bad -> _state.update { it.copy(saving = false, problems = priced.problems) }
-                is Priced.Ok -> commit(form, priced.minor)
+            // The price is text until Money says otherwise, and Money needs the currency to say
+            // anything at all, so this one pair is settled before the command is built. So is the
+            // warranty lead (#79): text that is not a whole number never reaches the use case.
+            val priced = priceOf(form.price, form.currency)
+            val lead = warrantyPartOf(form.warrantyLead)
+            if (priced is Priced.Ok && lead != null) {
+                commit(form, priced.minor, lead)
+            } else {
+                val marks = (priced as? Priced.Bad)?.problems.orEmpty() +
+                    (if (lead == null) mapOf(AssetField.WARRANTY_LEAD to ENTER_THE_NUMBER_OF_DAYS) else emptyMap())
+                _state.update { it.copy(saving = false, problems = marks) }
             }
         }
     }
@@ -1868,10 +1974,10 @@ class AssetEditViewModel(
      * later retry addresses (B1): a new asset is minted once, and a retry after a failed copy never
      * mints a second one.
      */
-    private suspend fun commit(form: AssetEditState, priceMinor: Long?) {
+    private suspend fun commit(form: AssetEditState, priceMinor: Long?, lead: WarrantyReminderCommand) {
         val snapshot = form.writtenSnapshot()
         if (writtenForm == null || writtenForm != snapshot) {
-            val cmd = form.settingsCommand(priceMinor)
+            val cmd = form.settingsCommand(priceMinor, lead)
             val result = runCatching {
                 saveAssetSettings.run(savedId, cmd, form.templateKey.takeIf { savedId == null })
             }
@@ -1892,7 +1998,9 @@ class AssetEditViewModel(
                     pendingPrompt = if (written.seasonMode == SeasonMode.YEAR_ROUND) null else ask ?: pendingPrompt
                     savedId = written.id
                     writtenForm = snapshot
+                    writtenLead = written.warrantyReminderLeadDays
                     _state.update { it.copy(storedSeasonMode = written.seasonMode, editing = true) }
+                    sweepIfTheWarrantyMoved(written)
                 }
                 is SeasonModeStrandsPolicy -> {
                     _state.update {
@@ -1936,6 +2044,12 @@ class AssetEditViewModel(
                 is AssetCycle -> {
                     _state.update { it.copy(saving = false) }
                     _messages.tryEmit("${nameOf(failure.parentId)} is already part of this asset.")
+                    return
+                }
+                is WarrantyReminderValidation -> {
+                    _state.update {
+                        it.copy(saving = false, problems = mapOf(AssetField.WARRANTY_LEAD to leadLineFor(failure.problems)))
+                    }
                     return
                 }
                 else -> {
@@ -2002,15 +2116,34 @@ class AssetEditViewModel(
             pendingPrompt = null
             _prompt.value = prompt
         }
+        // #79 (C11): after the copies and the #78 question, P79-12 — decided before `saving` drops, so it
+        // is up by the time anyone waiting on `saving` looks.
+        val leaving = assetId?.takeIf { done && prompt == null }
+        val asking = leaving != null && holdForRationale(leaving, Exit.SAVED)
         _state.update {
             it.copy(
                 saving = false,
                 problems = emptyMap(),
                 offersDocuments = offersDocuments,
                 attached = attached ?: it.attached,
+                askingForNotifications = it.askingForNotifications || asking,
             )
         }
-        if (done && prompt == null) assetId?.let { _saved.tryEmit(it) }
+        if (leaving != null && !asking) leave(leaving, Exit.SAVED)
+    }
+
+    /**
+     * #79 (C11, R79-15): a write that moved the warranty date or the lead runs the shipped reminder sweep
+     * once, so the warning is posted or withdrawn now rather than at the next digest; a write that moved
+     * neither never does. The asset is already written: a sweep that fails leaves it to the next digest
+     * or the backstop, and the editor finishes as it would have.
+     */
+    private suspend fun sweepIfTheWarrantyMoved(written: Asset) {
+        val warranty = written.warrantyExpiresOn to written.warrantyReminderLeadDays
+        if (warranty == sweptWarranty) return
+        sweptWarranty = warranty
+        val sweep = reconcile ?: return
+        runCatching { sweep.run() }.onFailure { if (it is CancellationException) throw it }
     }
 
     /** One staged file onto [assetId]: null when it landed, else why its line stops the copies. */
@@ -2054,11 +2187,11 @@ class AssetEditViewModel(
     }
 
     /**
-     * The four parts of one Save (spec §10.4). The asset part carries no `MM-DD` pair: the season-mode
+     * The five parts of one Save (spec §10.4; #79 adds the warranty reminder's lead). The asset part carries no `MM-DD` pair: the season-mode
      * part decides the season. A window goes only with S30, a phase only with a switch into MANUAL,
      * a break only while S59 is on, and a primary only with "One subject".
      */
-    private fun AssetEditState.settingsCommand(priceMinor: Long?) = AssetSettingsCommand(
+    private fun AssetEditState.settingsCommand(priceMinor: Long?, lead: WarrantyReminderCommand) = AssetSettingsCommand(
         asset = toCommand(priceMinor),
         seasonMode = SeasonModeCommand(
             seasonMode = seasonMode,
@@ -2076,6 +2209,8 @@ class AssetEditViewModel(
             healthPrimarySubjectId = primaryId?.let(::HealthSubjectId)
                 .takeIf { aggregation == HealthAggregation.TRACK_ONE },
         ),
+        // #79 (C2, C11): the fifth part, on every save — blank is off, so the field is the whole truth.
+        warrantyReminder = lead,
     )
 
     /**
@@ -2089,7 +2224,7 @@ class AssetEditViewModel(
         name, category, manufacturer, model, serialNumber, description, location, parentId,
         seasonMode, seasonStart, seasonEnd, manualPhase, breakOn, breakStart, breakEnd,
         aggregation, primaryId, purchaseOn, inServiceOn, price, currency, vendor,
-        warrantyExpiresOn, warrantyNotes, notes,
+        warrantyExpiresOn, warrantyLead, warrantyNotes, notes,
     )
 
     private fun AssetEditState.toCommand(priceMinor: Long?) = AssetCommand(
@@ -2149,6 +2284,7 @@ class AssetEditViewModel(
             currency = row.currency.orEmpty(),
             vendor = row.vendor,
             warrantyExpiresOn = row.warrantyExpiresOn.orEmpty(),
+            warrantyLead = row.warrantyReminderLeadDays?.toString().orEmpty(),
             warrantyNotes = row.warrantyNotes,
             notes = row.notes,
         )
@@ -2187,6 +2323,24 @@ private sealed interface Priced {
     data class Bad(val problems: Map<String, String>) : Priced
 }
 
+/** #79 (C11): the editor's two ways out, held while P79-12 is answered. */
+private enum class Exit { SAVED, REVIEW }
+
+/**
+ * #79 (C11, R79-12): the lead field's text as the save's fifth part — blank is no reminder, a whole
+ * number goes to the use case (which refuses one under a day), and anything else is null: it never
+ * reaches the use case and the field says "Enter the number of days.".
+ */
+private fun warrantyPartOf(text: String): WarrantyReminderCommand? {
+    val typed = text.trim()
+    if (typed.isEmpty()) return WarrantyReminderCommand(null)
+    return typed.toIntOrNull()?.let(::WarrantyReminderCommand)
+}
+
+/** The lead's one line for a refused part: a bad number first, then P79-9. */
+private fun leadLineFor(problems: List<WarrantyReminderProblem>): String =
+    if (WarrantyReminderProblem.LeadNotPositive in problems) ENTER_THE_NUMBER_OF_DAYS else ADD_THE_WARRANTY_DATE_FIRST
+
 /** #67, C6: a staged copy that did not land, and the sentence its line shows instead of P67-10. */
 private class CopyStopped(val sentence: String?)
 
@@ -2215,6 +2369,7 @@ private data class WrittenForm(
     val currency: String,
     val vendor: String,
     val warrantyExpiresOn: String,
+    val warrantyLead: String,
     val warrantyNotes: String,
     val notes: String,
 )

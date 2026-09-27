@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.asset
 
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -87,6 +88,7 @@ import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.usecase.SeasonView
+import com.loosecannon.servicetag.core.warranty.WarrantyStatus
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.links.LinkLauncher
 import com.loosecannon.servicetag.ui.attachments.AttachmentsSection
@@ -339,6 +341,7 @@ fun AssetDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 DetailsSection(current)
+                WarrantySection(current.warranty)
                 // 1.4 — the three independent facts, always in this order (spec §10.3): condition
                 // first, so a DOWN asset's health is never drawn above its condition (inv. 119).
                 ConditionSection(
@@ -768,32 +771,82 @@ private fun PartOfLine(parentName: String, onClick: () -> Unit) {
 }
 
 /**
- * The fields that are neither identity nor journal: what it cost, who from, which document proves
- * it (#67), and what the warranty says (spec §9). Only the ones that are actually set appear, and
- * the section is absent rather than empty when none are — a list of five dashes tells nobody
- * anything.
+ * The fields that are neither identity nor journal: what it cost, who from, and which document
+ * proves it (#67). Only the ones that are actually set appear, and the section is absent rather than
+ * empty when none are — a list of dashes tells nobody anything. The warranty's date and notes moved
+ * to their own section under #79 ([WarrantySection]).
  */
 @Composable
 private fun DetailsSection(state: AssetDetailState) {
-    val asset = state.asset
-    val rows = buildList {
-        asset.purchaseOn?.let { add("Purchase date" to it.asDayDate()) }
-        // #67 (R67-5): the newest purchase invoice or receipt, by name — text, not a link.
-        state.purchaseDocument?.let { add("Purchase document" to it) }
-        priceLine(asset)?.let { add("Price" to it) }
-        asset.vendor.takeIf { it.isNotBlank() }?.let { add("Vendor" to it) }
-        asset.warrantyExpiresOn?.let { on ->
-            // The date on its own makes the reader do the arithmetic; the word does it for them.
-            add("Warranty" to on.asDayDate() + if (state.warrantyExpired) " (expired)" else "")
-        }
-        asset.warrantyNotes.takeIf { it.isNotBlank() }?.let { add("Warranty notes" to it) }
-    }
+    val rows = detailsFacts(state)
     if (rows.isEmpty()) return
     SectionHeader(title = "Details")
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         rows.forEach { (label, value) ->
             LabelValue(label = label, value = value, modifier = Modifier.fillMaxWidth())
         }
+    }
+}
+
+/** DETAILS' rows, label then value, in the order drawn; only the facts that are set. */
+internal fun detailsFacts(state: AssetDetailState): List<Pair<String, String>> {
+    val asset = state.asset
+    return buildList {
+        asset.purchaseOn?.let { add("Purchase date" to it.asDayDate()) }
+        // #67 (R67-5): the newest purchase invoice or receipt, by name — text, not a link.
+        state.purchaseDocument?.let { add("Purchase document" to it) }
+        priceLine(asset)?.let { add("Price" to it) }
+        asset.vendor.takeIf { it.isNotBlank() }?.let { add("Vendor" to it) }
+    }
+}
+
+/**
+ * #79 (C10, R79-17): where the warranty stands, on every asset, right after DETAILS — which no longer
+ * carries the date or the notes. With a date, the derived badge (P79-1 in OPERATIONAL's tone, P79-2 a
+ * neutral outline, never DOWN's) over "Expires"/"Expired <date>"; without one, P79-3. The reminder
+ * line only where a warning can be delivered ([WarrantyFacts.reminderLine]), then the notes.
+ */
+@Composable
+private fun WarrantySection(warranty: WarrantyFacts) {
+    SectionHeader(title = "Warranty")
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val badge = warranty.badge
+        if (badge == null) {
+            QuietLine(WARRANTY_NOT_RECORDED)
+        } else {
+            WarrantyBadge(label = badge, inWarranty = warranty.status == WarrantyStatus.IN_WARRANTY)
+            warranty.dateLine?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            }
+        }
+        warranty.reminderLine?.let { QuietLine(it) }
+        warranty.notes.takeIf { it.isNotBlank() }?.let {
+            LabelValue(label = "Warranty notes", value = it, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/**
+ * The warranty's badge, the condition badge's own component: filled in OPERATIONAL's tone while in
+ * warranty, and outlined in the neutral one once it has run out — a fact, not a fault. The word is
+ * drawn as ratified.
+ */
+@Composable
+private fun WarrantyBadge(label: String, inWarranty: Boolean) {
+    val semantic = ServiceTagTheme.semanticColors
+    val colors = if (inWarranty) semantic.conditionOperational else semantic.conditionNotRecorded
+    Surface(
+        color = if (inWarranty) colors.container else Color.Transparent,
+        contentColor = colors.foreground,
+        shape = BadgeShape,
+        border = if (inWarranty) null else BorderStroke(1.dp, colors.foreground),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+            color = colors.foreground,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+        )
     }
 }
 

@@ -1,9 +1,15 @@
 package com.loosecannon.servicetag.ui
 
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventProfile
@@ -26,6 +32,8 @@ import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.AttachmentRepository
+import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
@@ -40,7 +48,10 @@ import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
+import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
+import com.loosecannon.servicetag.core.warranty.WarrantyStatus
+import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.conditionRow
@@ -49,6 +60,8 @@ import com.loosecannon.servicetag.testing.groupOf
 import com.loosecannon.servicetag.testing.replacementOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.testing.subjectRow
+import com.loosecannon.servicetag.ui.asset.AssetDetailViewModel
+import com.loosecannon.servicetag.ui.asset.AssetEditViewModel
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.health.AssetHealthView
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
@@ -59,12 +72,16 @@ import com.loosecannon.servicetag.ui.maintenance.scanSheetContentFor
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
@@ -236,6 +253,78 @@ class ReadPathsWriteNothingTest {
         assertEquals("nothing was written back", emptyList<ScheduleState>(), graph.scheduleStates.all())
     }
 
+    /**
+     * #79 (C10, C11; §3 row 29): the asset detail's load and the asset editor's load, over an asset in
+     * warranty with a reminder lead, write nothing — and the editor's load neither sweeps nor asks.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun theAssetDetailAndEditorLoadsWriteNothing() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        // The two view models live in a store the test clears before Main goes back: this graph's
+        // queries run on real threads, and a scope left running would resume on a Main that is gone.
+        val store = ViewModelStore()
+        fun <T : ViewModel> held(model: T): T = ViewModelProvider(
+            store,
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <V : ViewModel> create(modelClass: Class<V>): V = model as V
+            },
+        )[model::class.java.name, model::class.java]
+        try {
+            graph.today = LocalDate.parse("2028-01-10")
+            graph.assets.upsert(
+                assetRow("heater", name = "Example Heater").copy(
+                    warrantyExpiresOn = "2028-06-30", warrantyReminderLeadDays = 30, warrantyNotes = "Parts only",
+                ),
+            )
+            val recompute = RecomputeSchedules(
+                schedules, states, events, closures, groups, assets, activations, graph.todayPort, graph.clock,
+                zone = { ZoneOffset.UTC },
+            )
+            val health = AssetHealthReadModel(
+                assets, subjects, schedules, states, events, profiles, activations, conditions, recompute, graph.todayPort,
+                zone = { ZoneOffset.UTC },
+            )
+            val due = DueReadModel(
+                schedules, assets, groups, definitions, recompute, graph.todayPort, health,
+                snoozedUntilOf = { delivery.get(it)?.snoozedUntilAt },
+            )
+            var sweeps = 0
+            val asked = mutableListOf<String>()
+            val permission = object : NotificationPermission {
+                override fun granted(): Boolean = false
+                override fun shouldExplain(): Boolean = false
+                override suspend fun request(): Boolean = false.also { asked += "request" }
+            }
+            val detail = held(AssetDetailViewModel(
+                assets, tags, definitions, profiles, events, schedules, states, groups, due, conditions, activations,
+                subjects, attachments, health, GetAssetSeason(assets, activations, graph.uow, graph.todayPort),
+                graph.recordSeasonActivation, graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
+                graph.applyTemplate, graph.uow, graph.clock, graph.todayPort, AssetId("heater"),
+            ))
+            val editor = held(AssetEditViewModel(
+                assets, subjects, graph.saveAssetSettings, schedules, categories, attachments,
+                graph.attachmentStorage, graph.addAttachment, graph.todayPort, AssetId("heater"),
+                notifications = permission,
+                reconcile = { sweeps++ },
+            ))
+            val page = backgroundScope.launch { detail.state.collect {} }
+            detail.state.await("the detail page") { it != null }
+            editor.state.await("the editor's form") { it.parentChoices.isNotEmpty() }
+
+            assertEquals("zero writes anywhere", emptyList<String>(), writes)
+            assertEquals("no sweep and no request on a load", 0 to emptyList<String>(), sweeps to asked)
+            // The loads did real work: the section's facts, and the lead as the field shows it.
+            assertEquals(WarrantyStatus.IN_WARRANTY, detail.state.value!!.warranty.status)
+            assertEquals("Reminder: 30 days before", detail.state.value!!.warranty.reminderLine)
+            assertEquals("30", editor.state.value.warrantyLead)
+            page.cancel()
+        } finally {
+            store.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
     // ---------------------------------------------------------------- recording repositories
 
     private fun write(what: String) {
@@ -290,6 +379,16 @@ class ReadPathsWriteNothingTest {
         override suspend fun upsert(tag: TagBinding) = write("tag.upsert").also { graph.tags.upsert(tag) }
         override suspend fun delete(id: TagId) = write("tag.delete").also { graph.tags.delete(id) }
         override suspend fun deleteAll() = write("tag.deleteAll").also { graph.tags.deleteAll() }
+    }
+    private val attachments = object : AttachmentRepository by graph.attachments {
+        override suspend fun upsert(a: Attachment) = write("attachment.upsert").also { graph.attachments.upsert(a) }
+        override suspend fun delete(id: AttachmentId) = write("attachment.delete").also { graph.attachments.delete(id) }
+        override suspend fun deleteAll() = write("attachment.deleteAll").also { graph.attachments.deleteAll() }
+    }
+    private val categories = object : CategoryRepository by graph.categories {
+        override suspend fun upsert(row: AssetCategory) = write("category.upsert").also { graph.categories.upsert(row) }
+        override suspend fun delete(key: String) = write("category.delete").also { graph.categories.delete(key) }
+        override suspend fun deleteAll() = write("category.deleteAll").also { graph.categories.deleteAll() }
     }
     private val delivery = object : ScheduleLocalDeliveryRepository by graph.scheduleLocalDelivery {
         override suspend fun upsert(row: ScheduleLocalDelivery) = write("delivery.upsert").also { graph.scheduleLocalDelivery.upsert(row) }
