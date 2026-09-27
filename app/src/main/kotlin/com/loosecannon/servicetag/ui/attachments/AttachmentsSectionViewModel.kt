@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.isImage
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
@@ -49,6 +50,18 @@ private const val SUBSCRIPTION_GRACE_MS = 5_000L
 /** "Adding 3 of 8…" — the line the section shows while a multi-select lands (spec §8.1). */
 internal fun addingProgressLine(index: Int, total: Int): String = "Adding $index of $total…"
 
+/**
+ * #67 (P67-2/3/4, P67-6, ratified verbatim): the one home of the role labels, beside
+ * [AttachmentKind.label]'s in this package. The receiver is nullable because "no role" is one of
+ * the choices the pickers offer, and its words live here too.
+ */
+internal fun DocumentRole?.label(): String = when (this) {
+    DocumentRole.PURCHASE_INVOICE_OR_RECEIPT -> "Purchase invoice or receipt"
+    DocumentRole.USER_MANUAL -> "User manual"
+    DocumentRole.SERVICE_MANUAL -> "Service manual"
+    null -> "No role"
+}
+
 /** One picked or captured file, as the section hands it to the use case. */
 data class PickedFile(
     val displayName: String,
@@ -71,6 +84,8 @@ data class AttachmentRowState(
     val isImage: Boolean,
     val present: Boolean,
     val thumbnail: File? = null,
+    /** #67: the row's document role, which the sheet hands back unchanged unless the person edits it. */
+    val role: DocumentRole? = null,
 )
 
 data class AttachmentsSectionState(

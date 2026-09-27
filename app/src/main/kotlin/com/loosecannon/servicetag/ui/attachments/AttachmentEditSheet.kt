@@ -105,6 +105,8 @@ fun AttachmentEditSheet(
                                 kind = kind,
                                 capturedOn = capturedOn.ifBlank { null },
                                 notes = notes,
+                                // #67, C2: the row's own role, so a rename never clears it.
+                                role = row.role,
                             ),
                         )
                     },

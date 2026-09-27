@@ -349,7 +349,7 @@ class AttachmentsSectionViewModelTest {
 
         vm.save(
             before.id,
-            UpdateAttachmentCommand("Installation guide", AttachmentKind.MANUAL, "2026-09-14", ""),
+            UpdateAttachmentCommand("Installation guide", AttachmentKind.MANUAL, "2026-09-14", "", before.role),
         )
 
         val after = vm.state
@@ -382,8 +382,8 @@ class AttachmentsSectionViewModelTest {
         // badge case in `ReminderHealthViewModelTest`.
         val closed = async(Dispatchers.Main) { vm.saved.take(2).toList() }
 
-        vm.save(row.id, UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes))
-        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes))
+        vm.save(row.id, UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes, row.role))
+        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes, row.role))
 
         // Silent, but not stuck: nothing to write still closes the sheet.
         assertEquals(listOf(row.id, row.id), closed.await())
@@ -500,7 +500,7 @@ class AttachmentsSectionViewModelTest {
         backgroundScope.launch(Dispatchers.Main) { vm.saved.collect { closed += it } }
         val said = async(Dispatchers.Main) { vm.messages.first() }
 
-        vm.save(row.id, UpdateAttachmentCommand("Installation guide", row.kind, row.capturedOn, ""))
+        vm.save(row.id, UpdateAttachmentCommand("Installation guide", row.kind, row.capturedOn, "", row.role))
 
         assertEquals("Could not save Installation guide", said.await())
         assertEquals(emptyList<String>(), closed)
@@ -518,12 +518,12 @@ class AttachmentsSectionViewModelTest {
         backgroundScope.launch(Dispatchers.Main) { vm.saved.collect { closed += it } }
         val said = async(Dispatchers.Main) { vm.messages.first() }
 
-        vm.save(row.id, UpdateAttachmentCommand("   ", row.kind, row.capturedOn, row.notes))
+        vm.save(row.id, UpdateAttachmentCommand("   ", row.kind, row.capturedOn, row.notes, row.role))
         assertEquals("Give the file a name", said.await())
         assertEquals(emptyList<String>(), closed)
         assertEquals("guide.pdf", vm.state.value.rows.single().displayName)
 
-        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes))
+        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes, row.role))
         vm.state.first { it.rows.singleOrNull()?.displayName == "Renamed.pdf" }
         assertEquals(listOf(row.id), closed)
         clearModels()
@@ -603,7 +603,7 @@ class AttachmentsSectionViewModelTest {
         val row = vm.state.first { it.rows.size == 1 }.rows.single()
 
         val closed = async(Dispatchers.Main) { vm.saved.first() }
-        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes))
+        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes, row.role))
         closed.await()
 
         val gone = async(Dispatchers.Main) { vm.deleted.first() }
@@ -641,7 +641,7 @@ class AttachmentsSectionViewModelTest {
         val row = vm.state.first { it.rows.size == 1 }.rows.single()
 
         val closed = async(Dispatchers.Main) { vm.saved.first() }
-        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes))
+        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes, row.role))
         closed.await()
         val gone = async(Dispatchers.Main) { vm.deleted.first() }
         vm.delete(row.id)
@@ -673,7 +673,7 @@ class AttachmentsSectionViewModelTest {
             vm.saved.collect { closed += it }
         }
         runCurrent()
-        val same = UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes)
+        val same = UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes, row.role)
         vm.save(row.id, same)
         vm.save(row.id, same)
         advanceUntilIdle()

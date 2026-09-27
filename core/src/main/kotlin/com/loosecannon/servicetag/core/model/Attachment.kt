@@ -5,6 +5,16 @@ const val MAX_ATTACHMENT_BYTES: Long = 268_435_456L
 
 enum class AttachmentKind { PHOTO, LABEL_PHOTO, RECEIPT, MANUAL, WARRANTY, DOCUMENT, OTHER }
 
+/**
+ * What a document is *for* on its asset (#67, C1). Independent of [AttachmentKind]: neither one
+ * constrains the other (R67-7), and any number of an asset's documents may share a role (R67-3).
+ *
+ * Allowed on an **asset-owned** attachment only (R67-11). There is deliberately no `init` rule on
+ * [Attachment]: the use cases refuse a role on an event owner before they write anything, and the
+ * backup reader refuses one in a file, which are the two places such a row could come from.
+ */
+enum class DocumentRole { PURCHASE_INVOICE_OR_RECEIPT, USER_MANUAL, SERVICE_MANUAL }
+
 /** REFERENCE is 4B's `SAF_DOCUMENT` pointer; 4A writes MANAGED rows only. */
 enum class AttachmentMode { MANAGED, REFERENCE }
 
@@ -15,6 +25,9 @@ sealed interface AttachmentOwner {
     data class OfAsset(val assetId: AssetId) : AttachmentOwner
     data class OfEvent(val eventId: EventId) : AttachmentOwner
 }
+
+/** R67-11, stated once: no role at all, or an asset's attachment. The use cases and the codec ask this. */
+fun AttachmentOwner.accepts(role: DocumentRole?): Boolean = role == null || this is AttachmentOwner.OfAsset
 
 data class Attachment(
     val id: AttachmentId,
@@ -31,6 +44,8 @@ data class Attachment(
     val notes: String = "",
     val createdAt: Long,
     val updatedAt: Long,
+    /** Null is "no role" — every row written before #67. Metadata only: it never moves bytes. */
+    val role: DocumentRole? = null,
 )
 
 /** The only question the thumbnail path asks. */
