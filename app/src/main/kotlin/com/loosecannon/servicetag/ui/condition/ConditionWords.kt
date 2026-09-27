@@ -44,6 +44,12 @@ const val HELPER_DOWN = "Not available for its intended use."
 /** S23: an empty reason, wherever a reason would appear (the block, S27, history). */
 const val NO_REASON_GIVEN = "No reason given"
 
+/**
+ * P82-10 (#82, R82-7, R82-8): the way to a new Incident — on asset detail's Condition section for every
+ * asset in service, and on the scan sheet while the current failure has none. It only navigates.
+ */
+const val LOG_INCIDENT = "Log incident"
+
 /** S1–S3 for a recorded condition, S4 for none. */
 fun conditionWord(condition: OperationalCondition?): String = when (condition) {
     OperationalCondition.OPERATIONAL -> CONDITION_OPERATIONAL
