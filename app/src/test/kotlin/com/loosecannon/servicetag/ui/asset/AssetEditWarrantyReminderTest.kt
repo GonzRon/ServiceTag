@@ -257,6 +257,24 @@ class AssetEditWarrantyReminderTest {
         assertTrue(stillDenied.requests.isEmpty())
     }
 
+    /** C11, R79-16: no lead set, no rationale — a rename or a new asset on a phone that denied notifications. */
+    @Test fun aSaveThatSetsNoLeadNeverAsks() = runTest {
+        heater()
+        val denied = FakePermission(isGranted = false)
+        val rename = editor("heater", denied)
+        rename.model.onName("Example Heater, garage")
+        rename.model.saveAndSettle()
+        assertFalse("a rename with the lead left blank asks nothing", rename.model.state.value.askingForNotifications)
+        assertEquals(listOf(AssetId("heater")), rename.saved)
+
+        val created = editor(permission = denied)
+        created.model.onName("Example Heater, loft")
+        created.model.saveAndSettle()
+        assertFalse("a new asset with no lead asks nothing", created.model.state.value.askingForNotifications)
+        assertEquals(1, created.saved.size)
+        assertTrue("and nothing is requested", denied.requests.isEmpty())
+    }
+
     /**
      * "Not now" requests nothing and finishes the editor; and the rationale waits for the #78 question,
      * then finishes the way that answer chose.

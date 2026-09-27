@@ -445,7 +445,8 @@ data class ScheduleEditState(
  * service-policy question (S65–S84, spec §10.4), whose filters and held Save keep every policy refusal
  * unreachable, and the health link guard's dialog on a refused save (S140–S141, S137; inv. 130).
  *
- * The permission request lives here and nowhere else (master plan decision 23, #24 AC 1). "First"
+ * The permission request lives here and in the asset editor (master plan decision 23, #24 AC 1; #79,
+ * R79-16 makes the asset editor the second requester, for a first warranty reminder lead). "First"
  * is derived from the store rather than a remembered flag: a create is the first one when the store
  * held no schedule before it. That is the same fact a persisted "already asked" flag would carry,
  * with nothing to drift out of step, and it makes both halves of the matrix row true by
