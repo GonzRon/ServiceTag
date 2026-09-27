@@ -1029,10 +1029,10 @@ class BackupCodecTest {
         return resealed(bytes, stripped.toByteArray(Charsets.UTF_8))
     }
 
-    /** The numbers this tip carries: the format moved to 10, the legacy boundary did not. */
+    /** The numbers this tip carries: the format moved to 10 (#67) and on to 11 (#79), the legacy boundary did not. */
     @Test
-    fun theFormatIsTenAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(10, BackupCodec.FORMAT_VERSION)
+    fun theFormatIsElevenAndTheLegacyBoundaryStaysSeven() {
+        assertEquals(11, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 
@@ -1125,11 +1125,15 @@ class BackupCodecTest {
         }
     }
 
-    /** Hazard: format 10 changing what an attachment without a role reads as. It reads exactly as before. */
+    /**
+     * Hazard: format 10 changing what an attachment without a role reads as. It reads exactly as before.
+     * Stamped 10 explicitly since #79 moved this build's own format to 11, so the case still reads a
+     * format-10 archive.
+     */
     @Test
     fun aFormat10ArchiveWithoutRolesRestoresAsBefore() {
         val data = roleData(attachmentDto("att-1"), attachmentDto("att-2", assetId = null, eventId = "e1", locator = "events/e1/att-2.pdf"))
-        val bytes = encoded(data)
+        val bytes = archiveAt(10, data)
 
         val decoded = BackupCodec.decode(bytes)
 

@@ -196,11 +196,12 @@ class BackupFormat8Test {
             MaintenanceScheduleDto.serializer().descriptor.names,
         )
         val assetFields = AssetDto.serializer().descriptor.names
+        // Format 11 (#79) appends the warranty reminder's lead after them (`BackupFormat11Test`).
         assertEquals(
             listOf("seasonMode", "blackoutStartMmdd", "blackoutEndMmdd", "healthAggregation", "healthPrimarySubjectId"),
-            assetFields.takeLast(5),
+            assetFields.dropLast(1).takeLast(5),
         )
-        assertEquals(29, assetFields.size)
+        assertEquals(30, assetFields.size)
         // By position: format 9's categories follow them (`BackupFormat9Test`).
         assertEquals(
             listOf("seasonActivations", "assetConditions", "healthSubjects"),
@@ -212,7 +213,7 @@ class BackupFormat8Test {
             SeasonActivationDto.serializer().descriptor to SeasonActivationDto.serializer().descriptor.names,
             AssetConditionDto.serializer().descriptor to AssetConditionDto.serializer().descriptor.names,
             HealthSubjectDto.serializer().descriptor to HealthSubjectDto.serializer().descriptor.names,
-            AssetDto.serializer().descriptor to assetFields.takeLast(5),
+            AssetDto.serializer().descriptor to assetFields.dropLast(1).takeLast(5),
             MaintenanceScheduleDto.serializer().descriptor to listOf("servicePolicy", "policyOffsetDays", "ruleChangedAt"),
         )
         for ((descriptor, fields) in newFields) {
@@ -266,18 +267,18 @@ class BackupFormat8Test {
     // --- direction -------------------------------------------------------------------------------
 
     /**
-     * Hazard: a newer archive half-read. A manifest one format past this build's (11, since #67 made
-     * the build's own 10) over a `data.json` that no format could read is refused as **newer**, not as
+     * Hazard: a newer archive half-read. A manifest one format past this build's (12, since #79 made
+     * the build's own 11) over a `data.json` that no format could read is refused as **newer**, not as
      * corrupt — so the gate ran before a single row was parsed.
      */
     @Test
     fun aFormatPastThisBuildsIsRefusedBeforeAnyRow() {
         val unreadable = dataTreeOf(archiveOf(fixture())).editRows("healthSubjects") { it.with("weight", JsonPrimitive("heavy")) }
-        val bytes = sealed(unreadable, formatVersion = 11)
+        val bytes = sealed(unreadable, formatVersion = 12)
 
         val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(bytes) }
-        assertEquals(11, refusal.found)
-        assertEquals(10, refusal.supported)
+        assertEquals(12, refusal.found)
+        assertEquals(11, refusal.supported)
         // The same tree at a format this build reads *is* parsed — and refused as corrupt.
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(sealed(unreadable, formatVersion = 8)) }
     }

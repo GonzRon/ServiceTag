@@ -347,8 +347,8 @@ class BackupFormat6Test {
         // That is what makes the assertion above a statement about ordering and not about the row.
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(unreadable)) }
 
-        // What a 1.1.x build sees: 10 is greater than the 5 it supported, so its gate fires too.
-        assertEquals(10, BackupCodec.FORMAT_VERSION)
+        // What a 1.1.x build sees: 11 is greater than the 5 it supported, so its gate fires too.
+        assertEquals(11, BackupCodec.FORMAT_VERSION)
         assertTrue(BackupCodec.FORMAT_VERSION > LAST_1_1_X_FORMAT)
     }
 

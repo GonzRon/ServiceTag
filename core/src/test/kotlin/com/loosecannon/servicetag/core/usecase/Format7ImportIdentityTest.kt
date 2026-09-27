@@ -227,9 +227,9 @@ class Format7ImportIdentityTest {
 
         val report = target.replace.run(bytes)
 
-        // The export is this build's: format 10 since #67 carries the document role beside #74's
-        // categories and 1.4's rows.
-        assertEquals(10, report.formatVersion)
+        // The export is this build's: format 11 since #79 carries the warranty reminder lead beside
+        // #67's document role, #74's categories and 1.4's rows.
+        assertEquals(11, report.formatVersion)
         assertEquals(source.everything(), target.everything())
         val floor = target.schedules.all().single()
         assertEquals(dayMillis("2026-01-05"), floor.ruleChangedAt)

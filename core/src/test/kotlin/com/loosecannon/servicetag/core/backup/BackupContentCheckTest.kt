@@ -311,4 +311,33 @@ class BackupContentCheckTest {
         )
         assertEquals(rows, BackupCodec.decode(archiveOf(rows)).data)
     }
+
+    // --- #79 (C18): the warranty reminder's lead --------------------------------------------------
+
+    /**
+     * R79-12b: a lead needs a warranty date — the row `SetWarrantyReminder` refuses and every edit that
+     * clears the date clears. The same lead with a date decodes.
+     */
+    @Test
+    fun aLeadWithoutADate() {
+        assertRefused(
+            data(assets = listOf(generator.copy(warrantyReminderLeadDays = 30))),
+            "assets: asset a1", "LeadWithoutDate",
+        )
+        val dated = generator.copy(warrantyExpiresOn = "2027-03-01", warrantyReminderLeadDays = 30)
+        assertEquals(data(assets = listOf(dated)), BackupCodec.decode(archiveOf(data(assets = listOf(dated)))).data)
+    }
+
+    /** R79-12a: whole days, at least one, and no upper bound — zero or less is refused, any larger lead decodes. */
+    @Test
+    fun aLeadOfZero() {
+        for (lead in listOf(0, -1)) {
+            assertRefused(
+                data(assets = listOf(generator.copy(warrantyExpiresOn = "2027-03-01", warrantyReminderLeadDays = lead))),
+                "assets: asset a1", "LeadNotPositive",
+            )
+        }
+        val far = data(assets = listOf(generator.copy(warrantyExpiresOn = "2027-03-01", warrantyReminderLeadDays = Int.MAX_VALUE)))
+        assertEquals(far, BackupCodec.decode(archiveOf(far)).data)
+    }
 }
