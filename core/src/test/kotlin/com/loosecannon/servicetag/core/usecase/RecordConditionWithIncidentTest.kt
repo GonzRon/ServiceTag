@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.OperationalCondition.DEGRADED
 import com.loosecannon.servicetag.core.model.OperationalCondition.DOWN
 import com.loosecannon.servicetag.core.model.OperationalCondition.OPERATIONAL
+import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
@@ -240,6 +241,47 @@ class RecordConditionWithIncidentTest {
         assertEquals(first.condition, again.condition)
         assertTrue(h.events.rows.isEmpty(), "no second Incident")
         assertEquals(listOf(first.condition), h.rows())
+    }
+
+    /**
+     * Hazard: the app's "Could not save this entry." path is folded into the owner's refusal (C1, C7). A
+     * quick action of another asset is exactly [EventOwnership], and nothing is written.
+     */
+    @Test
+    fun anOwnershipFailureIsNotARefusal() = runBlocking<Unit> {
+        h.asset("a1")
+        h.asset("a2", name = "Generator")
+        h.profile("p-other", EventKind.INCIDENT, assetId = "a2")
+
+        val foreign = assertFailsWith<IllegalArgumentException> {
+            h.recordConditionWithIncident.run(
+                AssetId("a1"), "c-held", held(), incident().copy(profileId = ProfileId("p-other")),
+            )
+        }
+
+        assertEquals(EventOwnership::class, foreign::class)
+        assertTrue(h.events.rows.isEmpty())
+        assertTrue(h.conditions.rows.isEmpty())
+        assertEquals(0, h.uow.commits)
+    }
+
+    /**
+     * Hazard: a missing asset reaches the owner as a refusal. It is exactly [NoSuchAsset], answered before
+     * the command is checked — a blank title on a missing asset is still [NoSuchAsset] — and nothing is
+     * written.
+     */
+    @Test
+    fun aMissingAssetIsNotARefusalAndIsAnsweredFirst() = runBlocking<Unit> {
+        for (cmd in listOf(incident(assetId = "a9"), incident(title = " ", assetId = "a9"))) {
+            val missing = assertFailsWith<IllegalArgumentException> {
+                h.recordConditionWithIncident.run(AssetId("a9"), "c-held", held(), cmd)
+            }
+            assertEquals(NoSuchAsset::class, missing::class, "title \"${cmd.title}\"")
+        }
+
+        assertTrue(h.events.rows.isEmpty())
+        assertTrue(h.conditions.rows.isEmpty())
+        assertEquals(0, h.uow.commits)
     }
 
     /**
