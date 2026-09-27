@@ -479,18 +479,26 @@ class ImportBackupMergeTest {
     }
 
     /**
-     * R67-12 B, end to end: an export made before this phone gave its document a role — a format-9
-     * archive, exactly as a #74 build wrote it — still re-plans IDENTICAL afterwards, so it stays
-     * restorable by merge and the dev → production path is not blocked by a role.
+     * R67-12 B, end to end, through the path the app really takes: an export made before this phone
+     * gave its documents a role — a format-9 archive, exactly as a #74 build wrote it — still re-plans
+     * **applicable, with zero INSERT and every attachment IDENTICAL** after the roles are given the way
+     * the sheet gives them, through `UpdateAttachment`, whose save also moves the last-modified stamp.
+     * So it stays restorable by merge, and the dev → production path is not blocked by a role.
      */
     @Test
-    fun `a pre-format-10 export still re-plans IDENTICAL after a role is given here`() {
+    fun `a pre-format-10 export still re-plans IDENTICAL after roles are given through UpdateAttachment`() {
         val phone = Fakes(
-            FakeAttachmentStorage(InMemoryAttachmentStore().also { it.files["assets/a1/att1.pdf"] = bytes }),
+            FakeAttachmentStorage(
+                InMemoryAttachmentStore().also {
+                    it.files["assets/a1/att1.pdf"] = bytes
+                    it.files["assets/a1/att2.pdf"] = bytes
+                },
+            ),
         )
         runBlocking {
             phone.assets.upsert(asset("a1", "Hot tub"))
             phone.attachments.upsert(attachment("att1", "a1"))
+            phone.attachments.upsert(attachment("att2", "a1"))
         }
         val before = BackupCodec.decode(exportOf(phone)).let { decoded ->
             BackupCodec.encode(
@@ -498,13 +506,31 @@ class ImportBackupMergeTest {
                 createdAt = 1_758_400_000_000L, backupSetId = "set-merge", formatVersion = 9,
             )
         }
-        runBlocking { phone.attachments.upsert(attachment("att1", "a1").copy(role = DocumentRole.USER_MANUAL)) }
+        val sheet = UpdateAttachment(phone.attachments, phone.uow, Clock { 1_758_500_000_000L })
+        runBlocking {
+            for ((id, role) in listOf("att1" to DocumentRole.USER_MANUAL, "att2" to DocumentRole.PURCHASE_INVOICE_OR_RECEIPT)) {
+                val row = phone.attachments.get(AttachmentId(id))!!
+                assertTrue(
+                    sheet.run(row.id, UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes, role))
+                        is AttachmentResult.Ok,
+                )
+            }
+            // the stamp moved with the role, as it does on the phone
+            assertEquals(listOf(1_758_500_000_000L, 1_758_500_000_000L), phone.attachments.all().map { it.updatedAt })
+        }
 
         val report = runBlocking { phone.merge.plan(before) }
 
-        assertTrue(report.applicable)
-        assertEquals(MergeTally(0, 1, 0, 0), report.attachments)
+        assertTrue(report.applicable, report.conflicts.toString())
+        assertEquals(MergeTally(0, 2, 0, 0), report.attachments)
         assertEquals(MergeTally(0, 1, 0, 0), report.assets)
+        val tallies = listOf(
+            report.assets, report.groups, report.definitions, report.profiles, report.schedules,
+            report.closures, report.links, report.tags, report.events, report.attachments,
+            report.references, report.seasonActivations, report.conditions, report.healthSubjects,
+            report.categories,
+        )
+        assertEquals(0, tallies.sumOf { it.insert })
     }
 
     /**

@@ -106,12 +106,14 @@ import java.security.MessageDigest
  * pre-upgrade export's `appliance` against this phone's canonical `Appliance` is `IDENTICAL`: the
  * two are one classification, and a spelling the catalog canonicalised is not a disagreement.
  * And the third (#67, R67-12 option B): an archive older than format 10 has its attachments compared
- * **without the document role** on either side: it cannot speak about roles, so a role given on this
- * phone since that export keeps the row `IDENTICAL` and every pre-#67 export keeps re-planning
- * `IDENTICAL`. A format-10 archive compares the role like any field — the same role is `IDENTICAL`; a
- * different role, a role against none here, or none against one here is `CONFLICT` /
- * `CONTENT_DIFFERS` — and there is no update path: a role travels by merge only on a row the
- * destination does not have.
+ * **without the document role**, and — when the row here carries one — **without the last-modified
+ * stamp** that giving it moved (`UpdateAttachment` stamps every save): it cannot speak about roles, so
+ * a role given on this phone since that export keeps the row `IDENTICAL` and every pre-#67 export
+ * keeps re-planning `IDENTICAL`. Every other field still counts, so a rename or a re-kind here is still
+ * a `CONFLICT`, and a row here with no role compares its stamp as before. A format-10 archive compares
+ * the role and the stamp like any field — the same role is `IDENTICAL`; a different role, a role
+ * against none here, or none against one here is `CONFLICT` / `CONTENT_DIFFERS` — and there is no
+ * update path: a role travels by merge only on a row the destination does not have.
  *
  * ### Categories (#74, C13)
  *
@@ -666,9 +668,15 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
     // kept because it is one map lookup, because a hand-built archive is not obliged to be
     // codec-shaped, and because slice B's owner remapping makes it live.
     val attachmentWrites = mutableListOf<Attachment>()
-    // R67-12 (option B): see the KDoc's canonical-content paragraph.
+    // R67-12 (option B): see the KDoc's canonical-content paragraph. Giving a document its role in
+    // the app (the sheet, through `UpdateAttachment`) moves the stamp too, so against an older archive
+    // a row here that carries a role is compared without both; one without a role compares as always.
     val rolesCompared = backup.manifest.formatVersion >= BackupCodec.FIRST_ROLE_FORMAT
-    fun AttachmentDto.compared(): AttachmentDto = if (rolesCompared) this else copy(role = null)
+    fun sameAttachment(incoming: AttachmentDto, here: AttachmentDto): Boolean = when {
+        rolesCompared -> incoming == here
+        here.role == null -> incoming.copy(role = null) == here
+        else -> incoming.copy(role = null, updatedAt = here.updatedAt) == here.copy(role = null)
+    }
     for (dto in data.attachments) {
         val row = dto.toDomain()
         val id = dto.id
@@ -683,7 +691,7 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
         }
         val stored = snapshot.storedBytes[dto.storageLocator]
         decisions += when {
-            local != null && dto.compared() == local.toDto().compared() ->
+            local != null && sameAttachment(dto, local.toDto()) ->
                 MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.IDENTICAL)
             local != null ->
                 MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
