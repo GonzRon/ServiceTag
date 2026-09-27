@@ -23,6 +23,7 @@ import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
+import com.loosecannon.servicetag.core.ports.DeadlineLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
@@ -98,6 +99,7 @@ import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.SetHealthPolicy
 import com.loosecannon.servicetag.core.usecase.SetMaintenanceBreak
 import com.loosecannon.servicetag.core.usecase.SetSeasonMode
+import com.loosecannon.servicetag.core.usecase.SetWarrantyReminder
 import com.loosecannon.servicetag.core.usecase.StoreIsEmpty
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
@@ -113,11 +115,13 @@ import com.loosecannon.servicetag.data.room.MIGRATION_6_7
 import com.loosecannon.servicetag.data.room.MIGRATION_7_8
 import com.loosecannon.servicetag.data.room.MIGRATION_8_9
 import com.loosecannon.servicetag.data.room.MIGRATION_9_10
+import com.loosecannon.servicetag.data.room.MIGRATION_10_11
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomCategoryRepository
 import com.loosecannon.servicetag.data.room.RoomClosureRepository
 import com.loosecannon.servicetag.data.room.RoomConditionRepository
+import com.loosecannon.servicetag.data.room.RoomDeadlineLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
@@ -196,7 +200,7 @@ class AppGraph(private val context: Context) {
         .setQueryCoroutineContext(Dispatchers.IO)
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
+            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
         )
         .build()
 
@@ -271,6 +275,10 @@ class AppGraph(private val context: Context) {
     /** Never exported and never merged (invariants 64, 65). Losing it costs one repeated notification. */
     val scheduleLocalDelivery: ScheduleLocalDeliveryRepository =
         RoomScheduleLocalDeliveryRepository(db.scheduleLocalDeliveryDao())
+
+    /** #79 (C17): a deadline's device-local stamp; never exported, never merged, no foreign key. */
+    val deadlineLocalDelivery: DeadlineLocalDeliveryRepository =
+        RoomDeadlineLocalDeliveryRepository(db.deadlineLocalDeliveryDao())
 
     /**
      * Derived state as a **read**, so the delivery path cannot reach the one write method the
@@ -542,6 +550,8 @@ class AppGraph(private val context: Context) {
     val archiveHealthSubject: ArchiveHealthSubject =
         ArchiveHealthSubject(healthSubjects, assets, schedules, uow, clock)
     val setHealthPolicy: SetHealthPolicy = SetHealthPolicy(assets, healthSubjects, uow, clock)
+    /** #79 (C2): the warranty reminder's lead, outside the asset form's command. */
+    val setWarrantyReminder: SetWarrantyReminder = SetWarrantyReminder(assets, uow, clock)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, today, recomputeSchedules, applyTemplate,
         promoteCategory,
@@ -779,6 +789,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 10
+        const val SCHEMA_VERSION = 11
     }
 }

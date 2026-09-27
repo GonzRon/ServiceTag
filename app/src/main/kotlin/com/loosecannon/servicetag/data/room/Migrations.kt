@@ -587,6 +587,27 @@ val MIGRATION_9_10: Migration = object : Migration(9, 10) {
 }
 
 /**
+ * Schema v10 -> v11 (#79, C17): two additions, and nothing existing moves.
+ *
+ *  1. `asset` gains `warranty_reminder_lead_days`, one nullable column with **no default and no
+ *     backfill**: every row an earlier install holds arrives with no reminder, and no timestamp moves,
+ *     so a pre-upgrade export still re-plans IDENTICAL (the [MIGRATION_9_10] shape).
+ *  2. `deadline_local_delivery`, the device-local stamp a deadline's warning keeps: `CREATE TABLE`
+ *     copied verbatim from the exported `11.json`, so Room validates it on open. No foreign key — its
+ *     subject is soft — and never exported or merged.
+ */
+val MIGRATION_10_11: Migration = object : Migration(10, 11) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `asset` ADD COLUMN `warranty_reminder_lead_days` INTEGER")
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `deadline_local_delivery` (`kind` TEXT NOT NULL, " +
+                "`subject_id` TEXT NOT NULL, `announced_hash` TEXT NOT NULL, `announced_boot` INTEGER, " +
+                "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`kind`, `subject_id`))",
+        )
+    }
+}
+
+/**
  * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
  * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
  */

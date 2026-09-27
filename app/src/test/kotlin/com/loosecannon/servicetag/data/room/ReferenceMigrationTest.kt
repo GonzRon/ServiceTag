@@ -59,10 +59,10 @@ class ReferenceMigrationTest {
             }
 
             // Every seeded row, field for field, before and after. No pre-existing table gains a
-            // column in *this* migration, but the chain now runs on to v10, so the known deltas —
-            // which `Migration7To8Test` and `Migration9To10Test` own — are taken out, and only
-            // those: the schedule's three season columns before, and the asset's five, the
-            // schedule's three and the attachment's one new ones after.
+            // column in *this* migration, but the chain now runs on to v11, so the known deltas —
+            // which `Migration7To8Test`, `Migration9To10Test` and `Migration10To11Test` own — are
+            // taken out, and only those: the schedule's three season columns before, and the asset's
+            // six, the schedule's three and the attachment's one new ones after.
             val after = withConnection(migrated) { c ->
                 SEEDED.associateWith { (t, id) -> c.rowOf(t, id) }
             }
@@ -73,7 +73,7 @@ class ReferenceMigrationTest {
                 },
                 after.mapValues { (key, row) ->
                     when (key.first) {
-                        "asset" -> row.without(V8_NEW_ASSET_COLUMNS)
+                        "asset" -> row.without(V8_NEW_ASSET_COLUMNS + V11_ASSET_COLUMNS)
                         "maintenance_schedule" -> row.without(V8_SCHEDULE_COLUMNS)
                         "attachment" -> row.without(V10_ATTACHMENT_COLUMNS)
                         else -> row
@@ -101,7 +101,7 @@ class ReferenceMigrationTest {
                     // A v7 table added later without a line in the loop below fails here first.
                     assertEquals(
                         "UNTOUCHED must name every table the migration found",
-                        m.tableNames() - REFERENCE - ROOM_INTERNAL - V8_TABLES - V9_TABLES,
+                        m.tableNames() - REFERENCE - ROOM_INTERNAL - V8_TABLES - V9_TABLES - V11_TABLES,
                         UNTOUCHED,
                     )
                     assertEquals("asset_reference columns", f.columnsOf(REFERENCE), m.columnsOf(REFERENCE))

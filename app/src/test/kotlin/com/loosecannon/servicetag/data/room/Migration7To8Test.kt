@@ -41,8 +41,11 @@ class Migration7To8Test {
                 val was = before.getValue(row)
                 val now = after.getValue(row)
                 when (row.table) {
-                    // the asset gains five columns and changes no value it had
-                    "asset" -> assertEquals("$row", was, now.filterNot { it.column() in V8_NEW_ASSET_COLUMNS })
+                    // the asset gains five columns and changes no value it had (and the chain runs on to
+                    // v11, whose one asset column `Migration10To11Test` owns)
+                    "asset" -> assertEquals(
+                        "$row", was, now.filterNot { it.column() in V8_NEW_ASSET_COLUMNS + V11_ASSET_COLUMNS },
+                    )
                     // the schedule loses three columns and gains three; every other value is as it was
                     "maintenance_schedule" -> assertEquals(
                         "$row",

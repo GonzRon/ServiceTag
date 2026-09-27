@@ -26,6 +26,9 @@ import androidx.room3.PrimaryKey
  * two NOT NULL ones carry a `defaultValue` equal to the migration's `DEFAULT`, or an upgraded and a
  * fresh database would be two schemas for one version. `health_primary_subject_id` is a **soft
  * link** with no foreign key (inv. 109).
+ *
+ * Schema v11 (#79, C17) appends `warranty_reminder_lead_days`, nullable with **no default**: null is
+ * "no reminder", which is what every row that existed before #79 is, so nothing is backfilled.
  */
 @Entity(
     tableName = "asset",
@@ -69,4 +72,5 @@ data class AssetEntity(
     @ColumnInfo(name = "blackout_end_mmdd") val blackoutEndMmdd: String? = null,
     @ColumnInfo(name = "health_aggregation", defaultValue = "WORST") val healthAggregation: String = "WORST",
     @ColumnInfo(name = "health_primary_subject_id") val healthPrimarySubjectId: String? = null,
+    @ColumnInfo(name = "warranty_reminder_lead_days") val warrantyReminderLeadDays: Int? = null,
 )

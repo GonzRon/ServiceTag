@@ -407,11 +407,11 @@ class LocalReminderProviderTest {
      * because either alone is weak: the delivery table's names appear nowhere in the backup or
      * merge sources, and **no backup use case can even be handed the port** — a reflective check
      * over the four constructors, which is what catches a parameter added later by someone who did
-     * not read this brief.
+     * not read this brief. #79 widens both to the deadline stamp, `deadline_local_delivery` (C17).
      */
     @Test
     fun noDeliveryStateReachesAnExportOrAMerge() {
-        val forbidden = Regex("""schedule_local_delivery|ScheduleLocalDelivery""")
+        val forbidden = Regex("""schedule_local_delivery|ScheduleLocalDelivery|deadline_local_delivery|DeadlineLocalDelivery""")
         listOf("backup", "merge").forEach { directory ->
             coreSources("core/src/main/kotlin/com/loosecannon/servicetag/core/$directory").forEach { file ->
                 assertFalse(
@@ -430,7 +430,7 @@ class LocalReminderProviderTest {
             val parameters = type.constructors.flatMap { it.parameterTypes.toList() }.map { it.name }
             assertFalse(
                 "${type.simpleName} must not take the delivery port",
-                parameters.any { "ScheduleLocalDelivery" in it },
+                parameters.any { "ScheduleLocalDelivery" in it || "DeadlineLocalDelivery" in it },
             )
         }
     }

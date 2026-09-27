@@ -1351,9 +1351,10 @@ class MaintenanceRoutesTest {
      * under the archive's own list names beside every shipped key. #74 moved the schema to 9 (its
      * `asset_category` table) and then the format to 9 (the archive that carries the categories);
      * #67 moves the schema to 10 (`attachment.document_role`) and then the format to 10 (the archive
-     * that carries the role).
+     * that carries the role); #79 moves the schema to 11 (the warranty reminder's lead and the
+     * device-local deadline table) ahead of its format.
      */
-    @Test fun statusReports10And10AndTheNewCounts() {
+    @Test fun statusReports11And10AndTheNewCounts() {
         val tub = createAsset("Hot tub")
         assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
         assertEquals(
@@ -1370,7 +1371,7 @@ class MaintenanceRoutesTest {
         )
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
-        assertEquals(10, status.schemaVersion)
+        assertEquals(11, status.schemaVersion)
         assertEquals(10, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
