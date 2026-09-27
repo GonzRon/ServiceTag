@@ -53,8 +53,12 @@ import com.loosecannon.servicetag.ui.clearInstall
 import com.loosecannon.servicetag.ui.condition.CHANGE_CONDITION
 import com.loosecannon.servicetag.ui.condition.CONDITION_TITLE
 import com.loosecannon.servicetag.ui.condition.END_SEASON
+import com.loosecannon.servicetag.ui.condition.LOG_INCIDENT_DETAILS
+import com.loosecannon.servicetag.ui.condition.LOG_INCIDENT_DETAILS_QUESTION
 import com.loosecannon.servicetag.ui.condition.MARK_OPERATIONAL
 import com.loosecannon.servicetag.ui.condition.MARK_OPERATIONAL_TITLE
+import com.loosecannon.servicetag.ui.condition.PendingCondition
+import com.loosecannon.servicetag.ui.condition.SAVE_CONDITION
 import com.loosecannon.servicetag.ui.condition.START_SEASON
 import com.loosecannon.servicetag.ui.condition.WHEN_DID_THIS_CHANGE
 import com.loosecannon.servicetag.ui.condition.displayDate
@@ -96,7 +100,11 @@ class AssetDetailConditionHealthSeasonTest {
     private val zone: String get() = ZoneId.systemDefault().id
 
     /** Asset detail on [initial], opened on [section]; the returned setter switches it to another asset. */
-    private fun detail(initial: AssetId, section: String? = null): (AssetId) -> Unit {
+    private fun detail(
+        initial: AssetId,
+        section: String? = null,
+        onLogIncidentDetails: (PendingCondition) -> Unit = {},
+    ): (AssetId) -> Unit {
         var shown by mutableStateOf(initial)
         rule.setContent {
             ServiceTagTheme {
@@ -107,6 +115,7 @@ class AssetDetailConditionHealthSeasonTest {
                     onLogEvent = { _, _ -> }, onOpenEvent = {}, onOpenAsset = {}, onAddComponent = {},
                     onAddSchedule = {}, onLogOutcome = { _, _ -> }, onOpenSettings = {},
                     onOpenSchedule = {}, onOpenGroup = {}, section = section,
+                    onLogIncidentDetails = onLogIncidentDetails,
                 )
             }
         }
@@ -425,6 +434,31 @@ class AssetDetailConditionHealthSeasonTest {
         rule.waitForIdle()
         plateName("Generator").assertIsDisplayed()
         rule.onNodeWithText(SCHEDULES_SECTION).assertIsNotDisplayed()
+    }
+
+    /**
+     * #82, §3 row 18: Change condition opened from asset detail holds DOWN and asks P82-1; "Log
+     * incident details" hands the draft to the screen's host — which opens the Incident entry — and
+     * nothing is written here.
+     */
+    @Test fun theDetailsSheetHandsTheDraftToItsHost() {
+        val gen = asset("Generator")
+        val drafts = mutableListOf<PendingCondition>()
+        detail(gen, onLogIncidentDetails = { drafts += it })
+
+        rule.awaitText(CHANGE_CONDITION)
+        rule.onNodeWithText(CHANGE_CONDITION).performScrollTo().performClick()
+        rule.awaitText(SAVE_CONDITION)
+        rule.onNodeWithText("Down").performClick()
+        rule.onNodeWithText(SAVE_CONDITION).performClick()
+        rule.awaitText(LOG_INCIDENT_DETAILS_QUESTION)
+        rule.onNodeWithText("Generator is DOWN. Record what went wrong in the service record?").assertIsDisplayed()
+        rule.onNodeWithText(LOG_INCIDENT_DETAILS).performClick()
+
+        rule.waitUntil(TIMEOUT_MS) { drafts.isNotEmpty() }
+        assertEquals(OperationalCondition.DOWN, drafts.single().condition)
+        assertEquals(today.toString(), drafts.single().occurredOn)
+        assertEquals("nothing written", emptyList<AssetCondition>(), conditionRows(gen))
     }
 
     private companion object {

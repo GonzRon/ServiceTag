@@ -3,10 +3,14 @@ package com.loosecannon.servicetag.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -15,7 +19,11 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import com.loosecannon.servicetag.MainActivity
+import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.usecase.AssetCommand
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -83,5 +91,60 @@ class JournalSmokeTest {
             // fold on a phone, so scroll to it rather than asserting a node that merely exists.
             rule.onNodeWithText("Water test").performScrollTo().assertIsDisplayed()
         }
+    }
+
+    /**
+     * #82's Workflow A through the real back stack: Change condition with DOWN asks P82-1 and writes
+     * nothing; "Log incident details" opens the prefilled Incident entry with P82-5; closing the entry
+     * brings the question back; the entry's Save records the Incident and the held row, linked, once,
+     * and the sheet closes on the way back without another write.
+     */
+    @Test fun logIncidentDetailsRecordsTheIncidentAndTheConditionTogether() {
+        val graph = app.graph
+        val pump = runBlocking { graph.createAsset.run(AssetCommand(name = "Pump", category = "Water")).id }
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("servicetag://asset/${pump.value}"))
+            .setClass(context, MainActivity::class.java)
+
+        ActivityScenario.launch<MainActivity>(intent).use {
+            rule.awaitText("Change condition")
+            rule.onNodeWithText("Change condition").performScrollTo().performClick()
+            rule.awaitText("Save condition")
+            rule.onNodeWithText("Down").performClick()
+            rule.onNode(hasSetTextAction() and hasText("What is wrong? (optional)")).performTextInput("Will not start")
+            rule.onNodeWithText("Save condition").performClick()
+            rule.awaitText("Log incident details?")
+            rule.onNodeWithText("Pump is DOWN. Record what went wrong in the service record?").assertIsDisplayed()
+            assertEquals(0, runBlocking { graph.conditions.all().size })
+
+            // The entry opens prefilled, with P82-5 under its eyebrow; closing it writes nothing.
+            rule.onNodeWithText("Log incident details").performClick()
+            rule.awaitText("Saving also records Pump as DOWN.")
+            rule.onNode(hasSetTextAction() and hasText("Entry")).assert(hasText("Will not start"))
+            rule.onNodeWithContentDescription("Close").performClick()
+            rule.awaitText("Log incident details?")
+            assertEquals(0, runBlocking { graph.events.all().size + graph.conditions.all().size })
+
+            // Asked again, answered again: the entry's Save records both, and the sheet closes.
+            rule.onNodeWithText("Log incident details").performClick()
+            rule.awaitText("Saving also records Pump as DOWN.")
+            rule.onAllNodesWithText("Save").onFirst().performClick()
+            rule.awaitText("SERVICE RECORD")
+            rule.waitUntil(TIMEOUT_MS) {
+                rule.onAllNodesWithText("Save condition").fetchSemanticsNodes().isEmpty() &&
+                    rule.onAllNodesWithText("Log incident details?").fetchSemanticsNodes().isEmpty()
+            }
+            val incident = runBlocking { graph.events.all().single() }
+            assertEquals(EventKind.INCIDENT, incident.kind)
+            assertEquals("Will not start", incident.title)
+            val row = runBlocking { graph.conditions.all().single() }
+            assertEquals(OperationalCondition.DOWN, row.condition)
+            assertEquals(incident.id, row.eventId)
+            rule.onAllNodesWithText("DOWN").onFirst().assertIsDisplayed()
+        }
+    }
+
+    private companion object {
+        const val TIMEOUT_MS = 10_000L
     }
 }

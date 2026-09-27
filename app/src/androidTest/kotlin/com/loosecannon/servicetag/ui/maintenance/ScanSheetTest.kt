@@ -48,6 +48,7 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
+import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.condition.displayDate
 import com.loosecannon.servicetag.ui.scan.TagResultSheet
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
@@ -162,7 +163,12 @@ class ScanSheetTest {
         mower.id.value to tagId
     }
 
-    private fun sheetFor(graph: AppGraph, assetId: String, tagId: String?): MutableList<String> {
+    private fun sheetFor(
+        graph: AppGraph,
+        assetId: String,
+        tagId: String?,
+        onLogIncidentDetails: (PendingCondition) -> Unit = {},
+    ): MutableList<String> {
         val record = mutableListOf<String>()
         rule.setContent {
             ServiceTagTheme {
@@ -174,6 +180,7 @@ class ScanSheetTest {
                     onReviewSchedule = { record += "review:$it" },
                     onLogForm = { asset, profile -> record += "form:$asset:$profile" },
                     onDismiss = { record += "dismiss" },
+                    onLogIncidentDetails = onLogIncidentDetails,
                 )
             }
         }
@@ -640,6 +647,33 @@ class ScanSheetTest {
         val event = runBlocking { graph.events.all().single() }
         assertEquals(LocalDate.now().plusDays(1).toString(), event.occurredOn)
         assertEquals(1, conditionRows(graph))
+    }
+
+    /**
+     * #82, §3 row 18: Change condition opened from the scan sheet holds DOWN and asks P82-1; "Log
+     * incident details" hands the draft to the sheet's host, and the scan writes nothing.
+     */
+    @Test fun theScanSheetsSheetHandsTheDraftToItsHost() {
+        val graph = app.graph
+        val pack = asset(graph, "Battery pack")
+        record(graph, pack, OperationalCondition.DEGRADED, LocalDate.now().minusDays(1), reason = "Cells warm")
+        val drafts = mutableListOf<PendingCondition>()
+        val trail = sheetFor(graph, pack.value, null, onLogIncidentDetails = { drafts += it })
+
+        rule.awaitText("Change condition")
+        rule.onNodeWithText("Change condition").performClick()
+        rule.awaitText("Save condition")
+        rule.onNodeWithText("Down").performClick()
+        rule.onNodeWithText("Save condition").performClick()
+        rule.awaitText("Log incident details?")
+        rule.onNodeWithText("Battery pack is DOWN. Record what went wrong in the service record?").assertIsDisplayed()
+        rule.onNodeWithText("Log incident details").performClick()
+
+        rule.waitUntil(TIMEOUT_MS) { drafts.isNotEmpty() }
+        assertEquals(OperationalCondition.DOWN, drafts.single().condition)
+        assertEquals("only the DEGRADED row", 1, conditionRows(graph))
+        assertEquals(0, runBlocking { graph.events.all().size })
+        assertEquals("the sheet stays open", emptyList<String>(), trail)
     }
 
     private companion object {
