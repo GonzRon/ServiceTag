@@ -48,6 +48,7 @@ class ReferenceRoutesTest {
             maintenanceHandlersFor(graph),
             referenceHandlersFor(graph),
             seasonHealthHandlersFor(graph),
+            warrantyHandlersFor(graph),
             appVersion = "1.3.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -524,26 +525,32 @@ class ReferenceRoutesTest {
         val text = repoFile("docs/api/v1.md").readText()
 
         // 1.4 (B09): format 8 made the report fourteen tables, the import range 1–8 and the asset
-        // sub-resources sixteen; #74's format 9 made them fifteen and 1–9, and #67's format 10 made the
-        // range 1–10. These pins moved with the document.
+        // sub-resources sixteen; #74's format 9 made them fifteen and 1–9, #67's format 10 made the
+        // range 1–10, and #79's format 11 made it 1–11 and its two warranty routes the sub-resources
+        // eighteen. These pins moved with the document.
         assertFalse("the merge report is fifteen tables now", "eleven tables" in text || "fourteen tables" in text)
         assertTrue("the merge report must say fifteen tables", "fifteen tables" in text)
         // The bare string, both sites: the document spells the emphasis two ways, and a pattern
         // pinned to one asterisk placement would leave the other stale and still report clean.
-        assertFalse("the import endpoints read format 1–10 now", "1–7" in text || "1–8" in text || "1–9" in text)
-        // Both emphasis spellings, because a bare "1–10" is also the health weight's range.
+        assertFalse("the import endpoints read format 1–11 now", "1–7" in text || "1–8" in text || "1–9" in text)
+        // "1–10" only in its two emphasis spellings, because a bare "1–10" is also the health weight's range.
+        assertFalse(
+            "the import endpoints read format 1–11 now",
+            "format **1–10**" in text || "**format 1–10**" in text,
+        )
+        // Both emphasis spellings.
         assertTrue(
-            "the import endpoints must say 1–10",
-            "format **1–10**" in text && "**format 1–10**" in text,
+            "the import endpoints must say 1–11",
+            "format **1–11**" in text && "**format 1–11**" in text,
         )
 
         assertFalse(
-            "there are sixteen asset sub-resources now",
-            "nine `/v1/assets/{id}/…` sub-resources" in text,
+            "there are eighteen asset sub-resources now",
+            "nine `/v1/assets/{id}/…` sub-resources" in text || "sixteen `/v1/assets/{id}/…` sub-resources" in text,
         )
         assertTrue(
-            "the 405 row must name sixteen asset sub-resources",
-            "sixteen `/v1/assets/{id}/…` sub-resources" in text,
+            "the 405 row must name eighteen asset sub-resources",
+            "eighteen `/v1/assets/{id}/…` sub-resources" in text,
         )
 
         // The one code the mapper can spell and no route can return. The 1.2 subsection documents

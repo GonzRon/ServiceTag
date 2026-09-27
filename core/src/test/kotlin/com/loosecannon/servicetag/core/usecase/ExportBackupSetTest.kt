@@ -28,7 +28,7 @@ class ExportBackupSetTest {
 
         val decoded = BackupCodec.decode(install.export.run().data)
 
-        assertEquals(10, decoded.manifest.formatVersion)   // this build's export: format 10 since #67
+        assertEquals(11, decoded.manifest.formatVersion)   // this build's export: format 11 since #79
         assertEquals(rows, decoded.data.assetCategories.map { it.toDomain() })
         assertEquals(2, decoded.manifest.counts["assetCategories"])
     }
@@ -43,5 +43,32 @@ class ExportBackupSetTest {
 
         assertEquals(emptyList(), decoded.data.assetCategories)
         assertEquals(0, decoded.manifest.counts["assetCategories"])
+    }
+
+    /**
+     * #79 (C18): the warranty reminder's lead leaves with its asset and lands with it — by a replace,
+     * and by a merge into an install that has neither asset — and this install's own export re-plans
+     * IDENTICAL against it. An unset lead travels as none.
+     */
+    @Test
+    fun theWarrantyReminderLeadTravelsWithItsAsset() = runBlocking<Unit> {
+        val source = BackupInstall()
+        val led = plainAssetOf("h1", "Example Heater").copy(warrantyExpiresOn = "2027-03-01", warrantyReminderLeadDays = 30)
+        val plain = plainAssetOf("h2", "Example Heater two")
+        source.assets.upsert(led)
+        source.assets.upsert(plain)
+        val bytes = source.export.run().data
+
+        val replaced = BackupInstall()
+        replaced.replace.run(bytes)
+        assertEquals(listOf(led, plain), replaced.assets.all().sortedBy { it.id.value })
+
+        val merged = BackupInstall()
+        merged.apply.run(merged.build.run(bytes))
+        assertEquals(listOf(30, null), merged.assets.all().sortedBy { it.id.value }.map { it.warrantyReminderLeadDays })
+
+        val again = source.build.run(bytes)
+        assertEquals(true, again.applicable)
+        assertEquals(emptyList(), again.writes.assets, "IDENTICAL against the phone it came from")
     }
 }

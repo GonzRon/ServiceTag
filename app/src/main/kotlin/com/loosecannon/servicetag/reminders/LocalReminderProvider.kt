@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.DeadlineLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
@@ -13,6 +14,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleLocalDelivery
 import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.reminders.DeadlineKind
 import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.reminders.ReconcileReport
 import com.loosecannon.servicetag.core.reminders.ReminderHealthFinding
@@ -22,6 +24,7 @@ import com.loosecannon.servicetag.core.reminders.ReminderSubject
 import com.loosecannon.servicetag.core.reminders.RemoteChange
 import com.loosecannon.servicetag.core.reminders.RepairAction
 import com.loosecannon.servicetag.core.reminders.SubjectKey
+import com.loosecannon.servicetag.core.reminders.SubjectState
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.prefs.AppPrefs
@@ -66,8 +69,9 @@ class ScheduleDeliveryFacts(
     private val today: Today,
 ) : DeliveryFactsSource {
 
+    /** A key that is not a schedule's has no schedule facts: the deadline branch reads its own. */
     override suspend fun factsFor(key: SubjectKey): DeliveryFacts? {
-        val id = (key as SubjectKey.Schedule).scheduleId
+        val id = (key as? SubjectKey.Schedule)?.scheduleId ?: return null
         val schedule = schedules.get(id) ?: return null
         val state = states.stateOf(id) ?: return null
         val on = today.localDate()
@@ -158,6 +162,13 @@ class LocalReminderProvider(
      * shade. The call site below says which way round it has to be and why.
      */
     private val quickActions: QuickActions,
+    /**
+     * #79 (C6, C7): what a deadline's warning needs that the port does not carry, and its
+     * device-local stamp. The defaults are a provider handed no deadline facts, which therefore
+     * posts no warning and needs no stamp; `AppGraph` passes the real pair.
+     */
+    private val deadlineFacts: DeadlineFactsSource = DeadlineFactsSource { null },
+    private val deadlineDelivery: DeadlineLocalDeliveryRepository = NoDeadlineStamps,
 ) : ReminderProvider {
 
     override val id: ProviderId = ProviderId.LOCAL
@@ -172,19 +183,14 @@ class LocalReminderProvider(
         if (!alarm.armed()) alarm.arm()
         val now = clock.nowMillis()
         if (!deliveryEnabled()) return silence(now)
-        val inputs = subjects.map { subject ->
-            DeliveryInput(
-                subject = subject,
-                facts = facts.factsFor(subject.key),
-                delivery = delivery.get((subject.key as SubjectKey.Schedule).scheduleId),
-            )
-        }
+        val inputs = subjects.map { inputOf(it) }
 
         val decision = DigestPolicy.decide(
             inputs = inputs,
             standingTags = notifications.standingItems(),
             standingSummaryTag = notifications.standingSummary(),
             nowMillis = now,
+            bootCount = platform.bootCount(),
             // Per channel, not globally (fix round 1, finding 2): an owner who sets "Maintenance
             // due" to None must still get overdue reminders on the un-muted HIGH channel. Spec
             // §5.5 makes a muted channel *detectable*, and D-22's principle is that a platform
@@ -205,12 +211,48 @@ class LocalReminderProvider(
         // so its old nonce has to go before its new one is issued rather than after (D-21).
         decision.rows.forEach { delivery.upsert(it) }
         clearNoncesFor(decision.cancelTags, now)
-        decision.posts.forEach { post ->
-            notifications.postItem(post, quickActions.forSchedule((post.key as SubjectKey.Schedule).scheduleId))
-        }
+        // #79 (C7): the deadline stamps, in their own device-local table.
+        decision.deadlineRows.forEach { deadlineDelivery.upsert(it) }
+        decision.deadlineForgotten.forEach { deadlineDelivery.delete(it.kind.name, it.subjectId) }
+        forgetAbsentDeadlines(subjects)
+        decision.posts.forEach { post -> notifications.postItem(post, actionsFor(post.key)) }
         decision.summary?.let(notifications::postSummary)
 
         return decision.report
+    }
+
+    /**
+     * One subject routed to its family's input, by the key's own type — the one place the two
+     * families part, so nothing downstream has to ask what a key is.
+     */
+    private suspend fun inputOf(subject: ReminderSubject): DigestInput = when (val key = subject.key) {
+        is SubjectKey.Schedule -> DeliveryInput(subject, facts.factsFor(key), delivery.get(key.scheduleId))
+        is SubjectKey.Deadline ->
+            DeadlineInput(subject, deadlineFacts.factsFor(key), deadlineDelivery.get(key.kind.name, key.subjectId))
+    }
+
+    /**
+     * **Absence forgets** (#79, C7): a stamp whose key is not an Active subject of this list is
+     * deleted — the date or lead cleared, the asset out of service or gone, the expiry passed, or a
+     * row a restore left behind for an asset this install no longer holds (the table has no foreign
+     * key, and a replace restore never touches it). A stored kind this build does not know is
+     * nobody's subject, so it goes too.
+     */
+    private suspend fun forgetAbsentDeadlines(subjects: List<ReminderSubject>) {
+        val wanted = subjects.filter { it.state == SubjectState.Active }.map { it.key }
+            .filterIsInstance<SubjectKey.Deadline>().toSet()
+        deadlineDelivery.all().forEach { row ->
+            val kind = DeadlineKind.entries.firstOrNull { it.name == row.kind }
+            if (kind == null || SubjectKey.Deadline(kind, row.subjectId) !in wanted) {
+                deadlineDelivery.delete(row.kind, row.subjectId)
+            }
+        }
+    }
+
+    /** B07's actions for a schedule; "Open" alone for a deadline (#79, C8). */
+    private suspend fun actionsFor(key: SubjectKey): List<QuickAction> = when (key) {
+        is SubjectKey.Schedule -> quickActions.forSchedule(key.scheduleId)
+        is SubjectKey.Deadline -> quickActions.forDeadline(key)
     }
 
     /**
@@ -224,8 +266,9 @@ class LocalReminderProvider(
      * in the decision's own inputs and the digest policy never saw it.
      */
     private suspend fun clearNoncesFor(cancelledTags: List<String>, nowMillis: Long) {
-        cancelledTags.map { it.scheduleIdOfTag() }.distinct().forEach { id ->
-            val row = delivery.get(ScheduleId(id)) ?: return@forEach
+        // Schedule keys only: a deadline's warning carries no nonce (#79, C8).
+        cancelledTags.mapNotNull(::keyOfTag).filterIsInstance<SubjectKey.Schedule>().distinct().forEach { key ->
+            val row = delivery.get(key.scheduleId) ?: return@forEach
             if (row.actionNonce == null && row.nonceIssuedAt == null) return@forEach
             delivery.upsert(row.copy(actionNonce = null, nonceIssuedAt = null, updatedAt = nowMillis))
         }
@@ -306,6 +349,9 @@ class LocalReminderProvider(
         standing.forEach(notifications::cancelItem)
         if (notifications.standingSummary() != null) notifications.cancelSummary()
         clearNoncesFor(standing, nowMillis)
+        // #79 (C7): a warning taken down by the switch is forgotten with it, so switching back on
+        // announces it again.
+        deadlineDelivery.deleteAll()
         return ReconcileReport(0, standing.size, 0, listOf(SILENCED))
     }
 

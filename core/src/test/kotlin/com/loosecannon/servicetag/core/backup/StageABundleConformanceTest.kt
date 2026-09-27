@@ -98,11 +98,12 @@ class StageABundleConformanceTest {
         )
 
         // The format ≤7 asset key set: `AssetDto`'s names minus format 8's five, which the decoder
-        // writes into an old tree itself and which the format-5 generator therefore never emits.
+        // writes into an old tree itself and which the format-5 generator therefore never emits, and
+        // minus format 11's lead (#79), which defaults to null and which the generator never emits.
         assertKeysMatch(
             "assets",
             data.getValue("assets").jsonArray,
-            AssetDto.serializer().descriptor.elementNames.toSet() - FORMAT_8_ASSET_FIELDS,
+            AssetDto.serializer().descriptor.elementNames.toSet() - FORMAT_8_ASSET_FIELDS - FORMAT_11_ASSET_FIELDS,
         )
         assertKeysMatch(
             "measurementDefinitions",
@@ -196,5 +197,6 @@ class StageABundleConformanceTest {
             "seasonMode", "blackoutStartMmdd", "blackoutEndMmdd", "healthAggregation",
             "healthPrimarySubjectId",
         )
+        private val FORMAT_11_ASSET_FIELDS = setOf("warrantyReminderLeadDays")
     }
 }

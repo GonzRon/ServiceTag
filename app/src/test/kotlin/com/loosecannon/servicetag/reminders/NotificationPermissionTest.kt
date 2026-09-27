@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.reminders
 
 import android.app.Application
 import android.os.Build
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -30,6 +31,22 @@ class NotificationPermissionTest {
         )
         assertFalse(
             grantedOf(sdkInt = Build.VERSION_CODES.TIRAMISU, notificationsEnabled = true, permissionCheckGranted = false),
+        )
+    }
+
+    /**
+     * #79 (C9, R79-16): the asset editor's rationale is its own ratified sentence (P79-12), beside
+     * the schedule editor's, which is unchanged.
+     */
+    @Test
+    fun theWarrantyRationaleIsItsOwnRatifiedSentenceBesideTheShippedOne() {
+        assertEquals(
+            "ServiceTag needs notification permission to remind you before a warranty expires.",
+            WARRANTY_NOTIFICATION_RATIONALE,
+        )
+        assertEquals(
+            "ServiceTag needs notification permission to remind you when maintenance is due.",
+            NOTIFICATION_PERMISSION_RATIONALE,
         )
     }
 

@@ -64,7 +64,7 @@ internal fun openMigrated(file: File): AppDatabase = Room
     .setQueryCoroutineContext(Dispatchers.Default)
     .addMigrations(
         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
-        MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
+        MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
     )
     .build()
 
@@ -213,6 +213,12 @@ internal val V9_TABLES = setOf("asset_category")
 
 /** The one column schema v10 appends to `attachment` (#67): nullable, never backfilled. */
 internal val V10_ATTACHMENT_COLUMNS = setOf("document_role")
+
+/** The one column schema v11 appends to `asset` (#79): nullable, never backfilled. */
+internal val V11_ASSET_COLUMNS = setOf("warranty_reminder_lead_days")
+
+/** The one table schema v11 added (#79): device-local, never exported. */
+internal val V11_TABLES = setOf("deadline_local_delivery")
 
 /** The seven tables schema v2 added. */
 internal val JOURNAL_TABLES = setOf(

@@ -99,7 +99,7 @@ import java.security.MessageDigest
  *
  * **Canonical content is every backup-format field**, `createdAt` and the last-modified stamp
  * included, compared as `incoming == local.toDto()` in every pass and in the same direction. There
- * are three normalisations. The aggregate tables' child lists are read in `(sortOrder, id)`
+ * are four normalisations. The aggregate tables' child lists are read in `(sortOrder, id)`
  * order: `sortOrder` is the order the format writes them in (`BackupCodec.kt:85`–`96`) and the id
  * makes the key total, because the format does not promise `sortOrder` is unique within a parent.
  * And (#74, C13) an asset's `category` is read through `CategoryKey.of` on **both** sides, so a
@@ -114,6 +114,13 @@ import java.security.MessageDigest
  * the role and the stamp like any field — the same role is `IDENTICAL`; a different role, a role
  * against none here, or none against one here is `CONFLICT` / `CONTENT_DIFFERS` — and there is no
  * update path: a role travels by merge only on a row the destination does not have.
+ * And the fourth (#79, R79-11b, the same shape): an archive older than format 11 has its assets
+ * compared **without the warranty reminder's lead**, and — when the row here carries one — **without
+ * the last-modified stamp** that setting it moved (`SetWarrantyReminder` stamps every change), so a
+ * lead set on this phone since that export keeps the asset `IDENTICAL` and every pre-#79 export keeps
+ * re-planning `IDENTICAL`. Every other field still counts — a rename or another warranty date here is
+ * still a `CONFLICT` — and a row here with no lead compares its stamp as before. A format-11 archive
+ * compares the lead and the stamp like any field, with no update path.
  *
  * ### Categories (#74, C13)
  *
@@ -261,6 +268,15 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
     // `parentsFirst` gives indegree 0 to an asset whose parent is outside the collection
     // (`AssetTree.kt:54`–`56`), which is exactly a parent that lives in the destination.
     val assetDtos = data.assets.associateBy { it.id }
+    // R79-11b (option B): see the KDoc's canonical-content paragraph. The #74 normalisation applies
+    // on every path; below format 11 the lead is set aside, and with it the stamp when a lead is here.
+    val leadsCompared = backup.manifest.formatVersion >= BackupCodec.FIRST_LEAD_FORMAT
+    fun sameAsset(incoming: AssetDto, here: AssetDto): Boolean = when {
+        leadsCompared -> incoming.keyed() == here.keyed()
+        here.warrantyReminderLeadDays == null -> incoming.copy(warrantyReminderLeadDays = null).keyed() == here.keyed()
+        else -> incoming.copy(warrantyReminderLeadDays = null, updatedAt = here.updatedAt).keyed() ==
+            here.copy(warrantyReminderLeadDays = null).keyed()
+    }
     val assetWrites = mutableListOf<Asset>()
     val acceptedAssets = mutableSetOf<String>()
     for (row in AssetTree.parentsFirst(data.assets.map { it.toDomain() })) {
@@ -269,8 +285,8 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
         val local = localAssets[id]
         val parent = row.parentAssetId?.value
         decisions += when {
-            // The second normalisation (#74): `category` by its key, on both sides.
-            local != null && dto.keyed() == local.toDto().keyed() ->
+            // The second normalisation (#74): `category` by its key, on both sides; the fourth (#79) inside.
+            local != null && sameAsset(dto, local.toDto()) ->
                 MergeDecision(MergeTable.ASSETS, id, MergeVerdict.IDENTICAL)
             local != null ->
                 MergeDecision(MergeTable.ASSETS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)

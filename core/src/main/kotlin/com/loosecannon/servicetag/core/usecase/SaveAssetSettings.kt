@@ -15,13 +15,14 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
  * Everything the asset editor saves in one tap (spec §10.4): the asset, its season, its break and its
- * health policy.
+ * health policy — and (#79, C2) the warranty reminder, whose `null` part keeps the stored lead.
  */
 data class AssetSettingsCommand(
     val asset: AssetCommand,
     val seasonMode: SeasonModeCommand,
     val maintenanceBreak: BreakCommand,
     val healthPolicy: HealthPolicyCommand,
+    val warrantyReminder: WarrantyReminderCommand? = null,
 )
 
 /**
@@ -47,6 +48,10 @@ data class AssetSettingsCommand(
  *   does. No event, closure or schedule column is touched (inv. 86).
  * - **`id == null` creates the asset**, seeding [templateKey]'s definitions and quick actions in the
  *   same transaction, as [CreateAsset] does.
+ * - **The warranty reminder** (#79, C2; R79-11, R79-12): a non-null [AssetSettingsCommand.warrantyReminder]
+ *   is judged by [SetWarrantyReminder]'s rule against this command's own warranty date and written in the
+ *   same asset row; a null part keeps the stored lead, and a save that clears the date clears the lead
+ *   ([applying]'s date rule).
  * - **The category is promoted** (#74, C5): `next` carries the catalog's spelling
  *   ([PromoteCategory.resolve]), so the unchanged comparison sees it, and a first-use category's row
  *   is written beside the asset upsert — after the early return and after every refusal, so an
@@ -83,6 +88,11 @@ class SaveAssetSettings(
             all,
             id,
         )
+        // #79: the fifth part, judged against this command's own (trimmed) date, not the stored one.
+        cmd.warrantyReminder?.let { part ->
+            val problems = warrantyReminderProblems(part.leadDays, asset.warrantyExpiresOn)
+            if (problems.isNotEmpty()) throw WarrantyReminderValidation(problems)
+        }
         // A create's template is looked up before anything is written, so an unknown one is refused
         // with the other 422s rather than after the asset and its category.
         val template = if (current == null) {
@@ -94,7 +104,8 @@ class SaveAssetSettings(
         val now = clock.nowMillis()
         val promotion = promoteCategory.resolve(asset.category, now)
         val base = current ?: Asset(id = AssetId(ids.newId()), name = asset.name, createdAt = now, updatedAt = now)
-        val next = base.applying(asset.copy(category = promotion.spelling), now).copy(
+        val applied = base.applying(asset.copy(category = promotion.spelling), now)
+        val next = applied.copy(
             seasonMode = mode.seasonMode,
             seasonStartMmdd = mode.seasonStartMmdd,
             seasonEndMmdd = mode.seasonEndMmdd,
@@ -102,6 +113,10 @@ class SaveAssetSettings(
             blackoutEndMmdd = pause.blackoutEndMmdd,
             healthAggregation = cmd.healthPolicy.healthAggregation,
             healthPrimarySubjectId = cmd.healthPolicy.healthPrimarySubjectId,
+            // A null part keeps what `applying` left: the stored lead, or none once the date is cleared.
+            warrantyReminderLeadDays = cmd.warrantyReminder.let { part ->
+                if (part == null) applied.warrantyReminderLeadDays else part.leadDays
+            },
         )
 
         if (current != null) {

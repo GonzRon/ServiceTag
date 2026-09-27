@@ -6,8 +6,11 @@ import android.content.Intent
 import android.net.Uri
 import com.loosecannon.servicetag.MainActivity
 import com.loosecannon.servicetag.core.links.DeepLinkRoute
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.reminders.DeadlineKind
+import com.loosecannon.servicetag.core.reminders.SubjectKey
 
 /**
  * What one action on a notification is aimed at — **as a value, with no Android type in it**.
@@ -19,27 +22,41 @@ import com.loosecannon.servicetag.core.model.ScheduleId
  * all, so a builder that returned them directly would have made every one of those decisions
  * provable only on a device.
  *
- * The two **write** targets carry the notification's nonce; the two navigations do not, because
- * they write nothing and a nonce with nothing to authorise is only a value for a forged broadcast
- * to hunt for (D-21, invariant 56).
+ * The two **write** targets carry the notification's nonce; the navigations do not, because they
+ * write nothing and a nonce with nothing to authorise is only a value for a forged broadcast to
+ * hunt for (D-21, invariant 56).
+ *
+ * **#79 (C8):** a target is no longer always a schedule's. The four shipped ones are grouped under
+ * [ScheduleActionTarget], which carries the schedule id; [OpenAsset] is a warranty warning's "Open"
+ * and carries an asset id instead.
  */
 sealed interface QuickActionTarget {
-    val scheduleId: ScheduleId
 
     /** "Done" on a `QUICK` schedule with no meter rule: a broadcast to this app's own receiver. */
-    data class Complete(override val scheduleId: ScheduleId, val nonce: String) : QuickActionTarget
+    data class Complete(override val scheduleId: ScheduleId, val nonce: String) : ScheduleActionTarget
 
     /** "Snooze 1 day": a broadcast, and the only thing it writes is the device-local instant. */
-    data class Snooze(override val scheduleId: ScheduleId, val nonce: String) : QuickActionTarget
+    data class Snooze(override val scheduleId: ScheduleId, val nonce: String) : ScheduleActionTarget
 
     /**
      * "Done" on a `FORM` schedule, **or** on a `QUICK` one carrying a meter rule: an activity, so
      * the owner supplies what the notification must never fabricate (§12.1, invariant 55).
      */
-    data class CompletionForm(override val scheduleId: ScheduleId) : QuickActionTarget
+    data class CompletionForm(override val scheduleId: ScheduleId) : ScheduleActionTarget
 
     /** "Open": navigation and nothing else, on `servicetag://schedule/<uuid>` (invariant 57). */
-    data class OpenSchedule(override val scheduleId: ScheduleId) : QuickActionTarget
+    data class OpenSchedule(override val scheduleId: ScheduleId) : ScheduleActionTarget
+
+    /**
+     * #79 (C8): "Open" on a warranty warning — navigation and nothing else, on
+     * `servicetag://asset/<uuid>` (invariant 57). It writes nothing, so it carries no nonce.
+     */
+    data class OpenAsset(val assetId: AssetId) : QuickActionTarget
+}
+
+/** The four shipped targets, each aimed at one schedule (#79, C8). */
+sealed interface ScheduleActionTarget : QuickActionTarget {
+    val scheduleId: ScheduleId
 }
 
 /** One action on a notification: a RATIFIED label and what it is aimed at. */
@@ -110,6 +127,16 @@ class QuickActions(
             QuickAction(DigestPolicy.ACTION_OPEN, QuickActionTarget.OpenSchedule(id)),
         )
     }
+
+    /**
+     * #79 (C8, invariant 57): a deadline's warning offers "Open" and nothing else, aimed at the
+     * thing the date belongs to. Nothing on it writes, so **no nonce is issued** — there is nothing
+     * for one to authorise.
+     */
+    fun forDeadline(key: SubjectKey.Deadline): List<QuickAction> = when (key.kind) {
+        DeadlineKind.WARRANTY_EXPIRY ->
+            listOf(QuickAction(DigestPolicy.ACTION_OPEN, QuickActionTarget.OpenAsset(AssetId(key.subjectId))))
+    }
 }
 
 /** The one Android-shaped step: a target becomes something the notification shade can fire. */
@@ -118,14 +145,14 @@ fun interface QuickActionIntents {
 }
 
 /**
- * The four `PendingIntent`s, and the two rules that make them safe.
+ * The four `PendingIntent`s — five since #79's asset "Open" — and the two rules that make them safe.
  *
  * **Every one is `FLAG_IMMUTABLE`, with the flag on the same physical line as the call** (invariant
  * 54, master plan §16's line-based release grep, `DigestAlarmTest`'s own scan). A mutable one would
  * let another app rewrite the schedule id the action acts on, which is the whole of what the nonce
  * would then be protecting the wrong row from.
  *
- * **A receiver never starts an activity** (API 31+ trampoline rule, invariant 55). The two actions
+ * **A receiver never starts an activity** (API 31+ trampoline rule, invariant 55). The actions
  * that open a screen are `getActivity` **directly**; they do not broadcast to a receiver that then
  * launches something, because Android 12+ silently drops such a launch and the action appears to do
  * nothing at all. That is why this file builds `Intent`s and [QuickActionReceiver]'s does not.
@@ -162,8 +189,10 @@ class AndroidQuickActionIntents(private val context: Context) : QuickActionInten
             // find a button on. It is still an **activity** and it still writes nothing on the way
             // (#11 AC 2, invariant 55).
             is QuickActionTarget.CompletionForm ->
-                activity(app, REQUEST_COMPLETION_FORM, target.scheduleId, complete = true)
-            is QuickActionTarget.OpenSchedule -> activity(app, REQUEST_OPEN, target.scheduleId)
+                activity(app, REQUEST_COMPLETION_FORM, scheduleUri(target.scheduleId), complete = true)
+            is QuickActionTarget.OpenSchedule -> activity(app, REQUEST_OPEN, scheduleUri(target.scheduleId))
+            // #79 (C8): the asset's own link, which `MainActivity` already routes to its detail.
+            is QuickActionTarget.OpenAsset -> activity(app, REQUEST_OPEN_ASSET, assetUri(target.assetId))
         }
     }
 
@@ -183,21 +212,21 @@ class AndroidQuickActionIntents(private val context: Context) : QuickActionInten
     }
 
     /**
-     * The same `servicetag://schedule/<uuid>` the "Open" action navigates with, aimed explicitly at
-     * this app's single activity: an explicit component means no other app can answer it, and
+     * A `servicetag://` link — the schedule's, or since #79 the asset's — aimed explicitly at this
+     * app's single activity: an explicit component means no other app can answer it, and
      * `MainActivity` turns it into a route and does nothing else (invariant 57).
      */
     private fun activity(
         app: Context,
         requestCode: Int,
-        id: ScheduleId,
+        link: Uri,
         complete: Boolean = false,
     ): PendingIntent {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT
         val target = Intent(app, MainActivity::class.java)
             .setAction(Intent.ACTION_VIEW)
-            .setData(scheduleUri(id))
-        // The two activity targets share an action and a data uri and differ by **request code**,
+            .setData(link)
+        // The two schedule activity targets share an action and a data uri and differ by **request code**,
         // which is part of `PendingIntent` identity where an extra is not — so this instruction
         // cannot leak onto the "Open" action's pending intent.
         if (complete) target.putExtra(MainActivity.EXTRA_COMPLETE_SCHEDULE, true)
@@ -217,12 +246,22 @@ class AndroidQuickActionIntents(private val context: Context) : QuickActionInten
         .appendPath(id.value)
         .build()
 
+    /** The asset's link, built the same way and for the same reason (#79, C8). */
+    private fun assetUri(id: AssetId): Uri = Uri.Builder()
+        .scheme(DeepLinkRoute.SCHEME)
+        .authority(ASSET_HOST)
+        .appendPath(id.value)
+        .build()
+
     internal companion object {
         /**
          * The deep-link host, named once. It is the parser's own word and the manifest's; spelling
          * it a second time here is what would let the three drift apart.
          */
         const val SCHEDULE_HOST = "schedule"
+
+        /** The asset host, the parser's own word and the manifest's (#79, C8). */
+        const val ASSET_HOST = "asset"
 
         /**
          * One request code per action **kind**, not per schedule: the id is in the intent's data, so
@@ -233,5 +272,8 @@ class AndroidQuickActionIntents(private val context: Context) : QuickActionInten
         const val REQUEST_SNOOZE = 2302
         const val REQUEST_COMPLETION_FORM = 2303
         const val REQUEST_OPEN = 2304
+
+        /** #79 (C8): a warranty warning's "Open", its own kind of action. */
+        const val REQUEST_OPEN_ASSET = 2305
     }
 }

@@ -105,6 +105,8 @@ class ApiReadsWriteNothingTest {
             "/v1/assets/$tub/season",
             "/v1/assets/$generator/conditions",
             "/v1/assets/$generator/health-subjects",
+            // #79: the warranty, derived for today like the health and the season.
+            "/v1/assets/$generator/warranty",
             "/v1/schedules",
             "/v1/status",
         )) {
@@ -131,6 +133,10 @@ class ApiReadsWriteNothingTest {
         val tub = api.asset("Hot tub")
         val oilChange = schedule(generator, "Oil change")
         schedule(tub, "Water change")
+        val heater = api.ok(
+            AssetResponse.serializer(), "POST", "/v1/assets", """{"name":"Example Heater","warrantyExpiresOn":"2026-06-30"}""",
+            status = 201,
+        ).asset.id
 
         val expectations = listOf<Pair<Set<String>, () -> ApiResponse>>(
             setOf("asset", "schedule_state") to {
@@ -150,6 +156,10 @@ class ApiReadsWriteNothingTest {
             },
             setOf("health_subject") to {
                 api.call("POST", "/v1/health-subjects", subjectBody(generator, "Starter battery"))
+            },
+            // #79: the lead is the asset row alone — no schedule, no recompute.
+            setOf("asset") to {
+                api.call("POST", "/v1/assets/$heater/warranty-reminder", """{"leadDays":30}""")
             },
         )
         for ((expected, write) in expectations) assertEquals(expected, tablesWrittenBy(write))

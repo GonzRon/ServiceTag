@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.usecase.AssetProblem
 import com.loosecannon.servicetag.core.usecase.DefinitionProblem
 import com.loosecannon.servicetag.core.usecase.FieldProblem
 import com.loosecannon.servicetag.core.usecase.ProfileProblem
+import com.loosecannon.servicetag.core.usecase.WarrantyReminderProblem
 import com.loosecannon.servicetag.core.model.Season as SeasonWindow
 
 // --- #52: the four 1.1.0 validation families ---------------------------------------------------
@@ -147,5 +148,28 @@ internal fun profileRefusal(problem: ProfileProblem): Refusal = when (problem) {
         PROFILE_VALIDATION,
         "every consumable needs a name, and a defaultQuantity of zero or more when one is given",
         "consumables",
+    )
+}
+
+// --- #79: the warranty reminder's family ------------------------------------------------------------
+//
+// One `lower_snake` code for both problems, on the 1.1.0 families' terms: `problems` keeps every
+// problem by the domain's own name, and `message` and `field` describe the first. Both problems are
+// about the one body key, `leadDays` — a lead with no date to count back from is still a refused lead —
+// and neither message repeats the value that was sent.
+
+internal const val WARRANTY_REMINDER_VALIDATION: String = "warranty_reminder_validation"
+
+/** Every [WarrantyReminderProblem] as a refusal. */
+internal fun warrantyReminderRefusal(problem: WarrantyReminderProblem): Refusal = when (problem) {
+    WarrantyReminderProblem.LeadNotPositive -> Refusal(
+        WARRANTY_REMINDER_VALIDATION,
+        "leadDays must be a whole number of days, 1 or more, or null for no reminder",
+        "leadDays",
+    )
+    WarrantyReminderProblem.LeadWithoutDate -> Refusal(
+        WARRANTY_REMINDER_VALIDATION,
+        "a warranty reminder needs the asset's warrantyExpiresOn; set the date first",
+        "leadDays",
     )
 }

@@ -22,12 +22,33 @@ import java.time.LocalDate
 /**
  * What a subject *is about*.
  *
- * Sealed, with one member in 1.2. A supply-level subject is a later phase's, and a member added
- * before the thing it names exists is a subject something can write and nothing can deliver.
+ * Sealed. 1.2 shipped one member; #79 (R79-13) adds the second, a date no schedule owns. A
+ * supply-level subject is a later phase's, and a member added before the thing it names exists is
+ * a subject something can write and nothing can deliver.
  */
 sealed interface SubjectKey {
     data class Schedule(val scheduleId: ScheduleId) : SubjectKey
+
+    /**
+     * #79 (R79-13): a single date that no schedule owns. [kind] says what the date is and
+     * [subjectId] names the row it belongs to — an asset's id for [DeadlineKind.WARRANTY_EXPIRY].
+     * It is never completed and never parked: it is in the list while it should be held and
+     * absent otherwise.
+     */
+    data class Deadline(val kind: DeadlineKind, val subjectId: String) : SubjectKey
 }
+
+/**
+ * #79 (R79-13): which date a [SubjectKey.Deadline] is. One member; a kind is added only with the
+ * builder that produces it and the provider branch that delivers it.
+ */
+enum class DeadlineKind { WARRANTY_EXPIRY }
+
+/**
+ * #79 (R79-13, R79-14a): how often a deadline is announced. [ONCE] is once per content, on entering
+ * its window — a moved date or lead is new content and is announced again.
+ */
+enum class DeadlineRepeat { ONCE }
 
 /**
  * Which provider a list belongs to.
@@ -101,8 +122,8 @@ data class RuleFacts(
  * One thing a provider should be holding.
  *
  * [contentHash] covers every field that changes what a provider should show — [title], [body],
- * [dueOn], [leadDays], [state] and [rule] — and nothing else, so an edit a provider cannot see does
- * not churn it. [dueOn] is the **actionable** date for an active subject — the one its status word
+ * [dueOn], [leadDays], [state], [rule] and, for a deadline, [repeat] — and nothing else, so an edit
+ * a provider cannot see does not churn it. [dueOn] is the **actionable** date for an active subject — the one its status word
  * is measured against — and the effective date a withdrawn subject was last shown with. It is null
  * for a use-based rule and for a parked subject: a fabricated date is how a provider comes to announce
  * something that has no date.
@@ -116,7 +137,18 @@ data class ReminderSubject(
     val state: SubjectState,
     val rule: RuleFacts?,
     val contentHash: String,
-)
+    /**
+     * #79 (R79-13): how often a deadline is announced; null exactly when [key] is a
+     * [SubjectKey.Schedule], whose repeats are its rule's.
+     */
+    val repeat: DeadlineRepeat? = null,
+) {
+    init {
+        require((key is SubjectKey.Deadline) == (repeat != null)) {
+            "a deadline carries its repeat fact and a schedule carries none"
+        }
+    }
+}
 
 /**
  * What one [ReminderProvider.reconcile] did, in the coarsest terms that are still useful: enough for

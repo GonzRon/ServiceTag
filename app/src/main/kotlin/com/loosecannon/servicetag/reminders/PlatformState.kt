@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Build
+import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 
 /**
@@ -30,6 +31,13 @@ interface PlatformState {
 
     /** The OEM standby/battery reality this phone is applying to the app right now. */
     fun appRestricted(): AppRestriction
+
+    /**
+     * #79 (R79-14c): how many times this phone has started, or null when it cannot be read. A
+     * deadline's stamp records it, so a warning a restart took down is told apart from one the owner
+     * swiped away; a null is read as "the same boot", so an unreadable count never repeats a warning.
+     */
+    fun bootCount(): Int?
 }
 
 /**
@@ -76,6 +84,15 @@ class AndroidPlatformState(private val context: Context) : PlatformState {
         channelImportanceOf(
             NotificationManagerCompat.from(context).getNotificationChannelCompat(channelId)?.importance,
         )
+
+    /** `Settings.Global.BOOT_COUNT` (API 24; `minSdk` is 26), or null when the platform will not say. */
+    override fun bootCount(): Int? = try {
+        Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT)
+    } catch (e: Settings.SettingNotFoundException) {
+        null
+    } catch (e: SecurityException) {
+        null
+    }
 
     override fun appRestricted(): AppRestriction {
         // isBackgroundRestricted() is API 28+; STANDBY_BUCKET_RESTRICTED itself did not arrive

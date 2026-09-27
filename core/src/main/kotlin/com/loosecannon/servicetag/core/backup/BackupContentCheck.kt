@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.usecase.parseDate
 import com.loosecannon.servicetag.core.usecase.policyProblems
 import com.loosecannon.servicetag.core.usecase.subjectNameProblem
 import com.loosecannon.servicetag.core.usecase.thresholdsProblem
+import com.loosecannon.servicetag.core.usecase.warrantyReminderProblems
 import com.loosecannon.servicetag.core.usecase.weightProblem
 import com.loosecannon.servicetag.core.usecase.wellFormedZone
 
@@ -23,6 +24,8 @@ import com.loosecannon.servicetag.core.usecase.wellFormedZone
  * - a schedule's service policy: the offset's range, PRE_SERVICE or an offset on a meter-only
  *   schedule, a non-CONTINUOUS policy on a group target — B04's `policyProblems`, and nothing of its own;
  * - an asset's break covering every day of some year (`breakProblems`; its shape is the graph check's);
+ * - an asset's warranty reminder lead (#79, C18) under one day, or without a warranty date — the rule
+ *   `SetWarrantyReminder` asks (`warrantyReminderProblems`);
  * - a health subject's name, thresholds and weight;
  * - a condition's date, time, zone and reason — the zone by its form alone, never by this device's zone
  *   data (the controller's ruling on B06-F7); an activation's date.
@@ -62,7 +65,8 @@ internal object BackupContentCheck {
             val asset = dto.toDomain()
             refuse(
                 "assets", "asset", asset.id.value,
-                breakProblems(BreakCommand(asset.blackoutStartMmdd, asset.blackoutEndMmdd)),
+                breakProblems(BreakCommand(asset.blackoutStartMmdd, asset.blackoutEndMmdd)) +
+                    warrantyReminderProblems(asset.warrantyReminderLeadDays, asset.warrantyExpiresOn),
             )
         }
         data.healthSubjects.forEach { dto ->

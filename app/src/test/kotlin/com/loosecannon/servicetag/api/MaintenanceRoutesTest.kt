@@ -88,6 +88,7 @@ class MaintenanceRoutesTest {
             maintenanceHandlersFor(graph),
             referenceHandlersFor(graph),
             seasonHealthHandlersFor(graph),
+            warrantyHandlersFor(graph),
             appVersion = "1.2.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -1125,7 +1126,7 @@ class MaintenanceRoutesTest {
     // --- the merge report's three new tables -----------------------------------------------------
 
     /**
-     * `import_merge` reads a **format-10** archive, and the report carries the `groups`, `schedules`
+     * `import_merge` reads a **format-11** archive, and the report carries the `groups`, `schedules`
      * and `closures` tallies beside the shipped ones, plus 1.3's `references`. `applicable` still
      * governs.
      *
@@ -1145,7 +1146,7 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(10, report.formatVersion)
+        assertEquals(11, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)
@@ -1351,9 +1352,10 @@ class MaintenanceRoutesTest {
      * under the archive's own list names beside every shipped key. #74 moved the schema to 9 (its
      * `asset_category` table) and then the format to 9 (the archive that carries the categories);
      * #67 moves the schema to 10 (`attachment.document_role`) and then the format to 10 (the archive
-     * that carries the role).
+     * that carries the role); #79 moves the schema to 11 (the warranty reminder's lead and the
+     * device-local deadline table) and then the format to 11 (the archive that carries the lead).
      */
-    @Test fun statusReports10And10AndTheNewCounts() {
+    @Test fun statusReports11And11AndTheNewCounts() {
         val tub = createAsset("Hot tub")
         assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
         assertEquals(
@@ -1370,8 +1372,8 @@ class MaintenanceRoutesTest {
         )
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
-        assertEquals(10, status.schemaVersion)
-        assertEquals(10, status.backupFormatVersion)
+        assertEquals(11, status.schemaVersion)
+        assertEquals(11, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
         assertEquals(1, status.counts["healthSubjects"])
@@ -1381,11 +1383,11 @@ class MaintenanceRoutesTest {
     }
 
     /**
-     * Import-merge reads a **format-10** archive (this build's export) and reports **fifteen** tables: the donor's
+     * Import-merge reads a **format-11** archive (this build's export) and reports **fifteen** tables: the donor's
      * activation, condition and health subject each tally one INSERT on the wire, its two categories
      * (#74) two, and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
-    @Test fun importMergeReadsFormat10AndReportsFifteenTables() {
+    @Test fun importMergeReadsFormat11AndReportsFifteenTables() {
         val archive = donorArchive()
         fun post(path: String) = router().handle(
             ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
@@ -1397,7 +1399,7 @@ class MaintenanceRoutesTest {
         val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
         assertEquals(15, tallies.size)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(10, report.formatVersion)
+        assertEquals(11, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         val one = MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0)
         assertEquals(one, report.seasonActivations)

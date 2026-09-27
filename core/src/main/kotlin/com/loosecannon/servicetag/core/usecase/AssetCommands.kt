@@ -163,6 +163,10 @@ internal fun AssetCommand.legacyPairMode(): SeasonMode =
  * never from the form: `id`, `createdAt`, `status`, `retiredOn` and `templateKey` survive, and so does
  * every 1.4-only field — the season mode, the break and the health policy are never reset here. The
  * pair is laid over as sent; which mode it means is [CreateAsset]'s and [UpdateAsset]'s decision.
+ *
+ * **The warranty reminder's date rule** (#79, C2; R79-12b) lives here, so every edit that clears the
+ * warranty date — [UpdateAsset] and [SaveAssetSettings] alike — clears the lead with it: the lead is not
+ * the form's to set, but it never outlives its date. While the date stays (or moves), the lead is kept.
  */
 internal fun Asset.applying(cmd: AssetCommand, now: Long): Asset = copy(
     name = cmd.name,
@@ -180,6 +184,7 @@ internal fun Asset.applying(cmd: AssetCommand, now: Long): Asset = copy(
     location = cmd.location,
     warrantyExpiresOn = cmd.warrantyExpiresOn,
     warrantyNotes = cmd.warrantyNotes,
+    warrantyReminderLeadDays = warrantyReminderLeadDays.takeIf { cmd.warrantyExpiresOn != null },
     parentAssetId = cmd.parentAssetId,
     seasonStartMmdd = cmd.seasonStartMmdd,
     seasonEndMmdd = cmd.seasonEndMmdd,

@@ -1,11 +1,19 @@
 package com.loosecannon.servicetag.reminders
 
+import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.DeadlineLocalDelivery
+import com.loosecannon.servicetag.core.ports.DeadlineLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ScheduleLocalDelivery
 import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
+import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.reminders.BuildDeadlineSubjects
+import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.reminders.ReconcileReport
 import com.loosecannon.servicetag.core.reminders.ReminderProvider
 import com.loosecannon.servicetag.core.reminders.ReminderSubject
@@ -19,6 +27,7 @@ import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import java.io.File
+import java.time.LocalDate
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -73,6 +82,17 @@ internal class FakeDeliveryRepository : ScheduleLocalDeliveryRepository {
     override suspend fun deleteAll() = rows.clear()
 }
 
+/** #79: the deadline stamps in a map, keyed as the table's primary key is. */
+internal class FakeDeadlineDeliveryRepository : DeadlineLocalDeliveryRepository {
+    val rows = linkedMapOf<Pair<String, String>, DeadlineLocalDelivery>()
+    override suspend fun get(kind: String, subjectId: String): DeadlineLocalDelivery? = rows[kind to subjectId]
+    override suspend fun upsert(row: DeadlineLocalDelivery) { rows[row.kind to row.subjectId] = row }
+    override suspend fun delete(kind: String, subjectId: String) { rows.remove(kind to subjectId) }
+    override suspend fun all(): List<DeadlineLocalDelivery> =
+        rows.values.sortedWith(compareBy({ it.kind }, { it.subjectId }))
+    override suspend fun deleteAll() = rows.clear()
+}
+
 internal class GrantablePermission(var isGranted: Boolean = true) : NotificationPermission {
     override fun granted(): Boolean = isGranted
     override fun shouldExplain(): Boolean = false
@@ -84,11 +104,14 @@ internal class MutablePlatformState(
     var enabled: Boolean = true,
     val importances: MutableMap<String, ChannelImportance> = mutableMapOf(),
     var restriction: AppRestriction = AppRestriction.NORMAL,
+    /** #79 (R79-14c): the platform boot count; null is a count that cannot be read. */
+    var boot: Int? = 1,
 ) : PlatformState {
     override fun notificationsEnabled(): Boolean = enabled
     override fun channelImportance(channelId: String): ChannelImportance =
         importances[channelId] ?: ChannelImportance.DEFAULT
     override fun appRestricted(): AppRestriction = restriction
+    override fun bootCount(): Int? = boot
 }
 
 private class MapKeyValueStore : KeyValueStore {
@@ -139,6 +162,11 @@ class LocalReminderProviderTest {
     private val known = mutableSetOf<SubjectKey>()
     private val overdue = mutableSetOf<SubjectKey>()
 
+    // #79: the warranty half — real assets, the real subject builder and the real facts source.
+    private val assets = FakeAssetRepository()
+    private val deadlines = FakeDeadlineDeliveryRepository()
+    private var today: LocalDate = LocalDate.parse("2031-06-10")
+
     private fun provider() = LocalReminderProvider(
         facts = facts,
         delivery = delivery,
@@ -156,7 +184,31 @@ class LocalReminderProviderTest {
             },
             nonces = NonceStore(delivery, IdGenerator { "quick-nonce" }, clock),
         ),
+        deadlineFacts = DeadlineDeliveryFacts(assets, Today { today }),
+        deadlineDelivery = deadlines,
     )
+
+    /** The warranty subjects the sweep would hand this provider today. */
+    private suspend fun warranties() = BuildDeadlineSubjects(assets).forProvider(ProviderId.LOCAL, today)
+
+    private suspend fun heater(
+        expiresOn: String? = "2031-06-30",
+        lead: Int? = 30,
+        status: AssetStatus = AssetStatus.ACTIVE,
+        retiredOn: String? = null,
+    ): Asset = Asset(
+        id = AssetId("a1"),
+        name = "Example Heater",
+        status = status,
+        createdAt = 1_000L,
+        updatedAt = 1_000L,
+        warrantyExpiresOn = expiresOn,
+        retiredOn = retiredOn,
+        warrantyReminderLeadDays = lead,
+    ).also { assets.upsert(it) }
+
+    /** The owner swipes every warning away; the shade forgets it and nothing else does. */
+    private fun swipe() = notifications.items.clear()
 
     private fun subject(id: String, dueOn: String?, state: SubjectState = SubjectState.Active, stamp: String = "v1") =
         Fixture.subject(id, dueOn, state = state, stamp = stamp).also { known += it.key }
@@ -407,11 +459,11 @@ class LocalReminderProviderTest {
      * because either alone is weak: the delivery table's names appear nowhere in the backup or
      * merge sources, and **no backup use case can even be handed the port** — a reflective check
      * over the four constructors, which is what catches a parameter added later by someone who did
-     * not read this brief.
+     * not read this brief. #79 widens both to the deadline stamp, `deadline_local_delivery` (C17).
      */
     @Test
     fun noDeliveryStateReachesAnExportOrAMerge() {
-        val forbidden = Regex("""schedule_local_delivery|ScheduleLocalDelivery""")
+        val forbidden = Regex("""schedule_local_delivery|ScheduleLocalDelivery|deadline_local_delivery|DeadlineLocalDelivery""")
         listOf("backup", "merge").forEach { directory ->
             coreSources("core/src/main/kotlin/com/loosecannon/servicetag/core/$directory").forEach { file ->
                 assertFalse(
@@ -430,9 +482,199 @@ class LocalReminderProviderTest {
             val parameters = type.constructors.flatMap { it.parameterTypes.toList() }.map { it.name }
             assertFalse(
                 "${type.simpleName} must not take the delivery port",
-                parameters.any { "ScheduleLocalDelivery" in it },
+                parameters.any { "ScheduleLocalDelivery" in it || "DeadlineLocalDelivery" in it },
             )
         }
+    }
+
+    // #79 (C7, K1): the deadline family beside the schedule family, through the real provider.
+
+    /**
+     * One list with both families: each is posted with its own actions and stamped in its own
+     * table, and the same list again is inert. A provider that still assumed every key was a
+     * schedule's fails here with a class cast.
+     */
+    @Test
+    fun aMixedListReconcilesAndEachFamilyKeepsItsOwnDelivery() = runTest {
+        val provider = provider()
+        heater()
+        val schedule = subject("s1", "2026-06-15")
+        val subjects = listOf(schedule) + warranties()
+        val warranty = subjects.last()
+
+        assertEquals(ReconcileReport(2, 0, 0, emptyList()), provider.reconcile(subjects))
+        assertEquals(
+            setOf(itemTag(schedule.key, schedule.contentHash), itemTag(warranty.key, warranty.contentHash)),
+            notifications.standingItems(),
+        )
+        assertEquals(listOf("s1"), delivery.all().map { it.scheduleId.value })
+        assertEquals(listOf("WARRANTY_EXPIRY" to "a1"), deadlines.all().map { it.kind to it.subjectId })
+        assertEquals(
+            listOf(listOf("Done", "Snooze 1 day", "Open"), listOf("Open")),
+            notifications.postedActions.map { actions -> actions.map { it.label } },
+        )
+        assertEquals(QuickActionTarget.OpenAsset(AssetId("a1")), notifications.postedActions[1].single().target)
+
+        assertEquals(ReconcileReport(0, 0, 2, emptyList()), provider.reconcile(subjects))
+    }
+
+    /**
+     * R79-15 and AC 4: every way a warning stops being wanted — the date cleared (which clears the
+     * lead), the lead cleared, the asset archived or retired, the expiry passed — takes it down and
+     * forgets its stamp, because the subject is **absent** and absence forgets.
+     */
+    @Test
+    fun anAbsentWarrantyIsTakenDownAndForgotten() = runTest {
+        val provider = provider()
+        val ways: List<Pair<String, suspend () -> Unit>> = listOf(
+            "the date cleared" to { heater(expiresOn = null, lead = null) },
+            "the lead cleared" to { heater(lead = null) },
+            "archived" to { heater(status = AssetStatus.ARCHIVED) },
+            "retired" to { heater(retiredOn = "2031-06-01") },
+            "expired" to { today = LocalDate.parse("2031-07-01") },
+        )
+
+        ways.forEach { (way, change) ->
+            today = LocalDate.parse("2031-06-10")
+            heater()
+            provider.reconcile(warranties())
+            assertEquals(way, 1, notifications.standingItems().size)
+            assertEquals(way, 1, deadlines.all().size)
+
+            change()
+            val report = provider.reconcile(warranties())
+
+            assertEquals(way, emptySet<String>(), notifications.standingItems())
+            assertEquals(way, emptyList<DeadlineLocalDelivery>(), deadlines.all())
+            assertEquals(way, 1, report.cleared)
+        }
+    }
+
+    /** A warning switched off and on again is announced again: its stamp went with it. */
+    @Test
+    fun reEnablingAnnouncesAgain() = runTest {
+        val provider = provider()
+        heater()
+        provider.reconcile(warranties())
+        heater(lead = null)
+        provider.reconcile(warranties())
+
+        heater()
+        val report = provider.reconcile(warranties())
+
+        assertEquals(1, report.posted)
+        assertEquals(2, notifications.postedItems.size)
+        assertEquals(1, deadlines.all().size)
+    }
+
+    /** Reminders switched off: warnings come down with everything else, and their stamps go too. */
+    @Test
+    fun silenceTakesWarningsDownAndForgetsThem() = runTest {
+        val provider = provider()
+        heater()
+        provider.reconcile(warranties())
+
+        prefs.remindersEnabled = false
+        val report = provider.reconcile(warranties())
+        assertEquals(emptySet<String>(), notifications.standingItems())
+        assertEquals(emptyList<DeadlineLocalDelivery>(), deadlines.all())
+        assertEquals(1, report.cleared)
+
+        prefs.remindersEnabled = true
+        assertEquals("switched back on, it is announced again", 1, provider.reconcile(warranties()).posted)
+    }
+
+    /**
+     * R79-14b: a muted warranty channel posts nothing and stamps nothing, so un-muting announces at
+     * once; and muting both maintenance channels never mutes a warning.
+     */
+    @Test
+    fun aMutedWarrantyChannelPostsAndStampsNothing() = runTest {
+        val provider = provider()
+        heater()
+        platform.importances[NotificationChannels.WARRANTY] = ChannelImportance.MUTED
+
+        assertEquals(ReconcileReport(0, 0, 0, emptyList()), provider.reconcile(warranties()))
+        assertEquals(emptyList<ItemPost>(), notifications.postedItems)
+        assertEquals(emptyList<DeadlineLocalDelivery>(), deadlines.all())
+
+        platform.importances.remove(NotificationChannels.WARRANTY)
+        platform.importances[NotificationChannels.DUE] = ChannelImportance.MUTED
+        platform.importances[NotificationChannels.OVERDUE] = ChannelImportance.MUTED
+        assertEquals(1, provider.reconcile(warranties()).posted)
+        assertEquals(listOf(NotificationChannels.WARRANTY), notifications.postedItems.map { it.channelId })
+    }
+
+    /** R79-14c: a restart clears the shade; the next boot count posts the warning once more, and only once. */
+    @Test
+    fun aWarningARestartTookDownIsPostedOnceMore() = runTest {
+        val provider = provider()
+        heater()
+        platform.boot = 5
+        provider.reconcile(warranties())
+        assertEquals(listOf<Int?>(5), deadlines.all().map { it.announcedBoot })
+
+        notifications.clearEverything()
+        platform.boot = 6
+        assertEquals(1, provider.reconcile(warranties()).posted)
+        assertEquals(listOf<Int?>(6), deadlines.all().map { it.announcedBoot })
+
+        swipe()
+        assertEquals("swiped in this boot, it is final", 0, provider.reconcile(warranties()).posted)
+        assertEquals(2, notifications.postedItems.size)
+    }
+
+    /** R79-14a: a warning the owner swiped stays gone for the rest of the boot, however many runs follow. */
+    @Test
+    fun aSwipeInTheSameBootIsFinal() = runTest {
+        val provider = provider()
+        heater()
+        provider.reconcile(warranties())
+        swipe()
+
+        repeat(3) {
+            assertEquals(ReconcileReport(0, 0, 0, emptyList()), provider.reconcile(warranties()))
+        }
+        assertEquals(1, notifications.postedItems.size)
+    }
+
+    /** R79-14c: a count that cannot be read — now, or when the stamp was written — is the same boot. */
+    @Test
+    fun anUnreadableBootCountIsTheSameBoot() = runTest {
+        val provider = provider()
+        heater()
+        platform.boot = null
+        provider.reconcile(warranties())
+        assertEquals(listOf<Int?>(null), deadlines.all().map { it.announcedBoot })
+
+        swipe()
+        assertEquals("unreadable then and now", 0, provider.reconcile(warranties()).posted)
+
+        platform.boot = 7
+        assertEquals("unreadable then, readable now", 0, provider.reconcile(warranties()).posted)
+
+        val stamped = deadlines.all().single()
+        deadlines.upsert(stamped.copy(announcedBoot = 3))
+        platform.boot = null
+        assertEquals("readable then, unreadable now", 0, provider.reconcile(warranties()).posted)
+        assertEquals(1, notifications.postedItems.size)
+    }
+
+    /** AC 5: a warning writes one device-local stamp and nothing else — no schedule row, no asset write. */
+    @Test
+    fun aWarrantyWarningWritesOneDeviceLocalRowAndNothingElse() = runTest {
+        val provider = provider()
+        val asset = heater()
+        val subject = warranties().single()
+
+        provider.reconcile(listOf(subject))
+
+        assertEquals(
+            listOf(DeadlineLocalDelivery("WARRANTY_EXPIRY", "a1", subject.contentHash, 1, Fixture.NOW)),
+            deadlines.all(),
+        )
+        assertEquals(emptyList<ScheduleLocalDelivery>(), delivery.all())
+        assertEquals(asset, assets.get(AssetId("a1")))
     }
 
     /**

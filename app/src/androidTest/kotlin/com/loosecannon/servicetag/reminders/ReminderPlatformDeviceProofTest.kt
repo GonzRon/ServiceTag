@@ -2,6 +2,8 @@ package com.loosecannon.servicetag.reminders
 
 import android.Manifest
 import android.content.Context
+import android.service.notification.StatusBarNotification
+import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -11,11 +13,17 @@ import androidx.work.WorkManager
 import androidx.work.testing.TestListenableWorkerBuilder
 import com.loosecannon.servicetag.ServiceTagApp
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.reminders.DeadlineKind
 import com.loosecannon.servicetag.core.reminders.SubjectKey
+import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.core.usecase.WarrantyReminderCommand
+import com.loosecannon.servicetag.ui.clearInstall
+import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -47,23 +55,28 @@ class ReminderPlatformDeviceProofTest {
     /**
      * Invariant 53 against the platform: after a first launch both channels exist, at the
      * importances D-20 fixed, and the app has created **no others**. `ServiceTagApp.onCreate`
-     * created them; this is the only place that can confirm the platform agreed.
+     * created them; this is the only place that can confirm the platform agreed. #79 (R79-14b)
+     * amends invariant 53 with the third, `warranty_reminders`, at the default importance.
      */
     @Test
-    fun theTwoChannelsExistAtTheirImportancesAfterAFirstLaunch() {
+    fun theThreeChannelsExistAtTheirImportancesAfterAFirstLaunch() {
         val manager = NotificationManagerCompat.from(context)
 
         val due = manager.getNotificationChannelCompat(NotificationChannels.DUE)
         val overdue = manager.getNotificationChannelCompat(NotificationChannels.OVERDUE)
+        val warranty = manager.getNotificationChannelCompat(NotificationChannels.WARRANTY)
 
         assertEquals("Maintenance due", due?.name)
         assertEquals(NotificationManagerCompat.IMPORTANCE_DEFAULT, due?.importance)
         assertEquals("Maintenance overdue", overdue?.name)
         assertEquals(NotificationManagerCompat.IMPORTANCE_HIGH, overdue?.importance)
+        assertEquals("Warranty reminders", warranty?.name)
+        assertEquals("Reminders before a warranty expires.", warranty?.description)
+        assertEquals(NotificationManagerCompat.IMPORTANCE_DEFAULT, warranty?.importance)
 
         assertEquals(
             "no supplies and no sync_problems channel, ever (D-20 = B)",
-            setOf(NotificationChannels.DUE, NotificationChannels.OVERDUE),
+            setOf(NotificationChannels.DUE, NotificationChannels.OVERDUE, NotificationChannels.WARRANTY),
             manager.notificationChannelsCompat.map { it.id }.toSet(),
         )
     }
@@ -188,6 +201,100 @@ class ReminderPlatformDeviceProofTest {
 
         notifications.cancelItem(tag)
         assertTrue("and a cancel takes it away again", awaitStanding(notifications, tag, false))
+    }
+
+    /**
+     * #79 (C6, M4): the composition, through the real graph. An in-service asset with a lead, inside
+     * its window, is posted by `reminderRuns.reconcileAll()` — the one sweep every receiver, the
+     * alarm and the backstop share — so the deadline builder is proved to be in `subjectsFor`, the
+     * facts and the stamp table in the provider, and nothing else needed wiring.
+     */
+    @Test
+    fun theGraphsSweepPostsAWarrantyInItsWindow() {
+        clearInstall()
+        NotificationManagerCompat.from(context).cancelAll()
+        val graph = app.graph
+        val expiry = LocalDate.now().plusDays(10)
+        val asset = runBlocking {
+            val heater = graph.createAsset.run(AssetCommand(name = "Example Heater", warrantyExpiresOn = expiry.toString()))
+            graph.setWarrantyReminder.run(heater.id, WarrantyReminderCommand(30))
+        }
+        val key = SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, asset.id.value)
+
+        runBlocking { graph.reminderRuns.reconcileAll() }
+
+        assertTrue("the sweep posted the warning", awaitTrue { warningFor(key) != null })
+        val posted = warningFor(key)!!
+        assertEquals(key, keyOfTag(posted.tag))
+        assertEquals(NotificationChannels.WARRANTY, posted.notification.channelId)
+        assertEquals(
+            "and stamped it, once, in the device-local table",
+            listOf(asset.id.value),
+            runBlocking { graph.deadlineLocalDelivery.all() }.map { it.subjectId },
+        )
+
+        NotificationManagerCompat.from(context).cancelAll()
+        clearInstall()
+    }
+
+    /**
+     * #79 (C7, C8; invariants 54, 57): a warranty warning on a real `NotificationManager`, read back
+     * by its tag — the ratified word as sub-text, its own channel, and exactly one action, "Open",
+     * an **immutable activity** intent. Nothing on it writes, so it is never a broadcast.
+     */
+    @Test
+    fun aWarrantyPostIsReadableBackByItsTagWithOneImmutableOpenAction() {
+        val notifications = AndroidReminderNotifications(context, AndroidQuickActionIntents(context))
+        val key = SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, "0b4f3c2a-6d1e-4f8a-9b7c-5e2d1a0f3b6c")
+        val tag = itemTag(key, "fedcba9876543210ffff")
+        val post = ItemPost(
+            key = key,
+            tag = tag,
+            channelId = NotificationChannels.WARRANTY,
+            title = "Example Heater — Warranty",
+            body = "Warranty expires 30 Jun 2031.",
+            statusWord = DigestPolicy.WORD_EXPIRES_SOON,
+            meter = false,
+            actions = listOf(DigestPolicy.ACTION_OPEN),
+        )
+
+        notifications.cancelItem(tag)
+        notifications.postItem(post, app.graph.quickActions.forDeadline(key))
+        assertTrue("the shade holds it under its own tag", awaitStanding(notifications, tag, true))
+
+        val standing = NotificationManagerCompat.from(context).activeNotifications
+            .single { it.id == AndroidReminderNotifications.ITEM_ID && it.tag == tag }
+        assertEquals(key, keyOfTag(standing.tag))
+        assertEquals(NotificationChannels.WARRANTY, standing.notification.channelId)
+        assertEquals("EXPIRES SOON", standing.notification.extras.getCharSequence(NotificationCompat.EXTRA_SUB_TEXT)?.toString())
+        val actions = standing.notification.actions?.toList().orEmpty()
+        assertEquals(listOf("Open"), actions.map { it.title.toString() })
+        assertTrue("the one action is immutable (invariant 54)", actions.single().actionIntent.isImmutable)
+        assertTrue("and opens a screen directly, never through a receiver (invariant 55)", actions.single().actionIntent.isActivity)
+
+        notifications.cancelItem(tag)
+        assertTrue(awaitStanding(notifications, tag, false))
+    }
+
+    /** #79 (R79-14c): the boot count a deadline's stamp records is readable on a real phone. */
+    @Test
+    fun theBootCountIsReadable() {
+        val count = app.graph.platformState.bootCount()
+        assertNotNull("Settings.Global.BOOT_COUNT", count)
+        assertTrue("a phone that is running has started at least once", count!! >= 1)
+    }
+
+    private fun warningFor(key: SubjectKey.Deadline): StatusBarNotification? =
+        NotificationManagerCompat.from(context).activeNotifications.firstOrNull {
+            it.id == AndroidReminderNotifications.ITEM_ID && it.tag?.let(::keyOfTag) == key
+        }
+
+    private fun awaitTrue(until: () -> Boolean): Boolean {
+        repeat(POLL_ATTEMPTS) {
+            if (until()) return true
+            Thread.sleep(POLL_INTERVAL_MILLIS)
+        }
+        return until()
     }
 
     /**

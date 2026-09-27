@@ -25,7 +25,8 @@ class Migration9To10Test {
         migrating { file, before ->
             withConnection(file) { c ->
                 for (row in SEEDED) {
-                    val after = c.rowOf(row.table, row.id, row.key)
+                    // The chain runs on to v11, whose one asset column `Migration10To11Test` owns.
+                    val after = c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V11_ASSET_COLUMNS }
                     val expected = if (row.table == "attachment") before.getValue(row) + "document_role=NULL" else before.getValue(row)
                     assertEquals("$row", expected, after)
                 }

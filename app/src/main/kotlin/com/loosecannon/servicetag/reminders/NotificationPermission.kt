@@ -26,10 +26,13 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 const val NOTIFICATION_PERMISSION_RATIONALE =
     "ServiceTag needs notification permission to remind you when maintenance is due."
 
+/** #79, P79-12 (RATIFIED verbatim, R79-16, R79-21): the asset editor's rationale; A3 draws it. */
+const val WARRANTY_NOTIFICATION_RATIONALE = "ServiceTag needs notification permission to remind you before a warranty expires."
+
 /**
  * The permission state and the request plumbing (master plan §12, decision 23). `request()` never
- * throws on a denial — a denial is an answer, not an error (D-22) — and its only intended caller
- * is B14's editor: nothing under the navigation host, `MainActivity.kt` or `ServiceTagApp.kt` may
+ * throws on a denial — a denial is an answer, not an error (D-22) — and its intended callers are
+ * B14's editor and, since #79 (R79-16), the asset editor: nothing under the navigation host, `MainActivity.kt` or `ServiceTagApp.kt` may
  * reference this type (#24 AC 1). One Android-backed implementation, [AndroidNotificationPermission].
  */
 interface NotificationPermission {
@@ -62,8 +65,8 @@ internal fun grantedOf(sdkInt: Int, notificationsEnabled: Boolean, permissionChe
 /**
  * The Android-backed [NotificationPermission].
  *
- * The actual system dialog can only be driven from a live `Activity`, and B14's editor is the
- * only caller `request()` is meant to have — never `MainActivity` or the navigation host, which
+ * The actual system dialog can only be driven from a live `Activity`, and B14's editor and the asset
+ * editor (#79) are the only callers `request()` is meant to have — never `MainActivity` or the navigation host, which
  * this brief's own structural test forbids referencing this type at all. So this class reads the
  * resumed activity from [ResumedActivityTracker] rather than asking any excluded file to hand one
  * in, and rather than registering its own `ActivityLifecycleCallbacks` per instance: `AppGraph` is

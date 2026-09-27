@@ -338,6 +338,8 @@ correctly — at worst noisily — when it is empty. The nonce is persisted, not
 action still works after process death, and it is cleared on successful use and on replacement or
 reconcile (D-21).
 
+**Amendment (#79, 2026-09-27).** `SubjectKey` gains its second member, `Deadline(kind, subjectId)` — one date no schedule owns — with `DeadlineKind { WARRANTY_EXPIRY }` and `DeadlineRepeat { ONCE }` (the 1.2 master plan's decision 8 named `Supply` the planned second member; `Deadline` is the second, and #72 adds one member to each enum). `ReminderSubject` gains `repeat`, null exactly for a schedule; `contentHash` appends it only when present, so every schedule hash and tag stays byte-identical. A warranty subject exists while its asset is in service (ACTIVE, not retired), its warranty date parses, a lead is set and today is not past the expiry — otherwise it is absent — and it reads no season or break. The sweep hands the provider schedule subjects, then deadline subjects. LOCAL announces a deadline once per content on entering its window (the lead's days before the expiry through the expiry day), never counts it in the summary, offers "Open" alone (`servicetag://asset/<id>`, no nonce) and stamps it in a second device-local table, never exported or merged: `deadline_local_delivery(kind, subject_id, announced_hash, announced_boot, updated_at)`, keyed `(kind, subject_id)`, with no foreign key — a stamp whose key is not an Active subject is forgotten. `announced_boot` is the platform boot count: a warning a restart took down is posted once more, so one the owner swiped also returns once after the next restart inside the window, and an unreadable count is the same boot (R79-14c).
+
 ### 2.6 Dashboard and the Maintenance destination (#5, navigation ruling)
 
 Primary navigation becomes **Dashboard · Assets · Maintenance** (navigation ruling). "Maintenance"
@@ -923,6 +925,8 @@ declares **neither** `SCHEDULE_EXACT_ALARM` **nor** `USE_EXACT_ALARM`, asserted 
 manifest (#24 AC 2): the first is denied by default on API 34+, the second is Play-restricted to alarm
 and calendar apps, and "due today" is a date, not an instant (ledger A12).
 
+**Amendment (#79, 2026-09-27).** The asset editor is the permission's second requester (R79-16; decision 23 amended): after a save that first sets a warranty reminder lead while the permission is not granted, it shows the ratified "ServiceTag needs notification permission to remind you before a warranty expires." with "OK" and "Not now", at most once per editor, and requests only after "OK" — "Not now" requests nothing, as in the schedule editor. Without it an owner with no schedules on API 33+ would never be asked. The schedule editor's rationale and request are unchanged, and nothing asks at launch.
+
 **5.2 Alarm policy without exact alarms.** One **inexact daily digest alarm** at the user's hour via
 `setAndAllowWhileIdle(RTC_WAKEUP)` (or `setWindow` with a 30-minute window), re-armed by its own
 receiver after firing (#21, D3 §7.2 line 219). The instant is
@@ -1132,6 +1136,9 @@ naming several facts is one test asserting them together.
 
 **Reminders.**
 44. The reminder projection — the posted notifications and the armed alarm — is derivable from schedule state alone and can be rebuilt from nothing.
+
+**Amendment (#79, 2026-09-27).** Invariant 44 reads "from schedule state and the assets' warranty facts alone": a warranty warning is derived from the asset's date, lead and service status and `today`, and its device-local stamp is a delivery optimisation the provider behaves correctly without.
+
 45. `reconcile` run twice with the same subject list has no second effect. **— amended at implementation 2026-09-22, see §6.1.**
 46. A subject's `contentHash` suppresses a no-op update.
 47. A seasonally inactive or paused schedule arrives as `PARKED(reentryOn)` — never absent, never overdue.
@@ -1143,6 +1150,9 @@ naming several facts is one test asserting them together.
 **Platform and input safety.**
 52. The merged manifest declares neither `SCHEDULE_EXACT_ALARM` nor `USE_EXACT_ALARM`.
 53. Exactly two notification channels are created, and no `supplies` or `sync_problems` channel exists (D-20).
+
+**Amendment (#79, 2026-09-27).** Exactly three: `warranty_reminders` joins the two maintenance channels at the default importance (R79-14b), so muting either kind never mutes the other. There is still no `supplies` or `sync_problems` channel.
+
 54. No boot, time, or quick-action receiver is exported, and every `PendingIntent` is `FLAG_IMMUTABLE`.
 55. A notification action never starts an activity from a receiver on API 31+.
 56. A quick-action broadcast with a stale, missing or already-used nonce is rejected and writes nothing.
@@ -1338,6 +1348,8 @@ That covers the seven status terms above and the dashboard section labels ATTENT
 CURRENT · OUT OF SEASON (`:706-707`), so "every other string is ratified" is exactly true.
 
 Still unratified, and the only two items in 1.2: §12.
+
+**Amendment (#79, 2026-09-27): warranty reminder strings** — the warning's body "Warranty expires <date>." (P79-10) · its status word EXPIRES SOON (P79-11) · the asset editor's rationale "ServiceTag needs notification permission to remind you before a warranty expires." (P79-12) · the channel's name "Warranty reminders" (P79-13) and description "Reminders before a warranty expires." (P79-14). Ratified by the owner as #79's P79-10 … P79-14 (#79 plan §6, §16, R79-21), P-ids plan-local. The warning's title is the shipped `<asset> — <title>` with the reused "Warranty", and its one action is the shipped "Open".
 
 ---
 

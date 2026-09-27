@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.ClosureRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
+import com.loosecannon.servicetag.core.ports.DeadlineLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
@@ -78,6 +79,7 @@ import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.SetHealthPolicy
 import com.loosecannon.servicetag.core.usecase.SetMaintenanceBreak
 import com.loosecannon.servicetag.core.usecase.SetSeasonMode
+import com.loosecannon.servicetag.core.usecase.SetWarrantyReminder
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
@@ -87,6 +89,7 @@ import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomCategoryRepository
 import com.loosecannon.servicetag.data.room.RoomClosureRepository
 import com.loosecannon.servicetag.data.room.RoomConditionRepository
+import com.loosecannon.servicetag.data.room.RoomDeadlineLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
@@ -280,6 +283,7 @@ class FakeGraph(
     val archiveHealthSubject: ArchiveHealthSubject =
         ArchiveHealthSubject(healthSubjects, assets, schedules, uow, clock)
     val setHealthPolicy: SetHealthPolicy = SetHealthPolicy(assets, healthSubjects, uow, clock)
+    val setWarrantyReminder: SetWarrantyReminder = SetWarrantyReminder(assets, uow, clock)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
         applyTemplate, promoteCategory,
@@ -432,6 +436,10 @@ class FakeGraph(
      */
     val scheduleLocalDelivery: ScheduleLocalDeliveryRepository =
         RoomScheduleLocalDeliveryRepository(db.scheduleLocalDeliveryDao())
+
+    /** #79: the device-local deadline stamp, over the real table, as `AppGraph` builds it. */
+    val deadlineLocalDelivery: DeadlineLocalDeliveryRepository =
+        RoomDeadlineLocalDeliveryRepository(db.deadlineLocalDeliveryDao())
     val reminderSnooze: ReminderSnooze = ReminderSnooze(scheduleLocalDelivery, clock)
     val scheduleSnooze: ScheduleSnooze = ScheduleSnooze(reminderSnooze::snooze)
 

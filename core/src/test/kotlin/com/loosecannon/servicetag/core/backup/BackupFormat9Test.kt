@@ -61,12 +61,12 @@ class BackupFormat9Test {
     )
 
     /**
-     * The numbers this tip carries, as literals: the format moved — to 9 here, and on to 10 with #67's
-     * document role — and the legacy boundary did not.
+     * The numbers this tip carries, as literals: the format moved — to 9 here, on to 10 with #67's
+     * document role, and on to 11 with #79's warranty reminder lead — and the legacy boundary did not.
      */
     @Test
     fun theFormatMovedAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(10, BackupCodec.FORMAT_VERSION)
+        assertEquals(11, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 

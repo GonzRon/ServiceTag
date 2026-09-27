@@ -1,13 +1,17 @@
 package com.loosecannon.servicetag.core.reminders
 
+import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.testing.FakeReminderProvider
+import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import java.io.File
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
@@ -188,11 +192,72 @@ class ReminderPortContractTest {
             RegexOption.DOT_MATCHES_ALL,
         ).find(port)!!.groupValues[1]
         assertEquals(
-            listOf("Schedule"),
+            listOf("Schedule", "Deadline"),
             Regex("""data (?:class|object) (\w+)""").findAll(subjectKeyBlock)
                 .map { it.groupValues[1] }
                 .toList(),
         )
+    }
+
+    /**
+     * #79 (R79-13): one deadline kind. A kind added before its builder and its delivery branch is a
+     * subject something can write and nothing can deliver — decision 8's objection, again.
+     */
+    @Test
+    fun theDeadlineKindsAreExactlyWarrantyExpiry() {
+        assertEquals(listOf(DeadlineKind.WARRANTY_EXPIRY), DeadlineKind.entries.toList())
+        val port = sourceFile("$REMINDERS/ReminderPort.kt").readText()
+        assertEquals(
+            listOf("WARRANTY_EXPIRY"),
+            Regex("""enum class DeadlineKind \{ ([^}]*) \}""").find(port)!!
+                .groupValues[1].split(",").map { it.trim() },
+        )
+    }
+
+    /** #79 (R79-13, R79-14a): one repeat fact, announced once per content. */
+    @Test
+    fun theRepeatFactsAreExactlyOnce() {
+        assertEquals(listOf(DeadlineRepeat.ONCE), DeadlineRepeat.entries.toList())
+        val port = sourceFile("$REMINDERS/ReminderPort.kt").readText()
+        assertEquals(
+            listOf("ONCE"),
+            Regex("""enum class DeadlineRepeat \{ ([^}]*) \}""").find(port)!!
+                .groupValues[1].split(",").map { it.trim() },
+        )
+    }
+
+    /**
+     * #79 (C3): the repeat fact is null exactly when the key is a schedule's. The subject refuses
+     * the other two shapes, and the deadline builder hands out the one it must.
+     */
+    @Test
+    fun aScheduleSubjectHasNoRepeatAndADeadlineSubjectHasOne() = runTest {
+        assertEquals(null, subject("s1", "2026-04-20").repeat)
+
+        val deadline = SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, "a1")
+        assertFailsWith<IllegalArgumentException>("a deadline without its repeat fact") {
+            ReminderSubject(deadline, "Warranty", "", null, 30, SubjectState.Active, null, "h")
+        }
+        assertFailsWith<IllegalArgumentException>("a schedule with a repeat fact") {
+            ReminderSubject(
+                SubjectKey.Schedule(ScheduleId("s1")), "Filter change", "", null, 14, SubjectState.Active, null, "h",
+                repeat = DeadlineRepeat.ONCE,
+            )
+        }
+
+        val assets = InMemoryAssetRepository()
+        assets.upsert(
+            Asset(
+                id = AssetId("a1"),
+                name = "Example Heater",
+                createdAt = 1_000L,
+                updatedAt = 1_000L,
+                warrantyExpiresOn = "2031-06-30",
+                warrantyReminderLeadDays = 30,
+            ),
+        )
+        val built = BuildDeadlineSubjects(assets).forProvider(ProviderId.LOCAL, LocalDate.parse("2031-06-01"))
+        assertEquals(listOf(DeadlineRepeat.ONCE), built.map { it.repeat })
     }
 
     /**

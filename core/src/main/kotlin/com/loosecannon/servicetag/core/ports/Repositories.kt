@@ -241,6 +241,39 @@ interface ScheduleLocalDeliveryRepository {
 }
 
 /**
+ * #79 (C17; R79-14): one deadline subject's **device-local delivery stamp** — the fact that its
+ * warning has been announced, for which content, and in which boot. The sibling of
+ * [ScheduleLocalDelivery]: that row cascades from its schedule, and a deadline has none.
+ *
+ * Nothing here is canonical, exported or merged, and every reader must behave correctly — at worst
+ * noisily — when the row is absent: losing it costs at most one repeated warning. The key is soft:
+ * [kind] is the deadline kind's name as the notification tag writes it, and [subjectId] the id of
+ * what the deadline is about (an asset, for a warranty); no foreign key holds either, so a row for a
+ * subject that is gone is accepted, outlives it, and is forgotten by the delivery path.
+ */
+data class DeadlineLocalDelivery(
+    val kind: String,
+    val subjectId: String,
+    /** The content hash of the warning last announced; a moved hash is a new warning. */
+    val announcedHash: String,
+    /** The platform boot count it was announced in, or null when the count could not be read (R79-14c). */
+    val announcedBoot: Int?,
+    val updatedAt: Long,
+)
+
+/**
+ * #79. The deadline stamp above, as a port: `upsert` replaces the whole row, `delete` forgets one
+ * subject, `deleteAll` forgets every one. No backup or merge use case is ever handed it.
+ */
+interface DeadlineLocalDeliveryRepository {
+    suspend fun get(kind: String, subjectId: String): DeadlineLocalDelivery?
+    suspend fun upsert(row: DeadlineLocalDelivery)
+    suspend fun delete(kind: String, subjectId: String)
+    suspend fun all(): List<DeadlineLocalDelivery>
+    suspend fun deleteAll()
+}
+
+/**
  * 1.2. **Insert and query only.** Every other port here offers `upsert`; copying that shape would
  * hand a caller the amendment the closure fact forbids, so this one does not have it — and it has
  * no `delete` and no `deleteAll` either. A closure row is immutable: it is written once and leaves

@@ -77,6 +77,8 @@ internal fun clearInstall() {
             graph.assets.deleteAll()
             // #74: a category row outlives its assets, so it needs a line of its own.
             graph.categories.deleteAll()
+            // #79: a deadline's device-local stamp has no foreign key, so it outlives its asset too.
+            graph.deadlineLocalDelivery.deleteAll()
         }
     }
     // A thumbnail is keyed by id and sha256 prefix, so a stale one cannot normally be served — but

@@ -1,9 +1,13 @@
 package com.loosecannon.servicetag.reminders
 
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.ScheduleLocalDelivery
+import com.loosecannon.servicetag.core.reminders.DeadlineKind
+import com.loosecannon.servicetag.core.reminders.SubjectKey
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
@@ -189,6 +193,36 @@ class QuickActionsTest {
         val carried = (posted[0].target as QuickActionTarget.Complete).nonce
         assertEquals("the run's last word on the row is the nonce, not the stamp", carried, delivery.get(id)?.actionNonce)
         assertEquals("and the notify stamp survived it", Fixture.NOW, delivery.get(id)?.lastNotifiedAt)
+    }
+
+    /**
+     * #79 (C8, invariants 54 and 57): a warranty warning offers "Open" and nothing else, aimed at
+     * its asset. Nothing on it writes, so it issues no nonce and touches no delivery row — and its
+     * one label agrees with the one the digest put on the warning.
+     */
+    @Test
+    fun aWarrantyOffersOpenOnlyAimedAtItsAssetWithNoNonce() = runTest {
+        val key = SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, "a1")
+
+        val built = actions.forDeadline(key)
+
+        assertEquals(listOf(QuickAction(DigestPolicy.ACTION_OPEN, QuickActionTarget.OpenAsset(AssetId("a1")))), built)
+        assertEquals("no nonce was issued", 0, issued)
+        assertEquals(emptyList<ScheduleLocalDelivery>(), delivery.all())
+
+        val warning = DigestPolicy.decide(
+            inputs = listOf(
+                DeadlineInput(
+                    Fixture.warranty("a1", "2031-06-30"),
+                    Fixture.warrantyFacts(java.time.LocalDate.parse("2031-06-20")),
+                    null,
+                ),
+            ),
+            standingTags = emptySet(),
+            standingSummaryTag = null,
+            nowMillis = Fixture.NOW,
+        ).posts.single()
+        assertEquals(warning.actions, built.map { it.label })
     }
 
     private fun labelsFromTheNotificationBuild(groupTargeted: Boolean): List<String> {

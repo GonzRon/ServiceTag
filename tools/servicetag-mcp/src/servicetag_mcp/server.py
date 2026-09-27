@@ -129,6 +129,9 @@ TOOL_NAMES: tuple[str, ...] = (
     "list_attention",
     # 1.4.1 — #80's provider repair, plan by default. One, taking the total to 56.
     "repair_schedule_providers",
+    # #79 — the warranty and its reminder lead, each at a schema-11 minimum. Two, taking the total to 58.
+    "get_warranty",
+    "set_warranty_reminder",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -144,6 +147,12 @@ _MIN_SCHEMA_VERSION = 8
 `servicePolicy`, the season, condition and health routes — so it writes only to an app at least that
 new (master plan §20, dec. 25). Reads keep working against an older app."""
 
+_MIN_WARRANTY_SCHEMA_VERSION = 11
+"""The Room schema that carries the warranty reminder lead (#79). `get_warranty` and
+`set_warranty_reminder` speak two routes an older app does not have, so each refuses — read and write
+alike — a phone below it, with nothing sent. A per-tool minimum beside `_MIN_SCHEMA_VERSION`, which stays
+the global write minimum: every other tool behaves exactly as it did."""
+
 _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
     {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan"}
 )
@@ -151,33 +160,58 @@ _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
 plan: an old app may still be asked for either."""
 
 
-def _require_schema_8() -> None:
-    """Refuse to write to an app older than 1.4.0 — a `ToolError` carrying `APP_SCHEMA_TOO_OLD`, and
-    nothing sent.
-
-    `/v1/status` is read **once per pairing** and the answer kept on the `Device`, beside the code it
-    was read under: a later write under the same code asks nothing, and a new code (a new pairing,
-    perhaps another phone) reads it again. An answer with no usable `schemaVersion` is not kept, so
-    the next write asks again.
+def _schema_version(*, unconfirmed: str) -> int:
+    """The phone's `schemaVersion`, read from `/v1/status` **once per pairing** and kept on the
+    `Device`, beside the code it was read under: a later check under the same code asks nothing, and a
+    new code (a new pairing, perhaps another phone) reads it again. An answer with no usable
+    `schemaVersion` is not kept, so the next check asks again — and refuses now with `unconfirmed`.
     """
     cached = device.schema_version
     if cached is not None and cached[0] == device.token:
-        version = cached[1]
-    else:
-        answer = _call("GET", "/v1/status")
-        version = answer.get("schemaVersion") if isinstance(answer, dict) else None
-        if not isinstance(version, int) or isinstance(version, bool):
-            raise ToolError(
-                "APP_SCHEMA_TOO_OLD: the phone's /v1/status reports no schemaVersion, so this "
-                f"server cannot confirm ServiceTag 1.4.0 (schema {_MIN_SCHEMA_VERSION}) and writes "
-                "nothing — check SERVICETAG_API_BASE_URL and the app version"
-            )
-        device.schema_version = (device.token or "", version)
+        return cached[1]
+    answer = _call("GET", "/v1/status")
+    version = answer.get("schemaVersion") if isinstance(answer, dict) else None
+    if not isinstance(version, int) or isinstance(version, bool):
+        raise ToolError(unconfirmed)
+    device.schema_version = (device.token or "", version)
+    return version
+
+
+def _require_schema_8() -> None:
+    """Refuse to write to an app older than 1.4.0 — a `ToolError` carrying `APP_SCHEMA_TOO_OLD`, and
+    nothing sent. The version is read once per pairing (`_schema_version`).
+    """
+    version = _schema_version(
+        unconfirmed=(
+            "APP_SCHEMA_TOO_OLD: the phone's /v1/status reports no schemaVersion, so this "
+            f"server cannot confirm ServiceTag 1.4.0 (schema {_MIN_SCHEMA_VERSION}) and writes "
+            "nothing — check SERVICETAG_API_BASE_URL and the app version"
+        )
+    )
     if version < _MIN_SCHEMA_VERSION:
         raise ToolError(
             f"APP_SCHEMA_TOO_OLD: the phone's app reports schema {version}; this server writes only "
             f"to ServiceTag 1.4.0 or later (schema {_MIN_SCHEMA_VERSION}), so nothing was sent. "
             "Reads still work — update the app to write from here."
+        )
+
+
+def _require_warranty_schema(tool: str) -> None:
+    """Refuse `tool` — one of #79's two, a read or a write — on a phone below schema 11: a `ToolError`
+    carrying `APP_SCHEMA_TOO_OLD`, and nothing sent but the pairing's one `/v1/status` read, shared
+    with the write check above."""
+    version = _schema_version(
+        unconfirmed=(
+            "APP_SCHEMA_TOO_OLD: the phone's /v1/status reports no schemaVersion, so this server "
+            f"cannot confirm schema {_MIN_WARRANTY_SCHEMA_VERSION}, which {tool} needs, and sends "
+            "nothing — check SERVICETAG_API_BASE_URL and the app version"
+        )
+    )
+    if version < _MIN_WARRANTY_SCHEMA_VERSION:
+        raise ToolError(
+            f"APP_SCHEMA_TOO_OLD: the phone's app reports schema {version}; {tool} needs schema "
+            f"{_MIN_WARRANTY_SCHEMA_VERSION} or later (the warranty reminder), so nothing was sent. "
+            "Update the app to use it."
         )
 
 
@@ -409,7 +443,8 @@ def status() -> dict[str, Any]:
     """The app's version, the contract version, its `schemaVersion` and `backupFormatVersion`, and a
     row count per table (since 1.4 also `seasonActivations`, `assetConditions` and
     `healthSubjects`; since the durable category catalog also `assetCategories`). Every write tool reads `schemaVersion` once per pairing and refuses with
-    `APP_SCHEMA_TOO_OLD` below 8 (ServiceTag 1.4.0)."""
+    `APP_SCHEMA_TOO_OLD` below 8 (ServiceTag 1.4.0); `get_warranty` and `set_warranty_reminder` refuse
+    below 11."""
     return _call("GET", "/v1/status")
 
 
@@ -558,6 +593,10 @@ def update_asset(
     `LEGACY_WRITE_CANNOT_REPRESENT`, and one that would strand a `PRE_SERVICE` schedule is
     `SEASON_MODE_STRANDS_POLICY` — change the mode with `set_season_mode`. Condition, the break and
     the health policy are in no asset command; each has its own tool.
+
+    #79: the warranty reminder lead is in no asset command either, so this tool never sends it — an
+    edit keeps it while the warranty date stays, and clearing `warranty_expires_on` clears the lead
+    with it (the app's rule). Set it with `set_warranty_reminder`.
     """
     arguments = _arguments(locals(), besides=("asset_id", "clear_fields"))
     to_clear = _validate_clear_fields(clear_fields, _ASSET_CLEARABLE_FIELDS, arguments)
@@ -1036,11 +1075,14 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a `ServiceTag-data-*.zip` of format 1–10 (format 8, from ServiceTag
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–11 (format 8, from ServiceTag
     1.4.0, adds season activations, conditions and health subjects; format 9 adds the owner's own
     asset categories; format 10 adds each attachment's document role; an older archive's
     attachments are compared without the role and, when the phone's row carries one, without the
-    last-modified stamp that giving it moved, so a role given since that export stays IDENTICAL).
+    last-modified stamp that giving it moved, so a role given since that export stays IDENTICAL;
+    format 11 adds each asset's warranty reminder lead, on the same rule: an older archive's assets
+    are compared without the lead and, when the phone's asset carries one, without the `updatedAt`
+    that setting it moved).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
@@ -2234,6 +2276,51 @@ def list_attention() -> dict[str, Any]:
     `WARNING`, then asset name and id.
     """
     return _call("GET", "/v1/attention")
+
+
+# --- #79, the warranty (docs/api/v1.md, **Warranty reminders (#79)**) ----------------------------
+#
+# Two routes a phone below schema 11 does not have, so both tools refuse such a phone by name before
+# anything is sent — the read as well as the write. The status is derived on the phone for today and
+# stored nowhere; the lead is the asset row's `warrantyReminderLeadDays`, which no asset tool sends.
+
+
+@mcp.tool()
+def get_warranty(asset_id: str) -> dict[str, Any]:
+    """One asset's warranty, derived for today: `{warranty: {status, expiresOn, leadDays}}`.
+
+    `status` is `IN_WARRANTY` while today is on or before `expiresOn` (the expiry day itself is still
+    in), `OUT_OF_WARRANTY` after it, and `NOT_RECORDED` when the asset has no warranty date or one that
+    is not a date. It is computed at read time and stored nowhere: no asset row or archive carries it.
+    `expiresOn` is the asset's `warrantyExpiresOn` and `leadDays` its `warrantyReminderLeadDays`, each
+    `null` when there is none. Needs a phone at schema 11 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/warranty"
+    _require_warranty_schema("get_warranty")
+    return _call("GET", path)
+
+
+@mcp.tool()
+def set_warranty_reminder(asset_id: str, lead_days: int | None) -> dict[str, Any]:
+    """Set or clear the warning before an asset's warranty expires. A command: nothing is read first.
+
+    `lead_days` is how many whole days before `warrantyExpiresOn` the phone warns — 1 or more, with no
+    upper bound — and `None` turns the reminder off. It is required, so leaving it out can never turn a
+    reminder off by accident. The asset must already have a warranty date (set it with `update_asset`):
+    a lead under 1, or any lead on an asset without a date, is refused with `warranty_reminder_validation`
+    `[field=leadDays]` and nothing is written. The stored lead sent again writes nothing. Clearing
+    `warranty_expires_on` with `update_asset` clears the lead too; any other asset edit keeps it.
+    Answers `{asset, warranty}`.
+
+    The warning itself is the phone's: posted once when an in-service asset is inside its window, from
+    `lead_days` days before the expiry through the expiry day. A lead set here takes effect at the
+    phone's next digest (09:00 by default) or its 12-hour backstop, not at once. Needs a phone at schema
+    11 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/warranty-reminder"
+    _require_warranty_schema("set_warranty_reminder")
+    return _call("POST", path, json_body={"leadDays": lead_days}, content_type="application/json")
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

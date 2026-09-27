@@ -102,6 +102,7 @@ internal class ConditionHealthHarness(today: String = "2026-09-24") {
     val saveHealthSubject = SaveHealthSubject(healthSubjects, assets, schedules, profiles, uow, ids, clock)
     val archiveHealthSubject = ArchiveHealthSubject(healthSubjects, assets, schedules, uow, clock)
     val setHealthPolicy = SetHealthPolicy(assets, healthSubjects, uow, clock)
+    val setWarrantyReminder = SetWarrantyReminder(assets, uow, clock)
     val saveSchedule =
         SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, healthSubjects)
     val archiveSchedule = ArchiveSchedule(schedules, uow, recompute, healthSubjects, assets, clock)

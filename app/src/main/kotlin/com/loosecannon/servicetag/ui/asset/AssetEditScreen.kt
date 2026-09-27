@@ -66,6 +66,7 @@ import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.reminders.WARRANTY_NOTIFICATION_RATIONALE
 import com.loosecannon.servicetag.ui.attachments.NO_APP_CAN_PICK_FILES
 import com.loosecannon.servicetag.ui.attachments.NoAttachmentFolderCard
 import com.loosecannon.servicetag.ui.attachments.label
@@ -74,6 +75,8 @@ import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.health.RESTORE_SUBJECT
+import com.loosecannon.servicetag.ui.maintenance.NOT_NOW
+import com.loosecannon.servicetag.ui.maintenance.REMIND_ME_N_DAYS_EARLY
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.MonoText
@@ -238,6 +241,9 @@ const val ATTACHED_WHEN_YOU_SAVE = "Attached when you save"
  * schedules set to "Whenever it is due", asks once before the editor closes (P78-1a/1b, no title). The
  * season is already saved; "Keep schedules as-is" and the back gesture finish through [onDone], and
  * "Review maintenance schedules" through [onReviewSchedules]. Neither answer writes anything.
+ *
+ * **#79:** the Warranty block carries the reminder's lead, and a save that first sets one while
+ * notifications are not granted asks P79-12 before the editor closes — after #78's question.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -289,6 +295,17 @@ fun AssetEditScreen(
             },
         )
         null -> Unit
+    }
+
+    // #79 (C11, R79-16): P79-12 after a save that first set a lead, while notifications are not granted.
+    // The asset is already written; "OK" alone requests, and "Not now" or any dismissal requests nothing.
+    if (state.askingForNotifications) {
+        AlertDialog(
+            onDismissRequest = model::dismissNotifications,
+            text = { Text(WARRANTY_NOTIFICATION_RATIONALE) },
+            confirmButton = { TextButton(onClick = model::requestNotifications) { Text("OK") } },
+            dismissButton = { TextButton(onClick = model::dismissNotifications) { Text(NOT_NOW) } },
+        )
     }
 
     Scaffold(
@@ -579,7 +596,11 @@ private fun PurchaseBlock(
     )
 }
 
-/** When the cover runs out, and whatever the paperwork says about it. */
+/**
+ * When the cover runs out, how early to be warned, and whatever the paperwork says about it. #79 (C11):
+ * the lead sits under "Expires on" with the schedule editor's ratified label and P79-8 under it; it is
+ * off unless a number is typed, and its one line replaces P79-8 when a save is refused.
+ */
 @Composable
 private fun WarrantyBlock(state: AssetEditState, model: AssetEditViewModel) {
     SectionHeader(title = "Warranty")
@@ -588,6 +609,14 @@ private fun WarrantyBlock(state: AssetEditState, model: AssetEditViewModel) {
         onValueChange = model::onWarrantyExpiresOn,
         label = "Expires on",
         problem = state.problems[AssetField.WARRANTY_EXPIRES_ON],
+    )
+    FormField(
+        value = state.warrantyLead,
+        onValueChange = model::onWarrantyLead,
+        label = REMIND_ME_N_DAYS_EARLY,
+        problem = state.problems[AssetField.WARRANTY_LEAD],
+        hint = LEAVE_BLANK_FOR_NO_REMINDER,
+        numeric = true,
     )
     FormField(
         value = state.warrantyNotes,

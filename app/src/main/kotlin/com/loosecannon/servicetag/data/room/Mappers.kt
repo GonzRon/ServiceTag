@@ -65,6 +65,7 @@ fun AssetEntity.toDomain(): Asset = Asset(
     blackoutEndMmdd = blackoutEndMmdd,
     healthAggregation = HealthAggregation.valueOf(healthAggregation),
     healthPrimarySubjectId = healthPrimarySubjectId?.let(::HealthSubjectId),
+    warrantyReminderLeadDays = warrantyReminderLeadDays,
 )
 
 fun Asset.toEntity(): AssetEntity = AssetEntity(
@@ -97,6 +98,7 @@ fun Asset.toEntity(): AssetEntity = AssetEntity(
     blackoutEndMmdd = blackoutEndMmdd,
     healthAggregation = healthAggregation.name,
     healthPrimarySubjectId = healthPrimarySubjectId?.value,
+    warrantyReminderLeadDays = warrantyReminderLeadDays,
 )
 
 fun NfcTagEntity.toDomain(): TagBinding = TagBinding(

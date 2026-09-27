@@ -244,4 +244,109 @@ class SaveAssetSettingsTest {
         assertTrue(h.categories.rows.isEmpty())
         assertEquals(0, h.assets.upserts)
     }
+
+    // --- #79 (C2; R79-11, R79-12): the warranty reminder, the fifth part ---------------------------
+
+    private fun AssetSettingsCommand.warranty(expiresOn: String?, lead: WarrantyReminderCommand?) =
+        copy(asset = asset.copy(warrantyExpiresOn = expiresOn), warrantyReminder = lead)
+
+    /** An asset with a warranty date and a lead, stored as it is. */
+    private fun heater(id: String = "a1", expiresOn: String? = "2027-03-01", lead: Int? = 30): Asset =
+        h.asset(id, name = "Example Heater").copy(warrantyExpiresOn = expiresOn, warrantyReminderLeadDays = lead)
+            .also { h.assets.rows[id] = it }
+
+    /**
+     * Hazard: the lead is written apart from the rest of the save. A refused lead refuses the whole
+     * save — not the name, not the mode, not the break, not the policy, no activation, no recompute —
+     * and the same save with a good lead writes every part in one asset row.
+     */
+    @Test
+    fun aRefusedLeadWritesNoAssetSeasonBreakOrPolicy() = runBlocking<Unit> {
+        val before = heater()
+        h.subject("h1")
+        h.schedule("s1")
+        val save = settings(
+            "Example Heater, basement", SeasonMode.MANUAL, manualPhase = SeasonPhase.IN_SEASON, pause = "06-01" to "06-30",
+            aggregation = HealthAggregation.TRACK_ONE, primary = "h1",
+        )
+
+        for (lead in listOf(0, -1)) {
+            val refused = assertFailsWith<WarrantyReminderValidation> {
+                h.saveAssetSettings.run(AssetId("a1"), save.warranty("2027-03-01", WarrantyReminderCommand(lead)))
+            }
+            assertEquals(listOf(WarrantyReminderProblem.LeadNotPositive), refused.problems, "$lead")
+            assertEquals(before, h.stored("a1"), "not the name, the mode, the break, the policy or the lead")
+            assertEquals(0, h.assets.upserts)
+            assertTrue(h.activations.rows.isEmpty(), "no activation")
+            assertTrue(h.states.rows.isEmpty(), "no recompute")
+        }
+
+        h.now += 5_000L
+        val saved = h.saveAssetSettings.run(AssetId("a1"), save.warranty("2027-03-01", WarrantyReminderCommand(45)))
+        val expected = before.copy(
+            name = "Example Heater, basement", seasonMode = SeasonMode.MANUAL, blackoutStartMmdd = "06-01",
+            blackoutEndMmdd = "06-30", healthAggregation = HealthAggregation.TRACK_ONE,
+            healthPrimarySubjectId = HealthSubjectId("h1"), warrantyReminderLeadDays = 45, updatedAt = h.now,
+        )
+        assertEquals(expected, saved)
+        assertEquals(expected, h.stored("a1"))
+        assertEquals(1, h.assets.upserts, "one asset row for all five parts")
+        assertEquals(1, h.activations.rows.size, "and the switch into MANUAL's one activation")
+        assertTrue(h.states.rows.containsKey("s1"), "and the rebuild the season change needs")
+    }
+
+    /**
+     * Hazard: a save that does not speak about the lead clears it. The fifth part defaults to null,
+     * which keeps the stored lead through a rename; `WarrantyReminderCommand(null)` is what turns it off.
+     */
+    @Test
+    fun aNullPartKeepsTheStoredLead() = runBlocking<Unit> {
+        heater()
+        val renamed = h.saveAssetSettings.run(AssetId("a1"), settings("Example Heater, garage").warranty("2027-03-01", null))
+        assertEquals(30, renamed.warrantyReminderLeadDays)
+        assertEquals(30, h.stored("a1").warrantyReminderLeadDays)
+        assertEquals("Example Heater, garage", h.stored("a1").name)
+
+        val moved = h.saveAssetSettings.run(AssetId("a1"), settings("Example Heater, garage").warranty("2028-06-30", null))
+        assertEquals("2028-06-30" to 30, moved.warrantyExpiresOn to moved.warrantyReminderLeadDays, "a new date keeps it")
+
+        val off = h.saveAssetSettings.run(
+            AssetId("a1"), settings("Example Heater, garage").warranty("2028-06-30", WarrantyReminderCommand(null)),
+        )
+        assertEquals("2028-06-30" to null, off.warrantyExpiresOn to off.warrantyReminderLeadDays, "an explicit null is off")
+        assertEquals(3, h.assets.upserts)
+    }
+
+    /**
+     * Hazard: a lead without a date. The part is judged against **the command's own date**, blank being
+     * none: a blank date with a lead is refused and writes nothing, and a date set in the same save as
+     * its first lead is accepted although the stored row had none.
+     */
+    @Test
+    fun aBlankDateWithALeadIsRefused() = runBlocking<Unit> {
+        val before = heater()
+        for (blank in listOf(null, "", "   ")) {
+            val refused = assertFailsWith<WarrantyReminderValidation> {
+                h.saveAssetSettings.run(AssetId("a1"), settings("Example Heater").warranty(blank, WarrantyReminderCommand(30)))
+            }
+            assertEquals(listOf(WarrantyReminderProblem.LeadWithoutDate), refused.problems, "\"$blank\"")
+        }
+        assertEquals(before, h.stored("a1"), "the date is not cleared either")
+        assertEquals(0, h.assets.upserts)
+
+        heater("a2", expiresOn = null, lead = null)
+        val first = h.saveAssetSettings.run(AssetId("a2"), settings("Example Heater").warranty(" 2027-03-01 ", WarrantyReminderCommand(14)))
+        assertEquals("2027-03-01" to 14, first.warrantyExpiresOn to first.warrantyReminderLeadDays)
+        val created = h.saveAssetSettings.run(null, settings("Example Heater").warranty("2027-03-01", WarrantyReminderCommand(7)))
+        assertEquals(7, h.stored(created.id.value).warrantyReminderLeadDays, "a create carries its lead")
+    }
+
+    /** R79-12b: a save that clears the date clears the lead, whatever the fifth part says about it. */
+    @Test
+    fun aClearedDateClearsTheStoredLead() = runBlocking<Unit> {
+        heater()
+        val cleared = h.saveAssetSettings.run(AssetId("a1"), settings("Example Heater").warranty("  ", null))
+        assertEquals(null to null, cleared.warrantyExpiresOn to cleared.warrantyReminderLeadDays)
+        assertEquals(null, h.stored("a1").warrantyReminderLeadDays)
+    }
 }

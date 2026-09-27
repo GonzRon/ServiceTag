@@ -100,6 +100,7 @@ import org.junit.jupiter.api.Test
  *   derived state, and #82's impairment accept writes only its row.
  * - No activation, season, break, policy, subject or guarded schedule write touches `asset_event` or
  *   `occurrence_closure`; a policy write touches only the asset row; a subject write only its own table.
+ * - #79: the warranty reminder's lead is written on the asset row alone (C16).
  * - The journal's own writers — an event and a completion — write no condition (inv. 81).
  * - #74: `asset_category` is written by the three Asset commands only when they save a category
  *   nobody has saved before, by a rename and a delete, and by the two imports of backup format 9 —
@@ -231,6 +232,7 @@ class CrossConceptWriteTest {
     private val setSeasonMode = SetSeasonMode(assets, schedules, activations, uow, ids, clock, today, recompute)
     private val setMaintenanceBreak = SetMaintenanceBreak(assets, schedules, uow, clock, recompute)
     private val setHealthPolicy = SetHealthPolicy(assets, subjects, uow, clock)
+    private val setWarrantyReminder = SetWarrantyReminder(assets, uow, clock)
     private val saveHealthSubject = SaveHealthSubject(subjects, assets, schedules, profiles, uow, ids, clock)
     private val archiveHealthSubject = ArchiveHealthSubject(subjects, assets, schedules, uow, clock)
     private val saveSchedule =
@@ -365,6 +367,11 @@ class CrossConceptWriteTest {
             wrote("SetHealthPolicy") {
                 setHealthPolicy.run(AssetId("a1"), HealthPolicyCommand(HealthAggregation.AVERAGE))
             },
+            wrote("SetWarrantyReminder") {
+                // The date is laid on the row directly, outside the recorders: only the command's writes count.
+                assetRows.rows["a3"] = assetRows.rows.getValue("a3").copy(warrantyExpiresOn = "2027-03-01")
+                setWarrantyReminder.run(AssetId("a3"), WarrantyReminderCommand(30))
+            },
             wrote("SaveHealthSubject.create") { created = saveHealthSubject.create(AssetId("a1"), subject) },
             wrote("SaveHealthSubject.update") {
                 saveHealthSubject.update(created!!.id, subject.copy(name = "Battery age, pack two"))
@@ -442,6 +449,7 @@ class CrossConceptWriteTest {
             "SetSeasonMode to CALENDAR" to setOf("asset", derived),
             "SetMaintenanceBreak" to setOf("asset", derived),
             "SetHealthPolicy" to setOf("asset"),
+            "SetWarrantyReminder" to setOf("asset"),
             "SaveHealthSubject.create" to setOf("health_subject"),
             "SaveHealthSubject.update" to setOf("health_subject"),
             "ArchiveHealthSubject" to setOf("health_subject"),

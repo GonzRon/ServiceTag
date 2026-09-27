@@ -128,6 +128,13 @@ data class AssetDto(
     val healthAggregation: String,
     /** A soft link to the subject `TRACK_ONE` reads: never validated, never a merge owner. */
     val healthPrimarySubjectId: String?,
+    /**
+     * Format 11 (#79, C18): the warranty reminder's lead in whole days, or null for none — written as
+     * `null` when unset, never left out. A format ≤ 10 archive never had the key, so it reads as null,
+     * and one that carries a non-null lead is refused. Configuration only: the warranty **status** is
+     * derived at read time and never travels.
+     */
+    val warrantyReminderLeadDays: Int? = null,
 )
 
 @Serializable
@@ -526,6 +533,7 @@ fun Asset.toDto(): AssetDto = AssetDto(
     blackoutEndMmdd = blackoutEndMmdd,
     healthAggregation = healthAggregation.name,
     healthPrimarySubjectId = healthPrimarySubjectId?.value,
+    warrantyReminderLeadDays = warrantyReminderLeadDays,
 )
 
 fun AssetDto.toDomain(): Asset = Asset(
@@ -558,6 +566,7 @@ fun AssetDto.toDomain(): Asset = Asset(
     blackoutEndMmdd = blackoutEndMmdd,
     healthAggregation = enumOrCorrupt<HealthAggregation>(healthAggregation, "health aggregation", "asset $id"),
     healthPrimarySubjectId = healthPrimarySubjectId?.let(::HealthSubjectId),
+    warrantyReminderLeadDays = warrantyReminderLeadDays,
 )
 
 fun TagBinding.toDto(): NfcTagDto = NfcTagDto(
