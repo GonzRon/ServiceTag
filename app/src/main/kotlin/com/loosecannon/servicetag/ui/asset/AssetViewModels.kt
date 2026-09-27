@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.ui.asset
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.condition.ConditionHistory
+import com.loosecannon.servicetag.core.condition.needsIncident
 import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.health.SubjectHealth
 import com.loosecannon.servicetag.core.health.SubjectValue
@@ -629,6 +630,12 @@ data class AssetDetailState(
      * (P67-11) — text, not a link; null when the asset has none.
      */
     val purchaseDocument: String? = null,
+    /**
+     * #82 (C10, R82-7): P82-10 "Log incident" leads the Condition section, first and tonal, while
+     * the asset needs an Incident — in service, DOWN or DEGRADED, and none for its current failure
+     * (`needsIncident`). Computed where [conditionHistory] is, from the same rows and [events].
+     */
+    val leadsWithLogIncident: Boolean = false,
 ) {
     /** The current condition (S1–S3, or S4 when null), from the same read as [health]. */
     val condition: ConditionView? get() = health.condition
@@ -652,6 +659,14 @@ data class AssetDetailState(
      */
     val offersMarkOperational: Boolean
         get() = health.inService && condition?.condition?.needsAttention == true
+
+    /**
+     * #82 (C10, R82-7): whether the Condition section offers P82-10 "Log incident" — every asset **in
+     * service**, whatever its condition, and none retired or archived. Its tap only opens a new
+     * INCIDENT entry; [leadsWithLogIncident] says whether it leads or follows S6.
+     */
+    val offersLogIncident: Boolean
+        get() = health.inService
 }
 
 /**
@@ -776,11 +791,14 @@ class AssetDetailViewModel(
                 return@combine null
             }
             val histories = healthReadModel.conditionHistories()
+            val health = healthReadModel.forAsset(id)
             AssetDetailState(
                 asset = row,
-                health = healthReadModel.forAsset(id),
+                health = health,
                 season = season,
                 conditionHistory = histories[id]?.let { historyOf(it) }.orEmpty(),
+                // #82 (C10): the same rows and journal the page already holds — no further read.
+                leadsWithLogIncident = needsIncident(health.inService, histories[id]?.ordered.orEmpty(), j.events),
                 tags = tagRows,
                 definitions = j.definitions,
                 // An archived profile keeps its history but stops offering a quick action.
