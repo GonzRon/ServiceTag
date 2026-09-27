@@ -286,4 +286,47 @@ class AssetUseCasesTest {
         assertEquals(1, uow.commits)
         assertTrue(assets.rows.containsKey("a1"))
     }
+
+    // --- #79 (C2, K4; R79-11, R79-12b): the lead lives outside the form's command -----------------
+
+    private suspend fun storeWithLead(expiresOn: String = "2027-03-01", lead: Int = 30): Asset =
+        store().copy(warrantyExpiresOn = expiresOn, warrantyReminderLeadDays = lead).also { assets.upsert(it) }
+
+    /** A full-replace edit that says nothing about the lead keeps it while the warranty date stays. */
+    @Test fun anUpdateKeepsTheLeadWhileTheDateStays() = runTest {
+        storeWithLead()
+        now = 9_000L
+        val renamed = update.run(AssetId("a1"), AssetCommand("Pool pump, deck", warrantyExpiresOn = "2027-03-01"))
+        assertEquals(30, renamed.warrantyReminderLeadDays)
+        assertEquals(renamed, assets.rows["a1"])
+        assertEquals(9_000L, renamed.updatedAt)
+
+        val moved = update.run(AssetId("a1"), AssetCommand("Pool pump, deck", warrantyExpiresOn = " 2029-12-31 "))
+        assertEquals("2029-12-31" to 30, moved.warrantyExpiresOn to moved.warrantyReminderLeadDays, "a new date keeps it too")
+    }
+
+    /** R79-12b: an edit that clears the date clears the lead, so a lead never outlives its date. */
+    @Test fun anUpdateThatClearsTheDateClearsTheLead() = runTest {
+        storeWithLead()
+        val cleared = update.run(AssetId("a1"), AssetCommand("Pool pump"))
+        assertEquals(null to null, cleared.warrantyExpiresOn to cleared.warrantyReminderLeadDays)
+        assertEquals(cleared, assets.rows["a1"])
+
+        storeWithLead()
+        val blank = update.run(AssetId("a1"), AssetCommand("Pool pump", warrantyExpiresOn = "   "))
+        assertEquals(null to null, blank.warrantyExpiresOn to blank.warrantyReminderLeadDays, "blank is no date")
+    }
+
+    /**
+     * K4: the form's command has no lead, so a 1.4-era full-replace PATCH — which clears an omitted
+     * optional — can never clear it. Read reflectively, so a field added later fails here.
+     */
+    @Test fun assetCommandHasNoLeadProperty() {
+        val names = AssetCommand::class.java.declaredFields.map { it.name }
+        assertTrue("warrantyExpiresOn" in names && "warrantyNotes" in names, "the reflection reads the command: $names")
+        assertTrue(
+            names.none { "lead" in it.lowercase() || "reminder" in it.lowercase() },
+            "AssetCommand must not carry the warranty reminder: $names",
+        )
+    }
 }

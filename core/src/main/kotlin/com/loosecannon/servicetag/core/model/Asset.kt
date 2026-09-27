@@ -35,6 +35,12 @@ data class Asset(
     val healthAggregation: HealthAggregation = HealthAggregation.WORST,
     /** A soft link to the subject `TRACK_ONE` reads; no foreign key. */
     val healthPrimarySubjectId: HealthSubjectId? = null,
+    /**
+     * #79 (C2; R79-11, R79-12): warn this many whole days before [warrantyExpiresOn], or null for no
+     * reminder. It has its own command and is never part of the asset form's command, so a full
+     * replace of the form cannot clear it; it is non-null only while [warrantyExpiresOn] is.
+     */
+    val warrantyReminderLeadDays: Int? = null,
 )
 
 val Asset.isRetired: Boolean get() = retiredOn != null
