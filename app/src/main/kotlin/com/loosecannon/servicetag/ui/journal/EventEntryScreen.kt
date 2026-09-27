@@ -51,10 +51,13 @@ import com.loosecannon.servicetag.ui.components.InstrumentEntryHeader
 import com.loosecannon.servicetag.ui.components.InstrumentEntryRow
 import com.loosecannon.servicetag.ui.components.InstrumentList
 import com.loosecannon.servicetag.ui.components.InstrumentRow
+import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.condition.EventOfferDialog
 import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
 import com.loosecannon.servicetag.ui.condition.IncidentOfferDialog
+import com.loosecannon.servicetag.ui.condition.PendingCondition
+import com.loosecannon.servicetag.ui.condition.savingAlsoRecordsLine
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
@@ -81,9 +84,15 @@ fun EventEntryScreen(
     onBack: () -> Unit,
     /** The `EventKind` name a new, profile-less entry opens with (spec §7); ignored otherwise. */
     kind: String? = null,
+    /**
+     * #82 (C7): Change condition's held DOWN or DEGRADED, when "Log incident details" opened this
+     * entry — its Save records the Incident and that row together. The key names its id, so a
+     * second combined entry on the same asset is never handed this one's model.
+     */
+    pending: PendingCondition? = null,
 ) {
-    val model: EventEntryViewModel = viewModel(key = eventId ?: "new-$assetId-$profileId-$kind") {
-        EventEntryViewModel(graph, assetId, profileId, eventId, kind)
+    val model: EventEntryViewModel = viewModel(key = eventId ?: "new-$assetId-$profileId-$kind-${pending?.id}") {
+        EventEntryViewModel(graph, assetId, profileId, eventId, kind, pending)
     }
     val state by model.state.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
@@ -147,6 +156,10 @@ fun EventEntryScreen(
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 24.dp),
         ) {
+            // #82: P82-5, once, under the eyebrow — this Save records the held condition too.
+            state.alsoRecords?.let { condition ->
+                QuietLine(savingAlsoRecordsLine(state.assetName, condition), Modifier.padding(top = 8.dp))
+            }
             LoggedBlock(
                 occurredOn = state.occurredOn,
                 occurredTime = state.occurredTime,

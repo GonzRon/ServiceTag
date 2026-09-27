@@ -18,6 +18,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.api.DeveloperApiScreen
 import com.loosecannon.servicetag.ui.asset.AssetDetailScreen
@@ -25,6 +26,7 @@ import com.loosecannon.servicetag.ui.asset.AssetEditScreen
 import com.loosecannon.servicetag.ui.asset.AssetsScreen
 import com.loosecannon.servicetag.ui.asset.SECTION_SCHEDULES
 import com.loosecannon.servicetag.ui.backup.BackupScreen
+import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.dashboard.DashboardScreen
 import com.loosecannon.servicetag.ui.health.HealthSubjectEditScreen
 import com.loosecannon.servicetag.ui.journal.EventDetailScreen
@@ -201,6 +203,9 @@ fun ServiceTagRoot(
                         onOpenSchedule = { backStack.add(Route.ScheduleDetail(it)) },
                         onOpenGroup = { backStack.add(Route.GroupDetail(it)) },
                         section = key.section,
+                        // #82: Change condition's "Log incident details" opens the combined Incident
+                        // entry over this screen; its sheet asks again, or closes, on the way back.
+                        onLogIncidentDetails = { held -> backStack.add(combinedIncidentEntry(key.id, held)) },
                     )
                 }
                 entry<Route.AssetEdit> { key ->
@@ -286,6 +291,7 @@ fun ServiceTagRoot(
                         onDone = { backStack.removeLastOrNull() },
                         onBack = { backStack.removeLastOrNull() },
                         kind = key.kind,
+                        pending = key.pending?.toPending(),
                     )
                 }
                 entry<Route.EventDetail> { key ->
@@ -478,12 +484,21 @@ fun ServiceTagRoot(
                         },
                         // "Not now" writes nothing at all and simply leaves.
                         onDismiss = { backStack.removeLastOrNull() },
+                        // #82: the same combined Incident entry, over the sheet, as from asset detail.
+                        onLogIncidentDetails = { held -> backStack.add(combinedIncidentEntry(key.assetId, held)) },
                     )
                 }
             },
         )
     }
 }
+
+/**
+ * #82 (C6, C7): the Incident entry Change condition's "Log incident details" opens — a new,
+ * profile-less INCIDENT carrying the held condition, whose Save records both in one transaction.
+ */
+private fun combinedIncidentEntry(assetId: String, held: PendingCondition): Route.EventEntry =
+    Route.EventEntry(assetId, null, null, kind = EventKind.INCIDENT.name, pending = PendingConditionArgs.of(held))
 
 /**
  * Top-level switch keeps one entry per destination at the root: tapping Assets from three screens
