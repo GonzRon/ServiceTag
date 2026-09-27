@@ -42,6 +42,7 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.ports.UuidGenerator
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.references.StreamSourcePolicy
+import com.loosecannon.servicetag.core.reminders.BuildDeadlineSubjects
 import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
 import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
@@ -158,6 +159,7 @@ import com.loosecannon.servicetag.reminders.ReminderNotifications
 import com.loosecannon.servicetag.reminders.ReminderRuns
 import com.loosecannon.servicetag.reminders.ReminderSnooze
 import com.loosecannon.servicetag.reminders.ScheduleCompletion
+import com.loosecannon.servicetag.reminders.DeadlineDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.reminders.WorkManagerBackstop
@@ -264,6 +266,9 @@ class AppGraph(private val context: Context) {
      * every provider is asked.
      */
     val buildReminderSubjects: BuildReminderSubjects = BuildReminderSubjects(schedules, groups, recomputeSchedules)
+
+    /** #79 (C5): the warranty dates every provider is asked to hold, from the assets alone. */
+    val buildDeadlineSubjects: BuildDeadlineSubjects = BuildDeadlineSubjects(assets)
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
 
     // #24 — the platform-ownership seams B06, B07, B10 and B14 compile against (master plan §12).
@@ -331,6 +336,9 @@ class AppGraph(private val context: Context) {
         prefs = prefs,
         clock = clock,
         quickActions = quickActions,
+        // #79 (C6, C7): a warranty warning's facts and its device-local stamp.
+        deadlineFacts = DeadlineDeliveryFacts(assets, today),
+        deadlineDelivery = deadlineLocalDelivery,
     )
 
     /**
@@ -339,7 +347,10 @@ class AppGraph(private val context: Context) {
      */
     val reminderRuns: ReminderRuns = ReminderRuns(
         rebuildAll = { recomputeSchedules.all() },
-        subjectsFor = { provider, on -> buildReminderSubjects.forProvider(provider, on) },
+        // #79 (C6): schedule subjects, then deadline subjects — one list, one reconcile.
+        subjectsFor = { provider, on ->
+            buildReminderSubjects.forProvider(provider, on) + buildDeadlineSubjects.forProvider(provider, on)
+        },
         provider = localReminderProvider,
         alarm = digestAlarm,
         today = today,

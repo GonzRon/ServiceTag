@@ -57,6 +57,9 @@ object DigestPolicy {
      * without a projection table and invariant 45 true across process death: the tag carries the
      * subject's content hash, so "already showing, in this exact form" is a question the
      * notification shade itself answers.
+     *
+     * #79 (C7): [inputs] carry both families, and a deadline is routed to its own branch by type.
+     * [bootCount] is the platform's boot count, or null when it cannot be read (R79-14c).
      */
     fun decide(
         inputs: List<DigestInput>,
