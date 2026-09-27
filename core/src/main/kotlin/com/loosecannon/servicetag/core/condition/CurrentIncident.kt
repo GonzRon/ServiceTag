@@ -14,9 +14,10 @@ import com.loosecannon.servicetag.core.model.OperationalCondition
  * contiguous run of DOWN and DEGRADED rows in history order — a worsening from DEGRADED to DOWN stays
  * one failure, an OPERATIONAL row ends it. It is not "since", which a worsening would restart. Then:
  * 1. the latest INCIDENT, not a completion, that a row of the stretch names, if it still exists;
- * 2. else the latest INCIDENT of the asset, not a completion, dated on or after the stretch's first
- *    day **or** logged (`createdAt`) at or after that row was — failed Monday, recorded Tuesday, the
- *    Incident backdated to Monday still belongs to this failure.
+ * 2. else the latest **unlinked** INCIDENT of the asset — one no condition row names, since a row
+ *    outside the stretch ties it to an earlier failure — not a completion, dated on or after the
+ *    stretch's first day **or** logged (`createdAt`) at or after that row was: failed Monday, recorded
+ *    Tuesday, the Incident backdated to Monday still belongs to this failure.
  *
  * "Latest" is the condition order's key: `(occurredOn, occurredTime with nulls first, createdAt, id)`.
  * A dangling link, a linked MAINTENANCE or any other kind never counts.
@@ -33,7 +34,10 @@ fun currentIncident(rows: List<AssetCondition>, events: List<AssetEvent>): Asset
     val named = stretch.mapNotNull { it.eventId }.toSet()
     incidents.filter { it.id in named }.maxWithOrNull(LATEST)?.let { return it }
     val began = stretch.first()
-    return incidents.filter { it.occurredOn >= began.occurredOn || it.createdAt >= began.createdAt }.maxWithOrNull(LATEST)
+    val linked = ordered.mapNotNull { it.eventId }.toSet()
+    return incidents
+        .filter { it.id !in linked && (it.occurredOn >= began.occurredOn || it.createdAt >= began.createdAt) }
+        .maxWithOrNull(LATEST)
 }
 
 /**

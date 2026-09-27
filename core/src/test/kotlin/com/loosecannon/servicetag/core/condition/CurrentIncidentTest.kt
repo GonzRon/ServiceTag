@@ -119,6 +119,32 @@ class CurrentIncidentTest {
         assertNull(currentIncident(rows, listOf(event("e-old", "2026-09-10"))), "the last failure's Incident is not this one's")
     }
 
+    /**
+     * R82-6's "unlinked": an Incident a row outside the stretch names belongs to that earlier failure —
+     * even when it was logged after this one began (a backfill through Workflow A) or its date was
+     * edited into this one — and never answers for the current failure.
+     */
+    @Test
+    fun anIncidentLinkedToAnEarlierFailureNeverCountsForThisOne() {
+        val backfilled = listOf(
+            row("c1", DOWN, "2026-09-01"),
+            row("c2", DEGRADED, "2026-09-03", eventId = "e-backfill", createdOn = "2026-09-22"),
+            row("c3", OPERATIONAL, "2026-09-05"),
+            row("c4", DOWN, "2026-09-20"),
+        )
+        val backfill = listOf(event("e-backfill", "2026-09-03", loggedOn = "2026-09-22"))
+        assertNull(currentIncident(backfilled, backfill), "logged after the stretch began, but an earlier row's")
+        assertEquals(true, needsIncident(inService = true, backfilled, backfill))
+
+        val edited = listOf(
+            row("c1", DOWN, "2026-09-01", eventId = "e-edited"),
+            row("c2", OPERATIONAL, "2026-09-05"),
+            row("c3", DOWN, "2026-09-20"),
+        )
+        val redated = listOf(event("e-edited", "2026-09-21", loggedOn = "2026-09-01"))
+        assertNull(currentIncident(edited, redated), "dated within the stretch, but an earlier row's")
+    }
+
     @Test
     fun aLinkedMaintenanceADanglingLinkACompletionAndAnotherAssetsIncidentNeverCount() {
         val rows = listOf(

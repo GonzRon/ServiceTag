@@ -825,7 +825,7 @@ The identity plate and every component row gain a condition badge (`AssetDetailS
 - **Health:** critical lines and DOWN/DEGRADED components first, then the aggregate, contributors and S107.
 - **Season:** the window or phase, Start/End (S42–S45) and history; the break.
 
-**Amendment (#82, 2026-09-27).** The Condition section gains "Log incident" (P82-10) on every in-service asset, opening a new INCIDENT entry; a retired or archived asset shows none. It leads the row as a tonal button while the asset is DOWN or DEGRADED and its current failure has no Incident — the failure being the latest unbroken run of DOWN and DEGRADED rows, which a worsening from DEGRADED to DOWN continues and an OPERATIONAL row ends; an Incident counts when a row of that run names it, or when it is dated within the run or logged after the run began. Otherwise it is an outlined button after "Change condition". History rows and their links are unchanged.
+**Amendment (#82, 2026-09-27).** The Condition section gains "Log incident" (P82-10) on every in-service asset, opening a new INCIDENT entry; a retired or archived asset shows none. It leads the row as a tonal button while the asset is DOWN or DEGRADED and its current failure has no Incident — the failure being the latest unbroken run of DOWN and DEGRADED rows, which a worsening from DEGRADED to DOWN continues and an OPERATIONAL row ends; an Incident counts when a row of that run names it, or, when no condition row names it, when it is dated within the run or logged after the run began. Otherwise it is an outlined button after "Change condition". History rows and their links are unchanged.
 
 ### 10.4 Editors
 
