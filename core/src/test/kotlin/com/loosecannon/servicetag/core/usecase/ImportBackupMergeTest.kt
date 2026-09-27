@@ -15,6 +15,7 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
@@ -450,6 +451,60 @@ class ImportBackupMergeTest {
         val written = runBlocking { withBytes.merge.run(archive) }
         assertEquals(MergeTally(1, 0, 0, 0), written.attachments)
         runBlocking { assertEquals(1, withBytes.attachments.count()) }
+    }
+
+    /**
+     * #67 AC 6: a role travels by merge onto a **new** row, end to end — the production export, the
+     * real codec, the plan and the apply — and the same format-10 archive then re-plans IDENTICAL.
+     */
+    @Test
+    fun `a merged role lands on the new row`() {
+        val source = Fakes()
+        runBlocking {
+            source.assets.upsert(asset("a1", "Hot tub"))
+            source.attachments.upsert(attachment("att1", "a1").copy(role = DocumentRole.SERVICE_MANUAL))
+        }
+        val archive = exportOf(source)
+        val target = Fakes(
+            FakeAttachmentStorage(InMemoryAttachmentStore().also { it.files["assets/a1/att1.pdf"] = bytes }),
+        )
+
+        val report = runBlocking { target.merge.run(archive) }
+
+        assertEquals(MergeTally(1, 0, 0, 0), report.attachments)
+        runBlocking {
+            assertEquals(DocumentRole.SERVICE_MANUAL, target.attachments.get(AttachmentId("att1"))?.role)
+        }
+        assertEquals(MergeTally(0, 1, 0, 0), runBlocking { target.merge.plan(archive) }.attachments)
+    }
+
+    /**
+     * R67-12 B, end to end: an export made before this phone gave its document a role — a format-9
+     * archive, exactly as a #74 build wrote it — still re-plans IDENTICAL afterwards, so it stays
+     * restorable by merge and the dev → production path is not blocked by a role.
+     */
+    @Test
+    fun `a pre-format-10 export still re-plans IDENTICAL after a role is given here`() {
+        val phone = Fakes(
+            FakeAttachmentStorage(InMemoryAttachmentStore().also { it.files["assets/a1/att1.pdf"] = bytes }),
+        )
+        runBlocking {
+            phone.assets.upsert(asset("a1", "Hot tub"))
+            phone.attachments.upsert(attachment("att1", "a1"))
+        }
+        val before = BackupCodec.decode(exportOf(phone)).let { decoded ->
+            BackupCodec.encode(
+                decoded.data, appVersion = "1.4.1", schemaVersion = 9,
+                createdAt = 1_758_400_000_000L, backupSetId = "set-merge", formatVersion = 9,
+            )
+        }
+        runBlocking { phone.attachments.upsert(attachment("att1", "a1").copy(role = DocumentRole.USER_MANUAL)) }
+
+        val report = runBlocking { phone.merge.plan(before) }
+
+        assertTrue(report.applicable)
+        assertEquals(MergeTally(0, 1, 0, 0), report.attachments)
+        assertEquals(MergeTally(0, 1, 0, 0), report.assets)
     }
 
     /**

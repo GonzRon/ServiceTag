@@ -60,17 +60,20 @@ class BackupFormat9Test {
         assetCategories = categories.map { it.toDto() },
     )
 
-    /** The numbers this tip carries, as literals: the format moved, the legacy boundary did not. */
+    /**
+     * The numbers this tip carries, as literals: the format moved — to 9 here, and on to 10 with #67's
+     * document role — and the legacy boundary did not.
+     */
     @Test
-    fun theFormatIsNineAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(9, BackupCodec.FORMAT_VERSION)
+    fun theFormatMovedAndTheLegacyBoundaryStaysSeven() {
+        assertEquals(10, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 
     /** Hazard: a category dropped or reordered in transit. Shuffled in, key order out, counted. */
     @Test
     fun categoriesSurviveARoundTripInKeyOrder() {
-        val bytes = archiveOf(data(rows.reversed()))
+        val bytes = archiveOf(data(rows.reversed()), formatVersion = 9)
 
         val decoded = BackupCodec.decode(bytes)
 
@@ -145,7 +148,9 @@ class BackupFormat9Test {
     /** What a 1.4.x build (format 8) does with this one: refuses it loudly, before a row is read. */
     @Test
     fun aFormat8BuildRefusesAFormat9Archive() {
-        val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(archiveOf(data()), supportedFormat = 8) }
+        val refusal = assertFailsWith<BackupNewerFormat> {
+            BackupCodec.decode(archiveOf(data(), formatVersion = 9), supportedFormat = 8)
+        }
 
         assertEquals(9, refusal.found)
         assertEquals(8, refusal.supported)

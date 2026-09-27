@@ -2,7 +2,9 @@ package com.loosecannon.servicetag.core.merge
 
 import com.loosecannon.servicetag.core.backup.AssetDto
 import com.loosecannon.servicetag.core.backup.AssetEventDto
+import com.loosecannon.servicetag.core.backup.AttachmentDto
 import com.loosecannon.servicetag.core.backup.Backup
+import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.EventProfileDto
 import com.loosecannon.servicetag.core.backup.MaintenanceGroupDto
 import com.loosecannon.servicetag.core.backup.MaintenanceScheduleDto
@@ -103,6 +105,12 @@ import java.security.MessageDigest
  * And (#74, C13) an asset's `category` is read through `CategoryKey.of` on **both** sides, so a
  * pre-upgrade export's `appliance` against this phone's canonical `Appliance` is `IDENTICAL`: the
  * two are one classification, and a spelling the catalog canonicalised is not a disagreement.
+ * And (#67, R67-12 option B) an archive older than format 10 has its attachments compared **without
+ * the document role** on either side: it cannot speak about roles, so a role given on this phone
+ * since that export keeps the row `IDENTICAL` and every pre-#67 export keeps re-planning `IDENTICAL`.
+ * A format-10 archive compares the role like any field — the same role is `IDENTICAL`; another role,
+ * or none against one here, is `CONFLICT` / `CONTENT_DIFFERS` — and there is no update path: a role
+ * travels by merge only on a row the destination does not have.
  *
  * ### Categories (#74, C13)
  *
@@ -657,6 +665,9 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
     // kept because it is one map lookup, because a hand-built archive is not obliged to be
     // codec-shaped, and because slice B's owner remapping makes it live.
     val attachmentWrites = mutableListOf<Attachment>()
+    // R67-12 (option B): see the KDoc's canonical-content paragraph.
+    val rolesCompared = backup.manifest.formatVersion >= BackupCodec.FIRST_ROLE_FORMAT
+    fun AttachmentDto.compared(): AttachmentDto = if (rolesCompared) this else copy(role = null)
     for (dto in data.attachments) {
         val row = dto.toDomain()
         val id = dto.id
@@ -671,7 +682,7 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
         }
         val stored = snapshot.storedBytes[dto.storageLocator]
         decisions += when {
-            local != null && dto == local.toDto() ->
+            local != null && dto.compared() == local.toDto().compared() ->
                 MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.IDENTICAL)
             local != null ->
                 MergeDecision(MergeTable.ATTACHMENTS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)

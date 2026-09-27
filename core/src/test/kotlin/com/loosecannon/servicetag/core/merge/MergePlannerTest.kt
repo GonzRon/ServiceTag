@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.DerivedFormula
 import com.loosecannon.servicetag.core.model.DerivedSpec
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
@@ -210,9 +211,10 @@ class MergePlannerTest {
         profiles: List<EventProfile> = emptyList(),
         events: List<AssetEvent> = emptyList(),
         attachments: List<Attachment> = emptyList(),
+        formatVersion: Int = 5,
     ) = Backup(
         manifest = BackupManifest(
-            formatVersion = 5, appVersion = "1.1.0", schemaVersion = 5, createdAt = 1L,
+            formatVersion = formatVersion, appVersion = "1.1.0", schemaVersion = 5, createdAt = 1L,
             counts = emptyMap(), dataSha256 = "a".repeat(64), backupSetId = "set-incoming",
         ),
         data = BackupData(
@@ -1226,6 +1228,86 @@ class MergePlannerTest {
             ),
             plan.decision(MergeTable.ATTACHMENTS, "att1"),
         )
+    }
+
+    // --- #67: the document role, under R67-12 (option B) ---------------------------------------
+
+    private val tub = asset("a1", "Hot tub")
+
+    /** The one attachment these cases compare, with [role] and nothing else varied. */
+    private fun manual(role: DocumentRole?, name: String = "Manual.pdf") =
+        attachment("att1", "a1").copy(role = role, displayName = name)
+
+    /** An archive of [row] at [formatVersion] against a phone holding [local] and its bytes. */
+    private fun roleDecision(row: Attachment, formatVersion: Int, local: Attachment): MergeDecision =
+        mergePlanOf(
+            backupOf(assets = listOf(tub), attachments = listOf(row), formatVersion = formatVersion),
+            snapshotOf(
+                assets = listOf(tub), attachments = listOf(local),
+                storedBytes = mapOf("assets/a1/att1.pdf" to storedFour),
+            ),
+        ).decision(MergeTable.ATTACHMENTS, "att1")
+
+    private fun identical() = MergeDecision(MergeTable.ATTACHMENTS, "att1", MergeVerdict.IDENTICAL)
+
+    private fun differs() = MergeDecision(
+        MergeTable.ATTACHMENTS, "att1", MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, "att1",
+    )
+
+    /**
+     * R67-12 B: an archive older than format 10 cannot speak about roles, so its attachments are
+     * compared **without** them — a role given here since that export keeps it IDENTICAL, and every
+     * pre-#67 export keeps re-planning IDENTICAL. Every other field still counts.
+     */
+    @Test
+    fun `a format-9 archive against a role-tagged local row is IDENTICAL`() {
+        for (format in listOf(9, 8, 5)) {
+            val plan = mergePlanOf(
+                backupOf(assets = listOf(tub), attachments = listOf(manual(null)), formatVersion = format),
+                snapshotOf(
+                    assets = listOf(tub), attachments = listOf(manual(DocumentRole.USER_MANUAL)),
+                    storedBytes = mapOf("assets/a1/att1.pdf" to storedFour),
+                ),
+            )
+            assertTrue(plan.applicable, "format $format")
+            assertEquals(identical(), plan.decision(MergeTable.ATTACHMENTS, "att1"), "format $format")
+            assertEquals(emptyList(), plan.writes.attachments)
+        }
+        // the role is the only field set aside: a rename is still a rename
+        assertEquals(differs(), roleDecision(manual(null, "Guide.pdf"), 9, manual(DocumentRole.USER_MANUAL)))
+    }
+
+    /** R67-12 B, format 10: the role compares like any field, and the same role matches. */
+    @Test
+    fun `a format-10 archive with the same role is IDENTICAL`() {
+        assertEquals(identical(), roleDecision(manual(DocumentRole.USER_MANUAL), 10, manual(DocumentRole.USER_MANUAL)))
+        assertEquals(identical(), roleDecision(manual(null), 10, manual(null)))
+    }
+
+    /** R67-12 B, format 10: two roles disagree like two names do — a conflict, and nothing is written. */
+    @Test
+    fun `a format-10 archive with a different role is a CONFLICT`() {
+        assertEquals(
+            differs(),
+            roleDecision(manual(DocumentRole.SERVICE_MANUAL), 10, manual(DocumentRole.USER_MANUAL)),
+        )
+        // and a role on the incoming side against none here is a difference too: a merge never updates
+        assertEquals(differs(), roleDecision(manual(DocumentRole.USER_MANUAL), 10, manual(null)))
+    }
+
+    /** R67-12 B, format 10: an archive that says "no role" against a role here disagrees with it. */
+    @Test
+    fun `a format-10 archive with no role against a local role is a CONFLICT`() {
+        val plan = mergePlanOf(
+            backupOf(assets = listOf(tub), attachments = listOf(manual(null)), formatVersion = 10),
+            snapshotOf(
+                assets = listOf(tub), attachments = listOf(manual(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT)),
+                storedBytes = mapOf("assets/a1/att1.pdf" to storedFour),
+            ),
+        )
+
+        assertFalse(plan.applicable)
+        assertEquals(differs(), plan.decision(MergeTable.ATTACHMENTS, "att1"))
     }
 
     // --- hints, and the shape of the report -------------------------------------------------
