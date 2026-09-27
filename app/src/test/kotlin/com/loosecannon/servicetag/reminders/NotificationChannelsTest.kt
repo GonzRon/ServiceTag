@@ -42,7 +42,7 @@ class NotificationChannelsTest {
      * mute") is prevented by construction, not proved by this test alone: `CHANNELS` is a fixed
      * `val` and `ensure` reads no current state before choosing an importance, so the platform's
      * own no-overwrite guarantee always holds. What this asserts, structurally, is that calling
-     * `ensure` twice builds the exact same two specs both times — the fact the construction argument
+     * `ensure` twice builds the exact same specs both times — the fact the construction argument
      * depends on.
      */
     @Test
@@ -61,7 +61,7 @@ class NotificationChannelsTest {
      * Invariant 61, D-22: a denied `POST_NOTIFICATIONS` permission is a fact `PlatformState`
      * reports, never a guard clause. `ensure` takes no permission or platform-state argument at
      * all, so a fake reporting total denial cannot change what it creates — proven here by simply
-     * calling `ensure` on its own and getting both channels regardless.
+     * calling `ensure` on its own and getting every channel regardless.
      */
     @Test
     fun channelCreationDoesNotConsultPermissionOrPlatformState() {

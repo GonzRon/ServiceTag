@@ -253,10 +253,12 @@ class QuickActionReceiverTest {
      * The four §12.1 actions are built from **two** call sites — the two writes share a
      * `getBroadcast` and the two navigations share a `getActivity` — so what makes them four
      * distinct pending intents is four distinct request codes, which is the assertion below rather
-     * than a count of lines. `getService` appears nowhere: this brief starts no service.
+     * than a count of lines. `getService` appears nowhere: this brief starts no service. #79 (C8)
+     * adds a fifth, a warranty warning's "Open", through the same `getActivity` site with its own
+     * request code.
      */
     @Test
-    fun everyPendingIntentTheBuilderMakesIsImmutableAndTheFourActionsStayFour() {
+    fun everyPendingIntentTheBuilderMakesIsImmutableAndTheFiveActionsStayFive() {
         val lines = sourceFile("kotlin/com/loosecannon/servicetag/reminders/QuickActions.kt").readText().lines()
         val calls = lines.filter { "PendingIntent.get" in it }
 
