@@ -6,8 +6,11 @@ import androidx.activity.result.ActivityResultRegistry
 import androidx.activity.result.ActivityResultRegistryOwner
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -77,7 +80,11 @@ class AssetEditorKeyDocumentsTest {
         tree = useFileBackedTree()
     }
 
-    private fun openNewAsset(graph: AppGraph = app.graph, onOpenSettings: () -> Unit = {}) {
+    private fun openNewAsset(
+        graph: AppGraph = app.graph,
+        onOpenSettings: () -> Unit = {},
+        onBack: () -> Unit = {},
+    ) {
         rule.setContent {
             ServiceTagTheme {
                 CompositionLocalProvider(LocalActivityResultRegistryOwner provides registryOwner) {
@@ -85,7 +92,7 @@ class AssetEditorKeyDocumentsTest {
                         graph = graph,
                         assetId = null,
                         onDone = {},
-                        onBack = {},
+                        onBack = onBack,
                         onOpenSettings = onOpenSettings,
                     )
                 }
@@ -106,24 +113,73 @@ class AssetEditorKeyDocumentsTest {
         rule.awaitText("pick-2.pdf")
 
         rule.onAllNodesWithText(ATTACHED_WHEN_YOU_SAVE).assertCountEquals(3)
+        // B-2: each line draws the visible word, and says which file it removes to a screen reader.
+        rule.onAllNodesWithText("Remove").assertCountEquals(3)
+        rule.onNodeWithContentDescription("Remove pick-1.pdf").assert(hasText("Remove"))
 
         rule.onNodeWithContentDescription("Remove pick-1.pdf").performScrollTo().performClick()
         rule.waitUntil(WAIT_MS) { rule.onAllNodesWithText("pick-1.pdf").fetchSemanticsNodes().isEmpty() }
         rule.onAllNodesWithText(ATTACHED_WHEN_YOU_SAVE).assertCountEquals(2)
+        rule.onAllNodesWithText("Remove").assertCountEquals(2)
+        rule.onAllNodesWithText("pick-0.pdf").assertCountEquals(1)
+        rule.onAllNodesWithText("pick-2.pdf").assertCountEquals(1)
     }
 
-    /** C5 (AC 1): Cancel leaves no row and no file — nothing was ever copied. */
-    @Test fun cancelLeavesNoRowAndNoFile() {
+    /**
+     * R67-6: the receipt affordance and its staged line sit in PURCHASE (before WARRANTY); the two
+     * manual affordances and their staged lines sit in KEY DOCUMENTS (after WARRANTY, before NOTES).
+     * The column scrolls but never recycles, so every node is laid out and comparable in one frame.
+     */
+    @Test fun theReceiptSitsInPurchaseAndTheManualsInKeyDocuments() {
         openNewAsset()
+        rule.awaitText("PURCHASE")
+        rule.onNodeWithText(ADD_PURCHASE_INVOICE_OR_RECEIPT).performScrollTo().performClick()
+        rule.awaitText("pick-0.pdf")
+        rule.onNodeWithText(ADD_USER_MANUAL).performScrollTo().performClick()
+        rule.awaitText("pick-1.pdf")
+        rule.onNodeWithText(ADD_SERVICE_MANUAL).performScrollTo().performClick()
+        rule.awaitText("pick-2.pdf")
+        rule.waitForIdle()
+
+        val purchase = top("PURCHASE")
+        val warranty = top("WARRANTY")
+        val keyDocuments = top("KEY DOCUMENTS")
+        val notes = top("NOTES")
+        check(purchase < warranty && warranty < keyDocuments && keyDocuments < notes) {
+            "PURCHASE $purchase, WARRANTY $warranty, KEY DOCUMENTS $keyDocuments, NOTES $notes"
+        }
+        listOf(ADD_PURCHASE_INVOICE_OR_RECEIPT, "pick-0.pdf").forEach { text ->
+            val at = top(text)
+            check(at > purchase && at < warranty) { "$text at $at is not in PURCHASE ($purchase..$warranty)" }
+        }
+        listOf(ADD_USER_MANUAL, "pick-1.pdf", ADD_SERVICE_MANUAL, "pick-2.pdf").forEach { text ->
+            val at = top(text)
+            check(at > keyDocuments && at < notes) { "$text at $at is not in KEY DOCUMENTS ($keyDocuments..$notes)" }
+        }
+    }
+
+    private fun top(text: String) = rule.onNodeWithText(text).getUnclippedBoundsInRoot().top
+
+    /** C5 (AC 1): Cancel leaves no asset, no row and no file — nothing was ever written or copied. */
+    @Test fun cancelLeavesNoRowAndNoFile() {
+        var backed = false
+        openNewAsset(onBack = { backed = true })
         rule.awaitText("PURCHASE")
 
         rule.onNodeWithText(ADD_USER_MANUAL).performScrollTo().performClick()
         rule.awaitText("pick-0.pdf")
+        rule.onNodeWithText(ADD_SERVICE_MANUAL).performScrollTo().performClick()
+        rule.awaitText("pick-1.pdf")
 
-        // Nothing was ever staged into a row or a file: Save was never tapped.
-        val count = runBlocking { app.graph.attachments.count() }
-        check(count == 0) { "no attachment row before Save" }
-        check(filesUnder(tree).isEmpty()) { "no bytes under the tree before Save" }
+        rule.onNodeWithContentDescription("Cancel").performClick()
+        rule.waitUntil(WAIT_MS) { backed }
+
+        val assets = runBlocking { app.graph.assets.all().size }
+        val rows = runBlocking { app.graph.attachments.count() }
+        check(assets == 0) { "no asset after Cancel, found $assets" }
+        check(rows == 0) { "no attachment row after Cancel, found $rows" }
+        val files = filesUnder(tree)
+        check(files.isEmpty()) { "no bytes under the tree after Cancel, found $files" }
     }
 
     /** R67-13: with no folder the three affordances are hidden and the card shows exactly once. */
