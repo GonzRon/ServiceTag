@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ValueType
@@ -34,8 +35,10 @@ import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.NoSuchEvent
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.condition.EntryOffers
 import com.loosecannon.servicetag.ui.condition.EventOffer
 import com.loosecannon.servicetag.ui.condition.EventOffers
+import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
 import com.loosecannon.servicetag.ui.condition.tapped
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -146,7 +149,7 @@ class EventEntryViewModel(
      * [EventOffers]. An edit never offers: S19 and S53 say "You logged", and an edit logged nothing
      * new.
      */
-    private val offers: EventOffers,
+    private val offers: EntryOffers,
 ) : ViewModel() {
 
     constructor(
@@ -449,7 +452,8 @@ class EventEntryViewModel(
      */
     fun acceptOffer() {
         val open = _state.value.offer ?: return
-        if (open.accepting) return
+        // #82: the impairment offer names its answer, so only [acceptImpairment] accepts it.
+        if (open.accepting || open is ImpairmentOfferPrompt) return
         _state.update { it.copy(offer = open.tapped()) }
         viewModelScope.launch {
             try {
@@ -463,7 +467,33 @@ class EventEntryViewModel(
         }
     }
 
-    /** "Not yet" or "Not now": nothing is written, and the next offer is asked or the screen leaves. */
+    /**
+     * #82, Workflow B's answer: P82-7 ([condition] DOWN) or P82-8 (DEGRADED). The answer and
+     * `accepting` are set **before** the write — which disables all three answers — and a second tap
+     * is ignored, so one accept reaches the offers. A refused accept (the Incident deleted meanwhile)
+     * has no ratified sentence; the entry stands either way, and the screen leaves as it would have.
+     */
+    fun acceptImpairment(condition: OperationalCondition) {
+        val open = _state.value.offer as? ImpairmentOfferPrompt ?: return
+        if (open.accepting) return
+        val answered = open.copy(accepting = true, chosen = condition)
+        _state.update { it.copy(offer = answered) }
+        viewModelScope.launch {
+            try {
+                offers.accept(answered)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (refused: Exception) {
+                Log.w(TAG, "an accepted offer was refused", refused)
+            }
+            nextAfter(answered)
+        }
+    }
+
+    /**
+     * "Not yet", "Not now" or #82's "No change" — and any offer dismissed: nothing is written, and the
+     * next offer is asked or the screen leaves.
+     */
     fun declineOffer() {
         val open = _state.value.offer ?: return
         if (open.accepting) return

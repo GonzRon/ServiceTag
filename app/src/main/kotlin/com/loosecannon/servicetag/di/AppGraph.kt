@@ -157,6 +157,7 @@ import com.loosecannon.servicetag.reminders.ScheduleDeliveryFacts
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.reminders.WorkManagerBackstop
 import com.loosecannon.servicetag.ui.condition.EventOffers
+import com.loosecannon.servicetag.ui.condition.ImpairmentOffers
 import com.loosecannon.servicetag.ui.condition.OperationalOffers
 import com.loosecannon.servicetag.ui.condition.SeasonOffers
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
@@ -680,6 +681,7 @@ class AppGraph(private val context: Context) {
     val eventOffers: EventOffers = EventOffers(
         OperationalOffers(assets, conditions, acceptOperationalOffer, today),
         SeasonOffers(assets, seasonActivations, acceptSeasonOffer, today),
+        ImpairmentOffers(assets, conditions, acceptImpairmentOffer, today),
     )
 
     /**

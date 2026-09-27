@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.journal.Reading
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.InstrumentEntryHeader
@@ -52,6 +53,8 @@ import com.loosecannon.servicetag.ui.components.InstrumentList
 import com.loosecannon.servicetag.ui.components.InstrumentRow
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.condition.EventOfferDialog
+import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
+import com.loosecannon.servicetag.ui.condition.IncidentOfferDialog
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
@@ -90,8 +93,18 @@ fun EventEntryScreen(
     LaunchedEffect(model) { model.saved.collect { onDone() } }
 
     // 1.4: a just-logged event's one question — "Mark operational?" or the season offer — asked
-    // before the screen leaves. Only its accept writes (spec §3.3, §5.4).
-    state.offer?.let { EventOfferDialog(it, onAccept = model::acceptOffer, onDecline = model::declineOffer) }
+    // before the screen leaves. Only its accept writes (spec §3.3, §5.4). #82's impairment offer has
+    // three answers, so it is drawn by its own dialog; the two-button one is unchanged.
+    when (val offer = state.offer) {
+        null -> Unit
+        is ImpairmentOfferPrompt -> IncidentOfferDialog(
+            offer,
+            onMarkDown = { model.acceptImpairment(OperationalCondition.DOWN) },
+            onMarkDegraded = { model.acceptImpairment(OperationalCondition.DEGRADED) },
+            onNoChange = model::declineOffer,
+        )
+        else -> EventOfferDialog(offer, onAccept = model::acceptOffer, onDecline = model::declineOffer)
+    }
     LaunchedEffect(state.firstProblem) { state.firstProblem?.let { snackbars.showSnackbar(it) } }
 
     // A profile-less entry has no name of its own in the bar, so it shows one part, not an orphan

@@ -103,6 +103,7 @@ import com.loosecannon.servicetag.data.room.inMemoryDb
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.ui.condition.EventOffers
+import com.loosecannon.servicetag.ui.condition.ImpairmentOffers
 import com.loosecannon.servicetag.ui.condition.OperationalOffers
 import com.loosecannon.servicetag.ui.condition.SeasonOffers
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
@@ -402,6 +403,7 @@ class FakeGraph(
     val eventOffers: EventOffers = EventOffers(
         OperationalOffers(assets, conditions, acceptOperationalOffer, todayPort),
         SeasonOffers(assets, seasonActivations, acceptSeasonOffer, todayPort),
+        ImpairmentOffers(assets, conditions, acceptImpairmentOffer, todayPort),
     )
 
     /** The one completion mechanism, over the real use cases — always UTC, so a `tzId` is stable. */

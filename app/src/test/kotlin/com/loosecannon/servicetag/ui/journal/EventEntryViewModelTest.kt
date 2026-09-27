@@ -2,15 +2,21 @@ package com.loosecannon.servicetag.ui.journal
 
 import com.loosecannon.servicetag.core.journal.RangeState
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
+import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.FieldProblem
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.ui.condition.EntryOffers
+import com.loosecannon.servicetag.ui.condition.EventOffer
+import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -78,12 +85,39 @@ class EventEntryViewModelTest {
         )
     }
 
-    private fun entryModel(assetId: AssetId, profileId: ProfileId?, eventId: EventId?) =
-        EventEntryViewModel(
-            graph.assets, graph.definitions, graph.profiles, graph.events,
-            graph.logEvent, graph.updateEvent, graph.clock,
-            assetId, profileId, eventId, offers = graph.eventOffers,
-        )
+    private fun entryModel(
+        assetId: AssetId,
+        profileId: ProfileId?,
+        eventId: EventId?,
+        offers: EntryOffers = graph.eventOffers,
+        kind: EventKind? = null,
+    ) = EventEntryViewModel(
+        graph.assets, graph.definitions, graph.profiles, graph.events,
+        graph.logEvent, graph.updateEvent, graph.clock,
+        assetId, profileId, eventId, presetKind = kind, offers = offers,
+    )
+
+    /** #82: counts what reaches the graph's one [EntryOffers], delegating everything to it. */
+    private class RecordingOffers(private val real: EntryOffers) : EntryOffers by real {
+        var asked = 0
+        var accepts = 0
+
+        override suspend fun offersAfter(event: AssetEvent): List<EventOffer> {
+            asked += 1
+            return real.offersAfter(event)
+        }
+
+        override suspend fun accept(offer: EventOffer) {
+            accepts += 1
+            real.accept(offer)
+        }
+    }
+
+    /** An asset in service with no condition recorded: a new Incident on it asks Workflow B's question. */
+    private suspend fun pump(): AssetId {
+        graph.assets.upsert(assetRow("pump", name = "Pump"))
+        return AssetId("pump")
+    }
 
     private fun detailModel(id: EventId) =
         EventDetailViewModel(graph.events, graph.definitions, graph.assets, graph.deleteEvent, id)
@@ -468,5 +502,69 @@ class EventEntryViewModelTest {
 
         assertTrue(vm.missing.first { it })
         assertNull(vm.state.value)
+    }
+
+    // ------------------------------------------------------------------ #82: Workflow B on the entry (C8)
+
+    /** Row 15: an edit never asks — it logged nothing new, and S53 says "You logged". */
+    @Test fun anEditNeverAsks() = runTest {
+        val pump = pump()
+        val logged = graph.logEvent.run(
+            EventCommand(
+                assetId = pump, profileId = null, kind = EventKind.INCIDENT, title = "Seized",
+                occurredOn = today(), occurredTime = null, tzId = "UTC", notes = "",
+                values = emptyMap(), consumables = emptyList(),
+            ),
+        )
+        val offers = RecordingOffers(graph.eventOffers)
+        val vm = entryModel(pump, null, logged.id, offers)
+        vm.state.first { it.loaded }
+        val saved = CompletableDeferred<EventId>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { saved.complete(vm.saved.first()) }
+
+        vm.onNotes("Bearing gone")
+        vm.save()
+
+        val settled = vm.state.first { !it.saving || it.offer != null }
+        assertNull("the edit never asks", settled.offer)
+        assertEquals(logged.id, saved.await())
+        assertEquals("the offers are never read for an edit", 0, offers.asked)
+        assertEquals(0, graph.conditions.all().size)
+        assertTrue(
+            "the same Incident, new, would have asked",
+            graph.eventOffers.offersAfter(graph.events.get(logged.id)!!).single() is ImpairmentOfferPrompt,
+        )
+    }
+
+    /**
+     * Row 16: a second tap on an answer is ignored at the view model — one accept reaches the offers
+     * and the screen leaves once. Rows cannot show it: the accept re-reads and would write nothing.
+     */
+    @Test fun aSecondTapOnAnAnswerIsIgnored() = runTest {
+        val pump = pump()
+        val offers = RecordingOffers(graph.eventOffers)
+        val vm = entryModel(pump, null, null, offers, kind = EventKind.INCIDENT)
+        vm.state.first { it.loaded }
+        val saved = mutableListOf<EventId>()
+        val left = CompletableDeferred<EventId>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            vm.saved.collect {
+                saved += it
+                left.complete(it)
+            }
+        }
+
+        vm.save()
+        advanceUntilIdle()
+        assertTrue("Workflow B asks", vm.state.value.offer is ImpairmentOfferPrompt)
+        vm.acceptImpairment(OperationalCondition.DOWN)
+        vm.acceptImpairment(OperationalCondition.DEGRADED)
+        left.await()
+        vm.state.first { it.offer == null && !it.saving }
+        advanceUntilIdle()
+
+        assertEquals("one accept reaches the offers", 1, offers.accepts)
+        assertEquals(1, saved.size)
+        assertEquals(OperationalCondition.DOWN, graph.conditions.forAsset(pump).single().condition)
     }
 }
