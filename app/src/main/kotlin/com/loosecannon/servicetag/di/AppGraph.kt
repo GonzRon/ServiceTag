@@ -675,8 +675,10 @@ class AppGraph(private val context: Context) {
 
     /**
      * 1.4 — the offers an event makes (spec §3.3, §5.4): "Mark operational?" and the season offer,
-     * each written only by its accept (B06's `AcceptOperationalOffer`, B04's `AcceptSeasonOffer`).
-     * Built here once; the completion flow and the journal entry both ask through it.
+     * each written only by its accept (B06's `AcceptOperationalOffer`, B04's `AcceptSeasonOffer`) —
+     * and #82's impairment offer after a new Incident, written only by "Mark down" or "Mark
+     * degraded" (`AcceptImpairmentOffer`). Built here once; the completion flow and the journal
+     * entry both ask through it.
      */
     val eventOffers: EventOffers = EventOffers(
         OperationalOffers(assets, conditions, acceptOperationalOffer, today),

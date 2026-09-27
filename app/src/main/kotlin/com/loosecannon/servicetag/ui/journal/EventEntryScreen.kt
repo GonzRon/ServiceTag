@@ -91,7 +91,8 @@ fun EventEntryScreen(
      */
     pending: PendingCondition? = null,
 ) {
-    val model: EventEntryViewModel = viewModel(key = eventId ?: "new-$assetId-$profileId-$kind-${pending?.id}") {
+    val modelKey = eventId ?: "new-$assetId-$profileId-$kind" + pending?.let { "-pending-${it.id}" }.orEmpty()
+    val model: EventEntryViewModel = viewModel(key = modelKey) {
         EventEntryViewModel(graph, assetId, profileId, eventId, kind, pending)
     }
     val state by model.state.collectAsStateWithLifecycle()
