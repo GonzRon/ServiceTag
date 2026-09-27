@@ -65,6 +65,19 @@ class CurrentIncidentTest {
     }
 
     @Test
+    fun theLatestIncidentTheStretchNamesCounts() {
+        val rows = listOf(
+            row("c1", DEGRADED, "2026-09-18", eventId = "e-degraded"),
+            row("c2", DOWN, "2026-09-20", eventId = "e-down"),
+        )
+        val degraded = event("e-degraded", "2026-09-18")
+        val down = event("e-down", "2026-09-20")
+
+        assertEquals(down, currentIncident(rows, listOf(down, degraded)))
+        assertEquals(down, currentIncident(rows, listOf(degraded, down)))
+    }
+
+    @Test
     fun anUnlinkedIncidentDatedTheStretchsFirstDayCountsTheDayBeforeDoesNot() {
         val rows = listOf(row("c1", OPERATIONAL, "2026-09-01"), row("c2", DOWN, "2026-09-20"))
         val onTheDay = event("e-day", "2026-09-20")
