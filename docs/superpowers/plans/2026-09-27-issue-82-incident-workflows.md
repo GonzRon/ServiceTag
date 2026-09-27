@@ -441,3 +441,38 @@ device but `emulator-5554`. **Size:** about 220 production, 380 test, 20 docs li
   extended by #82:** `RecordCondition.run(assetId, ConditionCommand, rowId: String? = null)` — an optional
   row id, checked before validation, never on `ConditionCommand` (C2). The master plan is not edited; this
   entry and the spec's §5.4 amendment are the record.
+
+## 12. Owner rulings (2026-09-27; binding on every brief)
+
+- **R82-14 / §6:** P82-1 … P82-10 RATIFIED verbatim; S53 (re) as Workflow B's body and S25 (re) as the
+  combined Save's refusal RE-RATIFIED; **P82-4 = `Save condition only`** (not `Done`, which already carries
+  completion/close semantics and would hide that the button commits the held row).
+- **R82-1 = OPTION A.** No schema 11 / format 11; the condition row's existing `eventId` and the atomic
+  composite use case.
+- **R82-2 confirmed, both sub-choices as recommended:** (a) ask after every explicitly recorded DOWN or
+  DEGRADED, DOWN → DOWN and DOWN → DEGRADED included — no "improvement" heuristic, `Save condition only` is
+  the explicit cheap exit; (b) no `SavedStateHandle` persistence for the unsaved hold — process death
+  reopens the form empty with nothing written; the pre-allocated id / idempotency design protects the row
+  when the combined write lands.
+- **R82-3 confirmed:** the held date, no time, device zone; Incident title = the reason's first non-blank
+  line (fallback `Incident`); remaining lines → notes; all editable; a future-dated Incident refuses the
+  whole combined save (S25).
+- **R82-4 confirmed** exactly as planned; no DEGRADED → DOWN offer in Workflow B.
+- **R82-5 confirmed:** the accepted row dated `max(incident, current)` with the later known time, empty
+  reason, the Incident link (a later dangling link stays readable history, as the model already treats it).
+- **R82-6 confirmed:** the current failure = the contiguous DOWN/DEGRADED stretch (DEGRADED → DOWN is one
+  failure; OPERATIONAL ends it); an unlinked Incident counts if dated within the stretch OR logged
+  (`createdAt`) after it began — a read-time heuristic that governs only the affordance, never history.
+- **R82-7 confirmed:** `Log incident` on every in-service asset; none for retired/archived.
+- **R82-8 = YES:** the scan sheet shows navigation-only `Log incident` only when `needsIncident`
+  (`IncidentNeed` read-only seam + resume refresh); B1's amendment count is 5.
+- **R82-9 confirmed:** a standalone Incident on an already impaired asset writes only the event and asks
+  nothing.
+- **R82-10 = DEFER** free-form repair/replacement. **R82-11 confirmed:** no Incident-kind decoration.
+- **R82-12 confirmed:** docs-only API/MCP recipe (`log_event` then `record_condition(event_id=…)`); no new
+  endpoint or argument.
+- **R82-13 confirmed:** the spec amendments (§5.4 with the contract G erratum, invariant 81, §10.3, §10.1
+  item 3, §10.7 quoting P82-n with S25/S53 "(re)"; no new S-numbers); no `versionName` bump in #82; the
+  vehicle is the next feature-bearing MINOR release, numbered when its feature set closes.
+- Rev 2.1 is the implementation contract; the scoped re-review's APPROVE stands; no further planning or
+  review cycle. Related: #86 (whole-asset succession) has its own semantics and is outside #82.
