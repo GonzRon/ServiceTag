@@ -71,8 +71,9 @@ class BuildDeadlineSubjects(
 
     private companion object {
         /**
-         * The reused word "Warranty" (#79 §6), in its core home: the asset detail's section header
-         * and the `<title>` of the warning's `<asset> — <title>` line.
+         * The reused word "Warranty" (#79 §6, C5), in its core home: the `<title>` of the warning's
+         * `<asset> — <title>` line, and nothing else. The asset screens' "Warranty" section header
+         * keeps its shipped UI home (`AssetEditScreen`'s `SectionHeader`).
          */
         const val WARRANTY_TITLE = "Warranty"
     }

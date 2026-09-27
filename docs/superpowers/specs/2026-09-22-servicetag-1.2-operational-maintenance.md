@@ -925,7 +925,7 @@ declares **neither** `SCHEDULE_EXACT_ALARM` **nor** `USE_EXACT_ALARM`, asserted 
 manifest (#24 AC 2): the first is denied by default on API 34+, the second is Play-restricted to alarm
 and calendar apps, and "due today" is a date, not an instant (ledger A12).
 
-**Amendment (#79, 2026-09-27).** The asset editor is the permission's second requester (R79-16; decision 23 amended): after a save that first sets a warranty reminder lead while the permission is not granted, it shows the ratified "ServiceTag needs notification permission to remind you before a warranty expires." with "OK" and "Not now", at most once per editor, then requests. Without it an owner with no schedules on API 33+ would never be asked. The schedule editor's rationale and request are unchanged, and nothing asks at launch.
+**Amendment (#79, 2026-09-27).** The asset editor is the permission's second requester (R79-16; decision 23 amended): after a save that first sets a warranty reminder lead while the permission is not granted, it shows the ratified "ServiceTag needs notification permission to remind you before a warranty expires." with "OK" and "Not now", at most once per editor, and requests only after "OK" — "Not now" requests nothing, as in the schedule editor. Without it an owner with no schedules on API 33+ would never be asked. The schedule editor's rationale and request are unchanged, and nothing asks at launch.
 
 **5.2 Alarm policy without exact alarms.** One **inexact daily digest alarm** at the user's hour via
 `setAndAllowWhileIdle(RTC_WAKEUP)` (or `setWindow` with a 30-minute window), re-armed by its own

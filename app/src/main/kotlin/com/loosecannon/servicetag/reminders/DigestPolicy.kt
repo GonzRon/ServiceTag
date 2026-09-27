@@ -461,6 +461,11 @@ internal fun itemTag(key: SubjectKey, contentHash: String): String = when (key) 
 /**
  * The key a standing tag was written from, or null for a tag this codec never wrote. The hash is
  * hex, so the key is everything before the **last** separator.
+ *
+ * It assumes no schedule id begins with `<DeadlineKind>:` — a schedule id literally beginning
+ * `WARRANTY_EXPIRY:` would be read as a warranty tag. Every producer mints UUIDs, so only a
+ * hand-edited archive could reach it; a schedule tag must stay byte-identical, so no namespace is
+ * added here.
  */
 internal fun keyOfTag(tag: String): SubjectKey? {
     if (TAG_SEPARATOR !in tag) return null
