@@ -44,6 +44,7 @@ import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.condition.CHANGE_CONDITION
 import com.loosecannon.servicetag.ui.condition.ChangeConditionSheet
 import com.loosecannon.servicetag.ui.condition.ConditionBadge
+import com.loosecannon.servicetag.ui.condition.LOG_INCIDENT
 import com.loosecannon.servicetag.ui.condition.MARK_OPERATIONAL
 import com.loosecannon.servicetag.ui.condition.MarkOperationalDialog
 import com.loosecannon.servicetag.ui.condition.PendingCondition
@@ -97,6 +98,8 @@ fun MaintenanceSheet(
     onDismiss: () -> Unit,
     /** #82 — Change condition's P82-3: the held DOWN or DEGRADED, for the host's Incident entry. */
     onLogIncidentDetails: (PendingCondition) -> Unit = {},
+    /** #82 (C11, R82-8) — P82-10 "Log incident": the host opens a new INCIDENT entry; nothing is written here. */
+    onLogIncident: (assetId: String) -> Unit = {},
 ) {
     val model: MaintenanceSheetViewModel = viewModel(key = "sheet/$assetId/$tagId") {
         MaintenanceSheetViewModel(graph, assetId, tagId)
@@ -115,6 +118,13 @@ fun MaintenanceSheet(
     var resumed by remember { mutableStateOf(false) }
     LifecycleResumeEffect(model) {
         if (resumed) model.refresh() else resumed = true
+        onPauseOrDispose { }
+    }
+    // #82 (C11, NOTE 1): the Incident flag is read again on **every** resume, the first included and
+    // apart from the guard above — back from the Incident entry, the sheet composes afresh with the
+    // guard reset, and "Log incident" must drop at once rather than on some later refresh.
+    LifecycleResumeEffect(model) {
+        model.onShown()
         onPauseOrDispose { }
     }
 
@@ -154,9 +164,11 @@ fun MaintenanceSheet(
                     is SheetBlock.Condition -> ConditionBlock(block.view)
                     is SheetBlock.ConditionActions -> ConditionActions(
                         markOperational = block.markOperational,
+                        logIncident = block.logIncident,
                         busy = state.busy,
                         onMarkOperational = { markingOperational = it },
                         onChangeCondition = { changingCondition = true },
+                        onLogIncident = { onLogIncident(assetId) },
                     )
                     is SheetBlock.Components -> block.components.forEach { ComponentRow(it) }
                     is SheetBlock.Health -> HealthBlock(block)
@@ -240,15 +252,18 @@ private fun ConditionBlock(view: ConditionView?) {
 
 /**
  * Block 3: S7 and S6 for a DOWN or DEGRADED asset, S6 alone otherwise. Each only **opens** its
- * surface; nothing is written until that surface's own confirm.
+ * surface; nothing is written until that surface's own confirm. #82 (R82-8): P82-10 "Log incident"
+ * follows S6 while the current failure has no Incident, and only navigates.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ConditionActions(
     markOperational: OperationalCondition?,
+    logIncident: Boolean,
     busy: Boolean,
     onMarkOperational: (OperationalCondition) -> Unit,
     onChangeCondition: () -> Unit,
+    onLogIncident: () -> Unit,
 ) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         markOperational?.let { current ->
@@ -257,6 +272,9 @@ private fun ConditionActions(
             }
         }
         OutlinedButton(onClick = onChangeCondition, enabled = !busy, shape = ControlShape) { Text(CHANGE_CONDITION) }
+        if (logIncident) {
+            OutlinedButton(onClick = onLogIncident, enabled = !busy, shape = ControlShape) { Text(LOG_INCIDENT) }
+        }
     }
 }
 

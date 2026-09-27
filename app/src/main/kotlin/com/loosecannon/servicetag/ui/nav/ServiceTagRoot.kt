@@ -486,6 +486,11 @@ fun ServiceTagRoot(
                         onDismiss = { backStack.removeLastOrNull() },
                         // #82: the same combined Incident entry, over the sheet, as from asset detail.
                         onLogIncidentDetails = { held -> backStack.add(combinedIncidentEntry(key.assetId, held)) },
+                        // #82 (R82-8): "Log incident" only navigates — the new INCIDENT entry asset detail's
+                        // Condition section opens, over the sheet, which reads its flag again on the way back.
+                        onLogIncident = { assetId ->
+                            backStack.add(Route.EventEntry(assetId, null, null, kind = EventKind.INCIDENT.name))
+                        },
                     )
                 }
             },
