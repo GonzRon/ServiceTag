@@ -94,6 +94,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -133,12 +134,12 @@ class AssetViewModelsTest {
         updatedAt = 1L,
     )
 
-    /** The detail model takes twenty-three collaborators; every test wants the same ones off the graph. */
+    /** The detail model takes twenty-four collaborators; every test wants the same ones off the graph. */
     private fun detailModel(id: AssetId) = AssetDetailViewModel(
         graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
         graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
-        graph.conditions, graph.seasonActivations, graph.healthSubjects,
+        graph.conditions, graph.seasonActivations, graph.healthSubjects, graph.attachments,
         graph.assetHealthReadModel, graph.getAssetSeason, graph.recordSeasonActivation,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
         graph.applyTemplate, graph.uow, graph.clock, graph.todayPort, id,
@@ -2130,6 +2131,39 @@ class AssetViewModelsTest {
     }
 
     /**
+     * #67, R67-5: DETAILS names the newest purchase invoice or receipt — by `capturedOn`, the
+     * undated last — and follows the asset's files as they land. A manual never stands in for it,
+     * however recent, and an asset with no receipt has no fact at all.
+     */
+    @Test fun theDetailsFactsNameThePurchaseDocument() = runTest {
+        graph.assets.upsert(assetRow("tub", name = "Hot tub"))
+        val vm = detailModel(AssetId("tub"))
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it != null }
+        suspend fun attach(name: String, role: DocumentRole, capturedOn: String?): String? {
+            graph.addAttachment.run(
+                AttachmentOwner.OfAsset(AssetId("tub")),
+                AddAttachmentCommand(
+                    displayName = name,
+                    mimeType = "application/pdf",
+                    capturedOn = capturedOn,
+                    role = role,
+                ),
+                ByteSource { name.byteInputStream() },
+            )
+            scheduler.advanceUntilIdle()
+            return vm.state.value!!.purchaseDocument
+        }
+        assertNull(vm.state.value!!.purchaseDocument)
+
+        assertNull(attach("Owner's manual.pdf", DocumentRole.USER_MANUAL, "2026-09-01"))
+        assertEquals("Receipt, undated.pdf", attach("Receipt, undated.pdf", DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, null))
+        assertEquals("Receipt 2025.pdf", attach("Receipt 2025.pdf", DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, "2025-05-01"))
+        assertEquals("Receipt 2026.pdf", attach("Receipt 2026.pdf", DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, "2026-02-01"))
+        assertEquals("Receipt 2026.pdf", attach("Receipt 2024.pdf", DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, "2024-01-01"))
+    }
+
+    /**
      * Review M-1: one edit of the asset row rebuilds the detail state **once** — the condition
      * watchers are not torn down and re-subscribed when the asset tree has not changed.
      */
@@ -2141,7 +2175,7 @@ class AssetViewModelsTest {
             graph.assets, graph.tags,
             graph.definitions, graph.profiles, graph.events,
             graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
-            graph.conditions, graph.seasonActivations, graph.healthSubjects,
+            graph.conditions, graph.seasonActivations, graph.healthSubjects, graph.attachments,
             graph.assetHealthReadModel, GetAssetSeason(graph.assets, reads, graph.uow, graph.todayPort),
             graph.recordSeasonActivation,
             graph.archiveAsset, graph.retireAsset, graph.deleteAsset,

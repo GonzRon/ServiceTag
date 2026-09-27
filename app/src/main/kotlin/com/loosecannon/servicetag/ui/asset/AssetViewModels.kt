@@ -623,6 +623,11 @@ data class AssetDetailState(
     val schedules: List<DueItem> = emptyList(),
     /** 1.2 — the groups this asset holds an **open** membership window in. */
     val groups: List<AssetGroupRow> = emptyList(),
+    /**
+     * #67 (R67-5): the newest purchase invoice or receipt's display name, for the Details fact
+     * "Purchase document" — text, not a link; null when the asset has none.
+     */
+    val purchaseDocument: String? = null,
 ) {
     /** The current condition (S1–S3, or S4 when null), from the same read as [health]. */
     val condition: ConditionView? get() = health.condition
@@ -679,6 +684,8 @@ class AssetDetailViewModel(
     conditions: ConditionRepository,
     activations: SeasonActivationRepository,
     subjects: HealthSubjectRepository,
+    /** #67 (R67-5): this asset's files, observed for the Details fact only — the one accepted second read. */
+    attachments: AttachmentRepository,
     private val healthReadModel: AssetHealthReadModel,
     private val getSeason: GetAssetSeason,
     private val recordActivation: RecordSeasonActivation,
@@ -698,7 +705,7 @@ class AssetDetailViewModel(
         graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
         graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
-        graph.conditions, graph.seasonActivations, graph.healthSubjects,
+        graph.conditions, graph.seasonActivations, graph.healthSubjects, graph.attachments,
         graph.assetHealthReadModel, graph.getAssetSeason, graph.recordSeasonActivation,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
         graph.applyTemplate, graph.uow, graph.clock, graph.today, AssetId(id),

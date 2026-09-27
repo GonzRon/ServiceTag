@@ -179,6 +179,7 @@ fun AttachmentsSection(
     state.rows.firstOrNull { it.id == editing }?.let { row ->
         AttachmentEditSheet(
             row = row,
+            rolesOffered = model.rolesOffered,
             onSave = { cmd -> model.save(row.id, cmd) },
             onDelete = { model.delete(row.id) },
             onDismiss = { editing = null },

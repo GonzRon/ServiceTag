@@ -62,6 +62,9 @@ internal fun DocumentRole?.label(): String = when (this) {
     null -> "No role"
 }
 
+/** #67 (P67-5, ratified verbatim): the header over the role chips, in the edit sheet and the share intake. */
+internal const val ROLE_HEADER = "Role"
+
 /** One picked or captured file, as the section hands it to the use case. */
 data class PickedFile(
     val displayName: String,
@@ -86,14 +89,22 @@ data class AttachmentRowState(
     val thumbnail: File? = null,
     /** #67: the row's document role, which the sheet hands back unchanged unless the person edits it. */
     val role: DocumentRole? = null,
+    /** #67: when the row was written; the tie-break inside a role after `capturedOn` (R67-3). */
+    val createdAt: Long = 0L,
 )
+
+/** #67, C8: one role's documents, newest first, as the Key documents block draws them. */
+data class KeyDocumentGroup(val role: DocumentRole, val rows: List<AttachmentRowState>)
 
 data class AttachmentsSectionState(
     val store: StoreState = StoreState.NotConfigured,
     val rows: List<AttachmentRowState> = emptyList(),
     /** "Adding 3 of 8…" while a multi-select runs; null otherwise (spec §8.1). */
     val progress: String? = null,
-)
+) {
+    /** #67, C8: the role-tagged rows grouped by role; empty when no row carries a role. */
+    val keyDocuments: List<KeyDocumentGroup> get() = emptyList()
+}
 
 /**
  * The one ViewModel behind DOCUMENTS, keyed by its [owner], so asset detail and event detail draw
@@ -126,6 +137,9 @@ class AttachmentsSectionViewModel(
         graph.updateAttachment, graph.deleteAttachment, graph.thumbnails,
         viewUris = graph.attachmentStorage::viewUri,
     )
+
+    /** #67, C7: whether the edit sheet offers the Role chips — an asset's files only (R67-11). */
+    val rolesOffered: Boolean = false
 
     /** Already ordered by display name, collated case-insensitively, by the query itself. */
     private val rows: Flow<List<Attachment>> = attachments.observeForOwner(owner)

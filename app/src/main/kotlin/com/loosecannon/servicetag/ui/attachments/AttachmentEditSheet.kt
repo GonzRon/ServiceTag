@@ -39,6 +39,8 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 @Composable
 fun AttachmentEditSheet(
     row: AttachmentRowState,
+    /** #67, C7: the Role chips are drawn only when true — an asset's file, never an event's. */
+    rolesOffered: Boolean,
     onSave: (UpdateAttachmentCommand) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,

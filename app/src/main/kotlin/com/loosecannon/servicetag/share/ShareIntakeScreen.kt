@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.ui.attachments.label
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
@@ -42,6 +43,7 @@ internal fun ShareIntakeScreen(
     onName: (String) -> Unit,
     onDescribe: (String) -> Unit,
     onKind: (AttachmentKind) -> Unit,
+    onRole: (DocumentRole?) -> Unit,
     onSave: () -> Unit,
     onConfirm: () -> Unit,
     onDismissConfirmation: () -> Unit,
