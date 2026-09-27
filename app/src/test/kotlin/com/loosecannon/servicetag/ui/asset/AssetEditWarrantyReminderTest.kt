@@ -273,16 +273,18 @@ class AssetEditWarrantyReminderTest {
         edit.model.saveAndSettle()
 
         assertEquals("the #78 question first", EditPrompt.ReconcileSchedules(1), edit.model.prompt.value)
-        assertFalse(edit.model.state.value.askingForNotifications)
+        assertFalse("P79-12 waits for the #78 answer", edit.model.state.value.askingForNotifications)
         edit.model.reviewSchedules()
         assertTrue("then P79-12", edit.model.state.value.askingForNotifications)
-        assertTrue(edit.review.isEmpty() && edit.saved.isEmpty())
+        assertTrue("the editor waits for P79-12's answer", edit.review.isEmpty() && edit.saved.isEmpty())
 
         edit.model.dismissNotifications()
-        assertFalse(edit.model.state.value.askingForNotifications)
+        // Anything "Not now" might have started runs to the end before the request list is read.
+        testScheduler.advanceUntilIdle()
+        assertFalse("P79-12 is down", edit.model.state.value.askingForNotifications)
         assertTrue("\"Not now\" requests nothing", denied.requests.isEmpty())
         assertEquals("the season answer's way out", listOf(AssetId("heater")), edit.review)
-        assertTrue(edit.saved.isEmpty())
+        assertTrue("and only that one", edit.saved.isEmpty())
         assertEquals(30, storedLead())
     }
 
