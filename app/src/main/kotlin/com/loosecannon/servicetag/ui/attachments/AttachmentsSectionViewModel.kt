@@ -316,7 +316,7 @@ class AttachmentsSectionViewModel(
         } catch (e: Throwable) {
             // A broken provider or a folder that went away mid-copy. Name the file the person
             // picked — they chose eight, and "something failed" would not tell them which.
-            _messages.tryEmit("Could not add ${file.displayName}")
+            AttachmentFailure.CopyFailed(file.displayName).sentence()?.let { _messages.tryEmit(it) }
             return
         }
         if (outcome is AttachmentResult.Refused) say(outcome.problem)
@@ -377,17 +377,35 @@ class AttachmentsSectionViewModel(
 
     /** One line per refusal. `Unchanged` is silent: the sheet simply closes (spec §8.1). */
     private fun say(problem: AttachmentProblem) {
-        val line = when (problem) {
-            AttachmentProblem.BlankName -> "Give the file a name"
-            AttachmentProblem.NoStore -> "Choose an attachment folder in Settings first"
-            AttachmentProblem.StoreUnavailable -> "The attachment folder is not available"
-            is AttachmentProblem.TooLarge -> "That file is larger than 256 MB"
-            // `UpdateAttachment` reports a vanished *attachment* row as `OwnerMissing` too, so the
-            // wording is about the file: the person never named an owner.
-            AttachmentProblem.OwnerMissing -> "That file is no longer here"
-            AttachmentProblem.Unchanged -> return
-        }
-        _messages.tryEmit(line)
+        AttachmentFailure.Refused(problem).sentence()?.let { _messages.tryEmit(it) }
+    }
+}
+
+/**
+ * #67: how an add or an update did not land, as [sentence] words it. The section's snackbar and the
+ * asset editor's staged lines both say these through the one mapping, so no sentence is spelled twice.
+ */
+internal sealed interface AttachmentFailure {
+    /** A use case refused, with its reason. */
+    data class Refused(val problem: AttachmentProblem) : AttachmentFailure
+
+    /** The copy itself threw: a broken provider, a folder gone mid-copy, a grant that no longer holds. */
+    data class CopyFailed(val displayName: String) : AttachmentFailure
+}
+
+/** The one line a failure is said with; null is silence (`Unchanged`: the sheet simply closes, spec §8.1). */
+internal fun AttachmentFailure.sentence(): String? = when (this) {
+    // Name the file the person picked: of several, "something failed" would not tell them which.
+    is AttachmentFailure.CopyFailed -> "Could not add $displayName"
+    is AttachmentFailure.Refused -> when (problem) {
+        AttachmentProblem.BlankName -> "Give the file a name"
+        AttachmentProblem.NoStore -> "Choose an attachment folder in Settings first"
+        AttachmentProblem.StoreUnavailable -> "The attachment folder is not available"
+        is AttachmentProblem.TooLarge -> "That file is larger than 256 MB"
+        // `UpdateAttachment` reports a vanished *attachment* row as `OwnerMissing` too, so the
+        // wording is about the file: the person never named an owner.
+        AttachmentProblem.OwnerMissing -> "That file is no longer here"
+        AttachmentProblem.Unchanged -> null
     }
 }
 
