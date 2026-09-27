@@ -1033,9 +1033,11 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a `ServiceTag-data-*.zip` of format 1–9 (format 8, from ServiceTag
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–10 (format 8, from ServiceTag
     1.4.0, adds season activations, conditions and health subjects; format 9 adds the owner's own
-    asset categories). The phone decides, per row, whether
+    asset categories; format 10 adds each attachment's document role, which an older archive's
+    attachments are compared without, so a role given since that export stays IDENTICAL). The
+    phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
     only ever inserted: an id already on the phone is never overwritten and nothing is ever deleted.

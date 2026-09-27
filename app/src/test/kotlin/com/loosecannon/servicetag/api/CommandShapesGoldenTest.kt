@@ -77,17 +77,26 @@ class CommandShapesGoldenTest {
         assertEquals((keys + legacy).toSet(), row.map { rename[it] ?: it }.filter { it in command }.toSet())
     }
 
-    @Test fun theContractDocumentNamesFormat9AndFifteenTables() {
+    @Test fun theContractDocumentNamesFormat10AndFifteenTables() {
         val doc = repoFile("docs/api/v1.md").readText()
         val lines = doc.lines()
-        assertTrue("the import range reads 1–9", lines.count { "1–9" in it } >= 2)
+        // Anchored to the two spellings: a bare "1–10" is also the health weight's range.
+        assertEquals(
+            "the import range reads 1–10 at both sites",
+            2,
+            lines.count { "format **1–10**" in it || "**format 1–10**" in it },
+        )
         assertEquals(
             "a shipped spelling of an old import range survives",
             emptyList<String>(),
             lines.filter { line ->
-                listOf("1–7", "1–8").any { "format **$it**" in line || "**format $it**" in line }
+                listOf("1–7", "1–8", "1–9").any { "format **$it**" in line || "**format $it**" in line }
             },
         )
+        // #67: the status line names the new numbers, and IDENTICAL states R67-12's rule for the role.
+        assertTrue("the status line says 10 since #67", lines.count { "10 since #67" in it } >= 1)
+        val identical = lines.single { it.startsWith("| `IDENTICAL` |") }
+        assertTrue("IDENTICAL must state the role rule: $identical", "document role" in identical && "format 10" in identical)
         assertEquals(emptyList<String>(), lines.filter { "the eleven tables" in it.lowercase() })
         assertTrue("the report's fifteen tables", "fifteen tables" in doc.lowercase())
         assertFalse("the report's old fourteen tables", "fourteen tables" in doc.lowercase())
