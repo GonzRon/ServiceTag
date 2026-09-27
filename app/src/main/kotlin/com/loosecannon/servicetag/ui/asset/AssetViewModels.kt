@@ -19,6 +19,9 @@ import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AssetTree
+import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.GroupId
@@ -42,6 +45,9 @@ import com.loosecannon.servicetag.core.model.isWrittenFor
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.AttachmentRepository
+import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.ConditionRepository
@@ -53,12 +59,15 @@ import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.usecase.ActivationCommand
+import com.loosecannon.servicetag.core.usecase.AddAttachment
+import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.ApplyResult
 import com.loosecannon.servicetag.core.usecase.ApplyTemplate
 import com.loosecannon.servicetag.core.usecase.ArchiveAsset
@@ -69,6 +78,7 @@ import com.loosecannon.servicetag.core.usecase.AssetMembershipReferenced
 import com.loosecannon.servicetag.core.usecase.AssetProblem
 import com.loosecannon.servicetag.core.usecase.AssetSettingsCommand
 import com.loosecannon.servicetag.core.usecase.AssetValidation
+import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.BreakCommand
 import com.loosecannon.servicetag.core.usecase.BreakStrandsPolicy
 import com.loosecannon.servicetag.core.usecase.DeleteAsset
@@ -89,6 +99,9 @@ import com.loosecannon.servicetag.core.usecase.SeasonValidation
 import com.loosecannon.servicetag.core.usecase.SeasonView
 import com.loosecannon.servicetag.core.usecase.StrandedSchedule
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.attachments.AttachmentFailure
+import com.loosecannon.servicetag.ui.attachments.PickedFile
+import com.loosecannon.servicetag.ui.attachments.sentence
 import com.loosecannon.servicetag.ui.condition.componentLine
 import com.loosecannon.servicetag.ui.condition.displayDate
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
@@ -105,7 +118,11 @@ import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.health.needsAttention
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -1318,6 +1335,21 @@ internal fun isMonthDay(text: String): Boolean {
 }
 
 /**
+ * #67, C5: one picked file, its role, and the sentence a failed copy leaves behind. Nothing is
+ * copied and no row exists until Save's settings write has landed — this is only the promise of
+ * one, held in memory, forgotten by Remove or by process death alike (R67-2).
+ */
+data class StagedDocument(
+    val role: DocumentRole,
+    val file: PickedFile,
+    /** Null until a copy of this file fails; the line then shows this instead of P67-10. */
+    val problem: String? = null,
+)
+
+/** #67, R67-6: one of the asset's own role-tagged attachments, as the editor lists it read-only. */
+data class AttachedDocument(val role: DocumentRole, val displayName: String)
+
+/**
  * The grouped form of spec §9, as text. Every field is a string because that is what the person
  * typed; the command the use case validates is built once, on save, so a half-typed price or a
  * half-typed date is a thing the form still holds rather than a thing it has already refused.
@@ -1384,6 +1416,12 @@ data class AssetEditState(
     val templateKey: String? = null,
     /** True once the user picked a template by hand; category edits stop touching it then (§8). */
     val templateTouched: Boolean = false,
+    /** #67, C5: files picked but not yet copied — nothing is written until Save's settings write lands. */
+    val staged: List<StagedDocument> = emptyList(),
+    /** #67, R67-6: the asset's own role-tagged files, newest by `capturedOn` then `createdAt` first. */
+    val attached: List<AttachedDocument> = emptyList(),
+    /** #67, R67-13: whether the three document affordances have a folder to copy into. */
+    val offersDocuments: Boolean = true,
 ) {
     /** S35 is asked only when S31 is chosen on an asset that is not already MANUAL (inv. 92, UI half). */
     val asksManualPhase: Boolean
@@ -1490,12 +1528,23 @@ class AssetEditViewModel(
     private val saveAssetSettings: SaveAssetSettings,
     private val schedules: ScheduleRepository,
     categories: CategoryRepository,
+    private val attachments: AttachmentRepository,
+    private val storage: AttachmentStorage,
+    private val addAttachment: AddAttachment,
+    private val today: Today,
     private val id: AssetId?,
     presetParentId: String? = null,
+    /**
+     * Where the folder re-read and the staged copies run: `Dispatchers.IO` in the app, and a
+     * test's own scheduler in a JVM test, so none of that work outlives the test that started it
+     * (mirrors `AttachmentsSectionViewModel`'s own `io`).
+     */
+    private val io: CoroutineContext = Dispatchers.IO,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String?, parentId: String? = null) : this(
         graph.assets, graph.healthSubjects, graph.saveAssetSettings, graph.schedules, graph.categories,
+        graph.attachments, graph.attachmentStorage, graph.addAttachment, graph.today,
         id?.let(::AssetId), parentId,
     )
 
@@ -1505,9 +1554,21 @@ class AssetEditViewModel(
             parentId = presetParentId,
             // Once, on a new asset: a currency the person then clears stays cleared (spec §9).
             currency = if (id == null) localeCurrencyCode() else "",
+            // Read synchronously, exactly as `AttachmentsSectionViewModel`'s own seed is: a status
+            // block flashing over a folder that was there all along would be the wrong first frame.
+            offersDocuments = storage.state() is StoreState.Ready,
         ),
     )
     val state: StateFlow<AssetEditState> = _state.asStateFlow()
+
+    /** #67, C6: the route's id, or the id the write minted; null only before the first write. */
+    private var savedId: AssetId? = id
+
+    /** #67, C6: the user-editable fields as they were at the last successful write; null before it. */
+    private var writtenForm: WrittenForm? = null
+
+    /** #67, C6 step 3: the #78 question decided at the write, held while anything is staged. */
+    private var pendingPrompt: EditPrompt? = null
 
     /**
      * One shot per successful save. A buffer of one and no replay: the screen that started the
@@ -1543,9 +1604,14 @@ class AssetEditViewModel(
             val all = assets.all()
             val row = id?.let { existing -> all.firstOrNull { it.id == existing } }
             val subjects = id?.let { healthSubjects.forAsset(it) }.orEmpty()
+            // #67, R67-6: the asset's own role-tagged files, read once alongside the row itself —
+            // no second load, and the parentChoices wait every test suspends on already gates this.
+            val attached = id?.let { existing -> attachments.forOwner(AttachmentOwner.OfAsset(existing)) }
+                .orEmpty()
+                .let(::attachedDocumentsOf)
             _state.update { form ->
                 val filled = if (row == null) form else form.filledFrom(row, subjects)
-                filled.copy(parentChoices = choicesIn(all))
+                filled.copy(parentChoices = choicesIn(all), attached = attached)
             }
         }
         // The subject list follows the store, so one added or archived in the subject editor is
@@ -1648,18 +1714,42 @@ class AssetEditViewModel(
     /** null selects "None · set up later"; either way the choice was the user's from now on (§8). */
     fun onTemplate(key: String?) = _state.update { it.copy(templateKey = key, templateTouched = true) }
 
+    /** #67, C5: the picker or the camera hands over a file. Nothing is copied until Save's write lands. */
+    fun stage(role: DocumentRole, file: PickedFile) =
+        _state.update { it.copy(staged = it.staged + StagedDocument(role, file)) }
+
+    /** #67, C5: forgets one staged file — Remove, on a line that has not been copied yet. */
+    fun unstage(document: StagedDocument) =
+        _state.update { it.copy(staged = it.staged - document) }
+
+    /**
+     * #67, R67-13: re-reads the folder. The screen calls this on entering composition and on
+     * return from Settings — the two moments `AttachmentsSectionViewModel.refreshStore` answers
+     * the same way for DOCUMENTS.
+     */
+    fun refreshStore() {
+        viewModelScope.launch(io) {
+            val ready = storage.state() is StoreState.Ready
+            _state.update { it.copy(offersDocuments = ready) }
+        }
+    }
+
     /**
      * #78, P78-3 and the back gesture (C2): the season is already saved and the schedules stay as they
      * are, so the editor finishes exactly as a save that asked nothing. Writes nothing, and does nothing
-     * once the question has been answered.
+     * once the question has been answered. #67 (C6 step 3): never finishes over a file still staged —
+     * the answer still takes the question down, but the next Save is what raises it again once the
+     * staged list is empty.
      */
     fun keepSchedules() {
-        answered()?.let { _saved.tryEmit(it) }
+        val asset = answered() ?: return
+        if (_state.value.staged.isEmpty()) _saved.tryEmit(asset)
     }
 
     /** #78, P78-2 (C2): the editor finishes onto the asset's schedules. Writes nothing either. */
     fun reviewSchedules() {
-        answered()?.let { _review.tryEmit(it) }
+        val asset = answered() ?: return
+        if (_state.value.staged.isEmpty()) _review.tryEmit(asset)
     }
 
     /** Takes the question down; the asset it was about, or null when none was up. Only an edit ever asks. */
@@ -1690,62 +1780,160 @@ class AssetEditViewModel(
     }
 
     /**
-     * One [SaveAssetSettings] call per Save. Every refusal leaves the form as typed and writes
-     * nothing, because the use case wrote nothing: S55 or S64 names the schedules, S63 is the
+     * #67, C6: one [SaveAssetSettings] call, only when the form has moved since the last successful
+     * one ([writtenForm]) or nothing has been written yet — a retry whose form has not changed since
+     * the write never calls it again. Every refusal leaves the form as typed and the staged list
+     * intact, because the use case wrote nothing: S55 or S64 names the schedules, S63 is the
      * year-long break, the asset's own fields keep their shipped lines. A refusal the held Save
      * already makes unreachable — a missing phase, a half window, a primary that is not a live
      * subject — draws nothing, since no sentence for it is ratified (master dec. 46).
+     *
+     * On success the #78 question is decided from the *pre-write* stored mode and held in
+     * [pendingPrompt] rather than raised immediately — [copyStaged] raises it, and only once
+     * nothing is staged. `savedId` becomes the id this and every later retry addresses (B1): a new
+     * asset is minted once, and a retry after a failed copy never mints a second one.
      */
     private suspend fun commit(form: AssetEditState, priceMinor: Long?) {
-        val cmd = form.settingsCommand(priceMinor)
-        val result = runCatching {
-            saveAssetSettings.run(id, cmd, form.templateKey.takeIf { id == null })
-        }
-        // Each answer replaces the last one's lines: a refusal names what **this** save was refused for,
-        // never a line left over from an earlier one (B10 review M6).
-        _state.update { it.copy(seasonRefusal = null, breakRefusal = null) }
-        when (val failure = result.exceptionOrNull()) {
-            null -> {
-                // The question goes up before the form stops saving, so whoever waits on `saving`
-                // finds either the question or, as before, the finished editor — never neither. The
-                // question is advisory and the save is already written: a schedule read that fails
-                // finishes the editor as a save that asked nothing.
-                val written = result.getOrNull()
-                // A failed read finishes the editor as a save that asked nothing; a cancellation is not a
-                // failed read and goes back out the way it came (the backup model's own rule).
-                val ask = written?.let {
-                    runCatching { reconcilePromptFor(form) }
-                        .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+        val snapshot = form.writtenSnapshot()
+        if (writtenForm == null || writtenForm != snapshot) {
+            val cmd = form.settingsCommand(priceMinor)
+            val result = runCatching {
+                saveAssetSettings.run(savedId, cmd, form.templateKey.takeIf { savedId == null })
+            }
+            // Each answer replaces the last one's lines: a refusal names what **this** save was refused for,
+            // never a line left over from an earlier one (B10 review M6).
+            _state.update { it.copy(seasonRefusal = null, breakRefusal = null) }
+            when (val failure = result.exceptionOrNull()) {
+                null -> {
+                    val written = result.getOrThrow()
+                    // A failed read finishes the editor as a save that asked nothing; a cancellation is not a
+                    // failed read and goes back out the way it came (the backup model's own rule).
+                    val ask = runCatching { reconcilePromptFor(form) }
+                        .onFailure { if (it is CancellationException) throw it }
                         .getOrNull()
+                    if (ask != null) pendingPrompt = ask
+                    savedId = written.id
+                    writtenForm = snapshot
+                    _state.update { it.copy(storedSeasonMode = written.seasonMode, editing = true) }
                 }
-                ask?.let { _prompt.value = it }
-                _state.update { it.copy(saving = false, problems = emptyMap()) }
-                if (ask == null) written?.let { _saved.tryEmit(it.id) }
+                is SeasonModeStrandsPolicy -> {
+                    _state.update {
+                        it.copy(
+                            saving = false,
+                            seasonRefusal = seasonStrands(failure.schedules.map(StrandedSchedule::title)),
+                        )
+                    }
+                    return
+                }
+                is BreakStrandsPolicy -> {
+                    _state.update {
+                        it.copy(
+                            saving = false,
+                            breakRefusal = breakStrands(failure.schedules.map(StrandedSchedule::title)),
+                        )
+                    }
+                    return
+                }
+                is SeasonValidation -> {
+                    _state.update { form ->
+                        form.copy(
+                            saving = false,
+                            breakRefusal = BREAK_CANNOT_COVER_THE_YEAR
+                                .takeIf { SeasonProblem.BlackoutCoversTheYear in failure.problems },
+                            problems = failure.problems.mapNotNull(::monthDayMarkFor).toMap(),
+                        )
+                    }
+                    return
+                }
+                is HealthValidation -> {
+                    _state.update { it.copy(saving = false) }
+                    return
+                }
+                is AssetValidation -> {
+                    _state.update {
+                        it.copy(saving = false, problems = failure.problems.mapNotNull(::markFor).toMap())
+                    }
+                    return
+                }
+                is AssetCycle -> {
+                    _state.update { it.copy(saving = false) }
+                    _messages.tryEmit("${nameOf(failure.parentId)} is already part of this asset.")
+                    return
+                }
+                else -> {
+                    _state.update { it.copy(saving = false) }
+                    _messages.tryEmit("Could not save this asset.")
+                    return
+                }
             }
-            is SeasonModeStrandsPolicy -> _state.update {
-                it.copy(saving = false, seasonRefusal = seasonStrands(failure.schedules.map(StrandedSchedule::title)))
+        }
+        copyStaged(form.staged)
+    }
+
+    /**
+     * #67, C6 step 2: the staged files, straight after the write and before any #78 question, in
+     * staged order on [io]. Each success drops its line; the first failure sentences its line
+     * through the extracted mapping ([AttachmentFailure]) and stops — the rest stay staged, and the
+     * asset is never undone. Step 3: only once the staged list is empty does the write's own #78
+     * question — held in [pendingPrompt] since [commit] — go up, or [saved] emit.
+     */
+    private suspend fun copyStaged(staged: List<StagedDocument>) {
+        val assetId = savedId
+        val (remaining, offersDocuments) = if (assetId == null || staged.isEmpty()) {
+            staged to _state.value.offersDocuments
+        } else {
+            withContext(io) {
+                val capturedOn = today.localDate().toString()
+                var stoppedAt = staged.size
+                var sentence: String? = null
+                for ((index, doc) in staged.withIndex()) {
+                    val outcome = try {
+                        addAttachment.run(
+                            AttachmentOwner.OfAsset(assetId),
+                            AddAttachmentCommand(
+                                displayName = doc.file.displayName,
+                                mimeType = doc.file.mimeType,
+                                sizeBytes = doc.file.sizeBytes,
+                                kind = null,
+                                capturedOn = capturedOn,
+                                role = doc.role,
+                            ),
+                            ByteSource { doc.file.open() },
+                        )
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        sentence = AttachmentFailure.CopyFailed(doc.file.displayName).sentence()
+                        stoppedAt = index
+                        break
+                    }
+                    if (outcome is AttachmentResult.Refused) {
+                        sentence = AttachmentFailure.Refused(outcome.problem).sentence()
+                        stoppedAt = index
+                        break
+                    }
+                }
+                val left = if (stoppedAt >= staged.size) {
+                    emptyList()
+                } else {
+                    listOf(staged[stoppedAt].copy(problem = sentence)) + staged.drop(stoppedAt + 1)
+                }
+                // A refusal is itself news about the folder — the same reasoning
+                // `AttachmentsSectionViewModel.scan` bumps its own store read for: don't wait for the
+                // screen to come back around to learn the tree just went away mid-copy.
+                left to (storage.state() is StoreState.Ready)
             }
-            is BreakStrandsPolicy -> _state.update {
-                it.copy(saving = false, breakRefusal = breakStrands(failure.schedules.map(StrandedSchedule::title)))
-            }
-            is SeasonValidation -> _state.update { form ->
-                form.copy(
-                    saving = false,
-                    breakRefusal = BREAK_CANNOT_COVER_THE_YEAR
-                        .takeIf { SeasonProblem.BlackoutCoversTheYear in failure.problems },
-                    problems = failure.problems.mapNotNull(::monthDayMarkFor).toMap(),
-                )
-            }
-            is HealthValidation -> _state.update { it.copy(saving = false) }
-            is AssetValidation ->
-                _state.update { it.copy(saving = false, problems = failure.problems.mapNotNull(::markFor).toMap()) }
-            is AssetCycle -> {
-                _state.update { it.copy(saving = false) }
-                _messages.tryEmit("${nameOf(failure.parentId)} is already part of this asset.")
-            }
-            else -> {
-                _state.update { it.copy(saving = false) }
-                _messages.tryEmit("Could not save this asset.")
+        }
+        _state.update {
+            it.copy(saving = false, staged = remaining, problems = emptyMap(), offersDocuments = offersDocuments)
+        }
+        if (remaining.isEmpty()) {
+            val prompt = pendingPrompt
+            if (prompt != null) {
+                pendingPrompt = null
+                _prompt.value = prompt
+            } else {
+                assetId?.let { _saved.tryEmit(it) }
             }
         }
     }
@@ -1790,6 +1978,20 @@ class AssetEditViewModel(
             healthPrimarySubjectId = primaryId?.let(::HealthSubjectId)
                 .takeIf { aggregation == HealthAggregation.TRACK_ONE },
         ),
+    )
+
+    /**
+     * #67, C6: exactly the fields [settingsCommand] reads, snapshotted so a retry whose form has
+     * not moved since the last successful write can skip [SaveAssetSettings] entirely. Deliberately
+     * excludes `storedSeasonMode`, `staged`, `saving`, `problems` and the store state — comparing
+     * more than [settingsCommand] reads would only cost an extra, harmless write attempt, since
+     * `SaveAssetSettings` itself already no-ops an unchanged form.
+     */
+    private fun AssetEditState.writtenSnapshot() = WrittenForm(
+        name, category, manufacturer, model, serialNumber, description, location, parentId,
+        seasonMode, seasonStart, seasonEnd, manualPhase, breakOn, breakStart, breakEnd,
+        aggregation, primaryId, purchaseOn, inServiceOn, price, currency, vendor,
+        warrantyExpiresOn, warrantyNotes, notes,
     )
 
     private fun AssetEditState.toCommand(priceMinor: Long?) = AssetCommand(
@@ -1886,6 +2088,49 @@ private sealed interface Priced {
     data class Ok(val minor: Long?) : Priced
     data class Bad(val problems: Map<String, String>) : Priced
 }
+
+/** #67, C6: [AssetEditViewModel.writtenSnapshot]'s shape — see there for what it deliberately omits. */
+private data class WrittenForm(
+    val name: String,
+    val category: String,
+    val manufacturer: String,
+    val model: String,
+    val serialNumber: String,
+    val description: String,
+    val location: String,
+    val parentId: String?,
+    val seasonMode: SeasonMode,
+    val seasonStart: String,
+    val seasonEnd: String,
+    val manualPhase: SeasonPhase?,
+    val breakOn: Boolean,
+    val breakStart: String,
+    val breakEnd: String,
+    val aggregation: HealthAggregation,
+    val primaryId: String?,
+    val purchaseOn: String,
+    val inServiceOn: String,
+    val price: String,
+    val currency: String,
+    val vendor: String,
+    val warrantyExpiresOn: String,
+    val warrantyNotes: String,
+    val notes: String,
+)
+
+/**
+ * #67, R67-6: the asset's role-tagged attachments only, newest by `capturedOn` (nulls last) then by
+ * `createdAt` first — one flat list; the editor's two blocks (Purchase, Key documents) each filter
+ * it by role rather than loading twice.
+ */
+private fun attachedDocumentsOf(rows: List<Attachment>): List<AttachedDocument> = rows
+    .filter { it.role != null }
+    .sortedWith(
+        compareByDescending<Attachment> { it.capturedOn != null }
+            .thenByDescending { it.capturedOn }
+            .thenByDescending { it.createdAt },
+    )
+    .map { AttachedDocument(role = it.role!!, displayName = it.displayName) }
 
 /**
  * The form's price text as minor units. A blank price is no price, which is always allowed; a

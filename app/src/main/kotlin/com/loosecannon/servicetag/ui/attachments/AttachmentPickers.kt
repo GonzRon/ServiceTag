@@ -32,6 +32,29 @@ class AttachmentPickers internal constructor(
     val open: (AttachmentRowState) -> Unit,
 )
 
+/** #67, C5: one document, any MIME — the asset editor's Purchase and Key documents affordances. */
+class DocumentPicker internal constructor(val pick: () -> Unit)
+
+/**
+ * #67, C5: a single [OpenDocument][ActivityResultContracts.OpenDocument] pick whose [PickedFile.open]
+ * closes over the **application** context's resolver, never the Activity's — the editor's staged
+ * file must survive exactly as long as the grant does, and no longer be tied to the screen that
+ * happened to be on top when it was picked.
+ */
+@Composable
+fun rememberDocumentPicker(
+    onPicked: (PickedFile) -> Unit,
+    onNoFilePicker: () -> Unit,
+): DocumentPicker {
+    val resolver = LocalContext.current.applicationContext.contentResolver
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) onPicked(resolver.pickedFile(uri))
+    }
+    return DocumentPicker(
+        pick = { runCatching { launcher.launch(arrayOf("*/*")) }.onFailure { onNoFilePicker() } },
+    )
+}
+
 @Composable
 fun rememberAttachmentPickers(
     graph: AppGraph,
