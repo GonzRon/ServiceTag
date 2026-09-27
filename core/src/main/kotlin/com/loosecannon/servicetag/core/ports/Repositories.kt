@@ -27,6 +27,9 @@ import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.model.ServiceCase
+import com.loosecannon.servicetag.core.model.ServiceCaseEntry
+import com.loosecannon.servicetag.core.model.ServiceCaseId
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import kotlinx.coroutines.flow.Flow
@@ -383,4 +386,34 @@ interface CategoryRepository {
     suspend fun delete(key: String)
     suspend fun deleteAll()
     fun observeAll(): Flow<List<AssetCategory>>
+}
+
+/**
+ * #79 (C13; R79-1). A service case's **header**: upsert and query. There is **no delete** — a case
+ * leaves only by its asset's CASCADE, and CANCELLED is how an owner abandons one (R79-9). `deleteAll`
+ * is the replace import's wipe, which is its only caller. Lists by asset order by
+ * `(openedOn descending, id)`; [all] orders by id.
+ */
+interface ServiceCaseRepository {
+    suspend fun upsert(case: ServiceCase)
+    suspend fun get(id: ServiceCaseId): ServiceCase?
+    suspend fun forAsset(assetId: AssetId): List<ServiceCase>
+    suspend fun all(): List<ServiceCase>
+    suspend fun deleteAll()
+    fun observeForAsset(assetId: AssetId): Flow<List<ServiceCase>>
+}
+
+/**
+ * #79 (C13; R79-8). A case's timeline: **insert and query only**, the [ConditionRepository] shape. An
+ * entry is an immutable fact, so there is no update and no delete of one row anywhere; [insert]
+ * **aborts** on an id already held, never overwriting it. A row leaves only by its case's CASCADE, and
+ * `deleteAll` is the replace import's wipe. Every list orders by `(occurredOn, occurredTime nulls
+ * first, createdAt, id)` — the timeline order.
+ */
+interface ServiceCaseEntryRepository {
+    suspend fun insert(entry: ServiceCaseEntry)
+    suspend fun forCase(caseId: ServiceCaseId): List<ServiceCaseEntry>
+    suspend fun all(): List<ServiceCaseEntry>
+    suspend fun deleteAll()
+    fun observeForCase(caseId: ServiceCaseId): Flow<List<ServiceCaseEntry>>
 }

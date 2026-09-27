@@ -9,6 +9,9 @@ import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.CaseCoverage
+import com.loosecannon.servicetag.core.model.CaseStatus
+import com.loosecannon.servicetag.core.model.CaseType
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.DefinitionId
@@ -34,6 +37,8 @@ import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServiceCase
+import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
@@ -54,6 +59,8 @@ import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
@@ -75,6 +82,8 @@ import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
+import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.SeasonFixtures
 import com.loosecannon.servicetag.core.testing.archiveOf
@@ -100,7 +109,10 @@ import org.junit.jupiter.api.Test
  *   derived state, and #82's impairment accept writes only its row.
  * - No activation, season, break, policy, subject or guarded schedule write touches `asset_event` or
  *   `occurrence_closure`; a policy write touches only the asset row; a subject write only its own table.
- * - #79: the warranty reminder's lead is written on the asset row alone (C16).
+ * - #79: the warranty reminder's lead is written on the asset row alone (C16). A service case's three
+ *   writers write the case tables and nothing else: opening and editing a case write its header, a
+ *   note-only entry writes the entry alone, and a status entry the entry and its header (C16) — never
+ *   an event, a condition, a schedule or its derived state, so closing a case writes no condition.
  * - The journal's own writers — an event and a completion — write no condition (inv. 81).
  * - #74: `asset_category` is written by the three Asset commands only when they save a category
  *   nobody has saved before, by a rename and a delete, and by the two imports of backup format 9 —
@@ -130,9 +142,12 @@ class CrossConceptWriteTest {
     private val linkRows = InMemoryLinkRepository()
     private val attachmentRows = InMemoryAttachmentRepository()
     private val referenceRows = InMemoryReferenceRepository()
+    private val caseEntryRows = InMemoryServiceCaseEntryRepository()
+    private val caseRows = InMemoryServiceCaseRepository(caseEntryRows)
     private val uow = FakeUnitOfWork(
         assetRows, eventRows, activationRows, conditionRows, subjectRows, closureRows, stateRows, scheduleRows,
         groupRows, definitionRows, profileRows, categoryRows, tagRows, linkRows, attachmentRows, referenceRows,
+        caseRows, caseEntryRows,
     )
 
     private val assets = object : AssetRepository by assetRows {
@@ -210,6 +225,15 @@ class CrossConceptWriteTest {
         override suspend fun delete(id: ProfileId) = profileRows.delete(id).also { writes += "event_profile" }
         override suspend fun deleteAll() = profileRows.deleteAll().also { writes += "event_profile" }
     }
+    private val serviceCases = object : ServiceCaseRepository by caseRows {
+        override suspend fun upsert(case: ServiceCase) = caseRows.upsert(case).also { writes += "service_case" }
+        override suspend fun deleteAll() = caseRows.deleteAll().also { writes += "service_case" }
+    }
+    private val caseEntries = object : ServiceCaseEntryRepository by caseEntryRows {
+        override suspend fun insert(entry: ServiceCaseEntry) =
+            caseEntryRows.insert(entry).also { writes += "service_case_entry" }
+        override suspend fun deleteAll() = caseEntryRows.deleteAll().also { writes += "service_case_entry" }
+    }
 
     private var seq = 0
     private val ids = IdGenerator { "id-%03d".format(++seq) }
@@ -250,6 +274,9 @@ class CrossConceptWriteTest {
     private val deleteCategory = DeleteCategory(categories, assets, uow)
     private val logEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock, recompute)
     private val completeSchedule = CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recompute)
+    private val openServiceCase = OpenServiceCase(assets, events, serviceCases, uow, ids, clock, today)
+    private val updateServiceCase = UpdateServiceCase(events, serviceCases, uow, clock, today)
+    private val addServiceCaseEntry = AddServiceCaseEntry(serviceCases, caseEntries, uow, ids, clock, today)
     private val storage = FakeAttachmentStorage()
     private val buildMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
@@ -323,6 +350,8 @@ class CrossConceptWriteTest {
         var created: HealthSubject? = null
         var compressor: Asset? = null
         var planned: MergePlan? = null
+        var serviceCase: ServiceCase? = null
+        var closedStatus: CaseStatus? = null
         var keysBeforeTheImports: List<String> = emptyList()
         val s1 = scheduleRows.rows.getValue("s1")
         val cmdS1 = ScheduleCommand(
@@ -408,6 +437,33 @@ class CrossConceptWriteTest {
                 )
             },
             wrote("CompleteSchedule") { completeSchedule.run(ScheduleId("s1"), CompletionCommand("2026-09-24", tzId = "UTC")) },
+            wrote("OpenServiceCase") {
+                serviceCase = openServiceCase.run(
+                    AssetId("a1"),
+                    ServiceCaseCommand(
+                        title = "Output repair", type = CaseType.WARRANTY_SERVICE, openedOn = "2026-09-24",
+                        coverage = CaseCoverage.IN_WARRANTY, resolutionEventId = null, caseRef = "RMA-0001",
+                    ),
+                    EventId("e-incident"),
+                )
+            },
+            wrote("UpdateServiceCase") {
+                updateServiceCase.run(
+                    serviceCase!!.id,
+                    ServiceCaseCommand(
+                        title = "Output repair, generator a1", type = CaseType.WARRANTY_SERVICE, openedOn = "2026-09-24",
+                        coverage = CaseCoverage.IN_WARRANTY, resolutionEventId = EventId("e-0"), caseRef = "RMA-0001",
+                    ),
+                )
+            },
+            wrote("AddServiceCaseEntry, a note") {
+                addServiceCaseEntry.run(serviceCase!!.id, CaseEntryCommand("2026-09-24", null, "UTC", "Courier booked", null))
+            },
+            wrote("AddServiceCaseEntry, a status") {
+                closedStatus = addServiceCaseEntry
+                    .run(serviceCase!!.id, CaseEntryCommand("2026-09-24", null, "UTC", "Repaired", CaseStatus.CLOSED))
+                    .serviceCase.status
+            },
             wrote("CreateAsset, a new category") { compressor = createAsset.run(AssetCommand(name = "Compressor", category = "Appliance")) },
             wrote("CreateAsset, a built-in") { createAsset.run(AssetCommand(name = "Spare mower", category = "lawn  MOWER")) },
             wrote("SaveAssetSettings, a new category") {
@@ -459,6 +515,10 @@ class CrossConceptWriteTest {
             "SaveAssetSettings" to setOf("asset", "asset_season_activation", derived),
             "LogEvent" to setOf("asset_event", derived),
             "CompleteSchedule" to setOf("asset_event", derived),
+            "OpenServiceCase" to setOf("service_case"),
+            "UpdateServiceCase" to setOf("service_case"),
+            "AddServiceCaseEntry, a note" to setOf("service_case_entry"),
+            "AddServiceCaseEntry, a status" to setOf("service_case_entry", "service_case"),
             "CreateAsset, a new category" to setOf("asset", "asset_category"),
             "CreateAsset, a built-in" to setOf("asset"),
             "SaveAssetSettings, a new category" to setOf("asset", "asset_category"),
@@ -517,6 +577,18 @@ class CrossConceptWriteTest {
             assertEquals(1, counts.getValue(what)["asset_condition"], "$what writes exactly one condition")
         }
         assertEquals(1, counts.getValue("RecordConditionWithIncident")["asset_event"], "the combined write logs one Incident")
+
+        // #79 (C16): the case writers write one row per table they touch, and never an event, a
+        // condition, a schedule, a closure or derived state — closing a case included.
+        val caseWriters = listOf(
+            "OpenServiceCase", "UpdateServiceCase", "AddServiceCaseEntry, a note", "AddServiceCaseEntry, a status",
+        )
+        for (what in caseWriters) {
+            assertTrue(counts.getValue(what).values.all { it == 1 }, "$what wrote ${counts.getValue(what)}")
+            val forbidden = setOf("asset_event", "asset_condition", "maintenance_schedule", "occurrence_closure", derived)
+            assertTrue(cases.toMap().getValue(what).intersect(forbidden).isEmpty(), "$what wrote ${cases.toMap().getValue(what)}")
+        }
+        assertEquals(CaseStatus.CLOSED, closedStatus, "the closing entry took")
     }
 
     private companion object {
