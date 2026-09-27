@@ -2976,6 +2976,38 @@ class AssetViewModelsTest {
     }
 
     /**
+     * C6 (R-1): a picked file whose name and size are still being asked of the provider holds Save,
+     * so a tap in that moment cannot leave the file behind; once the answer lands and is staged, Save
+     * copies it.
+     */
+    @Test fun aPickStillBeingLookedUpHoldsSaveUntilItLands() = runTest {
+        val editor = intake()
+        editor.model.onName("Hot tub")
+        val answer = CompletableDeferred<Unit>()
+        editor.model.stagePicked(DocumentRole.USER_MANUAL) {
+            answer.await()
+            picked("manual.pdf")
+        }
+        advanceUntilIdle()
+        assertFalse("Save is held while the pick is looked up", editor.model.state.value.canSave)
+
+        editor.model.save()
+        advanceUntilIdle()
+        assertTrue("nothing written while the pick is looked up", graph.assets.all().isEmpty())
+        assertTrue(editor.saved.isEmpty())
+
+        answer.complete(Unit)
+        editor.model.state.first { it.canSave }
+        assertEquals(listOf("manual.pdf" to null), editor.model.stagedLines())
+
+        editor.model.saveAndWait()
+        val asset = graph.assets.all().single().id
+        assertEquals(listOf(asset), editor.saved)
+        assertEquals(listOf("manual.pdf"), graph.attachments.all().map { it.displayName })
+        assertTrue(editor.model.state.value.staged.isEmpty())
+    }
+
+    /**
      * C6 (M1): a new MANUAL asset whose copy failed is saved again after an edit. The stored mode was
      * refreshed from the written row, so MANUAL → MANUAL sends no phase and the save lands.
      */

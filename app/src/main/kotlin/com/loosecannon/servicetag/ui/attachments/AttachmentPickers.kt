@@ -40,18 +40,19 @@ class DocumentPicker internal constructor(val pick: () -> Unit)
  * closes over the **application** context's resolver, never the Activity's — the editor's staged
  * file must survive exactly as long as the grant does, and no longer be tied to the screen that
  * happened to be on top when it was picked.
+ *
+ * [onPicked] is handed the lookup, not its answer: the name and size are a provider query, and a
+ * cloud provider may take its time over it, so the caller runs it off the main thread — and knows,
+ * from the moment the picker returns, that a file is on its way (R-1).
  */
 @Composable
 fun rememberDocumentPicker(
-    onPicked: (PickedFile) -> Unit,
+    onPicked: (lookup: suspend () -> PickedFile) -> Unit,
     onNoFilePicker: () -> Unit,
 ): DocumentPicker {
     val resolver = LocalContext.current.applicationContext.contentResolver
-    val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        // The name and size are a provider query, and a cloud provider may take its time over it:
-        // the callback lands on the main thread, so the asking does not stay there (as `addFiles`).
-        if (uri != null) scope.launch { onPicked(withContext(Dispatchers.IO) { resolver.pickedFile(uri) }) }
+        if (uri != null) onPicked { resolver.pickedFile(uri) }
     }
     return DocumentPicker(
         pick = { runCatching { launcher.launch(arrayOf("*/*")) }.onFailure { onNoFilePicker() } },

@@ -645,7 +645,7 @@ private fun DocumentRoleBlock(
 ) {
     if (state.offersDocuments) {
         val picker = rememberDocumentPicker(
-            onPicked = { file -> model.stage(role, file) },
+            onPicked = { lookup -> model.stagePicked(role, lookup) },
             onNoFilePicker = onNoFilePicker,
         )
         TextButton(onClick = { if (!model.state.value.saving) picker.pick() }) {

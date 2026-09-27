@@ -1422,6 +1422,8 @@ data class AssetEditState(
     val attached: List<AttachedDocument> = emptyList(),
     /** #67, R67-13: whether the three document affordances have a folder to copy into. */
     val offersDocuments: Boolean = true,
+    /** #67 (R-1): picks whose name and size are still being asked of the provider; Save waits for none. */
+    val picksInFlight: Int = 0,
 ) {
     /** S35 is asked only when S31 is chosen on an asset that is not already MANUAL (inv. 92, UI half). */
     val asksManualPhase: Boolean
@@ -1450,9 +1452,11 @@ data class AssetEditState(
     /**
      * Save is held — never refused with words — while an answer the owner must give is missing: two
      * real `MM-DD`s under S30 and under S59, S35 on a switch into MANUAL, and S134 under "One subject".
+     * #67 (R-1): it is held too while a picked file is still being looked up, and is back the moment
+     * the file is staged.
      */
     val canSave: Boolean
-        get() = !saving && seasonReady && breakWindowReady && primaryReady
+        get() = !saving && picksInFlight == 0 && seasonReady && breakWindowReady && primaryReady
 
     private val seasonWindowReady: Boolean get() = isMonthDay(seasonStart) && isMonthDay(seasonEnd)
 
@@ -1715,12 +1719,39 @@ class AssetEditViewModel(
     fun onTemplate(key: String?) = _state.update { it.copy(templateKey = key, templateTouched = true) }
 
     /**
-     * #67, C5: the picker hands over a file. Nothing is copied until Save's write lands. Held while
+     * #67, C5: a file in hand joins the staged list ([stagePicked] is the picker's way in, which
+     * looks the file up first). Nothing is copied until Save's write lands. Held while
      * saving (C6, R67-8): the staged list is the one the copies are working through, so a pick that
      * lands then is ignored, as a second Save tap is — the screen does not open the picker then either.
      */
     fun stage(role: DocumentRole, file: PickedFile) = _state.update {
         if (it.saving) it else it.copy(staged = it.staged + StagedDocument(role, file))
+    }
+
+    /**
+     * #67 (R-1): the picker's way in. The picker has a file but its name and size are still to be
+     * asked of the provider, which [lookup] does on [io]; Save is held ([canSave]) from this call
+     * until the answer is staged, so a Save tapped in that moment cannot leave the file behind. The
+     * count drops however the lookup ends; a lookup that throws still throws, as it did before.
+     */
+    fun stagePicked(role: DocumentRole, lookup: suspend () -> PickedFile) {
+        _state.update { it.copy(picksInFlight = it.picksInFlight + 1) }
+        viewModelScope.launch(io) {
+            var file: PickedFile? = null
+            try {
+                file = lookup()
+            } finally {
+                val landed = file
+                _state.update { form ->
+                    val settled = form.copy(picksInFlight = form.picksInFlight - 1)
+                    if (landed == null || settled.saving) {
+                        settled
+                    } else {
+                        settled.copy(staged = settled.staged + StagedDocument(role, landed))
+                    }
+                }
+            }
+        }
     }
 
     /** #67, C5: forgets one staged file — Remove, on a line not copied yet. Held while saving, as [stage] is. */
