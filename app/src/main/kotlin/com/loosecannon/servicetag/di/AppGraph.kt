@@ -177,6 +177,8 @@ import com.loosecannon.servicetag.ui.condition.OperationalOffers
 import com.loosecannon.servicetag.ui.condition.SeasonOffers
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.health.inService
+import com.loosecannon.servicetag.ui.journal.CaseLinks
+import com.loosecannon.servicetag.ui.journal.caseLinksOf
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
@@ -586,6 +588,8 @@ class AppGraph(private val context: Context) {
     val updateServiceCase: UpdateServiceCase = UpdateServiceCase(events, serviceCases, uow, clock, today)
     val addServiceCaseEntry: AddServiceCaseEntry =
         AddServiceCaseEntry(serviceCases, serviceCaseEntries, uow, ids, clock, today)
+    /** #79 (C23): read-only — whether a case names an event; the Incident's delete confirm asks it. */
+    val caseLinks: CaseLinks = caseLinksOf(events, serviceCases)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, today, recomputeSchedules, applyTemplate,
         promoteCategory,

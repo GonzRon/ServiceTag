@@ -123,6 +123,8 @@ import com.loosecannon.servicetag.reminders.ReminderSnooze
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.health.inService
+import com.loosecannon.servicetag.ui.journal.CaseLinks
+import com.loosecannon.servicetag.ui.journal.caseLinksOf
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
 import com.loosecannon.servicetag.ui.maintenance.IncidentNeed
@@ -299,6 +301,7 @@ class FakeGraph(
     val updateServiceCase: UpdateServiceCase = UpdateServiceCase(events, serviceCases, uow, clock, todayPort)
     val addServiceCaseEntry: AddServiceCaseEntry =
         AddServiceCaseEntry(serviceCases, serviceCaseEntries, uow, ids, clock, todayPort)
+    val caseLinks: CaseLinks = caseLinksOf(events, serviceCases)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
         applyTemplate, promoteCategory,
