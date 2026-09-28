@@ -193,7 +193,7 @@ def test_open_service_case_sends_exactly_the_golden_keys(paired) -> None:
         "coverage": "PARTLY_COVERED", "outboundTracking": "T-OUT-1", "outboundCarrier": "Parcel Co",
         "returnTracking": "T-RET-2", "returnCarrier": "Freight Ltd", "costMinor": 0, "currency": "EUR",
         "notes": "Boxed", "incidentEventId": "e-incident", "resolutionEventId": "e-repair",
-    }, "zero is no charge, and is sent"
+    }, "every value under its own key, and a zero cost (no charge) is sent"
 
     server_module.open_service_case(
         asset_id="a1", title="Pump", type="REPAIR", opened_on="2026-09-12", coverage="UNKNOWN",
