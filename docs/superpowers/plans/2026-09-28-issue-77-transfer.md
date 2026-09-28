@@ -417,6 +417,7 @@ export re-plans IDENTICAL and tallies `transfers` 0. No Transfer Pack is made in
 | P77-62…65 C | detail block, withdrawal (R77-5) | `Withdraw transfer record` · `Withdraw the record for Transfer Pack <short id>?` (rm-8) · `Use this only if the asset did not leave, or another phone's record should stand. It stays archived.` · `Withdraw` | `TextButton` · dialog title · body · confirm |
 | P77-66 C | preview, a returning asset (R77-25) | `Coming back: <asset>` | `QuietLine` |
 | P77-67 | import refusal, stale or foreign pack | `<asset> was transferred out from this phone, and this Transfer Pack does not bring it back.` | error line |
+| P77-68 | Replace-restore refusal (R77-13), one / several | `Restore failed: this backup still contains <asset>, which was transferred out from this phone. Nothing was replaced.` / `Restore failed: this backup still contains <n> assets that were transferred out from this phone. Nothing was replaced.` | the shipped restore error line |
 | — | reused (8) | `Choose an attachment folder in Settings first` (`NoAttachmentFolder`); `Choose an attachment folder in ServiceTag Settings, then share this again.` (`IntakeStrings.NO_FOLDER`); `This ServiceTag tag is not in this phone's records.`; `Cancel`; `Close` (`IntakeStrings.CLOSE`); `Not now` (`NOT_NOW`); `Part of <parent>` (inline, `AssetDetailScreen.kt:799`); the missing-file wording (`BackupSetIncomplete.wording`) | through their homes |
 
 **66 new ids** (P77-1…67 less the withdrawn P77-29), **6 conditional** (P77-51, 62–66), **1 accessibility-only**
@@ -710,3 +711,7 @@ where they differ.**
   graph"); row 24 (B3) gains `aPackWhoseLineageNamesAWithdrawnOutStillReturns` (RED "treat a withdrawn OUT as closed for
   good"); row 25 (B4) gains `deleteAssetOnAHeldAssetKeepsTheRecords` (RED "cascade the records"). **Caps move with
   them:** B2a 18 → 20 counted RED, B3 16 → 17, B4 16 → 17; time boxes unchanged.
+- **P77-68 RATIFIED verbatim (owner, 2026-09-28)** — R77-13's refusal sentence, one / several, in the §6 table. B2a adds
+  the typed refusal only; B3 maps it in `BackupViewModel`'s restore error path (the one-asset form names the asset as
+  P77-67 does; two or more take the `<n>` form), beside `TransferredGraphEntangled` → P77-58. All #77 strings are now
+  ratified.
