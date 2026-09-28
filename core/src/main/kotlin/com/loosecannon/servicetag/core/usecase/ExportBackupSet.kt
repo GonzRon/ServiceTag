@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentMode
+import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
@@ -66,6 +67,8 @@ class ExportBackupSet(
     /** #79 — the service case aggregate (format 12): the headers, then their timelines. */
     private val serviceCases: ServiceCaseRepository,
     private val caseEntries: ServiceCaseEntryRepository,
+    /** #72 — the loans (format 13): open and returned alike, the contact link beside the name. */
+    private val loans: AssetLoanRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -102,6 +105,8 @@ class ExportBackupSet(
                 // Format 12: every case header, then every timeline entry as its own row.
                 serviceCases = serviceCases.all().map { it.toDto() },
                 serviceCaseEntries = caseEntries.all().map { it.toDto() },
+                // Format 13: every loan, the returned history included.
+                assetLoans = loans.all().map { it.toDto() },
             ) to rows
         }
         val plan = ArtifactsPlan(

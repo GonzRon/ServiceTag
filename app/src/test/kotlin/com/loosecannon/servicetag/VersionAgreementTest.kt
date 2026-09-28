@@ -67,8 +67,8 @@ class VersionAgreementTest {
      * device-local deadline table) lands first and format 11 follows with the archive that carries the
      * lead. #79b does it once more: schema 12 (the service case tables) lands first and format 12
      * follows with the archive that carries them. #72 does it again: schema 13 (the loan table) lands
-     * first and format 13 follows with the archive that carries the loans — so at this tip, with the
-     * first step landed, the schema is 13 and the format is still 12.
+     * first and format 13 follows with the archive that carries the loans — so at this tip, with both
+     * steps landed, the schema is 13 and the format is 13.
      *
      * The expected numbers are this test's own, deliberately: they are what the schema and the
      * format are at this tip, and they move only when a release changes them. They are **not**
@@ -76,9 +76,9 @@ class VersionAgreementTest {
      * `versionName`/`versionCode` cases own — otherwise bumping the schema in one file only would
      * still pass here, which is the whole failure this class exists to catch.
      */
-    @Test fun theSchemaIsThirteenAndTheFormatIsTwelve() {
+    @Test fun theSchemaIsThirteenAndTheFormatIsThirteen() {
         assertEquals(13, AppGraph.SCHEMA_VERSION)
-        assertEquals(12, BackupCodec.FORMAT_VERSION)
+        assertEquals(13, BackupCodec.FORMAT_VERSION)
     }
 
     /**
@@ -144,7 +144,7 @@ class VersionAgreementTest {
         )
         assertEquals("1.4.1", status.appVersion)
         assertEquals(13, status.schemaVersion)
-        assertEquals(12, status.backupFormatVersion)
+        assertEquals(13, status.backupFormatVersion)
     }
 
     /**

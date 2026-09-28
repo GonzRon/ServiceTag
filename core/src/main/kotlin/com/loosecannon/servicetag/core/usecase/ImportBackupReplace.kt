@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.journal.CategoryBackfill
 import com.loosecannon.servicetag.core.journal.CategoryCatalog
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.DefinitionKind
+import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
@@ -85,6 +86,8 @@ class ImportBackupReplace(
     /** #79 — the service case aggregate (format 12): the headers, then their timelines. */
     private val serviceCases: ServiceCaseRepository,
     private val caseEntries: ServiceCaseEntryRepository,
+    /** #72 — the loans (format 13): wiped by name, restored after their assets. */
+    private val loans: AssetLoanRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -136,6 +139,9 @@ class ImportBackupReplace(
             // timeline before the headers it points at, so no reader of this list has to know that.
             caseEntries.deleteAll()
             serviceCases.deleteAll()
+            // #72's loans likewise: the CASCADE would take them with their assets, and they are wiped by
+            // name so that no reader of this list has to know it.
+            loans.deleteAll()
             // The three 1.4 tables need no line: activations and conditions point only at an
             // asset and subjects at an asset or a schedule, all ON DELETE CASCADE, and neither fact
             // table has a delete of its own because its rows are immutable.
@@ -180,6 +186,9 @@ class ImportBackupReplace(
             // softly — and each timeline after its case.
             data.serviceCases.forEach { serviceCases.upsert(it.toDomain()) }
             data.serviceCaseEntries.forEach { caseEntries.insert(it.toDomain()) }
+            // #72: the loans after their assets. The graph check held the file to one open loan per
+            // asset, so the schema's unique index has nothing to refuse here.
+            data.assetLoans.forEach { loans.upsert(it.toDomain()) }
             // Attachment rows go last: every owner, asset or event, is already in.
             data.attachments.forEach { attachments.upsert(it.toDomain()) }
 

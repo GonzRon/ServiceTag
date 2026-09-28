@@ -1130,7 +1130,7 @@ class MaintenanceRoutesTest {
     // --- the merge report's three new tables -----------------------------------------------------
 
     /**
-     * `import_merge` reads a **format-12** archive, and the report carries the `groups`, `schedules`
+     * `import_merge` reads a **format-13** archive, and the report carries the `groups`, `schedules`
      * and `closures` tallies beside the shipped ones, plus 1.3's `references`. `applicable` still
      * governs.
      *
@@ -1150,7 +1150,7 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(12, report.formatVersion)
+        assertEquals(13, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)
@@ -1416,7 +1416,7 @@ class MaintenanceRoutesTest {
      * carries them); #72 moves the schema to 13 (the loan table) and then the format to 13 (the archive
      * that carries the loans).
      */
-    @Test fun statusReports13And12AndTheNewCounts() {
+    @Test fun statusReports13And13AndTheNewCounts() {
         val tub = createAsset("Hot tub")
         assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
         assertEquals(
@@ -1434,7 +1434,7 @@ class MaintenanceRoutesTest {
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
         assertEquals(13, status.schemaVersion)
-        assertEquals(12, status.backupFormatVersion)
+        assertEquals(13, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
         assertEquals(1, status.counts["healthSubjects"])
@@ -1444,11 +1444,11 @@ class MaintenanceRoutesTest {
     }
 
     /**
-     * Import-merge reads a **format-12** archive (this build's export) and reports **seventeen** tables: the donor's
+     * Import-merge reads a **format-13** archive (this build's export) and reports **seventeen** tables: the donor's
      * activation, condition and health subject each tally one INSERT on the wire, its two categories
      * (#74) two, and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
-    @Test fun importMergeReadsFormat12AndReportsSeventeenTables() {
+    @Test fun importMergeReadsFormat13AndReportsSeventeenTables() {
         val archive = donorArchive()
         fun post(path: String) = router().handle(
             ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
@@ -1460,7 +1460,7 @@ class MaintenanceRoutesTest {
         val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
         assertEquals(17, tallies.size)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(12, report.formatVersion)
+        assertEquals(13, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         val one = MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0)
         assertEquals(one, report.seasonActivations)

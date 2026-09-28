@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
+import com.loosecannon.servicetag.core.testing.loanOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
 import kotlin.test.assertEquals
 import kotlinx.coroutines.runBlocking
@@ -178,6 +179,26 @@ class ImportBackupReplaceTest {
 
         assertEquals(cases, install.serviceCases.all())
         assertEquals(entries, install.caseEntries.all())
+        assertEquals(1, install.uow.commits)
+    }
+
+    /**
+     * #72 (C6): the archive's loans — an open one and the returned history — replace this install's, the
+     * old ones wiped by name, and land after their assets in the one transaction.
+     */
+    @Test
+    fun theArchivesLoansReplaceThisInstalls() = runBlocking<Unit> {
+        val install = BackupInstall()
+        install.assets.upsert(plainAssetOf("a0", "Old drill"))
+        install.loans.upsert(loanOf("l-old", assetId = "a0"))
+        val loans = listOf(
+            loanOf("l1", assetId = "a1"),
+            loanOf("l2", assetId = "a1", lentOn = "2026-08-01", returnedOn = "2026-08-02", contactLookupUri = null),
+        )
+
+        install.replace.run(archiveOf(data(listOf(asset("a1", "Appliance", 100L, 200L))).copy(assetLoans = loans.map { it.toDto() })))
+
+        assertEquals(loans, install.loans.all())
         assertEquals(1, install.uow.commits)
     }
 }

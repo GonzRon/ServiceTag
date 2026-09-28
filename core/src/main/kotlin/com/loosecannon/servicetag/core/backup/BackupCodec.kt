@@ -24,7 +24,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
 /**
- * Backup format v12: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
+ * Backup format v13: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
  * backup set pairs it with an artifacts archive, and `backupSetId` is what ties the two together.
  *
  * ```
@@ -35,7 +35,8 @@ import kotlinx.serialization.json.JsonObject
  *                    attachments: [...], maintenanceGroups: [...], maintenanceSchedules: [...],
  *                    occurrenceClosures: [...], assetReferences: [...],
  *                    seasonActivations: [...], assetConditions: [...], healthSubjects: [...],
- *                    assetCategories: [...], serviceCases: [...], serviceCaseEntries: [...] }
+ *                    assetCategories: [...], serviceCases: [...], serviceCaseEntries: [...],
+ *                    assetLoans: [...] }
  * ```
  *
  * IDs are written verbatim, lists are sorted by id (children by sortOrder within their parent, and
@@ -92,6 +93,16 @@ import kotlinx.serialization.json.JsonObject
  * (R79-4). The rest — what a command would refuse about the row itself, and `closedOn` set exactly on a
  * CLOSED or CANCELLED case — is the content check's.
  *
+ * **Format 13 (#72, C6) adds one list and no upgrade.** `assetLoans` — one row per loan, open and returned,
+ * sorted by id, the canonical contact link beside the name snapshot (R72-4) — defaults to empty, so a
+ * format ≤12 archive decodes through the same strict decode with no loans; `LAST_LEGACY_FORMAT` stays 7
+ * for the reason above. No shipped writer put a loan into a format ≤12 archive, so one that carries a row
+ * is a hand-built file and is refused; an empty list is accepted. A loan's asset must be in the file, and
+ * **an asset holds at most one open loan in it** — a cross-row rule, so the graph check's, beside the
+ * duplicate ids: the schema's unique index would otherwise abort a replace with the owner's data already
+ * wiped. What a loan command refuses about the row itself is the content check's. The Room layer's open
+ * marker and a loan's standing are never in the archive.
+ *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
@@ -99,7 +110,7 @@ import kotlinx.serialization.json.JsonObject
  * at read time (inv. 111).
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 12
+    const val FORMAT_VERSION = 13
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -120,6 +131,9 @@ object BackupCodec {
 
     /** The first format that can carry a service case or a case entry (#79). */
     private const val FIRST_CASE_FORMAT = 12
+
+    /** The first format that can carry a loan (#72). */
+    private const val FIRST_LOAN_FORMAT = 13
 
     /** Lowercase hex, 64 chars — the shape every attachment row promises for its bytes. */
     private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
@@ -187,6 +201,8 @@ object BackupCodec {
             // Format 12: a case's entries are their own rows, never nested in the case (R79-8).
             serviceCases = data.serviceCases.sortedBy { it.id },
             serviceCaseEntries = data.serviceCaseEntries.sortedBy { it.id },
+            // Format 13: open and returned loans alike, each its own row.
+            assetLoans = data.assetLoans.sortedBy { it.id },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
         // The artifact tallies are derived here, in one place, from the rows themselves: a MANAGED
@@ -221,6 +237,7 @@ object BackupCodec {
                 "assetCategories" to sorted.assetCategories.size,
                 "serviceCases" to sorted.serviceCases.size,
                 "serviceCaseEntries" to sorted.serviceCaseEntries.size,
+                "assetLoans" to sorted.assetLoans.size,
             ),
             dataSha256 = sha256Hex(dataBytes),
             backupSetId = backupSetId,
@@ -320,6 +337,12 @@ object BackupCodec {
             }
         }
 
+        // #72, the same rule for the loans: the list did not exist before format 13, so a row in an older
+        // archive was put there by hand. An empty list is accepted.
+        if (manifest.formatVersion < FIRST_LOAN_FORMAT && data.assetLoans.isNotEmpty()) {
+            throw BackupCorrupt("assetLoans: a format ${manifest.formatVersion} archive cannot carry loans")
+        }
+
         // Every row must be nameable in the domain, otherwise the caller would only find out
         // halfway through a destructive import. Result discarded; this is a validation pass.
         data.assets.forEach { it.toDomain() }
@@ -339,6 +362,7 @@ object BackupCodec {
         data.assetCategories.forEach { it.toDomain() }
         data.serviceCases.forEach { it.toDomain() }
         data.serviceCaseEntries.forEach { it.toDomain() }
+        data.assetLoans.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
         // replays the insert loops in one transaction: a duplicate id or a reference to a row
@@ -354,7 +378,7 @@ object BackupCodec {
     }
 
     /**
-     * The version dispatch: formats 8 to 12 decode strictly as they stand; formats 1–7 are rewritten as a
+     * The version dispatch: formats 8 to 13 decode strictly as they stand; formats 1–7 are rewritten as a
      * tree by [LegacyArchive] first and then go through the very same strict decode.
      * `SerializationException` is an `IllegalArgumentException`, and so is the malformed-number
      * failure a tree decode can raise, so one catch covers both.
@@ -672,6 +696,25 @@ object BackupCodec {
                 throw BackupCorrupt(
                     "serviceCaseEntries: entry ${entry.id} points at case ${entry.caseId}, which is not in serviceCases",
                 )
+            }
+        }
+
+        // --- loans (format 13) --------------------------------------------------------------------
+        // A loan's asset is a real foreign key and must be in the file. And an asset holds **at most one
+        // open loan** (#72, C2 iii; R72-2): the schema's unique index would refuse a second, and only after
+        // a replace had wiped the owner's data, so a file saying otherwise is refused here, beside the ids.
+        // Returned loans are history and may be as many as there are.
+
+        uniqueIds("assetLoans", data.assetLoans.map { it.id })
+        val openLoanByAsset = HashMap<String, String>()
+        data.assetLoans.forEach { loan ->
+            if (loan.assetId !in assetIds) {
+                throw BackupCorrupt("assetLoans: loan ${loan.id} points at asset ${loan.assetId}, which is not in assets")
+            }
+            if (loan.returnedOn == null) {
+                openLoanByAsset.put(loan.assetId, loan.id)?.let { first ->
+                    throw BackupCorrupt("assetLoans: asset ${loan.assetId} holds two open loans, $first and ${loan.id}")
+                }
             }
         }
 

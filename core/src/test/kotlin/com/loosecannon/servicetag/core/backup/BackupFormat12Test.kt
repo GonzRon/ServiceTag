@@ -52,7 +52,8 @@ class BackupFormat12Test {
 
     @Test
     fun casesAndEntriesRoundTrip() {
-        val bytes = archiveOf(data(cases = listOf(closed, open), entries = entries))
+        // Stamped 12 explicitly since #72 moved this build's own format to 13: the cases' own format.
+        val bytes = archiveOf(data(cases = listOf(closed, open), entries = entries), formatVersion = 12)
 
         val decoded = BackupCodec.decode(bytes)
 
@@ -66,8 +67,8 @@ class BackupFormat12Test {
         val tree = dataTreeOf(bytes)
         assertEquals(
             listOf("serviceCases", "serviceCaseEntries"),
-            tree.keys.toList().takeLast(2),
-            "the two lists close data.json, after the categories",
+            tree.keys.toList().dropLast(1).takeLast(2),
+            "the two lists follow the categories, and format 13's loans close data.json",
         )
         assertTrue("closedOn" in tree.getValue("serviceCases").jsonArray.first().jsonObject, "an unset field is written, not left out")
     }

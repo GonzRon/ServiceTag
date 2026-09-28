@@ -82,18 +82,18 @@ class StageABundleConformanceTest {
         val entries = readZipEntries(resourceBytes())
         val data = Json.parseToJsonElement(String(entries.getValue("data.json"))).jsonObject
 
-        // The root object itself: BackupData defaults fourteen of its seventeen tables to emptyList(), so
+        // The root object itself: BackupData defaults fifteen of its eighteen tables to emptyList(), so
         // a *new* table added there tomorrow would never be emitted by the generator and would
         // decode away silently unless the root's own key set is pinned here too. The fixture is a
         // **format-5** archive and the generator writes format 5, so the three format-6 tables, the
-        // one format-7 table, the three format-8 tables, format 9's categories and format 12's two
-        // case lists are subtracted by
+        // one format-7 table, the three format-8 tables, format 9's categories, format 12's two
+        // case lists and format 13's loans are subtracted by
         // name — which keeps the guard live: a further table added to BackupData without a thought
         // for the generator still fails here. (A restore of the bundle promotes its assets'
         // categories itself, so the generator needs no category list.)
         assertEquals(
             BackupData.serializer().descriptor.elementNames.toSet() -
-                FORMAT_6_TABLES - FORMAT_7_TABLES - FORMAT_8_TABLES - FORMAT_9_TABLES - FORMAT_12_TABLES,
+                FORMAT_6_TABLES - FORMAT_7_TABLES - FORMAT_8_TABLES - FORMAT_9_TABLES - FORMAT_12_TABLES - FORMAT_13_TABLES,
             data.keys,
             "data.json root",
         )
@@ -202,5 +202,6 @@ class StageABundleConformanceTest {
 
         /** #79b's case lists: default empty, and the format-5 generator never emits them. */
         private val FORMAT_12_TABLES = setOf("serviceCases", "serviceCaseEntries")
+        private val FORMAT_13_TABLES = setOf("assetLoans")
     }
 }

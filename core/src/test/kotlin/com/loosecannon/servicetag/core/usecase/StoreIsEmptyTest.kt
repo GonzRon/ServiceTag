@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAssetLoanRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
@@ -28,6 +29,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
+import com.loosecannon.servicetag.core.testing.loanOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -154,6 +156,24 @@ class StoreIsEmptyTest {
         assets.delete(asset.id)
 
         assertTrue(serviceCases.all().isEmpty() && caseEntries.all().isEmpty(), "the asset took its case and timeline")
+        assertTrue(storeIsEmpty.run())
+    }
+
+    /**
+     * #72: a loan cannot exist without its asset either — `asset_loan.asset_id` is a CASCADE foreign key
+     * — so the asset check answers for it too and the six kinds stay six. Deleting the asset takes its
+     * open loan and its returned ones.
+     */
+    @Test fun aLoanIsAnsweredForByItsAsset() = runTest {
+        val loans = InMemoryAssetLoanRepository().also { assets.cascadesTo(it::cascadeFromAsset) }
+        assets.upsert(asset)
+        loans.upsert(loanOf("l1", assetId = asset.id.value, returnedOn = "2026-09-21"))
+        loans.upsert(loanOf("l2", assetId = asset.id.value))
+        assertFalse(storeIsEmpty.run())
+
+        assets.delete(asset.id)
+
+        assertTrue(loans.all().isEmpty(), "the asset took its loans")
         assertTrue(storeIsEmpty.run())
     }
 }

@@ -62,12 +62,12 @@ class BackupFormat9Test {
 
     /**
      * The numbers this tip carries, as literals: the format moved — to 9 here, on to 10 with #67's
-     * document role, on to 11 with #79's warranty reminder lead and on to 12 with #79b's service cases —
-     * and the legacy boundary did not.
+     * document role, on to 11 with #79's warranty reminder lead, on to 12 with #79b's service cases and
+     * on to 13 with #72's loans — and the legacy boundary did not.
      */
     @Test
     fun theFormatMovedAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(12, BackupCodec.FORMAT_VERSION)
+        assertEquals(13, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 
@@ -89,7 +89,7 @@ class BackupFormat9Test {
 
     /**
      * The DTO is the table's four columns, and the list is the data entry's last key before format 12's
-     * two case lists (#79b), which close it.
+     * two case lists (#79b) and format 13's loans (#72), which close it.
      */
     @Test
     fun theDtoIsTheFourColumns() {
@@ -98,8 +98,8 @@ class BackupFormat9Test {
             AssetCategoryDto.serializer().descriptor.elementNames.toList(),
         )
         assertEquals(
-            listOf("assetCategories", "serviceCases", "serviceCaseEntries"),
-            BackupData.serializer().descriptor.elementNames.toList().takeLast(3),
+            listOf("assetCategories", "serviceCases", "serviceCaseEntries", "assetLoans"),
+            BackupData.serializer().descriptor.elementNames.toList().takeLast(4),
         )
     }
 
@@ -108,16 +108,16 @@ class BackupFormat9Test {
      * `assetCategories` key or its manifest count at all, so resealing this encoder's own empty list
      * would prove nothing about the list's default (`BackupCodecTest`'s format-4 precedent): both are
      * stripped for real, and the data entry resealed — format 12's two case lists and counts with them
-     * (#79b), which no 1.4.x writer emitted either.
+     * (#79b), and format 13's loans (#72), which no 1.4.x writer emitted either.
      */
     @Test
     fun aFormat8ArchiveDecodesWithNoCategories() {
         val encoded = archiveOf(data(emptyList()), formatVersion = 8)
-        val dataBytes = prettyJson.encodeToString(JsonObject.serializer(), dataTreeOf(encoded).without("assetCategories", "serviceCases", "serviceCaseEntries"))
+        val dataBytes = prettyJson.encodeToString(JsonObject.serializer(), dataTreeOf(encoded).without("assetCategories", "serviceCases", "serviceCaseEntries", "assetLoans"))
             .toByteArray(Charsets.UTF_8)
         val manifest = prettyJson.decodeFromString(
             BackupManifest.serializer(), String(zipEntries(encoded).getValue(BackupCodec.MANIFEST_ENTRY), Charsets.UTF_8),
-        ).let { it.copy(counts = it.counts - "assetCategories" - "serviceCases" - "serviceCaseEntries", dataSha256 = sha256Hex(dataBytes)) }
+        ).let { it.copy(counts = it.counts - "assetCategories" - "serviceCases" - "serviceCaseEntries" - "assetLoans", dataSha256 = sha256Hex(dataBytes)) }
         val shipped = zipOf(
             BackupCodec.MANIFEST_ENTRY to prettyJson.encodeToString(BackupManifest.serializer(), manifest).toByteArray(Charsets.UTF_8),
             BackupCodec.DATA_ENTRY to dataBytes,

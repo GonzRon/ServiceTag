@@ -5,6 +5,8 @@ import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetLoan
+import com.loosecannon.servicetag.core.model.AssetLoanId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.Attachment
@@ -35,6 +37,7 @@ import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
 import com.loosecannon.servicetag.core.model.LinkId
+import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -520,6 +523,29 @@ data class ServiceCaseEntryDto(
     val createdAt: Long,
 )
 
+/**
+ * Format 13 (#72, C6; R72-1, R72-4). One loan: the `asset_loan` table's columns, in column order, with no
+ * defaults — a format-13 row that omits one is corrupt — **less the open marker**, which is the Room
+ * layer's storage detail and is never exported: open is `returnedOn == null`. [assetId] must resolve
+ * inside the file, and an asset holds at most one open loan in it. [contactLookupUri] is the canonical
+ * contact link beside the [borrowerName] snapshot; a phone that cannot resolve it still shows the name.
+ * A loan's standing (lent out, overdue) is derived at read time and is never here.
+ */
+@Serializable
+data class AssetLoanDto(
+    val id: String,
+    val assetId: String,
+    val borrowerName: String,
+    val contactLookupUri: String?,
+    val lentOn: String,
+    val dueOn: String?,
+    val returnedOn: String?,
+    val reminderMode: String,
+    val notes: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
 /** The canonical tables. Everything derived is rebuilt after an import. */
 @Serializable
 data class BackupData(
@@ -556,6 +582,11 @@ data class BackupData(
     val serviceCases: List<ServiceCaseDto> = emptyList(),
     /** Format 12 (#79); the cases' timelines, their own rows, ordered by id. Empty on every format ≤11 archive. */
     val serviceCaseEntries: List<ServiceCaseEntryDto> = emptyList(),
+    /**
+     * Format 13 (#72); the loans, open and returned, ordered by id. Empty on every format ≤12 archive,
+     * which never carries a **row** — the codec refuses one that does (an empty list is accepted).
+     */
+    val assetLoans: List<AssetLoanDto> = emptyList(),
 )
 
 /** A decoded archive: what it claims about itself, and what it holds. */
@@ -1276,4 +1307,34 @@ fun ServiceCaseEntryDto.toDomain(): ServiceCaseEntry = ServiceCaseEntry(
     note = note,
     status = status?.let { enumOrCorrupt<CaseStatus>(it, "case status", "case entry $id") },
     createdAt = createdAt,
+)
+
+// --- format 13: loans -----------------------------------------------------------------------------
+
+fun AssetLoan.toDto(): AssetLoanDto = AssetLoanDto(
+    id = id.value,
+    assetId = assetId.value,
+    borrowerName = borrowerName,
+    contactLookupUri = contactLookupUri,
+    lentOn = lentOn,
+    dueOn = dueOn,
+    returnedOn = returnedOn,
+    reminderMode = reminderMode.name,
+    notes = notes,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+fun AssetLoanDto.toDomain(): AssetLoan = AssetLoan(
+    id = AssetLoanId(id),
+    assetId = AssetId(assetId),
+    borrowerName = borrowerName,
+    contactLookupUri = contactLookupUri,
+    lentOn = lentOn,
+    dueOn = dueOn,
+    returnedOn = returnedOn,
+    reminderMode = enumOrCorrupt<LoanReminderMode>(reminderMode, "loan reminder mode", "loan $id"),
+    notes = notes,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
 )

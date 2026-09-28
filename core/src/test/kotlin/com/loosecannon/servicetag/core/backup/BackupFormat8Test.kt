@@ -267,18 +267,18 @@ class BackupFormat8Test {
     // --- direction -------------------------------------------------------------------------------
 
     /**
-     * Hazard: a newer archive half-read. A manifest one format past this build's (13, since #79b made
-     * the build's own 12) over a `data.json` that no format could read is refused as **newer**, not as
+     * Hazard: a newer archive half-read. A manifest one format past this build's (14, since #72 made
+     * the build's own 13) over a `data.json` that no format could read is refused as **newer**, not as
      * corrupt — so the gate ran before a single row was parsed.
      */
     @Test
     fun aFormatPastThisBuildsIsRefusedBeforeAnyRow() {
         val unreadable = dataTreeOf(archiveOf(fixture())).editRows("healthSubjects") { it.with("weight", JsonPrimitive("heavy")) }
-        val bytes = sealed(unreadable, formatVersion = 13)
+        val bytes = sealed(unreadable, formatVersion = 14)
 
         val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(bytes) }
-        assertEquals(13, refusal.found)
-        assertEquals(12, refusal.supported)
+        assertEquals(14, refusal.found)
+        assertEquals(13, refusal.supported)
         // The same tree at a format this build reads *is* parsed — and refused as corrupt.
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(sealed(unreadable, formatVersion = 8)) }
     }
@@ -305,8 +305,9 @@ class BackupFormat8Test {
         assertEquals(2, counts["seasonActivations"])
         assertEquals(3, counts["assetConditions"])
         assertEquals(1, counts["healthSubjects"])
-        // Twenty through format 8, format 9's `assetCategories` and format 12's two case lists.
-        assertEquals(23, counts.size)
+        // Twenty through format 8, format 9's `assetCategories`, format 12's two case lists and format 13's
+        // `assetLoans`.
+        assertEquals(24, counts.size)
     }
 
     // --- determinism -----------------------------------------------------------------------------

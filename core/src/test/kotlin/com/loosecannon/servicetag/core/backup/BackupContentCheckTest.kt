@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.core.backup
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.CaseStatus
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.HealthAggregation
@@ -12,6 +13,7 @@ import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
+import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.ServiceCase
@@ -23,6 +25,7 @@ import com.loosecannon.servicetag.core.testing.activationOf
 import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
+import com.loosecannon.servicetag.core.testing.loanOf
 import com.loosecannon.servicetag.core.testing.conditionOf
 import com.loosecannon.servicetag.core.testing.groupOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
@@ -428,6 +431,78 @@ class BackupContentCheckTest {
             caseOf("c1").copy(openedOn = "2099-01-01"),
             entries = listOf(caseEntryOf("n1", occurredOn = "2099-01-02")),
         )
+        assertEquals(ahead, BackupCodec.decode(archiveOf(ahead)).data)
+    }
+
+    // --- #72 (C6): loans, format 13 --------------------------------------------------------------
+
+    private fun lent(vararg loans: AssetLoan) = data().copy(assetLoans = loans.map { it.toDto() })
+
+    @Test
+    fun aBlankBorrowerIsRefused() {
+        assertRefused(lent(loanOf("l1", borrowerName = "  ")), "assetLoans: loan l1", "BorrowerRequired")
+    }
+
+    @Test
+    fun aDueDateBeforeTheLentDateIsRefused() {
+        assertRefused(lent(loanOf("l1", lentOn = "2026-09-20", dueOn = "2026-09-19")), "assetLoans: loan l1", "DueBeforeLent")
+        val sameDay = lent(loanOf("l1", lentOn = "2026-09-20", dueOn = "2026-09-20"))
+        assertEquals(sameDay, BackupCodec.decode(archiveOf(sameDay)).data, "due back the day it was lent")
+    }
+
+    @Test
+    fun aReturnDateBeforeTheLentDateIsRefused() {
+        assertRefused(
+            lent(loanOf("l1", lentOn = "2026-09-20", returnedOn = "2026-09-19")), "assetLoans: loan l1", "ReturnedBeforeLent",
+        )
+        val sameDay = lent(loanOf("l1", lentOn = "2026-09-20", returnedOn = "2026-09-20"))
+        assertEquals(sameDay, BackupCodec.decode(archiveOf(sameDay)).data, "returned the day it was lent")
+    }
+
+    /** N10: a mode without a due date is refused, as the commands refuse it — never read as None. */
+    @Test
+    fun aModeWithoutADueDateIsRefused() {
+        for (mode in listOf(LoanReminderMode.ONCE, LoanReminderMode.UNTIL_RETURNED)) {
+            assertRefused(lent(loanOf("l1", dueOn = null, reminderMode = mode)), "assetLoans: loan l1", "ReminderWithoutDueDate")
+        }
+        val plain = lent(loanOf("l1", dueOn = null, reminderMode = LoanReminderMode.NONE))
+        assertEquals(plain, BackupCodec.decode(archiveOf(plain)).data)
+    }
+
+    /** R72-4: the stored link is shape-checked by the one rule; a name-only loan's null link restores. */
+    @Test
+    fun aLinkFailingTheRuleIsRefused() {
+        for (link in listOf("content://com.android.contacts/contacts/7", "content://media/external/images/media/7", "")) {
+            assertRefused(lent(loanOf("l1", contactLookupUri = link)), "assetLoans: loan l1", "ContactLinkInvalid")
+        }
+        val nameOnly = lent(loanOf("l1", contactLookupUri = null))
+        assertEquals(nameOnly, BackupCodec.decode(archiveOf(nameOnly)).data)
+    }
+
+    @Test
+    fun aLoansDatesMustBeDates() {
+        val cases = listOf(
+            loanOf("l1", lentOn = "2026-02-30") to "BadDate(field=lentOn)",
+            loanOf("l1", dueOn = "4 Oct") to "BadDate(field=dueOn)",
+            loanOf("l1", returnedOn = "2026-13-01") to "BadDate(field=returnedOn)",
+        )
+        for ((row, problem) in cases) assertRefused(lent(row), "assetLoans: loan l1", problem)
+    }
+
+    /**
+     * C9's key `<assetId>/<loanId>` splits at the last `/`, so a loan id may never hold one. No writer on
+     * this build mints such an id; an archive carrying one was built by hand.
+     */
+    @Test
+    fun aLoanIdHoldingASlash() {
+        val refusal = refused(lent(loanOf("l/1")))
+        assertEquals("assetLoans: loan l/1 has an id holding a '/'", refusal)
+    }
+
+    /** No rule is relative to the importing device's today: a loan lent and returned far ahead restores. */
+    @Test
+    fun aLoanIsNeverJudgedByToday() {
+        val ahead = lent(loanOf("l1", lentOn = "2099-01-01", dueOn = "2099-02-01", returnedOn = "2099-01-15"))
         assertEquals(ahead, BackupCodec.decode(archiveOf(ahead)).data)
     }
 }
