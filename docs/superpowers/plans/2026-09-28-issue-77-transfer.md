@@ -657,3 +657,56 @@ a step the 1.4.1 API cannot drive. **Size:** about 200 production and 60 Python,
 **Owner directions for rev 2 (2026-09-28)**, designed to as recommendations for the gate: R77-12/R77-25 (stale
 resurrection refused, explicit transfer back accepted, a double mark detectable and resolvable) and R77-4 (inspection
 only, every guard's home enumerated). The roadmap ruling (§4's budget, R77-22) binds; the rest of §7 awaits the gate.
+
+**Gate rulings (owner, 2026-09-28) — rev 2.1 approved; every ruling below binds every brief and supersedes §2/§7 text
+where they differ.**
+- **R77-1** the nested ZIP, a `.zip` filename, `application/zip`. **R77-2 (a)+(b)** in-app import and share-to-ServiceTag;
+  no `ACTION_VIEW`, no manifest change. **R77-3** ARCHIVED plus the append-only OUT / IN / WITHDRAWN records.
+- **R77-4 full read-only:** a held asset is inspectable and ordinarily immutable everywhere — UI, child surfaces, API and
+  MCP-backed writes. **`DeleteAsset` stays allowed** as the explicit destructive "forget this local history" operation,
+  and **the transfer records survive it**; category-only rewrites and derived/device-local state stay the documented
+  exceptions.
+- **R77-5** an explicit, append-only, phone-only withdrawal; a withdrawal does **not** propagate through ordinary merge —
+  it is repeated explicitly on each installation. **The rm-8 recovery is APPROVED (amends C15):** a later pack whose
+  lineage names an OUT this phone has since withdrawn still counts as an explicit return, so a mistaken withdrawal never
+  permanently strands a legitimate later return.
+- **R77-6** an open loan refuses creation and marking; returned loans stay sender-local and leave later ordinary
+  backups. **R77-7** open service cases and entries travel. **R77-8** a child cannot transfer without its parent;
+  selecting a parent forces its subtree. **R77-9** a group with any row naming a staying asset, historical membership
+  included, moves whole or not at all — no partial-group semantics. **R77-10** any asset not currently held may be a
+  root, archived and retired included; its lifecycle facts travel verbatim. **R77-11** an explicit transferred-out
+  `Resolution`; a scan does not stamp the old phone's tag record.
+- **R77-12** the record model with lineage: stale ordinary archives never close an OUT; explicit packs can; a double
+  mark is `TRANSFER_DIVERGED`, resolved by withdrawing the incorrect OUT; an incoming ordinary merge never closes another
+  installation's OUT (withdrawal stays local and explicit); for several current INs `lineageFor` takes the latest `at`,
+  then the id.
+- **R77-13 — the controller's recommendation is NOT accepted; C9 is amended:** a Replace restore must not let a stale
+  pre-transfer backup silently resurrect an asset this installation transferred out. Before wiping local records,
+  `ImportBackupReplace` compares the archive against the local open OUTs and **refuses** the archive (nothing wiped) if it
+  carries the graph of an asset held here, **unless the archive's own transfer records contain a later IN whose lineage
+  legitimately closes that local OUT** (the same closing rule as C15, the rm-8 recovery included). This keeps stale
+  resurrection blocked under Replace while keeping the "Replace restore from the other installation after a legitimate
+  return" recovery path. The refusal is a named `BackupSetIncomplete`-style outcome with its own ratified sentence
+  proposal routed through the controller before B2a ships it.
+- **R77-14** a pack with managed documents needs an attachment folder on the recipient. **R77-15** one optional,
+  blank-by-default note. **R77-16** marking only from the ready screen, re-read, re-hashed and re-validated inside the
+  write; a stale pack is refused. **R77-17** the API gets the 409 semantics and the status count only — no pack, mark or
+  withdraw routes, no new MCP tools, no transfer field on `AssetDto`; `v1.md` documents that a held-but-ACTIVE row (from
+  merged transfer history) may read ACTIVE while every mutation answers 409. **R77-18** leaving the ready screen deletes
+  the working pack; start-up cleans intake/work copies and aged packs; a restored ready state re-validates its file and
+  disables its actions if it is gone. **R77-19** no new outbound foreign-UID proof. **R77-20** stands as ruled above.
+  **R77-21** schema/format 14 unreleased under 1.4.1, no `versionName` bump. **R77-22** the existing infrastructure,
+  JVM-first: the three justified rendered Compose classes and the two platform proofs, no gratuitous device coverage, no
+  device-mutation grinding; the merged-tip timing rule stands (14 min warns; > 15 min promotes #90). **R77-23** phone
+  lifecycle mutations reconcile once after the successful write; API mutations settle at the next normal sweep.
+- **R77-24 — P77-1…67 (P77-29 withdrawn) RATIFIED verbatim**, with their treatments: the `TRANSFERRED` visual treatment
+  and spoken "Transferred", `ic_handover`, all six conditional strings, P77-61's accessibility state description, and the
+  eight reused strings. (R77-13's refusal sentence is the one string still to ratify.)
+- **R77-25 replace on return, option (a):** append the IN first, replace the stale local asset graph with the returning
+  pack atomically, **keep the sender-local returned loans and their contact snapshots** as historical facts. A pack whose
+  valid lineage returns the asset is a bearer instrument by design; `v1.md` and the in-app help say so plainly.
+- **Rows the amendments add (the pin rule applies):** row 11 (B2a) gains `aReplaceOfAPreTransferBackupIsRefusedForAHeldAsset`
+  (nothing wiped; RED "skip the open-OUT check") and `aReplaceCarryingALaterClosingInRestores` (RED "refuse every held
+  graph"); row 24 (B3) gains `aPackWhoseLineageNamesAWithdrawnOutStillReturns` (RED "treat a withdrawn OUT as closed for
+  good"); row 25 (B4) gains `deleteAssetOnAHeldAssetKeepsTheRecords` (RED "cascade the records"). **Caps move with
+  them:** B2a 18 → 20 counted RED, B3 16 → 17, B4 16 → 17; time boxes unchanged.
