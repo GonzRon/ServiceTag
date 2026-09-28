@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.loan
 
+import android.content.ActivityNotFoundException
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.result.ActivityResultRegistry
@@ -27,6 +28,7 @@ import androidx.core.app.ActivityOptionsCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.contacts.ContactRow
 import com.loosecannon.servicetag.contacts.ContactRowQuery
@@ -47,6 +49,7 @@ import com.loosecannon.servicetag.ui.condition.displayDate
 import com.loosecannon.servicetag.ui.maintenance.NOT_NOW
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -94,6 +97,34 @@ class LendingSectionDeviceTest {
             ) {
                 @Suppress("UNCHECKED_CAST")
                 dispatchResult(requestCode, picked.toUri() as O)
+            }
+        }
+    }
+
+    /** A phone with no contact picker: every launch fails as `startActivity` would, with no handler. */
+    private val noPickerOwner = object : ActivityResultRegistryOwner {
+        override val activityResultRegistry: ActivityResultRegistry = object : ActivityResultRegistry() {
+            override fun <I, O> onLaunch(
+                requestCode: Int,
+                contract: ActivityResultContract<I, O>,
+                input: I,
+                options: ActivityOptionsCompat?,
+            ) {
+                throw ActivityNotFoundException("no activity handles the pick")
+            }
+        }
+    }
+
+    /** The lend form alone on [assetId], picks answered by [owner]; its two ways out counted apart. */
+    private fun form(assetId: String, owner: ActivityResultRegistryOwner, done: AtomicInteger, backs: AtomicInteger) {
+        rule.setContent {
+            ServiceTagTheme {
+                CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
+                    LoanEditScreen(
+                        graph = app.graph, assetId = assetId, loanId = null,
+                        onDone = { done.incrementAndGet() }, onBack = { backs.incrementAndGet() },
+                    )
+                }
             }
         }
     }
@@ -262,5 +293,59 @@ class LendingSectionDeviceTest {
         assertEquals("the new loan swept once, after the answer", 1, sweeps)
         rule.onAllNodesWithText(LOAN_NOTIFICATION_RATIONALE).assertCountEquals(0)
         assertNull(editing)
+    }
+
+    /**
+     * B3 review MAJOR-2, the owner's ruling: the system Back key on P72-33 is exactly "Not now". The
+     * dialog is its own window with its own back dispatcher (the #78 precedent), so the key reaches the
+     * dialog's dismissal: nothing is requested, the new loan is swept once, and the form finishes through
+     * `onDone` — never its own `onBack` — having written nothing more.
+     */
+    @Test fun theBackKeyOnTheRationaleIsNotNow() {
+        val id = create("Example Drill")
+        val due = app.graph.today.localDate().plusDays(7)
+        plantTheLendForm(id, granted = false)
+        val done = AtomicInteger()
+        val backs = AtomicInteger()
+        form(id, registryOwner, done, backs)
+
+        rule.awaitText(CHOOSE_FROM_CONTACTS)
+        rule.onNodeWithText(CHOOSE_FROM_CONTACTS).performClick()
+        rule.awaitText("Sample Borrower")
+        field(DUE_BACK).performScrollTo().performTextReplacement(due.toString())
+        rule.onNodeWithText(ONCE).performScrollTo().performClick()
+        rule.onNodeWithText(SAVE_LOAN).performScrollTo().performClick()
+        rule.awaitText(LOAN_NOTIFICATION_RATIONALE)
+        val atTheQuestion = loans().single()
+
+        // A key to the focused dialog window, as a gesture is: never the activity's own dispatcher.
+        Espresso.pressBack()
+        rule.waitUntil(WAIT_MS) { done.get() == 1 }
+        rule.waitForIdle()
+
+        assertEquals("the form finished through onDone", 1, done.get())
+        assertEquals("never through its own onBack", 0, backs.get())
+        rule.onAllNodesWithText(LOAN_NOTIFICATION_RATIONALE).assertCountEquals(0)
+        assertTrue("Back requests nothing", requests.isEmpty())
+        assertEquals("the new loan swept once", 1, sweeps)
+        assertEquals("and nothing more was written", listOf(atTheQuestion), loans())
+    }
+
+    /**
+     * B3 review MINOR-3 (C15, P72-45): with no contact picker on the phone, "Choose from Contacts" on the
+     * lend form says "No app can pick a contact" and writes nothing — the launcher's
+     * `ActivityNotFoundException`, caught at the boundary. No real picker is involved.
+     */
+    @Test fun noPickerSaysP72_45OnTheForm() {
+        val id = create("Example Drill")
+        plantTheLendForm(id, granted = true)
+        form(id, noPickerOwner, AtomicInteger(), AtomicInteger())
+
+        rule.awaitText(CHOOSE_FROM_CONTACTS)
+        rule.onNodeWithText(CHOOSE_FROM_CONTACTS).performClick()
+        rule.awaitText(NO_APP_CAN_PICK_A_CONTACT)
+
+        rule.onAllNodesWithText("Sample Borrower").assertCountEquals(0)
+        assertTrue("nothing written", loans().isEmpty())
     }
 }

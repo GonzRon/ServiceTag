@@ -53,8 +53,9 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
  * stored name as text. Then "Lent on" (P72-22, today), "Due back" (P72-23, optional), "Reminder" (P72-24)
  * with None / Once / Until returned — enabled only with a due date, P72-27 under them otherwise — Notes,
  * and "Save loan" (P72-28). A refusal is drawn under its field; a stale form or a failure is a snackbar.
- * After a save that first set a reminder with notifications off, P72-33 asks with "OK" and "Not now".
- * ✕ and back write nothing.
+ * After a save that first set a reminder with notifications off, P72-33 asks with "OK" and "Not now";
+ * Back on it is "Not now" (the owner's ruling) — the dialog's own window takes the key, and its dismissal
+ * is the same `dismissNotifications`. ✕ and back write nothing.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -377,6 +377,52 @@ class LoanEditViewModelTest {
         assertEquals("and wrote nothing more", 1, storedLoans().size)
     }
 
+    /**
+     * B3 review MAJOR-2, the owner's ruling: Back on P72-33 is exactly "Not now". The dialog's dismissal —
+     * Back, an outside tap, "Not now" — lands in `dismissNotifications`: nothing is requested, the sweep
+     * runs once, `saved` once. A second dismissal, and an "OK" after it, do nothing more.
+     */
+    @Test fun aDismissalIsNotNowAndNeverSweepsTwice() = runTest {
+        drill()
+        val model = editor(granted = false)
+        model.ready()
+        model.onPicked(SAMPLE_PICK)
+        model.onDueOn("2026-10-01")
+        model.onMode(LoanReminderMode.ONCE)
+        model.settled()
+        val saved = backgroundScope.async(start = CoroutineStart.UNDISPATCHED) { model.saved.first() }
+
+        model.save()
+        model.state.first { it.askingForNotifications }
+        val atTheQuestion = storedLoans().single()
+        model.dismissNotifications()
+        assertEquals("the first dismissal finished the form, with the asset", "drill", saved.await())
+        val again = backgroundScope.async(start = CoroutineStart.UNDISPATCHED) { model.saved.first() }
+        model.dismissNotifications()
+        model.requestNotifications()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals("the dismissals and the late OK requested nothing", emptyList<String>(), requests)
+        assertEquals("one sweep", 1, sweeps)
+        assertFalse("saved once: the second dismissal and the late OK finished nothing", again.isCompleted)
+        again.cancel()
+        assertEquals("the loan is as it was at the question", listOf(atTheQuestion), storedLoans())
+        assertFalse(model.state.value.askingForNotifications)
+
+        // An edit of a stored None loan to Until returned, then one dismissal: one more sweep, no request.
+        graph.assets.upsert(assetRow("ladder", name = "Example Ladder"))
+        graph.loans.upsert(loanRow("l2", "ladder", lentOn = "2026-09-01", dueOn = "2026-10-05"))
+        val edit = editor(loanId = "l2", assetId = "ladder", granted = false)
+        edit.ready()
+        edit.onMode(LoanReminderMode.UNTIL_RETURNED)
+        edit.save()
+        edit.state.first { it.askingForNotifications }
+        edit.dismissNotifications()
+        testScheduler.advanceUntilIdle()
+        assertEquals("the edit swept once more", 2, sweeps)
+        assertEquals(emptyList<String>(), requests)
+    }
+
     /** R72-15: once for a new loan and once for a moved due date or reminder; never for notes or the lent date. */
     @Test fun aNewLoanOrMovedDueOrModeSweepsOnceAndNotesNever() = runTest {
         drill()

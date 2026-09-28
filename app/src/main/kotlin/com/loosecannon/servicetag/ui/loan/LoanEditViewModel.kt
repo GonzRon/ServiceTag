@@ -285,7 +285,12 @@ class LoanEditViewModel(
         }
     }
 
-    /** P72-33's "Not now", and any other dismissal: nothing is requested; the loan stands. */
+    /**
+     * P72-33's "Not now", Back, and any other dismissal — the owner's ruling makes them one answer:
+     * nothing is requested, the loan stands, the sweep runs once when the loan is new or its due date or
+     * reminder moved, and the form finishes through [saved]. A second dismissal, or a late "OK", does
+     * nothing more.
+     */
     fun dismissNotifications() {
         val written = afterRationale ?: return
         afterRationale = null
