@@ -19,7 +19,8 @@ the one body key it is about, then the `problems` in parentheses.
   **1.3.0 or later**, the fourteen season, condition and health tools need **1.4.0 or later** and
   `repair_schedule_providers` needs **1.4.1 or later**; on an older build their routes are not there
   and every call answers 404. The two warranty tools need an app whose `schemaVersion` is **11 or
-  later**, and the five service-case tools one at **12 or later**; each checks it itself (below).
+  later**, the five service-case tools one at **12 or later**, and the five loan tools one at **13 or
+  later**; each checks it itself (below).
 - **Every write needs ServiceTag 1.4.0.** Before its first write under a pairing, the server reads
   `/v1/status` once and refuses to write to an app whose `schemaVersion` is below 8 — a `ToolError`
   carrying `APP_SCHEMA_TOO_OLD`, with nothing sent. The answer is kept for that pairing, and a new
@@ -28,11 +29,15 @@ the one body key it is about, then the `problems` in parentheses.
   either, is not schema-checked for the same reason.
 - **The warranty tools need schema 11.** `get_warranty` and `set_warranty_reminder` — the read as well
   as the write — refuse an app whose `schemaVersion` is below 11 the same way, with `APP_SCHEMA_TOO_OLD`
-  and nothing sent, from the same one `/v1/status` read per pairing. Every tool but these two and the
-  five service-case tools below keeps the minimum of 8.
+  and nothing sent, from the same one `/v1/status` read per pairing. Every tool but these two, the
+  five service-case tools and the five loan tools below keeps the minimum of 8.
 - **The service-case tools need schema 12.** `list_service_cases`, `get_service_case`,
   `open_service_case`, `update_service_case` and `add_case_entry` — the reads as well as the writes —
   refuse an app whose `schemaVersion` is below 12 the same way, from the same read.
+- **The loan tools need schema 13.** `list_loans`, `get_loan`, `lend_asset`, `update_loan` and
+  `return_loan` — the reads as well as the writes — refuse an app whose `schemaVersion` is below 13 the
+  same way, from the same read. The minima are therefore 8 for every write, 11 for the warranty tools,
+  12 for the case tools and 13 for the loan tools.
 
 ## Using it
 
@@ -75,7 +80,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Sixty-three: `pair` plus one per API operation.
+Sixty-eight: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -138,6 +143,18 @@ a note, a status, or both — and it is the only way a case's status moves (`CLO
 closes it, any other status reopens it). Nothing deletes a case or amends an entry.
 `docs/api/v1.md`'s **Service cases (#79)** section is the contract.
 
+**Loans (needs schema 13)** — `list_loans`, `get_loan`, `lend_asset`, `update_loan`, `return_loan`. A
+loan records that an asset is out with a person or an organisation: who has it, since when, when it is
+due back and whether the phone should remind the owner. `lend_asset` is a create sent as given, and
+`lent_on` is required — the phone applies none of its lend form's defaults over the API. It lends by
+**name only**: a loan answers `contactLinked`, and the Android Contacts link itself is on no answer and
+in no argument — only the phone makes one ("Choose from Contacts"). An asset holds one open loan at a
+time, and any lifecycle may be lent here. `update_loan` is an overlay (below) over the open loan's terms;
+it never sends a borrower, a return date or a link. `return_loan` is the only way a loan ends, and a
+returned loan is frozen. The reminder is the phone's own and has no tool; a loan written here settles at
+the phone's next sweep at or after its digest hour. Nothing deletes or relinks a loan.
+`docs/api/v1.md`'s **Loans (#72)** section is the contract.
+
 ### The schedule's two forms, and the deprecated season arguments
 
 1.4 gives a schedule a **service policy** — `service_policy` (`CONTINUOUS`, `IN_SERVICE_AT_START`,
@@ -178,19 +195,20 @@ so a mistyped field name can't be read as absent and quietly change what the cal
 
 The Android API's own writes (`PATCH /v1/assets/{id}`, `POST /v1/definitions`,
 `POST /v1/profiles`, `PATCH /v1/groups/{id}`, `PATCH /v1/schedules/{id}`,
-`PATCH /v1/health-subjects/{id}`, `PATCH /v1/service-cases/{id}`) are each a **full replacement** —
-every field on the wire is what the row ends up with. `update_asset`, `save_definition`/`save_profile`
-on an edit, `update_group`, `update_schedule`, `postpone_schedule`, `update_health_subject` and
-`update_service_case` add **partial-edit convenience**
+`PATCH /v1/health-subjects/{id}`, `PATCH /v1/service-cases/{id}`, `PATCH /v1/loans/{id}`) are each a
+**full replacement** — every field on the wire is what the row ends up with. `update_asset`,
+`save_definition`/`save_profile` on an edit, `update_group`, `update_schedule`, `postpone_schedule`,
+`update_health_subject`, `update_service_case` and `update_loan` add **partial-edit convenience**
 on top of that: the tool reads the row's current fields first, overlays only the arguments you
 actually supplied, and submits the complete replacement for you. Nothing about calling these tools
 requires stating every field.
 
-`update_asset`, `update_schedule`, `update_health_subject` and `update_service_case` do not keep a
-field list of their own: they send **every key of the command** as
+`update_asset`, `update_schedule`, `update_health_subject`, `update_service_case` and `update_loan` do
+not keep a field list of their own: they send **every key of the command** as
 `src/servicetag_mcp/command_shapes.py` lists it — read off the row, with the schedule's
-`assetId`/`groupId` renamed to `targetAssetId`/`targetGroupId`, and the case's without `assetId` and
-`incidentEventId` — and lay your arguments over it. That module is a vendored copy of four entries of the
+`assetId`/`groupId` renamed to `targetAssetId`/`targetGroupId`, the case's without `assetId` and
+`incidentEventId`, and the loan's without `assetId` and `borrowerName` — and lay your arguments over it.
+That module is a vendored copy of five entries of the
 repository's `docs/api/command-shapes.json`; nothing reads that file at runtime, and
 `tests/test_command_shapes.py` fails the moment the two differ.
 
@@ -232,6 +250,8 @@ provenance.
 | `update_health_subject` | `schedule_id`, `baseline_profile_id` | `null` | `name`, `kind`, `driver`, the three thresholds (required); `weight`, `sort_order` (pass a value) |
 | `update_service_case` | `provider`, `contact`, `case_ref`, `outbound_tracking`, `outbound_carrier`, `return_tracking`, `return_carrier`, `notes` | `""` | `title`, `type`, `opened_on`, `coverage` (required); the status and `closedOn`, which only `add_case_entry` moves |
 | | `cost_minor`, `currency`, `resolution_event_id` | `null` — the last removes the repair link | |
+| `update_loan` | `notes` | `""` | `lent_on` (required); `reminder_mode` (pass `NONE`); the borrower, the return date and the contact link, which no loan body carries |
+| | `due_on` | `null` — no due date; refused while a reminder mode stays, so pass `reminder_mode="NONE"` with it | |
 
 Three of those rows are worth reading twice.
 
@@ -253,11 +273,11 @@ the new target **and** clearing the old one in the same call.
 
 ### `import_merge`
 
-Takes a local path to a `ServiceTag-data-*.zip` of format **1–12** and merges it into the phone. A
+Takes a local path to a `ServiceTag-data-*.zip` of format **1–13** and merges it into the phone. A
 format-6 archive adds the maintenance groups, the schedules and the occurrence closures, format 7 the
 references, format 8 the season activations, the conditions and the health subjects, format 9 the
 owner's own categories, format 10 each attachment's document role, format 11 each asset's warranty
-reminder lead and format 12 the service cases and their timeline entries; an older archive simply has
+reminder lead, format 12 the service cases and their timeline entries and format 13 the loans; an older archive simply has
 none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
@@ -272,11 +292,13 @@ deletes anything:
   that closed the same round on the same day merge cleanly and a genuine disagreement about *when*
   a round was closed is a conflict for a person.
 
-The report carries a `{insert, identical, conflict, skipped}` tally for each of **seventeen**
+The report carries a `{insert, identical, conflict, skipped}` tally for each of **eighteen**
 tables — `assets`, `groups`, `definitions`, `profiles`, `schedules`, `closures`, `links`, `tags`,
 `events`, `attachments`, `references`, `seasonActivations`, `conditions`, `healthSubjects`,
-`categories`, `serviceCases`, `caseEntries`. A season activation, a condition and a case's timeline
-entry are immutable facts: each is only ever inserted or found identical.
+`categories`, `serviceCases`, `caseEntries`, `loans`. A season activation, a condition and a case's timeline
+entry are immutable facts: each is only ever inserted or found identical. A loan is never updated
+either: one returned, re-dated or relinked on one phone after the other received it conflicts, and an
+open loan whose asset already holds a different open loan here conflicts as `ASSET_ALREADY_LENT`.
 
 The tool asks for the plan and applies it only when the plan has no conflicts. Pass
 `plan_only=True` to stop after the plan. Either way the result has `applicable` and, when it is

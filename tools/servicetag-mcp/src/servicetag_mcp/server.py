@@ -138,6 +138,12 @@ TOOL_NAMES: tuple[str, ...] = (
     "open_service_case",
     "update_service_case",
     "add_case_entry",
+    # #72 — the loans, each at a schema-13 minimum. Five, taking the total to 68.
+    "list_loans",
+    "get_loan",
+    "lend_asset",
+    "update_loan",
+    "return_loan",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -163,6 +169,11 @@ _MIN_SERVICE_CASE_SCHEMA_VERSION = 12
 """The Room schema that carries the service cases and their timelines (#79). The five case tools speak
 routes an older app does not have, so each refuses — the two reads too — a phone below it, with nothing
 sent: a per-tool minimum on the warranty tools' pattern. The global write minimum stays 8."""
+
+_MIN_LOAN_SCHEMA_VERSION = 13
+"""The Room schema that carries the loans (#72). The five loan tools speak routes an older app does not
+have, so each refuses — the two reads too — a phone below it, with nothing sent: a per-tool minimum on the
+case tools' pattern. The global write minimum stays 8."""
 
 _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
     {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan"}
@@ -234,6 +245,11 @@ def _require_warranty_schema(tool: str) -> None:
 def _require_case_schema(tool: str) -> None:
     """One of #79's five service-case tools, on a phone below schema 12."""
     _require_tool_schema(tool, _MIN_SERVICE_CASE_SCHEMA_VERSION, "the service cases")
+
+
+def _require_loan_schema(tool: str) -> None:
+    """One of #72's five loan tools, on a phone below schema 13."""
+    _require_tool_schema(tool, _MIN_LOAN_SCHEMA_VERSION, "the loans")
 
 
 def _read_for_write(path: str) -> dict[str, Any]:
@@ -464,9 +480,10 @@ def status() -> dict[str, Any]:
     """The app's version, the contract version, its `schemaVersion` and `backupFormatVersion`, and a
     row count per table (since 1.4 also `seasonActivations`, `assetConditions` and
     `healthSubjects`; since the durable category catalog also `assetCategories`; since #79's service
-    cases also `serviceCases` and `serviceCaseEntries`). Every write tool reads `schemaVersion` once per
-    pairing and refuses with `APP_SCHEMA_TOO_OLD` below 8 (ServiceTag 1.4.0); `get_warranty` and
-    `set_warranty_reminder` refuse below 11, and the five service-case tools below 12."""
+    cases also `serviceCases` and `serviceCaseEntries`; since #72's loans also `assetLoans`). Every write
+    tool reads `schemaVersion` once per pairing and refuses with `APP_SCHEMA_TOO_OLD` below 8 (ServiceTag
+    1.4.0); `get_warranty` and `set_warranty_reminder` refuse below 11, the five service-case tools below
+    12, and the five loan tools below 13."""
     return _call("GET", "/v1/status")
 
 
@@ -1097,7 +1114,7 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a `ServiceTag-data-*.zip` of format 1–12 (format 8, from ServiceTag
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–13 (format 8, from ServiceTag
     1.4.0, adds season activations, conditions and health subjects; format 9 adds the owner's own
     asset categories; format 10 adds each attachment's document role; an older archive's
     attachments are compared without the role and, when the phone's row carries one, without the
@@ -1107,7 +1124,10 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     that setting it moved; format 12 adds the service cases and their timeline entries — a case
     whose header changed on one phone after the other received it (a status update, an edit, or
     linking or removing its repair record) conflicts on re-merge, while a note-only update merges as
-    a new entry beside an identical case).
+    a new entry beside an identical case; format 13 adds the loans, open and returned — a loan
+    returned, re-dated or relinked on one phone after the other received it conflicts on re-merge, and
+    an open loan whose asset already holds a different open loan here conflicts as
+    `ASSET_ALREADY_LENT`).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
@@ -1117,7 +1137,7 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     `plan_only=True`, or when the plan does have conflicts, it stops and returns the plan — whose
     `conflicts` list names each one by table, id and a stable reason code, in a deterministic order.
     Read `applicable` to know which happened. The report tallies `{insert, identical, conflict,
-    skipped}` for each of seventeen tables.
+    skipped}` for each of eighteen tables.
 
     The plan writes nothing, so it is asked of any app. The apply is a write: against an app below
     schema 8 (older than ServiceTag 1.4.0) it is refused after the plan with `APP_SCHEMA_TOO_OLD`
@@ -2538,6 +2558,135 @@ def add_case_entry(
         },
         content_type="application/json",
     )
+
+
+# --- #72, the loans (docs/api/v1.md, **Loans (#72)**) ----------------------------------------------------
+#
+# Five routes a phone below schema 13 does not have, so all five tools refuse such a phone by name before
+# anything is sent — the two reads as well. No tool takes, sends or answers a contact link: the phone makes
+# every link, and the API says only `contactLinked`. Nothing deletes or relinks a loan, and none of these
+# runs a reminder sweep: a loan written here settles at the phone's next sweep at or after its digest hour.
+
+_LOAN_TEXT_CLEARABLE: frozenset[str] = frozenset({"notes"})
+"""The loan's one optional text, cleared to `""`."""
+
+_LOAN_CLEARABLE_FIELDS: frozenset[str] = _LOAN_TEXT_CLEARABLE | frozenset({"due_on"})
+"""That, and the due date, cleared to `null` — no due date. `lent_on` and `reminder_mode` are in every
+body and never clearable (send `reminder_mode="NONE"` to turn the reminder off); the borrower, the return
+date and a contact link are in no body at all."""
+
+
+@mcp.tool()
+def list_loans(asset_id: str) -> dict[str, Any]:
+    """One asset's loans, open and returned, the latest lent first: `{loans}`, each a `LoanDto` —
+    `{id, assetId, borrowerName, contactLinked, lentOn, dueOn, reminderMode, returnedOn, notes, createdAt,
+    updatedAt}`. `contactLinked` says whether the phone linked the loan to an Android contact; the link
+    itself never leaves the phone. `returnedOn` is null while a loan is open. Needs a phone at schema 13 or
+    later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/loans"
+    _require_loan_schema("list_loans")
+    return _call("GET", path)
+
+
+@mcp.tool()
+def get_loan(loan_id: str) -> dict[str, Any]:
+    """One loan, open or returned: `{loan}`, a `LoanDto` whose `contactLinked` says whether the phone linked
+    it to a contact — the link itself is never sent. Needs a phone at schema 13 or later: an older one is
+    refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/loans/{_path_id(loan_id, field='loan_id')}"
+    _require_loan_schema("get_loan")
+    return _call("GET", path)
+
+
+@mcp.tool()
+def lend_asset(
+    asset_id: str,
+    borrower_name: str,
+    lent_on: str,
+    due_on: str | None = None,
+    reminder_mode: str = "NONE",
+    notes: str = "",
+) -> dict[str, Any]:
+    """Lend an asset to a person or an organisation, by name. A create, sent as given.
+
+    `borrower_name` is the name the loan shows; the loan is name-only (`contactLinked` false) — only the
+    phone links a loan to an Android contact, by "Choose from Contacts". `lent_on` is ISO `YYYY-MM-DD`,
+    not after today, and required: **the phone applies none of its form's defaults here**, today included.
+    `due_on` is optional (`None` for no due date) and not before `lent_on`. `reminder_mode` is `NONE`,
+    `ONCE` or `UNTIL_RETURNED`; any mode but `NONE` needs a `due_on`, and is refused without one rather
+    than reset. An asset of any lifecycle may be lent, but only one loan per asset may be open: a second is
+    refused as `asset_already_lent` — return the open one first. The reminder is the phone's own and
+    settles at its next sweep at or after the digest hour; nothing here runs one. Answers `{loan}`; a
+    refusal is `loan_validation` with the body key in `[field=…]`. Needs a phone at schema 13 or later: an
+    older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    _require_loan_schema("lend_asset")
+    return _call(
+        "POST",
+        "/v1/loans",
+        json_body={
+            "assetId": asset_id,
+            "borrowerName": borrower_name,
+            "lentOn": lent_on,
+            "dueOn": due_on,
+            "reminderMode": reminder_mode,
+            "notes": notes,
+        },
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def update_loan(
+    loan_id: str,
+    lent_on: str | None = None,
+    due_on: str | None = None,
+    reminder_mode: str | None = None,
+    notes: str | None = None,
+    clear_fields: list[str] | None = None,
+) -> dict[str, Any]:
+    """Edit an open loan's terms — the app's "Edit loan".
+
+    `PATCH /v1/loans/{id}` is a full replacement; this tool reads the loan first (`GET /v1/loans/{id}`)
+    and overlays only what you supplied onto **every key of the loan command but `assetId` and
+    `borrowerName`** (the vendored `command_shapes`) — a loan never changes asset or borrower. An omitted
+    argument and one sent as `null` both leave the current value alone.
+
+    **It never sends a return date, a borrower or a contact link**: the return is `return_loan`, the
+    borrower is fixed when the loan is made, and only the phone links a contact.
+
+    Clearing is by name: `clear_fields` takes `due_on` (sent as `null`, no due date) and `notes` (sent as
+    `""`). `lent_on` and `reminder_mode` are never clearable — pass `reminder_mode="NONE"` to turn the
+    reminder off. Clearing `due_on` on a loan with a reminder is refused unless `reminder_mode="NONE"` goes
+    with it: the phone refuses a mode without a due date rather than resetting it. A returned loan is
+    frozen and refused as `loan_returned`. Nothing deletes a loan. The change settles at the phone's next
+    sweep at or after the digest hour. Answers `{loan}`. Needs a phone at schema 13 or later: an older one
+    is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    arguments = _arguments(locals(), besides=("loan_id", "clear_fields"))
+    to_clear = _validate_clear_fields(clear_fields, _LOAN_CLEARABLE_FIELDS, arguments)
+
+    path = f"/v1/loans/{_path_id(loan_id, field='loan_id')}"
+    _require_loan_schema("update_loan")
+    current = _field(_read_for_write(path), "loan", of="the loan lookup")
+    keys = tuple(k for k in command_shapes.LOAN_KEYS if k not in ("assetId", "borrowerName"))
+    body = _overlay_command(current, keys, arguments, to_clear, text_fields=_LOAN_TEXT_CLEARABLE, of="the loan")
+    return _call("PATCH", path, json_body=body, content_type="application/json")
+
+
+@mcp.tool()
+def return_loan(loan_id: str, returned_on: str) -> dict[str, Any]:
+    """Mark a loan returned — the only way a loan ends. `returned_on` is ISO `YYYY-MM-DD`, not before the
+    lent date and not after today. The loan stays, as the asset's lending history, and is frozen from here
+    on: a second return or an edit is refused as `loan_returned`. Any reminder waiting on it is taken down
+    at the phone's next sweep at or after the digest hour. Answers `{loan}`. Needs a phone at schema 13 or
+    later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/loans/{_path_id(loan_id, field='loan_id')}/return"
+    _require_loan_schema("return_loan")
+    return _call("POST", path, json_body={"returnedOn": returned_on}, content_type="application/json")
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

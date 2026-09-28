@@ -54,7 +54,7 @@ def test_the_vendored_key_lists_equal_the_golden_file() -> None:
     """Keys, legacy keys, action flags and `rowToCommand`, in the golden file's own order."""
     shapes = golden()
     vendored = command_shapes.vendored()
-    assert set(vendored) == {"asset", "schedule", "healthSubject", "serviceCase"}
+    assert set(vendored) == {"asset", "schedule", "healthSubject", "serviceCase", "loan"}
     for name, entry in vendored.items():
         assert entry == shapes[name], name
 
