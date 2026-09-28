@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.R
+import com.loosecannon.servicetag.core.model.LoanStanding
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
@@ -52,6 +53,7 @@ import com.loosecannon.servicetag.ui.health.SubjectBandFact
 import com.loosecannon.servicetag.ui.health.dashboardHealthRow
 import com.loosecannon.servicetag.ui.health.healthColors
 import com.loosecannon.servicetag.ui.health.healthGlyph
+import com.loosecannon.servicetag.ui.loan.LoanBadge
 import com.loosecannon.servicetag.ui.maintenance.AttentionItem
 import com.loosecannon.servicetag.ui.maintenance.AttentionKind
 import com.loosecannon.servicetag.ui.maintenance.AttentionSection
@@ -233,6 +235,8 @@ private fun AttentionList(
                         AttentionKind.HEALTH ->
                             HealthRow(entry.item, onClick = { onOpenAsset(entry.item.assetId.value) })
                     }
+                    // #72 (C20): an overdue loan opens its asset, whose Lending section says the rest.
+                    is SectionEntry.Loan -> LoanRow(entry.row, onClick = { onOpenAsset(entry.row.assetId.value) })
                 }
                 RowRule()
             }
@@ -253,6 +257,7 @@ private val SectionEntry.key: String
             AttentionKind.CONDITION -> "condition-${item.assetId.value}"
             AttentionKind.HEALTH -> "health-${item.healthSubjectId?.value ?: "${item.assetId.value}-${item.rank}"}"
         }
+        is SectionEntry.Loan -> "loan-${row.loanId}"
     }
 
 /**
@@ -366,6 +371,31 @@ private fun AttentionItem.bandFact(): SubjectBandFact? {
     val b = band ?: return null
     val s = score ?: return null
     return SubjectBandFact(id, name, b, s)
+}
+
+/**
+ * #72 (C20; R72-14 b, R72-22): an open overdue loan of an in-service asset, after ATTENTION's ratified
+ * tiers — the loan glyph in the neutral tone, the asset's name with P72-2 "Loan overdue" (word and
+ * glyph, never colour alone and never maintenance OVERDUE), and P72-44 under it.
+ */
+@Composable
+internal fun LoanRow(row: LoanAttentionRow, onClick: () -> Unit) {
+    val tone = ServiceTagTheme.semanticColors.seasonInactive
+    AttentionRowFrame(
+        glyph = { Icon(ServiceTagIcons.Outbox, contentDescription = null, tint = tone.foreground, modifier = Modifier.size(28.dp)) },
+        onClick = onClick,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                text = row.assetName,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            LoanBadge(LoanStanding.OVERDUE)
+        }
+        QuietLine(row.line)
+    }
 }
 
 /** The shipped row metrics (G1 §1.2): 28dp glyph · text block · chevron, 56dp minimum. */

@@ -4,18 +4,25 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.LoanStanding
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.isRetired
+import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
+import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
+import com.loosecannon.servicetag.ui.condition.displayDate
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
+import com.loosecannon.servicetag.ui.health.inService
+import com.loosecannon.servicetag.ui.loan.dashboardLoanLine
 import com.loosecannon.servicetag.ui.maintenance.AttentionItem
 import com.loosecannon.servicetag.ui.maintenance.AttentionKind
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
@@ -28,9 +35,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import java.time.LocalDate
 
 /** How long the repository flow stays hot after the last collector leaves (a rotation, typically). */
 private const val SUBSCRIPTION_GRACE_MS = 5_000L
@@ -73,7 +82,29 @@ sealed interface SectionEntry {
     data class AssetLevel(val item: AttentionItem, val category: String?) : SectionEntry {
         override val assetId: String get() = item.assetId.value
     }
+
+    /**
+     * #72 (C20; R72-14 b): an open **overdue** loan of an in-service asset — a Dashboard-only row after
+     * ATTENTION's four ratified tiers, never an `AttentionKind` and never on `/v1/attention`.
+     */
+    data class Loan(val row: LoanAttentionRow) : SectionEntry {
+        override val assetId: String get() = row.assetId.value
+    }
 }
+
+/**
+ * #72 (C20): one Dashboard loan row — the asset's name, P72-2 with the loan glyph, and P72-44 ([line]).
+ * [category] is the asset's, for the category filter. Custody, not maintenance: it carries no status,
+ * condition or health (AC 13).
+ */
+data class LoanAttentionRow(
+    val loanId: String,
+    val assetId: AssetId,
+    val assetName: String,
+    val category: String?,
+    val dueOn: String,
+    val line: String,
+)
 
 /**
  * One drawn section: its identity and its rows in the order they are drawn. A section with no rows
@@ -166,6 +197,12 @@ class DashboardViewModel(
     private val assetHealth: AssetHealthReadModel,
     private val health: HealthSummary,
     private val prefs: AppPrefs,
+    /**
+     * #72 (C20): the open loans, observed for the overdue loan rows, and `Today` to judge them by. Null
+     * draws none — a test that is not about loans; `AppGraph` passes the real ones.
+     */
+    private val loans: AssetLoanRepository? = null,
+    private val today: Today? = null,
 ) : ViewModel() {
 
     /**
@@ -182,6 +219,8 @@ class DashboardViewModel(
         graph.assetHealthReadModel,
         health,
         graph.prefs,
+        loans = graph.loans,
+        today = graph.today,
     )
 
     private val refreshes = MutableStateFlow(0)
@@ -198,6 +237,8 @@ class DashboardViewModel(
         val conditions: Map<AssetId, OperationalCondition>,
         val worstSeverity: ReminderHealthSeverity?,
         val lastBackupAt: Long?,
+        /** #72 (C20): the Dashboard loan rows, already filtered to open, overdue and in service. */
+        val loanRows: List<LoanAttentionRow> = emptyList(),
     )
 
     private val store: Flow<StoreView> =
@@ -212,8 +253,10 @@ class DashboardViewModel(
             // only ever be re-read when the *store* moved: a launch check landing after the first
             // emission would leave a ≥ WARN badge absent for the whole session.
             health.changes,
-        ) { rows, _, _, _ -> rows }
-            .map { rows ->
+            // #72 (C20): the open loans — one read of every one; the rows are judged against `Today`.
+            loans?.observeOpen() ?: flowOf(emptyList()),
+        ) { rows, _, _, _, open -> rows to open }
+            .map { (rows, open) ->
                 StoreView(
                     rows = rows,
                     items = due.items(),
@@ -221,6 +264,7 @@ class DashboardViewModel(
                     conditions = currentConditions(),
                     worstSeverity = health.worstSeverity(),
                     lastBackupAt = prefs.lastBackupAt,
+                    loanRows = today?.let { loanAttentionRowsOf(open, rows, it.localDate()) }.orEmpty(),
                 )
             }
 
@@ -265,6 +309,7 @@ class DashboardViewModel(
                 .filter { !it.isComponent || it.isPromotable },
             attention = view.attention,
             categoryOf = { id -> byId[id]?.category },
+            loans = view.loanRows,
         )
 
         // The asset appears exactly once (controller ruling, fix round 1; plan decision 40). The
@@ -357,12 +402,40 @@ internal fun assembleSections(
     schedules: List<DueItem>,
     attention: List<AttentionItem>,
     categoryOf: (AssetId) -> String?,
+    loans: List<LoanAttentionRow> = emptyList(),
 ): List<AttentionGroup> = AttentionSection.entries.mapNotNull { section ->
     val (leading, trailing) = attention.filter { it.section == section }.partition { it.leadsItsSection }
     val entries = leading.map { it.entry(categoryOf) } +
         schedules.filter { it.section == section }.map(SectionEntry::Schedule) +
-        trailing.map { it.entry(categoryOf) }
+        trailing.map { it.entry(categoryOf) } +
+        // #72 (C20; R72-14 b): after ATTENTION's four ratified tiers, and in no other section.
+        (if (section == AttentionSection.ATTENTION) loans.map(SectionEntry::Loan) else emptyList())
     entries.takeIf { it.isNotEmpty() }?.let { AttentionGroup(section, it) }
+}
+
+/**
+ * #72 (C20; R72-14 b, R72-10): the Dashboard's loan rows — every **open** loan that is **overdue** on
+ * [today] (the due day itself is still lent out) of an asset **in service**, by due date, then the
+ * asset's name, then the loan's id. A retired or archived asset's overdue loan still reminds, but is not
+ * here: the Dashboard's ATTENTION shows in-service rows only.
+ */
+internal fun loanAttentionRowsOf(open: List<AssetLoan>, assets: List<Asset>, today: LocalDate): List<LoanAttentionRow> {
+    val byId = assets.associateBy { it.id }
+    return open
+        .filter { it.standingOn(today) == LoanStanding.OVERDUE }
+        .mapNotNull { loan ->
+            val asset = byId[loan.assetId]?.takeIf { it.inService } ?: return@mapNotNull null
+            val due = loan.dueOn ?: return@mapNotNull null
+            LoanAttentionRow(
+                loanId = loan.id.value,
+                assetId = asset.id,
+                assetName = asset.name,
+                category = asset.category.takeIf { it.isNotBlank() },
+                dueOn = due,
+                line = dashboardLoanLine(loan.borrowerName, displayDate(LocalDate.parse(due))),
+            )
+        }
+        .sortedWith(compareBy({ it.dueOn }, { it.assetName.lowercase() }, { it.loanId }))
 }
 
 /** A DOWN unit is drawn first in ATTENTION, before the schedule rows (#61 AC 6). */
