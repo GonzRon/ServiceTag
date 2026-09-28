@@ -116,6 +116,8 @@ class LoanUseCasesTest {
         assertEquals(0, uow.commits)
         assertEquals(0, loanUpserts)
         assertEquals(listOf("l-open"), loanRows.rows.keys.toList())
+        // C2 (ii): the one-open-loan read shares the write it guards, so no second loan can slip in between.
+        assertEquals(listOf(true), loanRows.openForInWrite, "the open-loan read ran inside the lend's write transaction")
     }
 
     @Test
@@ -170,6 +172,21 @@ class LoanUseCasesTest {
         // No reminder and no due date is a plain loan.
         val plain = lend.run(AssetId("a2"), "Sample Borrower", terms(dueOn = null, mode = LoanReminderMode.NONE), null)
         assertEquals(LoanReminderMode.NONE, plain.reminderMode)
+    }
+
+    /**
+     * R72-19's accepting boundaries in the commands themselves: a loan lent today — the phone's default
+     * "Lent on" — and due back that same day is accepted, on a lend and on an edit.
+     */
+    @Test
+    fun aLoanLentAndDueTodayIsAccepted() = runBlocking<Unit> {
+        val lent = lend.run(AssetId("a1"), "Sample Borrower", terms(lentOn = "2026-09-24", dueOn = "2026-09-24"), null)
+        assertEquals("2026-09-24" to "2026-09-24", lent.lentOn to lent.dueOn)
+
+        val open = stored(loanOf("l1", assetId = "a2", lentOn = "2026-09-20", dueOn = "2026-10-04"))
+        val edited = update.run(open.id, terms(lentOn = "2026-09-24", dueOn = "2026-09-24"))
+        assertEquals("2026-09-24" to "2026-09-24", edited.lentOn to edited.dueOn)
+        assertEquals(2, loanUpserts)
     }
 
     /** R72-11: the use case — and the API over it — lends an asset of any lifecycle. */

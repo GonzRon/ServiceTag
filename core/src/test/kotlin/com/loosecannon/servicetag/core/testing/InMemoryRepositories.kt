@@ -962,7 +962,9 @@ class InMemoryServiceCaseEntryRepository : ServiceCaseEntryRepository, Rollbacka
  * `(asset_id, open_marker)` is reproduced — an upsert that would leave an asset with two open loans is
  * refused, never written — so a writer that forgot its own check fails here as it would on Room.
  * [cascadeFromAsset] is not part of the port: it is how [InMemoryAssetRepository] reproduces the
- * schema's CASCADE from `asset`. [failOnUpsert] rigs the Nth upsert to throw.
+ * schema's CASCADE from `asset`. [failOnUpsert] rigs the Nth upsert to throw. [openForInWrite] records,
+ * per [openFor] call, whether a [FakeUnitOfWork] write transaction was open — so a writer's one-open-loan
+ * read can be shown to share the write it guards (C2 ii).
  */
 class InMemoryAssetLoanRepository : AssetLoanRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, AssetLoan>()
@@ -992,8 +994,13 @@ class InMemoryAssetLoanRepository : AssetLoanRepository, Rollbackable, Witnessed
     override suspend fun forAsset(assetId: AssetId): List<AssetLoan> =
         rows.values.filter { it.assetId == assetId }.sortedWith(BY_ASSET)
 
-    override suspend fun openFor(assetId: AssetId): AssetLoan? =
-        rows.values.firstOrNull { it.isOpen && it.assetId == assetId }
+    /** One entry per [openFor] call: true when it ran inside a write transaction. */
+    val openForInWrite = mutableListOf<Boolean>()
+
+    override suspend fun openFor(assetId: AssetId): AssetLoan? {
+        openForInWrite += witness?.inWrite == true
+        return rows.values.firstOrNull { it.isOpen && it.assetId == assetId }
+    }
 
     override suspend fun open(): List<AssetLoan> = rows.values.filter { it.isOpen }.sortedBy { it.id.value }
 

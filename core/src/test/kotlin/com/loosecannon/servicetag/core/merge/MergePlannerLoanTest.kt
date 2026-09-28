@@ -131,6 +131,25 @@ class MergePlannerLoanTest {
     }
 
     /**
+     * The everyday re-lend (dev ↔ production): a loan returned here, and the asset lent again on the other
+     * phone. History never blocks — only an open loan here does — so the new loan inserts, whether or not
+     * the archive also carries the returned one.
+     */
+    @Test
+    fun anIncomingOpenLoanInsertsBesideLocalReturnedOnes() {
+        val relent = loanOf("l2", lentOn = "2026-09-22")
+
+        val plan = planOf(decoded(listOf(relent)), loans = listOf(returned))
+        assertEquals(listOf(insert("l2")), plan.loans())
+        assertTrue(plan.applicable)
+        assertEquals(listOf(relent), plan.writes.loans)
+
+        val withHistory = planOf(decoded(listOf(returned, relent)), loans = listOf(returned))
+        assertEquals(listOf(identical("l0"), insert("l2")), withHistory.loans())
+        assertEquals(listOf(relent), withHistory.writes.loans)
+    }
+
+    /**
      * The owner rule. Through the real decode a loan's asset is always in the file, and an archive asset
      * the plan refuses is the only way it is unavailable: here the asset's parent sits under it in a
      * snapshot the schema could never hold — the planner guard, reached through a decoded archive. A
