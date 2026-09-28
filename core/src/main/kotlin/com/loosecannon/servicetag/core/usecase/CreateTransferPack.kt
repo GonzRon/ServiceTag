@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.transfer.TransferGraph
 import com.loosecannon.servicetag.core.transfer.TransferPack
+import com.loosecannon.servicetag.core.transfer.TransferPackCodec
 import com.loosecannon.servicetag.core.transfer.TransferPackDraft
 import com.loosecannon.servicetag.core.transfer.TransferRefusal
 import com.loosecannon.servicetag.core.transfer.TransferSelection
@@ -16,8 +17,14 @@ sealed interface CreateTransferPackResult {
     /** P77-15 to P77-18: the selection cannot leave as it stands; every reason, together. */
     data class Refused(val refusals: List<TransferRefusal>) : CreateTransferPackResult
 
-    /** P77-59: the data archive would be [dataBytes] bytes, over [limit]. */
-    data class TooLarge(val dataBytes: Long, val limit: Long) : CreateTransferPackResult
+    /**
+     * P77-59: [part] of the pack would be at least [bytes] bytes, over [limit] — refused here rather than built
+     * for every recipient's reader to call damaged (P77-49).
+     */
+    data class TooLarge(val part: Part, val bytes: Long, val limit: Long) : CreateTransferPackResult {
+        /** `data.zip` as stored; the pack's manifest; `data.zip`'s entries inflated together. */
+        enum class Part { DATA, MANIFEST, INFLATED_DATA }
+    }
 
     data class Created(val draft: TransferPackDraft) : CreateTransferPackResult
 }
@@ -31,7 +38,8 @@ sealed interface CreateTransferPackResult {
  *
  * [lineageOf] answers, inside the read, the pack ids an asset travelled in before this one, oldest first
  * (B2a wires the transfer records' `lineageFor`; until then every asset starts here). [maxDataBytes] is
- * [TransferPack.MAX_PACK_DATA_BYTES]; only a test passes another.
+ * [TransferPack.MAX_PACK_DATA_BYTES], and [maxManifestBytes] and [maxJsonBytes] the reader's own manifest and
+ * inflated caps (mn-1); only a test passes others.
  */
 class CreateTransferPack(
     private val repos: BackupRepositories,
@@ -42,6 +50,8 @@ class CreateTransferPack(
     private val schemaVersion: Int,
     private val lineageOf: suspend (AssetId) -> List<String>,
     private val maxDataBytes: Long = TransferPack.MAX_PACK_DATA_BYTES,
+    private val maxManifestBytes: Long = TransferPack.MAX_MANIFEST_BYTES,
+    private val maxJsonBytes: Long = TransferPack.MAX_PACK_JSON_BYTES,
 ) {
     /**
      * @throws IllegalArgumentException when [rootIds] is empty or names no asset, or [note] breaks the
@@ -63,28 +73,39 @@ class CreateTransferPack(
         val packId = ids.newId()
         val createdAt = clock.nowMillis()
         val data = BackupCodec.encode(selected.data, appVersion, schemaVersion, createdAt, packId)
-        if (data.size > maxDataBytes) return CreateTransferPackResult.TooLarge(data.size.toLong(), maxDataBytes)
+        if (data.size > maxDataBytes) {
+            return CreateTransferPackResult.TooLarge(CreateTransferPackResult.TooLarge.Part.DATA, data.size.toLong(), maxDataBytes)
+        }
+        // mn-1: never build what every recipient's reader would call damaged — the same caps, the same helper.
+        val inflated = TransferPack.inflatedSize(data, maxJsonBytes)
+        if (inflated > maxJsonBytes) {
+            return CreateTransferPackResult.TooLarge(CreateTransferPackResult.TooLarge.Part.INFLATED_DATA, inflated, maxJsonBytes)
+        }
         // The inner manifest is the one home of the counts and the content hash: read them back from it.
         val inner = BackupCodec.decode(data).manifest
-        return CreateTransferPackResult.Created(
-            TransferPackDraft(
-                packId = packId,
-                createdAt = createdAt,
-                appVersion = appVersion,
-                schemaVersion = schemaVersion,
-                dataFormatVersion = inner.formatVersion,
-                artifactFormatVersion = ArtifactsCodec.ARTIFACT_FORMAT_VERSION,
-                rootAssetIds = selected.rootIds.map { it.value },
-                assetIds = selected.assetIds.map { it.value },
-                lineage = lineage!!,
-                counts = inner.counts,
-                attachments = inner.artifactCount,
-                attachmentBytes = inner.artifactBytes,
-                contentSha256 = inner.dataSha256,
-                note = note,
-                data = data,
-                plan = artifactsPlanOf(selected.data, packId, createdAt),
-            ),
+        val draft = TransferPackDraft(
+            packId = packId,
+            createdAt = createdAt,
+            appVersion = appVersion,
+            schemaVersion = schemaVersion,
+            dataFormatVersion = inner.formatVersion,
+            artifactFormatVersion = ArtifactsCodec.ARTIFACT_FORMAT_VERSION,
+            rootAssetIds = selected.rootIds.map { it.value },
+            assetIds = selected.assetIds.map { it.value },
+            lineage = lineage!!,
+            counts = inner.counts,
+            attachments = inner.artifactCount,
+            attachmentBytes = inner.artifactBytes,
+            contentSha256 = inner.dataSha256,
+            note = note,
+            data = data,
+            plan = artifactsPlanOf(selected.data, packId, createdAt),
         )
+        // The artifacts' hash is not known yet; a placeholder of its exact length measures the manifest as sealed.
+        val manifestBytes = TransferPackCodec.encodeManifest(draft.manifest(artifactsSha256 = "0".repeat(64))).size.toLong()
+        if (manifestBytes > maxManifestBytes) {
+            return CreateTransferPackResult.TooLarge(CreateTransferPackResult.TooLarge.Part.MANIFEST, manifestBytes, maxManifestBytes)
+        }
+        return CreateTransferPackResult.Created(draft)
     }
 }

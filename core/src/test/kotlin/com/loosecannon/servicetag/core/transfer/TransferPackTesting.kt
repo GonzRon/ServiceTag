@@ -34,10 +34,26 @@ internal object TransferPackTesting {
         lineageOf: suspend (AssetId) -> List<String> = { emptyList() },
         maxDataBytes: Long = TransferPack.MAX_PACK_DATA_BYTES,
         ids: IdGenerator = IdGenerator { PACK_ID },
+        maxManifestBytes: Long = TransferPack.MAX_MANIFEST_BYTES,
+        maxJsonBytes: Long = TransferPack.MAX_PACK_JSON_BYTES,
     ) = CreateTransferPack(
         repositoriesOf(install), install.uow, ids, Clock { CREATED_AT }, appVersion = "1.4.1", schemaVersion = 13,
-        lineageOf = lineageOf, maxDataBytes = maxDataBytes,
+        lineageOf = lineageOf, maxDataBytes = maxDataBytes, maxManifestBytes = maxManifestBytes,
+        maxJsonBytes = maxJsonBytes,
     )
+
+    /** A ZIP whose names are in a legacy code page: `é` is the single byte 0xE9, and no UTF-8 flag is set. */
+    fun legacyZipOf(entries: List<Raw>): ByteArray {
+        val out = ByteArrayOutputStream()
+        ZipOutputStream(out, Charsets.ISO_8859_1).use { zos ->
+            entries.forEach { raw ->
+                zos.putNextEntry(ZipEntry(raw.name))
+                zos.write(raw.bytes)
+                zos.closeEntry()
+            }
+        }
+        return out.toByteArray()
+    }
 
     /** The fixtures' heater (and so its anode) as a draft, from a freshly seeded install. */
     fun heaterDraft(note: String = "Example handover note"): TransferPackDraft = runBlocking {

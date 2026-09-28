@@ -67,9 +67,16 @@ object TransferPackReader {
 
     private fun damaged(reason: String): Nothing = throw Refusal(TransferPackRead.Damaged(reason))
 
+    /**
+     * The JDK's ZIP reader fails in two families: `IOException` (truncation, a bad header), and
+     * `IllegalArgumentException` for an entry name that is not UTF-8 (MJ-1) — an older zipper's legacy code
+     * page. Both are damage here; neither may escape [read].
+     */
     private inline fun <T> zipRead(block: () -> T): T = try {
         block()
     } catch (e: IOException) {
+        damaged("the pack is not a readable zip: ${e.message}")
+    } catch (e: IllegalArgumentException) {
         damaged("the pack is not a readable zip: ${e.message}")
     }
 
@@ -86,6 +93,8 @@ object TransferPackReader {
             zin.nextEntry
         } catch (e: IOException) {
             null
+        } catch (e: IllegalArgumentException) {
+            null // a first name that is not UTF-8: some other ZIP, never a pack (MJ-1)
         }
         if (first == null || first.isDirectory || first.name != TransferPack.MANIFEST_ENTRY) {
             return TransferPackRead.NotAPack
@@ -113,7 +122,7 @@ object TransferPackReader {
 
         val dataBytes = data!!
         if (TransferPack.sha256Hex(dataBytes) != manifest.dataSha256) damaged("${TransferPack.DATA_ENTRY} does not match its sha256")
-        if (!inflatesWithin(dataBytes, TransferPack.MAX_PACK_JSON_BYTES)) {
+        if (zipRead { TransferPack.inflatedSize(dataBytes, TransferPack.MAX_PACK_JSON_BYTES) } > TransferPack.MAX_PACK_JSON_BYTES) {
             damaged("${TransferPack.DATA_ENTRY} inflates past ${TransferPack.MAX_PACK_JSON_BYTES} bytes")
         }
         val backup = try {
@@ -236,23 +245,6 @@ object TransferPackReader {
             if (total > cap) return null
             out.write(buffer, 0, read)
         }
-    }
-
-    /** Whether every entry of [archive], inflated and counted together, stays within [cap]; nothing is kept. */
-    private fun inflatesWithin(archive: ByteArray, cap: Long): Boolean = zipRead {
-        var total = 0L
-        val buffer = ByteArray(BUFFER)
-        ZipInputStream(ByteArrayInputStream(archive)).use { inner ->
-            while (inner.nextEntry != null) {
-                while (true) {
-                    val read = inner.read(buffer)
-                    if (read < 0) break
-                    total += read
-                    if (total > cap) return@zipRead false
-                }
-            }
-        }
-        true
     }
 
     /** The artifacts reader closes what it is handed; the pack's own stream must outlive it. */

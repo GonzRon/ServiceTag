@@ -248,7 +248,9 @@ object TransferGraph {
         val droppedDefinitions = data.measurementDefinitions.filter { it.assetId in heldIds }.map { it.id }.toSet()
         val droppedProfiles = data.eventProfiles.filter { it.assetId in heldIds }.map { it.id }.toSet()
 
-        val kept = BackupData(
+        // A copy, not a construction: a list this function does not name is kept whole (mn-2), so a table
+        // added later can never vanish from every ordinary backup without a sound.
+        val kept = data.copy(
             assets = data.assets.filterNot { it.id in heldIds },
             nfcTags = data.nfcTags.filterNot { it.assetId in heldIds || it.linkId in droppedLinks },
             externalLinks = data.externalLinks.filterNot { it.id in droppedLinks },
@@ -263,7 +265,6 @@ object TransferGraph {
             seasonActivations = data.seasonActivations.filterNot { it.assetId in heldIds },
             assetConditions = data.assetConditions.filterNot { it.assetId in heldIds },
             healthSubjects = data.healthSubjects.filterNot { it.assetId in heldIds },
-            assetCategories = data.assetCategories,
             serviceCases = data.serviceCases.filterNot { it.id in droppedCases },
             serviceCaseEntries = data.serviceCaseEntries.filterNot { it.caseId in droppedCases },
             assetLoans = data.assetLoans.filterNot { it.assetId in heldIds },

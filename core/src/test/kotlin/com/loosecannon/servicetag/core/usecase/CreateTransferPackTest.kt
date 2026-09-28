@@ -76,8 +76,28 @@ class CreateTransferPackTest {
         val result = TransferPackTesting.creationOf(seeded(), maxDataBytes = 1_000L).run(listOf(AssetId(HEATER)))
 
         val tooLarge = assertIs<CreateTransferPackResult.TooLarge>(result)
-        assertEquals(1_000L, tooLarge.limit)
-        assertEquals(true, tooLarge.dataBytes > 1_000L)
+        assertEquals(CreateTransferPackResult.TooLarge.Part.DATA to 1_000L, tooLarge.part to tooLarge.limit)
+        assertEquals(true, tooLarge.bytes > 1_000L)
+    }
+
+    /** mn-1: a manifest the reader would call damaged (over its cap) is refused at creation, not shipped. */
+    @Test
+    fun aManifestOverTheCapIsRefused() = runBlocking<Unit> {
+        val result = TransferPackTesting.creationOf(seeded(), maxManifestBytes = 500L).run(listOf(AssetId(HEATER)))
+
+        val tooLarge = assertIs<CreateTransferPackResult.TooLarge>(result)
+        assertEquals(CreateTransferPackResult.TooLarge.Part.MANIFEST to 500L, tooLarge.part to tooLarge.limit)
+        assertEquals(true, tooLarge.bytes > 500L)
+    }
+
+    /** mn-1: a data archive small as stored but past the reader's inflated cap is refused at creation too. */
+    @Test
+    fun inflatedDataOverTheCapIsRefused() = runBlocking<Unit> {
+        val result = TransferPackTesting.creationOf(seeded(), maxJsonBytes = 2_000L).run(listOf(AssetId(HEATER)))
+
+        val tooLarge = assertIs<CreateTransferPackResult.TooLarge>(result)
+        assertEquals(CreateTransferPackResult.TooLarge.Part.INFLATED_DATA to 2_000L, tooLarge.part to tooLarge.limit)
+        assertEquals(true, tooLarge.bytes > 2_000L)
     }
 
     /** One read transaction, no write, every table read inside it, and the store exactly as it was. */

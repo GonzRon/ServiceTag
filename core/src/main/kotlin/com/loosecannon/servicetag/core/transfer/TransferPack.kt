@@ -1,7 +1,9 @@
 package com.loosecannon.servicetag.core.transfer
 
 import com.loosecannon.servicetag.core.backup.ArtifactsPlan
+import java.io.ByteArrayInputStream
 import java.security.MessageDigest
+import java.util.zip.ZipInputStream
 import kotlinx.serialization.Serializable
 
 /**
@@ -40,6 +42,29 @@ object TransferPack {
     /** The note rule, stated once: the creation and the reader ask the same question. */
     fun noteAccepted(note: String): Boolean =
         note.length <= MAX_NOTE_CHARS && note.none { it == '\n' || it == '\r' || it == ' ' || it == ' ' }
+
+    /**
+     * `data.zip`'s entries inflated and counted together, stopping at the first byte past [cap] — so an answer
+     * over [cap] means "too large", and nothing is ever held. One home for the reader (before the backup codec,
+     * which has no cap) and for creation (mn-1). It throws what the JDK's ZIP reader throws on a malformed
+     * archive (an `IOException`, or an `IllegalArgumentException` for a name that is not UTF-8); the reader
+     * maps both to damage.
+     */
+    internal fun inflatedSize(archive: ByteArray, cap: Long): Long {
+        var total = 0L
+        val buffer = ByteArray(64 * 1024)
+        ZipInputStream(ByteArrayInputStream(archive)).use { zin ->
+            while (zin.nextEntry != null) {
+                while (true) {
+                    val read = zin.read(buffer)
+                    if (read < 0) break
+                    total += read
+                    if (total > cap) return total
+                }
+            }
+        }
+        return total
+    }
 
     internal fun sha256Hex(bytes: ByteArray): String = hex(MessageDigest.getInstance("SHA-256").digest(bytes))
 

@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.transfer
 
 import com.loosecannon.servicetag.core.backup.BackupCodec
+import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.testing.completionOf
@@ -12,6 +13,9 @@ import com.loosecannon.servicetag.core.transfer.TransferFixtures.HEATER
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.OPENER
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Test
 
 /**
@@ -43,6 +47,18 @@ class TransferGraphRetainTest {
         assertEquals(estate.assetCategories, kept.assetCategories, "the catalog is the sender's")
         assertEquals(listOf("sc2") to listOf("n2"), kept.serviceCases.map { it.id } to kept.serviceCaseEntries.map { it.id })
         assertEquals(listOf("l2"), kept.assetLoans.map { it.id }, "the heater's returned loan leaves every later backup (nt-4)")
+    }
+
+    /**
+     * mn-2: holding nothing keeps everything. The fixture fills every list the archive has, so a list that
+     * `retain` forgets or filters wrongly — #15's tables and every later one included — fails here.
+     */
+    @Test
+    fun retainingNothingIsTheIdentity() {
+        val lists = Json.encodeToJsonElement(BackupData.serializer(), estate).jsonObject
+        assertEquals(emptyList(), lists.filterValues { it.jsonArray.isEmpty() }.keys.toList(), "the fixture fills every list")
+
+        assertEquals(TransferRetention.Retained(estate), TransferGraph.retain(estate, emptySet()))
     }
 
     /** MJ-2: an empty group is wholly held by nothing, so no held set ever drops it. */

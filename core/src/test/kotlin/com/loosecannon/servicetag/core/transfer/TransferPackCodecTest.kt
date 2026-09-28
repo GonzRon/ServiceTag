@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.transfer
 
+import com.loosecannon.servicetag.core.backup.ArtifactsCodec
 import com.loosecannon.servicetag.core.backup.ArtifactsPlanEntry
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.model.AttachmentId
@@ -9,6 +10,7 @@ import com.loosecannon.servicetag.core.transfer.TransferPackTesting.Raw
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting.artifactsOf
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting.entriesOf
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting.heaterDraft
+import com.loosecannon.servicetag.core.transfer.TransferPackTesting.legacyZipOf
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting.read
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting.redraft
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting.seal
@@ -197,6 +199,61 @@ class TransferPackCodecTest {
         listOf(pack.size / 2, pack.size * 9 / 10, pack.size / 5).forEach { at ->
             assertIs<TransferPackRead.Damaged>(read(pack.copyOf(at)), "cut at $at of ${pack.size}")
         }
+    }
+
+    // --- names that are not UTF-8 (MJ-1) -------------------------------------------------------------
+
+    /** An ordinary ZIP from an older zipper, its first name in a legacy code page: not a pack, never a crash. */
+    @Test
+    fun aFirstEntryNameThatIsNotUtf8IsNotAPack() {
+        assertEquals(
+            TransferPackRead.NotAPack,
+            read(legacyZipOf(listOf(Raw("Caf\u00e9 receipt.pdf", "Example".toByteArray())))),
+        )
+    }
+
+    /** After the manifest, inside `data.zip` or inside `artifacts.zip`: such a name is damage, never a crash. */
+    @Test
+    fun aLaterEntryNameThatIsNotUtf8IsDamaged() {
+        val later = legacyZipOf(entriesOf(pack) + Raw("caf\u00e9.txt", "Example".toByteArray()))
+        assertIs<TransferPackRead.Damaged>(read(later), "a later entry of the pack")
+
+        val legacyData = legacyZipOf(listOf(Raw("caf\u00e9.json", "{}".toByteArray())))
+        assertIs<TransferPackRead.Damaged>(read(seal(redraft(draft, data = legacyData)).first), "inside data.zip")
+
+        val legacyArtifacts = legacyZipOf(entriesOf(artifactsOf(draft.plan)) + Raw("artifacts/caf\u00e9.pdf", "Example".toByteArray()))
+        assertIs<TransferPackRead.Damaged>(read(seal(draft, legacyArtifacts).first), "inside artifacts.zip")
+    }
+
+    // --- inner formats, disagreement, the manifest cap (mn-3) ---------------------------------------
+
+    @Test
+    fun aNewerInnerArchiveIsNewer() {
+        val newer = BackupCodec.FORMAT_VERSION + 1
+        val newerData = BackupCodec.encode(BackupCodec.decode(draft.data).data, "1.4.1", 13, draft.createdAt, draft.packId, newer)
+        assertEquals(
+            TransferPackRead.NewerPack("data", newer, BackupCodec.FORMAT_VERSION),
+            read(seal(redraft(draft, data = newerData)).first),
+        )
+
+        val artifactEntries = entriesOf(artifactsOf(draft.plan))
+        val newerManifest = String(artifactEntries[0].bytes).replaceFirst("\"artifactFormatVersion\": 1", "\"artifactFormatVersion\": 2")
+        val newerArtifacts = zipOf(listOf(Raw(ArtifactsCodec.MANIFEST_ENTRY, newerManifest.toByteArray())) + artifactEntries.drop(1))
+        assertEquals(TransferPackRead.NewerPack("artifacts", 2, 1), read(seal(draft, newerArtifacts).first))
+    }
+
+    @Test
+    fun aFormatOrSchemaDisagreementIsDamaged() {
+        damaged(withManifest { it.copy(dataFormatVersion = it.dataFormatVersion - 1) }, "data.zip is format")
+        damaged(withManifest { it.copy(schemaVersion = it.schemaVersion - 1) }, "data.zip is schema")
+        damaged(withManifest { it.copy(artifactFormatVersion = it.artifactFormatVersion + 1) }, "formats disagree")
+    }
+
+    @Test
+    fun anOverCapManifestIsDamaged() {
+        val huge = ByteArray((TransferPack.MAX_MANIFEST_BYTES + 1).toInt()) { ' '.code.toByte() }
+
+        damaged(zipOf(listOf(Raw(TransferPack.MANIFEST_ENTRY, huge)) + entriesOf(pack).drop(1)), "transfer-manifest.json is over")
     }
 
     @Test
