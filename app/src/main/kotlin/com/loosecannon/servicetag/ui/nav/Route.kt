@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.nav
 
 import androidx.navigation3.runtime.NavKey
+import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.ui.condition.PendingCondition
 import kotlinx.serialization.Serializable
@@ -49,6 +50,9 @@ sealed interface Route : NavKey {
      * #82 (C7): [pending] is Change condition's held DOWN or DEGRADED, when "Log incident details"
      * opened this entry; its Save then records the Incident and that row together. Absent — every
      * back stack stored before #82, and every other way in — it is null and the entry is as before.
+     *
+     * #79 (C20): [thenServiceCase] is P79-19 on an asset with no current Incident — the saved
+     * Incident (after any Workflow B answer) is replaced by the case editor on it. Absent, false.
      */
     @Serializable data class EventEntry(
         val assetId: String,
@@ -56,8 +60,23 @@ sealed interface Route : NavKey {
         val eventId: String?,
         val kind: String? = null,
         val pending: PendingConditionArgs? = null,
+        val thenServiceCase: Boolean = false,
     ) : Route
     @Serializable data class EventDetail(val id: String) : Route
+
+    /** #79 (C22): one service case — its header, its links and its append-only timeline. */
+    @Serializable data class ServiceCase(val id: String) : Route
+
+    /**
+     * #79 (C21): the case editor — new when [caseId] is null, opened on the Incident [incidentId]
+     * (R79-3: the phone opens every case from one); otherwise that case, whose own asset and
+     * Incident always win.
+     */
+    @Serializable data class ServiceCaseEdit(
+        val assetId: String,
+        val caseId: String? = null,
+        val incidentId: String? = null,
+    ) : Route
 
     @Serializable data object Scan : Route
     @Serializable data class TagResult(val format: String, val key: String) : Route
@@ -144,6 +163,17 @@ data class PendingConditionArgs(
         fun of(held: PendingCondition) = PendingConditionArgs(held.id, held.condition.name, held.occurredOn, held.reason)
     }
 }
+
+/**
+ * #79 (C20): where P79-19 "New service case" goes — the case editor on the current failure's Incident
+ * when the asset has one, otherwise a new INCIDENT entry first, whose save hands over to the editor.
+ */
+fun newServiceCaseRoute(assetId: String, currentIncidentId: String?): Route =
+    if (currentIncidentId != null) {
+        Route.ServiceCaseEdit(assetId, incidentId = currentIncidentId)
+    } else {
+        Route.EventEntry(assetId, null, null, kind = EventKind.INCIDENT.name, thenServiceCase = true)
+    }
 
 /**
  * The three roots the bottom bar switches between; nothing else ever shows it.

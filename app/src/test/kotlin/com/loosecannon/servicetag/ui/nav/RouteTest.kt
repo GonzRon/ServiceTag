@@ -106,4 +106,46 @@ class RouteTest {
             PendingConditionArgs("c1", "BROKEN", "2026-04-15", "").toPending(),
         )
     }
+
+    /**
+     * #79 (C20–C22; §3 row 46): the case screen and the case editor survive a stored back stack, and
+     * P79-19 goes to the editor on the current failure's Incident — or, with none, to a new INCIDENT
+     * entry first (R79-3). Neither case screen reads a tag.
+     */
+    @Test fun theServiceCaseRoutesRoundTrip() {
+        val case = Route.ServiceCase("c1")
+        assertEquals(case, Json.decodeFromString(Route.ServiceCase.serializer(), Json.encodeToString(Route.ServiceCase.serializer(), case)))
+        listOf(Route.ServiceCaseEdit("a1", incidentId = "e1"), Route.ServiceCaseEdit("a1", caseId = "c1")).forEach { edit ->
+            val stored = Json.encodeToString(Route.ServiceCaseEdit.serializer(), edit)
+            assertEquals(edit, Json.decodeFromString(Route.ServiceCaseEdit.serializer(), stored))
+            assertFalse("$edit reads no tag", edit.readsTags())
+        }
+        assertFalse(case.readsTags())
+
+        assertEquals(Route.ServiceCaseEdit("a1", incidentId = "e1"), newServiceCaseRoute("a1", currentIncidentId = "e1"))
+        assertEquals(
+            "no current Incident: one is logged first, and its save hands over to the editor",
+            Route.EventEntry("a1", null, null, kind = "INCIDENT", thenServiceCase = true),
+            newServiceCaseRoute("a1", currentIncidentId = null),
+        )
+    }
+
+    /**
+     * #79 (C20): the entry that hands over to the case editor keeps that on a stored back stack; one
+     * stored before #79 has no `thenServiceCase` and decodes as a plain entry, and a plain entry
+     * writes no such key.
+     */
+    @Test fun anEventEntryThenServiceCaseRoundTripsAndAnOldOneDecodes() {
+        val route = Route.EventEntry("a1", null, null, kind = "INCIDENT", thenServiceCase = true)
+        val stored = Json.encodeToString(Route.EventEntry.serializer(), route)
+        assertEquals(route, Json.decodeFromString(Route.EventEntry.serializer(), stored))
+
+        val old = """{"assetId":"a1","profileId":null,"eventId":null,"kind":"INCIDENT"}"""
+        val restored = Json.decodeFromString(Route.EventEntry.serializer(), old)
+        assertFalse("an entry stored before #79 hands over to nothing", restored.thenServiceCase)
+        assertFalse(
+            "a plain entry writes no thenServiceCase key",
+            "thenServiceCase" in Json.encodeToString(Route.EventEntry.serializer(), Route.EventEntry("a1", null, null)),
+        )
+    }
 }
