@@ -56,15 +56,17 @@ class ReminderPlatformDeviceProofTest {
      * Invariant 53 against the platform: after a first launch both channels exist, at the
      * importances D-20 fixed, and the app has created **no others**. `ServiceTagApp.onCreate`
      * created them; this is the only place that can confirm the platform agreed. #79 (R79-14b)
-     * amends invariant 53 with the third, `warranty_reminders`, at the default importance.
+     * amends invariant 53 with the third, `warranty_reminders`, at the default importance, and #72
+     * (R72-9) with the fourth, `loan_reminders`, at the default importance too.
      */
     @Test
-    fun theThreeChannelsExistAtTheirImportancesAfterAFirstLaunch() {
+    fun theFourChannelsExistAtTheirImportancesAfterAFirstLaunch() {
         val manager = NotificationManagerCompat.from(context)
 
         val due = manager.getNotificationChannelCompat(NotificationChannels.DUE)
         val overdue = manager.getNotificationChannelCompat(NotificationChannels.OVERDUE)
         val warranty = manager.getNotificationChannelCompat(NotificationChannels.WARRANTY)
+        val loans = manager.getNotificationChannelCompat(NotificationChannels.LOANS)
 
         assertEquals("Maintenance due", due?.name)
         assertEquals(NotificationManagerCompat.IMPORTANCE_DEFAULT, due?.importance)
@@ -73,10 +75,13 @@ class ReminderPlatformDeviceProofTest {
         assertEquals("Warranty reminders", warranty?.name)
         assertEquals("Reminders before a warranty expires.", warranty?.description)
         assertEquals(NotificationManagerCompat.IMPORTANCE_DEFAULT, warranty?.importance)
+        assertEquals("Loan reminders", loans?.name)
+        assertEquals("Reminders when a lent item is due back.", loans?.description)
+        assertEquals(NotificationManagerCompat.IMPORTANCE_DEFAULT, loans?.importance)
 
         assertEquals(
             "no supplies and no sync_problems channel, ever (D-20 = B)",
-            setOf(NotificationChannels.DUE, NotificationChannels.OVERDUE, NotificationChannels.WARRANTY),
+            setOf(NotificationChannels.DUE, NotificationChannels.OVERDUE, NotificationChannels.WARRANTY, NotificationChannels.LOANS),
             manager.notificationChannelsCompat.map { it.id }.toSet(),
         )
     }

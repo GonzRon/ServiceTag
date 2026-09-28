@@ -19,10 +19,13 @@ import com.loosecannon.servicetag.core.reminders.SubjectState
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import java.io.File
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -82,6 +85,55 @@ internal object Fixture {
     }
 
     fun warrantyFacts(today: LocalDate, ownerName: String = "Example Heater") = DeadlineFacts(ownerName, today)
+
+    /** #72: a loan subject exactly as `BuildLoanSubjects` builds one. */
+    fun loan(
+        dueOn: String = "2031-06-30",
+        repeat: DeadlineRepeat = DeadlineRepeat.ONCE,
+        assetId: String = "a1",
+        loanId: String = "l1",
+    ): ReminderSubject {
+        val due = LocalDate.parse(dueOn)
+        return ReminderSubject(
+            key = SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "$assetId/$loanId"),
+            title = "Due back",
+            body = "",
+            dueOn = due,
+            leadDays = 0,
+            state = SubjectState.Active,
+            rule = null,
+            contentHash = ContentHash.of("Due back", "", due, 0, SubjectState.Active, null, repeat),
+            repeat = repeat,
+        )
+    }
+
+    /** The tag a subject is posted under. */
+    fun tagOf(subject: ReminderSubject): String = itemTag(subject.key, subject.contentHash)
+
+    /** An instant as epoch millis. The policy compares instants only, so these fixtures read local time as UTC. */
+    fun millis(at: LocalDateTime): Long = at.toInstant(ZoneOffset.UTC).toEpochMilli()
+
+    /**
+     * #72 (C10): a loan's facts at [at] — its day, its borrower, the due day at the digest hour, and
+     * the latest digest-hour instant at or before [at] — as the facts source derives them.
+     */
+    fun loanFacts(
+        at: LocalDateTime,
+        dueOn: String = "2031-06-30",
+        digestHour: Int = 9,
+        ownerName: String = "Example Drill",
+        borrower: String = "Sample Borrower",
+    ): DeadlineFacts {
+        val hourToday = at.toLocalDate().atTime(digestHour, 0)
+        val since = if (hourToday.isAfter(at)) hourToday.minusDays(1) else hourToday
+        return DeadlineFacts(
+            ownerName = ownerName,
+            today = at.toLocalDate(),
+            borrower = borrower,
+            opensAt = millis(LocalDate.parse(dueOn).atTime(digestHour, 0)),
+            cadenceSince = millis(since),
+        )
+    }
 
     /** The stamp a warning leaves once it has been announced in [boot]. */
     fun stamp(subject: ReminderSubject, boot: Int? = 1) = DeadlineLocalDelivery(
@@ -554,7 +606,22 @@ class DigestPolicyTest {
             SubjectKey.Schedule(ScheduleId("sched-1")),
             SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, UUID_2),
             SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, "a1"),
+            // #72 (C9): a loan's `<assetId>/<loanId>`, an imported asset id holding `/` included.
+            SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "$UUID_1/$UUID_2"),
+            SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "shed/bench/l1"),
         ).forEach { key -> assertEquals(key, keyOfTag(itemTag(key, "fedcba9876543210ffff"))) }
+    }
+
+    /** #72 (C9, K6): a loan's tag carries its own kind, so it reads back as neither a warranty nor a schedule. */
+    @Test
+    fun aLoanTagNeverReadsAsAWarrantyOrASchedule() {
+        val key = SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "a1/l1")
+        val tag = itemTag(key, "0123456789abcdef0123")
+
+        assertEquals("LOAN_DUE_BACK:a1/l1|0123456789abcdef", tag)
+        assertEquals(key, keyOfTag(tag))
+        assertNotEquals(SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, "a1/l1"), keyOfTag(tag))
+        assertFalse("never a schedule's", keyOfTag(tag) is SubjectKey.Schedule)
     }
 
     /** A warning's tag carries its kind, so it is never read as a schedule's. */
@@ -712,6 +779,292 @@ class DigestPolicyTest {
         assertEquals(ReconcileCounters(0, 1, 1), scheduleGone.report.counters())
     }
 
+    // #72 (C11, R72-6 a): a loan's Once — strictly once per due occurrence, from the digest hour on its due day.
+
+    /** Nothing the day before, nothing at 00:05 or 08:59 on the due day, one post at 09:00 and none after. */
+    @Test
+    fun aLoanOnceWaitsForTheDigestHourOnItsDueDay() {
+        val run = LoanRun(Fixture.loan())
+        val posts = listOf(
+            at(-1, 9, 0), at(0, 0, 5), at(0, 8, 59), at(0, 9, 0), at(0, 15, 0), at(1, 0, 5),
+        ).map { run.sweep(it).posts.size }
+
+        assertEquals(listOf(0, 0, 0, 1, 0, 0), posts)
+        assertEquals(setOf(Fixture.tagOf(run.subject)), run.standing)
+    }
+
+    /** The phone was off on the due day: the first sweep days later posts it, in the words for after the due day. */
+    @Test
+    fun aFirstSweepDaysLaterPostsIt() {
+        val run = LoanRun(Fixture.loan())
+
+        val decision = run.sweep(at(3, 10, 0))
+
+        assertEquals("NOT RETURNED", decision.posts.single().statusWord)
+        assertEquals("Lent to Sample Borrower. Was due back 30 Jun 2031.", decision.posts.single().body)
+        assertEquals(listOf(run.subject.contentHash), decision.deadlineRows.map { it.announcedHash })
+        assertEquals(ReconcileCounters(1, 0, 0), decision.report.counters())
+    }
+
+    /** Once has no end while the loan is open: its post stands after the due day, held and never re-posted. */
+    @Test
+    fun aLoanOnceStillStandsAfterItsDueDay() {
+        val run = LoanRun(Fixture.loan())
+        run.sweep(at(0, 9, 0))
+
+        listOf(at(1, 0, 5), at(1, 9, 0), at(5, 9, 0), at(40, 9, 0)).forEach { time ->
+            val decision = run.sweep(time)
+            assertEquals("$time", emptyList<ItemPost>(), decision.posts)
+            assertEquals("$time", emptyList<String>(), decision.cancelTags)
+            assertEquals("$time", ReconcileCounters(0, 0, 1), decision.report.counters())
+        }
+        assertEquals(setOf(Fixture.tagOf(run.subject)), run.standing)
+    }
+
+    /** R72-6 (a): swiped, it never returns — not later that day, not after a restart, not days later. */
+    @Test
+    fun aSwipedLoanOnceNeverReturnsAfterARestart() {
+        val run = LoanRun(Fixture.loan())
+        run.sweep(at(0, 9, 0))
+        run.swipe()
+
+        val later = listOf(at(0, 15, 0)).map { run.sweep(it).posts.size }
+        run.restart()
+        val afterRestart = listOf(at(0, 16, 0), at(1, 9, 0), at(2, 9, 0)).map { run.sweep(it).posts.size }
+
+        assertEquals(listOf(0), later)
+        assertEquals(listOf(0, 0, 0), afterRestart)
+        assertEquals("the stamp is kept, from the boot it was written in", listOf<Int?>(1), listOfNotNull(run.row).map { it.announcedBoot })
+    }
+
+    /**
+     * R72-6 (a): a post a restart took down stays down — the stamp's hash alone says it was announced,
+     * whatever boot wrote it. A re-date is a new occurrence, announced when its own day comes.
+     */
+    @Test
+    fun aLoanOnceARestartTookDownStaysDown() {
+        val run = LoanRun(Fixture.loan())
+        run.boot = 5
+        run.sweep(at(0, 9, 0))
+        run.restart()
+
+        assertEquals(listOf(0, 0), listOf(at(0, 12, 0), at(1, 9, 0)).map { run.sweep(it).posts.size })
+
+        run.subject = Fixture.loan(dueOn = "2031-07-07")
+        assertEquals("before its own day the old stamp is forgotten", 0, run.sweep(at(2, 9, 0)).posts.size)
+        assertEquals(null, run.row)
+        assertEquals(1, run.sweep(at(7, 9, 0)).posts.size)
+    }
+
+    // #72 (C11, R72-7): a loan's Until returned — re-alerting once a period, at the digest hour.
+
+    /** Sweeps at 00:05, 09:00 and 15:00 from the day before to three days after: one post a day, each at 09:00. */
+    @Test
+    fun untilReturnedRealertsOnceAPeriodAtTheDigestHour() {
+        val run = LoanRun(Fixture.loan(repeat = DeadlineRepeat.UNTIL_CLEARED))
+        val postedAt = (-1..3).flatMap { day -> listOf(at(day, 0, 5), at(day, 9, 0), at(day, 15, 0)) }
+            .filter { run.sweep(it).posts.isNotEmpty() }
+
+        assertEquals((0..3).map { at(it, 9, 0) }, postedAt)
+    }
+
+    /** With yesterday's post standing, the midnight sweep is quiet and the 09:00 sweep re-alerts it in place. */
+    @Test
+    fun aSweepAt0005IsQuietAndThe0900SweepRealerts() {
+        val run = LoanRun(Fixture.loan(repeat = DeadlineRepeat.UNTIL_CLEARED))
+        run.sweep(at(0, 9, 0))
+
+        val midnight = run.sweep(at(1, 0, 5))
+        assertEquals(emptyList<ItemPost>(), midnight.posts)
+        assertEquals(emptyList<DeadlineLocalDelivery>(), midnight.deadlineRows)
+        assertEquals(ReconcileCounters(0, 0, 1), midnight.report.counters())
+
+        val digest = run.sweep(at(1, 9, 0))
+        assertEquals(listOf(Fixture.tagOf(run.subject)), digest.posts.map { it.tag })
+        assertEquals(emptyList<String>(), digest.cancelTags)
+        assertEquals(listOf(Fixture.millis(at(1, 9, 0))), digest.deadlineRows.map { it.updatedAt })
+    }
+
+    /**
+     * Posted late yesterday (15:00, a lend saved in the afternoon), standing: today's 09:00 sweep
+     * re-posts it under the same tag, in the post-due words, and counts it **unchanged** — it was
+     * already showing, so `posted + unchanged` stays what is held.
+     */
+    @Test
+    fun yesterdaysStandingPostIsRepostedAndCountedUnchanged() {
+        val run = LoanRun(Fixture.loan(repeat = DeadlineRepeat.UNTIL_CLEARED))
+        assertEquals(1, run.sweep(at(0, 15, 0)).posts.size)
+
+        val decision = run.sweep(at(1, 9, 0))
+
+        val post = decision.posts.single()
+        assertEquals(Fixture.tagOf(run.subject), post.tag)
+        assertEquals("Lent to Sample Borrower. Was due back 30 Jun 2031.", post.body)
+        assertEquals("NOT RETURNED", post.statusWord)
+        assertEquals(emptyList<String>(), decision.cancelTags)
+        assertEquals(ReconcileCounters(0, 0, 1), decision.report.counters())
+        assertEquals(listOf(Fixture.millis(at(1, 9, 0))), decision.deadlineRows.map { it.updatedAt })
+    }
+
+    /** Swiped: quiet for the rest of the period, the midnight sweep included, and posted again at the next digest hour. */
+    @Test
+    fun aSwipeIsQuietUntilTheNextDigestHour() {
+        val run = LoanRun(Fixture.loan(repeat = DeadlineRepeat.UNTIL_CLEARED))
+        run.sweep(at(0, 9, 0))
+        run.swipe()
+
+        assertEquals(listOf(0, 0), listOf(at(0, 15, 0), at(1, 0, 5)).map { run.sweep(it).posts.size })
+        val next = run.sweep(at(1, 9, 0))
+        assertEquals(1, next.posts.size)
+        assertEquals("nothing was standing, so it is a post", ReconcileCounters(1, 0, 0), next.report.counters())
+    }
+
+    /** Muted: nothing is posted or stamped, and a post already standing is kept — a mute never takes one down. */
+    @Test
+    fun aMutedChannelPostsAndStampsNothingAndKeepsAStandingPost() {
+        val quiet = LoanRun(Fixture.loan(repeat = DeadlineRepeat.UNTIL_CLEARED)).sweep(at(0, 9, 0), muted = true)
+        assertEquals(emptyList<ItemPost>(), quiet.posts)
+        assertEquals(emptyList<DeadlineLocalDelivery>(), quiet.deadlineRows)
+        assertEquals(ReconcileCounters(0, 0, 0), quiet.report.counters())
+
+        val run = LoanRun(Fixture.loan(repeat = DeadlineRepeat.UNTIL_CLEARED))
+        run.sweep(at(0, 9, 0))
+        val kept = run.sweep(at(1, 9, 0), muted = true)
+        assertEquals(emptyList<ItemPost>(), kept.posts)
+        assertEquals(emptyList<String>(), kept.cancelTags)
+        assertEquals(emptyList<DeadlineLocalDelivery>(), kept.deadlineRows)
+        assertEquals(ReconcileCounters(0, 0, 1), kept.report.counters())
+    }
+
+    /** A restart took the post down: the new boot posts it once more in the period, and then it is quiet. */
+    @Test
+    fun anotherBootRepostsOnceInThePeriod() {
+        val run = LoanRun(Fixture.loan(repeat = DeadlineRepeat.UNTIL_CLEARED))
+        run.sweep(at(0, 9, 0))
+        run.restart()
+
+        val first = run.sweep(at(0, 12, 0))
+        assertEquals(ReconcileCounters(1, 0, 0), first.report.counters())
+        assertEquals(listOf<Int?>(2), first.deadlineRows.map { it.announcedBoot })
+        assertEquals(0, run.sweep(at(0, 15, 0)).posts.size)
+    }
+
+    // #72 (C11, AC 13): the loan's own post — never maintenance.
+
+    /** P72-40/42 through the due day, P72-41/43 after it; `loan_reminders`; the title's `<asset> — Due back`; "Open" alone. */
+    @Test
+    fun theLoanTitleBodyWordChannelAndOneOpenAction() {
+        val through = LoanRun(Fixture.loan()).sweep(at(0, 9, 0)).posts.single()
+        assertEquals(SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "a1/l1"), through.key)
+        assertEquals("Example Drill — Due back", through.title)
+        assertEquals("Lent to Sample Borrower. Due back 30 Jun 2031.", through.body)
+        assertEquals("DUE BACK", through.statusWord)
+        assertEquals("loan_reminders", through.channelId)
+        assertEquals(listOf("Open"), through.actions)
+        assertFalse("a date, not a meter: the clock icon", through.meter)
+
+        val after = LoanRun(Fixture.loan(repeat = DeadlineRepeat.UNTIL_CLEARED)).sweep(at(1, 9, 0)).posts.single()
+        assertEquals("Example Drill — Due back", after.title)
+        assertEquals("Lent to Sample Borrower. Was due back 30 Jun 2031.", after.body)
+        assertEquals("NOT RETURNED", after.statusWord)
+        assertEquals("loan_reminders", after.channelId)
+        assertEquals(listOf("Open"), after.actions)
+    }
+
+    /** A loan is never counted in the summary, alone or beside a schedule. */
+    @Test
+    fun aLoanNeverCountsInTheMaintenanceSummary() {
+        val loan = DeadlineInput(Fixture.loan(), Fixture.loanFacts(at(1, 9, 0)), null)
+        val now = Fixture.millis(at(1, 9, 0))
+
+        val alone = decide(listOf(loan), now = now)
+        assertEquals(1, alone.posts.size)
+        assertNull("nothing needs maintenance", alone.summary)
+
+        val beside = decide(listOf(DeliveryInput(Fixture.subject("s1", "2026-06-15"), Fixture.facts(DueStatus.DUE), null), loan), now = now)
+        assertEquals(2, beside.posts.size)
+        assertEquals("1 maintenance items need attention", beside.summary?.title)
+        assertEquals("1 due.", beside.summary?.body)
+    }
+
+    /** The kept set covers the loan family too: the schedule rules never take a standing loan post down. */
+    @Test
+    fun theScheduleBranchNeverCancelsAStandingLoanPost() {
+        val loan = Fixture.loan()
+        val loanTag = Fixture.tagOf(loan)
+        val stamp = DeadlineLocalDelivery("LOAN_DUE_BACK", "a1/l1", loan.contentHash, 1, Fixture.millis(at(0, 9, 0)))
+        val loanInput = DeadlineInput(loan, Fixture.loanFacts(at(1, 9, 0)), stamp)
+        val schedule = Fixture.subject("s1", "2026-06-15")
+        val scheduleTag = itemTag(schedule.key, schedule.contentHash)
+        val now = Fixture.millis(at(1, 9, 0))
+
+        val both = decide(
+            listOf(DeliveryInput(schedule, Fixture.facts(DueStatus.DUE), null), loanInput),
+            standing = setOf(scheduleTag, loanTag),
+            now = now,
+        )
+        assertEquals(emptyList<String>(), both.cancelTags)
+        assertEquals(ReconcileCounters(0, 0, 2), both.report.counters())
+
+        val scheduleGone = decide(listOf(loanInput), standing = setOf(scheduleTag, loanTag), now = now)
+        assertEquals("only the schedule's own tag goes", listOf(scheduleTag), scheduleGone.cancelTags)
+        assertEquals(ReconcileCounters(0, 1, 1), scheduleGone.report.counters())
+    }
+
+    /** AC 13: whatever the repeat and the day, a loan's word is its own — never the bare OVERDUE, nor its channel. */
+    @Test
+    fun aLoanWordIsNeverTheBareOverdue() {
+        val words = listOf(DeadlineRepeat.ONCE, DeadlineRepeat.UNTIL_CLEARED).flatMap { repeat ->
+            (0..10).flatMap { day ->
+                LoanRun(Fixture.loan(repeat = repeat)).sweep(at(day, 9, 0)).posts
+            }
+        }
+
+        assertEquals(22, words.size)
+        assertEquals(setOf("DUE BACK", "NOT RETURNED"), words.map { it.statusWord }.toSet())
+        assertTrue(words.none { it.statusWord == DigestPolicy.WORD_OVERDUE })
+        assertEquals(setOf(NotificationChannels.LOANS), words.map { it.channelId }.toSet())
+    }
+
+    /** Day [day] after the fixture's due date, at [hour]:[minute] local. */
+    private fun at(day: Int, hour: Int, minute: Int): LocalDateTime =
+        LOAN_DUE.plusDays(day.toLong()).atTime(hour, minute)
+
+    /**
+     * One loan swept through `decide` again and again, with the shade and the stamp carried forward
+     * as the provider carries them: cancels leave the shade, posts join it, a written stamp replaces
+     * the row and a forgotten one clears it.
+     */
+    private inner class LoanRun(var subject: ReminderSubject) {
+        var standing: Set<String> = emptySet()
+        var row: DeadlineLocalDelivery? = null
+        var boot: Int? = 1
+
+        fun sweep(time: LocalDateTime, muted: Boolean = false): DigestDecision {
+            val decision = decide(
+                listOf(DeadlineInput(subject, Fixture.loanFacts(time, subject.dueOn.toString()), row)),
+                standing = standing,
+                now = Fixture.millis(time),
+                muted = if (muted) setOf(NotificationChannels.LOANS) else emptySet(),
+                boot = boot,
+            )
+            standing = standing - decision.cancelTags.toSet() + decision.posts.map { it.tag }
+            row = decision.deadlineRows.lastOrNull() ?: row?.takeUnless { subject.key in decision.deadlineForgotten }
+            return decision
+        }
+
+        /** The owner swipes it away: the shade forgets it and nothing else does. */
+        fun swipe() {
+            standing = emptySet()
+        }
+
+        /** A restart: the shade is empty and the boot count moves on. */
+        fun restart() {
+            standing = emptySet()
+            boot = (boot ?: 0) + 1
+        }
+    }
+
     // #72 (C14; K1, K2): the warranty warning is byte-identical across the loan work.
 
     /**
@@ -828,6 +1181,9 @@ class DigestPolicyTest {
 
     private companion object {
         val EXPIRY: LocalDate = LocalDate.parse("2031-06-30")
+
+        /** #72: the loan fixtures' due date, `Fixture.loan()`'s default. */
+        val LOAN_DUE: LocalDate = LocalDate.parse("2031-06-30")
 
         /** C14's record, beside this class on the test classpath. */
         const val WARRANTY_MATRIX = "warranty-day-matrix.txt"

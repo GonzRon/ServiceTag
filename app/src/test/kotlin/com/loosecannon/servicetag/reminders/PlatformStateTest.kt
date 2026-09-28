@@ -86,8 +86,9 @@ class PlatformStateTest {
         val created = mutableListOf<NotificationChannels.Spec>()
         NotificationChannels.ensure { created += it }
         assertEquals(
-            // #79 (R79-14b) amends invariant 53 with the third, `warranty_reminders`.
-            setOf(NotificationChannels.DUE, NotificationChannels.OVERDUE, NotificationChannels.WARRANTY),
+            // #79 (R79-14b) amends invariant 53 with the third, `warranty_reminders`; #72 (R72-9)
+            // with the fourth, `loan_reminders`.
+            setOf(NotificationChannels.DUE, NotificationChannels.OVERDUE, NotificationChannels.WARRANTY, NotificationChannels.LOANS),
             created.map { it.id }.toSet(),
         )
 

@@ -2,11 +2,14 @@ package com.loosecannon.servicetag.core.reminders
 
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.testing.FakeReminderProvider
+import com.loosecannon.servicetag.core.testing.InMemoryAssetLoanRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.loanOf
 import java.io.File
 import java.time.LocalDate
 import kotlin.test.Test
@@ -201,26 +204,30 @@ class ReminderPortContractTest {
 
     /**
      * #79 (R79-13): one deadline kind. A kind added before its builder and its delivery branch is a
-     * subject something can write and nothing can deliver — decision 8's objection, again.
+     * subject something can write and nothing can deliver — decision 8's objection, again. #72 (C8)
+     * adds the second, a lent asset's due-back date, with its builder and its two delivery steps.
      */
     @Test
-    fun theDeadlineKindsAreExactlyWarrantyExpiry() {
-        assertEquals(listOf(DeadlineKind.WARRANTY_EXPIRY), DeadlineKind.entries.toList())
+    fun theDeadlineKindsAreExactlyWarrantyExpiryAndLoanDueBack() {
+        assertEquals(listOf(DeadlineKind.WARRANTY_EXPIRY, DeadlineKind.LOAN_DUE_BACK), DeadlineKind.entries.toList())
         val port = sourceFile("$REMINDERS/ReminderPort.kt").readText()
         assertEquals(
-            listOf("WARRANTY_EXPIRY"),
+            listOf("WARRANTY_EXPIRY", "LOAN_DUE_BACK"),
             Regex("""enum class DeadlineKind \{ ([^}]*) \}""").find(port)!!
                 .groupValues[1].split(",").map { it.trim() },
         )
     }
 
-    /** #79 (R79-13, R79-14a): one repeat fact, announced once per content. */
+    /**
+     * #79 (R79-13, R79-14a): announced once per content. #72 (C8, R72-7) adds the second repeat,
+     * announced again each period until the subject leaves the list.
+     */
     @Test
-    fun theRepeatFactsAreExactlyOnce() {
-        assertEquals(listOf(DeadlineRepeat.ONCE), DeadlineRepeat.entries.toList())
+    fun theRepeatFactsAreExactlyOnceAndUntilCleared() {
+        assertEquals(listOf(DeadlineRepeat.ONCE, DeadlineRepeat.UNTIL_CLEARED), DeadlineRepeat.entries.toList())
         val port = sourceFile("$REMINDERS/ReminderPort.kt").readText()
         assertEquals(
-            listOf("ONCE"),
+            listOf("ONCE", "UNTIL_CLEARED"),
             Regex("""enum class DeadlineRepeat \{ ([^}]*) \}""").find(port)!!
                 .groupValues[1].split(",").map { it.trim() },
         )
@@ -258,6 +265,14 @@ class ReminderPortContractTest {
         )
         val built = BuildDeadlineSubjects(assets).forProvider(ProviderId.LOCAL, LocalDate.parse("2031-06-01"))
         assertEquals(listOf(DeadlineRepeat.ONCE), built.map { it.repeat })
+
+        // #72 (C8, C9): a loan's subject carries the repeat its reminder mode names, both of them.
+        val loans = InMemoryAssetLoanRepository()
+        loans.upsert(loanOf("l1", assetId = "a1", reminderMode = LoanReminderMode.ONCE))
+        loans.upsert(loanOf("l2", assetId = "a2", reminderMode = LoanReminderMode.UNTIL_RETURNED))
+        val lent = BuildLoanSubjects(loans).forProvider(ProviderId.LOCAL, LocalDate.parse("2031-06-01"))
+        assertEquals(listOf(DeadlineRepeat.ONCE, DeadlineRepeat.UNTIL_CLEARED), lent.map { it.repeat })
+        assertEquals(listOf(DeadlineKind.LOAN_DUE_BACK), lent.map { (it.key as SubjectKey.Deadline).kind }.distinct())
     }
 
     /**

@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.reminders.DeadlineKind
+import com.loosecannon.servicetag.core.reminders.LoanSubjectId
 import com.loosecannon.servicetag.core.reminders.SubjectKey
 
 /**
@@ -132,10 +133,18 @@ class QuickActions(
      * #79 (C8, invariant 57): a deadline's warning offers "Open" and nothing else, aimed at the
      * thing the date belongs to. Nothing on it writes, so **no nonce is issued** — there is nothing
      * for one to authorise.
+     *
+     * #72 (C12, R72-8): a loan reminder's "Open" is aimed at the loan's **asset**, read straight off
+     * its subject id (`<assetId>/<loanId>`) with no store read, so this stays a plain call. There is
+     * no "Returned" here: a return is dated and confirmed in the app. An id that is not a loan's
+     * offers nothing — unreachable, since only the loan builder mints them.
      */
     fun forDeadline(key: SubjectKey.Deadline): List<QuickAction> = when (key.kind) {
         DeadlineKind.WARRANTY_EXPIRY ->
             listOf(QuickAction(DigestPolicy.ACTION_OPEN, QuickActionTarget.OpenAsset(AssetId(key.subjectId))))
+        DeadlineKind.LOAN_DUE_BACK -> listOfNotNull(
+            LoanSubjectId.assetOf(key.subjectId)?.let { QuickAction(DigestPolicy.ACTION_OPEN, QuickActionTarget.OpenAsset(it)) },
+        )
     }
 }
 

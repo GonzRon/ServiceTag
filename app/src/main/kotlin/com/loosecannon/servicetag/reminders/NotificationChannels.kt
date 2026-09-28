@@ -13,6 +13,9 @@ import androidx.core.app.NotificationManagerCompat
  * **#79 (R79-14b) amends invariant 53 with a third:** [WARRANTY], at the default importance, so an
  * owner who mutes maintenance still hears about a warranty and one who mutes warranties still hears
  * about maintenance.
+ *
+ * **#72 (R72-9) amends it again with a fourth:** [LOANS], at the default importance, for the same
+ * reason — a loan's reminder is neither maintenance nor a warranty, and muting one never mutes it.
  */
 object NotificationChannels {
     const val DUE = "maintenance_due"
@@ -20,6 +23,9 @@ object NotificationChannels {
 
     /** #79 (R79-14b): the warranty warning's own channel, so muting maintenance never mutes it. */
     const val WARRANTY = "warranty_reminders"
+
+    /** #72 (R72-9): a loan reminder's own channel, so muting maintenance or warranties never mutes it. */
+    const val LOANS = "loan_reminders"
 
     /** One channel's fixed shape: an id, an importance and the two ratified system-settings strings. */
     internal data class Spec(
@@ -49,6 +55,13 @@ object NotificationChannels {
             importance = NotificationManagerCompat.IMPORTANCE_DEFAULT,
             name = "Warranty reminders",
             description = "Reminders before a warranty expires.",
+        ),
+        // #72, P72-38 and P72-39 (RATIFIED verbatim, R72-23).
+        Spec(
+            id = LOANS,
+            importance = NotificationManagerCompat.IMPORTANCE_DEFAULT,
+            name = "Loan reminders",
+            description = "Reminders when a lent item is due back.",
         ),
     )
 

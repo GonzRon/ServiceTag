@@ -9,10 +9,12 @@ class NotificationChannelsTest {
 
     /** Invariant 53, D-20 = B, #24 AC 3 amended: exactly two, with their ratified ids, importances,
      * names and descriptions — and no `supplies` or `sync_problems` channel anywhere. #79 (R79-14b)
-     * amends inv. 53 with a third, `warranty_reminders` (P79-13, P79-14), at the default importance. */
+     * amends inv. 53 with a third, `warranty_reminders` (P79-13, P79-14), at the default importance.
+     * #72 (R72-9) amends it again with a fourth, `loan_reminders` (P72-38, P72-39), at the default
+     * importance. */
     @Test
-    fun exactlyThreeChannelsWithTheirRatifiedShape() {
-        assertEquals(3, NotificationChannels.CHANNELS.size)
+    fun exactlyFourChannelsWithTheirRatifiedShape() {
+        assertEquals(4, NotificationChannels.CHANNELS.size)
 
         val due = NotificationChannels.CHANNELS.single { it.id == NotificationChannels.DUE }
         assertEquals("maintenance_due", due.id)
@@ -31,6 +33,12 @@ class NotificationChannelsTest {
         assertEquals(NotificationManagerCompat.IMPORTANCE_DEFAULT, warranty.importance)
         assertEquals("Warranty reminders", warranty.name)
         assertEquals("Reminders before a warranty expires.", warranty.description)
+
+        val loans = NotificationChannels.CHANNELS.single { it.id == NotificationChannels.LOANS }
+        assertEquals("loan_reminders", loans.id)
+        assertEquals(NotificationManagerCompat.IMPORTANCE_DEFAULT, loans.importance)
+        assertEquals("Loan reminders", loans.name)
+        assertEquals("Reminders when a lent item is due back.", loans.description)
 
         val ids = NotificationChannels.CHANNELS.map { it.id }
         assertTrue("supplies" !in ids)
@@ -53,7 +61,7 @@ class NotificationChannelsTest {
         NotificationChannels.ensure { firstPass += it }
         NotificationChannels.ensure { secondPass += it }
 
-        assertEquals(3, firstPass.size)
+        assertEquals(4, firstPass.size)
         assertEquals(firstPass, secondPass)
     }
 
@@ -68,7 +76,7 @@ class NotificationChannelsTest {
         val created = mutableListOf<NotificationChannels.Spec>()
         NotificationChannels.ensure { created += it }
         assertEquals(
-            setOf(NotificationChannels.DUE, NotificationChannels.OVERDUE, NotificationChannels.WARRANTY),
+            setOf(NotificationChannels.DUE, NotificationChannels.OVERDUE, NotificationChannels.WARRANTY, NotificationChannels.LOANS),
             created.map { it.id }.toSet(),
         )
     }

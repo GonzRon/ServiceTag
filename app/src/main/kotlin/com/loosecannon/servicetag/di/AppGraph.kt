@@ -367,8 +367,9 @@ class AppGraph(private val context: Context) {
         prefs = prefs,
         clock = clock,
         quickActions = quickActions,
-        // #79 (C6, C7): a warranty warning's facts and its device-local stamp.
-        deadlineFacts = DeadlineDeliveryFacts(assets, today),
+        // #79 (C6, C7): a warranty warning's facts and its device-local stamp. #72 (C10): a loan's too,
+        // its day anchored to the owner's digest hour, read on every sweep.
+        deadlineFacts = DeadlineDeliveryFacts(assets, today, loans, clock, digestHour = { prefs.digestHour }),
         deadlineDelivery = deadlineLocalDelivery,
     )
 
