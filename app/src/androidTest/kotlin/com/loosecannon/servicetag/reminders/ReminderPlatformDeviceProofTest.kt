@@ -12,10 +12,15 @@ import androidx.work.ListenableWorker
 import androidx.work.WorkManager
 import androidx.work.testing.TestListenableWorkerBuilder
 import com.loosecannon.servicetag.ServiceTagApp
+import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetLoan
+import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.reminders.DeadlineKind
 import com.loosecannon.servicetag.core.reminders.SubjectKey
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.core.usecase.LoanTerms
 import com.loosecannon.servicetag.core.usecase.WarrantyReminderCommand
 import com.loosecannon.servicetag.ui.clearInstall
 import java.time.LocalDate
@@ -279,6 +284,110 @@ class ReminderPlatformDeviceProofTest {
 
         notifications.cancelItem(tag)
         assertTrue(awaitStanding(notifications, tag, false))
+    }
+
+    /**
+     * #72 (C10, C11): the composition, through the real graph. A loan due **yesterday** — so the
+     * owner's digest hour on its due day has passed whatever it is set to — is posted by
+     * `reminderRuns.reconcileAll()`, the one sweep every receiver, the alarm and the backstop share:
+     * the loan builder is in `subjectsFor`, the facts source reads the loan, and the post rides its own
+     * channel under a `LOAN_DUE_BACK:<asset>/<loan>` tag, stamped once in the device-local table.
+     */
+    @Test
+    fun theGraphsSweepPostsALoanPastItsDueDay() {
+        val (asset, loan) = freshLoanDueYesterday()
+        val key = SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "${asset.id.value}/${loan.id.value}")
+
+        runBlocking { app.graph.reminderRuns.reconcileAll() }
+
+        assertTrue("the sweep posted the loan reminder", awaitTrue { warningFor(key) != null })
+        val posted = warningFor(key)!!
+        assertTrue(posted.tag.startsWith("LOAN_DUE_BACK:${asset.id.value}/${loan.id.value}|"))
+        assertEquals(key, keyOfTag(posted.tag))
+        assertEquals(NotificationChannels.LOANS, posted.notification.channelId)
+        assertEquals("NOT RETURNED", posted.notification.extras.getCharSequence(NotificationCompat.EXTRA_SUB_TEXT)?.toString())
+        assertEquals(
+            "and stamped it, once, in the device-local table",
+            listOf("LOAN_DUE_BACK" to key.subjectId),
+            runBlocking { app.graph.deadlineLocalDelivery.all() }.map { it.kind to it.subjectId },
+        )
+
+        NotificationManagerCompat.from(context).cancelAll()
+        clearInstall()
+    }
+
+    /**
+     * #72 (C12; invariants 54, 55, 57): the loan reminder the real sweep posted carries exactly one
+     * action, "Open" — an **immutable activity** intent, and the very one the shipped intents build
+     * for the loan's **asset**, never one aimed at the loan's own id.
+     */
+    @Test
+    fun aLoanPostHasOneImmutableOpenActionAimedAtItsAsset() {
+        val (asset, loan) = freshLoanDueYesterday()
+        val key = SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "${asset.id.value}/${loan.id.value}")
+
+        runBlocking { app.graph.reminderRuns.reconcileAll() }
+
+        assertTrue(awaitTrue { warningFor(key) != null })
+        val actions = warningFor(key)!!.notification.actions?.toList().orEmpty()
+        assertEquals(listOf("Open"), actions.map { it.title.toString() })
+        val open = actions.single().actionIntent
+        assertTrue("the one action is immutable (invariant 54)", open.isImmutable)
+        assertTrue("and opens a screen directly, never through a receiver (invariant 55)", open.isActivity)
+        val intents = AndroidQuickActionIntents(context)
+        assertEquals("aimed at the asset", intents.pendingIntentFor(QuickActionTarget.OpenAsset(asset.id)), open)
+        assertNotEquals(
+            "never at the loan",
+            intents.pendingIntentFor(QuickActionTarget.OpenAsset(AssetId(loan.id.value))),
+            open,
+        )
+
+        NotificationManagerCompat.from(context).cancelAll()
+        clearInstall()
+    }
+
+    /**
+     * #72 (C11, AC 8): marked returned, the loan leaves the subjects, so the next sweep takes its
+     * reminder down and forgets its stamp — through the real use case, graph and shade.
+     */
+    @Test
+    fun returningTheLoanThenSweepingTakesItDown() {
+        val (asset, loan) = freshLoanDueYesterday()
+        val key = SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "${asset.id.value}/${loan.id.value}")
+        runBlocking { app.graph.reminderRuns.reconcileAll() }
+        assertTrue(awaitTrue { warningFor(key) != null })
+
+        runBlocking {
+            app.graph.returnLoan.run(loan.id, LocalDate.now().toString())
+            app.graph.reminderRuns.reconcileAll()
+        }
+
+        assertTrue("the return took it down", awaitTrue { warningFor(key) == null })
+        assertEquals(emptyList<String>(), runBlocking { app.graph.deadlineLocalDelivery.all() }.map { it.subjectId })
+
+        NotificationManagerCompat.from(context).cancelAll()
+        clearInstall()
+    }
+
+    /** A clean install holding one in-service asset, lent three days ago and due back yesterday, with a Once reminder. */
+    private fun freshLoanDueYesterday(): Pair<Asset, AssetLoan> {
+        clearInstall()
+        NotificationManagerCompat.from(context).cancelAll()
+        val graph = app.graph
+        val today = LocalDate.now()
+        return runBlocking {
+            val drill = graph.createAsset.run(AssetCommand(name = "Example Drill"))
+            val loan = graph.lendAsset.run(
+                drill.id,
+                "Sample Borrower",
+                LoanTerms(
+                    lentOn = today.minusDays(3).toString(),
+                    dueOn = today.minusDays(1).toString(),
+                    reminderMode = LoanReminderMode.ONCE,
+                ),
+            )
+            drill to loan
+        }
     }
 
     /** #79 (R79-14c): the boot count a deadline's stamp records is readable on a real phone. */

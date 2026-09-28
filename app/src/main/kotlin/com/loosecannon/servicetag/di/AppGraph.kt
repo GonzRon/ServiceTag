@@ -46,6 +46,7 @@ import com.loosecannon.servicetag.core.ports.UuidGenerator
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.references.StreamSourcePolicy
 import com.loosecannon.servicetag.core.reminders.BuildDeadlineSubjects
+import com.loosecannon.servicetag.core.reminders.BuildLoanSubjects
 import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
 import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
@@ -300,6 +301,9 @@ class AppGraph(private val context: Context) {
 
     /** #79 (C5): the warranty dates every provider is asked to hold, from the assets alone. */
     val buildDeadlineSubjects: BuildDeadlineSubjects = BuildDeadlineSubjects(assets)
+
+    /** #72 (C9): the open loans' due-back dates every provider is asked to hold, from the loans alone. */
+    val buildLoanSubjects: BuildLoanSubjects = BuildLoanSubjects(loans)
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
 
     // #24 — the platform-ownership seams B06, B07, B10 and B14 compile against (master plan §12).
@@ -379,9 +383,12 @@ class AppGraph(private val context: Context) {
      */
     val reminderRuns: ReminderRuns = ReminderRuns(
         rebuildAll = { recomputeSchedules.all() },
-        // #79 (C6): schedule subjects, then deadline subjects — one list, one reconcile.
+        // #79 (C6): schedule subjects, then deadline subjects — one list, one reconcile. #72 (C10):
+        // then the loan subjects, the second deadline kind.
         subjectsFor = { provider, on ->
-            buildReminderSubjects.forProvider(provider, on) + buildDeadlineSubjects.forProvider(provider, on)
+            buildReminderSubjects.forProvider(provider, on) +
+                buildDeadlineSubjects.forProvider(provider, on) +
+                buildLoanSubjects.forProvider(provider, on)
         },
         provider = localReminderProvider,
         alarm = digestAlarm,
