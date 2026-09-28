@@ -2,11 +2,12 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
-// Test infrastructure, never a product (#62). A second application with its own package, and so
-// its own UID, that fires a real ACTION_SEND at ServiceTag's share target: ShareBoundaryTest uses
-// it to prove what Android delivers from *another* app. `:app` does not depend on it and no
-// release workflow names it; `:app:connectedDebugAndroidTest` installs it and CI's build job
-// assembles it so it cannot rot. See README.md beside this file.
+// Test infrastructure, never a product (#62, #72). A second application with its own package, and
+// so its own UID, that fires a real ACTION_SEND at ServiceTag's share target (ShareBoundaryTest) and
+// answers as a contact picker with a one-shot read grant (ContactGrantBoundaryTest): each proves what
+// Android delivers from *another* app. `:app` does not depend on it and no release workflow names
+// it; `:app:connectedDebugAndroidTest` installs it and CI's build job assembles it so it cannot rot.
+// See README.md beside this file.
 val senderId = "com.loosecannon.servicetag.testsender"
 
 android {

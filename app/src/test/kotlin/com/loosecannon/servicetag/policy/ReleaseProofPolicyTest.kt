@@ -12,8 +12,10 @@ import org.junit.Test
  * 1. No file under [SCANNED] names a screen-driving tool. "File" means what git tracks there plus
  *    anything new that git would not ignore, so a harness is caught before its first commit and a
  *    build directory is never read.
- * 2. `docs/release-proofs.md` has exactly one R4 row, and the only test it names is
- *    `ShareBoundaryTest`: the external boundary is three connected cases, not a scripted journey.
+ * 2. `docs/release-proofs.md` has exactly one R4 row, and the tests it names are exactly
+ *    `ShareBoundaryTest` and, since #72 (R72-24), `ContactGrantBoundaryTest`: the external boundary is
+ *    five connected cases across two named OS boundaries — a share from another UID, and a contact
+ *    handed over by another UID with a one-shot grant — never a scripted journey.
  *
  * A JVM test, so it runs in R1 and in CI's build job. The files it reads are declared as inputs of
  * this module's test tasks (`app/build.gradle.kts`), so a planted harness can never be answered by
@@ -44,7 +46,7 @@ class ReleaseProofPolicyTest {
         )
     }
 
-    @Test fun theExternalBoundaryRowIsShareBoundaryTestAlone() {
+    @Test fun theExternalBoundaryRowIsShareBoundaryTestAndContactGrantBoundaryTest() {
         val rows = File(root, RUNBOOK).readLines()
             .map { it.trim() }
             .filter { it.startsWith("|") }
@@ -53,8 +55,8 @@ class ReleaseProofPolicyTest {
 
         assertEquals("$RUNBOOK must have exactly one R4 row", 1, rows.size)
         assertEquals(
-            "R4 is ShareBoundaryTest and nothing else; a new row entry needs a new OS boundary",
-            setOf("ShareBoundaryTest"),
+            "R4 is ShareBoundaryTest and ContactGrantBoundaryTest and nothing else; a new row entry needs a new OS boundary",
+            setOf("ShareBoundaryTest", "ContactGrantBoundaryTest"),
             TEST_CLASS.findAll(rows.single().joinToString("|")).map { it.value }.toSet(),
         )
     }

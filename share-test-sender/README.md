@@ -1,8 +1,13 @@
 # share-test-sender
 
-A test-only Android application (#62). It exists so the connected suite can prove one fact that
-no in-process test can: **Android delivers a share from another UID to ServiceTag's exported
-share target**, with a real temporary read grant when the share carries a file.
+A test-only Android application (#62, #72). It exists so the connected suite can prove two facts
+that no in-process test can:
+
+1. **Android delivers a share from another UID to ServiceTag's exported share target**, with a
+   real temporary read grant when the share carries a file (#62, `ShareBoundaryTest`);
+2. **a contact handed over by another UID with a one-shot read grant is readable by ServiceTag,
+   which holds no contacts permission** — and one handed over without the grant is not (#72,
+   `ContactGrantBoundaryTest`).
 
 It is not part of ServiceTag. `:app` does not depend on it, no release workflow builds it, and it
 has no release variant.
@@ -12,9 +17,15 @@ has no release variant.
   `:share-test-sender:installDebug`. Export `ANDROID_SERIAL=emulator-5554` first, or Gradle
   installs it on every attached device.
 - **Built by CI:** the `build` job assembles `:share-test-sender:assembleDebug`.
-- **Driven by:** `app/src/androidTest/.../share/TestSender.kt`, for `ShareBoundaryTest`.
+- **Driven by:** `app/src/androidTest/.../share/TestSender.kt`, for `ShareBoundaryTest`, and
+  `app/src/androidTest/.../contacts/TestContactSender.kt`, for `ContactGrantBoundaryTest` and
+  `ContactLinkContractTest`.
 
 ## Commands
+
+Six commands, three per boundary, across two exported, explicit-only activities.
+
+### Sharing (`SenderActivity`, #62)
 
 `SenderActivity` is exported (the test runs under ServiceTag's UID and must be able to start it),
 has no intent filter and draws nothing. It reads three string extras, fires one explicit
@@ -31,6 +42,32 @@ has no intent filter and draws nothing. It reads three string extras, fires one 
 any other name sends nothing. Both are fictional. The fixture is copied out of `assets/` into
 the app's files directory once and served by a non-exported `FileProvider` under
 `com.loosecannon.sharetestsender.fixtures`.
+
+### Picking a contact (`PickerActivity`, #72)
+
+`PickerActivity` is exported for the same reason and has no intent filter either, so no
+`ACTION_PICK` ever resolves to it and the system contact picker is never displaced. ServiceTag's
+test aims ServiceTag's own pick seam (`rememberContactPick`'s contract, which is `PickContact()` in
+the app) at it explicitly and waits for the result. It reads the `command` extra, answers with one
+result and finishes; it draws nothing.
+
+| `command` | what it answers |
+|---|---|
+| `pick_contact` | seeds the fixture contact, then `RESULT_OK` with its lookup URI and `FLAG_GRANT_READ_URI_PERMISSION` — the system picker's shape |
+| `pick_contact_no_grant` | seeds the fixture contact, then `RESULT_OK` with its lookup URI and no grant |
+| `forget_contact` | deletes the fixture contact, then `RESULT_OK` with no data |
+
+The fixture is one fictional, **organisation-only** raw contact, "Example Rentals Ltd", written with
+**no account** by `ContentResolver.applyBatch` from the sender's own UID: the platform contacts
+provider keeps an account-less contact on the device, so no account and no sync are involved, and a
+company-only contact's display name is its organisation. Seeding forgets any earlier copy first. The
+lookup URI is the provider's own (`RawContacts.getContactLookupUri`),
+`content://com.android.contacts/contacts/lookup/<key>/<id>`.
+
+The sender declares `READ_CONTACTS` and `WRITE_CONTACTS` — it needs them to write the fixture and to
+pass on a read grant it holds itself — and the test grants them at run time through the
+instrumentation's own `UiAutomation`. ServiceTag declares neither, and the test asserts it holds
+neither.
 
 ### Why the authority is not under `com.loosecannon.servicetag`
 
@@ -77,7 +114,9 @@ adb -s emulator-5554 shell am start -n com.loosecannon.servicetag.testsender/.Se
 
 ## What it must not become
 
-It holds no permission, never reads ServiceTag's data and has one exported component. It proves
-delivery and the grant, nothing else: choosing an asset, naming, saving and every refusal
-sentence are proved in process (see `docs/release-proofs.md`). A new command needs a new OS
-boundary to demonstrate; a variation of an existing one is an in-process test.
+It holds the two contacts permissions and no other, uses them only on its own fictional fixture
+contact, never reads ServiceTag's data or any other contact, and has two exported components, both
+explicit-only. It proves delivery and the grant — a share's and a picked contact's — nothing else:
+choosing an asset, naming, saving, lending, the lend form, and every refusal sentence are proved in
+process (see `docs/release-proofs.md`). Its six commands are the whole list: a new command needs a
+new OS boundary to demonstrate; a variation of an existing one is an in-process test.

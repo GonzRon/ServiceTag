@@ -16,7 +16,7 @@ demonstrates, or it is not added.*
 | R1 | unit gate from scratch | `./gradlew --rerun-tasks :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest` | JVM (includes `ReleaseProofPolicyTest`, the tripwire below) | — |
 | R2 | connected suite, which includes the boundary and contract classes; the preserved set is staged first (below) | `ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest` | instrumented Compose and framework contract (`ShareResolutionContractTest` among them) | zero skips |
 | R3 | the Python suites | `root=$(git rev-parse --show-toplevel) && (cd "$root/tools/servicetag-mcp" && uv run --frozen pytest) && (cd "$root/tools/servicetag-bundle" && uv run --frozen pytest) && (cd "$root/tools/servicetag-schedules" && uv run --frozen pytest)` | each tool's own pytest | — |
-| R4 | external boundary | **is R2's `ShareBoundaryTest`** — three cases, 20 s each; nothing else may be added to this row without naming a new OS boundary | external-boundary smoke, from the `:share-test-sender` UID | ≤ 60 s |
+| R4 | external boundary | **is R2's `ShareBoundaryTest` and `ContactGrantBoundaryTest`** — five cases, 20 s each; nothing else may be added to this row without naming a new OS boundary | external-boundary smoke, from the `:share-test-sender` UID | ≤ 100 s |
 | R5 | structural | inside R1: `ManifestContractTest.kt`'s two classes — `ManifestContractTest` (the source manifest and the exported set) and `MergedManifestContractTest` (the merged-manifest permission set) — and `VersionAgreementTest`; plus the exported-set parser line below | JVM structural | — |
 | R6 | hygiene | the range greps below | the controller, over `<base>..HEAD` | — |
 | R7 | signed-APK upgrade smoke | install the verified release over the previous one on the development phone, in place: `adb install -r <verified apk>`; same `firstInstallTime` and UID before and after; table counts unchanged | one install on the development phone | one install |
@@ -49,6 +49,25 @@ They choose no asset, type nothing, press nothing and count nothing. Choosing, n
 Cancel, every refusal sentence, the uri-list arm, the caps and process death are proved in process
 by `ShareIntakeScreenTest`, `ShareIntakeViewModelTest`, `SharedItemReaderTest` and
 `SharedItemLiftTest`. What the installed package manager resolves is `ShareResolutionContractTest`.
+
+`ContactGrantBoundaryTest` (#72, R72-24) proves the second boundary: **a contact handed over by
+another UID with a one-shot read grant is readable by ServiceTag, which holds no contacts
+permission.** It grants the sender its own `READ_CONTACTS` and `WRITE_CONTACTS` through the
+instrumentation's `UiAutomation` (no shell string names a permission), asserts ServiceTag's UID holds
+neither, aims ServiceTag's own pick seam at the sender's explicit-only `PickerActivity` and calls
+`launch()`; the sender seeds its fictional, account-less, organisation-only contact ("Example Rentals
+Ltd") and answers. Its two cases:
+
+1. the sender's real lookup URI **without** a grant reads as unreadable (P72-46), not a crash. This
+   case runs first (`NAME_ASCENDING`), so every run shows the refusal before any grant is made;
+2. the same pick **with** the grant reads as "Example Rentals Ltd", and the link the codec builds from
+   the row's real `_ID` and `LOOKUP_KEY` is the URI the provider handed out.
+
+Nothing is chosen, typed or pressed, and the Contacts app is never driven. The lend form, the
+section, the relink, the return and every loan sentence are proved in process by
+`PickedContactReaderTest`, `LoanEditViewModelTest`, `LoanReturnTest`, `AssetLoansStateTest` and
+`LendingSectionDeviceTest`; the codec against the framework's own `Contacts.getLookupUri` is
+`ContactLinkContractTest`.
 
 ## R5's parser line
 
