@@ -1105,8 +1105,9 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     format 11 adds each asset's warranty reminder lead, on the same rule: an older archive's assets
     are compared without the lead and, when the phone's asset carries one, without the `updatedAt`
     that setting it moved; format 12 adds the service cases and their timeline entries — a case
-    whose status moved on one phone after the other received it conflicts on re-merge, while a note
-    added since merges as a new entry beside an identical case).
+    whose header changed on one phone after the other received it (a status update, an edit, or
+    linking or removing its repair record) conflicts on re-merge, while a note-only update merges as
+    a new entry beside an identical case).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are

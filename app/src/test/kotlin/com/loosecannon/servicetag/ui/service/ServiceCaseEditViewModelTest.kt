@@ -164,6 +164,11 @@ class ServiceCaseEditViewModelTest {
         model.onCost("120")
         model.save()
         assertEquals(mapOf(CaseField.CURRENCY to "A cost needs a currency"), settle(model).problems)
+        model.onCost("")
+        assertFalse(
+            "editing the cost takes its line under Currency away too, as the price does",
+            CaseField.CURRENCY in model.state.value.problems,
+        )
 
         model.onOpenedOn("2028-07-14")
         model.onCurrency("USD")

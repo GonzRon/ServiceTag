@@ -163,7 +163,7 @@ class ServiceCaseEditViewModel(
     fun onOutboundCarrier(value: String) = edit { it.copy(outboundCarrier = value) }
     fun onReturnTracking(value: String) = edit { it.copy(returnTracking = value) }
     fun onReturnCarrier(value: String) = edit { it.copy(returnCarrier = value) }
-    fun onCost(value: String) = edit(CaseField.COST) { it.copy(cost = value) }
+    fun onCost(value: String) = edit(CaseField.COST, CaseField.CURRENCY) { it.copy(cost = value) }
     fun onCurrency(value: String) = edit(CaseField.CURRENCY, CaseField.COST) { it.copy(currency = value) }
     fun onNotes(value: String) = edit { it.copy(notes = value) }
 
