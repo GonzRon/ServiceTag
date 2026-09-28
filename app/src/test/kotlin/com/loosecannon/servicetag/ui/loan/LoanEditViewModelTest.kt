@@ -3,6 +3,9 @@ package com.loosecannon.servicetag.ui.loan
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
+import com.loosecannon.servicetag.contacts.ContactRow
+import com.loosecannon.servicetag.contacts.ContactRowQuery
+import com.loosecannon.servicetag.contacts.PickedContactReader
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetLoanId
@@ -89,9 +92,10 @@ class LoanEditViewModelTest {
         loanId: String? = null,
         assetId: String = "drill",
         granted: Boolean = true,
+        reader: PickedContactReader = fakeContactReader(),
     ) = held(
         LoanEditViewModel(
-            graph.assets, graph.loans, graph.lendAsset, graph.updateLoan, fakeContactReader(), graph.todayPort,
+            graph.assets, graph.loans, graph.lendAsset, graph.updateLoan, reader, graph.todayPort,
             AssetId(assetId), loanId?.let(::AssetLoanId),
             io = StandardTestDispatcher(scheduler),
             notifications = permission(granted),
@@ -136,6 +140,34 @@ class LoanEditViewModelTest {
         assertEquals("Example Rentals Ltd", loan.borrowerName)
         assertEquals(RENTALS_PICK, loan.contactLookupUri)
         assertNull(loan.returnedOn)
+    }
+
+    /**
+     * Branch review MINOR: after process death the pick comes back as the launcher re-registers, while
+     * the new editor's `load()` still waits on Room. It is held — a later one replacing it — and applied
+     * once the form loads: read once, the borrower set, nothing written.
+     */
+    @Test fun aPickBeforeTheFormLoadsIsAppliedOnceLoaded() = runTest {
+        drill()
+        val reads = mutableListOf<String>()
+        val rows = mapOf(
+            SAMPLE_PICK to ContactRow(5, "0r5-EXAMPLEKEY", "Sample Borrower"),
+            RENTALS_PICK to ContactRow(9, "0r9-EXAMPLERENTALS", "Example Rentals Ltd"),
+        )
+        val model = editor(reader = PickedContactReader(ContactRowQuery { uri -> reads += uri; rows[uri] }))
+        assertFalse("load() is still waiting on Room", model.state.value.loaded)
+
+        model.onPicked(SAMPLE_PICK)
+        model.onPicked(RENTALS_PICK)
+        model.ready()
+        testScheduler.advanceUntilIdle()
+
+        val form = model.state.value
+        assertEquals("the later pick is the borrower", "Example Rentals Ltd", form.borrower)
+        assertEquals(RENTALS_PICK, form.lookupUri)
+        assertFalse(form.reading)
+        assertEquals("read once, the replaced pick never", listOf(RENTALS_PICK), reads)
+        assertEquals("a pick writes nothing", emptyList<AssetLoan>(), storedLoans())
     }
 
     @Test fun aNamelessPickSaysP72_30() = runTest {

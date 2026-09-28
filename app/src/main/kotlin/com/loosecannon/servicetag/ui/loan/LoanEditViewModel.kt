@@ -145,6 +145,9 @@ class LoanEditViewModel(
     /** The written loan waiting on P72-33's answer before the sweep and [saved]. */
     private var afterRationale: AssetLoan? = null
 
+    /** A new loan's pick that came before [load] finished (process death); [load] applies it once. */
+    private var heldPick: String? = null
+
     init {
         viewModelScope.launch { load() }
     }
@@ -168,6 +171,7 @@ class LoanEditViewModel(
         }
         assets.get(assetId) ?: return run { _missing.value = true }
         _state.update { it.copy(loaded = true, lentOn = today.localDate().toString()) }
+        heldPick?.let { pick -> heldPick = null; onPicked(pick) }
     }
 
     fun onLentOn(value: String) = edit(LoanField.LENT_ON) { it.copy(lentOn = value) }
@@ -196,10 +200,13 @@ class LoanEditViewModel(
      * The pick's result, from its callback (C15): read once, now, while its grant lasts. A person or an
      * organisation becomes the borrower and its link; a nameless contact is P72-30 and an unreadable
      * one P72-46, both under Borrower, and either leaves no borrower behind. An edit has no picker.
+     * After process death the pick can come back before [load] has finished: it is held, a later one
+     * replacing it, and read once the form has loaded — the grant lasts while this activity does.
      */
     fun onPicked(uri: String) {
         val form = _state.value
-        if (!form.isNew || !form.loaded || form.saving || form.reading) return
+        if (!form.isNew || form.saving || form.reading) return
+        if (!form.loaded) return run { heldPick = uri }
         _state.update { it.copy(reading = true) }
         viewModelScope.launch {
             val read = withContext(io) { reader.read(uri) }
