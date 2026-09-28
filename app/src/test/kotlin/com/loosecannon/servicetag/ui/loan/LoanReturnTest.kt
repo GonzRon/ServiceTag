@@ -154,6 +154,18 @@ class LoanReturnTest {
         )
     }
 
+    /** C18, P72-45 (beyond the matrix): no contact picker on the phone — the relink says so and writes nothing. */
+    @Test fun aRelinkWithNoPickerSaysP72_45() = runTest {
+        val before = lent()
+        val model = actions()
+        val said = backgroundScope.async(start = CoroutineStart.UNDISPATCHED) { model.messages.first() }
+
+        model.onNoPicker()
+
+        assertEquals("No app can pick a contact", said.await())
+        assertEquals(before, stored())
+    }
+
     @Test fun aRelinkReadFailureSaysP72_46() = runTest {
         val before = lent()
         val model = actions()

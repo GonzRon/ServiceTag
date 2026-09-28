@@ -218,6 +218,19 @@ class LoanEditViewModelTest {
         assertEquals("every refusal wrote nothing", emptyList<AssetLoan>(), storedLoans())
     }
 
+    /** C15, P72-45 (beyond the matrix): a phone with no contact picker says so, and nothing is written. */
+    @Test fun noPickerSaysP72_45() = runTest {
+        drill()
+        val model = editor()
+        model.ready()
+        val said = backgroundScope.async(start = CoroutineStart.UNDISPATCHED) { model.messages.first() }
+
+        model.onNoPicker()
+
+        assertEquals("No app can pick a contact", said.await())
+        assertEquals(emptyList<AssetLoan>(), storedLoans())
+    }
+
     /** C2 (i), P72-37: a form opened before the asset was lent elsewhere writes nothing and says so. */
     @Test fun aStaleFormSaysP72_37() = runTest {
         drill()
