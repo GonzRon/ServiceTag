@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.dashboard
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
@@ -452,7 +453,11 @@ class DashboardAttentionTest {
         rule.awaitText("Belt age WARNING")
         rule.awaitText("Lent to Sample Borrower · due back ${displayDate(today.minusDays(2))}")
         rule.onAllNodesWithText("LOAN OVERDUE", useUnmergedTree = true).assertCountEquals(1)
-        rule.onAllNodesWithText("OVERDUE", useUnmergedTree = true).assertCountEquals(0)
+        // The row's own words: "LOAN OVERDUE", never the bare maintenance OVERDUE the mower's schedule row
+        // rightly carries above it.
+        val words = rule.onNode(hasText("Example Drill") and hasClickAction()).fetchSemanticsNode()
+            .config[SemanticsProperties.Text].map { it.text }
+        check("LOAN OVERDUE" in words && "OVERDUE" !in words) { "the loan row says $words" }
         rule.onAllNodesWithText("Lent to Example Rentals Ltd", substring = true).assertCountEquals(0)
 
         val order = listOf(
