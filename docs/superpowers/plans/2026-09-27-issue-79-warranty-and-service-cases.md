@@ -732,3 +732,68 @@ or `closedOn`; lower the global MCP minimum; bump `versionName`. **Size:** about
   two ports are nullable defaults, their production wiring proven at the branch gate by the editor → sweep device
   case; the release gate's in-app step answers the notification question with "Not now" and seeds the date
   through an overlay write; the unlisted pins A2 and A4 moved are itemised in their reports.
+
+## 18. Errata after implementation (#79b; controller, 2026-09-27 onward)
+
+Merged to master at 56bd6387 (`merge issue-79b`, branch head 9242c489 on e5660b4d) after B1–B3, one task review each,
+one batched fix round each (B1 the timeline-survival case and the zone rule; B2 device RED evidence and the sheet's failure
+line; B3 the all-fields round trip, two 405 shapes and the README minima) and one whole-branch review (MERGE, two minors
+closed before the merge). What the code does where the plan was silent, narrow or read literally:
+
+- **A backdated status entry still sets the case's status** — status follows write order, not entry date (C14 read
+  literally); the timeline records what was entered, and B2 does not refuse a status entry dated before the latest.
+- **The coverage suggestion is a form default only** (`suggestCoverage`, a pure helper for B2's form; C15), and the
+  asset's currency is the form's prefill (C21): `OpenServiceCase` stores exactly the coverage and currency it is sent.
+- **The docs lagged B1 until B3 by design:** exports were format 12 and the merge report carried `serviceCases` and
+  `caseEntries` from B1's commit on, while `docs/api/v1.md` and the MCP docstrings ("formats 1–11", "fifteen tables")
+  moved only with B3.
+- **The shipped reference-tally test cannot see the two new tallies** (its archive holds no cases); a mis-wired
+  tally is caught by `MergePlannerServiceCaseTest.theReportTalliesBothTables` and the on-the-wire case.
+- **`StoreIsEmpty` is unchanged:** a case cannot exist without its asset, so the asset check covers it (as for
+  definitions and profiles); its KDoc says so and a test pins the reasoning.
+- **A case entry's zone id is validated** (an unparseable `tzId` is `BackupCorrupt` on restore and a refusal in the
+  use case): decided at B1's review, before any format-12 archive exists, so it refuses nothing this build wrote.
+- **The Incident detail reads the case link when Delete is tapped** (held in the view model, one short read before
+  the confirm is drawn), not on load — C23 says only that the confirm "adds P79-60 when a case links it".
+- **P79-60 also shows when a case names the event as its repair record**, not only as its Incident: `linking(eventId)`
+  is "a case links this entry", the string reads generically, and a deleted repair record dangles like an Incident (S24).
+- **"Could not save this entry." is written inline once more** in the case screen's view model — its only other home is private in
+  the untouched `EventEntryViewModel.kt`; `BAD_CURRENCY` and `FormField` became internal for the case editor's reuse.
+  A shared home is a #84 candidate.
+- **Sizes ran over the estimates** (B1 and B2 each roughly 1.7× production, 1.4× test): KDoc, mappers, the shipped pin
+  moves, and the two new device classes; accepted as built.
+- **The Add-update sheet offers the case's current status as a chip** (C22: six chips, none = no change); choosing it
+  writes a status entry that stamps the header, so the case conflicts on re-merge exactly as any status move does.
+- **A link or Remove write the rules refuse shows P79-61 with no field** (for example a merged-in `openedOn` after the
+  local today, refused as `OpenedAfterToday`); the editor shows S25 on Opened on for the same header. Rare; no
+  ratified sentence; recorded.
+- **Codes the plan left open (B3):** a missing case is 404 `no_such_service_case`; an unknown `type`, `coverage` or
+  `status` name is a 400 on the event-kind precedent; the asset's case list returns headers only, no entries; a blank
+  currency is null. The responses reuse the archive's own `ServiceCaseDto`/`ServiceCaseEntryDto` (one schema).
+- **An Incident-less case opened through the API never gains an Incident:** the originating Incident is set at open
+  (`OpenServiceCase`'s third argument) and the full-replace PATCH does not move `incidentEventId`; a case on a retired
+  or archived asset is accepted (R79-3's core/API reading).
+- **The MCP's schema check is shared** (`_require_tool_schema(tool, minimum, feature)`): A4's warranty tools and B3's
+  case tools refuse the same way, the warranty messages byte-identical to A4's.
+- **The release gate's 8 → 12 proof is a written procedure** that needs a signed candidate; it opens a case through
+  the API with a note and a CLOSED entry so both tallies are non-zero on the round trip.
+- **The API's case list is in the repository's order** (`opened_on DESC, id`, closed cases mixed in), documented in
+  `v1.md` and the tool docstring; the phone's section alone puts open cases first, then closed as history.
+- **Any header write conflicts on re-merge**, not only a status move: a status update, an editor save, or linking or
+  removing the repair record on one phone after the other received the case; only a note-only update merges cleanly
+  (§5's "status" wording was too narrow; `v1.md`'s general rule was right; the MCP docstring corrected at the merge).
+- **Entries are not bounded below** by `openedOn` or the Incident's date, so a backdated CLOSED entry can put `closedOn`
+  before `openedOn`; recorded, not refused.
+- **A dangling repair record keeps its row** (S24 with "Remove"); "Link repair record" returns only after Remove — two
+  taps to relink, which C22 allows.
+- **"New service case" opens the editor on the current Incident even when a case already names it**, so an Incident may
+  gather several cases from the detail as well as from the Incident's page (R79-3 sets no one-case rule).
+- **The case editor settles cost and currency before the header's other problems** (the asset price precedent); typing
+  in Cost now clears both fields' refusals (the branch review's m1, fixed at the merge).
+- **The release gate's entry bodies carry a `tzId`** (for example `"Etc/UTC"`), as `v1.md` requires.
+- **The merged-tip gate's first attempt failed one shipped device case** (`AssetModelDeviceProofTest.
+  aComponentIsReparentedUnderItsSiblingAndNoDescendantIsOffered`, from #73): its tap on the "Part of …" link was never
+  scrolled into view, and the Service cases section — now between Condition and Health — made the preceding scroll to
+  the COMPONENTS list carry that link above the fold, so the tap landed off-screen and the test edited the wrong asset.
+  Fixed test-only (`performScrollTo()` before the two parent-link taps, the #82 precedent); the merge was redone on the
+  fixed head and gated once. Every un-scrolled tap in a shipped device test is a #84 sweep candidate.
