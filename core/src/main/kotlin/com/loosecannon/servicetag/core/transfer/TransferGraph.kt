@@ -176,7 +176,6 @@ object TransferGraph {
         // What a carried row names must be carried too, or the pack would not decode (AC 3).
         val definitionIds = definitions.map { it.id }.toSet()
         val profileIds = profiles.map { it.id }.toSet()
-        val ownerOfGroup = groups.associate { group -> group.id to group.members.minOf { it.assetId } }
         events.sortedBy { it.id }.forEach { event ->
             if (event.scheduleId != null && event.scheduleId !in scheduleIds) {
                 refusals += outside(event.assetId, "assetEvents", event.id, event.scheduleId)
@@ -188,11 +187,14 @@ object TransferGraph {
             }
         }
         schedules.sortedBy { it.id }.forEach { schedule ->
-            val owner = schedule.assetId ?: ownerOfGroup.getValue(schedule.groupId!!)
-            listOfNotNull(schedule.meterDefinitionId?.takeIf { it !in definitionIds },
-                schedule.profileId?.takeIf { it !in profileIds }).forEach { target ->
-                refusals += outside(owner, "maintenanceSchedules", schedule.id, target)
-            }
+            val targets = listOfNotNull(
+                schedule.meterDefinitionId?.takeIf { it !in definitionIds },
+                schedule.profileId?.takeIf { it !in profileIds },
+            )
+            // A group schedule is refused in the name of its first member asset, by id.
+            val owner = schedule.assetId
+                ?: groups.firstOrNull { it.id == schedule.groupId }?.members?.minOfOrNull { it.assetId }
+            if (owner != null) targets.forEach { refusals += outside(owner, "maintenanceSchedules", schedule.id, it) }
         }
         if (refusals.isNotEmpty()) return TransferSelection.Refused(refusals)
 
