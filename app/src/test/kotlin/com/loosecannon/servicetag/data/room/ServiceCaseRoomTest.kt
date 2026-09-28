@@ -10,6 +10,12 @@ import com.loosecannon.servicetag.core.model.ServiceCase
 import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.ServiceCaseEntryId
 import com.loosecannon.servicetag.core.model.ServiceCaseId
+import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.usecase.AddServiceCaseEntry
+import com.loosecannon.servicetag.core.usecase.CaseEntryCommand
+import java.time.LocalDate
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -78,5 +84,37 @@ class ServiceCaseRoomTest {
             entries.forCase(ServiceCaseId("c1")),
         )
         assertEquals(entries.all(), entries.observeForCase(ServiceCaseId("c1")).first())
+    }
+
+    /**
+     * Review MINOR-1: a header written again **after** its case has a timeline keeps every entry. The
+     * DAO's upsert is update-then-insert; an `INSERT OR REPLACE` would delete the header row first, and
+     * the entry table's CASCADE would take the whole timeline with it — on every status entry. Proved
+     * both ways: a bare re-upsert of the header, and a status entry through the real use case over Room.
+     */
+    @Test
+    fun rewritingAHeaderKeepsItsTimeline() = runTest {
+        assets.upsert(Asset(id = AssetId("a1"), name = "Example Heater", createdAt = 1L, updatedAt = 1L))
+        cases.upsert(caseOf("c1"))
+        val before = listOf(entryOf("n1", "Courier booked", time = "09:30"), entryOf("n2", "Courier collected", time = "15:00"))
+        before.forEach { entries.insert(it) }
+
+        cases.upsert(caseOf("c1").copy(title = "Example Heater claim, renamed", updatedAt = 400L))
+        assertEquals("a bare header rewrite", before, entries.forCase(ServiceCaseId("c1")))
+
+        var n = 0
+        val addEntry = AddServiceCaseEntry(
+            cases, entries, RoomUnitOfWork(db), IdGenerator { "n-status-${++n}" }, Clock { 500L },
+            Today { LocalDate.parse("2026-09-24") },
+        )
+        val closed = addEntry.run(ServiceCaseId("c1"), CaseEntryCommand("2026-09-24", null, "UTC", "Repaired", CaseStatus.CLOSED))
+
+        assertEquals(CaseStatus.CLOSED to "2026-09-24", closed.serviceCase.status to closed.serviceCase.closedOn)
+        assertEquals(closed.serviceCase, cases.get(ServiceCaseId("c1")))
+        assertEquals(
+            "a status entry's header write keeps every entry, its own included",
+            listOf("n1", "n2", "n-status-1"),
+            entries.forCase(ServiceCaseId("c1")).map { it.id.value },
+        )
     }
 }
