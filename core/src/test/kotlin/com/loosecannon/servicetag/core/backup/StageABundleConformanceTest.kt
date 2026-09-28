@@ -82,7 +82,7 @@ class StageABundleConformanceTest {
         val entries = readZipEntries(resourceBytes())
         val data = Json.parseToJsonElement(String(entries.getValue("data.json"))).jsonObject
 
-        // The root object itself: BackupData defaults eleven of its fourteen tables to emptyList(), so
+        // The root object itself: BackupData defaults fourteen of its seventeen tables to emptyList(), so
         // a *new* table added there tomorrow would never be emitted by the generator and would
         // decode away silently unless the root's own key set is pinned here too. The fixture is a
         // **format-5** archive and the generator writes format 5, so the three format-6 tables, the
