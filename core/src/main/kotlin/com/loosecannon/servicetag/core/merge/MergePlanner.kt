@@ -184,6 +184,18 @@ import java.security.MessageDigest
  * here**; else INSERT. Only the local side is asked about open loans: the codec's graph check already
  * holds the archive to one open loan per asset.
  *
+ * ### Transfer records (#77, C10; R77-5, R77-12)
+ *
+ * Decided last, in [MergeTable] order. A record by its id, every field compared: IDENTICAL, or CONFLICT
+ * `CONTENT_DIFFERS` — no UPDATE. One the phone lacks, against R' (this phone's records and every incoming one
+ * absent here): **M1** an IN or WITHDRAWN that would close an OUT open here → `ASSET_TRANSFERRED_OUT` (an
+ * ordinary archive never returns an asset; a withdrawal never propagates); an OUT leaving its asset with two
+ * open OUTs in R' → `TRANSFER_DIVERGED`, both packs named; else INSERT. Then, with what the phone would hold
+ * after the plan: **M2** every row the rules would INSERT whose owning asset (`TransferOwnership`) is held →
+ * `ASSET_TRANSFERRED_OUT`; **M3** `TransferGraph.retain` of the phone as the plan would leave it must be
+ * `Retained` — an entangling inserted row, or the inserted OUT a local row entangles, → `ASSET_TRANSFERRED_OUT`.
+ * The records are written last of all.
+ *
  * ### Not total, and only for a hand-built [Backup]
  *
  * This propagates `IllegalStateException` from [AssetTree.parentsFirst] on a cyclic asset set,
