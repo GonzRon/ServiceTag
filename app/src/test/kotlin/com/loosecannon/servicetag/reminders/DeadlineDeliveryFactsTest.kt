@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetLoanId
+import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.Clock
@@ -96,9 +97,9 @@ class DeadlineDeliveryFactsTest {
 
     /**
      * A fixed zone far from UTC (+05:30), at 08:00 local on 20 June: at digest hour 9 today's 09:00
-     * is still ahead, so the period began yesterday at 09:00; at digest hour 7 it began today at 07:00.
-     * Then digest hour 2 on New York's spring-forward day, whose 02:00–03:00 does not exist: both
-     * instants move forward to 03:00 local.
+     * is still ahead, so the day opens at 09:00 today and the period began yesterday at 09:00; at
+     * digest hour 7 both are today's 07:00. Then digest hour 2 on New York's spring-forward day, whose
+     * 02:00–03:00 does not exist: both instants move forward to 03:00 local.
      */
     @Test
     fun aLoanFactNamesItsAssetBorrowerAndItsDigestHourInstants() = runTest {
@@ -106,26 +107,16 @@ class DeadlineDeliveryFactsTest {
         loans.upsert(sampleLoan(dueOn = "2031-06-18"))
         val key = SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "a1/l1")
 
-        assertEquals(
-            DeadlineFacts(
-                ownerName = "Example Drill",
-                today = LocalDate.parse("2031-06-10"),
-                borrower = "Sample Borrower",
-                opensAt = Instant.parse("2031-06-18T03:30:00Z").toEpochMilli(),
-                cadenceSince = Instant.parse("2031-06-19T03:30:00Z").toEpochMilli(),
-            ),
-            facts(digestHour = 9).factsFor(key),
-        )
-        assertEquals(
-            DeadlineFacts(
-                ownerName = "Example Drill",
-                today = LocalDate.parse("2031-06-10"),
-                borrower = "Sample Borrower",
-                opensAt = Instant.parse("2031-06-18T01:30:00Z").toEpochMilli(),
-                cadenceSince = Instant.parse("2031-06-20T01:30:00Z").toEpochMilli(),
-            ),
-            facts(digestHour = 7).factsFor(key),
-        )
+        val nine = facts(digestHour = 9).factsFor(key)!!
+        assertEquals("Example Drill", nine.ownerName)
+        assertEquals(LocalDate.parse("2031-06-10"), nine.today)
+        assertEquals("Sample Borrower", nine.borrower)
+        assertEquals("today's 09:00, still ahead", Instant.parse("2031-06-20T03:30:00Z").toEpochMilli(), nine.dayOpensAt)
+        assertEquals("yesterday's 09:00", Instant.parse("2031-06-19T03:30:00Z").toEpochMilli(), nine.cadenceSince)
+
+        val seven = facts(digestHour = 7).factsFor(key)!!
+        assertEquals("today's 07:00", Instant.parse("2031-06-20T01:30:00Z").toEpochMilli(), seven.dayOpensAt)
+        assertEquals("today's 07:00", Instant.parse("2031-06-20T01:30:00Z").toEpochMilli(), seven.cadenceSince)
 
         loans.upsert(sampleLoan(dueOn = "2031-03-09"))
         val springForward = facts(
@@ -133,8 +124,27 @@ class DeadlineDeliveryFactsTest {
             digestHour = 2,
             zone = "America/New_York",
         ).factsFor(key)!!
-        assertEquals("03:00 EDT", Instant.parse("2031-03-09T07:00:00Z").toEpochMilli(), springForward.opensAt)
+        assertEquals("03:00 EDT", Instant.parse("2031-03-09T07:00:00Z").toEpochMilli(), springForward.dayOpensAt)
         assertEquals("03:00 EDT", Instant.parse("2031-03-09T07:00:00Z").toEpochMilli(), springForward.cadenceSince)
+    }
+
+    /**
+     * R72-10 (fix round 1, MINOR-1): custody is independent of service. An open loan on a retired
+     * asset, and one on an archived asset, still have facts named after their asset, so their
+     * reminders are delivered.
+     */
+    @Test
+    fun aRetiredOrArchivedAssetsOpenLoanStillHasFacts() = runTest {
+        assets.upsert(Asset(id = AssetId("a1"), name = "Example Drill", createdAt = 1_000L, updatedAt = 1_000L, retiredOn = "2031-06-15"))
+        assets.upsert(
+            Asset(id = AssetId("a2"), name = "Example Ladder", status = AssetStatus.ARCHIVED, createdAt = 1_000L, updatedAt = 1_000L),
+        )
+        loans.upsert(sampleLoan(id = "l1", assetId = "a1"))
+        loans.upsert(sampleLoan(id = "l2", assetId = "a2"))
+        val facts = facts()
+
+        assertEquals("Example Drill", facts.factsFor(SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "a1/l1"))?.ownerName)
+        assertEquals("Example Ladder", facts.factsFor(SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "a2/l2"))?.ownerName)
     }
 
     /** Returned, gone, its asset gone, or a subject id that is not this loan's: no facts, so the post comes down. */

@@ -26,13 +26,14 @@ fun interface DeadlineFactsSource {
  * subjects on. An asset gone between the list being built and this read has no facts, and its
  * warning is forgotten.
  *
- * #72 (C10, R72-7): a loan's owner is its asset too, and its facts add the borrower and two instants
- * that anchor a loan's day to the owner's [digestHour] rather than to midnight: the due day at that
- * hour (the reminder opens there) and the latest such instant at or before the [clock]'s now (an
- * Until-returned period began there). Both are taken in [zone], the device's, read on every call so
- * a zone change is followed; an hour a spring-forward gap skips is moved forward by the gap, as
- * `java.time` resolves it. No column is added for any of this. A loan returned or gone, its asset
- * gone, or an id that is not this loan's has no facts, so its reminder is taken down and forgotten.
+ * #72 (C10, R72-7): a loan's owner is its asset too — whatever its lifecycle, since custody is
+ * independent of service (R72-10) — and its facts add the borrower and the instants that anchor a
+ * loan's day to the owner's [digestHour] rather than to midnight: today at that hour (a loan is held
+ * before it) and the latest such instant at or before the [clock]'s now (an Until-returned period
+ * began there). Both are taken in [zone], the device's, read on every call so a zone change is
+ * followed; an hour a spring-forward gap skips is moved forward by the gap, as `java.time` resolves
+ * it. No column is added for any of this. A loan returned or gone, its asset gone, or an id that is
+ * not this loan's has no facts, so its reminder is taken down and forgotten.
  */
 class DeadlineDeliveryFacts(
     private val assets: AssetRepository,
@@ -52,7 +53,7 @@ class DeadlineDeliveryFacts(
         val assetId = LoanSubjectId.assetOf(subjectId) ?: return null
         val loanId = LoanSubjectId.loanOf(subjectId) ?: return null
         val loan = loans.get(loanId)?.takeIf { it.isOpen && it.assetId == assetId } ?: return null
-        val dueOn = loan.dueOn?.let(::parsedOrNull) ?: return null
+        if (loan.dueOn?.let(::parsedOrNull) == null) return null
         val asset = assets.get(assetId) ?: return null
         val zone = zone()
         val hour = digestHour()
@@ -63,8 +64,8 @@ class DeadlineDeliveryFacts(
             ownerName = asset.name,
             today = today.localDate(),
             borrower = loan.borrowerName,
-            opensAt = dueOn.atHour(hour, zone),
             cadenceSince = if (todaysHour <= nowMillis) todaysHour else localToday.minusDays(1).atHour(hour, zone),
+            dayOpensAt = todaysHour,
         )
     }
 

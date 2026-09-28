@@ -774,6 +774,27 @@ class LocalReminderProviderTest {
         }
     }
 
+    /**
+     * R72-10 (fix round 1, MINOR-1): a retired asset's open loan and an archived asset's open loan
+     * are both posted through the real builder, facts and provider, each named after its asset.
+     */
+    @Test
+    fun aRetiredOrArchivedAssetsOpenLoanStillPosts() = runTest {
+        val provider = provider()
+        assets.upsert(Asset(id = AssetId("a1"), name = "Example Drill", createdAt = 1_000L, updatedAt = 1_000L, retiredOn = "2026-06-01"))
+        assets.upsert(
+            Asset(id = AssetId("a2"), name = "Example Ladder", status = AssetStatus.ARCHIVED, createdAt = 1_000L, updatedAt = 1_000L),
+        )
+        loans.upsert(sampleLoan(id = "l1", assetId = "a1", dueOn = "2026-06-05"))
+        loans.upsert(sampleLoan(id = "l2", assetId = "a2", dueOn = "2026-06-05", reminderMode = LoanReminderMode.UNTIL_RETURNED))
+
+        assertEquals(ReconcileReport(2, 0, 0, emptyList()), provider.reconcile(lentOut()))
+        assertEquals(
+            listOf("Example Drill — Due back", "Example Ladder — Due back"),
+            notifications.postedItems.map { it.title },
+        )
+    }
+
     /** Reminders switched off: loan posts come down with everything else, and their stamps go too. */
     @Test
     fun silenceTakesLoanPostsDownAndForgetsThem() = runTest {

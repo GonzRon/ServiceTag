@@ -369,11 +369,18 @@ class ReminderPlatformDeviceProofTest {
         clearInstall()
     }
 
-    /** A clean install holding one in-service asset, lent three days ago and due back yesterday, with a Once reminder. */
+    /**
+     * A clean install holding one in-service asset, lent three days ago and due back yesterday, with a
+     * Once reminder. The digest hour is set to 00:00 (fix round 1, R1-8): a loan is quiet between
+     * local midnight and the day's digest hour, and `clearInstall()` resets the hour to 09:00, so
+     * without this the loan cases would fail whenever the class runs before 09:00 local. The closing
+     * `clearInstall()` restores the default.
+     */
     private fun freshLoanDueYesterday(): Pair<Asset, AssetLoan> {
         clearInstall()
         NotificationManagerCompat.from(context).cancelAll()
         val graph = app.graph
+        graph.prefs.digestHour = 0
         val today = LocalDate.now()
         return runBlocking {
             val drill = graph.createAsset.run(AssetCommand(name = "Example Drill"))

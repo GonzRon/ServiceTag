@@ -111,11 +111,12 @@ internal object Fixture {
     fun tagOf(subject: ReminderSubject): String = itemTag(subject.key, subject.contentHash)
 
     /** An instant as epoch millis. The policy compares instants only, so these fixtures read local time as UTC. */
-    fun millis(at: LocalDateTime): Long = at.toInstant(ZoneOffset.UTC).toEpochMilli()
+    fun millis(at: LocalDateTime, zone: ZoneOffset = ZoneOffset.UTC): Long = at.toInstant(zone).toEpochMilli()
 
     /**
-     * #72 (C10): a loan's facts at [at] — its day, its borrower, the due day at the digest hour, and
-     * the latest digest-hour instant at or before [at] — as the facts source derives them.
+     * #72 (C10): a loan's facts at [at], local time in [zone] — its day, its borrower, the latest
+     * digest-hour instant at or before [at], and (fix round 1) this day at the digest hour — as the
+     * facts source derives them.
      */
     fun loanFacts(
         at: LocalDateTime,
@@ -123,6 +124,7 @@ internal object Fixture {
         digestHour: Int = 9,
         ownerName: String = "Example Drill",
         borrower: String = "Sample Borrower",
+        zone: ZoneOffset = ZoneOffset.UTC,
     ): DeadlineFacts {
         val hourToday = at.toLocalDate().atTime(digestHour, 0)
         val since = if (hourToday.isAfter(at)) hourToday.minusDays(1) else hourToday
@@ -130,8 +132,8 @@ internal object Fixture {
             ownerName = ownerName,
             today = at.toLocalDate(),
             borrower = borrower,
-            opensAt = millis(LocalDate.parse(dueOn).atTime(digestHour, 0)),
-            cadenceSince = millis(since),
+            cadenceSince = millis(since, zone),
+            dayOpensAt = millis(hourToday, zone),
         )
     }
 
@@ -1026,6 +1028,127 @@ class DigestPolicyTest {
         assertEquals(setOf(NotificationChannels.LOANS), words.map { it.channelId }.toSet())
     }
 
+    // #72 B2 fix round 1 (BLOCKER-1, controller ruling (1), R72-7): a sweep between local midnight and
+    // that day's digest hour is quiet for loans — no first post, no re-alert, no restart re-post — and
+    // it holds a standing post and forgets nothing (MINOR-2).
+
+    /** R1-1, the control: a loan first eligible after the digest hour posts at the next sweep that same day. */
+    @Test
+    fun aLoanFirstEligibleAfterTheDigestHourPostsAtTheNextSameDaySweep() {
+        listOf(DeadlineRepeat.ONCE, DeadlineRepeat.UNTIL_CLEARED).forEach { repeat ->
+            val post = LoanRun(Fixture.loan(repeat = repeat)).sweep(at(0, 20, 5)).posts.single()
+
+            assertEquals("$repeat", "Lent to Sample Borrower. Due back 30 Jun 2031.", post.body)
+            assertEquals("$repeat", "DUE BACK", post.statusWord)
+        }
+    }
+
+    /**
+     * R1-2: re-dated to today in the evening, with no sweep before midnight: the midnight sweep and
+     * the backstop at 03:00 post nothing, stamp nothing and forget nothing; the 09:00 sweep posts, in
+     * the words for after the due day.
+     */
+    @Test
+    fun aMidnightSweepNeverMakesALoansFirstPost() {
+        listOf(DeadlineRepeat.ONCE, DeadlineRepeat.UNTIL_CLEARED).forEach { repeat ->
+            val run = LoanRun(Fixture.loan(repeat = repeat))
+
+            listOf(at(1, 0, 5), at(1, 3, 0)).forEach { time ->
+                val quiet = run.sweep(time)
+                assertEquals("$repeat $time", emptyList<ItemPost>(), quiet.posts)
+                assertEquals("$repeat $time", emptyList<DeadlineLocalDelivery>(), quiet.deadlineRows)
+                assertEquals("$repeat $time", emptyList<SubjectKey.Deadline>(), quiet.deadlineForgotten)
+                assertEquals("$repeat $time", ReconcileCounters(0, 0, 0), quiet.report.counters())
+            }
+            val post = run.sweep(at(1, 9, 0)).posts.single()
+            assertEquals("$repeat", "Lent to Sample Borrower. Was due back 30 Jun 2031.", post.body)
+            assertEquals("$repeat", "NOT RETURNED", post.statusWord)
+        }
+    }
+
+    /** R1-3: lent through the API at 07:00, due three days ago — the 07:05 sweep waits for the digest hour. */
+    @Test
+    fun aLoanPastDueFirstSeenBeforeTheDigestHourWaitsForIt() {
+        listOf(DeadlineRepeat.ONCE, DeadlineRepeat.UNTIL_CLEARED).forEach { repeat ->
+            val run = LoanRun(Fixture.loan(repeat = repeat))
+
+            assertEquals("$repeat", listOf(0, 1), listOf(at(3, 7, 5), at(3, 9, 0)).map { run.sweep(it).posts.size })
+        }
+    }
+
+    /**
+     * R1-4: posted on the due day and never swept again until after the next midnight (Doze held the
+     * digest and the backstop). The 00:05 sweep holds the standing post, with no re-alert and no
+     * stamp; the 09:00 sweep re-alerts it, once.
+     */
+    @Test
+    fun untilReturnedAfterAMissedPeriodStaysQuietAtMidnight() {
+        val run = LoanRun(Fixture.loan(repeat = DeadlineRepeat.UNTIL_CLEARED))
+        run.sweep(at(0, 9, 0))
+
+        val midnight = run.sweep(at(2, 0, 5))
+        assertEquals(emptyList<ItemPost>(), midnight.posts)
+        assertEquals(emptyList<String>(), midnight.cancelTags)
+        assertEquals(emptyList<DeadlineLocalDelivery>(), midnight.deadlineRows)
+        assertEquals(ReconcileCounters(0, 0, 1), midnight.report.counters())
+
+        val digest = run.sweep(at(2, 9, 0))
+        assertEquals(listOf(Fixture.tagOf(run.subject)), digest.posts.map { it.tag })
+        assertEquals(ReconcileCounters(0, 0, 1), digest.report.counters())
+    }
+
+    /**
+     * R1-5: a restart at 00:30 empties the shade; the sweep it triggers posts nothing and leaves the
+     * stamp from the old boot alone, and the 09:00 sweep posts it again in the new boot.
+     */
+    @Test
+    fun aRestartBeforeTheDigestHourIsQuietForUntilReturned() {
+        val run = LoanRun(Fixture.loan(repeat = DeadlineRepeat.UNTIL_CLEARED))
+        run.sweep(at(0, 9, 0))
+        run.sweep(at(1, 9, 0))
+        run.restart()
+
+        assertEquals(0, run.sweep(at(2, 0, 30)).posts.size)
+        assertEquals(listOf<Int?>(1), listOfNotNull(run.row).map { it.announcedBoot })
+        assertEquals(listOf(Fixture.millis(at(1, 9, 0))), listOfNotNull(run.row).map { it.updatedAt })
+
+        assertEquals(1, run.sweep(at(2, 9, 0)).posts.size)
+        assertEquals(listOf<Int?>(2), listOfNotNull(run.row).map { it.announcedBoot })
+    }
+
+    /**
+     * R1-6: the hold never takes a post down or forgets a stamp — at 00:05 and 08:59 the day after,
+     * for both repeats. And on the due day itself (MINOR-2): a Once posted at 09:00 in UTC+2, swept an
+     * hour later after flying to UTC−5 — 03:00 local, still the due day — keeps its post and stamp,
+     * and the 09:00 local sweep there does not post it a second time.
+     */
+    @Test
+    fun thePreDigestHoldNeverTakesAPostDownOrForgetsAStamp() {
+        listOf(DeadlineRepeat.ONCE, DeadlineRepeat.UNTIL_CLEARED).forEach { repeat ->
+            val run = LoanRun(Fixture.loan(repeat = repeat))
+            run.sweep(at(0, 9, 0))
+
+            listOf(at(1, 0, 5), at(1, 8, 59)).forEach { time ->
+                val held = run.sweep(time)
+                assertEquals("$repeat $time", emptyList<String>(), held.cancelTags)
+                assertEquals("$repeat $time", emptyList<SubjectKey.Deadline>(), held.deadlineForgotten)
+                assertEquals("$repeat $time", ReconcileCounters(0, 0, 1), held.report.counters())
+            }
+            assertEquals("$repeat", setOf(Fixture.tagOf(run.subject)), run.standing)
+        }
+
+        val once = LoanRun(Fixture.loan())
+        val east = ZoneOffset.ofHours(2)
+        val west = ZoneOffset.ofHours(-5)
+        assertEquals(1, once.sweep(at(0, 9, 0), zone = east).posts.size)
+
+        val moved = once.sweep(at(0, 3, 0), zone = west)
+        assertEquals(emptyList<String>(), moved.cancelTags)
+        assertEquals(emptyList<SubjectKey.Deadline>(), moved.deadlineForgotten)
+        assertEquals(ReconcileCounters(0, 0, 1), moved.report.counters())
+        assertEquals("never posted twice", 0, once.sweep(at(0, 9, 0), zone = west).posts.size)
+    }
+
     /** Day [day] after the fixture's due date, at [hour]:[minute] local. */
     private fun at(day: Int, hour: Int, minute: Int): LocalDateTime =
         LOAN_DUE.plusDays(day.toLong()).atTime(hour, minute)
@@ -1040,11 +1163,12 @@ class DigestPolicyTest {
         var row: DeadlineLocalDelivery? = null
         var boot: Int? = 1
 
-        fun sweep(time: LocalDateTime, muted: Boolean = false): DigestDecision {
+        /** One sweep at [time], local time in [zone]: a zone other than UTC is the phone having moved. */
+        fun sweep(time: LocalDateTime, muted: Boolean = false, zone: ZoneOffset = ZoneOffset.UTC): DigestDecision {
             val decision = decide(
-                listOf(DeadlineInput(subject, Fixture.loanFacts(time, subject.dueOn.toString()), row)),
+                listOf(DeadlineInput(subject, Fixture.loanFacts(time, subject.dueOn.toString(), zone = zone), row)),
                 standing = standing,
-                now = Fixture.millis(time),
+                now = Fixture.millis(time, zone),
                 muted = if (muted) setOf(NotificationChannels.LOANS) else emptySet(),
                 boot = boot,
             )
