@@ -64,7 +64,7 @@ internal fun openMigrated(file: File): AppDatabase = Room
     .setQueryCoroutineContext(Dispatchers.Default)
     .addMigrations(
         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
-        MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
+        MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
     )
     .build()
 
@@ -219,6 +219,9 @@ internal val V11_ASSET_COLUMNS = setOf("warranty_reminder_lead_days")
 
 /** The one table schema v11 added (#79): device-local, never exported. */
 internal val V11_TABLES = setOf("deadline_local_delivery")
+
+/** The two tables schema v12 added (#79): the service case aggregate. */
+internal val V12_TABLES = setOf("service_case", "service_case_entry")
 
 /** The seven tables schema v2 added. */
 internal val JOURNAL_TABLES = setOf(
