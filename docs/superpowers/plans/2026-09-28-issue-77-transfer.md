@@ -715,3 +715,21 @@ where they differ.**
   the typed refusal only; B3 maps it in `BackupViewModel`'s restore error path (the one-asset form names the asset as
   P77-67 does; two or more take the `<n>` form), beside `TransferredGraphEntangled` → P77-58. All #77 strings are now
   ratified.
+- **B2a review rulings (owner, 2026-09-28; the B2a task review's MJ-1 and NOTE 1):**
+  - **R77-B2a-MJ1 — C6's closing rule amended, option (a).** An IN closes an OUT when both are for the same asset
+    and **either** the IN's lineage names the OUT's pack **or** the IN's own pack id is the OUT's. A recipient's
+    `IN(q)` means "q arrived here": an `OUT(q)` merged in later cancels against it for custody rather than making the
+    actual holder "transferred out". **`returnsHere` stays lineage-only (R77-13 unchanged):** a same-pack IN is
+    evidence that the pack arrived, never evidence of a later transfer back. Consequence, for B5's `v1.md`: after S
+    transfers X to R, ordinary sender/recipient merge is **directional, recipient ← sender** while R holds X. The
+    reverse refuses loudly (M1's `ASSET_TRANSFERRED_OUT`) and never tries to synchronise custody.
+  - **R77-B2a-MARK — C8 amended.** `MarkTransferredOut` succeeds only if the **complete** retained estate after the
+    proposed mark, `retain(snapshot, held ∪ packAssets)`, is `Retained`. Any `Entangled` result refuses (P77-58), with
+    no before/after exemption for entanglements this mark did not introduce. It is stricter on purpose: an estate that
+    cannot produce a valid backup gets no further ownership transition until the bad reference is resolved.
+  - **R77-B2b-GUARD — C12 widened.** B2b's write guard refuses an ordinary write not only when the row is owned by a
+    held asset, but also when a retained row would gain a hard reference into a held graph. Example: a staying asset's
+    event naming a transferred asset's schedule, profile or measurement definition, or a subject naming a held
+    schedule. The reference semantics are `TransferGraph.retain`'s, the one canonical definition; there is no separate
+    list. The refusal is `AssetTransferredOut` / API 409, and there is no new phone string because the path is
+    API-reachable.
