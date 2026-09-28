@@ -73,6 +73,12 @@ sealed interface ServiceCaseProblem {
     /** Not an `HH:MM` time of day. */
     data class BadTime(val field: String) : ServiceCaseProblem
 
+    /**
+     * Not a zone id: malformed, or — for an entry added here — one this device's time-zone data does
+     * not know. A restored entry is judged by the id's form alone (`wellFormedZone`), as a condition is.
+     */
+    data class BadTimeZone(val field: String) : ServiceCaseProblem
+
     /** The case's `openedOn` is later than today. */
     data object OpenedAfterToday : ServiceCaseProblem
 
@@ -137,19 +143,25 @@ internal fun serviceCaseHeaderProblems(
 }
 
 /**
- * The shape of one timeline entry, whatever wrote it: a note or a status, an ISO date, and an `HH:MM`
- * time or none. Whether it is dated after today is the use case's alone: it needs a today.
+ * The shape of one timeline entry, whatever wrote it: a note or a status, an ISO date, an `HH:MM` time
+ * or none, and a zone id [zone] accepts — the condition fact's rule (`conditionFactProblems`):
+ * [AddServiceCaseEntry] asks with `resolvesHere`, the zone data of this device, and the backup content
+ * check with `wellFormedZone`, the id's form alone. Whether it is dated after today is the use case's
+ * alone: it needs a today.
  */
 internal fun caseEntryProblems(
     occurredOn: String,
     occurredTime: String?,
+    tzId: String,
     note: String,
     status: CaseStatus?,
+    zone: (String) -> Boolean,
 ): List<ServiceCaseProblem> {
     val problems = mutableListOf<ServiceCaseProblem>()
     if (note.isBlank() && status == null) problems += ServiceCaseProblem.EntryEmpty
     if (parseDate(occurredOn) == null) problems += ServiceCaseProblem.BadDate("occurredOn")
     if (occurredTime != null && !isTimeOfDay(occurredTime)) problems += ServiceCaseProblem.BadTime("occurredTime")
+    if (!zone(tzId)) problems += ServiceCaseProblem.BadTimeZone("tzId")
     return problems
 }
 

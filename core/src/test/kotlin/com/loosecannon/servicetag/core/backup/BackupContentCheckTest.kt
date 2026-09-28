@@ -404,6 +404,23 @@ class BackupContentCheckTest {
         assertEquals(fine, BackupCodec.decode(archiveOf(fine)).data, "a status alone, and a note with no time, decode")
     }
 
+    /**
+     * Review N4 (controller ruling), the condition rule for a restored row: an entry's zone is judged by
+     * its form alone, never by this device's zone data — a well-formed region only the archive knows
+     * restores; a blank or malformed id is refused, naming the command's problem.
+     */
+    @Test
+    fun anEntrysZoneIsJudgedByItsForm() {
+        val elsewhere = cased(caseOf("c1"), entries = listOf(caseEntryOf("n1").copy(tzId = "Mars/Olympus_Mons")))
+        assertEquals(elsewhere, BackupCodec.decode(archiveOf(elsewhere)).data)
+        for (zone in listOf("UTC+99", "", "not a zone")) {
+            assertRefused(
+                cased(caseOf("c1"), entries = listOf(caseEntryOf("n1").copy(tzId = zone))),
+                "serviceCaseEntries: entry n1", "BadTimeZone(field=tzId)",
+            )
+        }
+    }
+
     /** No rule is relative to the importing device's today: a case and an entry dated far ahead restore. */
     @Test
     fun aCaseOrEntryIsNeverJudgedByToday() {

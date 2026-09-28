@@ -392,6 +392,31 @@ class ServiceCaseUseCasesTest {
         assertEquals(0, uow.commits)
     }
 
+    /**
+     * Review N4 (controller ruling): an entry's zone is the zone it was entered in, as a condition's is
+     * — one this device resolves (`resolvesHere`); a blank, malformed or unknown id is refused with the
+     * other problems, before any write.
+     */
+    @Test
+    fun anEntrysZoneMustResolveHere() = runBlocking<Unit> {
+        val before = stored()
+        for (zone in listOf("", "  ", "UTC+99", "not a zone", "Mars/Olympus_Mons")) {
+            assertEquals(
+                listOf(ServiceCaseProblem.BadTimeZone("tzId")),
+                refusedEntry(entryOf(note = "Courier booked").copy(tzId = zone)),
+                "\"$zone\"",
+            )
+        }
+        assertEquals(
+            listOf(ServiceCaseProblem.EntryEmpty, ServiceCaseProblem.BadTimeZone("tzId")),
+            refusedEntry(entryOf().copy(tzId = "UTC+99")),
+            "collected with the rest",
+        )
+        assertEquals(before, caseRows.rows.getValue("c1"))
+        assertTrue(entryRows.rows.isEmpty())
+        assertEquals("Europe/Paris", addEntry.run(ServiceCaseId("c1"), entryOf(note = "Paris").copy(tzId = " Europe/Paris ")).entry.tzId)
+    }
+
     @Test
     fun anEntryAfterTodayIsRefused() = runBlocking<Unit> {
         val before = stored()

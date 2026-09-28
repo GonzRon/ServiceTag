@@ -46,7 +46,8 @@ import com.loosecannon.servicetag.core.usecase.wellFormedZone
  *   `openedOn`, a negative cost, a cost with no currency, a malformed currency
  *   (`serviceCaseHeaderProblems`, asked with no today) — or whose `closedOn` is not set exactly when it
  *   is CLOSED or CANCELLED, which only a status entry moves; and a case entry with neither a note nor a
- *   status, or a malformed date or time (`caseEntryProblems`).
+ *   status, a malformed date or time, or a malformed zone — by its form alone, as a condition's
+ *   (`caseEntryProblems`).
  *
  * What depends on **other rows or on today** is deliberately not asked: a subject naming an archived
  * or retargeted schedule (NOT TRACKED, which a merge may bring — plan decision 17), a TRACK_ONE
@@ -136,7 +137,9 @@ internal object BackupContentCheck {
             val entry = dto.toDomain()
             refuse(
                 "serviceCaseEntries", "entry", entry.id.value,
-                caseEntryProblems(entry.occurredOn, entry.occurredTime, entry.note, entry.status),
+                caseEntryProblems(
+                    entry.occurredOn, entry.occurredTime, entry.tzId, entry.note, entry.status, zone = ::wellFormedZone,
+                ),
             )
         }
     }

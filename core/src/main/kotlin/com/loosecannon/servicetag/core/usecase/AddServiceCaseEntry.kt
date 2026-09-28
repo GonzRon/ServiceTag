@@ -27,8 +27,8 @@ data class CaseEntryAdded(val serviceCase: ServiceCase, val entry: ServiceCaseEn
  *
  * The entry is inserted before the header is written, inside one transaction, so a header write that
  * fails leaves no entry behind. The problems — an entry with neither note nor status, a bad date or
- * time, a date after today — are collected before any write into one [ServiceCaseValidation]; a
- * missing case is [NoSuchServiceCase].
+ * time, a zone this device does not resolve, a date after today — are collected before any write into
+ * one [ServiceCaseValidation]; a missing case is [NoSuchServiceCase].
  */
 class AddServiceCaseEntry(
     private val cases: ServiceCaseRepository,
@@ -43,7 +43,8 @@ class AddServiceCaseEntry(
         val occurredOn = entry.occurredOn.trim()
         val occurredTime = entry.occurredTime.blankToNull()
         val note = entry.note.trim()
-        val problems = caseEntryProblems(occurredOn, occurredTime, note, entry.status).toMutableList()
+        val tzId = entry.tzId.trim()
+        val problems = caseEntryProblems(occurredOn, occurredTime, tzId, note, entry.status, ::resolvesHere).toMutableList()
         val on = parseDate(occurredOn)
         if (on != null && on > today.localDate()) problems += ServiceCaseProblem.EntryAfterToday
         if (problems.isNotEmpty()) throw ServiceCaseValidation(problems)
@@ -54,7 +55,7 @@ class AddServiceCaseEntry(
             caseId = caseId,
             occurredOn = occurredOn,
             occurredTime = occurredTime,
-            tzId = entry.tzId.trim(),
+            tzId = tzId,
             note = note,
             status = entry.status,
             createdAt = now,
