@@ -21,6 +21,7 @@ import com.loosecannon.servicetag.core.transfer.TransferFixtures.COMPRESSOR
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.EMPTY_GROUP
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.GROUP
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.HEATER
+import com.loosecannon.servicetag.core.transfer.TransferFixtures.OPENER
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -214,6 +215,26 @@ class MarkTransferredOutTest {
 
         assertEquals(listOf(EntangledRef("assetEvents", "e9", "maintenanceSchedules", "s1")), refusal.refs)
         assertEquals(0, install.uow.commits)
+    }
+
+    /**
+     * R77-B2a-MARK: marking succeeds only if the **whole** estate it leaves retains cleanly — no exemption for a
+     * reference an earlier transfer left. Here the compressor is already held, and a staying row (an event of the
+     * archived opener, set by hand onto the compressor's schedule) names one of its rows: marking the unrelated
+     * heater pack is refused, nothing written.
+     */
+    @Test
+    fun markingRefusesAnEstateAlreadyEntangledByAnEarlierTransfer() = runBlocking<Unit> {
+        val install = seeded()
+        install.transfers.append(transferOf("r0", assetId = COMPRESSOR, packId = "pack-earlier"))
+        install.events.upsert(completionOf("e9", "2026-05-01", "2026-05-01", assetId = OPENER, scheduleId = "s2"))
+        val pack = created(install)
+
+        val refusal = assertIs<MarkTransferredOutResult.Entangled>(markerOf(install).run(pack))
+
+        assertEquals(listOf(EntangledRef("assetEvents", "e9", "maintenanceSchedules", "s2")), refusal.refs)
+        assertEquals(0, install.uow.commits)
+        assertEquals(listOf("r0"), install.transfers.all().map { it.id })
     }
 
     /** A pack with no id or no file hash was never sealed: a contract violation, before any read. */

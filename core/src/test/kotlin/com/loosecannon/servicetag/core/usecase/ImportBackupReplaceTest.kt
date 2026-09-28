@@ -293,4 +293,35 @@ class ImportBackupReplaceTest {
         val refusal = assertFailsWith<TransferredOutInArchive> { stranger.replace.run(foreign.export.run().data) }
         assertEquals(listOf(anode), refusal.assetIds)
     }
+
+    /**
+     * R77-B2a-MJ1 with R77-13 unchanged: a same-pack IN is never a return. The recipient's archive carries the
+     * heater and anode live with its own `IN(q)` — and, once it has merged this phone's backup, this phone's
+     * `OUT(q)` too, which its `IN(q)` cancels, so its export now carries the graph — but no lineage naming q. A
+     * Replace from it on this phone, which still holds `OUT(q)`, is refused before anything is wiped.
+     */
+    @Test
+    fun aReplaceFromTheRecipientsArchiveIsStillRefused() = runBlocking<Unit> {
+        val sender = seeded()
+        sender.transfers.append(transferOf("r1", assetId = heater.value, packId = "pack-q"))
+        sender.transfers.append(transferOf("r2", assetId = anode.value, packId = "pack-q"))
+        val before = sender.snapshot() to sender.transfers.all()
+        val commits = sender.uow.commits
+
+        val recipient = seeded()
+        recipient.transfers.append(transferOf("i1", assetId = heater.value, kind = TransferKind.IN, packId = "pack-q"))
+        recipient.transfers.append(transferOf("i2", assetId = anode.value, kind = TransferKind.IN, packId = "pack-q"))
+        val arrivedOnly = recipient.export.run().data
+        val onlyIns = assertFailsWith<TransferredOutInArchive> { sender.replace.run(arrivedOnly) }
+        assertEquals(listOf(heater, anode), onlyIns.assetIds)
+
+        recipient.transfers.append(transferOf("r1", assetId = heater.value, packId = "pack-q"))
+        recipient.transfers.append(transferOf("r2", assetId = anode.value, packId = "pack-q"))
+        val merged = recipient.export.run().data
+        val refusal = assertFailsWith<TransferredOutInArchive> { sender.replace.run(merged) }
+
+        assertEquals(listOf(heater, anode), refusal.assetIds)
+        assertEquals(before, sender.snapshot() to sender.transfers.all(), "nothing wiped")
+        assertEquals(commits, sender.uow.commits)
+    }
 }

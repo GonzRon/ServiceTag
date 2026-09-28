@@ -36,19 +36,23 @@ data class TransferRecord(
     val note: String,
 )
 
-// The rules, pure and in one place (C6; R77-12). Every rule is **per asset**: one pack carries several assets,
-// and a record speaks only for its own. An OUT(q) is open unless an IN here lists q in its **lineage** — the
-// pack ids the asset travelled in before the IN's own pack — or a WITHDRAWN here names q. An IN(p) is current
+// The rules, pure and in one place (C6; R77-12, R77-B2a-MJ1). Every rule is **per asset**: one pack carries
+// several assets, and a record speaks only for its own. An OUT(q) is open unless an IN here lists q in its
+// **lineage** — the pack ids the asset travelled in before the IN's own pack, so it came back — or an IN here
+// **is** q — the recipient's "q arrived here", which, where the sender's OUT(q) meets it (a merge between the two
+// ends of the transfer), cancels the departure for custody — or a WITHDRAWN here names q. An IN(p) is current
 // unless an OUT here lists p in its lineage: the asset arrived in p and has left again since.
 
 /**
- * Whether [record] closes [out] — the one closing rule: an IN of the same asset whose **lineage** lists the
- * OUT's pack (the asset came back), or a WITHDRAWN of the same asset naming it. An IN of the OUT's own pack
- * closes nothing: that is the recipient's arrival, and the asset is over there.
+ * Whether [record] closes [out] — the one closing rule (R77-B2a-MJ1). For the same asset: an IN whose **lineage**
+ * lists the OUT's pack (the asset came back), or an IN **of** the OUT's pack (the recipient's arrival: on the
+ * recipient, a merged OUT(q) must never hold the asset it actually has; on the sender, M1 refuses that IN loudly
+ * as one that would close an OUT open here); or a WITHDRAWN naming it. A return, though, is lineage-only:
+ * [returnsHere] never counts a same-pack IN.
  */
 fun closes(record: TransferRecord, out: TransferRecord): Boolean =
     out.kind == TransferKind.OUT && record.assetId == out.assetId && when (record.kind) {
-        TransferKind.IN -> out.packId in record.lineage
+        TransferKind.IN -> out.packId in record.lineage || record.packId == out.packId
         TransferKind.WITHDRAWN -> record.packId == out.packId
         TransferKind.OUT -> false
     }
@@ -81,7 +85,8 @@ fun lineageFor(records: List<TransferRecord>, asset: AssetId): List<String> {
 /**
  * Whether a pack whose [lineage] for [asset] is this one brings it back here (R77-13, C15, rm-8): it names an
  * OUT of [asset] here that no IN has closed — an open OUT, or one withdrawn here, so a mistaken withdrawal
- * never strands a legitimate return. An OUT an IN already closed is history: naming it again is stale.
+ * never strands a legitimate return. An OUT an IN already closed is history: naming it again is stale. The
+ * acceptance is **lineage-only**: an IN of the OUT's own pack (the recipient's arrival) is never a return.
  */
 fun returnsHere(records: List<TransferRecord>, asset: AssetId, lineage: List<String>): Boolean =
     records.any { out ->

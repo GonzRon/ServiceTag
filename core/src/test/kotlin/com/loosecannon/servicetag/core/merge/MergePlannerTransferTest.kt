@@ -157,7 +157,8 @@ class MergePlannerTransferTest {
     /**
      * An ordinary archive from the installation the heater came back to carries the IN that closed this phone's
      * OUT — refused: only the pack itself returns an asset (C15). A withdrawal from another phone is refused
-     * the same way (R77-5). The recipient's own IN(q), whose lineage does not name q, closes nothing and lands.
+     * the same way (R77-5). And the recipient's own IN(q), merged back into the sender: it would close the open
+     * OUT(q) here (R77-B2a-MJ1, an IN of the same pack closes it) — refused loudly, never a silent unhold.
      */
     @Test
     fun anOrdinaryArchivesInClosingAnOpenOutIsRefused() {
@@ -174,9 +175,54 @@ class MergePlannerTransferTest {
 
         val recipients = transferOf("i4", assetId = "h1", kind = TransferKind.IN, packId = "pack-q")
         val arrived = mergePlanOf(decoded(records = listOf(recipients)), here)
-        assertEquals(listOf(insert("i4")), arrived.of(MergeTable.TRANSFERS))
-        assertTrue(arrived.applicable)
-        assertEquals(setOf(AssetId("h1")), heldIds(here.transfers + arrived.writes.transfers), "still held here")
+        assertEquals(listOf(transferredOut(MergeTable.TRANSFERS, "i4", "h1")), arrived.of(MergeTable.TRANSFERS))
+        assertFalse(arrived.applicable)
+        assertEquals(MergeWrites(), arrived.writes, "still held here: nothing lands")
+    }
+
+    // --- the two ends of one transfer (R77-B2a-MJ1) ------------------------------------------------------
+
+    /**
+     * Review scenario A: this phone received the heater in q (`IN(q)`, the heater live here) and merges the
+     * sender's ordinary backup, which carries only `OUT(q)`. The arrival here cancels that departure: the OUT
+     * lands and the heater stays live — never silently held on the phone that actually has it.
+     */
+    @Test
+    fun aRecipientMergingTheSendersExportKeepsItsAsset() {
+        val arrived = transferOf("i1", assetId = "h1", kind = TransferKind.IN, packId = "pack-q")
+        val here = MergeSnapshot(
+            assets = listOf(heater, compressor), events = listOf(eventOf("e1", "h1")), transfers = listOf(arrived),
+            attachmentStoreConfigured = true,
+        )
+
+        val plan = mergePlanOf(decoded(assets = listOf(compressor), records = listOf(outQ)), here)
+
+        assertEquals(listOf(insert("r1")), plan.of(MergeTable.TRANSFERS))
+        assertTrue(plan.applicable, plan.conflicts.toString())
+        assertEquals(emptySet(), heldIds(here.transfers + plan.writes.transfers), "the heater stays live here")
+    }
+
+    /**
+     * Review scenario B: the heater went out in q and came back in r (lineage `[q]`); this phone merges the former
+     * recipient's backup, which carries `IN(q)` and `OUT(r, [q])`. This phone's own `IN(r)` cancels the incoming
+     * `OUT(r)`, so the returned, live heater stays live.
+     */
+    @Test
+    fun aReturnedAssetStaysLiveAfterMergingTheFormerRecipient() {
+        val back = transferOf("i2", assetId = "h1", kind = TransferKind.IN, packId = "pack-r", lineage = listOf("pack-q"))
+        val here = MergeSnapshot(
+            assets = listOf(heater, compressor), events = listOf(eventOf("e1", "h1")), transfers = listOf(outQ, back),
+            attachmentStoreConfigured = true,
+        )
+        check(heldIds(here.transfers).isEmpty())
+        val theirIn = transferOf("i1", assetId = "h1", kind = TransferKind.IN, packId = "pack-q")
+        val theirOut = transferOf("r3", assetId = "h1", packId = "pack-r", lineage = listOf("pack-q"))
+
+        val plan = mergePlanOf(decoded(assets = listOf(compressor), records = listOf(theirIn, theirOut)), here)
+
+        assertEquals(listOf(insert("i1"), insert("r3")), plan.of(MergeTable.TRANSFERS))
+        assertTrue(plan.applicable, plan.conflicts.toString())
+        assertEquals(emptySet(), heldIds(here.transfers + plan.writes.transfers), "the returned heater stays live")
     }
 
     // --- convergence -------------------------------------------------------------------------------

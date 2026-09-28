@@ -73,7 +73,8 @@ sealed interface MarkTransferredOutResult {
  *   its re-encoded content hash different (a row added, changed or scanned since creation), or an asset's
  *   `lineageFor` no longer the lineage the pack carries ([MarkTransferredOutResult.PackOutdated], P77-51);
  *   an open loan on a pack asset is [MarkTransferredOutResult.OpenLoan] instead (R77-6, P77-17);
- * - a row that stays names a pack row (`TransferGraph.retain`'s `Entangled`, the controller's ruling), which
+ * - the estate the mark would leave is not retained cleanly — `TransferGraph.retain(snapshot, held ∪ pack)` is
+ *   `Entangled`, whether the staying row names a pack row or a row of an asset held before (R77-B2a-MARK) — which
  *   would otherwise break the next ordinary backup ([MarkTransferredOutResult.Entangled], P77-58).
  *
  * Otherwise each pack asset is archived with a new `updatedAt` and its lifecycle rebuild asked for, each group
@@ -124,10 +125,11 @@ class MarkTransferredOut(
         pack.assetIds.firstOrNull { lineageFor(records, it) != pack.lineage[it.value] }?.let {
             refuse(MarkTransferredOutResult.PackOutdated(it))
         }
-        // Only what this pack would entangle: a reference an earlier transfer left is the export's to report.
-        val before = entangled(snapshot, held)
-        val after = entangled(snapshot, held + pack.assetIds)
-        (after - before.toSet()).takeIf { it.isNotEmpty() }?.let { refuse(MarkTransferredOutResult.Entangled(it)) }
+        // R77-B2a-MARK: the **whole** estate the mark would leave must retain cleanly — no exemption for a reference
+        // an earlier transfer left, so a mark never lands on an estate whose next ordinary backup cannot be made.
+        entangled(snapshot, held + pack.assetIds).takeIf { it.isNotEmpty() }?.let {
+            refuse(MarkTransferredOutResult.Entangled(it))
+        }
 
         val now = clock.nowMillis()
         val names = snapshot.assets.associate { it.id to it.name }

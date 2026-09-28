@@ -1022,6 +1022,10 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
     val localRecords = snapshot.transfers
     val localRecordsById = localRecords.associateBy { it.id }
     val incomingRecords = data.transferRecords.map { it.toDomain() }
+    // R' is built from **every** incoming record absent here — wider than the plan's "planned inserts": an IN or
+    // WITHDRAWN M1 then refuses still counts in it. That can only change which reason a refused plan reports
+    // (e.g. an OUT that R' sees closed is not also named TRANSFER_DIVERGED); it never changes a write, because an
+    // applicable plan inserts every absent record, and then the two definitions are the same set.
     val recordsPrime = localRecords + incomingRecords.filter { it.id !in localRecordsById }
     val openHere = openOuts(localRecords)
     val openPrime = openOuts(recordsPrime)

@@ -49,14 +49,15 @@ class TransferRecordsTest {
     }
 
     /**
-     * The recipient's own IN(q) names the pack q itself, not in its lineage: merged into the sender, it must
-     * never close the sender's OUT(q) — the asset is over there, not back here.
+     * R77-B2a-MJ1: the recipient's IN(q) means "q arrived here"; where it meets the sender's OUT(q) — a merge
+     * between the two ends of the transfer — the arrival cancels the departure for custody. A different pack's
+     * IN closes nothing.
      */
     @Test
-    fun anInOfTheSamePackDoesNotCloseTheOut() {
-        val records = listOf(out("r1", "q"), into("r2", "q"))
-
-        assertEquals(setOf(a1), heldIds(records))
+    fun anInOfTheSamePackClosesTheOut() {
+        assertEquals(emptySet(), heldIds(listOf(out("r1", "q"), into("r2", "q"))))
+        assertEquals(setOf(a1), heldIds(listOf(out("r1", "q"), into("r2", "p"))))
+        assertEquals(setOf(AssetId("a2")), heldIds(listOf(out("r1", "q", asset = "a2"), into("r2", "q"))), "per asset")
     }
 
     @Test
