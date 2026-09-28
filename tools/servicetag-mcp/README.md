@@ -19,7 +19,7 @@ the one body key it is about, then the `problems` in parentheses.
   **1.3.0 or later**, the fourteen season, condition and health tools need **1.4.0 or later** and
   `repair_schedule_providers` needs **1.4.1 or later**; on an older build their routes are not there
   and every call answers 404. The two warranty tools need an app whose `schemaVersion` is **11 or
-  later**, and check it themselves (below).
+  later**, and the five service-case tools one at **12 or later**; each checks it itself (below).
 - **Every write needs ServiceTag 1.4.0.** Before its first write under a pairing, the server reads
   `/v1/status` once and refuses to write to an app whose `schemaVersion` is below 8 — a `ToolError`
   carrying `APP_SCHEMA_TOO_OLD`, with nothing sent. The answer is kept for that pairing, and a new
@@ -30,6 +30,9 @@ the one body key it is about, then the `problems` in parentheses.
   as the write — refuse an app whose `schemaVersion` is below 11 the same way, with `APP_SCHEMA_TOO_OLD`
   and nothing sent, from the same one `/v1/status` read per pairing. Every other tool keeps the
   minimum of 8.
+- **The service-case tools need schema 12.** `list_service_cases`, `get_service_case`,
+  `open_service_case`, `update_service_case` and `add_case_entry` — the reads as well as the writes —
+  refuse an app whose `schemaVersion` is below 12 the same way, from the same read.
 
 ## Using it
 
@@ -72,7 +75,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Fifty-eight: `pair` plus one per API operation.
+Sixty-three: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -124,6 +127,17 @@ edit keeps it while the date stays, and clearing `warranty_expires_on` clears it
 the phone's own and has no tool; a lead set here takes effect at the phone's next digest or its
 12-hour backstop. `docs/api/v1.md`'s **Warranty reminders (#79)** section is the contract.
 
+**Service cases (needs schema 12)** — `list_service_cases`, `get_service_case`, `open_service_case`,
+`update_service_case`, `add_case_entry`. A service case is an asset's record of an outside repair or
+warranty claim — provider, case or RMA number, type, coverage, status, tracking and cost — with an
+append-only timeline. `open_service_case` is a create sent as given: `type`, `coverage` and
+`opened_on` are required, because the phone applies none of its own form's defaults over the API.
+`update_service_case` is an overlay (below); it **never sends a status or a `closedOn`** and carries
+the stored repair link forward. `add_case_entry` records a new fact, so every argument is required:
+a note, a status, or both — and it is the only way a case's status moves (`CLOSED` or `CANCELLED`
+closes it, any other status reopens it). Nothing deletes a case or amends an entry.
+`docs/api/v1.md`'s **Service cases (#79)** section is the contract.
+
 ### The schedule's two forms, and the deprecated season arguments
 
 1.4 gives a schedule a **service policy** — `service_policy` (`CONTINUOUS`, `IN_SERVICE_AT_START`,
@@ -164,17 +178,19 @@ so a mistyped field name can't be read as absent and quietly change what the cal
 
 The Android API's own writes (`PATCH /v1/assets/{id}`, `POST /v1/definitions`,
 `POST /v1/profiles`, `PATCH /v1/groups/{id}`, `PATCH /v1/schedules/{id}`,
-`PATCH /v1/health-subjects/{id}`) are each a **full replacement** — every field on the wire is what
-the row ends up with. `update_asset`, `save_definition`/`save_profile` on an edit, `update_group`,
-`update_schedule`, `postpone_schedule` and `update_health_subject` add **partial-edit convenience**
+`PATCH /v1/health-subjects/{id}`, `PATCH /v1/service-cases/{id}`) are each a **full replacement** —
+every field on the wire is what the row ends up with. `update_asset`, `save_definition`/`save_profile`
+on an edit, `update_group`, `update_schedule`, `postpone_schedule`, `update_health_subject` and
+`update_service_case` add **partial-edit convenience**
 on top of that: the tool reads the row's current fields first, overlays only the arguments you
 actually supplied, and submits the complete replacement for you. Nothing about calling these tools
 requires stating every field.
 
-`update_asset`, `update_schedule` and `update_health_subject` do not keep a field list of their
-own: they send **every key of the command** as `src/servicetag_mcp/command_shapes.py` lists it —
-read off the row, with the schedule's `assetId`/`groupId` renamed to `targetAssetId`/`targetGroupId`
-— and lay your arguments over it. That module is a vendored copy of three entries of the
+`update_asset`, `update_schedule`, `update_health_subject` and `update_service_case` do not keep a
+field list of their own: they send **every key of the command** as
+`src/servicetag_mcp/command_shapes.py` lists it — read off the row, with the schedule's
+`assetId`/`groupId` renamed to `targetAssetId`/`targetGroupId`, and the case's without `assetId` and
+`incidentEventId` — and lay your arguments over it. That module is a vendored copy of four entries of the
 repository's `docs/api/command-shapes.json`; nothing reads that file at runtime, and
 `tests/test_command_shapes.py` fails the moment the two differ.
 
@@ -192,7 +208,7 @@ readings as typed measurements, not as the definition-id-to-text map `update_eve
 reconstructing one from the other would risk silently reformatting a value. Every one of its
 arguments is required — the call always replaces the whole event, and there is no default that
 could clear something by omission. `complete_schedule`, `close_round`, `start_season`,
-`end_season` and `record_condition` are the same, for a sharper reason: each records a **new
+`end_season`, `record_condition` and `add_case_entry` are the same, for a sharper reason: each records a **new
 fact**, and there is nothing about a new fact to inherit from a row, so overlaying one would invent
 provenance.
 
@@ -214,6 +230,8 @@ provenance.
 | | `season_reentry`, `season_reentry_offset_days` (deprecated) | `null`, in the legacy form | |
 | `postpone_schedule` | `postponed_due_on` | `null` — the occurrence goes back to what the rule says | |
 | `update_health_subject` | `schedule_id`, `baseline_profile_id` | `null` | `name`, `kind`, `driver`, the three thresholds (required); `weight`, `sort_order` (pass a value) |
+| `update_service_case` | `provider`, `contact`, `case_ref`, `outbound_tracking`, `outbound_carrier`, `return_tracking`, `return_carrier`, `notes` | `""` | `title`, `type`, `opened_on`, `coverage` (required); the status and `closedOn`, which only `add_case_entry` moves |
+| | `cost_minor`, `currency`, `resolution_event_id` | `null` — the last removes the repair link | |
 
 Three of those rows are worth reading twice.
 
@@ -235,11 +253,12 @@ the new target **and** clearing the old one in the same call.
 
 ### `import_merge`
 
-Takes a local path to a `ServiceTag-data-*.zip` of format **1–11** and merges it into the phone. A
+Takes a local path to a `ServiceTag-data-*.zip` of format **1–12** and merges it into the phone. A
 format-6 archive adds the maintenance groups, the schedules and the occurrence closures, format 7 the
 references, format 8 the season activations, the conditions and the health subjects, format 9 the
-owner's own categories, format 10 each attachment's document role and format 11 each asset's warranty
-reminder lead; an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
+owner's own categories, format 10 each attachment's document role, format 11 each asset's warranty
+reminder lead and format 12 the service cases and their timeline entries; an older archive simply has
+none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
 - a row whose id is not on the phone is **inserted**, with its UUID preserved exactly;
@@ -253,11 +272,11 @@ deletes anything:
   that closed the same round on the same day merge cleanly and a genuine disagreement about *when*
   a round was closed is a conflict for a person.
 
-The report carries a `{insert, identical, conflict, skipped}` tally for each of **fifteen**
+The report carries a `{insert, identical, conflict, skipped}` tally for each of **seventeen**
 tables — `assets`, `groups`, `definitions`, `profiles`, `schedules`, `closures`, `links`, `tags`,
 `events`, `attachments`, `references`, `seasonActivations`, `conditions`, `healthSubjects`,
-`categories`. A season
-activation and a condition are immutable facts: each is only ever inserted or found identical.
+`categories`, `serviceCases`, `caseEntries`. A season activation, a condition and a case's timeline
+entry are immutable facts: each is only ever inserted or found identical.
 
 The tool asks for the plan and applies it only when the plan has no conflicts. Pass
 `plan_only=True` to stop after the plan. Either way the result has `applicable` and, when it is
@@ -274,7 +293,8 @@ has no route. And `log_event` cannot record a completion — `complete_schedule`
 because two completion paths would let reminder state and history diverge. Since 1.4 there is also
 no tool that **amends or deletes a condition or an activation**, **deletes a health subject** or
 **writes a health value**: facts are appended and never rewritten, a subject leaves only by
-archiving, and health is computed at read time.
+archiving, and health is computed at read time. Since #79 there is no tool that **deletes a service
+case** or **amends or deletes a timeline entry**, and none but `add_case_entry` moves a case's status.
 
 ## Tests
 

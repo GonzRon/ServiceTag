@@ -132,6 +132,12 @@ TOOL_NAMES: tuple[str, ...] = (
     # #79 — the warranty and its reminder lead, each at a schema-11 minimum. Two, taking the total to 58.
     "get_warranty",
     "set_warranty_reminder",
+    # #79 — the service cases and their timelines, each at a schema-12 minimum. Five, taking the total to 63.
+    "list_service_cases",
+    "get_service_case",
+    "open_service_case",
+    "update_service_case",
+    "add_case_entry",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -152,6 +158,11 @@ _MIN_WARRANTY_SCHEMA_VERSION = 11
 `set_warranty_reminder` speak two routes an older app does not have, so each refuses — read and write
 alike — a phone below it, with nothing sent. A per-tool minimum beside `_MIN_SCHEMA_VERSION`, which stays
 the global write minimum: every other tool behaves exactly as it did."""
+
+_MIN_SERVICE_CASE_SCHEMA_VERSION = 12
+"""The Room schema that carries the service cases and their timelines (#79). The five case tools speak
+routes an older app does not have, so each refuses — the two reads too — a phone below it, with nothing
+sent: a per-tool minimum on the warranty tools' pattern. The global write minimum stays 8."""
 
 _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
     {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan"}
@@ -196,23 +207,33 @@ def _require_schema_8() -> None:
         )
 
 
-def _require_warranty_schema(tool: str) -> None:
-    """Refuse `tool` — one of #79's two, a read or a write — on a phone below schema 11: a `ToolError`
-    carrying `APP_SCHEMA_TOO_OLD`, and nothing sent but the pairing's one `/v1/status` read, shared
-    with the write check above."""
+def _require_tool_schema(tool: str, minimum: int, feature: str) -> None:
+    """Refuse `tool` — a read or a write — on a phone below schema `minimum`, which `feature` needs: a
+    `ToolError` carrying `APP_SCHEMA_TOO_OLD`, and nothing sent but the pairing's one `/v1/status` read,
+    shared with the write check above."""
     version = _schema_version(
         unconfirmed=(
             "APP_SCHEMA_TOO_OLD: the phone's /v1/status reports no schemaVersion, so this server "
-            f"cannot confirm schema {_MIN_WARRANTY_SCHEMA_VERSION}, which {tool} needs, and sends "
+            f"cannot confirm schema {minimum}, which {tool} needs, and sends "
             "nothing — check SERVICETAG_API_BASE_URL and the app version"
         )
     )
-    if version < _MIN_WARRANTY_SCHEMA_VERSION:
+    if version < minimum:
         raise ToolError(
             f"APP_SCHEMA_TOO_OLD: the phone's app reports schema {version}; {tool} needs schema "
-            f"{_MIN_WARRANTY_SCHEMA_VERSION} or later (the warranty reminder), so nothing was sent. "
+            f"{minimum} or later ({feature}), so nothing was sent. "
             "Update the app to use it."
         )
+
+
+def _require_warranty_schema(tool: str) -> None:
+    """One of #79's two warranty tools, on a phone below schema 11."""
+    _require_tool_schema(tool, _MIN_WARRANTY_SCHEMA_VERSION, "the warranty reminder")
+
+
+def _require_case_schema(tool: str) -> None:
+    """One of #79's five service-case tools, on a phone below schema 12."""
+    _require_tool_schema(tool, _MIN_SERVICE_CASE_SCHEMA_VERSION, "the service cases")
 
 
 def _read_for_write(path: str) -> dict[str, Any]:
@@ -442,9 +463,10 @@ def pair(code: str) -> str:
 def status() -> dict[str, Any]:
     """The app's version, the contract version, its `schemaVersion` and `backupFormatVersion`, and a
     row count per table (since 1.4 also `seasonActivations`, `assetConditions` and
-    `healthSubjects`; since the durable category catalog also `assetCategories`). Every write tool reads `schemaVersion` once per pairing and refuses with
-    `APP_SCHEMA_TOO_OLD` below 8 (ServiceTag 1.4.0); `get_warranty` and `set_warranty_reminder` refuse
-    below 11."""
+    `healthSubjects`; since the durable category catalog also `assetCategories`; since #79's service
+    cases also `serviceCases` and `serviceCaseEntries`). Every write tool reads `schemaVersion` once per
+    pairing and refuses with `APP_SCHEMA_TOO_OLD` below 8 (ServiceTag 1.4.0); `get_warranty` and
+    `set_warranty_reminder` refuse below 11, and the five service-case tools below 12."""
     return _call("GET", "/v1/status")
 
 
@@ -1075,14 +1097,16 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a `ServiceTag-data-*.zip` of format 1–11 (format 8, from ServiceTag
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–12 (format 8, from ServiceTag
     1.4.0, adds season activations, conditions and health subjects; format 9 adds the owner's own
     asset categories; format 10 adds each attachment's document role; an older archive's
     attachments are compared without the role and, when the phone's row carries one, without the
     last-modified stamp that giving it moved, so a role given since that export stays IDENTICAL;
     format 11 adds each asset's warranty reminder lead, on the same rule: an older archive's assets
     are compared without the lead and, when the phone's asset carries one, without the `updatedAt`
-    that setting it moved).
+    that setting it moved; format 12 adds the service cases and their timeline entries — a case
+    whose status moved on one phone after the other received it conflicts on re-merge, while a note
+    added since merges as a new entry beside an identical case).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
@@ -1092,7 +1116,7 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     `plan_only=True`, or when the plan does have conflicts, it stops and returns the plan — whose
     `conflicts` list names each one by table, id and a stable reason code, in a deterministic order.
     Read `applicable` to know which happened. The report tallies `{insert, identical, conflict,
-    skipped}` for each of fifteen tables.
+    skipped}` for each of seventeen tables.
 
     The plan writes nothing, so it is asked of any app. The apply is a write: against an app below
     schema 8 (older than ServiceTag 1.4.0) it is refused after the plan with `APP_SCHEMA_TOO_OLD`
@@ -2321,6 +2345,198 @@ def set_warranty_reminder(asset_id: str, lead_days: int | None) -> dict[str, Any
     path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/warranty-reminder"
     _require_warranty_schema("set_warranty_reminder")
     return _call("POST", path, json_body={"leadDays": lead_days}, content_type="application/json")
+
+
+# --- #79, the service cases (docs/api/v1.md, **Service cases (#79)**) --------------------------------
+#
+# Five routes a phone below schema 12 does not have, so all five tools refuse such a phone by name before
+# anything is sent — the two reads as well. A case's status and `closedOn` move only through a status
+# entry: no header tool takes or sends either, and nothing deletes a case or amends an entry.
+
+_CASE_TEXT_CLEARABLE: frozenset[str] = frozenset(
+    {"provider", "contact", "case_ref", "outbound_tracking", "outbound_carrier", "return_tracking",
+     "return_carrier", "notes"}
+)
+"""The header's optional text, each cleared to `""`."""
+
+_CASE_CLEARABLE_FIELDS: frozenset[str] = _CASE_TEXT_CLEARABLE | frozenset(
+    {"cost_minor", "currency", "resolution_event_id"}
+)
+"""Those, and the three nullable fields, each cleared to `null` — the repair link among them. `title`,
+`type`, `opened_on` and `coverage` are required and never clearable."""
+
+
+@mcp.tool()
+def list_service_cases(asset_id: str) -> dict[str, Any]:
+    """One asset's service cases, newest `openedOn` first: `{serviceCases}`, headers only — each in the
+    same shape a backup archive carries it, `status` and `closedOn` included. Read one case's timeline with
+    `get_service_case`. Needs a phone at schema 12 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/service-cases"
+    _require_case_schema("list_service_cases")
+    return _call("GET", path)
+
+
+@mcp.tool()
+def get_service_case(case_id: str) -> dict[str, Any]:
+    """One service case and its whole timeline: `{serviceCase, entries}`, the entries in the timeline's
+    order — `(occurredOn, occurredTime with none first, createdAt, id)`. Needs a phone at schema 12 or
+    later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/service-cases/{_path_id(case_id, field='case_id')}"
+    _require_case_schema("get_service_case")
+    return _call("GET", path)
+
+
+@mcp.tool()
+def open_service_case(
+    asset_id: str,
+    title: str,
+    type: str,
+    opened_on: str,
+    coverage: str,
+    incident_event_id: str | None = None,
+    provider: str | None = None,
+    contact: str | None = None,
+    case_ref: str | None = None,
+    outbound_tracking: str | None = None,
+    outbound_carrier: str | None = None,
+    return_tracking: str | None = None,
+    return_carrier: str | None = None,
+    cost_minor: int | None = None,
+    currency: str | None = None,
+    notes: str | None = None,
+    resolution_event_id: str | None = None,
+) -> dict[str, Any]:
+    """Open a service case on an asset: an outside repair or a warranty claim. A create, sent as given.
+
+    `type` is `WARRANTY_SERVICE`, `REPAIR` or `OTHER_SERVICE`; `coverage` is `IN_WARRANTY`,
+    `OUT_OF_WARRANTY`, `UNKNOWN` or `PARTLY_COVERED`; `opened_on` is ISO `YYYY-MM-DD` and not after today.
+    All four are required: **the phone applies none of its own form's defaults here** — no coverage
+    suggested from the warranty date, no type from it, no date of today, no currency from the asset.
+    `cost_minor` is minor units of `currency` (`0` is no charge; a cost needs a currency of its own).
+    `incident_event_id` optionally names the non-completion `INCIDENT` of this asset the case began from;
+    `resolution_event_id` a `MAINTENANCE` or `REPLACEMENT` event of this asset that resolved it. The case
+    opens `OPEN` with no `closedOn`; its status moves only through `add_case_entry`. Answers
+    `{serviceCase}`; a refusal is `service_case_validation` with the body key in `[field=…]`. Needs a phone
+    at schema 12 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    _require_case_schema("open_service_case")
+    return _call(
+        "POST",
+        "/v1/service-cases",
+        json_body=_body(
+            assetId=asset_id,
+            title=title,
+            type=type,
+            openedOn=opened_on,
+            provider=provider,
+            contact=contact,
+            caseRef=case_ref,
+            coverage=coverage,
+            outboundTracking=outbound_tracking,
+            outboundCarrier=outbound_carrier,
+            returnTracking=return_tracking,
+            returnCarrier=return_carrier,
+            costMinor=cost_minor,
+            currency=currency,
+            notes=notes,
+            incidentEventId=incident_event_id,
+            resolutionEventId=resolution_event_id,
+        ),
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def update_service_case(
+    case_id: str,
+    title: str | None = None,
+    type: str | None = None,
+    opened_on: str | None = None,
+    provider: str | None = None,
+    contact: str | None = None,
+    case_ref: str | None = None,
+    coverage: str | None = None,
+    outbound_tracking: str | None = None,
+    outbound_carrier: str | None = None,
+    return_tracking: str | None = None,
+    return_carrier: str | None = None,
+    cost_minor: int | None = None,
+    currency: str | None = None,
+    notes: str | None = None,
+    resolution_event_id: str | None = None,
+    clear_fields: list[str] | None = None,
+) -> dict[str, Any]:
+    """Edit a service case's header.
+
+    `PATCH /v1/service-cases/{id}` is a full replacement; this tool reads the case first and overlays
+    only what you supplied onto **every key of the case command but `assetId` and `incidentEventId`**
+    (the vendored `command_shapes`) — a case never changes asset or Incident. An omitted argument and one
+    sent as `null` both leave the current value alone, **the repair link included**: the stored
+    `resolutionEventId` is carried forward, so an edit never unlinks a repair record by accident.
+
+    **It never sends a status or a `closedOn`**: they are in no header command, and move only through
+    `add_case_entry` (a `CLOSED` or `CANCELLED` entry closes the case, any other status reopens it).
+
+    Clearing is by name: `clear_fields` takes `provider`, `contact`, `case_ref`, `outbound_tracking`,
+    `outbound_carrier`, `return_tracking`, `return_carrier` and `notes` (each sent as `""`), and
+    `cost_minor`, `currency` and `resolution_event_id` (each sent as `null` — the last removes the repair
+    link). `title`, `type`, `opened_on` and `coverage` are required and never clearable. The app checks
+    the whole header again (the same refusals as `open_service_case`). Nothing deletes a case. Answers
+    `{serviceCase}`. Needs a phone at schema 12 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    arguments = _arguments(locals(), besides=("case_id", "clear_fields"))
+    to_clear = _validate_clear_fields(clear_fields, _CASE_CLEARABLE_FIELDS, arguments)
+
+    path = f"/v1/service-cases/{_path_id(case_id, field='case_id')}"
+    _require_case_schema("update_service_case")
+    current = _field(_read_for_write(path), "serviceCase", of="the service case lookup")
+    keys = tuple(k for k in command_shapes.SERVICE_CASE_KEYS if k not in ("assetId", "incidentEventId"))
+    body = _overlay_command(
+        current, keys, arguments, to_clear, text_fields=_CASE_TEXT_CLEARABLE, of="the service case",
+    )
+    return _call("PATCH", path, json_body=body, content_type="application/json")
+
+
+@mcp.tool()
+def add_case_entry(
+    case_id: str,
+    occurred_on: str,
+    occurred_time: str | None,
+    tz_id: str,
+    note: str,
+    status: str | None,
+) -> dict[str, Any]:
+    """Add one entry to a service case's timeline. **A new fact: no overlay, no defaults.**
+
+    Every argument is required. `occurred_on` is ISO `YYYY-MM-DD`, not after today; `occurred_time` is
+    `HH:MM` or `None`; `tz_id` is an IANA zone id this phone knows, such as `"Etc/UTC"`; `note` is the
+    text, `""` for none; `status` is `OPEN`, `SENT_OUT`, `AT_SERVICE_CENTER`, `RETURNED`, `CLOSED`,
+    `CANCELLED` or `None` for a note-only entry — an entry needs a note, a status, or both.
+
+    **This is the only way a case's status moves.** A note-only entry leaves the header untouched; a
+    status entry sets the header's status, and `CLOSED` or `CANCELLED` sets its `closedOn` to
+    `occurred_on` (any other status clears it). Closing a case writes no condition and no event. The entry
+    can never be amended or deleted. Answers `{serviceCase, entry}`. Needs a phone at schema 12 or later:
+    an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/service-cases/{_path_id(case_id, field='case_id')}/entries"
+    _require_case_schema("add_case_entry")
+    return _call(
+        "POST",
+        path,
+        json_body={
+            "occurredOn": occurred_on,
+            "occurredTime": occurred_time,
+            "tzId": tz_id,
+            "note": note,
+            "status": status,
+        },
+        content_type="application/json",
+    )
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

@@ -40,8 +40,8 @@ MAINTENANCE_TOOLS = (
 schedule listings — every schedule, one asset's, one group's — because §10 names one tool and the
 three are one question asked of three scopes. The registered total was 21 + 17 = **38** at 1.2,
 **41** after 1.3's three reference tools, **55** after 1.4's fourteen, **56** after 1.4.1's
-`repair_schedule_providers`, and is **58** since #79's two warranty tools, which `test_argument_guard.py`
-pins."""
+`repair_schedule_providers`, **58** after #79's two warranty tools, and is **63** since #79's five
+service-case tools, which `test_argument_guard.py` pins."""
 
 
 def body_of(recorded) -> dict:
