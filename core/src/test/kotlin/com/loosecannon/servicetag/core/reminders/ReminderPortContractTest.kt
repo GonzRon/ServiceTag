@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.testing.FakeReminderProvider
 import com.loosecannon.servicetag.core.testing.InMemoryAssetLoanRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.loanOf
 import java.io.File
 import java.time.LocalDate
@@ -263,14 +264,14 @@ class ReminderPortContractTest {
                 warrantyReminderLeadDays = 30,
             ),
         )
-        val built = BuildDeadlineSubjects(assets).forProvider(ProviderId.LOCAL, LocalDate.parse("2031-06-01"))
+        val built = BuildDeadlineSubjects(assets, InMemoryTransferRecordRepository()).forProvider(ProviderId.LOCAL, LocalDate.parse("2031-06-01"))
         assertEquals(listOf(DeadlineRepeat.ONCE), built.map { it.repeat })
 
         // #72 (C8, C9): a loan's subject carries the repeat its reminder mode names, both of them.
         val loans = InMemoryAssetLoanRepository()
         loans.upsert(loanOf("l1", assetId = "a1", reminderMode = LoanReminderMode.ONCE))
         loans.upsert(loanOf("l2", assetId = "a2", reminderMode = LoanReminderMode.UNTIL_RETURNED))
-        val lent = BuildLoanSubjects(loans).forProvider(ProviderId.LOCAL, LocalDate.parse("2031-06-01"))
+        val lent = BuildLoanSubjects(loans, InMemoryTransferRecordRepository()).forProvider(ProviderId.LOCAL, LocalDate.parse("2031-06-01"))
         assertEquals(listOf(DeadlineRepeat.ONCE, DeadlineRepeat.UNTIL_CLEARED), lent.map { it.repeat })
         assertEquals(listOf(DeadlineKind.LOAN_DUE_BACK), lent.map { (it.key as SubjectKey.Deadline).kind }.distinct())
     }

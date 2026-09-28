@@ -1,8 +1,8 @@
 package com.loosecannon.servicetag.core.schedule
 
+import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
-import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -11,7 +11,8 @@ import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.isRetired
+import com.loosecannon.servicetag.core.model.maintainedHere
+import com.loosecannon.servicetag.core.transfer.TransferGraph
 import java.time.LocalDate
 
 /**
@@ -64,15 +65,25 @@ fun List<MaintenanceSchedule>.listedForDue(): List<MaintenanceSchedule> =
     filter { it.status != ScheduleStatus.ARCHIVED }
 
 /**
- * Whether what this schedule is aimed at is still **in service** — #5 AC 3's bound, D-16's
- * lifecycle rule — and the second of the two bounds every surface that answers "what needs
- * attention" applies. [listedForDue] drops an archived *schedule*; this drops a live schedule on a
- * thing that has left service.
+ * Whether what this schedule is aimed at is still **maintained here** — #5 AC 3's bound, D-16's
+ * lifecycle rule, and #77's custody rule (C11, R77-20) — and the second of the two bounds every surface
+ * that answers "what needs attention" applies. [listedForDue] drops an archived *schedule*; this drops a
+ * live schedule on a thing that has left service or left this phone.
  *
- * An out-of-service target's obligations are not what "needs attention" means, and they are not
- * merely hidden: `BuildReminderSubjects` hands a retired obligation to the provider as
- * `SubjectState.Withdrawn`, so the app has already **stopped trying to deliver** it. A surface that
- * reported a delivery problem for one would be reporting a problem nothing is trying to solve.
+ * - An **asset** target is maintained here iff the asset `maintainedHere(held)`: ACTIVE, not retired,
+ *   and not transferred out from this installation.
+ * - A **group** target is maintained here iff the group is not archived and not wholly in [held]
+ *   (`TransferGraph.whollyIn`, the one definition of "wholly"). A member's retirement or transfer alone
+ *   leaves the group's schedule in service for the members that stay.
+ *
+ * An out-of-service or held target's obligations are not what "needs attention" means, and they are not
+ * merely hidden: `BuildReminderSubjects` hands such a schedule to the provider as
+ * `SubjectState.Withdrawn`, by this same predicate, so its standing post is taken down (#77 corrected the
+ * defect that kept an archived or retired asset's live schedule reminding). A surface that reported a
+ * delivery problem for one would be reporting a problem nothing is trying to solve.
+ *
+ * [held] has **no default** (C11): every caller reads the transfer records and passes the held set, so no
+ * projection can forget custody in silence.
  *
  * **One function, not one per surface** (master plan decision 27): a second copy of this predicate
  * is the drift that decision exists to prevent, and it is the reason this is here rather than
@@ -80,20 +91,19 @@ fun List<MaintenanceSchedule>.listedForDue(): List<MaintenanceSchedule> =
  * pure and testable, and so a caller that has already read every asset and group once — as every
  * caller does — pays for one read and not one per schedule.
  *
- * **Transcribed unchanged** from the one place that already had it (`DueReadModel`'s `World`), so
- * this is a move and not a new rule — including its one asymmetry: a **missing asset** answers
- * false while a **missing group** answers true. Both are unreachable in the real store, because
- * `maintenance_schedule`'s `asset_id` and `group_id` foreign keys are each `CASCADE`, so a schedule
- * cannot outlive either target. Recorded rather than quietly normalised: changing it would change
- * the shipped projection's answer, which is not a thing to do while moving code.
+ * Its one asymmetry is kept: a **missing asset** answers false while a **missing group** answers true.
+ * Both are unreachable in the real store, because `maintenance_schedule`'s `asset_id` and `group_id`
+ * foreign keys are each `CASCADE`, so a schedule cannot outlive either target.
  */
 fun MaintenanceSchedule.targetInService(
     assetOf: (AssetId) -> Asset?,
     groupOf: (GroupId) -> MaintenanceGroup?,
+    held: Set<AssetId>,
 ): Boolean = when (val aim = target) {
-    is ScheduleTarget.AssetTarget ->
-        assetOf(aim.assetId)?.let { it.status == AssetStatus.ACTIVE && !it.isRetired } == true
-    is ScheduleTarget.GroupTarget -> groupOf(aim.groupId)?.archivedAt == null
+    is ScheduleTarget.AssetTarget -> assetOf(aim.assetId)?.maintainedHere(held) == true
+    is ScheduleTarget.GroupTarget -> groupOf(aim.groupId)?.let { group ->
+        group.archivedAt == null && !TransferGraph.whollyIn(group.toDto(), held.mapTo(HashSet()) { it.value })
+    } ?: true
 }
 
 /**

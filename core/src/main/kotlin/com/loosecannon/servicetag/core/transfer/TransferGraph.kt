@@ -101,6 +101,22 @@ sealed interface TransferSelection {
 /** One retained row naming a dropped one (C3): [table] row [rowId] names [targetTable] row [targetId]. */
 data class EntangledRef(val table: String, val rowId: String, val targetTable: String, val targetId: String)
 
+/**
+ * The ids of every row [TransferGraph.retain] drops for a held set (C3), by table — [assets] is the held set
+ * itself. One computation ([TransferGraph.droppedBy]) that `retain` and the write guard (C12,
+ * R77-B2b-GUARD) share.
+ */
+data class DroppedRows(
+    val assets: Set<String>,
+    val groups: Set<String>,
+    val schedules: Set<String>,
+    val events: Set<String>,
+    val links: Set<String>,
+    val cases: Set<String>,
+    val definitions: Set<String>,
+    val profiles: Set<String>,
+)
+
 sealed interface TransferRetention {
     data class Retained(val data: BackupData) : TransferRetention
     data class Entangled(val refs: List<EntangledRef>) : TransferRetention
@@ -241,15 +257,10 @@ object TransferGraph {
      * every such reference — a later archive of what stays must still decode.
      */
     fun retain(data: BackupData, held: Set<AssetId>): TransferRetention {
-        val heldIds = held.map { it.value }.toSet()
-        val droppedGroups = data.maintenanceGroups.filter { whollyIn(it, heldIds) }.map { it.id }.toSet()
-        val droppedSchedules = data.maintenanceSchedules
-            .filter { it.assetId in heldIds || it.groupId in droppedGroups }.map { it.id }.toSet()
-        val droppedEvents = data.assetEvents.filter { it.assetId in heldIds }.map { it.id }.toSet()
-        val droppedLinks = data.externalLinks.filter { it.assetId in heldIds }.map { it.id }.toSet()
-        val droppedCases = data.serviceCases.filter { it.assetId in heldIds }.map { it.id }.toSet()
-        val droppedDefinitions = data.measurementDefinitions.filter { it.assetId in heldIds }.map { it.id }.toSet()
-        val droppedProfiles = data.eventProfiles.filter { it.assetId in heldIds }.map { it.id }.toSet()
+        val dropped = droppedBy(data, held)
+        val (heldIds, droppedGroups, droppedSchedules, droppedEvents, droppedLinks, droppedCases) = dropped
+        val droppedDefinitions = dropped.definitions
+        val droppedProfiles = dropped.profiles
 
         // A copy, not a construction: a list this function does not name is kept whole (mn-2), so a table
         // added later can never vanish from every ordinary backup without a sound.
@@ -273,6 +284,43 @@ object TransferGraph {
             assetLoans = data.assetLoans.filterNot { it.assetId in heldIds },
         )
 
+        val refs = entangledRefs(kept, dropped)
+        return if (refs.isEmpty()) TransferRetention.Retained(kept) else TransferRetention.Entangled(refs)
+    }
+
+    /**
+     * C3 — which rows [held] drops from [data], by id: the held assets; each group **wholly** in [held]; the
+     * schedules of a held asset or a dropped group; and the events, 2.6 links, cases, definitions and profiles
+     * of a held asset. [retain] cuts by it; the write guard (C12) asks it of the held graph's rows, so the two
+     * can never disagree about what "dropped" means.
+     */
+    fun droppedBy(data: BackupData, held: Set<AssetId>): DroppedRows {
+        val heldIds = held.map { it.value }.toSet()
+        val droppedGroups = data.maintenanceGroups.filter { whollyIn(it, heldIds) }.map { it.id }.toSet()
+        val droppedSchedules = data.maintenanceSchedules
+            .filter { it.assetId in heldIds || it.groupId in droppedGroups }.map { it.id }.toSet()
+        val droppedEvents = data.assetEvents.filter { it.assetId in heldIds }.map { it.id }.toSet()
+        val droppedLinks = data.externalLinks.filter { it.assetId in heldIds }.map { it.id }.toSet()
+        val droppedCases = data.serviceCases.filter { it.assetId in heldIds }.map { it.id }.toSet()
+        val droppedDefinitions = data.measurementDefinitions.filter { it.assetId in heldIds }.map { it.id }.toSet()
+        val droppedProfiles = data.eventProfiles.filter { it.assetId in heldIds }.map { it.id }.toSet()
+        return DroppedRows(
+            heldIds, droppedGroups, droppedSchedules, droppedEvents, droppedLinks, droppedCases, droppedDefinitions,
+            droppedProfiles,
+        )
+    }
+
+    /**
+     * C3 — **the one list of hard references** (R77-B2b-GUARD): every reference a row of [kept] makes to a row
+     * [dropped] names — a parent, a group member, a schedule's meter definition or profile, a profile field's
+     * definition, an event's schedule, profile or measured definition, a subject's schedule. [retain] asks it of
+     * the whole kept archive; the write guard (C12) asks it of the one row a write would store.
+     */
+    fun entangledRefs(kept: BackupData, dropped: DroppedRows): List<EntangledRef> {
+        val heldIds = dropped.assets
+        val droppedSchedules = dropped.schedules
+        val droppedDefinitions = dropped.definitions
+        val droppedProfiles = dropped.profiles
         val refs = mutableListOf<EntangledRef>()
         kept.assets.forEach { asset ->
             if (asset.parentAssetId in heldIds) refs += EntangledRef("assets", asset.id, "assets", asset.parentAssetId!!)
@@ -311,7 +359,7 @@ object TransferGraph {
                 refs += EntangledRef("healthSubjects", subject.id, "maintenanceSchedules", it)
             }
         }
-        return if (refs.isEmpty()) TransferRetention.Retained(kept) else TransferRetention.Entangled(refs)
+        return refs
     }
 
     /** A list travels only if its class says so (C1); then only the rows [keep] names. */

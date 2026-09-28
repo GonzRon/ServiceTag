@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.lineageFor
+import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
 import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
@@ -179,30 +180,46 @@ class FakeGraph(
     val ids: IdGenerator = IdGenerator { "00000000-0000-4000-8000-%012d".format(++seq) }
 
     val uow: UnitOfWork = RoomUnitOfWork(db)
-    val assets: AssetRepository = RoomAssetRepository(db.assetDao())
-    val tags: TagRepository = RoomTagRepository(db.nfcTagDao())
     val links: LinkRepository = RoomLinkRepository(db.externalLinkDao())
-    val definitions: DefinitionRepository = RoomDefinitionRepository(db.definitionDao())
-    val profiles: ProfileRepository = RoomProfileRepository(db.profileDao())
-    val events: EventRepository = RoomEventRepository(db.eventDao())
-    val attachments: AttachmentRepository = RoomAttachmentRepository(db.attachmentDao())
-    val groups: GroupRepository = RoomGroupRepository(db.maintenanceGroupDao())
-    val schedules: ScheduleRepository = RoomScheduleRepository(db.maintenanceScheduleDao())
-    val closures: ClosureRepository = RoomClosureRepository(db.occurrenceClosureDao())
-    val references: ReferenceRepository = RoomReferenceRepository(db.assetReferenceDao())
+    /** #77's transfer records, mirroring `AppGraph`'s field by name; before the ports, which its guard reads. */
+    val transferRecords: TransferRecordRepository = RoomTransferRecordRepository(db.transferRecordDao())
+
+    // #77 (C12): the write guard over the sixteen asset-owned ports, wired exactly as `AppGraph` wires it, so a
+    // view-model or route test writes through the same refusal the app does.
+    private val roomEvents = RoomEventRepository(db.eventDao())
+    private val roomDefinitions = RoomDefinitionRepository(db.definitionDao())
+    private val roomProfiles = RoomProfileRepository(db.profileDao())
+    private val roomGroups = RoomGroupRepository(db.maintenanceGroupDao())
+    private val roomSchedules = RoomScheduleRepository(db.maintenanceScheduleDao())
+    private val roomServiceCases = RoomServiceCaseRepository(db.serviceCaseDao())
+    private val heldWriteGuard = HeldWriteGuard(
+        transferRecords, roomEvents, roomDefinitions, roomProfiles, roomGroups, roomSchedules, roomServiceCases, links,
+    )
+
+    val assets: AssetRepository = heldWriteGuard.assets(RoomAssetRepository(db.assetDao()))
+    val tags: TagRepository = heldWriteGuard.tags(RoomTagRepository(db.nfcTagDao()))
+    val definitions: DefinitionRepository = heldWriteGuard.definitions(roomDefinitions)
+    val profiles: ProfileRepository = heldWriteGuard.profiles(roomProfiles)
+    val events: EventRepository = heldWriteGuard.events(roomEvents)
+    val attachments: AttachmentRepository = heldWriteGuard.attachments(RoomAttachmentRepository(db.attachmentDao()))
+    val groups: GroupRepository = heldWriteGuard.groups(roomGroups)
+    val schedules: ScheduleRepository = heldWriteGuard.schedules(roomSchedules)
+    val closures: ClosureRepository = heldWriteGuard.closures(RoomClosureRepository(db.occurrenceClosureDao()))
+    val references: ReferenceRepository = heldWriteGuard.references(RoomReferenceRepository(db.assetReferenceDao()))
     // 1.4's three data ports, mirroring `AppGraph`'s fields by name.
-    val seasonActivations: SeasonActivationRepository = RoomSeasonActivationRepository(db.seasonActivationDao())
-    val conditions: ConditionRepository = RoomConditionRepository(db.assetConditionDao())
-    val healthSubjects: HealthSubjectRepository = RoomHealthSubjectRepository(db.healthSubjectDao())
+    val seasonActivations: SeasonActivationRepository =
+        heldWriteGuard.activations(RoomSeasonActivationRepository(db.seasonActivationDao()))
+    val conditions: ConditionRepository = heldWriteGuard.conditions(RoomConditionRepository(db.assetConditionDao()))
+    val healthSubjects: HealthSubjectRepository =
+        heldWriteGuard.subjects(RoomHealthSubjectRepository(db.healthSubjectDao()))
     /** #74's catalog rows, mirroring `AppGraph`'s field by name. */
     val categories: CategoryRepository = RoomCategoryRepository(db.assetCategoryDao())
     /** #79's two case ports, mirroring `AppGraph`'s fields by name. */
-    val serviceCases: ServiceCaseRepository = RoomServiceCaseRepository(db.serviceCaseDao())
-    val serviceCaseEntries: ServiceCaseEntryRepository = RoomServiceCaseEntryRepository(db.serviceCaseEntryDao())
+    val serviceCases: ServiceCaseRepository = heldWriteGuard.cases(roomServiceCases)
+    val serviceCaseEntries: ServiceCaseEntryRepository =
+        heldWriteGuard.entries(RoomServiceCaseEntryRepository(db.serviceCaseEntryDao()))
     /** #72's loan port, mirroring `AppGraph`'s field by name. */
-    val loans: AssetLoanRepository = RoomAssetLoanRepository(db.assetLoanDao())
-    /** #77's transfer records, mirroring `AppGraph`'s field by name. */
-    val transferRecords: TransferRecordRepository = RoomTransferRecordRepository(db.transferRecordDao())
+    val loans: AssetLoanRepository = heldWriteGuard.loans(RoomAssetLoanRepository(db.assetLoanDao()))
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
 
     /** `T`, injected: a test says which day it is and the engine answers the same way every run. */
@@ -221,10 +238,10 @@ class FakeGraph(
      */
     val assetHealthReadModel: AssetHealthReadModel = AssetHealthReadModel(
         assets, healthSubjects, schedules, scheduleStates, events, profiles, seasonActivations, conditions,
-        recomputeSchedules, todayPort, zone = { ZoneOffset.UTC },
+        recomputeSchedules, todayPort, zone = { ZoneOffset.UTC }, transfers = transferRecords,
     )
     val attentionReadModel: AttentionReadModel =
-        AttentionReadModel(assets, assetHealthReadModel, todayPort)
+        AttentionReadModel(assets, assetHealthReadModel, todayPort, transferRecords)
 
     /**
      * 1.2 — the one due projection, mirroring `AppGraph`'s field so a view-model test takes the
@@ -234,6 +251,7 @@ class FakeGraph(
     val dueReadModel: DueReadModel = DueReadModel(
         schedules, assets, groups, definitions, recomputeSchedules, todayPort, assetHealthReadModel,
         snoozedUntilOf = { scheduleLocalDelivery.get(it)?.snoozedUntilAt },
+        transfers = transferRecords,
     )
 
     /**
@@ -449,7 +467,8 @@ class FakeGraph(
     )
 
     /** 1.4.1 (#80) — the provider repair, from exactly the members `AppGraph` builds it from. */
-    val repairScheduleProviders: RepairScheduleProviders = RepairScheduleProviders(schedules, uow, clock)
+    val repairScheduleProviders: RepairScheduleProviders =
+        RepairScheduleProviders(schedules, assets, groups, transferRecords, uow, clock)
     val completeSchedule: CompleteSchedule =
         CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recomputeSchedules)
     val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)

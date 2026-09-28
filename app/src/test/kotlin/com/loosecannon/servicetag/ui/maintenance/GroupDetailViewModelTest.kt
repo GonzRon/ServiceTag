@@ -95,6 +95,7 @@ class GroupDetailViewModelTest {
     private fun readModel(): DueReadModel = DueReadModel(
         graph.schedules, graph.assets, graph.groups,
         graph.definitions, graph.recomputeSchedules, graph.todayPort, graph.assetHealthReadModel, { null },
+        transfers = graph.transferRecords,
     )
 
     private suspend fun asset(name: String): Asset =

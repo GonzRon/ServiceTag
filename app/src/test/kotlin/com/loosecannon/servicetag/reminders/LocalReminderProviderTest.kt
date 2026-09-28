@@ -7,6 +7,8 @@ import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.DeadlineLocalDelivery
 import com.loosecannon.servicetag.core.ports.DeadlineLocalDeliveryRepository
@@ -31,6 +33,7 @@ import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.FakeTransferRecords
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.scheduleOf
 import java.io.File
@@ -214,8 +217,11 @@ class LocalReminderProviderTest {
     // 2026-06-09 10:13 UTC, past that day's 09:00, so a loan due on or before it is past its digest hour.
     private val loans = FakeAssetLoanRepository()
 
+    /** #77 (C11): the transfer records the two deadline builders read; empty unless a case appends. */
+    private val transfers = FakeTransferRecords()
+
     /** The loan subjects the sweep would hand this provider. */
-    private suspend fun lentOut() = BuildLoanSubjects(loans).forProvider(ProviderId.LOCAL, today)
+    private suspend fun lentOut() = BuildLoanSubjects(loans, transfers).forProvider(ProviderId.LOCAL, today)
 
     private suspend fun drill(
         dueOn: String? = "2026-06-05",
@@ -228,7 +234,7 @@ class LocalReminderProviderTest {
     }
 
     /** The warranty subjects the sweep would hand this provider today. */
-    private suspend fun warranties() = BuildDeadlineSubjects(assets).forProvider(ProviderId.LOCAL, today)
+    private suspend fun warranties() = BuildDeadlineSubjects(assets, transfers).forProvider(ProviderId.LOCAL, today)
 
     private suspend fun heater(
         expiresOn: String? = "2031-06-30",
@@ -902,7 +908,9 @@ class LocalReminderProviderTest {
      */
     private inner class Estate {
         val graph = FakeGraph().also { it.today = LocalDate.parse("2026-04-10") }
-        private val subjects = BuildReminderSubjects(graph.schedules, graph.groups, graph.recomputeSchedules)
+        private val subjects = BuildReminderSubjects(
+            graph.schedules, graph.groups, graph.assets, graph.transferRecords, graph.recomputeSchedules,
+        )
         private val provider = LocalReminderProvider(
             facts = ScheduleDeliveryFacts(
                 graph.schedules, graph.scheduleStateReader, graph.assets, graph.groups, graph.definitions, graph.todayPort,
@@ -958,6 +966,61 @@ class LocalReminderProviderTest {
 
         assertEquals("an archived asset's post is taken down", emptySet<String>(), notifications.standingItems())
         assertTrue("its tag was cancelled", notifications.cancelled.containsAll(standing))
+    }
+
+    /** An OUT of "Example Water Heater" — what marking appends last (C8); the asset itself still reads ACTIVE. */
+    private fun outOfTheHeater(id: String = "out-1", asset: String = "h1") = TransferRecord(
+        id = id, assetId = AssetId(asset), kind = TransferKind.OUT, packId = "0f1e2d3c-pack", lineage = emptyList(),
+        at = 1_758_960_000_000L, packSha256 = "ab".repeat(32), nameSnapshot = "Example Water Heater", note = "",
+    )
+
+    /**
+     * R77-20 (row 16): the transfer takes the standing maintenance post down — its tag cancelled, its quick-action
+     * nonce cleared with it (D-21), and the next sweep posts nothing again. The asset still reads ACTIVE, so it is
+     * the record that quiesces it, not ARCHIVED.
+     */
+    @Test
+    fun transferringTakesTheStandingMaintenancePostDown() = estate {
+        seed()
+        assertEquals(1, sweep().posted)
+        val standing = notifications.standingItems()
+        NonceStore(delivery, IdGenerator { "nonce-1" }, clock).issue(ScheduleId("s1"))
+        assertEquals("nonce-1", delivery.get(ScheduleId("s1"))?.actionNonce)
+
+        graph.transferRecords.append(outOfTheHeater())
+        assertEquals(AssetStatus.ACTIVE, graph.assets.get(AssetId("h1"))?.status)
+        sweep()
+
+        assertEquals("the post is down", emptySet<String>(), notifications.standingItems())
+        assertTrue("its tag was cancelled", notifications.cancelled.containsAll(standing))
+        assertEquals("the nonce went with it", null, delivery.get(ScheduleId("s1"))?.actionNonce)
+        val posted = notifications.postedItems.size
+        assertEquals("no re-post", 0, sweep().posted)
+        assertEquals(posted, notifications.postedItems.size)
+    }
+
+    /**
+     * R72-10 beside #77 (row 16): a retired or an archived asset's open loan still reminds — custody is not
+     * service — while a transferred-out asset's open loan (merged history; a transfer refuses an open loan) does not.
+     */
+    @Test
+    fun anArchivedOrRetiredAssetsOpenLoanStillReminds() = runTest {
+        val provider = provider()
+        assets.upsert(Asset(id = AssetId("a1"), name = "Example Drill", createdAt = 1_000L, updatedAt = 1_000L, retiredOn = "2026-06-01"))
+        assets.upsert(
+            Asset(id = AssetId("a2"), name = "Example Ladder", status = AssetStatus.ARCHIVED, createdAt = 1_000L, updatedAt = 1_000L),
+        )
+        assets.upsert(Asset(id = AssetId("h1"), name = "Example Water Heater", createdAt = 1_000L, updatedAt = 1_000L))
+        loans.upsert(sampleLoan(id = "l1", assetId = "a1", dueOn = "2026-06-05"))
+        loans.upsert(sampleLoan(id = "l2", assetId = "a2", dueOn = "2026-06-05", reminderMode = LoanReminderMode.UNTIL_RETURNED))
+        loans.upsert(sampleLoan(id = "l3", assetId = "h1", dueOn = "2026-06-05"))
+        transfers.append(outOfTheHeater())
+
+        assertEquals(ReconcileReport(2, 0, 0, emptyList()), provider.reconcile(lentOut()))
+        assertEquals(
+            listOf("Example Drill — Due back", "Example Ladder — Due back"),
+            notifications.postedItems.map { it.title },
+        )
     }
 
     /** R77-20: retiring an asset does the same — a retired asset's live schedule reminds no more. */

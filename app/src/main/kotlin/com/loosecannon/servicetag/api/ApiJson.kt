@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
 import com.loosecannon.servicetag.core.ports.StoreIoException
+import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.core.usecase.AssetAlreadyLent
 import com.loosecannon.servicetag.core.usecase.AssetCycle
 import com.loosecannon.servicetag.core.usecase.AssetHasChildren
@@ -353,6 +354,16 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     )
     is AssetHasChildren -> errorResponse(
         409, "Conflict", "asset_has_children", "this asset still has components",
+    )
+    // #77 (C13, R77-17): every write route that reaches a row of an asset transferred out from this phone —
+    // its own rows, a new asset under it, a group or schedule naming it, or a staying row that would name its
+    // graph (C12's one guard, R77-B2b-GUARD). A 409, not a 422: the body may be fine, and the remedy is another
+    // row (the transfer) — a command that fails its own validation first still answers its 422. A held asset that
+    // reads ACTIVE (merged transfer history) answers this too.
+    is AssetTransferredOut -> errorResponse(
+        409, "Conflict", "asset_transferred_out",
+        "this asset was transferred out from this phone; its history can be read but not changed",
+        listOf("AssetTransferredOut(assetId=${e.assetId.value})"),
     )
     is EventOwnership -> errorResponse(
         409, "Conflict", "ownership", "that row belongs to a different asset",

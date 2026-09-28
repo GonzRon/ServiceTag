@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -23,9 +24,10 @@ import kotlin.test.assertTrue
 class ResolveTagTest {
     private val assets = InMemoryAssetRepository()
     private val tags = InMemoryTagRepository()
+    private val transfers = InMemoryTransferRecordRepository()
     private val uow = FakeUnitOfWork(assets, tags)
     private val clock = Clock { 9_000L }
-    private val resolve = ResolveTag(tags, assets, uow, clock)
+    private val resolve = ResolveTag(tags, assets, transfers, uow, clock)
 
     private val v1Id = TagId("123e4567-e89b-12d3-a456-426614174000")
     private val asset = Asset(AssetId("a1"), "Hot tub", createdAt = 1L, updatedAt = 1L)

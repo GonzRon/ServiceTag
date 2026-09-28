@@ -1939,6 +1939,7 @@ class AssetViewModelsTest {
         val health = AssetHealthReadModel(
             graph.assets, held, graph.schedules, graph.scheduleStates, graph.events, graph.profiles,
             graph.seasonActivations, graph.conditions, graph.recomputeSchedules, graph.todayPort, zone = { ZoneOffset.UTC },
+            transfers = graph.transferRecords,
         )
         val vm = AssetsViewModel(graph.assets, graph.categories, graph.seasonActivations, graph.tags, health, graph.todayPort)
         val watching = backgroundScope.launch { vm.state.collect() }

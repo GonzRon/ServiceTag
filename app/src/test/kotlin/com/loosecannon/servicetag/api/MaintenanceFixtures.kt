@@ -38,6 +38,7 @@ internal fun maintenanceHandlersFor(graph: FakeGraph): MaintenanceHandlers = Mai
         graph.schedules, graph.assets, graph.groups, graph.definitions,
         graph.recomputeSchedules, graph.todayPort, graph.assetHealthReadModel,
         snoozedUntilOf = { null },
+        transfers = graph.transferRecords,
     ),
     recompute = graph.recomputeSchedules,
     today = graph.todayPort,

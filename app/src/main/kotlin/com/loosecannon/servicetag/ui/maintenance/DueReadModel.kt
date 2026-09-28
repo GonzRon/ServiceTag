@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.GroupOccurrence
 import com.loosecannon.servicetag.core.schedule.SeasonContext
@@ -179,6 +180,11 @@ class DueReadModel(
     private val today: Today,
     private val health: AssetHealthReadModel,
     private val snoozedUntilOf: suspend (ScheduleId) -> Long?,
+    /**
+     * #77 (C11, R77-20): the transfer records, read once per call for the held set, with **no default** for
+     * [snoozedUntilOf]'s reason — a projection that forgot custody would list a transferred-out asset's work.
+     */
+    private val transfers: TransferRecordRepository,
 ) {
 
     /**
@@ -188,12 +194,14 @@ class DueReadModel(
      * carry-forward (a): every due, projection and dashboard query starts there, so retired work
      * appears in no section and no count. The lifecycle bound on the **target** drops a schedule
      * whose Asset is archived or retired, or whose group is archived, because an out-of-service
-     * thing's obligations are not what "what needs attention" means (#5 AC 3). That second bound is
+     * thing's obligations are not what "what needs attention" means (#5 AC 3) — and, by the same
+     * predicate, one whose Asset is transferred out from this phone, or whose group is wholly
+     * transferred out (#77, C11, R77-20), whatever the asset's status reads. That second bound is
      * deliberately **not** applied by [forAsset]: an archived asset opened directly keeps its
      * history.
      */
     suspend fun items(): List<DueItem> {
-        val world = World.of(assets, groups)
+        val world = World.of(assets, groups, transfers)
         return project(
             schedules.all().listedForDue().filter { world.targetInService(it) },
             world,
@@ -210,7 +218,7 @@ class DueReadModel(
      * answer, per round, and this only has to be certain it misses nothing.
      */
     suspend fun forAsset(assetId: AssetId): List<DueItem> {
-        val world = World.of(assets, groups)
+        val world = World.of(assets, groups, transfers)
         val own = schedules.forAsset(assetId)
         val throughGroups = groups.allWindowsFor(assetId).flatMap { schedules.forGroup(it.id) }
         return project(
@@ -304,6 +312,8 @@ class DueReadModel(
     private class World(
         private val assetsById: Map<String, Asset>,
         private val groupsById: Map<String, MaintenanceGroup>,
+        /** #77 (C11): the assets transferred out from this phone, read once per call. */
+        private val held: Set<AssetId>,
     ) {
         fun asset(id: AssetId): Asset? = assetsById[id.value]
 
@@ -318,13 +328,15 @@ class DueReadModel(
          * finding on the badge for a schedule no list will show.
          */
         fun targetInService(schedule: MaintenanceSchedule): Boolean =
-            schedule.targetInService(::asset, ::group)
+            schedule.targetInService(::asset, ::group, held)
 
         companion object {
-            suspend fun of(assets: AssetRepository, groups: GroupRepository): World = World(
-                assetsById = assets.all().associateBy { it.id.value },
-                groupsById = groups.all().associateBy { it.id.value },
-            )
+            suspend fun of(assets: AssetRepository, groups: GroupRepository, transfers: TransferRecordRepository): World =
+                World(
+                    assetsById = assets.all().associateBy { it.id.value },
+                    groupsById = groups.all().associateBy { it.id.value },
+                    held = transfers.heldIds(),
+                )
         }
     }
 

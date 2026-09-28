@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
@@ -12,9 +14,13 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
+import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.dayMillis
 import com.loosecannon.servicetag.core.testing.scheduleOf
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,7 +41,15 @@ class RepairScheduleProvidersTest {
     private val store = InMemoryScheduleRepository()
     private val uow = RecordingUnitOfWork(FakeUnitOfWork(store))
     private val schedules = RecordingSchedules(store, uow)
-    private val repair = RepairScheduleProviders(schedules, uow, clock)
+    /**
+     * #77 (RM-1): the universe is bounded by `targetInService(…, held)`, so the one asset every row targets
+     * (`scheduleOf`'s default, a1) is in service here, and no record holds it. A fixture, not an assertion.
+     */
+    private val assets = InMemoryAssetRepository().also {
+        runBlocking { it.upsert(Asset(AssetId("a1"), "Example Water Heater", createdAt = 1L, updatedAt = 1L)) }
+    }
+    private val transfers = InMemoryTransferRecordRepository()
+    private val repair = RepairScheduleProviders(schedules, assets, InMemoryGroupRepository(), transfers, uow, clock)
 
     private val local = ScheduleProviderRow(ProviderId.LOCAL.name, enabled = true)
     private val localOff = ScheduleProviderRow(ProviderId.LOCAL.name, enabled = false)

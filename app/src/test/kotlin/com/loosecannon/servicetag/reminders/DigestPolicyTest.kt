@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.reminders.RuleFacts
 import com.loosecannon.servicetag.core.reminders.SubjectKey
 import com.loosecannon.servicetag.core.reminders.SubjectState
 import com.loosecannon.servicetag.core.schedule.DueStatus
+import com.loosecannon.servicetag.testing.FakeTransferRecords
 import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -1330,7 +1331,7 @@ class DigestPolicyTest {
                 warrantyReminderLeadDays = 30,
             ),
         )
-        val builder = BuildDeadlineSubjects(assets)
+        val builder = BuildDeadlineSubjects(assets, FakeTransferRecords())
         val reference = builder.forProvider(ProviderId.LOCAL, EXPIRY).single()
         val referenceTag = itemTag(reference.key, reference.contentHash)
         val conditions = listOf(

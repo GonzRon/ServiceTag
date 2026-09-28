@@ -291,7 +291,7 @@ class DashboardFiltersTest {
             loanRow("l-back", "back", lentOn = "2026-01-01", dueOn = "2026-02-01", returnedOn = "2026-02-05"),
         )
 
-        val rows = loanAttentionRowsOf(loans, assets, today)
+        val rows = loanAttentionRowsOf(loans, assets, today, held = emptySet())
 
         assertEquals(listOf("l-ladder", "l-drill", "l-mower"), rows.map { it.loanId })
         assertEquals("Lent to Example Rentals Ltd · due back 1 Sep 2026", rows.first().line)

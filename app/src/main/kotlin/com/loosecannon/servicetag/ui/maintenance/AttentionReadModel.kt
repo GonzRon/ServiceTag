@@ -7,10 +7,11 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.model.maintainedHere
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
-import com.loosecannon.servicetag.ui.health.inService
 
 /** What an asset-level attention row is about: the unit's condition, or one of its health subjects. */
 enum class AttentionKind { CONDITION, HEALTH }
@@ -58,7 +59,8 @@ data class AttentionItem(
 
 /**
  * The asset-level half of "what needs me" (master plan §13.1): in-service assets and components
- * only, each on its own lifecycle (status ACTIVE, not retired).
+ * only, each on its own lifecycle (status ACTIVE, not retired) — and never one transferred out from
+ * this phone (#77, C11, R77-20: `maintainedHere`, whatever its status reads).
  *
  * Per asset: a current DOWN or DEGRADED condition is one CONDITION row; each **AGE** subject
  * scoring CRITICAL is a HEALTH row in ATTENTION and each scoring WARNING one in UPCOMING. A
@@ -74,15 +76,18 @@ class AttentionReadModel(
     private val assets: AssetRepository,
     private val health: AssetHealthReadModel,
     private val today: Today,
+    /** #77 (C11): the transfer records, read once per call for the held set. */
+    private val transfers: TransferRecordRepository,
 ) {
 
     suspend fun items(): List<AttentionItem> {
         val t = today.localDate()
         val all = assets.all()
+        val held = transfers.heldIds()
         val byId = all.associateBy { it.id }
         val histories = health.conditionHistories()
         val ranked = mutableListOf<Pending>()
-        for (asset in all.filter { it.inService }) {
+        for (asset in all.filter { it.maintainedHere(held) }) {
             val parent = asset.parentAssetId?.let { byId[it] }
             val history = histories[asset.id]
             val current = history?.current

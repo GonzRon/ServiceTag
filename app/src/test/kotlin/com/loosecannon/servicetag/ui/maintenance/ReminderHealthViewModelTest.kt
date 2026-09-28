@@ -34,6 +34,7 @@ import com.loosecannon.servicetag.reminders.ReminderRepair
 import com.loosecannon.servicetag.reminders.ScheduleStateReader
 import com.loosecannon.servicetag.reminders.assetOf
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.FakeTransferRecords
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.scheduleOf
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +82,7 @@ class ReminderHealthViewModelTest {
     private val schedules = FakeScheduleRepository()
     private val assets = FakeAssetRepository()
     private val groups = FakeGroupRepository()
+    private val transfers = FakeTransferRecords()
     private val states = mutableMapOf<String, ScheduleState>()
     private val clock = Clock { 0L }
 
@@ -99,7 +101,7 @@ class ReminderHealthViewModelTest {
     /** The one canonical repair, over this suite's rows, recorded as it runs. */
     private val restoreForReal: suspend () -> Unit = {
         calls += "restore"
-        RepairScheduleProviders(schedules, uow, clock).apply()
+        RepairScheduleProviders(schedules, assets, groups, transfers, uow, clock).apply()
     }
 
     /**
@@ -141,6 +143,7 @@ class ReminderHealthViewModelTest {
             assets = assets,
             groups = groups,
             io = Dispatchers.Unconfined,
+            transfers = transfers,
         ),
     )
 
@@ -473,6 +476,7 @@ class ReminderHealthViewModelTest {
                 due = DueReadModel(
                     graph.schedules, graph.assets, graph.groups,
                     graph.definitions, graph.recomputeSchedules, graph.todayPort, graph.assetHealthReadModel, { null },
+                    transfers = graph.transferRecords,
                 ),
                 health = health,
                 notifications = object : NotificationPermission {

@@ -172,6 +172,7 @@ class AssetRowHealthTest {
         val model = AssetHealthReadModel(
             graph.assets, graph.healthSubjects, graph.schedules, graph.scheduleStates, graph.events, graph.profiles,
             graph.seasonActivations, flaky, graph.recomputeSchedules, graph.todayPort, zone = { ZoneOffset.UTC },
+            transfers = graph.transferRecords,
         )
         val seen = collect(model)
         seen.await("the empty first emission and the failed pass's empty map") { it.size == 2 }
@@ -298,6 +299,7 @@ class AssetRowHealthTest {
     private fun modelWith(subjects: HealthSubjectRepository) = AssetHealthReadModel(
         graph.assets, subjects, graph.schedules, graph.scheduleStates, graph.events, graph.profiles,
         graph.seasonActivations, graph.conditions, graph.recomputeSchedules, graph.todayPort, zone = { ZoneOffset.UTC },
+        transfers = graph.transferRecords,
     )
 
     private companion object {

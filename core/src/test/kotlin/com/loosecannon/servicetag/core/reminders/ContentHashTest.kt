@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.testing.InMemoryAssetLoanRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.loanOf
 import java.time.LocalDate
 import kotlin.test.Test
@@ -77,7 +78,7 @@ class ContentHashTest {
                 warrantyReminderLeadDays = 30,
             ),
         )
-        val subject = BuildDeadlineSubjects(assets).forProvider(ProviderId.LOCAL, LocalDate.parse("2031-06-01")).single()
+        val subject = BuildDeadlineSubjects(assets, InMemoryTransferRecordRepository()).forProvider(ProviderId.LOCAL, LocalDate.parse("2031-06-01")).single()
 
         assertEquals("b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e", subject.contentHash)
     }
@@ -92,7 +93,7 @@ class ContentHashTest {
         val loans = InMemoryAssetLoanRepository()
         loans.upsert(loanOf("l1", assetId = "a1", reminderMode = LoanReminderMode.ONCE))
         loans.upsert(loanOf("l2", assetId = "a2", reminderMode = LoanReminderMode.UNTIL_RETURNED))
-        val subjects = BuildLoanSubjects(loans).forProvider(ProviderId.LOCAL, LocalDate.parse("2026-10-01"))
+        val subjects = BuildLoanSubjects(loans, InMemoryTransferRecordRepository()).forProvider(ProviderId.LOCAL, LocalDate.parse("2026-10-01"))
 
         assertEquals(listOf(LOAN_ONCE_HASH, LOAN_UNTIL_CLEARED_HASH), subjects.map { it.contentHash })
         assertNotEquals(subjects[0].contentHash, subjects[1].contentHash)

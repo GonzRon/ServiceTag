@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetLoanId
 import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 
@@ -24,13 +25,18 @@ import java.time.format.DateTimeParseException
  * keeps no producer — and never a withdrawn one: it is simply not in the list.
  *
  * It reads **no asset** — so no lifecycle, season or break gates it: an asset retired or archived
- * while lent is still out, and custody is independent of service (R72-10) — and **no clock**: `today`
+ * while lent is still out, and custody is independent of service (R72-10). The one asset fact it asks
+ * is the transfer records' (#77, C11, R77-20): a loan of an asset transferred out from this phone is no
+ * subject — the sender no longer answers for it. #77 refuses a transfer while a loan is open, so this
+ * only ever drops a loan merged history left open — and **no clock**: `today`
  * is not consulted, so a loan long past its due date is still a subject until it is returned. When
  * a subject is announced, and how often, is the provider's business: the subject carries the date and
  * the repeat.
  */
 class BuildLoanSubjects(
     private val loans: AssetLoanRepository,
+    /** #77 (C11): the transfer records, read once per answer for the held set. */
+    private val transfers: TransferRecordRepository,
 ) {
 
     /**
@@ -38,10 +44,13 @@ class BuildLoanSubjects(
      * loan has no per-provider rows — ordered by loan id, so two consecutive answers can be compared.
      */
     @Suppress("UNUSED_PARAMETER")
-    suspend fun forProvider(provider: ProviderId, today: LocalDate): List<ReminderSubject> =
-        loans.open()
+    suspend fun forProvider(provider: ProviderId, today: LocalDate): List<ReminderSubject> {
+        val held = transfers.heldIds()
+        return loans.open()
+            .filter { it.assetId !in held }
             .sortedBy { it.id.value }
             .mapNotNull(::loanSubjectOf)
+    }
 
     private fun loanSubjectOf(loan: AssetLoan): ReminderSubject? {
         val repeat = when (loan.reminderMode) {

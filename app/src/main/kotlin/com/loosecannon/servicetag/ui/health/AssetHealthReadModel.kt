@@ -13,7 +13,6 @@ import com.loosecannon.servicetag.core.health.SubjectValue
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetId
-import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.HealthAggregation
@@ -23,7 +22,8 @@ import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.SeasonMode
-import com.loosecannon.servicetag.core.model.isRetired
+import com.loosecannon.servicetag.core.model.isInService
+import com.loosecannon.servicetag.core.model.maintainedHere
 import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ConditionRepository
@@ -34,6 +34,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.schedule.ScheduleRecompute
 import com.loosecannon.servicetag.core.schedule.SeasonContext
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
@@ -156,6 +157,11 @@ class AssetHealthReadModel(
     private val today: Today,
     /** The owner's zone, for `policyInputsOf`'s pin floor — the same seam the recompute reads. */
     private val zone: () -> ZoneId,
+    /**
+     * #77 (C11, R77-20): the transfer records — the fleet ([observeRowHealth]) is the assets maintained here, so
+     * a transferred-out asset carries no row health whatever its status reads. Observed as one more signal.
+     */
+    private val transfers: TransferRecordRepository,
 ) {
 
     /**
@@ -186,11 +192,11 @@ class AssetHealthReadModel(
 
     /**
      * #71 (plan E3): the Assets list's health, live — one [AssetHealthView] per asset **in service**
-     * (its own lifecycle: active and not retired, E1), keyed by id, each equal to [forAsset] for that
+     * (its own lifecycle: active and not retired, E1) and not transferred out from this phone (#77), keyed by id, each equal to [forAsset] for that
      * asset on the same day. Nothing here gates on tracking: a row's own gate (in service and a
      * non-null aggregate, E2) is the view model's.
      *
-     * The signals are the asset, subject, schedule, schedule-state and condition tables and
+     * The signals are the asset, subject, schedule, schedule-state and condition tables, the held set and
      * [refreshes]; events, activations, profiles and the passing of midnight are not observed, so the
      * list catches up on the next [refreshes] emission — the attention list's accepted staleness.
      * The first emission is an empty map, so the list never waits for a pass, and a newer signal
@@ -212,6 +218,7 @@ class AssetHealthReadModel(
                 schedules.observeAll(),
                 states.observeAll(),
                 conditions.observeAll(),
+                transfers.observeHeldIds(),
                 refreshes,
             ),
         ) { }
@@ -225,13 +232,14 @@ class AssetHealthReadModel(
             .conflate()
             .onStart { emit(emptyMap()) }
 
-    /** One pass of [observeRowHealth]: every asset in service, each alone (the failure belt). */
+    /** One pass of [observeRowHealth]: every asset maintained here, each alone (the failure belt). */
     private suspend fun rowHealth(): Map<AssetId, AssetHealthView> {
         val t = today.localDate()
         val all = assets.all()
+        val held = transfers.heldIds()
         val histories = conditionHistories()
         return buildMap {
-            for (asset in all.filter { it.inService }) {
+            for (asset in all.filter { it.maintainedHere(held) }) {
                 runCatching {
                     AssetHealthView(
                         assetId = asset.id,
@@ -406,8 +414,10 @@ internal val OperationalCondition.needsAttention: Boolean
     get() = this == OperationalCondition.DOWN || this == OperationalCondition.DEGRADED
 
 /**
- * Whether an asset or component is **in service** on its own lifecycle: active and not retired.
- * The same bound `targetInService` applies to a schedule's target Asset, for the asset-level rows.
+ * Whether an asset or component is **in service** on its own lifecycle: active and not retired — the
+ * domain's one predicate, `isInService`, delegated to (#77, C11). The detail and sub-screen facts that ask
+ * this are about the asset in front of them; a projection that answers "what needs attention" asks
+ * `maintainedHere(held)` instead, so a transferred-out asset is never in it.
  */
 internal val Asset.inService: Boolean
-    get() = status == AssetStatus.ACTIVE && !isRetired
+    get() = isInService

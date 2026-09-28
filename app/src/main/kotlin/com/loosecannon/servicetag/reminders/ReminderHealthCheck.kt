@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.reminders.ReminderHealthFinding
 import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.reminders.ReminderProvider
@@ -161,6 +162,11 @@ class ReminderHealthCheck(
     private val assets: AssetRepository,
     private val groups: GroupRepository,
     /**
+     * #77 (C11, R77-20): the transfer records, read once per run for the held set — a transferred-out asset's
+     * schedules are not maintained here, so they raise no finding. No default: the bound cannot forget custody.
+     */
+    private val transfers: TransferRecordRepository,
+    /**
      * Where the blocking platform reads happen. The standby bucket, the pending-alarm query and
      * WorkManager's future are all binder calls, and every caller of this class is on a scope whose
      * default dispatcher is the main thread.
@@ -270,12 +276,14 @@ class ReminderHealthCheck(
      * `SCHEDULE_PROVIDER_DISABLED`. The two partition the 1.2 finding's rows: none is in both.
      *
      * **Every finding carries both lifecycle bounds** (fix round 1, S1/S2). `listedForDue()` drops an
-     * archived schedule; [inService] drops a live schedule on a retired asset or an archived group;
-     * and `status == ACTIVE` drops a paused one. Every clause earns its place: without the archive
+     * archived schedule; [inService] drops a live schedule whose target is not maintained here — an
+     * archived, retired or transferred-out asset, an archived group or one wholly transferred out (#77,
+     * C11); and `status == ACTIVE` drops a paused one. Every clause earns its place: without the archive
      * bound every retired schedule raises a finding nothing can clear; without the target bound the
      * app reports a delivery problem for an obligation it has already withdrawn from delivery
-     * (`BuildReminderSubjects` hands a retired one over as `Withdrawn`) and sends the owner to edit
-     * a schedule on equipment they retired; and without `status == ACTIVE` a **paused** schedule is
+     * (`BuildReminderSubjects` withdraws a schedule whose target is out of service or held, by the same
+     * `targetInService`) and sends the owner to edit a schedule on equipment they retired or no longer
+     * hold; and without `status == ACTIVE` a **paused** schedule is
      * told it "need[s] a meter reading before [it] can come due", which is false of a schedule that
      * cannot come due — §11.1's ruling is that a paused schedule needs nothing.
      *
@@ -364,7 +372,8 @@ class ReminderHealthCheck(
         if (rows.isEmpty()) return rows
         val assetsById = assets.all().associateBy { it.id.value }
         val groupsById = groups.all().associateBy { it.id.value }
-        return rows.filter { it.targetInService({ id -> assetsById[id.value] }, { id -> groupsById[id.value] }) }
+        val held = transfers.heldIds()
+        return rows.filter { it.targetInService({ id -> assetsById[id.value] }, { id -> groupsById[id.value] }, held) }
     }
 
     /**
