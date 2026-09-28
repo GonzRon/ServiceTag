@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -248,11 +249,17 @@ class LoanEditViewModelTest {
         model.onPicked(SAMPLE_PICK)
         model.settled()
         val saved = backgroundScope.async(start = CoroutineStart.UNDISPATCHED) { model.saved.first() }
+        val said = mutableListOf<String>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { model.messages.collect { said += it } }
 
         model.save()
         model.save()
         saved.await()
+        testScheduler.advanceUntilIdle()
         assertEquals("one loan", 1, storedLoans().size)
+        // The second tap never reached the use case: it would have met the first loan and said P72-37.
+        assertEquals("the second tap said nothing", emptyList<String>(), said)
+        assertTrue("saving stays set once the loan is written", model.state.value.saving)
     }
 
     /** ✕ and back only leave: a picked, typed-into form abandoned writes nothing, new or an edit. */
