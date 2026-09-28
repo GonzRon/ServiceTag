@@ -54,7 +54,7 @@ internal class ApiRouter(
     }
 
     /**
-     * The whole surface. Fifty-one path shapes over sixty-one method-and-path rows; anything
+     * The whole surface. Fifty-five path shapes over sixty-six method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -86,6 +86,12 @@ internal class ApiRouter(
      * #79 added two rows over two shapes, both `/v1/assets/{id}/…` sub-resources on the same 404
      * convention: the warranty, derived for today and stored nowhere, and its reminder lead, written
      * through `SetWarrantyReminder` alone. Neither runs a reminder sweep.
+     *
+     * #79b added five rows over four shapes: the nineteenth `/v1/assets/{id}/…` sub-resource (an asset's
+     * service cases, read only), and `/v1/service-cases`, `/v1/service-cases/{id}` and
+     * `/v1/service-cases/{id}/entries`, each a 405 for a verb it does not take. **Nothing destructive came
+     * with them** (R79-8, R79-9): no verb deletes a case, amends or deletes an entry, or writes a case's
+     * status or `closedOn` except a status entry — a CANCELLED or CLOSED entry is the exit.
      */
     private suspend fun route(request: ApiRequest): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -142,6 +148,8 @@ internal class ApiRouter(
                 // #79 — two more, the seventeenth and eighteenth: the derived warranty, and the lead.
                 "warranty" to "GET" -> handlers.warranty.getWarranty(rest[1])
                 "warranty-reminder" to "POST" -> handlers.warranty.setWarrantyReminder(rest[1], request)
+                // #79b — the nineteenth: the asset's service cases, read only.
+                "service-cases" to "GET" -> handlers.serviceCases.listForAsset(rest[1])
                 else -> throw ApiFailure.notFound(request.path)
             }
 
@@ -234,6 +242,20 @@ internal class ApiRouter(
                 "archive" to "POST" -> handlers.seasonHealth.archiveSubject(rest[1], request)
                 else -> throw ApiFailure.notFound(request.path)
             }
+
+            // #79b — a case is opened, read, replaced and appended to, and never deleted; an entry is
+            // appended and never amended. Three shapes, each a 405 for a verb it does not take.
+            rest == listOf("service-cases") ->
+                if (method == "POST") handlers.serviceCases.open(request) else notAllowed(request)
+
+            rest.size == 2 && rest[0] == "service-cases" -> when (method) {
+                "GET" -> handlers.serviceCases.get(rest[1])
+                "PATCH" -> handlers.serviceCases.update(rest[1], request)
+                else -> notAllowed(request)
+            }
+
+            rest.size == 3 && rest[0] == "service-cases" && rest[2] == "entries" ->
+                if (method == "POST") handlers.serviceCases.addEntry(rest[1], request) else notAllowed(request)
 
             rest == listOf("attention") ->
                 if (method == "GET") handlers.seasonHealth.listAttention() else notAllowed(request)

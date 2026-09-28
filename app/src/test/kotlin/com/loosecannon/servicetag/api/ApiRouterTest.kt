@@ -58,6 +58,7 @@ class ApiRouterTest {
             referenceHandlersFor(graph),
             seasonHealthHandlersFor(graph),
             warrantyHandlersFor(graph),
+            serviceCaseHandlersFor(graph),
             appVersion = "1.1.0",
             schemaVersion = 5,
         ),
@@ -199,6 +200,20 @@ class ApiRouterTest {
             "POST" to "/v1/health",
             "DELETE" to "/v1/attention",
             "PATCH" to "/v1/attention",
+            // #79b's additions (R79-8, R79-9). Nothing deletes a service case — a CANCELLED or CLOSED
+            // status entry is the exit — and a timeline entry is immutable: never amended, never
+            // removed. Nor does any route write a case's status or `closedOn` except a status entry.
+            "DELETE" to "/v1/service-cases/c1",
+            "DELETE" to "/v1/service-cases",
+            "DELETE" to "/v1/assets/$id/service-cases",
+            "DELETE" to "/v1/assets/$id/service-cases/c1",
+            "PATCH" to "/v1/service-cases/c1/entries",
+            "DELETE" to "/v1/service-cases/c1/entries",
+            "PATCH" to "/v1/service-cases/c1/entries/n1",
+            "DELETE" to "/v1/service-cases/c1/entries/n1",
+            "POST" to "/v1/service-cases/c1/status",
+            "POST" to "/v1/service-cases/c1/close",
+            "POST" to "/v1/service-cases/c1/delete",
         )) {
             val response = call(method, path, if (method == "GET") "" else "{}")
             assertTrue("$method $path answered ${response.status}", response.status == 404 || response.status == 405)
@@ -588,6 +603,7 @@ class ApiRouterTest {
                 referenceHandlersFor(graph),
                 seasonHealthHandlersFor(graph),
                 warrantyHandlersFor(graph),
+                serviceCaseHandlersFor(graph),
                 appVersion = "1.1.0",
                 schemaVersion = 5,
             ),

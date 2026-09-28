@@ -28,5 +28,11 @@
   },
   "warrantyReminder": {
     "keys": ["leadDays"]
+  },
+  "serviceCase": {
+    "keys": ["assetId", "title", "type", "openedOn", "provider", "contact", "caseRef", "coverage", "outboundTracking", "outboundCarrier", "returnTracking", "returnCarrier", "costMinor", "currency", "notes", "incidentEventId", "resolutionEventId"]
+  },
+  "caseEntry": {
+    "keys": ["occurredOn", "occurredTime", "tzId", "note", "status"]
   }
 }

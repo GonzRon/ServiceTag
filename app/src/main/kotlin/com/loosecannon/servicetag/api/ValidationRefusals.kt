@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.usecase.AssetProblem
 import com.loosecannon.servicetag.core.usecase.DefinitionProblem
 import com.loosecannon.servicetag.core.usecase.FieldProblem
 import com.loosecannon.servicetag.core.usecase.ProfileProblem
+import com.loosecannon.servicetag.core.usecase.ServiceCaseProblem
 import com.loosecannon.servicetag.core.usecase.WarrantyReminderProblem
 import com.loosecannon.servicetag.core.model.Season as SeasonWindow
 
@@ -172,4 +173,45 @@ internal fun warrantyReminderRefusal(problem: WarrantyReminderProblem): Refusal 
         "a warranty reminder needs the asset's warrantyExpiresOn; set the date first",
         "leadDays",
     )
+}
+
+// --- #79b: the service case's family ---------------------------------------------------------------
+//
+// One `lower_snake` code for every problem a case header or a timeline entry can have, on the same
+// terms again: `problems` keeps every problem by the domain's own name, and `message` and `field`
+// describe the first. A problem about a pair names its first key — an empty entry is `note`, the
+// entry's note-or-status pair — and a refused event link names the body key that sent it, the id itself
+// staying in `problems`. No message repeats a value that was sent.
+
+internal const val SERVICE_CASE_VALIDATION: String = "service_case_validation"
+
+/** Every [ServiceCaseProblem] as a refusal. */
+internal fun serviceCaseRefusal(problem: ServiceCaseProblem): Refusal = when (problem) {
+    ServiceCaseProblem.TitleRequired -> Refusal(SERVICE_CASE_VALIDATION, "a service case needs a title", "title")
+    // `openedOn` on a header, `occurredOn` on an entry: the domain's own key.
+    is ServiceCaseProblem.BadDate ->
+        Refusal(SERVICE_CASE_VALIDATION, "${problem.field} must be an ISO YYYY-MM-DD date", problem.field)
+    is ServiceCaseProblem.BadTime ->
+        Refusal(SERVICE_CASE_VALIDATION, "${problem.field} must be an HH:MM time of day", problem.field)
+    is ServiceCaseProblem.BadTimeZone ->
+        Refusal(SERVICE_CASE_VALIDATION, "${problem.field} must be a time zone id this phone knows", problem.field)
+    ServiceCaseProblem.OpenedAfterToday ->
+        Refusal(SERVICE_CASE_VALIDATION, "openedOn may not be later than today", "openedOn")
+    ServiceCaseProblem.NegativeCost -> Refusal(SERVICE_CASE_VALIDATION, "costMinor may not be negative", "costMinor")
+    ServiceCaseProblem.CostWithoutCurrency -> Refusal(SERVICE_CASE_VALIDATION, "a costMinor needs a currency", "currency")
+    ServiceCaseProblem.BadCurrency ->
+        Refusal(SERVICE_CASE_VALIDATION, "currency must be an ISO 4217 code this build knows", "currency")
+    is ServiceCaseProblem.IncidentInvalid -> Refusal(
+        SERVICE_CASE_VALIDATION,
+        "incidentEventId must name an INCIDENT of this asset that no schedule completion logged",
+        "incidentEventId",
+    )
+    is ServiceCaseProblem.ResolutionInvalid -> Refusal(
+        SERVICE_CASE_VALIDATION,
+        "resolutionEventId must name a MAINTENANCE or REPLACEMENT event of this case's asset",
+        "resolutionEventId",
+    )
+    ServiceCaseProblem.EntryEmpty -> Refusal(SERVICE_CASE_VALIDATION, "an entry needs a note, a status, or both", "note")
+    ServiceCaseProblem.EntryAfterToday ->
+        Refusal(SERVICE_CASE_VALIDATION, "occurredOn may not be later than today", "occurredOn")
 }

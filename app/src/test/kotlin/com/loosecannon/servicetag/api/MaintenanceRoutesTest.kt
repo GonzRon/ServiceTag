@@ -92,6 +92,7 @@ class MaintenanceRoutesTest {
             referenceHandlersFor(graph),
             seasonHealthHandlersFor(graph),
             warrantyHandlersFor(graph),
+            serviceCaseHandlersFor(graph),
             appVersion = "1.2.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),

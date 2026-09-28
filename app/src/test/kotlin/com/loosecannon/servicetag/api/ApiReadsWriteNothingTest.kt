@@ -42,6 +42,9 @@ class ApiReadsWriteNothingTest {
             "maintenance_group" to graph.groups.all().toSet(),
             "measurement_definition" to graph.definitions.all().toSet(),
             "event_profile" to graph.profiles.all().toSet(),
+            // #79b's aggregate: the header and its append-only timeline.
+            "service_case" to graph.serviceCases.all().toSet(),
+            "service_case_entry" to graph.serviceCaseEntries.all().toSet(),
         )
     }
 
@@ -90,6 +93,15 @@ class ApiReadsWriteNothingTest {
         val tub = api.asset("Hot tub")
         api.ok(AssetSeasonResponse.serializer(), "POST", "/v1/assets/$tub/season-mode", """{"seasonMode":"MANUAL","manualPhase":"IN_SEASON"}""")
         schedule(tub, "Water change", """"servicePolicy":"IN_SERVICE_RESUME_CLAMPED"""")
+        val case = api.ok(
+            ServiceCaseResponse.serializer(), "POST", "/v1/service-cases",
+            """{"assetId":"$generator","title":"Starter claim","type":"REPAIR","openedOn":"2026-01-19","coverage":"UNKNOWN"}""",
+            status = 201,
+        ).serviceCase.id
+        api.ok(
+            CaseEntryResponse.serializer(), "POST", "/v1/service-cases/$case/entries",
+            """{"occurredOn":"2026-01-20","tzId":"UTC","note":"Sent out","status":"SENT_OUT"}""", status = 201,
+        )
 
         graph.today = LocalDate.parse("2026-02-10")
         graph.now = dayMillis("2026-02-10")
@@ -107,6 +119,9 @@ class ApiReadsWriteNothingTest {
             "/v1/assets/$generator/health-subjects",
             // #79: the warranty, derived for today like the health and the season.
             "/v1/assets/$generator/warranty",
+            // #79b: an asset's cases, and one case with its timeline.
+            "/v1/assets/$generator/service-cases",
+            "/v1/service-cases/$case",
             "/v1/schedules",
             "/v1/status",
         )) {
@@ -163,6 +178,36 @@ class ApiReadsWriteNothingTest {
             },
         )
         for ((expected, write) in expectations) assertEquals(expected, tablesWrittenBy(write))
+
+        // #79b (C16): a case writes its own two tables and nothing else — no event, no condition, no
+        // schedule or its state — and a note-only entry never touches the header (R79-5).
+        var case = ""
+        assertEquals(
+            setOf("service_case"),
+            tablesWrittenBy {
+                api.call(
+                    "POST", "/v1/service-cases",
+                    """{"assetId":"$heater","title":"Heater claim","type":"WARRANTY_SERVICE","openedOn":"2026-02-09","coverage":"IN_WARRANTY"}""",
+                ).also { case = ApiJson.decodeFromString(ServiceCaseResponse.serializer(), it.bodyText()).serviceCase.id }
+            },
+        )
+        assertEquals(
+            setOf("service_case"),
+            tablesWrittenBy {
+                api.call(
+                    "PATCH", "/v1/service-cases/$case",
+                    """{"title":"Heater claim, element","type":"WARRANTY_SERVICE","openedOn":"2026-02-09","coverage":"IN_WARRANTY"}""",
+                )
+            },
+        )
+        assertEquals(
+            setOf("service_case_entry"),
+            tablesWrittenBy { api.call("POST", "/v1/service-cases/$case/entries", """{"occurredOn":"2026-02-10","tzId":"UTC","note":"Called"}""") },
+        )
+        assertEquals(
+            setOf("service_case_entry", "service_case"),
+            tablesWrittenBy { api.call("POST", "/v1/service-cases/$case/entries", """{"occurredOn":"2026-02-10","tzId":"UTC","status":"CLOSED"}""") },
+        )
 
         val battery = runBlocking { graph.healthSubjects.all() }.single().id.value
         assertEquals(
