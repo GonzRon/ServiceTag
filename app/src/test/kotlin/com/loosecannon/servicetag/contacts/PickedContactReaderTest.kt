@@ -15,7 +15,7 @@ class PickedContactReaderTest {
     private val picked = "content://com.android.contacts/contacts/lookup/0r5-EXAMPLEKEY/5"
 
     private fun readerOf(row: ContactRow?, logs: MutableList<String> = mutableListOf()) =
-        PickedContactReader(ContactRowQuery { row }) { message, _ -> logs += message }
+        PickedContactReader(ContactRowQuery { row }) { reason -> logs += reason }
 
     @Test fun aPersonsNameAndLookupUri() {
         val read = readerOf(ContactRow(5, "0r5-EXAMPLEKEY", "  Sample Borrower ")).read(picked)
@@ -41,7 +41,7 @@ class PickedContactReaderTest {
         val logs = mutableListOf<String>()
         assertEquals("no row", PickedContact.Unreadable, readerOf(null, logs).read(picked))
 
-        val denied = PickedContactReader(ContactRowQuery { throw SecurityException("Permission Denial") }) { m, _ -> logs += m }
+        val denied = PickedContactReader(ContactRowQuery { throw SecurityException("Permission Denial") }) { logs += it }
         assertEquals("a refused read", PickedContact.Unreadable, denied.read(picked))
 
         assertEquals("a blank key", PickedContact.Unreadable, readerOf(ContactRow(5, "", "Sample Borrower"), logs).read(picked))
@@ -50,5 +50,30 @@ class PickedContactReaderTest {
 
         assertEquals("each is logged", 5, logs.size)
         assertTrue("and no log line names the URI", logs.none { it.contains("content://") })
+    }
+
+    /**
+     * B3 review MAJOR-1: a refused or failed read logs a fixed reason and never the exception — the
+     * platform's permission denial and a provider's "Unknown URI" both name the lookup URI, and a lookup
+     * key can embed a contact's normalised name. What reaches the log holds no `content://` and no part
+     * of the key — and the log's type admits no `Throwable` at all.
+     */
+    @Test fun aRefusedOrFailedReadLogsNoPartOfTheUri() {
+        val thrown = listOf(
+            SecurityException(
+                "Permission Denial: reading com.android.providers.contacts.ContactsProvider2 uri $picked " +
+                    "from pid=1, uid=2 requires android.permission.READ_CONTACTS, or grantUriPermission()",
+            ),
+            IllegalArgumentException("Unknown URI $picked"),
+        )
+        thrown.forEach { failure ->
+            val logged = mutableListOf<String>()
+            val reader = PickedContactReader(ContactRowQuery { throw failure }) { reason -> logged += reason }
+
+            assertEquals(PickedContact.Unreadable, reader.read(picked))
+            assertEquals("one log line for ${failure::class.simpleName}", 1, logged.size)
+            assertTrue("no URI in ${logged.single()}", logged.none { it.contains("content://") })
+            assertTrue("no key in ${logged.single()}", logged.none { it.contains("EXAMPLEKEY") })
+        }
     }
 }

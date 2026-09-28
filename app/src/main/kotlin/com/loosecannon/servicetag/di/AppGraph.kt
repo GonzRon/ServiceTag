@@ -624,11 +624,12 @@ class AppGraph(private val context: Context) {
     /**
      * #72 (C15): what a picked contact reads as — its `_ID`, `LOOKUP_KEY` and `DISPLAY_NAME` through the
      * pick's one-shot grant, read once in the pick's callback by the lend form and the Lending section's
-     * relink. ServiceTag holds no contacts permission; nothing else ever reads a contact.
+     * relink. ServiceTag holds no contacts permission; nothing else ever reads a contact. Its log is a
+     * fixed reason with no exception attached: a refused read's message names the lookup URI.
      */
     val pickedContactReader: PickedContactReader = PickedContactReader(
         ResolverContactRowQuery(context.applicationContext.contentResolver),
-    ) { message, error -> Log.w("PickedContact", message, error) }
+    ) { reason -> Log.w("PickedContact", reason) }
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, today, recomputeSchedules, applyTemplate,
         promoteCategory,

@@ -37,29 +37,32 @@ sealed interface PickedContact {
  * [PickedContact.NoName]. A company-only contact's display name is its organisation (AC 2), which the
  * provider answers itself. Only the link and the name leave this class: nothing else is kept.
  *
- * The log never carries the URI: a lookup key can embed a contact's normalised name.
+ * **The log never carries the URI**: a lookup key can embed a contact's normalised name. So [log]
+ * takes a fixed reason and nothing else — never the exception, and never its message: the platform's
+ * permission denial and a provider's "Unknown URI" both name the URI they refused (B3 review MAJOR-1).
+ * A failed read says only which kind of exception it was, by its class's simple name.
  */
 class PickedContactReader(
     private val query: ContactRowQuery,
-    private val log: (message: String, error: Throwable?) -> Unit = { _, _ -> },
+    private val log: (reason: String) -> Unit = {},
 ) {
     fun read(uri: String): PickedContact {
         val row = try {
             query.row(uri)
         } catch (denied: SecurityException) {
-            log("a picked contact could not be read: the read was refused", denied)
+            log("a picked contact could not be read: the read was refused (${denied.javaClass.simpleName})")
             return PickedContact.Unreadable
         } catch (failed: RuntimeException) {
-            log("a picked contact could not be read", failed)
+            log("a picked contact could not be read (${failed.javaClass.simpleName})")
             return PickedContact.Unreadable
         }
         if (row == null) {
-            log("a picked contact could not be read: no row", null)
+            log("a picked contact could not be read: no row")
             return PickedContact.Unreadable
         }
         val link = row.lookupKey?.let { ContactLink.lookupUriOf(row.id, it) }
         if (link == null) {
-            log("a picked contact could not be read: its lookup key cannot be stored", null)
+            log("a picked contact could not be read: its lookup key cannot be stored")
             return PickedContact.Unreadable
         }
         val name = row.displayName?.trim().orEmpty()
