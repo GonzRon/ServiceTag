@@ -151,8 +151,9 @@ due back and whether the phone should remind the owner. `lend_asset` is a create
 in no argument — only the phone makes one ("Choose from Contacts"). An asset holds one open loan at a
 time, and any lifecycle may be lent here. `update_loan` is an overlay (below) over the open loan's terms;
 it never sends a borrower, a return date or a link. `return_loan` is the only way a loan ends, and a
-returned loan is frozen. The reminder is the phone's own and has no tool; a loan written here settles at
-the phone's next sweep at or after its digest hour. Nothing deletes or relinks a loan.
+returned loan is frozen. The reminder is the phone's own and has no tool; a loan written here posts only
+at the phone's next sweep at or after its digest hour, but a returned loan's standing reminder comes down
+at the next sweep of any kind, the midnight sweep included. Nothing deletes or relinks a loan.
 `docs/api/v1.md`'s **Loans (#72)** section is the contract.
 
 ### The schedule's two forms, and the deprecated season arguments

@@ -2680,9 +2680,10 @@ def update_loan(
 def return_loan(loan_id: str, returned_on: str) -> dict[str, Any]:
     """Mark a loan returned — the only way a loan ends. `returned_on` is ISO `YYYY-MM-DD`, not before the
     lent date and not after today. The loan stays, as the asset's lending history, and is frozen from here
-    on: a second return or an edit is refused as `loan_returned`. Any reminder waiting on it is taken down
-    at the phone's next sweep at or after the digest hour. Answers `{loan}`. Needs a phone at schema 13 or
-    later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    on: a second return or an edit is refused as `loan_returned`. A reminder standing for it comes down at
+    the phone's next sweep of any kind, the midnight sweep included; only a post waits for a sweep at or
+    after the digest hour. Answers `{loan}`. Needs a phone at schema 13 or later: an older one is refused
+    with `APP_SCHEMA_TOO_OLD` and nothing is sent.
     """
     path = f"/v1/loans/{_path_id(loan_id, field='loan_id')}/return"
     _require_loan_schema("return_loan")
