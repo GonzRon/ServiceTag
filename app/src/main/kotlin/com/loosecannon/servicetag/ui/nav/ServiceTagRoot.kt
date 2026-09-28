@@ -44,6 +44,8 @@ import com.loosecannon.servicetag.ui.nfc.rememberReaderMode
 import com.loosecannon.servicetag.ui.scan.ScanScreen
 import com.loosecannon.servicetag.ui.scan.TagResultSheet
 import com.loosecannon.servicetag.ui.scan.WriteTagScreen
+import com.loosecannon.servicetag.ui.service.ServiceCaseEditScreen
+import com.loosecannon.servicetag.ui.service.ServiceCaseScreen
 import com.loosecannon.servicetag.ui.settings.CategoriesScreen
 import com.loosecannon.servicetag.ui.settings.SettingsScreen
 import com.loosecannon.servicetag.ui.setup.AssetSetupScreen
@@ -206,6 +208,10 @@ fun ServiceTagRoot(
                         // #82: Change condition's "Log incident details" opens the combined Incident
                         // entry over this screen; its sheet asks again, or closes, on the way back.
                         onLogIncidentDetails = { held -> backStack.add(combinedIncidentEntry(key.id, held)) },
+                        // #79 (C20): a case row opens the case; P79-19 opens the editor on the current
+                        // failure's Incident, or a new Incident entry first that hands over on its save.
+                        onOpenServiceCase = { backStack.add(Route.ServiceCase(it)) },
+                        onNewServiceCase = { asset, incident -> backStack.add(newServiceCaseRoute(asset, incident)) },
                     )
                 }
                 entry<Route.AssetEdit> { key ->
@@ -292,6 +298,16 @@ fun ServiceTagRoot(
                         onBack = { backStack.removeLastOrNull() },
                         kind = key.kind,
                         pending = key.pending?.toPending(),
+                        // #79 (C20): P79-19's Incident entry is replaced by the case editor on the saved
+                        // Incident, so back from the editor lands where "New service case" was tapped.
+                        onSaved = if (key.thenServiceCase) {
+                            { saved ->
+                                backStack.removeLastOrNull()
+                                if (saved.isNotEmpty()) backStack.add(Route.ServiceCaseEdit(key.assetId, incidentId = saved))
+                            }
+                        } else {
+                            null
+                        },
                     )
                 }
                 entry<Route.EventDetail> { key ->
@@ -303,6 +319,33 @@ fun ServiceTagRoot(
                         onEdit = { asset, event -> backStack.add(Route.EventEntry(asset, null, event)) },
                         onBack = { backStack.removeLastOrNull() },
                         onOpenSettings = { backStack.add(Route.Settings) },
+                        // #79 (C23): P79-20 opens the case editor on this Incident.
+                        onStartServiceCase = { asset, event -> backStack.add(Route.ServiceCaseEdit(asset, incidentId = event)) },
+                    )
+                }
+                entry<Route.ServiceCase> { key ->
+                    ServiceCaseScreen(
+                        graph = graph,
+                        caseId = key.id,
+                        onEdit = { asset, case -> backStack.add(Route.ServiceCaseEdit(asset, caseId = case)) },
+                        onOpenEvent = { backStack.add(Route.EventDetail(it)) },
+                        onBack = { backStack.removeLastOrNull() },
+                        onOpenSettings = { backStack.add(Route.Settings) },
+                    )
+                }
+                entry<Route.ServiceCaseEdit> { key ->
+                    ServiceCaseEditScreen(
+                        graph = graph,
+                        assetId = key.assetId,
+                        caseId = key.caseId,
+                        incidentId = key.incidentId,
+                        // A new case opens on its own screen and the form leaves the stack, as a new
+                        // asset does; an edit simply returns to the case, which redraws itself.
+                        onDone = { id ->
+                            backStack.removeLastOrNull()
+                            if (key.caseId == null) backStack.add(Route.ServiceCase(id))
+                        },
+                        onBack = { backStack.removeLastOrNull() },
                     )
                 }
                 entry<Route.Scan> {

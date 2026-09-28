@@ -50,6 +50,8 @@ import com.loosecannon.servicetag.ui.components.InstrumentList
 import com.loosecannon.servicetag.ui.components.InstrumentRow
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.service.A_SERVICE_CASE_LINKS_THIS_ENTRY
+import com.loosecannon.servicetag.ui.service.START_SERVICE_CASE
 import com.loosecannon.servicetag.ui.theme.Eyebrow
 import com.loosecannon.servicetag.ui.theme.MonoText
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
@@ -70,12 +72,14 @@ fun EventDetailScreen(
     onBack: () -> Unit,
     /** DOCUMENTS sends the person here when there is no attachment folder yet (spec §8.1). */
     onOpenSettings: () -> Unit,
+    /** #79 (C23): P79-20 — the host opens the case editor on this Incident. The tap writes nothing. */
+    onStartServiceCase: (assetId: String, eventId: String) -> Unit = { _, _ -> },
 ) {
     val model: EventDetailViewModel = viewModel(key = eventId) { EventDetailViewModel(graph, eventId) }
     val state by model.state.collectAsStateWithLifecycle()
     val missing by model.missing.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
-    var confirming by remember { mutableStateOf(false) }
+    val confirm by model.deleteConfirm.collectAsStateWithLifecycle()
 
     // Deleting an entry makes it missing too, so both routes out are funnelled through one latch:
     // two pops would take the asset screen with them.
@@ -116,7 +120,12 @@ fun EventDetailScreen(
                     if (current != null) {
                         EntryOverflow(
                             onEdit = { onEdit(current.event.assetId.value, current.event.id.value) },
-                            onDelete = { confirming = true },
+                            onDelete = model::askDelete,
+                            onStartServiceCase = if (current.startsServiceCase) {
+                                { onStartServiceCase(current.event.assetId.value, current.event.id.value) }
+                            } else {
+                                null
+                            },
                         )
                     }
                 },
@@ -127,11 +136,12 @@ fun EventDetailScreen(
             QuietLine("Loading…", Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
-        if (confirming) {
+        confirm?.let { asked ->
             DeleteDialog(
-                onDismiss = { confirming = false },
+                linkedByCase = asked.linkedByCase,
+                onDismiss = model::dismissDelete,
                 onConfirm = {
-                    confirming = false
+                    model.dismissDelete()
                     model.delete()
                 },
             )
@@ -269,25 +279,41 @@ private fun NotesSection(notes: String) {
     }
 }
 
+/** #79 (C23): [onStartServiceCase] is P79-20, after Edit, only when the entry may start a case. */
 @Composable
-private fun EntryOverflow(onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun EntryOverflow(onEdit: () -> Unit, onDelete: () -> Unit, onStartServiceCase: (() -> Unit)? = null) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {
         Icon(Icons.Outlined.MoreVert, contentDescription = "More")
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
         DropdownMenuItem(text = { Text("Edit") }, onClick = { open = false; onEdit() })
+        onStartServiceCase?.let { start ->
+            DropdownMenuItem(text = { Text(START_SERVICE_CASE) }, onClick = { open = false; start() })
+        }
         DropdownMenuItem(text = { Text("Delete") }, onClick = { open = false; onDelete() })
     }
 }
 
-/** The readings go with the entry (CASCADE), and the dialog says so before anything happens. */
+/**
+ * The delete confirm's lines: the readings go with the entry (CASCADE); #79 (C23, R79-4) — when a
+ * service case links it, P79-60 second, since the case keeps a dangling link and the entry's
+ * documents go with it.
+ */
+internal fun deleteConfirmLines(linkedByCase: Boolean): List<String> =
+    listOfNotNull("Its readings go with it.", A_SERVICE_CASE_LINKS_THIS_ENTRY.takeIf { linkedByCase })
+
+/** The dialog says what goes with the entry before anything happens. */
 @Composable
-private fun DeleteDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+private fun DeleteDialog(linkedByCase: Boolean, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Delete this entry?") },
-        text = { Text("Its readings go with it.") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                deleteConfirmLines(linkedByCase).forEach { Text(it) }
+            }
+        },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text("Delete", color = ServiceTagTheme.semanticColors.destructiveAction.foreground)

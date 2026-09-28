@@ -3,7 +3,10 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.toDomain
 import com.loosecannon.servicetag.core.model.AssetCategory
+import com.loosecannon.servicetag.core.model.CaseStatus
 import com.loosecannon.servicetag.core.testing.BackupInstall
+import com.loosecannon.servicetag.core.testing.caseEntryOf
+import com.loosecannon.servicetag.core.testing.caseOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
 import kotlin.test.assertEquals
 import kotlinx.coroutines.runBlocking
@@ -28,7 +31,7 @@ class ExportBackupSetTest {
 
         val decoded = BackupCodec.decode(install.export.run().data)
 
-        assertEquals(11, decoded.manifest.formatVersion)   // this build's export: format 11 since #79
+        assertEquals(12, decoded.manifest.formatVersion)   // this build's export: format 12 since #79b
         assertEquals(rows, decoded.data.assetCategories.map { it.toDomain() })
         assertEquals(2, decoded.manifest.counts["assetCategories"])
     }
@@ -70,5 +73,44 @@ class ExportBackupSetTest {
         val again = source.build.run(bytes)
         assertEquals(true, again.applicable)
         assertEquals(emptyList(), again.writes.assets, "IDENTICAL against the phone it came from")
+    }
+
+    /**
+     * #79 (C18, C19): a case and its timeline leave with their asset — every header, every entry — and
+     * land with it, field for field and the soft links dangling as they were, by a replace and by a
+     * merge into an install without them; and this install's own export re-plans IDENTICAL.
+     */
+    @Test
+    fun casesAndTheirEntriesTravelWithTheirAsset() = runBlocking<Unit> {
+        val source = BackupInstall()
+        source.assets.upsert(plainAssetOf("a1", "Example Heater"))
+        val cases = listOf(caseOf("c1", status = CaseStatus.CLOSED, closedOn = "2026-09-24"), caseOf("c2"))
+        val entries = listOf(
+            caseEntryOf("n1"),
+            caseEntryOf("n2", status = CaseStatus.CLOSED, note = "Repaired", occurredOn = "2026-09-24"),
+            caseEntryOf("n3", caseId = "c2", occurredTime = null),
+        )
+        cases.forEach { source.serviceCases.upsert(it) }
+        entries.forEach { source.caseEntries.insert(it) }
+        val bytes = source.export.run().data
+
+        val decoded = BackupCodec.decode(bytes)
+        assertEquals(cases, decoded.data.serviceCases.map { it.toDomain() })
+        assertEquals(entries, decoded.data.serviceCaseEntries.map { it.toDomain() })
+        assertEquals(2 to 3, decoded.manifest.counts["serviceCases"] to decoded.manifest.counts["serviceCaseEntries"])
+
+        val replaced = BackupInstall()
+        replaced.replace.run(bytes)
+        assertEquals(cases, replaced.serviceCases.all())
+        val timeline = entries.sortedWith(compareBy({ it.occurredOn }, { it.occurredTime }, { it.createdAt }))
+        assertEquals(timeline, replaced.caseEntries.all())
+
+        val merged = BackupInstall()
+        merged.apply.run(merged.build.run(bytes))
+        assertEquals(cases to timeline, merged.serviceCases.all() to merged.caseEntries.all(), "by a merge into an install without them")
+
+        val again = source.build.run(bytes)
+        assertEquals(true, again.applicable)
+        assertEquals(emptyList(), again.writes.serviceCases + again.writes.caseEntries, "IDENTICAL against the phone it came from")
     }
 }

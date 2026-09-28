@@ -22,6 +22,8 @@ import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -80,6 +82,9 @@ class ImportBackupReplace(
     private val healthSubjects: HealthSubjectRepository,
     /** #74 — the owner's own categories: wiped, restored first, completed by the promotion. */
     private val categories: CategoryRepository,
+    /** #79 — the service case aggregate (format 12): the headers, then their timelines. */
+    private val serviceCases: ServiceCaseRepository,
+    private val caseEntries: ServiceCaseEntryRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -127,6 +132,10 @@ class ImportBackupReplace(
             links.deleteAll()
             // References point only at assets, so they clear just before them.
             references.deleteAll()
+            // #79's case aggregate would go with its assets by the CASCADE too; it is wiped by name, the
+            // timeline before the headers it points at, so no reader of this list has to know that.
+            caseEntries.deleteAll()
+            serviceCases.deleteAll()
             // The three 1.4 tables need no line: activations and conditions point only at an
             // asset and subjects at an asset or a schedule, all ON DELETE CASCADE, and neither fact
             // table has a delete of its own because its rows are immutable.
@@ -167,6 +176,10 @@ class ImportBackupReplace(
             data.externalLinks.forEach { links.upsert(it.toDomain()) }
             data.nfcTags.forEach { tags.upsert(it.toDomain()) }
             data.assetEvents.forEach { events.upsert(it.toDomain()) }
+            // #79: the case headers after their assets — and after the events, which they name only
+            // softly — and each timeline after its case.
+            data.serviceCases.forEach { serviceCases.upsert(it.toDomain()) }
+            data.serviceCaseEntries.forEach { caseEntries.insert(it.toDomain()) }
             // Attachment rows go last: every owner, asset or event, is already in.
             data.attachments.forEach { attachments.upsert(it.toDomain()) }
 

@@ -4,8 +4,11 @@ import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetCategory
+import com.loosecannon.servicetag.core.model.CaseStatus
 import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.archiveOf
+import com.loosecannon.servicetag.core.testing.caseEntryOf
+import com.loosecannon.servicetag.core.testing.caseOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
 import kotlin.test.assertEquals
 import kotlinx.coroutines.runBlocking
@@ -149,5 +152,32 @@ class ImportBackupReplaceTest {
         assertEquals(listOf(appliance), install.categories.all())
         assertEquals(mapOf("h1" to "Hot tub"), install.spellings())
         assertEquals(mapOf("h1" to 700L), install.updatedAts())
+    }
+
+    /**
+     * #79 (C18): the replace wipes this install's cases and their timelines, and lands the archive's —
+     * the headers after their assets, the entries after their cases — in the one transaction.
+     */
+    @Test
+    fun theArchivesCasesAndEntriesReplaceThisInstalls() = runBlocking<Unit> {
+        val install = BackupInstall()
+        install.assets.upsert(plainAssetOf("a0", "Old heater"))
+        install.serviceCases.upsert(caseOf("c-old", assetId = "a0"))
+        install.caseEntries.insert(caseEntryOf("n-old", caseId = "c-old"))
+        val cases = listOf(caseOf("c1"), caseOf("c2", status = CaseStatus.CANCELLED, closedOn = "2026-09-22"))
+        val entries = listOf(caseEntryOf("n1"), caseEntryOf("n2", caseId = "c2", status = CaseStatus.CANCELLED, note = ""))
+
+        install.replace.run(
+            archiveOf(
+                data(listOf(asset("a1", "Appliance", 100L, 200L))).copy(
+                    serviceCases = cases.map { it.toDto() },
+                    serviceCaseEntries = entries.map { it.toDto() },
+                ),
+            ),
+        )
+
+        assertEquals(cases, install.serviceCases.all())
+        assertEquals(entries, install.caseEntries.all())
+        assertEquals(1, install.uow.commits)
     }
 }

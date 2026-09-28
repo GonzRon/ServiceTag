@@ -37,6 +37,7 @@ import com.loosecannon.servicetag.core.usecase.NoSuchGroup
 import com.loosecannon.servicetag.core.usecase.NoSuchHealthSubject
 import com.loosecannon.servicetag.core.usecase.NoSuchProfile
 import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
+import com.loosecannon.servicetag.core.usecase.NoSuchServiceCase
 import com.loosecannon.servicetag.core.usecase.NotAGroupMember
 import com.loosecannon.servicetag.core.usecase.NotARequiredMember
 import com.loosecannon.servicetag.core.usecase.OccurrenceAlreadyClosed
@@ -58,6 +59,7 @@ import com.loosecannon.servicetag.core.usecase.SeasonModeStrandsPolicy
 import com.loosecannon.servicetag.core.usecase.SeasonNotManual
 import com.loosecannon.servicetag.core.usecase.SeasonProblem
 import com.loosecannon.servicetag.core.usecase.SeasonValidation
+import com.loosecannon.servicetag.core.usecase.ServiceCaseValidation
 import com.loosecannon.servicetag.core.usecase.StrandedSchedule
 import com.loosecannon.servicetag.core.usecase.UnknownTemplate
 import com.loosecannon.servicetag.core.usecase.WarrantyReminderValidation
@@ -502,6 +504,17 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
             ?: Refusal(WARRANTY_REMINDER_VALIDATION, "the warranty reminder was refused"),
         e.problems.map { it.toString() },
     )
+    // --- #79b, the service case (C24) --------------------------------------------------------
+    //
+    // The same shape: one lower-snake code for a header's and an entry's problems alike, the first
+    // problem's sentence and key, every problem by name. The fallback is unreachable, as theirs is.
+    is ServiceCaseValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::serviceCaseRefusal)
+            ?: Refusal(SERVICE_CASE_VALIDATION, "the service case was refused"),
+        e.problems.map { it.toString() },
+    )
+    // 1.1.0's lower-snake spelling for a row that is not there, beside `no_such_asset`.
+    is NoSuchServiceCase -> errorResponse(404, "Not Found", "no_such_service_case", "no such service case")
     else -> errorResponse(
         500, "Internal Server Error", "internal", e.javaClass.simpleName,
     )

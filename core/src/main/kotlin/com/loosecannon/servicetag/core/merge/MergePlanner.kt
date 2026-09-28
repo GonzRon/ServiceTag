@@ -30,6 +30,8 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.model.ServiceCase
+import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
@@ -46,6 +48,8 @@ import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.ports.TagRepository
 import java.io.IOException
@@ -138,6 +142,15 @@ import java.security.MessageDigest
  * the apply writes [MergeWrites] and nothing else. Two costs of key-as-identity are accepted
  * (R74-2): an archive made before a new-key rename re-inserts the old key as an unused row, and a
  * deleted category comes back from an archive that holds it.
+ *
+ * ### Service cases (#79, C19)
+ *
+ * Decided last, in [MergeTable] order: a case after the assets it needs, each entry after the cases.
+ * A case is an aggregate root compared by its header — IDENTICAL, CONFLICT `CONTENT_DIFFERS`,
+ * `OWNER_NOT_AVAILABLE` for its asset, or INSERT, and never an UPDATE — and its Incident and repair
+ * links are soft, never owners. Its entries are append-only: one held here is IDENTICAL or a CONFLICT,
+ * one the phone lacks is an INSERT whose case must be here or accepted by this plan. No entry is ever
+ * updated or deleted by a merge.
  *
  * ### Not total, and only for a hand-built [Backup]
  *
@@ -882,6 +895,54 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
         }
     }
 
+    // --- service cases and their timelines (#79, C19) -----------------------------------------
+    // A case is an aggregate root: identity is its id, and a case here is compared by its header
+    // alone — IDENTICAL, or CONFLICT `CONTENT_DIFFERS` on any difference, since there is no UPDATE.
+    // Its only owner is the asset; its Incident and repair links are soft and never owners (R79-4).
+    // Its entries are append-only facts on the conditions shape, owned by the case: one here compares
+    // IDENTICAL or CONFLICT, one the phone lacks is an INSERT when its case is here or accepted by this
+    // plan. A note-only entry never moves the header, so a note added elsewhere re-merges as one entry
+    // INSERT beside an IDENTICAL case; a status entry stamps the header, so it conflicts (plan §5).
+    val localCases = snapshot.serviceCases.associateBy { it.id.value }
+    val localEntries = snapshot.caseEntries.associateBy { it.id.value }
+    val caseWrites = mutableListOf<ServiceCase>()
+    val acceptedCases = mutableSetOf<String>()
+    for (dto in data.serviceCases) {
+        val id = dto.id
+        val local = localCases[id]
+        decisions += when {
+            local != null && dto == local.toDto() ->
+                MergeDecision(MergeTable.SERVICE_CASES, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.SERVICE_CASES, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            !assetAvailable(dto.assetId) ->
+                MergeDecision(MergeTable.SERVICE_CASES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.assetId)
+            else -> {
+                caseWrites += dto.toDomain()
+                acceptedCases += id
+                MergeDecision(MergeTable.SERVICE_CASES, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
+    val entryWrites = mutableListOf<ServiceCaseEntry>()
+    for (dto in data.serviceCaseEntries) {
+        val id = dto.id
+        val local = localEntries[id]
+        decisions += when {
+            local != null && dto == local.toDto() ->
+                MergeDecision(MergeTable.CASE_ENTRIES, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.CASE_ENTRIES, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            dto.caseId !in localCases && dto.caseId !in acceptedCases ->
+                MergeDecision(MergeTable.CASE_ENTRIES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.caseId)
+            else -> {
+                entryWrites += dto.toDomain()
+                MergeDecision(MergeTable.CASE_ENTRIES, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
     // --- review hints, which change nothing (#44 identity 3) --------------------------------
     val localBySignature = snapshot.assets
         .filter { it.manufacturer.isNotBlank() && it.model.isNotBlank() && it.serialNumber.isNotBlank() }
@@ -920,6 +981,8 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
                 seasonActivations = activationWrites,
                 conditions = conditionWrites,
                 healthSubjects = subjectWrites,
+                serviceCases = caseWrites,
+                caseEntries = entryWrites,
             )
         },
         duplicateCandidates = candidates,
@@ -1049,7 +1112,7 @@ internal suspend fun storedBytesOf(
 }
 
 /**
- * Fifteen reads. **The caller owns the transaction** — see each use case for which one.
+ * Seventeen reads. **The caller owns the transaction** — see each use case for which one.
  *
  * Schema 8's other two tables are deliberately not among them, and are named nowhere in this
  * package: derived due state never appears in a plan, and device-local delivery state is never
@@ -1071,6 +1134,8 @@ internal suspend fun mergeSnapshotOf(
     conditions: ConditionRepository,
     healthSubjects: HealthSubjectRepository,
     categories: CategoryRepository,
+    serviceCases: ServiceCaseRepository,
+    caseEntries: ServiceCaseEntryRepository,
     storedBytes: Map<String, StoredBytes>,
     attachmentStoreConfigured: Boolean,
 ): MergeSnapshot = MergeSnapshot(
@@ -1089,6 +1154,8 @@ internal suspend fun mergeSnapshotOf(
     conditions = conditions.all(),
     healthSubjects = healthSubjects.all(),
     categories = categories.all(),
+    serviceCases = serviceCases.all(),
+    caseEntries = caseEntries.all(),
     storedBytes = storedBytes,
     attachmentStoreConfigured = attachmentStoreConfigured,
 )

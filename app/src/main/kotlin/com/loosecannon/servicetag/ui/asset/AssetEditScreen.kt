@@ -793,9 +793,10 @@ private fun Nested(content: @Composable () -> Unit) {
  * The plain outlined field every section is made of, on the 6dp control corner (D12 §7). A
  * [problem] both reddens it and replaces the hint, so the one line under a field is always the
  * most urgent thing that field has to say.
+ * Internal since #79: the service case editor (`ui/service`) draws its fields with it.
  */
 @Composable
-private fun FormField(
+internal fun FormField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,

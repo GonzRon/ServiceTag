@@ -1,7 +1,7 @@
 """The overlays stop enumerating fields (spec §9.4; master plan §12, dec. 48, ruled M15).
 
-`update_asset`, `update_schedule` and `update_health_subject` build their bodies from the command
-key lists **vendored into the package** (`servicetag_mcp.command_shapes`). This file is the one
+`update_asset`, `update_schedule`, `update_health_subject` and (#79) `update_service_case` build their
+bodies from the command key lists **vendored into the package** (`servicetag_mcp.command_shapes`). This file is the one
 place the repository's golden `docs/api/command-shapes.json` is read, and only at test time: it
 proves the vendored copy equal to the golden file, and every overlay's body equal to that copy —
 in both schedule forms — so the app's JVM test, the golden file, this package and the wire all move
@@ -54,7 +54,7 @@ def test_the_vendored_key_lists_equal_the_golden_file() -> None:
     """Keys, legacy keys, action flags and `rowToCommand`, in the golden file's own order."""
     shapes = golden()
     vendored = command_shapes.vendored()
-    assert set(vendored) == {"asset", "schedule", "healthSubject"}
+    assert set(vendored) == {"asset", "schedule", "healthSubject", "serviceCase"}
     for name, entry in vendored.items():
         assert entry == shapes[name], name
 

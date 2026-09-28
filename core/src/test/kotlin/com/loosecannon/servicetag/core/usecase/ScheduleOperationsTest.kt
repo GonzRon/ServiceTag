@@ -42,6 +42,8 @@ import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
+import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
 import com.loosecannon.servicetag.core.testing.dayMillis
@@ -757,7 +759,7 @@ class ScheduleOperationsTest {
             assets, groups, tags, links, defs, profiles, schedules, closures, events, attachments,
             references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(),
-            InMemoryHealthSubjectRepository(), categories,
+            InMemoryHealthSubjectRepository(), categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(),
             uow, IdGenerator { "set-1" }, clock, appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
 
@@ -765,7 +767,7 @@ class ScheduleOperationsTest {
             assets, groups, tags, links, defs, profiles, schedules, closures, events, attachments,
             references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(),
-            InMemoryHealthSubjectRepository(), categories,
+            InMemoryHealthSubjectRepository(), categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(),
             storage, uow, rebuildAll = rebuildAll,
         )
 

@@ -90,6 +90,11 @@ fun EventEntryScreen(
      * second combined entry on the same asset is never handed this one's model.
      */
     pending: PendingCondition? = null,
+    /**
+     * #79 (C20): the saved event's id, used instead of [onDone] when set — P79-19's Incident entry
+     * hands over to the case editor on it, after any Workflow B answer.
+     */
+    onSaved: ((String) -> Unit)? = null,
 ) {
     val modelKey = eventId ?: "new-$assetId-$profileId-$kind" + pending?.let { "-pending-${it.id}" }.orEmpty()
     val model: EventEntryViewModel = viewModel(key = modelKey) {
@@ -100,7 +105,12 @@ fun EventEntryScreen(
     val focus = LocalFocusManager.current
 
     // The save itself belongs to the ViewModel; this only listens for the one shot that says done.
-    LaunchedEffect(model) { model.saved.collect { onDone() } }
+    LaunchedEffect(model) {
+        model.saved.collect { id ->
+            val handOver = onSaved
+            if (handOver != null) handOver(id.value) else onDone()
+        }
+    }
 
     // 1.4: a just-logged event's one question — "Mark operational?" or the season offer — asked
     // before the screen leaves. Only its accept writes (spec §3.3, §5.4). #82's impairment offer has

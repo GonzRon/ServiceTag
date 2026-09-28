@@ -47,6 +47,8 @@ import com.loosecannon.servicetag.data.room.RoomReferenceRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
 import com.loosecannon.servicetag.data.room.RoomSeasonActivationRepository
+import com.loosecannon.servicetag.data.room.RoomServiceCaseEntryRepository
+import com.loosecannon.servicetag.data.room.RoomServiceCaseRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
@@ -88,6 +90,8 @@ class RestoreProofTest {
         val conditions = RoomConditionRepository(db.assetConditionDao())
         val healthSubjects = RoomHealthSubjectRepository(db.healthSubjectDao())
         val categories = RoomCategoryRepository(db.assetCategoryDao())
+        val serviceCases = RoomServiceCaseRepository(db.serviceCaseDao())
+        val caseEntries = RoomServiceCaseEntryRepository(db.serviceCaseEntryDao())
         val uow = RoomUnitOfWork(db)
         // The restore's rebuild seam, wired to the real engine over the same database: the proof
         // is about the canonical rows, and derived state is rebuilt after any import.
@@ -99,13 +103,13 @@ class RestoreProofTest {
         // bytes are what `BackupViewModelTest` and `ArtifactsCodecTest` prove.
         val export = ExportBackupSet(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, references, seasonActivations, conditions, healthSubjects, categories, uow,
-            IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
+            attachments, references, seasonActivations, conditions, healthSubjects, categories,
+            serviceCases, caseEntries, uow, IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
         )
         val import = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
             attachments, references, seasonActivations, conditions, healthSubjects, categories,
-            FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
+            serviceCases, caseEntries, FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
             rebuildAll = { recompute.all() },
         )
     }

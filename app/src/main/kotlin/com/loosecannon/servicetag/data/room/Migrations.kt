@@ -608,6 +608,43 @@ val MIGRATION_10_11: Migration = object : Migration(10, 11) {
 }
 
 /**
+ * Schema v11 -> v12 (#79, C17; R79-1): the service case aggregate, two new tables, and nothing existing
+ * moves — no column, no row and no timestamp, so a pre-upgrade export still re-plans IDENTICAL.
+ *
+ *  1. `service_case`, a case's header, owned by its asset (`asset_id`, CASCADE, indexed). Its Incident
+ *     and repair links are soft: no foreign key, so a deleted event leaves a readable dangling id.
+ *  2. `service_case_entry`, the append-only timeline, owned by its case (`case_id`, CASCADE, indexed).
+ *
+ * Each `CREATE` is copied verbatim from the exported `12.json`, so Room validates both on open.
+ */
+val MIGRATION_11_12: Migration = object : Migration(11, 12) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `service_case` (`id` TEXT NOT NULL, `asset_id` TEXT NOT NULL, " +
+                "`title` TEXT NOT NULL, `type` TEXT NOT NULL, `opened_on` TEXT NOT NULL, `closed_on` TEXT, " +
+                "`provider` TEXT NOT NULL, `contact` TEXT NOT NULL, `case_ref` TEXT NOT NULL, `coverage` TEXT NOT NULL, " +
+                "`status` TEXT NOT NULL, `outbound_tracking` TEXT NOT NULL, `outbound_carrier` TEXT NOT NULL, " +
+                "`return_tracking` TEXT NOT NULL, `return_carrier` TEXT NOT NULL, `cost_minor` INTEGER, " +
+                "`currency` TEXT, `notes` TEXT NOT NULL, `incident_event_id` TEXT, `resolution_event_id` TEXT, " +
+                "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
+                "FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_service_case_asset_id` ON `service_case` (`asset_id`)",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `service_case_entry` (`id` TEXT NOT NULL, `case_id` TEXT NOT NULL, " +
+                "`occurred_on` TEXT NOT NULL, `occurred_time` TEXT, `tz_id` TEXT NOT NULL, `note` TEXT NOT NULL, " +
+                "`status` TEXT, `created_at` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
+                "FOREIGN KEY(`case_id`) REFERENCES `service_case`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_service_case_entry_case_id` ON `service_case_entry` (`case_id`)",
+        )
+    }
+}
+
+/**
  * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
  * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
  */

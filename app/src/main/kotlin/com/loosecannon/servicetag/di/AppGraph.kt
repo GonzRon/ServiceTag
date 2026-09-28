@@ -36,6 +36,8 @@ import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
@@ -49,6 +51,7 @@ import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
 import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddReference
+import com.loosecannon.servicetag.core.usecase.AddServiceCaseEntry
 import com.loosecannon.servicetag.core.usecase.ApplyTemplate
 import com.loosecannon.servicetag.core.usecase.ApplyBackupMergePlan
 import com.loosecannon.servicetag.core.usecase.ArchiveAsset
@@ -75,6 +78,7 @@ import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LogEvent
+import com.loosecannon.servicetag.core.usecase.OpenServiceCase
 import com.loosecannon.servicetag.core.usecase.PauseSchedule
 import com.loosecannon.servicetag.core.usecase.PostponeSchedule
 import com.loosecannon.servicetag.core.usecase.PromoteCategory
@@ -106,6 +110,7 @@ import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
+import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.MIGRATION_1_2
 import com.loosecannon.servicetag.data.room.MIGRATION_2_3
@@ -117,6 +122,7 @@ import com.loosecannon.servicetag.data.room.MIGRATION_7_8
 import com.loosecannon.servicetag.data.room.MIGRATION_8_9
 import com.loosecannon.servicetag.data.room.MIGRATION_9_10
 import com.loosecannon.servicetag.data.room.MIGRATION_10_11
+import com.loosecannon.servicetag.data.room.MIGRATION_11_12
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomCategoryRepository
@@ -134,6 +140,8 @@ import com.loosecannon.servicetag.data.room.RoomScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleRepository
 import com.loosecannon.servicetag.data.room.RoomScheduleStateRepository
 import com.loosecannon.servicetag.data.room.RoomSeasonActivationRepository
+import com.loosecannon.servicetag.data.room.RoomServiceCaseEntryRepository
+import com.loosecannon.servicetag.data.room.RoomServiceCaseRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.prefs.AppPrefs
@@ -169,6 +177,8 @@ import com.loosecannon.servicetag.ui.condition.OperationalOffers
 import com.loosecannon.servicetag.ui.condition.SeasonOffers
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.health.inService
+import com.loosecannon.servicetag.ui.journal.CaseLinks
+import com.loosecannon.servicetag.ui.journal.caseLinksOf
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.CompletionFlow
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
@@ -203,6 +213,7 @@ class AppGraph(private val context: Context) {
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
+            MIGRATION_11_12,
         )
         .build()
 
@@ -239,6 +250,13 @@ class AppGraph(private val context: Context) {
      * Never derived from assets.
      */
     val categories: CategoryRepository = RoomCategoryRepository(db.assetCategoryDao())
+
+    /**
+     * #79's two data ports (C13): a service case's header, upserted and never deleted, and its
+     * timeline, inserted and never amended. Their rules live in the three case use cases below.
+     */
+    val serviceCases: ServiceCaseRepository = RoomServiceCaseRepository(db.serviceCaseDao())
+    val serviceCaseEntries: ServiceCaseEntryRepository = RoomServiceCaseEntryRepository(db.serviceCaseEntryDao())
 
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
@@ -453,14 +471,14 @@ class AppGraph(private val context: Context) {
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
+        serviceCases, serviceCaseEntries, uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
     )
 
     /** Wipe-and-load import. Replace is the only mode Phase 1A ships (D7 1A). */
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, attachmentStorage, uow,
         // Derived state is rebuilt after any import, and the wipe took it with the schedule rows.
         rebuildAll = { recomputeSchedules.all() },
     )
@@ -474,12 +492,12 @@ class AppGraph(private val context: Context) {
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, attachmentStorage, uow,
     )
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, attachmentStorage, uow,
         // The total post-apply recompute, wired to the engine: an imported event, membership row,
         // closure or meter reading can each move a due date, and rebuilding every schedule inside
         // the apply's own transaction is cheaper than enumerating which.
@@ -490,9 +508,9 @@ class AppGraph(private val context: Context) {
 
     /**
      * #40 — is there anything on this phone a restore would replace? The Backup screen asks once,
-     * per picked file, and the answer chooses the confirmation. Definitions and profiles are not
-     * read: neither can exist without its asset, so `assets` answers for both. A category row can
-     * (#74: it outlives its assets), so `categories` is the sixth kind.
+     * per picked file, and the answer chooses the confirmation. Definitions, profiles and #79's
+     * service cases are not read: none can exist without its asset, so `assets` answers for them. A
+     * category row can (#74: it outlives its assets), so `categories` is the sixth kind.
      */
     val storeIsEmpty: StoreIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links, categories)
 
@@ -563,6 +581,15 @@ class AppGraph(private val context: Context) {
     val setHealthPolicy: SetHealthPolicy = SetHealthPolicy(assets, healthSubjects, uow, clock)
     /** #79 (C2): the warranty reminder's lead, outside the asset form's command. */
     val setWarrantyReminder: SetWarrantyReminder = SetWarrantyReminder(assets, uow, clock)
+
+    // #79 — service cases (C14). Opening and editing write the case's header alone; an entry writes
+    // itself, and a status entry also its header. None writes an event, a condition or a schedule.
+    val openServiceCase: OpenServiceCase = OpenServiceCase(assets, events, serviceCases, uow, ids, clock, today)
+    val updateServiceCase: UpdateServiceCase = UpdateServiceCase(events, serviceCases, uow, clock, today)
+    val addServiceCaseEntry: AddServiceCaseEntry =
+        AddServiceCaseEntry(serviceCases, serviceCaseEntries, uow, ids, clock, today)
+    /** #79 (C23): read-only — whether a case names an event; the Incident's delete confirm asks it. */
+    val caseLinks: CaseLinks = caseLinksOf(events, serviceCases)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, today, recomputeSchedules, applyTemplate,
         promoteCategory,
@@ -800,6 +827,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 11
+        const val SCHEMA_VERSION = 12
     }
 }

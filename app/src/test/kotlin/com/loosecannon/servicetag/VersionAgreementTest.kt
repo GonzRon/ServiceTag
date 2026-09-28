@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.api.StatusResponse
 import com.loosecannon.servicetag.api.maintenanceHandlersFor
 import com.loosecannon.servicetag.api.referenceHandlersFor
 import com.loosecannon.servicetag.api.seasonHealthHandlersFor
+import com.loosecannon.servicetag.api.serviceCaseHandlersFor
 import com.loosecannon.servicetag.api.warrantyHandlersFor
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.di.AppGraph
@@ -64,7 +65,9 @@ class VersionAgreementTest {
      * same: schema 10 (`attachment.document_role`) lands first and format 10 follows with the archive
      * that carries the role. #79 does the same again: schema 11 (the warranty reminder's lead and the
      * device-local deadline table) lands first and format 11 follows with the archive that carries the
-     * lead — so at this tip, with both steps landed, the schema is 11 and the format is 11.
+     * lead. #79b does it once more: schema 12 (the service case tables) lands first and format 12
+     * follows with the archive that carries them — so at this tip, with both steps landed, the schema
+     * is 12 and the format is 12.
      *
      * The expected numbers are this test's own, deliberately: they are what the schema and the
      * format are at this tip, and they move only when a release changes them. They are **not**
@@ -72,9 +75,9 @@ class VersionAgreementTest {
      * `versionName`/`versionCode` cases own — otherwise bumping the schema in one file only would
      * still pass here, which is the whole failure this class exists to catch.
      */
-    @Test fun theSchemaIsElevenAndTheFormatIsEleven() {
-        assertEquals(11, AppGraph.SCHEMA_VERSION)
-        assertEquals(11, BackupCodec.FORMAT_VERSION)
+    @Test fun theSchemaIsTwelveAndTheFormatIsTwelve() {
+        assertEquals(12, AppGraph.SCHEMA_VERSION)
+        assertEquals(12, BackupCodec.FORMAT_VERSION)
     }
 
     /**
@@ -121,6 +124,7 @@ class VersionAgreementTest {
                 referenceHandlersFor(graph),
                 seasonHealthHandlersFor(graph),
                 warrantyHandlersFor(graph),
+                serviceCaseHandlersFor(graph),
                 appVersion = BuildConfig.VERSION_NAME,
                 schemaVersion = AppGraph.SCHEMA_VERSION,
             ),
@@ -138,8 +142,8 @@ class VersionAgreementTest {
             StatusResponse.serializer(), response.body.decodeToString(),
         )
         assertEquals("1.4.1", status.appVersion)
-        assertEquals(11, status.schemaVersion)
-        assertEquals(11, status.backupFormatVersion)
+        assertEquals(12, status.schemaVersion)
+        assertEquals(12, status.backupFormatVersion)
     }
 
     /**

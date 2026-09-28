@@ -24,7 +24,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
 /**
- * Backup format v11: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
+ * Backup format v12: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
  * backup set pairs it with an artifacts archive, and `backupSetId` is what ties the two together.
  *
  * ```
@@ -35,7 +35,7 @@ import kotlinx.serialization.json.JsonObject
  *                    attachments: [...], maintenanceGroups: [...], maintenanceSchedules: [...],
  *                    occurrenceClosures: [...], assetReferences: [...],
  *                    seasonActivations: [...], assetConditions: [...], healthSubjects: [...],
- *                    assetCategories: [...] }
+ *                    assetCategories: [...], serviceCases: [...], serviceCaseEntries: [...] }
  * ```
  *
  * IDs are written verbatim, lists are sorted by id (children by sortOrder within their parent, and
@@ -83,6 +83,15 @@ import kotlinx.serialization.json.JsonObject
  * planner compares a format ≤10 archive's assets without the lead (R79-11b). The warranty **status**
  * is derived at read time and is never in the archive.
  *
+ * **Format 12 (#79, C18) adds two lists and no upgrade.** `serviceCases` and `serviceCaseEntries` — a
+ * case's header and its append-only timeline, each its own rows, sorted by id — default to empty, so a
+ * format ≤11 archive decodes through the same strict decode with no cases; `LAST_LEGACY_FORMAT` stays 7
+ * for the reason above. No shipped writer put a case or an entry into a format ≤11 archive, so one that
+ * carries a row is a hand-built file and is refused; an empty list is accepted. A case's asset and an
+ * entry's case must be in the file; a case's Incident and repair links are soft and are never checked
+ * (R79-4). The rest — what a command would refuse about the row itself, and `closedOn` set exactly on a
+ * CLOSED or CANCELLED case — is the content check's.
+ *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
@@ -90,7 +99,7 @@ import kotlinx.serialization.json.JsonObject
  * at read time (inv. 111).
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 11
+    const val FORMAT_VERSION = 12
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -108,6 +117,9 @@ object BackupCodec {
      * as [FIRST_ROLE_FORMAT]: an older archive's assets are compared without the lead.
      */
     internal const val FIRST_LEAD_FORMAT = 11
+
+    /** The first format that can carry a service case or a case entry (#79). */
+    private const val FIRST_CASE_FORMAT = 12
 
     /** Lowercase hex, 64 chars — the shape every attachment row promises for its bytes. */
     private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
@@ -172,6 +184,9 @@ object BackupCodec {
             healthSubjects = data.healthSubjects.sortedBy { it.id },
             // Format 9: the key is the row's identity, so it is the sort key too.
             assetCategories = data.assetCategories.sortedBy { it.key },
+            // Format 12: a case's entries are their own rows, never nested in the case (R79-8).
+            serviceCases = data.serviceCases.sortedBy { it.id },
+            serviceCaseEntries = data.serviceCaseEntries.sortedBy { it.id },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
         // The artifact tallies are derived here, in one place, from the rows themselves: a MANAGED
@@ -204,6 +219,8 @@ object BackupCodec {
                 "assetConditions" to sorted.assetConditions.size,
                 "healthSubjects" to sorted.healthSubjects.size,
                 "assetCategories" to sorted.assetCategories.size,
+                "serviceCases" to sorted.serviceCases.size,
+                "serviceCaseEntries" to sorted.serviceCaseEntries.size,
             ),
             dataSha256 = sha256Hex(dataBytes),
             backupSetId = backupSetId,
@@ -290,6 +307,19 @@ object BackupCodec {
             }
         }
 
+        // #79b, the same rule for the service cases: neither list existed before format 12, so a row in
+        // an older archive was put there by hand. An empty list is accepted.
+        if (manifest.formatVersion < FIRST_CASE_FORMAT) {
+            if (data.serviceCases.isNotEmpty()) {
+                throw BackupCorrupt("serviceCases: a format ${manifest.formatVersion} archive cannot carry service cases")
+            }
+            if (data.serviceCaseEntries.isNotEmpty()) {
+                throw BackupCorrupt(
+                    "serviceCaseEntries: a format ${manifest.formatVersion} archive cannot carry service case entries",
+                )
+            }
+        }
+
         // Every row must be nameable in the domain, otherwise the caller would only find out
         // halfway through a destructive import. Result discarded; this is a validation pass.
         data.assets.forEach { it.toDomain() }
@@ -307,6 +337,8 @@ object BackupCodec {
         data.assetConditions.forEach { it.toDomain() }
         data.healthSubjects.forEach { it.toDomain() }
         data.assetCategories.forEach { it.toDomain() }
+        data.serviceCases.forEach { it.toDomain() }
+        data.serviceCaseEntries.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
         // replays the insert loops in one transaction: a duplicate id or a reference to a row
@@ -322,7 +354,7 @@ object BackupCodec {
     }
 
     /**
-     * The version dispatch: formats 8 to 11 decode strictly as they stand; formats 1–7 are rewritten as a
+     * The version dispatch: formats 8 to 12 decode strictly as they stand; formats 1–7 are rewritten as a
      * tree by [LegacyArchive] first and then go through the very same strict decode.
      * `SerializationException` is an `IllegalArgumentException`, and so is the malformed-number
      * failure a tree decode can raise, so one catch covers both.
@@ -620,6 +652,28 @@ object BackupCodec {
         // malformed is `BackupContentCheck`'s.
 
         uniqueIds("assetCategories", data.assetCategories.map { it.key })
+
+        // --- service cases (format 12) --------------------------------------------------------------
+        // A case's asset and an entry's case are real foreign keys and must be in the file. A case's
+        // `incidentEventId` and `resolutionEventId` are soft links and are deliberately **not** checked
+        // (R79-4): a deleted event leaves a readable dangling id, and a restore must carry it as it is.
+
+        val caseIds = uniqueIds("serviceCases", data.serviceCases.map { it.id })
+        data.serviceCases.forEach { case ->
+            if (case.assetId !in assetIds) {
+                throw BackupCorrupt(
+                    "serviceCases: case ${case.id} points at asset ${case.assetId}, which is not in assets",
+                )
+            }
+        }
+        uniqueIds("serviceCaseEntries", data.serviceCaseEntries.map { it.id })
+        data.serviceCaseEntries.forEach { entry ->
+            if (entry.caseId !in caseIds) {
+                throw BackupCorrupt(
+                    "serviceCaseEntries: entry ${entry.id} points at case ${entry.caseId}, which is not in serviceCases",
+                )
+            }
+        }
 
         // --- events ------------------------------------------------------------------------------
 

@@ -9,17 +9,22 @@ import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.usecase.DeleteEvent
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.health.inService
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -42,7 +47,32 @@ data class EventDetailState(
      * entry carried no readings at all; a row that cannot be computed is present and reads "—".
      */
     val derived: List<Reading> = emptyList(),
+    /**
+     * #79 (C23, R79-3): P79-20 "Start service case" — a non-completion INCIDENT of an asset **in
+     * service**, the one rule with the asset detail's P79-19.
+     */
+    val startsServiceCase: Boolean = false,
 )
+
+/** #79 (C23, R79-4): the delete confirm as asked — with P79-60 when a service case names the entry. */
+data class DeleteConfirm(val linkedByCase: Boolean)
+
+/**
+ * #79 (C23): whether a service case names an event — as its Incident or its repair record. Read-only,
+ * built in `AppGraph`; the Incident's delete confirm asks it (R79-4: the link is left dangling).
+ */
+fun interface CaseLinks {
+    suspend fun linking(eventId: EventId): Boolean
+}
+
+/**
+ * The graph's [CaseLinks]: the event's asset's cases — one read of each, never a read per case — any of
+ * which names it as its Incident or its repair record. An event that is gone links nothing.
+ */
+fun caseLinksOf(events: EventRepository, cases: ServiceCaseRepository): CaseLinks = CaseLinks { id ->
+    val event = events.get(id) ?: return@CaseLinks false
+    cases.forAsset(event.assetId).any { it.incidentEventId == id || it.resolutionEventId == id }
+}
 
 /**
  * The read side of the journal. [missing] is separate from [state] because "not loaded yet" and
@@ -55,10 +85,12 @@ class EventDetailViewModel(
     assets: AssetRepository,
     private val deleteEvent: DeleteEvent,
     private val id: EventId,
+    /** #79 (C23): whether a case links this entry. The default links none — a test that is not about cases. */
+    private val caseLinks: CaseLinks = CaseLinks { false },
 ) : ViewModel() {
 
     constructor(graph: AppGraph, eventId: String) :
-        this(graph.events, graph.definitions, graph.assets, graph.deleteEvent, EventId(eventId))
+        this(graph.events, graph.definitions, graph.assets, graph.deleteEvent, EventId(eventId), graph.caseLinks)
 
     private val row = events.observe(id)
 
@@ -66,11 +98,13 @@ class EventDetailViewModel(
         .map { event ->
             event?.let {
                 val byId = definitions.forAsset(it.assetId).associateBy(MeasurementDefinition::id)
+                val asset = assets.get(it.assetId)
                 EventDetailState(
                     event = it,
                     definitions = byId,
-                    assetName = assets.get(it.assetId)?.name.orEmpty(),
+                    assetName = asset?.name.orEmpty(),
                     derived = derivedFor(it, byId),
+                    startsServiceCase = it.kind == EventKind.INCIDENT && it.scheduleId == null && asset?.inService == true,
                 )
             }
         }
@@ -79,6 +113,24 @@ class EventDetailViewModel(
     val missing: StateFlow<Boolean> = row
         .map { it == null }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), false)
+
+    /**
+     * #79 (C23, R79-4): the delete confirm, or null while none is asked. Whether a case links the entry
+     * is read when Delete is tapped, not when the page opened: a case started from this very entry
+     * (P79-20) and back again is counted.
+     */
+    private val _deleteConfirm = MutableStateFlow<DeleteConfirm?>(null)
+    val deleteConfirm: StateFlow<DeleteConfirm?> = _deleteConfirm.asStateFlow()
+
+    /** Delete, tapped: the one read the confirm needs, then the confirm. Nothing is written. */
+    fun askDelete() {
+        viewModelScope.launch { _deleteConfirm.value = DeleteConfirm(linkedByCase = caseLinks.linking(id)) }
+    }
+
+    /** "Cancel", any dismissal, and the confirm itself: the dialog goes. */
+    fun dismissDelete() {
+        _deleteConfirm.value = null
+    }
 
     /** One shot, so the screen pops on the delete it asked for rather than on the row vanishing. */
     private val _deleted = MutableSharedFlow<Unit>(replay = 0, extraBufferCapacity = 1)

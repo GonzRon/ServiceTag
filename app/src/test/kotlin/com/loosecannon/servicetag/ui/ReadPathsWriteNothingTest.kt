@@ -10,8 +10,12 @@ import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
+import com.loosecannon.servicetag.core.model.CaseCoverage
+import com.loosecannon.servicetag.core.model.CaseStatus
+import com.loosecannon.servicetag.core.model.CaseType
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubject
@@ -27,6 +31,8 @@ import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.model.ServiceCase
+import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
@@ -46,10 +52,14 @@ import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
+import com.loosecannon.servicetag.core.usecase.CaseEntryCommand
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
+import com.loosecannon.servicetag.core.usecase.ServiceCaseCommand
 import com.loosecannon.servicetag.core.warranty.WarrantyStatus
 import com.loosecannon.servicetag.reminders.NotificationPermission
 import com.loosecannon.servicetag.testing.FakeGraph
@@ -64,11 +74,15 @@ import com.loosecannon.servicetag.ui.asset.AssetDetailViewModel
 import com.loosecannon.servicetag.ui.asset.AssetEditViewModel
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.health.AssetHealthView
+import com.loosecannon.servicetag.ui.journal.EventDetailViewModel
+import com.loosecannon.servicetag.ui.journal.caseLinksOf
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.ScanRoundMembership
 import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
 import com.loosecannon.servicetag.ui.maintenance.scanSheetContentFor
+import com.loosecannon.servicetag.ui.service.ServiceCaseEditViewModel
+import com.loosecannon.servicetag.ui.service.ServiceCaseViewModel
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlinx.coroutines.Dispatchers
@@ -325,10 +339,113 @@ class ReadPathsWriteNothingTest {
         }
     }
 
+    /**
+     * #79 (C20–C23; §3 row 51): the Service cases section's load (the detail), the case screen's, the
+     * case editor's — new on an Incident, and an edit — and the Incident detail's with its case links,
+     * over a case with a timeline and a repair record, write nothing.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun theServiceCaseLoadsWriteNothing() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        fun <T : ViewModel> held(model: T): T = ViewModelProvider(
+            store,
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <V : ViewModel> create(modelClass: Class<V>): V = model as V
+            },
+        )["${model::class.java.name}-${System.identityHashCode(model)}", model::class.java]
+        try {
+            graph.today = LocalDate.parse("2028-07-15")
+            graph.assets.upsert(assetRow("heater", name = "Example Heater").copy(currency = "EUR", warrantyExpiresOn = "2028-06-30"))
+            graph.events.upsert(replacementOf("r1", "heater", "2028-07-10"))
+            val incident = replacementOf("inc-1", "heater", "2028-07-01").copy(kind = EventKind.INCIDENT, title = "Will not heat")
+            graph.events.upsert(incident)
+            val opened = graph.openServiceCase.run(
+                AssetId("heater"),
+                ServiceCaseCommand(
+                    title = "Heater claim", type = CaseType.WARRANTY_SERVICE, openedOn = "2028-07-02",
+                    coverage = CaseCoverage.IN_WARRANTY, resolutionEventId = EventId("r1"),
+                ),
+                incident.id,
+            )
+            graph.addServiceCaseEntry.run(opened.id, CaseEntryCommand("2028-07-03", null, "UTC", "Shipped", CaseStatus.SENT_OUT))
+
+            val recompute = RecomputeSchedules(
+                schedules, states, events, closures, groups, assets, activations, graph.todayPort, graph.clock,
+                zone = { ZoneOffset.UTC },
+            )
+            val health = AssetHealthReadModel(
+                assets, subjects, schedules, states, events, profiles, activations, conditions, recompute, graph.todayPort,
+                zone = { ZoneOffset.UTC },
+            )
+            val due = DueReadModel(
+                schedules, assets, groups, definitions, recompute, graph.todayPort, health,
+                snoozedUntilOf = { delivery.get(it)?.snoozedUntilAt },
+            )
+            val detail = held(AssetDetailViewModel(
+                assets, tags, definitions, profiles, events, schedules, states, groups, due, conditions, activations,
+                subjects, attachments, health, GetAssetSeason(assets, activations, graph.uow, graph.todayPort),
+                graph.recordSeasonActivation, graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
+                graph.applyTemplate, graph.uow, graph.clock, graph.todayPort, AssetId("heater"),
+                serviceCases = serviceCases,
+            ))
+            val screen = held(ServiceCaseViewModel(
+                serviceCases, caseEntries, events, graph.updateServiceCase, graph.addServiceCaseEntry,
+                graph.todayPort, opened.id,
+            ))
+            val fresh = held(ServiceCaseEditViewModel(
+                assets, events, serviceCases, graph.openServiceCase, graph.updateServiceCase, graph.todayPort,
+                AssetId("heater"), null, incident.id,
+            ))
+            val edit = held(ServiceCaseEditViewModel(
+                assets, events, serviceCases, graph.openServiceCase, graph.updateServiceCase, graph.todayPort,
+                AssetId("heater"), opened.id, null,
+            ))
+            val incidentDetail = held(EventDetailViewModel(
+                events, definitions, assets, graph.deleteEvent, incident.id, caseLinksOf(events, serviceCases),
+            ))
+            val page = backgroundScope.launch { detail.state.collect {} }
+            val case = backgroundScope.launch { screen.state.collect {} }
+            val entry = backgroundScope.launch { incidentDetail.state.collect {} }
+            detail.state.await("the detail page") { it?.cases?.isNotEmpty() == true }
+            screen.state.await("the case screen") { it?.timeline?.isNotEmpty() == true && it.repair != null }
+            fresh.state.await("the new case form") { it.loaded }
+            edit.state.await("the edit form") { it.loaded }
+            incidentDetail.state.await("the Incident detail") { it != null }
+            // Delete, tapped: the confirm's one read, and nothing is deleted or written.
+            incidentDetail.askDelete()
+            incidentDetail.deleteConfirm.await("the delete confirm") { it != null }
+
+            assertEquals("zero writes anywhere", emptyList<String>(), writes)
+            // The loads did real work: the section's row, the timeline, both forms and the link check.
+            assertEquals(listOf("Sent out · In warranty"), detail.state.value!!.cases.map { it.line })
+            assertEquals("Battery replaced", screen.state.value!!.repair!!.title)
+            assertEquals("Will not heat", fresh.state.value.title)
+            assertEquals("Heater claim", edit.state.value.title)
+            assertTrue(incidentDetail.deleteConfirm.value!!.linkedByCase)
+            page.cancel()
+            case.cancel()
+            entry.cancel()
+        } finally {
+            store.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
     // ---------------------------------------------------------------- recording repositories
 
     private fun write(what: String) {
         writes += what
+    }
+
+    private val serviceCases = object : ServiceCaseRepository by graph.serviceCases {
+        override suspend fun upsert(case: ServiceCase) = write("case.upsert").also { graph.serviceCases.upsert(case) }
+        override suspend fun deleteAll() = write("case.deleteAll").also { graph.serviceCases.deleteAll() }
+    }
+    private val caseEntries = object : ServiceCaseEntryRepository by graph.serviceCaseEntries {
+        override suspend fun insert(entry: ServiceCaseEntry) = write("entry.insert").also { graph.serviceCaseEntries.insert(entry) }
+        override suspend fun deleteAll() = write("entry.deleteAll").also { graph.serviceCaseEntries.deleteAll() }
     }
 
     private val assets = object : AssetRepository by graph.assets {

@@ -23,7 +23,11 @@ import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
+import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
+import com.loosecannon.servicetag.core.testing.caseEntryOf
+import com.loosecannon.servicetag.core.testing.caseOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -131,5 +135,25 @@ class StoreIsEmptyTest {
     @Test fun oneCategoryRowIsEnoughToMakeItNotEmpty() = runTest {
         categories.upsert(AssetCategory("appliance", "Appliance", 1L, 1L))
         assertFalse(storeIsEmpty.run())
+    }
+
+    /**
+     * #79: a service case cannot exist without its asset — `service_case.asset_id` is a CASCADE foreign
+     * key, and an entry's `case_id` another — so, as for definitions and profiles, the asset check
+     * answers for both and no seventh kind is read. Deleting the asset takes the case and its timeline,
+     * which leaves nothing a restore would replace.
+     */
+    @Test fun aCaseAndItsEntriesAreAnsweredForByTheirAsset() = runTest {
+        val caseEntries = InMemoryServiceCaseEntryRepository()
+        val serviceCases = InMemoryServiceCaseRepository(caseEntries).also { assets.cascadesTo(it::cascadeFromAsset) }
+        assets.upsert(asset)
+        serviceCases.upsert(caseOf("c1"))
+        caseEntries.insert(caseEntryOf("n1"))
+        assertFalse(storeIsEmpty.run())
+
+        assets.delete(asset.id)
+
+        assertTrue(serviceCases.all().isEmpty() && caseEntries.all().isEmpty(), "the asset took its case and timeline")
+        assertTrue(storeIsEmpty.run())
     }
 }

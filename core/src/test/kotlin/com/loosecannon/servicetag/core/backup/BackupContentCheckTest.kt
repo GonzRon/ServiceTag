@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.core.backup
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.CaseStatus
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthSubject
@@ -13,11 +14,15 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.model.ServiceCase
+import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.testing.GOLDEN_FORMAT_7
 import com.loosecannon.servicetag.core.testing.activationOf
 import com.loosecannon.servicetag.core.testing.archiveOf
+import com.loosecannon.servicetag.core.testing.caseEntryOf
+import com.loosecannon.servicetag.core.testing.caseOf
 import com.loosecannon.servicetag.core.testing.conditionOf
 import com.loosecannon.servicetag.core.testing.groupOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
@@ -339,5 +344,90 @@ class BackupContentCheckTest {
         }
         val far = data(assets = listOf(generator.copy(warrantyExpiresOn = "2027-03-01", warrantyReminderLeadDays = Int.MAX_VALUE)))
         assertEquals(far, BackupCodec.decode(archiveOf(far)).data)
+    }
+
+    // --- #79 (C18): the service case aggregate, format 12 -----------------------------------------
+
+    private fun cased(vararg cases: ServiceCase, entries: List<ServiceCaseEntry> = emptyList()) =
+        data().copy(serviceCases = cases.map { it.toDto() }, serviceCaseEntries = entries.map { it.toDto() })
+
+    /** The header's shape — what `OpenServiceCase` and `UpdateServiceCase` refuse about the row itself. */
+    @Test
+    fun aCasesTitleCostCurrencyAndDateAreChecked() {
+        val cases = listOf(
+            caseOf("c1", title = "  ") to "TitleRequired",
+            caseOf("c1", costMinor = -1) to "NegativeCost",
+            caseOf("c1", currency = null) to "CostWithoutCurrency",
+            caseOf("c1", currency = "eur") to "BadCurrency",
+            caseOf("c1").copy(openedOn = "2026-02-30") to "BadDate(field=openedOn)",
+        )
+        for ((row, problem) in cases) assertRefused(cased(row), "serviceCases: case c1", problem)
+        val free = cased(caseOf("c1", costMinor = 0), caseOf("c2", costMinor = null, currency = null))
+        assertEquals(free, BackupCodec.decode(archiveOf(free)).data, "no charge, and no cost, both decode")
+    }
+
+    /** R79-5, R79-9: a status entry sets `closedOn` exactly when it closes or cancels, and clears it otherwise. */
+    @Test
+    fun closedOnIsSetExactlyWhenTheCaseIsClosedOrCancelled() {
+        for (status in listOf(CaseStatus.CLOSED, CaseStatus.CANCELLED)) {
+            assertRefused(cased(caseOf("c1", status = status)), "serviceCases: case c1", "is $status with no closedOn")
+        }
+        for (status in listOf(CaseStatus.OPEN, CaseStatus.SENT_OUT, CaseStatus.AT_SERVICE_CENTER, CaseStatus.RETURNED)) {
+            assertRefused(cased(caseOf("c1", status = status, closedOn = "2026-09-24")), "serviceCases: case c1", "is $status with a closedOn")
+        }
+        assertRefused(
+            cased(caseOf("c1", status = CaseStatus.CLOSED, closedOn = "2026-13-01")), "serviceCases: case c1", "BadDate(field=closedOn)",
+        )
+        val shaped = cased(
+            caseOf("c1", status = CaseStatus.CLOSED, closedOn = "2026-09-24"),
+            caseOf("c2", status = CaseStatus.CANCELLED, closedOn = "2026-09-23"),
+            caseOf("c3", status = CaseStatus.RETURNED),
+        )
+        assertEquals(shaped, BackupCodec.decode(archiveOf(shaped)).data)
+    }
+
+    /** What `AddServiceCaseEntry` refuses about the row itself: neither a note nor a status, a bad date or time. */
+    @Test
+    fun anEmptyEntryIsRefused() {
+        val cases = listOf(
+            caseEntryOf("n1", note = " ", status = null) to "EntryEmpty",
+            caseEntryOf("n1", occurredOn = "2026-02-30") to "BadDate(field=occurredOn)",
+            caseEntryOf("n1", occurredTime = "7:45") to "BadTime(field=occurredTime)",
+        )
+        for ((row, problem) in cases) {
+            assertRefused(cased(caseOf("c1"), entries = listOf(row)), "serviceCaseEntries: entry n1", problem)
+        }
+        val fine = cased(
+            caseOf("c1"),
+            entries = listOf(caseEntryOf("n1", note = "", status = CaseStatus.RETURNED), caseEntryOf("n2", occurredTime = null)),
+        )
+        assertEquals(fine, BackupCodec.decode(archiveOf(fine)).data, "a status alone, and a note with no time, decode")
+    }
+
+    /**
+     * Review N4 (controller ruling), the condition rule for a restored row: an entry's zone is judged by
+     * its form alone, never by this device's zone data — a well-formed region only the archive knows
+     * restores; a blank or malformed id is refused, naming the command's problem.
+     */
+    @Test
+    fun anEntrysZoneIsJudgedByItsForm() {
+        val elsewhere = cased(caseOf("c1"), entries = listOf(caseEntryOf("n1").copy(tzId = "Mars/Olympus_Mons")))
+        assertEquals(elsewhere, BackupCodec.decode(archiveOf(elsewhere)).data)
+        for (zone in listOf("UTC+99", "", "not a zone")) {
+            assertRefused(
+                cased(caseOf("c1"), entries = listOf(caseEntryOf("n1").copy(tzId = zone))),
+                "serviceCaseEntries: entry n1", "BadTimeZone(field=tzId)",
+            )
+        }
+    }
+
+    /** No rule is relative to the importing device's today: a case and an entry dated far ahead restore. */
+    @Test
+    fun aCaseOrEntryIsNeverJudgedByToday() {
+        val ahead = cased(
+            caseOf("c1").copy(openedOn = "2099-01-01"),
+            entries = listOf(caseEntryOf("n1", occurredOn = "2099-01-02")),
+        )
+        assertEquals(ahead, BackupCodec.decode(archiveOf(ahead)).data)
     }
 }

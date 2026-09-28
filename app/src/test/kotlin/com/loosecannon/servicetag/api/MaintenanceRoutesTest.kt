@@ -3,6 +3,8 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.CaseCoverage
+import com.loosecannon.servicetag.core.model.CaseType
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubject
@@ -34,6 +36,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -89,6 +92,7 @@ class MaintenanceRoutesTest {
             referenceHandlersFor(graph),
             seasonHealthHandlersFor(graph),
             warrantyHandlersFor(graph),
+            serviceCaseHandlersFor(graph),
             appVersion = "1.2.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -1126,7 +1130,7 @@ class MaintenanceRoutesTest {
     // --- the merge report's three new tables -----------------------------------------------------
 
     /**
-     * `import_merge` reads a **format-11** archive, and the report carries the `groups`, `schedules`
+     * `import_merge` reads a **format-12** archive, and the report carries the `groups`, `schedules`
      * and `closures` tallies beside the shipped ones, plus 1.3's `references`. `applicable` still
      * governs.
      *
@@ -1146,7 +1150,7 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(11, report.formatVersion)
+        assertEquals(12, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)
@@ -1191,6 +1195,8 @@ class MaintenanceRoutesTest {
                 "seasonActivations", "conditions", "healthSubjects",
                 // #74 (format 9): table 15, appended, though its rows are written first.
                 "categories",
+                // #79 (format 12): tables 16 and 17, the case headers and their timelines.
+                "serviceCases", "caseEntries",
                 "conflicts", "duplicateCandidates",
             ),
             MergeReportResponse.serializer().descriptor.elementNames.toList(),
@@ -1215,6 +1221,58 @@ class MaintenanceRoutesTest {
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.healthSubjects)
         // The donor's two category rows, which this phone does not hold.
         assertEquals(MergeTallyDto(insert = 2, identical = 0, conflict = 0, skipped = 0), report.categories)
+    }
+
+    /**
+     * #79 (C19; M3): the two case tallies are on the **wire**, read out of the route's own JSON before
+     * any decode. A donor holding one asset with two cases and three timeline entries gives each tally a
+     * value no other tally here has (1, 2 and 3), so a mirror wired to the wrong table fails; the apply
+     * then lands them, inserts only.
+     */
+    @Test fun aCaseAndAnEntryAreTalliedOnTheWire() {
+        val donor = FakeGraph().apply {
+            now = dayMillis("2026-01-01")
+            today = LocalDate.parse("2026-01-20")
+        }
+        val archive = try {
+            runBlocking {
+                val asset = donor.createAsset.run(com.loosecannon.servicetag.core.usecase.AssetCommand(name = "Example Heater"), null)
+                val command = com.loosecannon.servicetag.core.usecase.ServiceCaseCommand(
+                    title = "Example Heater claim", type = CaseType.WARRANTY_SERVICE, openedOn = "2026-01-10",
+                    coverage = CaseCoverage.IN_WARRANTY, resolutionEventId = null, caseRef = "RMA-0001",
+                )
+                val first = donor.openServiceCase.run(asset.id, command, null)
+                donor.openServiceCase.run(asset.id, command.copy(title = "Example Heater claim, second"), null)
+                for (note in listOf("Called the provider", "Courier booked", "Courier collected")) {
+                    donor.addServiceCaseEntry.run(
+                        first.id,
+                        com.loosecannon.servicetag.core.usecase.CaseEntryCommand("2026-01-12", null, "UTC", note, null),
+                    )
+                }
+                donor.exportBackupSet.run().data
+            }
+        } finally {
+            donor.close()
+        }
+        fun post(path: String) = router().handle(
+            ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
+        )
+
+        val planned = post(IMPORT_MERGE_PLAN_PATH)
+
+        assertEquals(planned.text(), 200, planned.status)
+        val wire = ApiJson.parseToJsonElement(planned.text()).jsonObject
+        fun inserts(key: String) = wire.getValue(key).jsonObject.getValue("insert").jsonPrimitive.content.toInt()
+        assertEquals(1, inserts("assets"))
+        assertEquals(2, inserts("serviceCases"))
+        assertEquals(3, inserts("caseEntries"))
+        assertEquals("after categories, in table order", listOf("serviceCases", "caseEntries"), wire.keys.toList().dropLast(2).takeLast(2))
+
+        assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
+        runBlocking {
+            assertEquals(2, graph.serviceCases.all().size)
+            assertEquals(3, graph.serviceCaseEntries.all().size)
+        }
     }
 
     // --- 1.4 (B09): derived state, status and the fourteen-table merge ---------------------------
@@ -1353,9 +1411,11 @@ class MaintenanceRoutesTest {
      * `asset_category` table) and then the format to 9 (the archive that carries the categories);
      * #67 moves the schema to 10 (`attachment.document_role`) and then the format to 10 (the archive
      * that carries the role); #79 moves the schema to 11 (the warranty reminder's lead and the
-     * device-local deadline table) and then the format to 11 (the archive that carries the lead).
+     * device-local deadline table) and then the format to 11 (the archive that carries the lead); #79b
+     * moves the schema to 12 (the service case tables) and then the format to 12 (the archive that
+     * carries them).
      */
-    @Test fun statusReports11And11AndTheNewCounts() {
+    @Test fun statusReports12And12AndTheNewCounts() {
         val tub = createAsset("Hot tub")
         assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
         assertEquals(
@@ -1372,8 +1432,8 @@ class MaintenanceRoutesTest {
         )
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
-        assertEquals(11, status.schemaVersion)
-        assertEquals(11, status.backupFormatVersion)
+        assertEquals(12, status.schemaVersion)
+        assertEquals(12, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
         assertEquals(1, status.counts["healthSubjects"])
@@ -1383,11 +1443,11 @@ class MaintenanceRoutesTest {
     }
 
     /**
-     * Import-merge reads a **format-11** archive (this build's export) and reports **fifteen** tables: the donor's
+     * Import-merge reads a **format-12** archive (this build's export) and reports **seventeen** tables: the donor's
      * activation, condition and health subject each tally one INSERT on the wire, its two categories
      * (#74) two, and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
-    @Test fun importMergeReadsFormat11AndReportsFifteenTables() {
+    @Test fun importMergeReadsFormat12AndReportsSeventeenTables() {
         val archive = donorArchive()
         fun post(path: String) = router().handle(
             ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
@@ -1397,9 +1457,9 @@ class MaintenanceRoutesTest {
         assertEquals(planned.text(), 200, planned.status)
         val wire = ApiJson.parseToJsonElement(planned.text()).jsonObject
         val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
-        assertEquals(15, tallies.size)
+        assertEquals(17, tallies.size)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(11, report.formatVersion)
+        assertEquals(12, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         val one = MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0)
         assertEquals(one, report.seasonActivations)

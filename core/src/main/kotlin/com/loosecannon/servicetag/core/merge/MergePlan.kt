@@ -15,12 +15,14 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.model.ServiceCase
+import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import java.security.MessageDigest
 
 /**
- * The fifteen canonical tables. The first fourteen are **in the order a merge must write them**:
+ * The seventeen canonical tables. The first fourteen are **in the order a merge must write them**:
  * every reference a row makes points at a table declared before it (assets first, attachment rows
  * last, when every owner is in). The ordinal is also the first key decisions and conflicts are
  * sorted by, which is what makes a report deterministic.
@@ -46,10 +48,16 @@ import java.security.MessageDigest
  * text, never a foreign key — so no position could break a reference. Its rows are **decided first**
  * (an accepted asset is written in the spelling an accepted category row gives it) and **written
  * first** ([MergeWrites.categories] is that value's first field), but listed last.
+ *
+ * #79's [SERVICE_CASES] and [CASE_ENTRIES] are appended after [CATEGORIES], so no shipped ordinal moves,
+ * and there they are also in dependency position again: a case points at its asset (its Incident and
+ * repair links are soft, never owners), and an entry at its case, which is decided just before it.
+ * [MergeWrites] writes them last, after the assets and the events.
  */
 enum class MergeTable {
     ASSETS, GROUPS, DEFINITIONS, PROFILES, SCHEDULES, CLOSURES, LINKS, TAGS, EVENTS, ATTACHMENTS,
     REFERENCES, SEASON_ACTIVATIONS, CONDITIONS, HEALTH_SUBJECTS, CATEGORIES,
+    SERVICE_CASES, CASE_ENTRIES,
 }
 
 /**
@@ -322,6 +330,7 @@ data class MergeTally(val insert: Int, val identical: Int, val conflict: Int, va
  * apply that wrote this value and nothing else leaves every accepted asset's category in the catalog.
  * [assets] carries each accepted asset in its **canonical** spelling — a local row's, an accepted
  * row's, or a built-in's label — with the archive's own `updatedAt`.
+ * #79's [serviceCases] and their [caseEntries] come last: a case after its asset, an entry after its case.
  */
 data class MergeWrites(
     val categories: List<AssetCategory> = emptyList(),
@@ -339,6 +348,8 @@ data class MergeWrites(
     val seasonActivations: List<SeasonActivation> = emptyList(),
     val conditions: List<AssetCondition> = emptyList(),
     val healthSubjects: List<HealthSubject> = emptyList(),
+    val serviceCases: List<ServiceCase> = emptyList(),
+    val caseEntries: List<ServiceCaseEntry> = emptyList(),
 )
 
 /**
@@ -369,6 +380,9 @@ data class MergeSnapshot(
     val healthSubjects: List<HealthSubject> = emptyList(),
     /** #74 — the owner's own categories. The built-ins are compiled, never rows, never here. */
     val categories: List<AssetCategory> = emptyList(),
+    /** #79 — the case headers and their timelines. */
+    val serviceCases: List<ServiceCase> = emptyList(),
+    val caseEntries: List<ServiceCaseEntry> = emptyList(),
     val storedBytes: Map<String, StoredBytes> = emptyMap(),
     val attachmentStoreConfigured: Boolean,
 )
@@ -400,8 +414,11 @@ data class MergeReport(
     val seasonActivations: MergeTally,
     val conditions: MergeTally,
     val healthSubjects: MergeTally,
-    /** #74 — last, in [MergeTable] order, although categories are written first. */
+    /** #74 — in [MergeTable] order, although categories are written first. */
     val categories: MergeTally,
+    /** #79 — the case headers, then their timelines: the report is seventeen tables. */
+    val serviceCases: MergeTally,
+    val caseEntries: MergeTally,
     /** Deterministic: table order, then id. */
     val conflicts: List<MergeDecision>,
     val duplicateCandidates: List<DuplicateCandidate>,
@@ -473,6 +490,8 @@ class MergePlan internal constructor(
         conditions = tally(MergeTable.CONDITIONS),
         healthSubjects = tally(MergeTable.HEALTH_SUBJECTS),
         categories = tally(MergeTable.CATEGORIES),
+        serviceCases = tally(MergeTable.SERVICE_CASES),
+        caseEntries = tally(MergeTable.CASE_ENTRIES),
         conflicts = conflicts,
         duplicateCandidates = duplicateCandidates,
     )

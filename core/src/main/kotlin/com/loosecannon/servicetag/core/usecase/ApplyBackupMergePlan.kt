@@ -20,6 +20,8 @@ import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -94,6 +96,9 @@ class ApplyBackupMergePlan(
     private val healthSubjects: HealthSubjectRepository,
     /** #74 — the owner's own categories: read into the snapshot, written first. */
     private val categories: CategoryRepository,
+    /** #79 — the case headers and their timelines (format 12). */
+    private val serviceCases: ServiceCaseRepository,
+    private val caseEntries: ServiceCaseEntryRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -117,7 +122,7 @@ class ApplyBackupMergePlan(
                 mergeSnapshotOf(
                     assets, groups, tags, links, definitions, profiles, schedules, closures,
                     events, attachments, references, seasonActivations, conditions, healthSubjects,
-                    categories, stored, configured,
+                    categories, serviceCases, caseEntries, stored, configured,
                 ),
             )
             // Order matters — see the class KDoc.
@@ -140,6 +145,9 @@ class ApplyBackupMergePlan(
             fresh.writes.seasonActivations.forEach { seasonActivations.insert(it) }
             fresh.writes.conditions.forEach { conditions.insert(it) }
             fresh.writes.healthSubjects.forEach { healthSubjects.upsert(it) }
+            // #79: the case headers after their assets and the events, then each case's timeline.
+            fresh.writes.serviceCases.forEach { serviceCases.upsert(it) }
+            fresh.writes.caseEntries.forEach { caseEntries.insert(it) }
 
             // After every write, inside the same transaction, once.
             rebuildAll()

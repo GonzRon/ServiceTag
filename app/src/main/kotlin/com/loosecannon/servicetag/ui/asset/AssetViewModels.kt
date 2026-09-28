@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.ui.asset
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.condition.ConditionHistory
+import com.loosecannon.servicetag.core.condition.currentIncident
 import com.loosecannon.servicetag.core.condition.needsIncident
 import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.health.SubjectHealth
@@ -60,6 +61,7 @@ import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.Today
@@ -126,6 +128,9 @@ import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.ENTER_THE_NUMBER_OF_DAYS
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
+import com.loosecannon.servicetag.ui.service.ServiceCaseRow
+import com.loosecannon.servicetag.ui.service.openServiceCasesLine
+import com.loosecannon.servicetag.ui.service.serviceCaseRowsOf
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -638,6 +643,13 @@ data class AssetDetailState(
     val leadsWithLogIncident: Boolean = false,
     /** #79 (C10): the Warranty section's facts, from the row already read and `Today`. */
     val warranty: WarrantyFacts = WarrantyFacts(),
+    /** #79 (C20): this asset's service cases, from one `observeForAsset` — open first, then closed as history. */
+    val cases: List<ServiceCaseRow> = emptyList(),
+    /**
+     * #79 (C20): the Incident of the current failure (`currentIncident`), from the same rows and journal
+     * as [leadsWithLogIncident]. P79-19 opens the case editor on it, or — null — an Incident entry first.
+     */
+    val currentIncidentId: String? = null,
 ) {
     /** The current condition (S1–S3, or S4 when null), from the same read as [health]. */
     val condition: ConditionView? get() = health.condition
@@ -668,6 +680,14 @@ data class AssetDetailState(
      * INCIDENT entry; [leadsWithLogIncident] says whether it leads or follows S6.
      */
     val offersLogIncident: Boolean
+        get() = health.inService
+
+    /** #79 (C20): P79-17/P79-18 above the case rows, or null — hidden — while none is open. */
+    val openCasesLine: String?
+        get() = openServiceCasesLine(cases.count { it.open })
+
+    /** #79 (C20, R79-17): P79-19 "New service case" only on an asset **in service**, as P82-10 and P79-20. */
+    val offersNewServiceCase: Boolean
         get() = health.inService
 }
 
@@ -717,6 +737,11 @@ class AssetDetailViewModel(
     /** `T` for the season dialog, the same day `RecordSeasonActivation` and the season view read. */
     private val today: Today,
     private val id: AssetId,
+    /**
+     * #79 (C20): this asset's cases, observed once for the Service cases section. Null lists none — a
+     * test that is not about cases; `AppGraph` passes the real repository.
+     */
+    serviceCases: ServiceCaseRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String) : this(
@@ -727,6 +752,7 @@ class AssetDetailViewModel(
         graph.assetHealthReadModel, graph.getAssetSeason, graph.recordSeasonActivation,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
         graph.applyTemplate, graph.uow, graph.clock, graph.today, AssetId(id),
+        serviceCases = graph.serviceCases,
     )
 
     /** The zone the retirement dialog's today is read in: the user's calendar day. */
@@ -781,6 +807,15 @@ class AssetDetailViewModel(
         .map { files -> purchaseDocumentOf(files) }
         .distinctUntilChanged()
 
+    /**
+     * #79 (C20): the Service cases section's one observation — this asset's cases, as rows. Folded in
+     * after the page's own combine, as [purchaseDocument] is, so a case written re-derives the section
+     * and never rebuilds the page. No read per case.
+     */
+    private val cases: Flow<List<ServiceCaseRow>> = (serviceCases?.observeForAsset(id) ?: flowOf(emptyList()))
+        .map { rows -> serviceCaseRowsOf(rows) }
+        .distinctUntilChanged()
+
     val state: StateFlow<AssetDetailState?> =
         combine(rows, tags.observeForAsset(id), journal, maintenance, facts) { all, tagRows, j, groupRows, _ ->
             val row = all.firstOrNull { it.id == id } ?: return@combine null
@@ -800,6 +835,8 @@ class AssetDetailViewModel(
                 conditionHistory = histories[id]?.let { historyOf(it) }.orEmpty(),
                 // #82 (C10): the same rows and journal the page already holds — no further read.
                 leadsWithLogIncident = needsIncident(health.inService, histories[id]?.ordered.orEmpty(), j.events),
+                // #79 (C20): the same rows and journal again — the Incident P79-19 opens a case on.
+                currentIncidentId = currentIncident(histories[id]?.ordered.orEmpty(), j.events)?.id?.value,
                 tags = tagRows,
                 definitions = j.definitions,
                 // An archived profile keeps its history but stops offering a quick action.
@@ -822,6 +859,7 @@ class AssetDetailViewModel(
                     .map { AssetGroupRow(it.id, it.name) },
             )
         }.combine(purchaseDocument) { page, document -> page?.copy(purchaseDocument = document) }
+            .combine(cases) { page, rows -> page?.copy(cases = rows) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), null)
 
     val missing: StateFlow<Boolean> = asset
@@ -2502,5 +2540,6 @@ internal fun seasonStrands(titles: List<String>): String =
 internal fun breakStrands(titles: List<String>): String =
     BREAK_STRANDS_PRE_SERVICE.replace("<titles>", titles.joinToString(", "))
 
-private const val BAD_CURRENCY = "Currency is a three-letter code like USD"
+/** Also the case editor's currency refusal (#79, C21): reused through this home. */
+internal const val BAD_CURRENCY = "Currency is a three-letter code like USD"
 private const val CURRENCY_REQUIRED = "A price needs a currency"

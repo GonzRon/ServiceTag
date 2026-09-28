@@ -20,6 +20,8 @@ import com.loosecannon.servicetag.data.room.dao.ProfileDao
 import com.loosecannon.servicetag.data.room.dao.ScheduleLocalDeliveryDao
 import com.loosecannon.servicetag.data.room.dao.ScheduleStateDao
 import com.loosecannon.servicetag.data.room.dao.SeasonActivationDao
+import com.loosecannon.servicetag.data.room.dao.ServiceCaseDao
+import com.loosecannon.servicetag.data.room.dao.ServiceCaseEntryDao
 import com.loosecannon.servicetag.data.room.entities.AssetCategoryEntity
 import com.loosecannon.servicetag.data.room.entities.AssetConditionEntity
 import com.loosecannon.servicetag.data.room.entities.AssetEntity
@@ -44,6 +46,8 @@ import com.loosecannon.servicetag.data.room.entities.ProfileFieldEntity
 import com.loosecannon.servicetag.data.room.entities.ScheduleLocalDeliveryEntity
 import com.loosecannon.servicetag.data.room.entities.ScheduleProviderEntity
 import com.loosecannon.servicetag.data.room.entities.ScheduleStateEntity
+import com.loosecannon.servicetag.data.room.entities.ServiceCaseEntity
+import com.loosecannon.servicetag.data.room.entities.ServiceCaseEntryEntity
 
 @Database(
     entities = [
@@ -71,8 +75,10 @@ import com.loosecannon.servicetag.data.room.entities.ScheduleStateEntity
         HealthSubjectEntity::class,
         AssetCategoryEntity::class,
         DeadlineLocalDeliveryEntity::class,
+        ServiceCaseEntity::class,
+        ServiceCaseEntryEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -94,4 +100,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun healthSubjectDao(): HealthSubjectDao
     abstract fun assetCategoryDao(): AssetCategoryDao
     abstract fun deadlineLocalDeliveryDao(): DeadlineLocalDeliveryDao
+    abstract fun serviceCaseDao(): ServiceCaseDao
+    abstract fun serviceCaseEntryDao(): ServiceCaseEntryDao
 }

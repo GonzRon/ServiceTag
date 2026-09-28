@@ -12,6 +12,9 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.CaseCoverage
+import com.loosecannon.servicetag.core.model.CaseStatus
+import com.loosecannon.servicetag.core.model.CaseType
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.ConsumableUsage
 import com.loosecannon.servicetag.core.model.DefinitionId
@@ -53,6 +56,10 @@ import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.ServiceCase
+import com.loosecannon.servicetag.core.model.ServiceCaseEntry
+import com.loosecannon.servicetag.core.model.ServiceCaseEntryId
+import com.loosecannon.servicetag.core.model.ServiceCaseId
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.StorageProvider
 import com.loosecannon.servicetag.core.model.TagBinding
@@ -463,6 +470,56 @@ data class AssetCategoryDto(
     val updatedAt: Long,
 )
 
+/**
+ * Format 12 (#79, C18; R79-1). One service case's header: the `service_case` table's columns, in column
+ * order, with no defaults — a format-12 row that omits one is corrupt. [assetId] is a real reference and
+ * must resolve inside the file; [incidentEventId] and [resolutionEventId] are soft links and are never
+ * checked (R79-4). [closedOn] is set exactly when [status] is CLOSED or CANCELLED.
+ */
+@Serializable
+data class ServiceCaseDto(
+    val id: String,
+    val assetId: String,
+    val title: String,
+    val type: String,
+    val openedOn: String,
+    val closedOn: String?,
+    val provider: String,
+    val contact: String,
+    val caseRef: String,
+    val coverage: String,
+    val status: String,
+    val outboundTracking: String,
+    val outboundCarrier: String,
+    val returnTracking: String,
+    val returnCarrier: String,
+    val costMinor: Long?,
+    val currency: String?,
+    val notes: String,
+    val incidentEventId: String?,
+    val resolutionEventId: String?,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+/**
+ * Format 12 (#79, C18; R79-8). One timeline entry: immutable, so there is no `updatedAt`. Its own row,
+ * never nested inside the case — the [OccurrenceClosureDto] precedent — so a new entry never changes the
+ * case's exported content and a note added elsewhere re-merges as an INSERT beside an IDENTICAL case.
+ * [caseId] must resolve inside the file.
+ */
+@Serializable
+data class ServiceCaseEntryDto(
+    val id: String,
+    val caseId: String,
+    val occurredOn: String,
+    val occurredTime: String?,
+    val tzId: String,
+    val note: String,
+    val status: String?,
+    val createdAt: Long,
+)
+
 /** The canonical tables. Everything derived is rebuilt after an import. */
 @Serializable
 data class BackupData(
@@ -492,6 +549,13 @@ data class BackupData(
      * which never carries a **row** — the codec refuses one that does (an empty list is accepted).
      */
     val assetCategories: List<AssetCategoryDto> = emptyList(),
+    /**
+     * Format 12 (#79); case headers, ordered by id. Empty on every format ≤11 archive, which never
+     * carries a **row** — the codec refuses one that does (an empty list is accepted).
+     */
+    val serviceCases: List<ServiceCaseDto> = emptyList(),
+    /** Format 12 (#79); the cases' timelines, their own rows, ordered by id. Empty on every format ≤11 archive. */
+    val serviceCaseEntries: List<ServiceCaseEntryDto> = emptyList(),
 )
 
 /** A decoded archive: what it claims about itself, and what it holds. */
@@ -1138,4 +1202,78 @@ fun AssetCategoryDto.toDomain(): AssetCategory = AssetCategory(
     display = display,
     createdAt = createdAt,
     updatedAt = updatedAt,
+)
+
+// --- format 12: service cases ---------------------------------------------------------------------
+
+fun ServiceCase.toDto(): ServiceCaseDto = ServiceCaseDto(
+    id = id.value,
+    assetId = assetId.value,
+    title = title,
+    type = type.name,
+    openedOn = openedOn,
+    closedOn = closedOn,
+    provider = provider,
+    contact = contact,
+    caseRef = caseRef,
+    coverage = coverage.name,
+    status = status.name,
+    outboundTracking = outboundTracking,
+    outboundCarrier = outboundCarrier,
+    returnTracking = returnTracking,
+    returnCarrier = returnCarrier,
+    costMinor = costMinor,
+    currency = currency,
+    notes = notes,
+    incidentEventId = incidentEventId?.value,
+    resolutionEventId = resolutionEventId?.value,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+fun ServiceCaseDto.toDomain(): ServiceCase = ServiceCase(
+    id = ServiceCaseId(id),
+    assetId = AssetId(assetId),
+    title = title,
+    type = enumOrCorrupt<CaseType>(type, "case type", "case $id"),
+    openedOn = openedOn,
+    closedOn = closedOn,
+    provider = provider,
+    contact = contact,
+    caseRef = caseRef,
+    coverage = enumOrCorrupt<CaseCoverage>(coverage, "case coverage", "case $id"),
+    status = enumOrCorrupt<CaseStatus>(status, "case status", "case $id"),
+    outboundTracking = outboundTracking,
+    outboundCarrier = outboundCarrier,
+    returnTracking = returnTracking,
+    returnCarrier = returnCarrier,
+    costMinor = costMinor,
+    currency = currency,
+    notes = notes,
+    incidentEventId = incidentEventId?.let(::EventId),
+    resolutionEventId = resolutionEventId?.let(::EventId),
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+fun ServiceCaseEntry.toDto(): ServiceCaseEntryDto = ServiceCaseEntryDto(
+    id = id.value,
+    caseId = caseId.value,
+    occurredOn = occurredOn,
+    occurredTime = occurredTime,
+    tzId = tzId,
+    note = note,
+    status = status?.name,
+    createdAt = createdAt,
+)
+
+fun ServiceCaseEntryDto.toDomain(): ServiceCaseEntry = ServiceCaseEntry(
+    id = ServiceCaseEntryId(id),
+    caseId = ServiceCaseId(caseId),
+    occurredOn = occurredOn,
+    occurredTime = occurredTime,
+    tzId = tzId,
+    note = note,
+    status = status?.let { enumOrCorrupt<CaseStatus>(it, "case status", "case entry $id") },
+    createdAt = createdAt,
 )

@@ -37,6 +37,8 @@ import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
+import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import kotlinx.coroutines.test.runTest
 import java.io.ByteArrayInputStream
@@ -76,7 +78,7 @@ class ArtifactsUseCasesTest {
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references,
         InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-        categories, uow,
+        categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), uow,
         IdGenerator { "set-1" }, Clock { 1_726_000_000_000L }, appVersion = "2.4", schemaVersion = 5,
     )
     private val restore = RestoreArtifacts(attachments, storage)

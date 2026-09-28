@@ -121,13 +121,13 @@ class AssetModelDeviceProofTest {
             rule.onAllNodesWithText("Part of Solar system").assertCountEquals(0)
 
             // Up one level: the new parent lists it.
-            rule.onNodeWithText("Part of Inverter").performClick()
+            rule.onNodeWithText("Part of Inverter").performScrollTo().performClick()
             rule.awaitText("COMPONENTS")
             rule.onNodeWithText("Battery bank").performScrollTo().assertIsDisplayed()
 
             // Up again, and open the root's own picker.
             rule.awaitText("Part of Solar system")
-            rule.onNodeWithText("Part of Solar system").performClick()
+            rule.onNodeWithText("Part of Solar system").performScrollTo().performClick()
             rule.awaitText("COMPONENTS")
             rule.openEditor()
 

@@ -30,6 +30,9 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.model.ServiceCase
+import com.loosecannon.servicetag.core.model.ServiceCaseEntry
+import com.loosecannon.servicetag.core.model.ServiceCaseId
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
@@ -48,6 +51,8 @@ import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import kotlinx.coroutines.flow.Flow
@@ -122,9 +127,27 @@ open class InMemoryAssetRepository : AssetRepository, Rollbackable, Witnessed {
         return rows.values.toList()
     }
 
-    override suspend fun delete(id: AssetId) { rows.remove(id.value); version.value += 1 }
+    override suspend fun delete(id: AssetId) {
+        rows.remove(id.value)
+        version.value += 1
+        cascades.forEach { it(id) }
+    }
 
-    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+    override suspend fun deleteAll() {
+        val gone = rows.keys.map(::AssetId)
+        rows.clear()
+        version.value += 1
+        gone.forEach { id -> cascades.forEach { it(id) } }
+    }
+
+    /**
+     * #79 (C17): the schema's CASCADE from `asset`, for the stores that ask for it — today the service
+     * cases ([InMemoryServiceCaseRepository.cascadeFromAsset]). Every other table's cascade is still the
+     * Room tests' to prove; a double that registers nothing deletes the asset row alone, as before.
+     */
+    private val cascades = mutableListOf<(AssetId) -> Unit>()
+
+    fun cascadesTo(cascade: (AssetId) -> Unit) { cascades += cascade }
 
     override fun observeAll(): Flow<List<Asset>> = version.map {
         rows.values.sortedWith(
@@ -828,4 +851,104 @@ class InMemoryCategoryRepository : CategoryRepository, Rollbackable, Witnessed {
     override suspend fun deleteAll() { rows.clear(); version.value += 1 }
 
     override fun observeAll(): Flow<List<AssetCategory>> = version.map { rows.values.sortedBy { it.key } }
+}
+
+/**
+ * #79's case headers: upsert and query, and no delete, exactly as the port is. [cascadeFromAsset] is not
+ * part of the port: it is how [InMemoryAssetRepository] reproduces the schema's CASCADE from `asset`
+ * (which takes each case, and — through [entries] — each case's timeline). [failOnUpsert] rigs the Nth
+ * upsert to throw, so a two-row write can be shown to be all or nothing.
+ */
+class InMemoryServiceCaseRepository(
+    private val entries: InMemoryServiceCaseEntryRepository? = null,
+) : ServiceCaseRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, ServiceCase>()
+    override var witness: TransactionWitness? = null
+    private val rig = UpsertRig("service case")
+    private val version = MutableStateFlow(0)
+    var failOnUpsert: Int?
+        get() = rig.failOnUpsert
+        set(value) { rig.failOnUpsert = value }
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun upsert(case: ServiceCase) {
+        rig.check()
+        rows[case.id.value] = case
+        version.value += 1
+    }
+
+    override suspend fun get(id: ServiceCaseId): ServiceCase? = rows[id.value]
+
+    override suspend fun forAsset(assetId: AssetId): List<ServiceCase> =
+        rows.values.filter { it.assetId == assetId }.sortedWith(BY_ASSET)
+
+    override suspend fun all(): List<ServiceCase> {
+        witness?.observeAll()
+        return rows.values.sortedBy { it.id.value }
+    }
+
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<ServiceCase>> =
+        version.map { rows.values.filter { it.assetId == assetId }.sortedWith(BY_ASSET) }
+
+    /** The schema's CASCADE from `asset`: this asset's cases go, and their entries with them. */
+    fun cascadeFromAsset(assetId: AssetId) {
+        val doomed = rows.values.filter { it.assetId == assetId }.map { it.id }
+        doomed.forEach { rows.remove(it.value) }
+        entries?.cascadeFromCases(doomed.toSet())
+        version.value += 1
+    }
+
+    private companion object {
+        val BY_ASSET = compareByDescending<ServiceCase> { it.openedOn }.thenBy { it.id.value }
+    }
+}
+
+/**
+ * #79's case timeline: insert and query only, exactly as the port is. An insert of an id already held
+ * is refused, never an overwrite — the primary key, as a fake. Every list is in the timeline order,
+ * `(occurredOn, occurredTime nulls first, createdAt, id)`.
+ */
+class InMemoryServiceCaseEntryRepository : ServiceCaseEntryRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, ServiceCaseEntry>()
+    override var witness: TransactionWitness? = null
+    private val version = MutableStateFlow(0)
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun insert(entry: ServiceCaseEntry) {
+        if (entry.id.value in rows) throw RiggedFailure("service_case_entry already holds ${entry.id.value}")
+        rows[entry.id.value] = entry
+        version.value += 1
+    }
+
+    override suspend fun forCase(caseId: ServiceCaseId): List<ServiceCaseEntry> =
+        rows.values.filter { it.caseId == caseId }.sortedWith(ORDER)
+
+    override suspend fun all(): List<ServiceCaseEntry> {
+        witness?.observeAll()
+        return rows.values.sortedWith(ORDER)
+    }
+
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeForCase(caseId: ServiceCaseId): Flow<List<ServiceCaseEntry>> =
+        version.map { rows.values.filter { it.caseId == caseId }.sortedWith(ORDER) }
+
+    internal fun cascadeFromCases(caseIds: Set<ServiceCaseId>) {
+        rows.values.removeAll { it.caseId in caseIds }
+        version.value += 1
+    }
+
+    private companion object {
+        val ORDER = compareBy<ServiceCaseEntry>({ it.occurredOn }, { it.occurredTime }, { it.createdAt }, { it.id.value })
+    }
 }
