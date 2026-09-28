@@ -127,7 +127,7 @@ class Format7ImportIdentityTest {
         )
         val build = BuildBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, references, activations, conditions, subjects, categories, serviceCases, caseEntries,
+            attachments, references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans,
             storage, uow,
         )
 

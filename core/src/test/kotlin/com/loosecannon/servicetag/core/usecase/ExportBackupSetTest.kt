@@ -116,9 +116,10 @@ class ExportBackupSetTest {
     }
 
     /**
-     * #72 (C6): a loan leaves with its asset — the open one and the returned history, the contact link
+     * #72 (C6, C7): a loan leaves with its asset — the open one and the returned history, the contact link
      * beside the name snapshot, a name-only loan's null link as it is — and lands with it, field for
-     * field, by a replace.
+     * field, by a replace and by a merge into an install without them; and this install's own export
+     * re-plans IDENTICAL.
      */
     @Test
     fun loansTravelWithTheirAsset() = runBlocking<Unit> {
@@ -138,5 +139,13 @@ class ExportBackupSetTest {
         val replaced = BackupInstall()
         replaced.replace.run(bytes)
         assertEquals(loans, replaced.loans.all(), "by a replace")
+
+        val merged = BackupInstall()
+        merged.apply.run(merged.build.run(bytes))
+        assertEquals(loans, merged.loans.all(), "by a merge into an install without them")
+
+        val again = source.build.run(bytes)
+        assertEquals(true, again.applicable)
+        assertEquals(emptyList(), again.writes.loans, "IDENTICAL against the phone it came from")
     }
 }

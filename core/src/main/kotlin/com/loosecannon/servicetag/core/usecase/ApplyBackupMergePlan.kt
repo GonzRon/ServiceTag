@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.merge.MergeReport
 import com.loosecannon.servicetag.core.merge.mergePlanOf
 import com.loosecannon.servicetag.core.merge.mergeSnapshotOf
 import com.loosecannon.servicetag.core.merge.storedBytesOf
+import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
@@ -99,6 +100,8 @@ class ApplyBackupMergePlan(
     /** #79 — the case headers and their timelines (format 12). */
     private val serviceCases: ServiceCaseRepository,
     private val caseEntries: ServiceCaseEntryRepository,
+    /** #72 — the loans (format 13). */
+    private val loans: AssetLoanRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -122,7 +125,7 @@ class ApplyBackupMergePlan(
                 mergeSnapshotOf(
                     assets, groups, tags, links, definitions, profiles, schedules, closures,
                     events, attachments, references, seasonActivations, conditions, healthSubjects,
-                    categories, serviceCases, caseEntries, stored, configured,
+                    categories, serviceCases, caseEntries, loans, stored, configured,
                 ),
             )
             // Order matters — see the class KDoc.
@@ -148,6 +151,8 @@ class ApplyBackupMergePlan(
             // #79: the case headers after their assets and the events, then each case's timeline.
             fresh.writes.serviceCases.forEach { serviceCases.upsert(it) }
             fresh.writes.caseEntries.forEach { caseEntries.insert(it) }
+            // #72: the loans after their assets; the plan held each asset to one open loan.
+            fresh.writes.loans.forEach { loans.upsert(it) }
 
             // After every write, inside the same transaction, once.
             rebuildAll()

@@ -333,7 +333,7 @@ class MergePlannerReferenceTest {
      * dropped from the type stops compiling, one wired to the wrong table fails on its value, and
      * one left out of `report()` fails as an empty tally where a populated one belongs.
      *
-     * The archive is shaped so the seventeen expectations are not all the same value: only
+     * The archive is shaped so the eighteen expectations are not all the same value: only
      * `references` and `assets` carry rows, so a report that read `attachments` where it meant
      * `references` — the drift a positional mirror invites — fails here rather than passing on a
      * row of zeroes.
@@ -366,6 +366,8 @@ class MergePlannerReferenceTest {
             // #79: the case headers and their timelines close the list.
             MergeTable.SERVICE_CASES to report.serviceCases,
             MergeTable.CASE_ENTRIES to report.caseEntries,
+            // #72: the loans close it.
+            MergeTable.LOANS to report.loans,
         )
         assertEquals(MergeTable.entries.toList(), byName.map { it.first })
         assertEquals(MergeTable.entries.map { plan.tally(it) }, byName.map { it.second })
