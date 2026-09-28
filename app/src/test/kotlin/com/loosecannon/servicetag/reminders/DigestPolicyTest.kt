@@ -115,8 +115,8 @@ internal object Fixture {
 
     /**
      * #72 (C10): a loan's facts at [at], local time in [zone] — its day, its borrower, the latest
-     * digest-hour instant at or before [at], and (fix round 1) this day at the digest hour — as the
-     * facts source derives them.
+     * digest-hour instant at or before [at], and (fix round 1) this day at the digest hour and the
+     * start of the day after the due day — as the facts source derives them.
      */
     fun loanFacts(
         at: LocalDateTime,
@@ -134,6 +134,7 @@ internal object Fixture {
             borrower = borrower,
             cadenceSince = millis(since, zone),
             dayOpensAt = millis(hourToday, zone),
+            wordsTurnAt = millis(LocalDate.parse(dueOn).plusDays(1).atStartOfDay(), zone),
         )
     }
 
@@ -808,18 +809,23 @@ class DigestPolicyTest {
         assertEquals(ReconcileCounters(1, 0, 0), decision.report.counters())
     }
 
-    /** Once has no end while the loan is open: its post stands after the due day, held and never re-posted. */
+    /**
+     * Once has no end while the loan is open: its post stands after the due day, held and never
+     * cancelled or announced again. Fix round 1 (owner ruling R72-B2): its one re-post is the silent
+     * post-due refresh at the first digest hour after the due day, only-alert-once.
+     */
     @Test
     fun aLoanOnceStillStandsAfterItsDueDay() {
         val run = LoanRun(Fixture.loan())
         run.sweep(at(0, 9, 0))
 
-        listOf(at(1, 0, 5), at(1, 9, 0), at(5, 9, 0), at(40, 9, 0)).forEach { time ->
+        val reposts = listOf(at(1, 0, 5), at(1, 9, 0), at(5, 9, 0), at(40, 9, 0)).flatMap { time ->
             val decision = run.sweep(time)
-            assertEquals("$time", emptyList<ItemPost>(), decision.posts)
             assertEquals("$time", emptyList<String>(), decision.cancelTags)
             assertEquals("$time", ReconcileCounters(0, 0, 1), decision.report.counters())
+            decision.posts.map { time to it.onlyAlertOnce }
         }
+        assertEquals("only the silent refresh", listOf(at(1, 9, 0) to true), reposts)
         assertEquals(setOf(Fixture.tagOf(run.subject)), run.standing)
     }
 
@@ -903,6 +909,7 @@ class DigestPolicyTest {
         assertEquals(Fixture.tagOf(run.subject), post.tag)
         assertEquals("Lent to Sample Borrower. Was due back 30 Jun 2031.", post.body)
         assertEquals("NOT RETURNED", post.statusWord)
+        assertFalse("a re-alert alerts (fix round 1: only the Once refresh is silent)", post.onlyAlertOnce)
         assertEquals(emptyList<String>(), decision.cancelTags)
         assertEquals(ReconcileCounters(0, 0, 1), decision.report.counters())
         assertEquals(listOf(Fixture.millis(at(1, 9, 0))), decision.deadlineRows.map { it.updatedAt })
@@ -1147,6 +1154,101 @@ class DigestPolicyTest {
         assertEquals(emptyList<SubjectKey.Deadline>(), moved.deadlineForgotten)
         assertEquals(ReconcileCounters(0, 0, 1), moved.report.counters())
         assertEquals("never posted twice", 0, once.sweep(at(0, 9, 0), zone = west).posts.size)
+    }
+
+    // #72 B2 fix round 1 (MAJOR-1 (a), owner ruling R72-B2): a Once still showing after its due day
+    // takes the post-due words once, silently, in place; a Once that is gone never comes back.
+
+    /**
+     * Posted on the due day in the through-the-due-day words; held at 00:05; at the next digest hour
+     * re-posted once under the same tag in P72-41/43, **only-alert-once**, counted unchanged, never
+     * cancelled first, and re-stamped; never again after that.
+     */
+    @Test
+    fun aStandingOnceTakesThePostDueWordsSilentlyOnce() {
+        val run = LoanRun(Fixture.loan())
+        val first = run.sweep(at(0, 9, 0)).posts.single()
+        assertEquals("DUE BACK", first.statusWord)
+        assertFalse("an announcement alerts", first.onlyAlertOnce)
+
+        assertEquals(emptyList<ItemPost>(), run.sweep(at(1, 0, 5)).posts)
+
+        val refresh = run.sweep(at(1, 9, 0))
+        val post = refresh.posts.single()
+        assertEquals(first.tag, post.tag)
+        assertEquals("Lent to Sample Borrower. Was due back 30 Jun 2031.", post.body)
+        assertEquals("NOT RETURNED", post.statusWord)
+        assertTrue("the refresh is silent", post.onlyAlertOnce)
+        assertEquals(emptyList<String>(), refresh.cancelTags)
+        assertEquals(ReconcileCounters(0, 0, 1), refresh.report.counters())
+        assertEquals(listOf(Fixture.millis(at(1, 9, 0))), refresh.deadlineRows.map { it.updatedAt })
+
+        listOf(at(1, 15, 0), at(2, 9, 0), at(40, 9, 0)).forEach { time ->
+            val later = run.sweep(time)
+            assertEquals("$time", emptyList<ItemPost>(), later.posts)
+            assertEquals("$time", ReconcileCounters(0, 0, 1), later.report.counters())
+        }
+    }
+
+    /**
+     * A Once that is not showing is never refreshed back: swiped on its due day, or swiped after its
+     * refresh, it stays gone past its due day and after a restart, and its stamp is kept.
+     */
+    @Test
+    fun aSwipedOnceIsNeverRefreshedPastItsDueDay() {
+        val swipedOnTheDay = LoanRun(Fixture.loan())
+        swipedOnTheDay.sweep(at(0, 9, 0))
+        swipedOnTheDay.swipe()
+        val beforeRestart = listOf(at(1, 9, 0), at(2, 9, 0)).map { swipedOnTheDay.sweep(it).posts.size }
+        swipedOnTheDay.restart()
+        val afterRestart = listOf(at(2, 12, 0), at(3, 9, 0)).map { swipedOnTheDay.sweep(it).posts.size }
+        assertEquals(listOf(0, 0, 0, 0), beforeRestart + afterRestart)
+        assertEquals(listOf(Fixture.loan().contentHash), listOfNotNull(swipedOnTheDay.row).map { it.announcedHash })
+
+        val swipedAfterRefresh = LoanRun(Fixture.loan())
+        swipedAfterRefresh.sweep(at(0, 9, 0))
+        assertEquals(1, swipedAfterRefresh.sweep(at(1, 9, 0)).posts.size)
+        swipedAfterRefresh.swipe()
+        assertEquals(0, swipedAfterRefresh.sweep(at(2, 9, 0)).posts.size)
+        swipedAfterRefresh.restart()
+        assertEquals(listOf(0, 0), listOf(at(2, 12, 0), at(3, 9, 0)).map { swipedAfterRefresh.sweep(it).posts.size })
+        assertTrue(listOfNotNull(swipedAfterRefresh.row).isNotEmpty())
+    }
+
+    /** First posted days after its due day, already in the post-due words: there is nothing to refresh. */
+    @Test
+    fun aOnceFirstPostedAfterItsDueDayIsNeverRefreshed() {
+        val run = LoanRun(Fixture.loan())
+        assertEquals("NOT RETURNED", run.sweep(at(3, 10, 0)).posts.single().statusWord)
+
+        val next = run.sweep(at(4, 9, 0))
+        assertEquals(emptyList<ItemPost>(), next.posts)
+        assertEquals(ReconcileCounters(0, 0, 1), next.report.counters())
+    }
+
+    /**
+     * The owner's boundary: nothing but that refresh is only-alert-once. Every warranty post across
+     * its window, every schedule DUE and OVERDUE post, and every loan announcement and re-alert — Once
+     * on its due day and first seen after it, Until returned across six days — alerts as it always has.
+     */
+    @Test
+    fun noAnnouncementRealertOrWarrantyPostIsOnlyAlertOnce() {
+        val warranty = Fixture.warranty("a1", "2031-06-30")
+        val warrantyPosts = (-31..2).flatMap { day ->
+            decide(listOf(DeadlineInput(warranty, Fixture.warrantyFacts(EXPIRY.plusDays(day.toLong())), null))).posts
+        }
+        val schedulePosts = listOf(DueStatus.DUE, DueStatus.OVERDUE).flatMap { status ->
+            decide(listOf(DeliveryInput(Fixture.subject("s1", "2026-06-15"), Fixture.facts(status), null))).posts
+        }
+        val until = LoanRun(Fixture.loan(repeat = DeadlineRepeat.UNTIL_CLEARED))
+        val loanPosts = LoanRun(Fixture.loan()).sweep(at(0, 9, 0)).posts +
+            LoanRun(Fixture.loan()).sweep(at(3, 10, 0)).posts +
+            (0..5).flatMap { day -> until.sweep(at(day, 9, 0)).posts }
+
+        assertEquals(31, warrantyPosts.size)
+        assertEquals(2, schedulePosts.size)
+        assertEquals(8, loanPosts.size)
+        assertEquals(emptyList<ItemPost>(), (warrantyPosts + schedulePosts + loanPosts).filter { it.onlyAlertOnce })
     }
 
     /** Day [day] after the fixture's due date, at [hour]:[minute] local. */

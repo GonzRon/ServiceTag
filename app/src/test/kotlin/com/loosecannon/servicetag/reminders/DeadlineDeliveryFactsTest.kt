@@ -113,6 +113,11 @@ class DeadlineDeliveryFactsTest {
         assertEquals("Sample Borrower", nine.borrower)
         assertEquals("today's 09:00, still ahead", Instant.parse("2031-06-20T03:30:00Z").toEpochMilli(), nine.dayOpensAt)
         assertEquals("yesterday's 09:00", Instant.parse("2031-06-19T03:30:00Z").toEpochMilli(), nine.cadenceSince)
+        assertEquals(
+            "the words turn at the start of the day after the due day, local",
+            Instant.parse("2031-06-18T18:30:00Z").toEpochMilli(),
+            nine.wordsTurnAt,
+        )
 
         val seven = facts(digestHour = 7).factsFor(key)!!
         assertEquals("today's 07:00", Instant.parse("2031-06-20T01:30:00Z").toEpochMilli(), seven.dayOpensAt)
@@ -126,6 +131,7 @@ class DeadlineDeliveryFactsTest {
         ).factsFor(key)!!
         assertEquals("03:00 EDT", Instant.parse("2031-03-09T07:00:00Z").toEpochMilli(), springForward.dayOpensAt)
         assertEquals("03:00 EDT", Instant.parse("2031-03-09T07:00:00Z").toEpochMilli(), springForward.cadenceSince)
+        assertEquals("00:00 EDT the next day", Instant.parse("2031-03-10T04:00:00Z").toEpochMilli(), springForward.wordsTurnAt)
     }
 
     /**

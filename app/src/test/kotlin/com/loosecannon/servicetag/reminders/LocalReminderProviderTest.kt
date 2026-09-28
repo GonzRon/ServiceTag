@@ -151,7 +151,9 @@ class LocalReminderProviderTest {
     private val platform = MutablePlatformState()
     private val alarm = RecordingDigestAlarm(isArmed = true)
     private val prefs = AppPrefs(MapKeyValueStore())
-    private val clock = Clock { Fixture.NOW }
+    /** #72 fix round 1: the clock a test may move; every shipped case leaves it at `Fixture.NOW`. */
+    private var nowMillis: Long = Fixture.NOW
+    private val clock = Clock { nowMillis }
 
     /**
      * The status is the facts', never the date's — which is the whole of carry-forward (c). Subjects
@@ -793,6 +795,33 @@ class LocalReminderProviderTest {
             listOf("Example Drill — Due back", "Example Ladder — Due back"),
             notifications.postedItems.map { it.title },
         )
+    }
+
+    /**
+     * Fix round 1 (MAJOR-1 (a)): posted on its due day, a Once still showing the next morning is
+     * re-posted in place — one post under the same tag, never a cancel — in the post-due words and
+     * only-alert-once, and the shade holds that one notification.
+     */
+    @Test
+    fun aStandingOnceIsRefreshedInPlaceAndNeverCancelled() = runTest {
+        val provider = provider()
+        today = LocalDate.parse("2026-06-09")
+        drill(dueOn = "2026-06-09")
+        assertEquals(1, provider.reconcile(lentOut()).posted)
+        val tag = notifications.standingItems().single()
+        assertEquals("DUE BACK", notifications.items.getValue(tag).statusWord)
+        notifications.log.clear()
+
+        today = LocalDate.parse("2026-06-10")
+        nowMillis = java.time.Instant.parse("2026-06-10T09:00:00Z").toEpochMilli()
+        val report = provider.reconcile(lentOut())
+
+        assertEquals(listOf("post $tag"), notifications.log)
+        assertEquals(setOf(tag), notifications.standingItems())
+        val refreshed = notifications.items.getValue(tag)
+        assertEquals("Lent to Sample Borrower. Was due back 9 Jun 2026.", refreshed.body)
+        assertTrue(refreshed.onlyAlertOnce)
+        assertEquals(ReconcileReport(0, 0, 1, emptyList()), report)
     }
 
     /** Reminders switched off: loan posts come down with everything else, and their stamps go too. */

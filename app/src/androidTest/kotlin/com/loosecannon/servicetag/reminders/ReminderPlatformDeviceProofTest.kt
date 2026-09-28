@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.reminders
 
 import android.Manifest
+import android.app.Notification
 import android.content.Context
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
@@ -397,6 +398,58 @@ class ReminderPlatformDeviceProofTest {
         }
     }
 
+    /**
+     * #72 fix round 1 (MAJOR-2, owner ruling R72-B2): the one ruled departure in `Notifications.kt`,
+     * on a real `NotificationManager`. A loan announcement reads back **without**
+     * `FLAG_ONLY_ALERT_ONCE`, so it alerts as every shipped post does; the same tag re-posted as the
+     * Once refresh — the post-due words, `onlyAlertOnce` set — is still one notification under that
+     * tag, carries the new text, and carries the flag, so the update does not sound.
+     */
+    @Test
+    fun anOnlyAlertOncePostKeepsItsTagAndCarriesTheFlag() {
+        val notifications = AndroidReminderNotifications(context, AndroidQuickActionIntents(context))
+        val key = SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "0b4f3c2a-6d1e-4f8a-9b7c-5e2d1a0f3b6c/c9f0f895-fb98-4b91-99f5-1d5a2e7c0b3e")
+        val tag = itemTag(key, "fedcba9876543210ffff")
+        val announcement = ItemPost(
+            key = key,
+            tag = tag,
+            channelId = NotificationChannels.LOANS,
+            title = "Example Drill — Due back",
+            body = "Lent to Sample Borrower. Due back 30 Jun 2031.",
+            statusWord = DigestPolicy.WORD_DUE_BACK,
+            meter = false,
+            actions = listOf(DigestPolicy.ACTION_OPEN),
+        )
+        notifications.cancelItem(tag)
+        assertTrue(awaitStanding(notifications, tag, false))
+
+        notifications.postItem(announcement, app.graph.quickActions.forDeadline(key))
+        assertTrue(awaitStanding(notifications, tag, true))
+        assertEquals("an announcement alerts", 0, itemFor(tag)!!.notification.flags and Notification.FLAG_ONLY_ALERT_ONCE)
+
+        val refresh = announcement.copy(
+            body = "Lent to Sample Borrower. Was due back 30 Jun 2031.",
+            statusWord = DigestPolicy.WORD_NOT_RETURNED,
+            onlyAlertOnce = true,
+        )
+        notifications.postItem(refresh, app.graph.quickActions.forDeadline(key))
+        assertTrue(
+            "the refresh replaced it in place",
+            awaitTrue { itemFor(tag)?.notification?.extras?.getCharSequence(NotificationCompat.EXTRA_TEXT)?.toString() == refresh.body },
+        )
+        val standing = NotificationManagerCompat.from(context).activeNotifications
+            .filter { it.id == AndroidReminderNotifications.ITEM_ID && it.tag == tag }
+        assertEquals("one notification under its tag", 1, standing.size)
+        assertEquals(
+            "the refresh carries only-alert-once",
+            Notification.FLAG_ONLY_ALERT_ONCE,
+            standing.single().notification.flags and Notification.FLAG_ONLY_ALERT_ONCE,
+        )
+
+        notifications.cancelItem(tag)
+        assertTrue(awaitStanding(notifications, tag, false))
+    }
+
     /** #79 (R79-14c): the boot count a deadline's stamp records is readable on a real phone. */
     @Test
     fun theBootCountIsReadable() {
@@ -404,6 +457,11 @@ class ReminderPlatformDeviceProofTest {
         assertNotNull("Settings.Global.BOOT_COUNT", count)
         assertTrue("a phone that is running has started at least once", count!! >= 1)
     }
+
+    private fun itemFor(tag: String): StatusBarNotification? =
+        NotificationManagerCompat.from(context).activeNotifications.firstOrNull {
+            it.id == AndroidReminderNotifications.ITEM_ID && it.tag == tag
+        }
 
     private fun warningFor(key: SubjectKey.Deadline): StatusBarNotification? =
         NotificationManagerCompat.from(context).activeNotifications.firstOrNull {

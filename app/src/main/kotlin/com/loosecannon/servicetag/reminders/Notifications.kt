@@ -79,7 +79,7 @@ class AndroidReminderNotifications(
             .setSubText(post.statusWord)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(false)
-            .setOnlyAlertOnce(false)
+            .setOnlyAlertOnce(post.onlyAlertOnce)
         // A body is only set when there is one. The empty case is unreachable today — a DUE or
         // OVERDUE subject carries either a date or a crossed meter threshold — and that is exactly
         // why it must not ship a blank sentence if it ever becomes reachable: a title-only

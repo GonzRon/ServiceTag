@@ -115,6 +115,14 @@ object DigestPolicy {
                             unchanged++
                             deadlineRows += step.stamp
                         }
+                        // Fix round 1 (MAJOR-1 (a)): the same accounting, silently — the post
+                        // carries only-alert-once, so the update does not sound.
+                        is DeadlineStep.Refresh -> {
+                            shown += step.post
+                            posts += step.post
+                            unchanged++
+                            deadlineRows += step.stamp
+                        }
                     }
                     return@forEach
                 }
@@ -428,7 +436,12 @@ object DigestPolicy {
      * - From the due day on, before the day's digest hour ([DeadlineFacts.dayOpensAt]): **held** — a
      *   standing post stays, anything else waits — and nothing is stamped or forgotten, so neither a
      *   midnight sweep nor a zone moved west on the due day can take a post down and announce it twice.
-     * - Standing in exactly this form: held, and counted unchanged — after the due day too.
+     * - Standing in exactly this form: held, and counted unchanged — with one exception (fix round 1,
+     *   owner ruling R72-B2): still showing after the due day in the due-day words (stamped before
+     *   [DeadlineFacts.wordsTurnAt]), it is **refreshed once** — re-posted in place under the same
+     *   tag in P72-41/43, only-alert-once so nothing sounds, re-stamped so it happens once
+     *   ([DeadlineStep.Refresh]). Only the platform's standing list authorises it: a Once that is not
+     *   showing is never refreshed back.
      * - Stamped with this content **from any boot**: nothing. The owner swiped it, or a restart took it
      *   down, and "once" means once — the plate, the list and the Dashboard still say so. The boot is
      *   written into the stamp and not read here (R79-14c's restart rule is the warranty's alone).
@@ -455,8 +468,16 @@ object DigestPolicy {
         val post = loanPost(input, facts, dueOn)
         val standing = post.tag in standingTags
         if (nowMillis < dayOpensAt) return if (standing) DeadlineStep.Standing(post) else DeadlineStep.Quiet
-        if (standing) return DeadlineStep.Standing(post)
         val row = input.row
+        if (standing) {
+            val wordsTurnAt = facts.wordsTurnAt ?: return DeadlineStep.Standing(post)
+            val showsDueDayWords = row == null || row.updatedAt < wordsTurnAt
+            return if (facts.today.isAfter(dueOn) && showsDueDayWords && channelDelivers(post.channelId)) {
+                DeadlineStep.Refresh(post.copy(onlyAlertOnce = true), loanStamp(input, bootCount, nowMillis))
+            } else {
+                DeadlineStep.Standing(post)
+            }
+        }
         if (row != null && row.announcedHash == subject.contentHash) return DeadlineStep.Quiet
         if (!channelDelivers(post.channelId)) return DeadlineStep.Quiet
         return DeadlineStep.Announce(post, loanStamp(input, bootCount, nowMillis))
@@ -578,6 +599,13 @@ object DigestPolicy {
          * again, and stamped. It was already showing, so it is counted unchanged.
          */
         data class Realert(val post: ItemPost, val stamp: DeadlineLocalDelivery) : DeadlineStep
+
+        /**
+         * #72 fix round 1 (MAJOR-1 (a)): a Once still showing after its due day, re-posted now in
+         * place under the same tag in the post-due words, [ItemPost.onlyAlertOnce] so it does not
+         * sound, and re-stamped so it happens once. Counted unchanged, never cancelled first.
+         */
+        data class Refresh(val post: ItemPost, val stamp: DeadlineLocalDelivery) : DeadlineStep
     }
 
     /** A meter with no unit at all (a pH definition) leaves the `<unit>` slot empty rather than doubling a space. */
@@ -731,6 +759,12 @@ data class DeadlineFacts(
      * A loan posts, re-alerts or re-posts only at a sweep at or after it; before it, a loan is held.
      */
     val dayOpensAt: Long? = null,
+    /**
+     * Fix round 1 (MAJOR-1 (a)): epoch millis of the start of the day after the due day, in the
+     * device zone — when a loan's words turn to P72-41/43. A Once stamped before it and still
+     * showing after the due day carries the due-day words, and is refreshed once, silently.
+     */
+    val wordsTurnAt: Long? = null,
 )
 
 /** One per-item notification. [tag] is its identity in the shade; [actions] are B07's to wire. */
@@ -744,6 +778,12 @@ data class ItemPost(
     /** Whether a crossed meter threshold is what came due, which selects the icon. */
     val meter: Boolean,
     val actions: List<String>,
+    /**
+     * #72 fix round 1 (owner ruling R72-B2): update a standing notification without alerting.
+     * **False on every path but one** — the silent post-due refresh of a loan's Once that is still
+     * showing — so every schedule, warranty and loan announcement and every re-alert sounds as before.
+     */
+    val onlyAlertOnce: Boolean = false,
 )
 
 /** The one summary a run posts. [tag] changes exactly when the counts do. */
