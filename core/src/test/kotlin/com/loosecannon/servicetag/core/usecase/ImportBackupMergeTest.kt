@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.merge.MergeTable
 import com.loosecannon.servicetag.core.merge.MergeTally
 import com.loosecannon.servicetag.core.merge.MergeVerdict
 import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
@@ -16,6 +17,7 @@ import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.GroupMember
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
@@ -27,21 +29,28 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.ServiceCase
+import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.AttachmentStore
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.StoreIoException
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.testing.FakeAttachmentStorage
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
+import com.loosecannon.servicetag.core.testing.HealthFixtures
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentStore
@@ -61,6 +70,8 @@ import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseEntryRepositor
 import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
+import com.loosecannon.servicetag.core.testing.caseEntryOf
+import com.loosecannon.servicetag.core.testing.caseOf
 import java.io.InputStream
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -100,9 +111,11 @@ class ImportBackupMergeTest {
         val schedules = InMemoryScheduleRepository(closures)
         val references = InMemoryReferenceRepository()
         val categories = InMemoryCategoryRepository()
+        val caseEntries = InMemoryServiceCaseEntryRepository()
+        val serviceCases = InMemoryServiceCaseRepository(caseEntries)
         val uow = FakeUnitOfWork(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, references, categories,
+            events, attachments, references, categories, serviceCases, caseEntries,
         )
 
         /** How many times the apply asked for a total recompute, and what it had written by then. */
@@ -116,13 +129,13 @@ class ImportBackupMergeTest {
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, storage, uow,
+            categories, serviceCases, caseEntries, storage, uow,
         )
         val apply = ApplyBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, storage, uow,
+            categories, serviceCases, caseEntries, storage, uow,
             rebuildAll = {
                 rebuilds += 1
                 writesAtRebuild = runBlocking {
@@ -209,7 +222,7 @@ class ImportBackupMergeTest {
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
             f.closures, f.events, f.attachments, f.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            f.categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
+            f.categories, f.serviceCases, f.caseEntries, f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
             appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
     }
@@ -674,5 +687,47 @@ class ImportBackupMergeTest {
         assertFailsWith<BackupNewerFormat> { runBlocking { target.merge.run(newer) } }
 
         assertEquals(before, target.everything())
+    }
+
+    /**
+     * #79 (C19): the apply writes a case after its asset and after the events — which it names only
+     * softly — and each case's entries after the case, then rebuilds once. Every write is logged in
+     * the order it reached its store.
+     */
+    @Test
+    fun casesThenEntriesLandAfterAssetsAndEvents() = runBlocking<Unit> {
+        val donor = Fakes()
+        donor.assets.upsert(asset("a1", "Example Heater"))
+        donor.events.upsert(HealthFixtures.eventOf("e1", "a1", EventKind.INCIDENT, "No hot water", "2026-09-20"))
+        donor.serviceCases.upsert(caseOf("c1", incident = "e1"))
+        donor.caseEntries.insert(caseEntryOf("n1"))
+        donor.caseEntries.insert(caseEntryOf("n2", note = "Courier collected", occurredOn = "2026-09-22"))
+        val archive = exportOf(donor)
+
+        val target = Fakes()
+        val log = mutableListOf<String>()
+        val assets = object : AssetRepository by target.assets {
+            override suspend fun upsert(asset: Asset) = target.assets.upsert(asset).also { log += "asset:${asset.id.value}" }
+        }
+        val events = object : EventRepository by target.events {
+            override suspend fun upsert(e: AssetEvent) = target.events.upsert(e).also { log += "event:${e.id.value}" }
+        }
+        val cases = object : ServiceCaseRepository by target.serviceCases {
+            override suspend fun upsert(case: ServiceCase) = target.serviceCases.upsert(case).also { log += "case:${case.id.value}" }
+        }
+        val entries = object : ServiceCaseEntryRepository by target.caseEntries {
+            override suspend fun insert(entry: ServiceCaseEntry) =
+                target.caseEntries.insert(entry).also { log += "entry:${entry.id.value}" }
+        }
+        val apply = ApplyBackupMergePlan(
+            assets, target.groups, target.tags, target.links, target.definitions, target.profiles, target.schedules,
+            target.closures, events, target.attachments, target.references,
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
+            target.categories, cases, entries, target.storage, target.uow, rebuildAll = { log += "rebuild" },
+        )
+
+        apply.run(target.build.run(archive))
+
+        assertEquals(listOf("asset:a1", "event:e1", "case:c1", "entry:n1", "entry:n2", "rebuild"), log)
     }
 }

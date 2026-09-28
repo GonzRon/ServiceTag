@@ -280,11 +280,12 @@ class CrossConceptWriteTest {
     private val storage = FakeAttachmentStorage()
     private val buildMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
-        activations, conditions, subjects, categories, storage, uow,
+        activations, conditions, subjects, categories, serviceCases, caseEntries, storage, uow,
     )
     private val applyMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
-        activations, conditions, subjects, categories, storage, uow, rebuildAll = { recompute.all() },
+        activations, conditions, subjects, categories, serviceCases, caseEntries, storage, uow,
+        rebuildAll = { recompute.all() },
     )
     private val importBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,

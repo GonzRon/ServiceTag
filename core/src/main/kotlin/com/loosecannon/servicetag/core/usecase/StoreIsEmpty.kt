@@ -23,7 +23,8 @@ import com.loosecannon.servicetag.core.ports.TagRepository
  * so [assets] cannot answer for it, and a restore deletes it like any other record. `MeasurementDefinition` and
  * `EventProfile` are deliberately not read: both carry a non-null `assetId` and the schema's
  * foreign key enforces it, so neither can exist without the asset it names and [assets] already
- * answers for them.
+ * answers for them. #79's service cases are not read for the same reason — `service_case.asset_id`
+ * is a CASCADE foreign key, and an entry's `case_id` another — so no seventh kind is added.
  *
  * That same argument applies to [events] today — `asset_event.asset_id` is non-null and cascades
  * from `asset` — so the events clause is defence in depth against a schema that later relaxes the

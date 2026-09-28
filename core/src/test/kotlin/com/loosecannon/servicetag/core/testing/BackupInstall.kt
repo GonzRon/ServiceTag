@@ -52,11 +52,11 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
     )
     val build = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-        references, activations, conditions, subjects, categories, storage, uow,
+        references, activations, conditions, subjects, categories, serviceCases, caseEntries, storage, uow,
     )
     val apply = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-        references, activations, conditions, subjects, categories, storage, uow,
+        references, activations, conditions, subjects, categories, serviceCases, caseEntries, storage, uow,
         rebuildAll = { rebuilds += 1 },
     )
 }

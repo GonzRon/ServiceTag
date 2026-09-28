@@ -76,8 +76,9 @@ class ExportBackupSetTest {
     }
 
     /**
-     * #79 (C18): a case and its timeline leave with their asset — every header, every entry — and land
-     * with it by a replace, field for field, the soft links dangling as they were.
+     * #79 (C18, C19): a case and its timeline leave with their asset — every header, every entry — and
+     * land with it, field for field and the soft links dangling as they were, by a replace and by a
+     * merge into an install without them; and this install's own export re-plans IDENTICAL.
      */
     @Test
     fun casesAndTheirEntriesTravelWithTheirAsset() = runBlocking<Unit> {
@@ -101,6 +102,15 @@ class ExportBackupSetTest {
         val replaced = BackupInstall()
         replaced.replace.run(bytes)
         assertEquals(cases, replaced.serviceCases.all())
-        assertEquals(entries.sortedWith(compareBy({ it.occurredOn }, { it.occurredTime }, { it.createdAt })), replaced.caseEntries.all())
+        val timeline = entries.sortedWith(compareBy({ it.occurredOn }, { it.occurredTime }, { it.createdAt }))
+        assertEquals(timeline, replaced.caseEntries.all())
+
+        val merged = BackupInstall()
+        merged.apply.run(merged.build.run(bytes))
+        assertEquals(cases to timeline, merged.serviceCases.all() to merged.caseEntries.all(), "by a merge into an install without them")
+
+        val again = source.build.run(bytes)
+        assertEquals(true, again.applicable)
+        assertEquals(emptyList(), again.writes.serviceCases + again.writes.caseEntries, "IDENTICAL against the phone it came from")
     }
 }

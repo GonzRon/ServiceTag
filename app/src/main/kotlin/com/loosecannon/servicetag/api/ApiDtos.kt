@@ -147,8 +147,9 @@ internal data class MergeReportResponse(
     // the write order: a group's members reference assets, a schedule references an asset or a
     // group, a closure references a schedule, a reference an asset; an activation and a condition
     // reference an asset, and a health subject an asset and, softly, a schedule. #74's `categories`
-    // is last here, as in the enum, though a merge writes categories **first** (`MergeWrites`).
-    // Fifteen tables since format 9.
+    // follows here, as in the enum, though a merge writes categories **first** (`MergeWrites`), and
+    // #79's `serviceCases` and `caseEntries` close the list, as they close the enum. Fifteen tables
+    // since format 9, seventeen since format 12.
     val assets: MergeTallyDto,
     val groups: MergeTallyDto,
     val definitions: MergeTallyDto,
@@ -165,6 +166,9 @@ internal data class MergeReportResponse(
     val healthSubjects: MergeTallyDto,
     /** #74 — the archive's rows and the synthesised rows its accepted assets need (C13). */
     val categories: MergeTallyDto,
+    /** #79 — the case headers and their timelines (format 12). */
+    val serviceCases: MergeTallyDto,
+    val caseEntries: MergeTallyDto,
     /** Deterministic: table order, then id. Empty when [applicable]. */
     val conflicts: List<MergeDecisionDto>,
     val duplicateCandidates: List<DuplicateCandidateDto>,
@@ -197,6 +201,8 @@ internal fun MergeReport.toResponse() = MergeReportResponse(
     conditions = conditions.dto(),
     healthSubjects = healthSubjects.dto(),
     categories = categories.dto(),
+    serviceCases = serviceCases.dto(),
+    caseEntries = caseEntries.dto(),
     conflicts = conflicts.map { it.dto() },
     duplicateCandidates = duplicateCandidates.map { it.dto() },
 )

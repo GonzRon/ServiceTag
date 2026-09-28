@@ -125,7 +125,8 @@ class Format7ImportIdentityTest {
         )
         val build = BuildBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, references, activations, conditions, subjects, categories, storage, uow,
+            attachments, references, activations, conditions, subjects, categories, serviceCases, caseEntries,
+            storage, uow,
         )
 
         fun everything(): List<Any> = runBlocking {

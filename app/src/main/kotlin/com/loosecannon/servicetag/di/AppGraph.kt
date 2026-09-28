@@ -490,12 +490,12 @@ class AppGraph(private val context: Context) {
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, attachmentStorage, uow,
     )
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, attachmentStorage, uow,
         // The total post-apply recompute, wired to the engine: an imported event, membership row,
         // closure or meter reading can each move a due date, and rebuilding every schedule inside
         // the apply's own transaction is cheaper than enumerating which.
@@ -506,9 +506,9 @@ class AppGraph(private val context: Context) {
 
     /**
      * #40 — is there anything on this phone a restore would replace? The Backup screen asks once,
-     * per picked file, and the answer chooses the confirmation. Definitions and profiles are not
-     * read: neither can exist without its asset, so `assets` answers for both. A category row can
-     * (#74: it outlives its assets), so `categories` is the sixth kind.
+     * per picked file, and the answer chooses the confirmation. Definitions, profiles and #79's
+     * service cases are not read: none can exist without its asset, so `assets` answers for them. A
+     * category row can (#74: it outlives its assets), so `categories` is the sixth kind.
      */
     val storeIsEmpty: StoreIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links, categories)
 
