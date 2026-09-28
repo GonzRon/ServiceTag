@@ -658,3 +658,9 @@ unless stated.
   land in the same batched fix round; one scoped re-review of the fix before B2 is accepted and B3 dispatched.
 - This resolves the R72-6 / R72-7 tension by option (a): a standing Once turns to "Was due back … / NOT RETURNED"
   silently after the due day; a dismissed one never returns.
+- **PD-2 accepted as disclosed (owner, 2026-09-28, after the scoped re-review):** a swipe landing between the
+  provider's read of the standing notifications and the silent refresh's post re-creates that Once, audibly — a window
+  of milliseconds (up to about 100 ms on a cold start), at most once in a Once loan's life, after which the re-stamp
+  keeps a dismissal durable. No platform call updates a notification only while it shows; the re-check and `setSilent`
+  variants were declined (each a further departure that narrows or mutes but cannot close it). B2 stands at `4c0de0ac`.
+  The strictly-once refinement for a backward clock, zone or date-line move across the due day is deferred to #84.
