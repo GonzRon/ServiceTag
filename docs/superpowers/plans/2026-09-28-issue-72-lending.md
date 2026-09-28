@@ -601,3 +601,44 @@ tools/servicetag-mcp && uv run --frozen pytest)` green at 68 tools. **Greps:**
 carry a lookup URI on a loan route or tool; route a delete, a relink or a contact query; reconcile from a handler; let
 `null` clear in `update_loan`; lower the global MCP minimum; bump `versionName`; rewrite ratified spec text. **Size:**
 about 550 production and 300 Python, 850 test, 110 docs lines.
+
+## 13. Owner rulings (2026-09-28; binding on every brief)
+
+The owner passed the gate on rev 2.1 as written: no further planning review. Every ruling is the recommendation above
+unless stated.
+
+- **R72-1** A, the `asset_loan` aggregate. **R72-2** all four enforcement layers (use case, the unique
+  `(asset_id, open_marker)` index, the archive graph check, the merge conflict) — the invariant is canonical.
+- **R72-3** a phone loan requires a picked contact; its display name is the snapshot, not directly editable; API loans
+  may be name-only and linked later on the phone. **R72-4** the canonical `contact_lookup_uri`, exported beside the
+  snapshot in backup and merge, degrading gracefully where it does not resolve, never exposed by the loan API;
+  **P72-19 ACTIVE.** **R72-5** a relink on an open loan replaces link and snapshot together; returned loans frozen.
+- **R72-6 (a) strictly once** per due occurrence: a swiped Once never returns after a restart.
+- **R72-7** the digest-hour period; Until returned daily, re-alerting in place; the post-due forms **P72-10, P72-41,
+  P72-43 ACTIVE**; no alert around midnight because `ACTION_DATE_CHANGED` ran.
+- **R72-8** "Open" only; no notification-side Returned. **R72-9** the dedicated `loan_reminders` channel, default
+  importance (four channels). **R72-10** reminders continue while a loan is open on a retired or archived asset.
+  **R72-11** the phone offers "Lend out" in service only; the API accepts any lifecycle. **R72-12** archive and retire
+  allowed while lent (the loan stays visible and returnable); delete follows the existing destructive confirmation and
+  cascades the loan. **R72-13** no maintenance, condition or health coupling; an overdue loan is never maintenance
+  OVERDUE.
+- **R72-14 (b)** the Dashboard-only loan row after the ratified ATTENTION tiers; `AttentionKind` and `/v1/attention`
+  untouched; **P72-44 ACTIVE**; accepted: a retired or archived overdue loan notifies but is absent from that in-service
+  projection.
+- **R72-15** phone writes reconcile at once; API and MCP writes settle at the next digest or backstop — no handler becomes
+  a reminder reconciler. **R72-16** five routes and five tools (63 → 68) with `GET /v1/loans/{id}` and the overlay
+  `update_loan` honouring null-preserves; `LoanDto` carries `contactLinked`, never the lookup URI.
+- **R72-17** "Mark returned" is the only exit; no loan delete; "Edit loan" corrects an open loan. **R72-18** returned
+  loans frozen; accepted: a return, re-date or relink on one phone conflicts with a stale copy on another — no UPDATE
+  merge path for loans. **R72-19** dates only, with the stated ordering rules. **R72-20** a returned loan is absent from
+  the subjects; the `Completed` reservation untouched. **R72-21** no version bump; schema/format 13 rides unreleased
+  under 1.4.1 into the next feature-bearing MINOR with #79; the release proof is the direct schema 8 → 13 path.
+- **R72-22** Lending right after Warranty, before Condition, "Lend out" inside it; both loan badges word + glyph in the
+  neutral tone, "Loan overdue" included — never maintenance-overdue or degraded semantics.
+- **R72-23** P72-1 … P72-46 **ratified verbatim**: the literals `Lent out` and `Loan overdue` stay mixed-case
+  (`StatusBadge` draws LENT OUT / LOAN OVERDUE; TalkBack reads the phrase); the three surface-specific overdue
+  expressions stay ("Loan overdue", "Was due back", "NOT RETURNED"); P72-45 is `No app can pick a contact`; the
+  conditionals P72-10, 19, 41, 43, 44 are all ACTIVE; the single-home `lentTo(name)` composition for P72-4/P72-44 stands.
+- **R72-24** the foreign-UID grant proof `ContactGrantBoundaryTest` from the test-only sender, never Contacts UI
+  automation; the testing hierarchy in `docs/superpowers/planning-policy.md` amended at ratification (committed with
+  this section).

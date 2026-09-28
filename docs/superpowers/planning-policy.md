@@ -79,6 +79,10 @@ pyramid, top to bottom by count:
    **test-only sender module** (`:share-test-sender`: its own package and UID, a `FileProvider`
    with fictional fixtures, three commands: `send_text`, `send_file`, `send_bad_grant`) — never
    from `adb shell` posing as a sharer, DocumentsUI, Gboard or MediaStore accidents.
+   **Amendment (#72, 2026-09-28):** the sender also seeds one fictional, account-less contact and answers
+   `pick_contact`, `pick_contact_no_grant` and `forget_contact`, holding the contacts permissions itself, so
+   `ContactGrantBoundaryTest` proves a picked contact's one-shot provider grant is readable by ServiceTag without
+   `READ_CONTACTS`; R4 names it beside `ShareBoundaryTest`.
 5. **One signed-APK upgrade/install smoke test** on the development phone.
 
 **Hard rule:** a black-box UI test must name the Android/OS/process boundary it demonstrates that
@@ -86,4 +90,5 @@ no JVM, instrumentation, Compose-semantics, API or structural test can. If it ca
 boundary, it is not added. Ten semantic variations of one boundary are one boundary test plus ten
 in-process tests. See ServiceTag issue #62.
 
-The standing release runbook, one command per layer and R4 capped at `ShareBoundaryTest`, is `docs/release-proofs.md`.
+The standing release runbook, one command per layer and R4 capped at `ShareBoundaryTest` (and, from #72,
+`ContactGrantBoundaryTest`), is `docs/release-proofs.md`.
