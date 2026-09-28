@@ -38,7 +38,11 @@ class BackupFormat11Test {
     @Test
     fun aLeadRoundTrips() {
         val led = heater.copy(warrantyReminderLeadDays = 30)
-        val bytes = archiveOf(data(led, plainAssetOf("a2", "Example Heater two").copy(warrantyExpiresOn = "2030-12-31", warrantyReminderLeadDays = Int.MAX_VALUE)))
+        // Stamped 11 explicitly since #79b moved this build's own format to 12: the lead's own format.
+        val bytes = archiveOf(
+            data(led, plainAssetOf("a2", "Example Heater two").copy(warrantyExpiresOn = "2030-12-31", warrantyReminderLeadDays = Int.MAX_VALUE)),
+            formatVersion = 11,
+        )
 
         val decoded = BackupCodec.decode(bytes)
 

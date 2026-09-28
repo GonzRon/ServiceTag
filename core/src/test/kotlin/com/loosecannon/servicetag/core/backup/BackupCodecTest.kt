@@ -240,6 +240,8 @@ class BackupCodecTest {
                 "seasonActivations" to 0, "assetConditions" to 0, "healthSubjects" to 0,
                 // Format 9's key, at zero here because this class pins the whole map.
                 "assetCategories" to 0,
+                // Format 12's two keys (#79), at zero here for the same reason.
+                "serviceCases" to 0, "serviceCaseEntries" to 0,
             ),
             manifest.counts,
         )
@@ -463,6 +465,8 @@ class BackupCodecTest {
                 "seasonActivations" to 0, "assetConditions" to 0, "healthSubjects" to 0,
                 // Format 9's key, at zero here because this class pins the whole map.
                 "assetCategories" to 0,
+                // Format 12's two keys (#79), at zero here for the same reason.
+                "serviceCases" to 0, "serviceCaseEntries" to 0,
             ),
             decoded.manifest.counts,
         )
@@ -1029,10 +1033,13 @@ class BackupCodecTest {
         return resealed(bytes, stripped.toByteArray(Charsets.UTF_8))
     }
 
-    /** The numbers this tip carries: the format moved to 10 (#67) and on to 11 (#79), the legacy boundary did not. */
+    /**
+     * The numbers this tip carries: the format moved to 10 (#67), on to 11 (#79) and on to 12 (#79b),
+     * the legacy boundary did not.
+     */
     @Test
-    fun theFormatIsElevenAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(11, BackupCodec.FORMAT_VERSION)
+    fun theFormatIsTwelveAndTheLegacyBoundaryStaysSeven() {
+        assertEquals(12, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 

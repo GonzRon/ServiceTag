@@ -24,6 +24,8 @@ import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -61,6 +63,9 @@ class ExportBackupSet(
     private val healthSubjects: HealthSubjectRepository,
     /** #74 — the owner's own categories (format 9). The compiled built-ins are never rows. */
     private val categories: CategoryRepository,
+    /** #79 — the service case aggregate (format 12): the headers, then their timelines. */
+    private val serviceCases: ServiceCaseRepository,
+    private val caseEntries: ServiceCaseEntryRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -94,6 +99,9 @@ class ExportBackupSet(
                 healthSubjects = healthSubjects.all().map { it.toDto() },
                 // Format 9: every row, used or not — a category outlives the last Asset using it.
                 assetCategories = categories.all().map { it.toDto() },
+                // Format 12: every case header, then every timeline entry as its own row.
+                serviceCases = serviceCases.all().map { it.toDto() },
+                serviceCaseEntries = caseEntries.all().map { it.toDto() },
             ) to rows
         }
         val plan = ArtifactsPlan(

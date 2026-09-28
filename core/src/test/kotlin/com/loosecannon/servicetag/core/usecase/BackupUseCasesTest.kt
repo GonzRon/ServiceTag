@@ -52,6 +52,8 @@ import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
+import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
 import java.io.ByteArrayInputStream
@@ -233,7 +235,7 @@ class BackupUseCasesTest {
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
             f.closures, f.events, f.attachments, f.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            f.categories, f.uow, IdGenerator { "set-1" }, Clock { now }, appVersion = "2.0", schemaVersion = 1,
+            f.categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), f.uow, IdGenerator { "set-1" }, Clock { now }, appVersion = "2.0", schemaVersion = 1,
         ).run().data
     }
 
@@ -242,7 +244,7 @@ class BackupUseCasesTest {
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
             f.closures, f.events, f.attachments, f.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            f.categories, f.storage, f.uow, rebuildAll = { },
+            f.categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), f.storage, f.uow, rebuildAll = { },
         ).run(bytes)
     }
 
@@ -426,6 +428,8 @@ class BackupUseCasesTest {
                 "seasonActivations" to 0, "assetConditions" to 0, "healthSubjects" to 0,
                 // Format 9's key, at zero here because this class pins the whole map.
                 "assetCategories" to 0,
+                // Format 12's two keys (#79), at zero here for the same reason.
+                "serviceCases" to 0, "serviceCaseEntries" to 0,
             ),
             decoded.manifest.counts,
         )

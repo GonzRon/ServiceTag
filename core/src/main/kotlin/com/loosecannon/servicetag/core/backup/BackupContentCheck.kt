@@ -4,10 +4,13 @@ import com.loosecannon.servicetag.core.journal.CategoryKey
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.usecase.BreakCommand
 import com.loosecannon.servicetag.core.usecase.SeasonProblem
+import com.loosecannon.servicetag.core.usecase.ServiceCaseProblem
 import com.loosecannon.servicetag.core.usecase.breakProblems
+import com.loosecannon.servicetag.core.usecase.caseEntryProblems
 import com.loosecannon.servicetag.core.usecase.conditionFactProblems
 import com.loosecannon.servicetag.core.usecase.parseDate
 import com.loosecannon.servicetag.core.usecase.policyProblems
+import com.loosecannon.servicetag.core.usecase.serviceCaseHeaderProblems
 import com.loosecannon.servicetag.core.usecase.subjectNameProblem
 import com.loosecannon.servicetag.core.usecase.thresholdsProblem
 import com.loosecannon.servicetag.core.usecase.warrantyReminderProblems
@@ -39,10 +42,17 @@ import com.loosecannon.servicetag.core.usecase.wellFormedZone
  *   later release must never make an older archive unrestorable, and the replace and the merge
  *   planner drop it. (A duplicate key is the graph check's `uniqueIds`, which runs first.)
  *
+ * - a service case (#79, C18) whose header a case command would refuse — a blank title, a malformed
+ *   `openedOn`, a negative cost, a cost with no currency, a malformed currency
+ *   (`serviceCaseHeaderProblems`, asked with no today) — or whose `closedOn` is not set exactly when it
+ *   is CLOSED or CANCELLED, which only a status entry moves; and a case entry with neither a note nor a
+ *   status, or a malformed date or time (`caseEntryProblems`).
+ *
  * What depends on **other rows or on today** is deliberately not asked: a subject naming an archived
  * or retargeted schedule (NOT TRACKED, which a merge may bring — plan decision 17), a TRACK_ONE
  * primary that is gone (S138's fallback), a PRE_SERVICE schedule on a boundary-less asset, two subjects
- * on one schedule (the merge planner's own reason), or a fact dated after the importing device's today.
+ * on one schedule (the merge planner's own reason), a fact, a case or an entry dated after the importing
+ * device's today, or a case's Incident or repair link (soft, R79-4).
  *
  * Every refusal is [BackupCorrupt] naming the table, the row and the problem.
  */
@@ -97,6 +107,38 @@ internal object BackupContentCheck {
             )
         }
         checkCategories(data)
+        checkServiceCases(data)
+    }
+
+    /**
+     * #79 (C18): a case header and a timeline entry, by the rules the case commands ask, and the one
+     * rule only a status entry keeps — `closedOn` set exactly when the case is CLOSED or CANCELLED.
+     */
+    private fun checkServiceCases(data: BackupData) {
+        data.serviceCases.forEach { dto ->
+            val case = dto.toDomain()
+            val id = case.id.value
+            refuse(
+                "serviceCases", "case", id,
+                serviceCaseHeaderProblems(case.title, case.openedOn, case.costMinor, case.currency) +
+                    listOfNotNull(
+                        ServiceCaseProblem.BadDate("closedOn").takeIf { case.closedOn != null && parseDate(case.closedOn) == null },
+                    ),
+            )
+            if (case.status.isTerminal && case.closedOn == null) {
+                throw BackupCorrupt("serviceCases: case $id is ${case.status} with no closedOn")
+            }
+            if (!case.status.isTerminal && case.closedOn != null) {
+                throw BackupCorrupt("serviceCases: case $id is ${case.status} with a closedOn")
+            }
+        }
+        data.serviceCaseEntries.forEach { dto ->
+            val entry = dto.toDomain()
+            refuse(
+                "serviceCaseEntries", "entry", entry.id.value,
+                caseEntryProblems(entry.occurredOn, entry.occurredTime, entry.note, entry.status),
+            )
+        }
     }
 
     /**

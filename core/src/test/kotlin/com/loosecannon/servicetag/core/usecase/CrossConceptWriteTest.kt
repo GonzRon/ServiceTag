@@ -288,7 +288,8 @@ class CrossConceptWriteTest {
     )
     private val importBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
-        activations, conditions, subjects, categories, storage, uow, rebuildAll = { recompute.all() },
+        activations, conditions, subjects, categories, serviceCases, caseEntries, storage, uow,
+        rebuildAll = { recompute.all() },
     )
 
     /** A pre-upgrade (format 8) archive with one asset under a category this install has never saved. */
@@ -600,6 +601,8 @@ class CrossConceptWriteTest {
         val REPLACE_WRITES = setOf(
             "attachment", "asset_event", "maintenance_schedule", "maintenance_group", "event_profile",
             "measurement_definition", "nfc_tag", "external_link", "asset_reference", "asset", "asset_category",
+            // #79b: the case aggregate is wiped by name, its timeline before its headers.
+            "service_case_entry", "service_case",
         )
     }
 }

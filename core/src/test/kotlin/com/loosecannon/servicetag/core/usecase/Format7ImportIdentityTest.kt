@@ -32,6 +32,8 @@ import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
+import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import com.loosecannon.servicetag.core.testing.activationOf
 import com.loosecannon.servicetag.core.testing.conditionOf
@@ -104,19 +106,22 @@ class Format7ImportIdentityTest {
         val references = InMemoryReferenceRepository()
         val storage = FakeAttachmentStorage()
         val categories = InMemoryCategoryRepository()
+        val caseEntries = InMemoryServiceCaseEntryRepository()
+        val serviceCases = InMemoryServiceCaseRepository(caseEntries)
         val uow = FakeUnitOfWork(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, references, activations, conditions, subjects, categories,
+            attachments, references, activations, conditions, subjects, categories, serviceCases, caseEntries,
         )
         val export = ExportBackupSet(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, references, activations, conditions, subjects, categories,
+            attachments, references, activations, conditions, subjects, categories, serviceCases, caseEntries,
             uow, IdGenerator { "set-format-8" }, Clock { 1_758_700_000_000L },
             appVersion = "1.4.0", schemaVersion = 8,
         )
         val replace = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
-            attachments, references, activations, conditions, subjects, categories, storage, uow, rebuildAll = { },
+            attachments, references, activations, conditions, subjects, categories, serviceCases, caseEntries,
+            storage, uow, rebuildAll = { },
         )
         val build = BuildBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
@@ -227,9 +232,9 @@ class Format7ImportIdentityTest {
 
         val report = target.replace.run(bytes)
 
-        // The export is this build's: format 11 since #79 carries the warranty reminder lead beside
-        // #67's document role, #74's categories and 1.4's rows.
-        assertEquals(11, report.formatVersion)
+        // The export is this build's: format 12 since #79b carries the service cases beside #79's
+        // warranty reminder lead, #67's document role, #74's categories and 1.4's rows.
+        assertEquals(12, report.formatVersion)
         assertEquals(source.everything(), target.everything())
         val floor = target.schedules.all().single()
         assertEquals(dayMillis("2026-01-05"), floor.ruleChangedAt)

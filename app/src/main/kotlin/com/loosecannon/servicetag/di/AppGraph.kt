@@ -469,14 +469,14 @@ class AppGraph(private val context: Context) {
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
+        serviceCases, serviceCaseEntries, uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
     )
 
     /** Wipe-and-load import. Replace is the only mode Phase 1A ships (D7 1A). */
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, attachmentStorage, uow,
         // Derived state is rebuilt after any import, and the wipe took it with the schedule rows.
         rebuildAll = { recomputeSchedules.all() },
     )
