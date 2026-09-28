@@ -8,6 +8,8 @@ import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetLoan
+import com.loosecannon.servicetag.core.model.AssetLoanId
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.CaseCoverage
@@ -19,6 +21,8 @@ import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubject
+import com.loosecannon.servicetag.core.model.LoanReminderMode
+import com.loosecannon.servicetag.core.model.LoanStanding
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
@@ -37,6 +41,7 @@ import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
@@ -66,18 +71,25 @@ import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.conditionRow
 import com.loosecannon.servicetag.testing.dayMillis
+import com.loosecannon.servicetag.testing.fakeContactReader
 import com.loosecannon.servicetag.testing.groupOf
+import com.loosecannon.servicetag.testing.loanRow
 import com.loosecannon.servicetag.testing.replacementOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import com.loosecannon.servicetag.testing.subjectRow
 import com.loosecannon.servicetag.ui.asset.AssetDetailViewModel
 import com.loosecannon.servicetag.ui.asset.AssetEditViewModel
+import com.loosecannon.servicetag.ui.asset.AssetsViewModel
+import com.loosecannon.servicetag.ui.dashboard.DashboardViewModel
+import com.loosecannon.servicetag.ui.dashboard.SectionEntry
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
 import com.loosecannon.servicetag.ui.health.AssetHealthView
 import com.loosecannon.servicetag.ui.journal.EventDetailViewModel
 import com.loosecannon.servicetag.ui.journal.caseLinksOf
+import com.loosecannon.servicetag.ui.loan.LoanEditViewModel
 import com.loosecannon.servicetag.ui.maintenance.AttentionReadModel
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
+import com.loosecannon.servicetag.ui.maintenance.NoHealthFindings
 import com.loosecannon.servicetag.ui.maintenance.ScanRoundMembership
 import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
 import com.loosecannon.servicetag.ui.maintenance.scanSheetContentFor
@@ -433,10 +445,104 @@ class ReadPathsWriteNothingTest {
         }
     }
 
+    /**
+     * #72 (C16–C20; §3 row 34): the Lending section's load (the detail and its plate), the Assets list's,
+     * the Dashboard's and the lend form's — new, and an edit of the open loan — over an asset with an
+     * overdue open loan and a returned one, write nothing; no load sweeps or asks.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun theLoanLoadsWriteNothing() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        fun <T : ViewModel> held(model: T): T = ViewModelProvider(
+            store,
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <V : ViewModel> create(modelClass: Class<V>): V = model as V
+            },
+        )["${model::class.java.name}-${System.identityHashCode(model)}", model::class.java]
+        try {
+            graph.today = LocalDate.parse("2026-09-20")
+            graph.assets.upsert(assetRow("drill", name = "Example Drill"))
+            graph.assets.upsert(assetRow("ladder", name = "Example Ladder"))
+            graph.loans.upsert(loanRow("l-open", "drill", lentOn = "2026-09-01", dueOn = "2026-09-10", mode = LoanReminderMode.ONCE))
+            graph.loans.upsert(loanRow("l-back", "drill", lentOn = "2026-06-01", returnedOn = "2026-07-01"))
+
+            val recompute = RecomputeSchedules(
+                schedules, states, events, closures, groups, assets, activations, graph.todayPort, graph.clock,
+                zone = { ZoneOffset.UTC },
+            )
+            val health = AssetHealthReadModel(
+                assets, subjects, schedules, states, events, profiles, activations, conditions, recompute, graph.todayPort,
+                zone = { ZoneOffset.UTC },
+            )
+            val due = DueReadModel(
+                schedules, assets, groups, definitions, recompute, graph.todayPort, health,
+                snoozedUntilOf = { delivery.get(it)?.snoozedUntilAt },
+            )
+            var sweeps = 0
+            val asked = mutableListOf<String>()
+            val permission = object : NotificationPermission {
+                override fun granted(): Boolean = false
+                override fun shouldExplain(): Boolean = false
+                override suspend fun request(): Boolean = false.also { asked += "request" }
+            }
+            val detail = held(AssetDetailViewModel(
+                assets, tags, definitions, profiles, events, schedules, states, groups, due, conditions, activations,
+                subjects, attachments, health, GetAssetSeason(assets, activations, graph.uow, graph.todayPort),
+                graph.recordSeasonActivation, graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
+                graph.applyTemplate, graph.uow, graph.clock, graph.todayPort, AssetId("drill"),
+                loans = loans,
+            ))
+            val list = held(AssetsViewModel(assets, categories, activations, tags, health, graph.todayPort, loans = loans))
+            val dashboard = held(DashboardViewModel(
+                assets, schedules, states, due, AttentionReadModel(assets, health, graph.todayPort), health,
+                NoHealthFindings, graph.prefs, loans = loans, today = graph.todayPort,
+            ))
+            fun editor(loanId: String?) = held(LoanEditViewModel(
+                assets, loans, graph.lendAsset, graph.updateLoan, fakeContactReader(), graph.todayPort,
+                AssetId(if (loanId == null) "ladder" else "drill"), loanId?.let(::AssetLoanId),
+                io = UnconfinedTestDispatcher(testScheduler),
+                notifications = permission,
+                reconcile = { sweeps++ },
+            ))
+            val fresh = editor(null)
+            val edit = editor("l-open")
+            val page = backgroundScope.launch { detail.state.collect {} }
+            val rows = backgroundScope.launch { list.state.collect {} }
+            val board = backgroundScope.launch { dashboard.state.collect {} }
+            detail.state.await("the detail page") { it?.loans?.open != null }
+            list.state.await("the list") { it.items.any { row -> row.loan != null } }
+            dashboard.state.await("the dashboard") { it.sections.any { group -> group.entries.any { e -> e is SectionEntry.Loan } } }
+            fresh.state.await("the new loan form") { it.loaded }
+            edit.state.await("the edit form") { it.loaded }
+
+            assertEquals("zero writes anywhere", emptyList<String>(), writes)
+            assertEquals("no sweep and no request on a load", 0 to emptyList<String>(), sweeps to asked)
+            // The loads did real work: the block, the plate, the row, the Dashboard row and both forms.
+            assertEquals(LoanStanding.OVERDUE, detail.state.value!!.loans.standing)
+            assertEquals(1, detail.state.value!!.loans.history.size)
+            assertEquals(LoanStanding.OVERDUE, list.state.value.items.single { it.asset.name == "Example Drill" }.loan)
+            assertEquals("2026-09-10", edit.state.value.dueOn)
+            assertEquals("2026-09-20", fresh.state.value.lentOn)
+            page.cancel()
+            rows.cancel()
+            board.cancel()
+        } finally {
+            store.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
     // ---------------------------------------------------------------- recording repositories
 
     private fun write(what: String) {
         writes += what
+    }
+
+    private val loans = object : AssetLoanRepository by graph.loans {
+        override suspend fun upsert(loan: AssetLoan) = write("loan.upsert").also { graph.loans.upsert(loan) }
+        override suspend fun deleteAll() = write("loan.deleteAll").also { graph.loans.deleteAll() }
     }
 
     private val serviceCases = object : ServiceCaseRepository by graph.serviceCases {
