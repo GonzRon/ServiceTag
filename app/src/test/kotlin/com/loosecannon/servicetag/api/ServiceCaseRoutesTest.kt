@@ -346,9 +346,10 @@ class ServiceCaseRoutesTest {
         val incident = event(asset, "INCIDENT", "Will not heat")
         val foreign = event(other, "INCIDENT", "Leak")
         val case = open(asset).id
-        val wire = openRefusals(asset, foreign, incident).map { it.second } +
+        // What the wire sends, never the expectations above: the document drifts only with this red.
+        val wire = openRefusals(asset, foreign, incident).map { api.call("POST", "/v1/service-cases", it.first).errorDetail() } +
             api.call("PATCH", "/v1/service-cases/$case", """{"title":"x","type":"REPAIR","openedOn":"2026-09-12","coverage":"UNKNOWN","resolutionEventId":"$incident"}""").errorDetail() +
-            entryRefusals().map { it.second }
+            entryRefusals().map { api.call("POST", "/v1/service-cases/$case/entries", it.first).errorDetail() }
         for (detail in wire) {
             val problem = detail.problems.first().replace(Regex("""EventId\(value=[^)]*\)"""), "EventId(value=…)")
             val line = "| 422 | `${detail.code}` | `$problem` | `${detail.field}` | `${detail.message}` |"
