@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.journal.DerivedProblem
 import com.loosecannon.servicetag.core.usecase.AssetProblem
 import com.loosecannon.servicetag.core.usecase.DefinitionProblem
 import com.loosecannon.servicetag.core.usecase.FieldProblem
+import com.loosecannon.servicetag.core.usecase.LoanProblem
 import com.loosecannon.servicetag.core.usecase.ProfileProblem
 import com.loosecannon.servicetag.core.usecase.ServiceCaseProblem
 import com.loosecannon.servicetag.core.usecase.WarrantyReminderProblem
@@ -214,4 +215,32 @@ internal fun serviceCaseRefusal(problem: ServiceCaseProblem): Refusal = when (pr
     ServiceCaseProblem.EntryEmpty -> Refusal(SERVICE_CASE_VALIDATION, "an entry needs a note, a status, or both", "note")
     ServiceCaseProblem.EntryAfterToday ->
         Refusal(SERVICE_CASE_VALIDATION, "occurredOn may not be later than today", "occurredOn")
+}
+
+// --- #72: the loan's family ------------------------------------------------------------------------
+//
+// One `lower_snake` code for every problem a lend, an edit or a return can have, on the same terms
+// again: `problems` keeps every problem by the domain's own name, in the loan's field order, and
+// `message` and `field` describe the first. Every problem is about one body key but the contact link's,
+// which no route sends — a link is made on the phone alone (R72-3, R72-4) — so `ContactLinkInvalid` is
+// unreachable here, names no key, and says the rule rather than a value. No message repeats a value that
+// was sent.
+
+internal const val LOAN_VALIDATION: String = "loan_validation"
+
+/** Every [LoanProblem] as a refusal. */
+internal fun loanRefusal(problem: LoanProblem): Refusal = when (problem) {
+    LoanProblem.BorrowerRequired -> Refusal(LOAN_VALIDATION, "a loan needs a borrowerName", "borrowerName")
+    // Unreachable over this API: no request takes a link.
+    LoanProblem.ContactLinkInvalid -> Refusal(
+        LOAN_VALIDATION, "a contact link must be an Android Contacts lookup link, and only the phone makes one",
+    )
+    // `lentOn`, `dueOn` or `returnedOn`: the domain's own key.
+    is LoanProblem.BadDate -> Refusal(LOAN_VALIDATION, "${problem.field} must be an ISO YYYY-MM-DD date", problem.field)
+    LoanProblem.LentAfterToday -> Refusal(LOAN_VALIDATION, "lentOn may not be later than today", "lentOn")
+    LoanProblem.DueBeforeLent -> Refusal(LOAN_VALIDATION, "dueOn may not be before lentOn", "dueOn")
+    LoanProblem.ReminderWithoutDueDate ->
+        Refusal(LOAN_VALIDATION, "a reminderMode other than NONE needs a dueOn", "reminderMode")
+    LoanProblem.ReturnedBeforeLent -> Refusal(LOAN_VALIDATION, "returnedOn may not be before lentOn", "returnedOn")
+    LoanProblem.ReturnedAfterToday -> Refusal(LOAN_VALIDATION, "returnedOn may not be later than today", "returnedOn")
 }

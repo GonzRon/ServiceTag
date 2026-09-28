@@ -59,6 +59,7 @@ class ApiRouterTest {
             seasonHealthHandlersFor(graph),
             warrantyHandlersFor(graph),
             serviceCaseHandlersFor(graph),
+            loanHandlersFor(graph),
             appVersion = "1.1.0",
             schemaVersion = 5,
         ),
@@ -214,6 +215,21 @@ class ApiRouterTest {
             "POST" to "/v1/service-cases/c1/status",
             "POST" to "/v1/service-cases/c1/close",
             "POST" to "/v1/service-cases/c1/delete",
+            // #72's additions (R72-3, R72-17). Nothing deletes a loan — "Mark returned" is the only exit,
+            // and a returned loan is history — and no route relinks one or reads a contact: a link is made
+            // on the phone alone, and the lookup URI never crosses this API.
+            "DELETE" to "/v1/loans/l1",
+            "DELETE" to "/v1/loans",
+            "DELETE" to "/v1/assets/$id/loans",
+            "DELETE" to "/v1/assets/$id/loans/l1",
+            "DELETE" to "/v1/loans/l1/return",
+            "POST" to "/v1/loans/l1/delete",
+            "POST" to "/v1/loans/l1/reopen",
+            "POST" to "/v1/loans/l1/relink",
+            "PATCH" to "/v1/loans/l1/contact",
+            "GET" to "/v1/loans/l1/contact",
+            "GET" to "/v1/contacts",
+            "GET" to "/v1/assets/$id/loans/l1/contact",
         )) {
             val response = call(method, path, if (method == "GET") "" else "{}")
             assertTrue("$method $path answered ${response.status}", response.status == 404 || response.status == 405)
@@ -604,6 +620,7 @@ class ApiRouterTest {
                 seasonHealthHandlersFor(graph),
                 warrantyHandlersFor(graph),
                 serviceCaseHandlersFor(graph),
+                loanHandlersFor(graph),
                 appVersion = "1.1.0",
                 schemaVersion = 5,
             ),

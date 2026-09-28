@@ -113,6 +113,18 @@ internal fun serviceCaseHandlersFor(graph: FakeGraph): ServiceCaseHandlers = Ser
 )
 
 /**
+ * #72's five loan routes over a [FakeGraph], on the same terms: one more collaborator, one more line at
+ * every call site. The use cases are the fake graph's own, built on its `todayPort`.
+ */
+internal fun loanHandlersFor(graph: FakeGraph): LoanHandlers = LoanHandlers(
+    assets = graph.assets,
+    loans = graph.loans,
+    lendAsset = graph.lendAsset,
+    updateLoan = graph.updateLoan,
+    returnLoan = graph.returnLoan,
+)
+
+/**
  * 1.4 (B09): one `/v1` client over a [FakeGraph] for the new suites — the production router, the
  * production handlers (every collaborator above) and the production serializers, exactly as
  * `ApiRouterTest` builds them, written once rather than six times.
@@ -131,6 +143,7 @@ internal class V1Client(val graph: FakeGraph, private val token: String = "ABCD2
             seasonHealthHandlersFor(graph),
             warrantyHandlersFor(graph),
             serviceCaseHandlersFor(graph),
+            loanHandlersFor(graph),
             appVersion = "1.4.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),

@@ -94,6 +94,7 @@ class MaintenanceRoutesTest {
             seasonHealthHandlersFor(graph),
             warrantyHandlersFor(graph),
             serviceCaseHandlersFor(graph),
+            loanHandlersFor(graph),
             appVersion = "1.2.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -1497,6 +1498,8 @@ class MaintenanceRoutesTest {
         assertEquals(1, status.counts["assets"])
         // #74: the asset's saved category ("Water", from `createAsset`) is the one row counted.
         assertEquals(1, status.counts["assetCategories"])
+        // #72: the loans' count, under the archive's own list name — none lent here.
+        assertEquals(0, status.counts["assetLoans"])
     }
 
     /**
