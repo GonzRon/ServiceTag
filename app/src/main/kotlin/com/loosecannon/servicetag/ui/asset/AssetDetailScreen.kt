@@ -140,6 +140,7 @@ import com.loosecannon.servicetag.ui.journal.stateLabel
 import com.loosecannon.servicetag.ui.references.ReferencesSection
 import com.loosecannon.servicetag.ui.scan.identityLine
 import com.loosecannon.servicetag.ui.scan.placementOrNull
+import com.loosecannon.servicetag.ui.service.ServiceCasesSection
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.Instant
@@ -191,6 +192,13 @@ fun AssetDetailScreen(
     section: String? = null,
     /** #82 — Change condition's P82-3: the held DOWN or DEGRADED, for the host's Incident entry. */
     onLogIncidentDetails: (PendingCondition) -> Unit = {},
+    /** #79 (C20): a Service cases row opens its case. */
+    onOpenServiceCase: (caseId: String) -> Unit = {},
+    /**
+     * #79 (C20): P79-19 — the host opens the case editor on [currentIncidentId], or an Incident entry
+     * first when it is null (`newServiceCaseRoute`). The tap writes nothing.
+     */
+    onNewServiceCase: (assetId: String, currentIncidentId: String?) -> Unit = { _, _ -> },
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -351,6 +359,14 @@ fun AssetDetailScreen(
                     // #82 (C10): a new INCIDENT through the screen's one free-form entry; the tap writes nothing.
                     onLogIncident = { onLogOutcome(assetId, EventKind.INCIDENT.name) },
                     onOpenEvent = onOpenEvent,
+                )
+                // #79 (C20, R79-17): the asset's service cases, right after Condition.
+                ServiceCasesSection(
+                    rows = current.cases,
+                    openLine = current.openCasesLine,
+                    offersNew = current.offersNewServiceCase,
+                    onOpenCase = onOpenServiceCase,
+                    onNewCase = { onNewServiceCase(assetId, current.currentIncidentId) },
                 )
                 HealthSection(current.healthBlocks, plurals)
                 SeasonSection(
