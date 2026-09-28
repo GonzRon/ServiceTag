@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.reminders.BuildDeadlineSubjects
 import com.loosecannon.servicetag.core.reminders.BuildLoanSubjects
+import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
 import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.reminders.ReconcileReport
 import com.loosecannon.servicetag.core.reminders.ReminderProvider
@@ -29,6 +30,9 @@ import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
+import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.scheduleOf
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -887,6 +891,88 @@ class LocalReminderProviderTest {
         assertFalse("already used", nonces.consume(id, issued))
         assertFalse("missing row", nonces.consume(ScheduleId("nobody"), "nonce-1"))
         assertEquals(null, delivery.rows["nobody"])
+    }
+
+    // ---- #77 (B2b, R77-20): the corrected defect, through the real builder, the real facts and this provider ----
+
+    /**
+     * One overdue maintenance schedule on "Example Water Heater", over the real Room tables. The subjects come
+     * from `BuildReminderSubjects` built as `AppGraph`'s `subjectsFor` wires it — `FakeGraph` has no subject
+     * builder (rm-3) — and the facts from `ScheduleDeliveryFacts` over the same tables, as `AppGraph` builds them.
+     */
+    private inner class Estate {
+        val graph = FakeGraph().also { it.today = LocalDate.parse("2026-04-10") }
+        private val subjects = BuildReminderSubjects(graph.schedules, graph.groups, graph.recomputeSchedules)
+        private val provider = LocalReminderProvider(
+            facts = ScheduleDeliveryFacts(
+                graph.schedules, graph.scheduleStateReader, graph.assets, graph.groups, graph.definitions, graph.todayPort,
+            ),
+            delivery = delivery,
+            notifications = notifications,
+            permission = permission,
+            platform = platform,
+            alarm = alarm,
+            prefs = prefs,
+            clock = clock,
+            quickActions = QuickActions(
+                shapes = QuickActionShapeSource {
+                    QuickActionShape(groupTargeted = false, completionMode = CompletionMode.QUICK, meterRule = false)
+                },
+                nonces = NonceStore(delivery, IdGenerator { "quick-nonce" }, clock),
+            ),
+        )
+
+        suspend fun seed() {
+            graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+            graph.schedules.upsert(scheduleOf("s1", assetId = "h1", title = "Flush the tank"))
+            graph.recomputeSchedules.all()
+        }
+
+        /** One sweep: the subjects the builder answers today, reconciled. */
+        suspend fun sweep(): ReconcileReport = provider.reconcile(subjects.forProvider(ProviderId.LOCAL, graph.today))
+    }
+
+    private fun estate(block: suspend Estate.() -> Unit) = runTest {
+        val estate = Estate()
+        try {
+            estate.block()
+        } finally {
+            estate.graph.close()
+        }
+    }
+
+    /**
+     * R77-20: archiving an asset takes its standing maintenance post down — the schedule stays ACTIVE, and an
+     * archived asset's live schedule arrives `Withdrawn`, so the provider cancels its tag (the defect: it kept
+     * reminding, because only the schedule's own status was asked).
+     */
+    @Test
+    fun archivingAnAssetTakesItsStandingMaintenancePostDown() = estate {
+        seed()
+        assertEquals("the overdue schedule is posted", 1, sweep().posted)
+        val standing = notifications.standingItems()
+        assertEquals(1, standing.size)
+
+        graph.archiveAsset.run(AssetId("h1"))
+        sweep()
+
+        assertEquals("an archived asset's post is taken down", emptySet<String>(), notifications.standingItems())
+        assertTrue("its tag was cancelled", notifications.cancelled.containsAll(standing))
+    }
+
+    /** R77-20: retiring an asset does the same — a retired asset's live schedule reminds no more. */
+    @Test
+    fun retiringAnAssetTakesItsStandingMaintenancePostDown() = estate {
+        seed()
+        assertEquals("the overdue schedule is posted", 1, sweep().posted)
+        val standing = notifications.standingItems()
+        assertEquals(1, standing.size)
+
+        graph.retireAsset.retire(AssetId("h1"), "2026-04-05")
+        sweep()
+
+        assertEquals("a retired asset's post is taken down", emptySet<String>(), notifications.standingItems())
+        assertTrue("its tag was cancelled", notifications.cancelled.containsAll(standing))
     }
 }
 
