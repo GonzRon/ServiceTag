@@ -642,3 +642,19 @@ unless stated.
 - **R72-24** the foreign-UID grant proof `ContactGrantBoundaryTest` from the test-only sender, never Contacts UI
   automation; the testing hierarchy in `docs/superpowers/planning-policy.md` amended at ratification (committed with
   this section).
+
+**Addendum (owner, 2026-09-28, after B2's task review):**
+- **R72-B2 departure approved:** add a per-post `onlyAlertOnce` flag to the notification post model and builder,
+  default **false**. Only the silent post-due refresh of an already-standing **Once** loan reminder sets it **true**. No
+  existing maintenance, warranty, Until-returned or ordinary loan announcement changes behaviour. This crosses §10's
+  `Notifications.kt` fence by that one flag only; `LocalReminderProvider.kt` stays untouched ("still standing" is the
+  platform's active-notification list the provider already passes in).
+- **Conditions:** the flag defaults to false on every path; only the standing Once → post-due wording refresh sets it;
+  the pre-digest hold rule applies before **all** loan-post decisions (first post, Until-returned cadence, restart
+  re-post), an already-standing notification simply left alone before the day's digest hour; tests prove the three owner
+  boundaries — a standing Once refreshes silently, a swiped Once stays gone after the due day and after a restart,
+  Until-returned and warranty behaviour unchanged — plus a device read-back of the alert flag and a negative unit
+  assertion that ordinary announcements and warranty posts never carry it; the review's lifecycle and zone-change minors
+  land in the same batched fix round; one scoped re-review of the fix before B2 is accepted and B3 dispatched.
+- This resolves the R72-6 / R72-7 tension by option (a): a standing Once turns to "Was due back … / NOT RETURNED"
+  silently after the due day; a dismissed one never returns.
