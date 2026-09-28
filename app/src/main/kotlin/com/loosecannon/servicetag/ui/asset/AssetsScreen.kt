@@ -60,6 +60,7 @@ import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.condition.ConditionBadge
 import com.loosecannon.servicetag.ui.health.HealthBadge
 import com.loosecannon.servicetag.ui.health.needsAttention
+import com.loosecannon.servicetag.ui.loan.LoanBadge
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
@@ -336,7 +337,8 @@ internal fun AssetListRow(row: AssetRow, onClick: () -> Unit, modifier: Modifier
                 )
             }
             val archived = statusLabel(asset.status)
-            if (asset.isRetired || row.outOfSeason || archived != null || health != null) {
+            val loan = row.loan
+            if (asset.isRetired || row.outOfSeason || archived != null || loan != null || health != null) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -359,6 +361,9 @@ internal fun AssetListRow(row: AssetRow, onClick: () -> Unit, modifier: Modifier
                     archived?.let { label ->
                         StatusBadge(label = label, colors = ServiceTagTheme.semanticColors.seasonInactive)
                     }
+                    // #72 (C19): after the lifecycle badges, before condition and health — custody is
+                    // no maintenance fact, so it never sits among them.
+                    loan?.let { LoanBadge(it) }
                     if (health != null) {
                         // Condition before health: a DOWN asset's health is never drawn before its
                         // condition (inv. 119), the detail's own rule.

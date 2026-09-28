@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.CaseCoverage
 import com.loosecannon.servicetag.core.model.CaseType
+import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubject
@@ -93,6 +94,7 @@ class MaintenanceRoutesTest {
             seasonHealthHandlersFor(graph),
             warrantyHandlersFor(graph),
             serviceCaseHandlersFor(graph),
+            loanHandlersFor(graph),
             appVersion = "1.2.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -1130,7 +1132,7 @@ class MaintenanceRoutesTest {
     // --- the merge report's three new tables -----------------------------------------------------
 
     /**
-     * `import_merge` reads a **format-12** archive, and the report carries the `groups`, `schedules`
+     * `import_merge` reads a **format-13** archive, and the report carries the `groups`, `schedules`
      * and `closures` tallies beside the shipped ones, plus 1.3's `references`. `applicable` still
      * governs.
      *
@@ -1150,7 +1152,7 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(12, report.formatVersion)
+        assertEquals(13, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)
@@ -1197,6 +1199,8 @@ class MaintenanceRoutesTest {
                 "categories",
                 // #79 (format 12): tables 16 and 17, the case headers and their timelines.
                 "serviceCases", "caseEntries",
+                // #72 (format 13): table 18, the loans.
+                "loans",
                 "conflicts", "duplicateCandidates",
             ),
             MergeReportResponse.serializer().descriptor.elementNames.toList(),
@@ -1266,12 +1270,65 @@ class MaintenanceRoutesTest {
         assertEquals(1, inserts("assets"))
         assertEquals(2, inserts("serviceCases"))
         assertEquals(3, inserts("caseEntries"))
-        assertEquals("after categories, in table order", listOf("serviceCases", "caseEntries"), wire.keys.toList().dropLast(2).takeLast(2))
+        assertEquals(
+            "after categories, in table order, before #72's loans",
+            listOf("serviceCases", "caseEntries", "loans"),
+            wire.keys.toList().dropLast(2).takeLast(3),
+        )
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
         runBlocking {
             assertEquals(2, graph.serviceCases.all().size)
             assertEquals(3, graph.serviceCaseEntries.all().size)
+        }
+    }
+
+    /**
+     * #72 (C7): the loans tally is on the **wire**, read out of the route's own JSON before any decode. A
+     * donor holding two assets, one open loan each and three returned ones gives the tally a value — 5 —
+     * no other tally here has, so a mirror wired to the wrong table fails; the apply then lands them,
+     * inserts only.
+     */
+    @Test fun aLoanIsTalliedOnTheWire() {
+        val donor = FakeGraph().apply {
+            now = dayMillis("2026-01-01")
+            today = LocalDate.parse("2026-01-20")
+        }
+        val archive = try {
+            runBlocking {
+                val drill = donor.createAsset.run(com.loosecannon.servicetag.core.usecase.AssetCommand(name = "Example Drill"), null)
+                val ladder = donor.createAsset.run(com.loosecannon.servicetag.core.usecase.AssetCommand(name = "Example Ladder"), null)
+                fun terms(lent: String, due: String?) = com.loosecannon.servicetag.core.usecase.LoanTerms(
+                    lent, due, if (due == null) LoanReminderMode.NONE else LoanReminderMode.ONCE,
+                )
+                for ((asset, lent) in listOf(drill to "2026-01-02", drill to "2026-01-05", ladder to "2026-01-03")) {
+                    val loan = donor.lendAsset.run(asset.id, "Sample Borrower", terms(lent, null))
+                    donor.returnLoan.run(loan.id, lent)
+                }
+                donor.lendAsset.run(drill.id, "Example Rentals Ltd", terms("2026-01-10", "2026-01-31"))
+                donor.lendAsset.run(ladder.id, "Sample Borrower", terms("2026-01-11", null))
+                donor.exportBackupSet.run().data
+            }
+        } finally {
+            donor.close()
+        }
+        fun post(path: String) = router().handle(
+            ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
+        )
+
+        val planned = post(IMPORT_MERGE_PLAN_PATH)
+
+        assertEquals(planned.text(), 200, planned.status)
+        val wire = ApiJson.parseToJsonElement(planned.text()).jsonObject
+        fun inserts(key: String) = wire.getValue(key).jsonObject.getValue("insert").jsonPrimitive.content.toInt()
+        assertEquals(2, inserts("assets"))
+        assertEquals(5, inserts("loans"))
+        assertEquals("the last tally, after the case entries", "loans", wire.keys.toList().dropLast(2).last())
+
+        assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
+        runBlocking {
+            assertEquals(5, graph.loans.all().size)
+            assertEquals(2, graph.loans.open().size)
         }
     }
 
@@ -1413,9 +1470,10 @@ class MaintenanceRoutesTest {
      * that carries the role); #79 moves the schema to 11 (the warranty reminder's lead and the
      * device-local deadline table) and then the format to 11 (the archive that carries the lead); #79b
      * moves the schema to 12 (the service case tables) and then the format to 12 (the archive that
-     * carries them).
+     * carries them); #72 moves the schema to 13 (the loan table) and then the format to 13 (the archive
+     * that carries the loans).
      */
-    @Test fun statusReports12And12AndTheNewCounts() {
+    @Test fun statusReports13And13AndTheNewCounts() {
         val tub = createAsset("Hot tub")
         assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
         assertEquals(
@@ -1432,22 +1490,24 @@ class MaintenanceRoutesTest {
         )
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
-        assertEquals(12, status.schemaVersion)
-        assertEquals(12, status.backupFormatVersion)
+        assertEquals(13, status.schemaVersion)
+        assertEquals(13, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
         assertEquals(1, status.counts["healthSubjects"])
         assertEquals(1, status.counts["assets"])
         // #74: the asset's saved category ("Water", from `createAsset`) is the one row counted.
         assertEquals(1, status.counts["assetCategories"])
+        // #72: the loans' count, under the archive's own list name — none lent here.
+        assertEquals(0, status.counts["assetLoans"])
     }
 
     /**
-     * Import-merge reads a **format-12** archive (this build's export) and reports **seventeen** tables: the donor's
+     * Import-merge reads a **format-13** archive (this build's export) and reports **eighteen** tables: the donor's
      * activation, condition and health subject each tally one INSERT on the wire, its two categories
      * (#74) two, and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
-    @Test fun importMergeReadsFormat12AndReportsSeventeenTables() {
+    @Test fun importMergeReadsFormat13AndReportsEighteenTables() {
         val archive = donorArchive()
         fun post(path: String) = router().handle(
             ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
@@ -1457,9 +1517,9 @@ class MaintenanceRoutesTest {
         assertEquals(planned.text(), 200, planned.status)
         val wire = ApiJson.parseToJsonElement(planned.text()).jsonObject
         val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
-        assertEquals(17, tallies.size)
+        assertEquals(18, tallies.size)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(12, report.formatVersion)
+        assertEquals(13, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         val one = MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0)
         assertEquals(one, report.seasonActivations)

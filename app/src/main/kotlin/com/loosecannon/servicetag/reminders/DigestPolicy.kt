@@ -46,6 +46,14 @@ object DigestPolicy {
     /** #79, P79-11 (RATIFIED verbatim): a warranty warning's status word, its `setSubText` as DUE's. */
     const val WORD_EXPIRES_SOON = "EXPIRES SOON"
 
+    /**
+     * #72, P72-42 and P72-43 (RATIFIED verbatim, R72-7, R72-23): a loan reminder's status word
+     * through its due day, and after it. Neither is the bare `OVERDUE` (AC 13), so a loan never
+     * takes that word's icon or accent.
+     */
+    const val WORD_DUE_BACK = "DUE BACK"
+    const val WORD_NOT_RETURNED = "NOT RETURNED"
+
     /** The shipped display-date shape (`AssetDetailScreen.kt:821`, `EventDetailScreen.kt:177`). */
     private val DISPLAY_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM uuuu")
 
@@ -96,6 +104,23 @@ object DigestPolicy {
                             shown += step.post
                             posts += step.post
                             posted++
+                            deadlineRows += step.stamp
+                        }
+                        // #72 (C11, R72-7): a standing post re-posted in place so it alerts again. It
+                        // was already showing, so it is `unchanged`, never `posted` — the identity
+                        // `posted + unchanged` = what is held survives the re-alert.
+                        is DeadlineStep.Realert -> {
+                            shown += step.post
+                            posts += step.post
+                            unchanged++
+                            deadlineRows += step.stamp
+                        }
+                        // Fix round 1 (MAJOR-1 (a)): the same accounting, silently — the post
+                        // carries only-alert-once, so the update does not sound.
+                        is DeadlineStep.Refresh -> {
+                            shown += step.post
+                            posts += step.post
+                            unchanged++
                             deadlineRows += step.stamp
                         }
                     }
@@ -200,8 +225,8 @@ object DigestPolicy {
             }
         }
 
-        // The kept set covers both families: a standing warning is kept by its own key, so the
-        // schedule rules above can never take one down (#79, K3).
+        // The kept set covers both families: a standing warning or loan reminder is kept by its own
+        // key, so the schedule rules above can never take one down (#79, K3; #72).
         val keptKeys = shown.map { it.key }.toSet()
         val keptTags = shown.map { it.tag }.toSet()
         val cancelTags = standingTags.filterNot { it in keptTags }
@@ -300,6 +325,10 @@ object DigestPolicy {
     /**
      * #79 (C7, R79-14): one deadline, by its repeat fact. `null` is unreachable — a
      * `ReminderSubject` refuses a deadline without one — and is read as the gone subject it would be.
+     *
+     * #72 (C11): routed by **kind first**, then repeat, so each kind keeps its own steps: a warranty
+     * goes to the shipped [once] and nowhere else, a loan to [loanOnce] or [untilCleared]. Any other
+     * pairing is not a subject either kind produces, and is forgotten.
      */
     private fun deadlineStep(
         input: DeadlineInput,
@@ -307,9 +336,16 @@ object DigestPolicy {
         nowMillis: Long,
         bootCount: Int?,
         channelDelivers: (String) -> Boolean,
-    ): DeadlineStep = when (input.subject.repeat) {
-        DeadlineRepeat.ONCE -> once(input, standingTags, nowMillis, bootCount, channelDelivers)
-        null -> DeadlineStep.Forget
+    ): DeadlineStep = when (input.key.kind) {
+        DeadlineKind.WARRANTY_EXPIRY -> when (input.subject.repeat) {
+            DeadlineRepeat.ONCE -> once(input, standingTags, nowMillis, bootCount, channelDelivers)
+            DeadlineRepeat.UNTIL_CLEARED, null -> DeadlineStep.Forget
+        }
+        DeadlineKind.LOAN_DUE_BACK -> when (input.subject.repeat) {
+            DeadlineRepeat.ONCE -> loanOnce(input, standingTags, nowMillis, bootCount, channelDelivers)
+            DeadlineRepeat.UNTIL_CLEARED -> untilCleared(input, standingTags, nowMillis, bootCount, channelDelivers)
+            null -> DeadlineStep.Forget
+        }
     }
 
     /**
@@ -387,12 +423,169 @@ object DigestPolicy {
     /** #79, P79-10 (RATIFIED verbatim), in the shipped display-date shape. */
     private fun warrantyBody(expiresOn: LocalDate): String = "Warranty expires ${expiresOn.display()}."
 
+    /**
+     * #72 (C11, R72-6 a): a loan's Once — **strictly once per due occurrence**. It opens at the owner's
+     * digest hour on the due day; the first sweep at or after it posts, or a later one if the phone was
+     * off — but never a sweep before **that day's** digest hour (R72-7, fix round 1): the midnight
+     * `DATE_CHANGED` sweep, the backstop at night or a boot at 00:30 is quiet for a loan. It has no
+     * end: a loan is a subject until it is returned, and a return makes it absent.
+     *
+     * - No facts (the loan returned or gone, its asset gone), not Active, or before its due day:
+     *   nothing shows and the stamp is forgotten, so a re-dated loan announces again when its own day
+     *   comes.
+     * - From the due day on, before the day's digest hour ([DeadlineFacts.dayOpensAt]): **held** — a
+     *   standing post stays, anything else waits — and nothing is stamped or forgotten, so neither a
+     *   midnight sweep nor a zone moved west on the due day can take a post down and announce it twice.
+     * - Standing in exactly this form: held, and counted unchanged — with one exception (fix round 1,
+     *   owner ruling R72-B2): still showing after the due day in the due-day words (stamped before
+     *   [DeadlineFacts.wordsTurnAt]), it is **refreshed once** — re-posted in place under the same
+     *   tag in P72-41/43, only-alert-once so nothing sounds, re-stamped so it happens once
+     *   ([DeadlineStep.Refresh]). Only the platform's standing list authorises it: a Once that is not
+     *   showing is never refreshed back.
+     * - Stamped with this content **from any boot**: nothing. The owner swiped it, or a restart took it
+     *   down, and "once" means once — the plate, the list and the Dashboard still say so. The boot is
+     *   written into the stamp and not read here (R79-14c's restart rule is the warranty's alone).
+     * - Its channel muted: nothing, and **no stamp**, so un-muting announces it.
+     * - Otherwise it is posted and stamped. A re-date or a mode change is new content, so a new
+     *   occurrence; so is a None → Once round trip, whose stamp went with the subject.
+     *
+     * Never counted in the maintenance summary, never snoozed, never nonced.
+     */
+    private fun loanOnce(
+        input: DeadlineInput,
+        standingTags: Set<String>,
+        nowMillis: Long,
+        bootCount: Int?,
+        channelDelivers: (String) -> Boolean,
+    ): DeadlineStep {
+        val subject = input.subject
+        val facts = input.facts ?: return DeadlineStep.Forget
+        val dueOn = subject.dueOn ?: return DeadlineStep.Forget
+        if (subject.state != SubjectState.Active) return DeadlineStep.Forget
+        if (facts.today.isBefore(dueOn)) return DeadlineStep.Forget
+        val dayOpensAt = facts.dayOpensAt ?: return DeadlineStep.Forget
+
+        val post = loanPost(input, facts, dueOn)
+        val standing = post.tag in standingTags
+        if (nowMillis < dayOpensAt) return if (standing) DeadlineStep.Standing(post) else DeadlineStep.Quiet
+        val row = input.row
+        if (standing) {
+            val wordsTurnAt = facts.wordsTurnAt ?: return DeadlineStep.Standing(post)
+            val showsDueDayWords = row == null || row.updatedAt < wordsTurnAt
+            return if (facts.today.isAfter(dueOn) && showsDueDayWords && channelDelivers(post.channelId)) {
+                DeadlineStep.Refresh(post.copy(onlyAlertOnce = true), loanStamp(input, bootCount, nowMillis))
+            } else {
+                DeadlineStep.Standing(post)
+            }
+        }
+        if (row != null && row.announcedHash == subject.contentHash) return DeadlineStep.Quiet
+        if (!channelDelivers(post.channelId)) return DeadlineStep.Quiet
+        return DeadlineStep.Announce(post, loanStamp(input, bootCount, nowMillis))
+    }
+
+    /**
+     * #72 (C11, R72-7): a loan's Until returned — announced again **once each period**, a period
+     * running from one of the owner's digest hours to the next ([DeadlineFacts.cadenceSince] is the
+     * latest one at or before now). It opens as [loanOnce] does, has no end, and is quiet at every
+     * sweep before the day's digest hour (fix round 1): no first post, no re-alert after a missed
+     * period and no restart re-post happens between local midnight and that hour, so the midnight
+     * `DATE_CHANGED` sweep never alerts. Past that hold, the period began at the day's digest hour.
+     *
+     * - No facts, not Active, or before its due day: nothing shows and the stamp is forgotten.
+     * - From the due day on, before the day's digest hour: held if standing, else nothing; nothing is
+     *   stamped or forgotten.
+     * - **Announced this period** — a stamp with this content, from this boot, written at or after
+     *   the period began: held if its post is standing, else nothing (a swipe is quiet until the next
+     *   digest hour).
+     * - Its channel muted: held if its post is standing — a mute never takes a post down — else
+     *   nothing, and no stamp.
+     * - Otherwise it is announced and stamped: posted if nothing of it is standing (the first time, a
+     *   swipe, or a restart that took it down — once more in the period), or **re-posted in place** if
+     *   yesterday's post still stands, so it alerts again ([DeadlineStep.Realert]).
+     *
+     * Never counted in the maintenance summary, never snoozed, never nonced.
+     */
+    private fun untilCleared(
+        input: DeadlineInput,
+        standingTags: Set<String>,
+        nowMillis: Long,
+        bootCount: Int?,
+        channelDelivers: (String) -> Boolean,
+    ): DeadlineStep {
+        val subject = input.subject
+        val facts = input.facts ?: return DeadlineStep.Forget
+        val dueOn = subject.dueOn ?: return DeadlineStep.Forget
+        if (subject.state != SubjectState.Active) return DeadlineStep.Forget
+        if (facts.today.isBefore(dueOn)) return DeadlineStep.Forget
+        val dayOpensAt = facts.dayOpensAt ?: return DeadlineStep.Forget
+        val cadenceSince = facts.cadenceSince ?: return DeadlineStep.Forget
+
+        val post = loanPost(input, facts, dueOn)
+        val standing = post.tag in standingTags
+        if (nowMillis < dayOpensAt) return if (standing) DeadlineStep.Standing(post) else DeadlineStep.Quiet
+        val row = input.row
+        val announcedThisPeriod = row != null &&
+            row.announcedHash == subject.contentHash &&
+            sameBoot(row.announcedBoot, bootCount) &&
+            row.updatedAt >= cadenceSince
+        if (announcedThisPeriod || !channelDelivers(post.channelId)) {
+            return if (standing) DeadlineStep.Standing(post) else DeadlineStep.Quiet
+        }
+        val stamp = loanStamp(input, bootCount, nowMillis)
+        return if (standing) DeadlineStep.Realert(post, stamp) else DeadlineStep.Announce(post, stamp)
+    }
+
+    /**
+     * A loan's device-local stamp, in the shipped table and shape: the content announced, the boot it
+     * was announced in and when. [untilCleared] reads all three; [loanOnce] reads the content alone,
+     * so its boot is written and ignored (R72-6 a) — no column is added for either.
+     */
+    private fun loanStamp(input: DeadlineInput, bootCount: Int?, nowMillis: Long): DeadlineLocalDelivery = DeadlineLocalDelivery(
+        kind = input.key.kind.name,
+        subjectId = input.key.subjectId,
+        announcedHash = input.subject.contentHash,
+        announcedBoot = bootCount,
+        updatedAt = nowMillis,
+    )
+
+    /**
+     * #72 (C11; R72-7, R72-9): a loan reminder, chosen by its kind — `<asset> — Due back` on the
+     * `loan_reminders` channel, P72-40 and P72-42 through the due day and P72-41 and P72-43 after it,
+     * "Open" alone, and, being neither a meter nor OVERDUE, the clock icon and DUE's accent from
+     * `Notifications.kt`'s shipped `else` branches. The borrower comes from the facts, never the
+     * subject, so a relink moves no hash and posts nothing twice.
+     */
+    private fun loanPost(input: DeadlineInput, facts: DeadlineFacts, dueOn: LocalDate): ItemPost {
+        val borrower = facts.borrower.orEmpty()
+        val afterDueDay = facts.today.isAfter(dueOn)
+        return ItemPost(
+            key = input.key,
+            tag = itemTag(input.key, input.subject.contentHash),
+            channelId = NotificationChannels.LOANS,
+            title = "${facts.ownerName} — ${input.subject.title}",
+            body = if (afterDueDay) loanBodyAfter(borrower, dueOn) else loanBodyThrough(borrower, dueOn),
+            statusWord = if (afterDueDay) WORD_NOT_RETURNED else WORD_DUE_BACK,
+            meter = false,
+            actions = listOf(ACTION_OPEN),
+        )
+    }
+
+    /** #72, P72-40 (RATIFIED verbatim), in the shipped display-date shape. */
+    private fun loanBodyThrough(borrower: String, dueOn: LocalDate): String = "Lent to $borrower. Due back ${dueOn.display()}."
+
+    /** #72, P72-41 (RATIFIED verbatim, R72-7), in the shipped display-date shape. */
+    private fun loanBodyAfter(borrower: String, dueOn: LocalDate): String = "Lent to $borrower. Was due back ${dueOn.display()}."
+
     /** What the deadline branch decided for one subject; [decide] turns it into posts, stamps and counts. */
     private sealed interface DeadlineStep {
         /** Gone, or outside its window: nothing shows, and its stamp is forgotten. */
         data object Forget : DeadlineStep
 
-        /** Swiped in this boot, or its channel muted: nothing shows, and nothing is written. */
+        /**
+         * Nothing shows, and nothing is written: a warning swiped in this boot, a loan's Once already
+         * announced, an Until already announced this period, a muted channel, or a loan held before
+         * the day's digest hour with nothing standing.
+         */
         data object Quiet : DeadlineStep
 
         /** Showing in exactly this form. */
@@ -400,6 +593,19 @@ object DigestPolicy {
 
         /** Posted now, and stamped. */
         data class Announce(val post: ItemPost, val stamp: DeadlineLocalDelivery) : DeadlineStep
+
+        /**
+         * #72 (C11, R72-7): standing, and re-posted now in place under the same tag so it alerts
+         * again, and stamped. It was already showing, so it is counted unchanged.
+         */
+        data class Realert(val post: ItemPost, val stamp: DeadlineLocalDelivery) : DeadlineStep
+
+        /**
+         * #72 fix round 1 (MAJOR-1 (a)): a Once still showing after its due day, re-posted now in
+         * place under the same tag in the post-due words, [ItemPost.onlyAlertOnce] so it does not
+         * sound, and re-stamped so it happens once. Counted unchanged, never cancelled first.
+         */
+        data class Refresh(val post: ItemPost, val stamp: DeadlineLocalDelivery) : DeadlineStep
     }
 
     /** A meter with no unit at all (a pH definition) leaves the `<unit>` slot empty rather than doubling a space. */
@@ -537,8 +743,29 @@ data class DeadlineInput(
 /**
  * #79 (C6): what a deadline's warning needs that the port does not carry — the asset's name for
  * the `<asset>` slot of the title, and the day the window is measured on.
+ *
+ * #72 (C10): a loan's more, each null for a warranty. They ride here and **never** in the subject's
+ * body or hash, so a relink moves no tag and posts nothing twice.
  */
-data class DeadlineFacts(val ownerName: String, val today: LocalDate)
+data class DeadlineFacts(
+    val ownerName: String,
+    val today: LocalDate,
+    /** The loan's borrower, its display-name snapshot, for the body's `Lent to <name>`. */
+    val borrower: String? = null,
+    /** Epoch millis of the latest digest-hour instant at or before now: Until returned's period began here. */
+    val cadenceSince: Long? = null,
+    /**
+     * Fix round 1 (R72-7): epoch millis of **today** at the owner's digest hour, in the device zone.
+     * A loan posts, re-alerts or re-posts only at a sweep at or after it; before it, a loan is held.
+     */
+    val dayOpensAt: Long? = null,
+    /**
+     * Fix round 1 (MAJOR-1 (a)): epoch millis of the start of the day after the due day, in the
+     * device zone — when a loan's words turn to P72-41/43. A Once stamped before it and still
+     * showing after the due day carries the due-day words, and is refreshed once, silently.
+     */
+    val wordsTurnAt: Long? = null,
+)
 
 /** One per-item notification. [tag] is its identity in the shade; [actions] are B07's to wire. */
 data class ItemPost(
@@ -551,6 +778,12 @@ data class ItemPost(
     /** Whether a crossed meter threshold is what came due, which selects the icon. */
     val meter: Boolean,
     val actions: List<String>,
+    /**
+     * #72 fix round 1 (owner ruling R72-B2): update a standing notification without alerting.
+     * **False on every path but one** — the silent post-due refresh of a loan's Once that is still
+     * showing — so every schedule, warranty and loan announcement and every re-alert sounds as before.
+     */
+    val onlyAlertOnce: Boolean = false,
 )
 
 /** The one summary a run posts. [tag] changes exactly when the counts do. */

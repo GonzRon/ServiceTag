@@ -5,6 +5,8 @@ import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetLoan
+import com.loosecannon.servicetag.core.model.AssetLoanId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
@@ -251,8 +253,9 @@ interface ScheduleLocalDeliveryRepository {
  * Nothing here is canonical, exported or merged, and every reader must behave correctly — at worst
  * noisily — when the row is absent: losing it costs at most one repeated warning. The key is soft:
  * [kind] is the deadline kind's name as the notification tag writes it, and [subjectId] the id of
- * what the deadline is about (an asset, for a warranty); no foreign key holds either, so a row for a
- * subject that is gone is accepted, outlives it, and is forgotten by the delivery path.
+ * what the deadline is about — an asset's id for a warranty, and `<assetId>/<loanId>` for a loan's
+ * due-back reminder (#72, C5, C9); no foreign key holds either, so a row for a subject that is gone
+ * is accepted, outlives it, and is forgotten by the delivery path.
  */
 data class DeadlineLocalDelivery(
     val kind: String,
@@ -416,4 +419,26 @@ interface ServiceCaseEntryRepository {
     suspend fun all(): List<ServiceCaseEntry>
     suspend fun deleteAll()
     fun observeForCase(caseId: ServiceCaseId): Flow<List<ServiceCaseEntry>>
+}
+
+/**
+ * #72 (C1; R72-1, R72-17). The loans of an asset, one row per loan: upsert and query, and **no delete**
+ * — "Mark returned" is a loan's only exit, a returned loan stays as history, and a loan leaves only by
+ * its asset's CASCADE. `deleteAll` is the replace import's wipe, which is its only caller. An asset
+ * holds at most one open loan; the use cases refuse a second, and the schema's unique index is the
+ * last word. Lists by asset order by `(lentOn descending, id)`; [all] and [open] order by id.
+ */
+interface AssetLoanRepository {
+    suspend fun upsert(loan: AssetLoan)
+    suspend fun get(id: AssetLoanId): AssetLoan?
+    suspend fun forAsset(assetId: AssetId): List<AssetLoan>
+    /** The asset's one open loan, or null when it holds none. */
+    suspend fun openFor(assetId: AssetId): AssetLoan?
+    /** Every open loan, by id. */
+    suspend fun open(): List<AssetLoan>
+    suspend fun all(): List<AssetLoan>
+    suspend fun deleteAll()
+    fun observeForAsset(assetId: AssetId): Flow<List<AssetLoan>>
+    /** Every open loan, live, by id — the Assets list's and the Dashboard's one read. */
+    fun observeOpen(): Flow<List<AssetLoan>>
 }

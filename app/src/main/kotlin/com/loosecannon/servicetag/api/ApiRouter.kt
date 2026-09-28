@@ -54,7 +54,7 @@ internal class ApiRouter(
     }
 
     /**
-     * The whole surface. Fifty-five path shapes over sixty-six method-and-path rows; anything
+     * The whole surface. Fifty-nine path shapes over seventy-one method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -92,6 +92,12 @@ internal class ApiRouter(
      * `/v1/service-cases/{id}/entries`, each a 405 for a verb it does not take. **Nothing destructive came
      * with them** (R79-8, R79-9): no verb deletes a case, amends or deletes an entry, or writes a case's
      * status or `closedOn` except a status entry — a CANCELLED or CLOSED entry is the exit.
+     *
+     * #72 added five rows over four shapes: the twentieth `/v1/assets/{id}/…` sub-resource (an asset's
+     * loans, read only), and `/v1/loans`, `/v1/loans/{id}` and `/v1/loans/{id}/return`, each a 405 for a
+     * verb it does not take. **Nothing destructive came with them either** (R72-17): no verb deletes a
+     * loan — "Mark returned" is the exit, and the row stays as history — and none relinks one or reads a
+     * contact (R72-3, R72-4): a link is made on the phone alone. None runs a reminder sweep (R72-15).
      */
     private suspend fun route(request: ApiRequest): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -150,6 +156,8 @@ internal class ApiRouter(
                 "warranty-reminder" to "POST" -> handlers.warranty.setWarrantyReminder(rest[1], request)
                 // #79b — the nineteenth: the asset's service cases, read only.
                 "service-cases" to "GET" -> handlers.serviceCases.listForAsset(rest[1])
+                // #72 — the twentieth: the asset's loans, open and returned, read only.
+                "loans" to "GET" -> handlers.loans.listForAsset(rest[1])
                 else -> throw ApiFailure.notFound(request.path)
             }
 
@@ -256,6 +264,20 @@ internal class ApiRouter(
 
             rest.size == 3 && rest[0] == "service-cases" && rest[2] == "entries" ->
                 if (method == "POST") handlers.serviceCases.addEntry(rest[1], request) else notAllowed(request)
+
+            // #72 — a loan is lent, read, replaced while open and returned, and never deleted, relinked or
+            // reopened. Three shapes, each a 405 for a verb it does not take.
+            rest == listOf("loans") ->
+                if (method == "POST") handlers.loans.lend(request) else notAllowed(request)
+
+            rest.size == 2 && rest[0] == "loans" -> when (method) {
+                "GET" -> handlers.loans.get(rest[1])
+                "PATCH" -> handlers.loans.update(rest[1], request)
+                else -> notAllowed(request)
+            }
+
+            rest.size == 3 && rest[0] == "loans" && rest[2] == "return" ->
+                if (method == "POST") handlers.loans.markReturned(rest[1], request) else notAllowed(request)
 
             rest == listOf("attention") ->
                 if (method == "GET") handlers.seasonHealth.listAttention() else notAllowed(request)

@@ -645,6 +645,36 @@ val MIGRATION_11_12: Migration = object : Migration(11, 12) {
 }
 
 /**
+ * Schema v12 -> v13 (#72, C5; R72-1, R72-2): the loan aggregate, one new table, and nothing existing
+ * moves — no column, no row and no timestamp, so a pre-upgrade export still re-plans IDENTICAL.
+ *
+ *  1. `asset_loan`, one row per loan, owned by its asset (`asset_id`, CASCADE, indexed on the house
+ *     style though the unique index below leads with it).
+ *  2. `index_asset_loan_asset_id_open_marker`, unique: at most one open loan per asset. `open_marker` is
+ *     1 while a loan is open and NULL once it is returned, and SQLite's NULLs are distinct, so returned
+ *     loans pile up as history — the `asset_event` completion index's precedent.
+ *
+ * Each statement is copied verbatim from the exported `13.json`, so Room validates it on open.
+ */
+val MIGRATION_12_13: Migration = object : Migration(12, 13) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `asset_loan` (`id` TEXT NOT NULL, `asset_id` TEXT NOT NULL, " +
+                "`borrower_name` TEXT NOT NULL, `contact_lookup_uri` TEXT, `lent_on` TEXT NOT NULL, `due_on` TEXT, " +
+                "`returned_on` TEXT, `reminder_mode` TEXT NOT NULL, `notes` TEXT NOT NULL, " +
+                "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `open_marker` INTEGER, " +
+                "PRIMARY KEY(`id`), " +
+                "FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_asset_loan_asset_id` ON `asset_loan` (`asset_id`)")
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_asset_loan_asset_id_open_marker` " +
+                "ON `asset_loan` (`asset_id`, `open_marker`)",
+        )
+    }
+}
+
+/**
  * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
  * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
  */

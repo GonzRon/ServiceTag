@@ -243,7 +243,7 @@ class MergePlannerMaintenanceTest {
     // --- write order ------------------------------------------------------------------------
 
     /**
-     * Hazard: merge order breaks a reference. The seventeen members are asserted **as a list**, and a
+     * Hazard: merge order breaks a reference. The eighteen members are asserted **as a list**, and a
      * plan over an archive whose group, schedule, closure and event all arrive together writes them
      * in that order. #74's `CATEGORIES` is appended last, keeping every other ordinal: it references
      * nothing and is referenced by nothing, and it is decided and written first (`MergeWrites`).
@@ -265,6 +265,8 @@ class MergePlannerMaintenanceTest {
                 MergeTable.CATEGORIES,
                 // #79 (format 12; `MergePlannerServiceCaseTest`): appended after it, a case before its entries.
                 MergeTable.SERVICE_CASES, MergeTable.CASE_ENTRIES,
+                // #72 (format 13; `MergePlannerLoanTest`): appended after them, a loan after its asset.
+                MergeTable.LOANS,
             ),
             MergeTable.entries.toList(),
         )

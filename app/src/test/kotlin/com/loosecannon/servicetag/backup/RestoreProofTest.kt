@@ -32,6 +32,7 @@ import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.ImportReport
 import com.loosecannon.servicetag.data.room.AppDatabase
+import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomCategoryRepository
@@ -92,6 +93,7 @@ class RestoreProofTest {
         val categories = RoomCategoryRepository(db.assetCategoryDao())
         val serviceCases = RoomServiceCaseRepository(db.serviceCaseDao())
         val caseEntries = RoomServiceCaseEntryRepository(db.serviceCaseEntryDao())
+        val loans = RoomAssetLoanRepository(db.assetLoanDao())
         val uow = RoomUnitOfWork(db)
         // The restore's rebuild seam, wired to the real engine over the same database: the proof
         // is about the canonical rows, and derived state is rebuilt after any import.
@@ -104,12 +106,12 @@ class RestoreProofTest {
         val export = ExportBackupSet(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
             attachments, references, seasonActivations, conditions, healthSubjects, categories,
-            serviceCases, caseEntries, uow, IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
+            serviceCases, caseEntries, loans, uow, IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
         )
         val import = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
             attachments, references, seasonActivations, conditions, healthSubjects, categories,
-            serviceCases, caseEntries, FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
+            serviceCases, caseEntries, loans, FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
             rebuildAll = { recompute.all() },
         )
     }

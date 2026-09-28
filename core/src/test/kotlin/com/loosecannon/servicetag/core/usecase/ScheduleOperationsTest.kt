@@ -42,6 +42,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAssetLoanRepository
 import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
@@ -760,7 +761,7 @@ class ScheduleOperationsTest {
             references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(),
             InMemoryHealthSubjectRepository(), categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(),
-            uow, IdGenerator { "set-1" }, clock, appVersion = "1.2.0", schemaVersion = 6,
+            InMemoryAssetLoanRepository(), uow, IdGenerator { "set-1" }, clock, appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
 
         fun restore(rebuildAll: suspend () -> Unit) = ImportBackupReplace(
@@ -768,7 +769,7 @@ class ScheduleOperationsTest {
             references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(),
             InMemoryHealthSubjectRepository(), categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(),
-            storage, uow, rebuildAll = rebuildAll,
+            InMemoryAssetLoanRepository(), storage, uow, rebuildAll = rebuildAll,
         )
 
         // Once, and after the last insert: everything the file carried was already in when it ran.

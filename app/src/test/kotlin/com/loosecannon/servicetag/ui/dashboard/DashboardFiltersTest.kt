@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.ui.dashboard
 
 import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthSubjectId
@@ -11,11 +12,14 @@ import com.loosecannon.servicetag.core.model.PolicyReason
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.schedule.DueStatus
+import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.loanRow
 import com.loosecannon.servicetag.ui.maintenance.AttentionItem
 import com.loosecannon.servicetag.ui.maintenance.AttentionKind
 import com.loosecannon.servicetag.ui.maintenance.AttentionSection
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.statusLabel
+import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -191,7 +195,121 @@ class DashboardFiltersTest {
         assertEquals(listOf(0, 2), narrowed.first().assetRows.map { it.rank })
     }
 
+    /**
+     * #72 (C20; R72-14 b): the loan rows come after ATTENTION's four ratified tiers — DOWN units, the
+     * schedule rows, DEGRADED units, independent CRITICAL health — in their own order, and in no other
+     * section; loans alone still make an ATTENTION section.
+     */
+    @Test fun loanRowsFollowTheRatifiedTiers() {
+        val sections = assembleSections(
+            schedules = listOf(
+                schedule("s-a", AttentionSection.ATTENTION, DueStatus.OVERDUE, rank = 0),
+                schedule("s-d", AttentionSection.UPCOMING, DueStatus.DUE_SOON, rank = 1),
+            ),
+            attention = listOf(
+                unit("u-z", OperationalCondition.DOWN, rank = 0),
+                unit("u-y", OperationalCondition.DEGRADED, rank = 1),
+                health("u-x", HealthBand.CRITICAL, assetCondition = null, rank = 2),
+            ),
+            categoryOf = { "Yard" },
+            loans = listOf(loan("l-1", "a-l1"), loan("l-2", "a-l2")),
+        )
+        assertEquals(
+            listOf("u-z", "a-s-a", "u-y", "u-x", "a-l1", "a-l2"),
+            sections.first { it.section == AttentionSection.ATTENTION }.entries.map { it.assetId },
+        )
+        assertTrue(
+            "no loan row outside ATTENTION",
+            sections.filter { it.section != AttentionSection.ATTENTION }.flatMap { it.entries }.none { it is SectionEntry.Loan },
+        )
+
+        val loansOnly = assembleSections(emptyList(), emptyList(), { null }, loans = listOf(loan("l-1", "a-l1")))
+        assertEquals(listOf(AttentionSection.ATTENTION), loansOnly.map { it.section })
+    }
+
+    /** A loan row is no maintenance status and no condition: any status or condition chip hides it. */
+    @Test fun hiddenUnderAnyStatusOrConditionChip() {
+        val sections = assembleSections(
+            schedules = listOf(schedule("s-a", AttentionSection.ATTENTION, DueStatus.OVERDUE, condition = OperationalCondition.DOWN)),
+            attention = emptyList(),
+            categoryOf = { "Yard" },
+            loans = listOf(loan("l-1", "a-l1")),
+        )
+        fun loansUnder(filters: DashboardFilters) =
+            filters.narrow(sections).flatMap { it.entries }.filterIsInstance<SectionEntry.Loan>().map { it.row.loanId }
+
+        assertEquals("no filter: drawn", listOf("l-1"), loansUnder(DashboardFilters()))
+        DueStatus.entries.forEach { status ->
+            assertEquals("$status hides it", emptyList<String>(), loansUnder(DashboardFilters(status = status)))
+        }
+        ConditionChip.entries.forEach { chip ->
+            assertEquals("$chip hides it", emptyList<String>(), loansUnder(DashboardFilters(conditions = setOf(chip))))
+        }
+    }
+
+    @Test fun theCategoryChipFiltersThem() {
+        val sections = assembleSections(
+            schedules = emptyList(),
+            attention = emptyList(),
+            categoryOf = { null },
+            loans = listOf(loan("l-1", "a-l1", category = "Yard"), loan("l-2", "a-l2", category = "Garage"), loan("l-3", "a-l3", category = null)),
+        )
+        fun loansIn(category: String?) = DashboardFilters(category = category).narrow(sections)
+            .flatMap { it.entries }.filterIsInstance<SectionEntry.Loan>().map { it.row.loanId }
+
+        assertEquals(listOf("l-1", "l-2", "l-3"), loansIn(null))
+        assertEquals(listOf("l-1"), loansIn("Yard"))
+        assertEquals(listOf("l-2"), loansIn("Garage"))
+    }
+
+    /**
+     * R72-14 b, R72-10: only an **open, overdue** loan of an asset **in service** — the due day itself is
+     * still lent out, a loan with no date is never overdue, a returned one is history, and a retired or
+     * archived asset's overdue loan is not drawn here. By due date, then the asset's name, then the id;
+     * each row says P72-44.
+     */
+    @Test fun onlyOverdueLoansOfInServiceAssets() {
+        val today = LocalDate.parse("2026-09-20")
+        val assets = listOf(
+            assetRow("drill", name = "Example Drill").copy(category = "Tools"),
+            assetRow("ladder", name = "Example Ladder"),
+            assetRow("mower", name = "Example Mower"),
+            assetRow("retired", name = "Example Pump", retiredOn = "2026-09-01"),
+            assetRow("archived", name = "Example Fan", status = AssetStatus.ARCHIVED),
+            assetRow("today", name = "Example Saw"),
+            assetRow("dateless", name = "Example Hose"),
+            assetRow("back", name = "Example Rake"),
+        )
+        val loans = listOf(
+            loanRow("l-drill", "drill", lentOn = "2026-09-01", dueOn = "2026-09-19"),
+            loanRow("l-ladder", "ladder", lentOn = "2026-08-01", dueOn = "2026-09-01", borrower = "Example Rentals Ltd"),
+            loanRow("l-mower", "mower", lentOn = "2026-09-01", dueOn = "2026-09-19"),
+            loanRow("l-retired", "retired", lentOn = "2026-08-01", dueOn = "2026-08-15"),
+            loanRow("l-archived", "archived", lentOn = "2026-08-01", dueOn = "2026-08-15"),
+            loanRow("l-today", "today", lentOn = "2026-09-01", dueOn = "2026-09-20"),
+            loanRow("l-dateless", "dateless", lentOn = "2026-01-01"),
+            loanRow("l-back", "back", lentOn = "2026-01-01", dueOn = "2026-02-01", returnedOn = "2026-02-05"),
+        )
+
+        val rows = loanAttentionRowsOf(loans, assets, today)
+
+        assertEquals(listOf("l-ladder", "l-drill", "l-mower"), rows.map { it.loanId })
+        assertEquals("Lent to Example Rentals Ltd · due back 1 Sep 2026", rows.first().line)
+        assertEquals("Example Ladder", rows.first().assetName)
+        assertEquals("Tools", rows[1].category)
+        assertEquals("Lent to Sample Borrower · due back 19 Sep 2026", rows[1].line)
+    }
+
     private companion object {
+        fun loan(loanId: String, assetId: String, category: String? = "Yard", dueOn: String = "2026-09-01") = LoanAttentionRow(
+            loanId = loanId,
+            assetId = AssetId(assetId),
+            assetName = assetId,
+            category = category,
+            dueOn = dueOn,
+            line = "Lent to Sample Borrower · due back 1 Sep 2026",
+        )
+
         @Suppress("LongParameterList")
         fun schedule(
             id: String,

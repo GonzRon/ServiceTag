@@ -31,7 +31,8 @@ sealed interface SubjectKey {
 
     /**
      * #79 (R79-13): a single date that no schedule owns. [kind] says what the date is and
-     * [subjectId] names the row it belongs to — an asset's id for [DeadlineKind.WARRANTY_EXPIRY].
+     * [subjectId] names the row it belongs to — an asset's id for [DeadlineKind.WARRANTY_EXPIRY],
+     * and `<assetId>/<loanId>` for [DeadlineKind.LOAN_DUE_BACK] (#72, [LoanSubjectId]).
      * It is never completed and never parked: it is in the list while it should be held and
      * absent otherwise.
      */
@@ -39,16 +40,19 @@ sealed interface SubjectKey {
 }
 
 /**
- * #79 (R79-13): which date a [SubjectKey.Deadline] is. One member; a kind is added only with the
- * builder that produces it and the provider branch that delivers it.
+ * #79 (R79-13): which date a [SubjectKey.Deadline] is. A kind is added only with the builder that
+ * produces it and the provider branch that delivers it: #72 (C8, C9) adds the second, the day a lent
+ * asset is due back, with [BuildLoanSubjects].
  */
-enum class DeadlineKind { WARRANTY_EXPIRY }
+enum class DeadlineKind { WARRANTY_EXPIRY, LOAN_DUE_BACK }
 
 /**
  * #79 (R79-13, R79-14a): how often a deadline is announced. [ONCE] is once per content, on entering
- * its window — a moved date or lead is new content and is announced again.
+ * its window — a moved date or lead is new content and is announced again. #72 (C8, R72-7) adds
+ * [UNTIL_CLEARED]: announced again once each period for as long as the subject stays in the list,
+ * so it ends only when the subject leaves it (a loan's return).
  */
-enum class DeadlineRepeat { ONCE }
+enum class DeadlineRepeat { ONCE, UNTIL_CLEARED }
 
 /**
  * Which provider a list belongs to.

@@ -49,6 +49,7 @@ import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
+import com.loosecannon.servicetag.core.model.LoanStanding
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.ui.health.AssetHealthView
 import com.loosecannon.servicetag.ui.health.ComponentCondition
@@ -229,6 +230,94 @@ class AssetsIndicatorsTest {
         }
     }
 
+    // --- #72 (C19; R72-22, R72-23; §3 row 33): the loan badge -----------------------------------------
+
+    /**
+     * AC 14: a lent asset's row says "LENT OUT" and an overdue one's "LOAN OVERDUE" — the word drawn,
+     * the ratified mixed-case phrase described to TalkBack — and never the bare maintenance "OVERDUE".
+     */
+    @Test fun aLentAndAnOverdueAssetShowTheirWords() {
+        draw(
+            PHONE_412, 1.0f,
+            listOf(row("Example Drill", loan = LoanStanding.LENT_OUT), row("Example Ladder", loan = LoanStanding.OVERDUE)),
+        )
+
+        rule.onAllNodesWithText("LENT OUT", useUnmergedTree = true).assertCountEquals(1)
+        rule.onAllNodesWithText("LOAN OVERDUE", useUnmergedTree = true).assertCountEquals(1)
+        rule.onAllNodesWithContentDescription("Lent out", useUnmergedTree = true).assertCountEquals(1)
+        rule.onAllNodesWithContentDescription("Loan overdue", useUnmergedTree = true).assertCountEquals(1)
+        rule.onAllNodesWithText("OVERDUE", useUnmergedTree = true).assertCountEquals(0)
+        assertTrue("each word on its own row", pill("LENT OUT").top.value < pill("LOAN OVERDUE").top.value)
+    }
+
+    /**
+     * C19: the loan badge comes after the lifecycle badges — retired, out of season, archived — and
+     * before the condition and health badges, in reading order and on screen.
+     */
+    @Test fun theLoanBadgeFollowsTheLifecycleBadgesAndPrecedesConditionAndHealth() {
+        draw(
+            PHONE_412, 1.0f,
+            listOf(
+                row("Old pump", retiredOn = "2026-01-01", status = AssetStatus.ARCHIVED, outOfSeason = true, loan = LoanStanding.LENT_OUT),
+            ),
+        )
+        val lifecycle = listOf("RETIRED", "OUT OF SEASON", "ARCHIVED")
+        lifecycle.forEach { word ->
+            assertTrue("$word is read before the loan", order(hasText(word)) < order(hasText("LENT OUT")))
+            assertTrue("$word is drawn before the loan", before(pill(word), pill("LENT OUT")))
+        }
+
+        draw(PHONE_412, 1.0f, listOf(row("Generator", health = downCritical(), loan = LoanStanding.OVERDUE)))
+        listOf("DOWN", "CRITICAL").forEach { word ->
+            assertTrue("the loan is read before $word", order(hasText("LOAN OVERDUE")) < order(hasText(word)))
+            assertTrue("the loan is drawn before $word", before(pill("LOAN OVERDUE"), pill(word)))
+        }
+    }
+
+    /** C19: a row whose only fact is its loan still draws the badge group — the row's guard admits it. */
+    @Test fun aLoanOnlyRowDrawsItsBadge() {
+        draw(PHONE_412, 1.0f, listOf(row("Example Drill", loan = LoanStanding.LENT_OUT)))
+
+        rule.onNodeWithText("LENT OUT", useUnmergedTree = true).assertExists()
+        rule.onNodeWithContentDescription("Lent out", useUnmergedTree = true).assertExists()
+        assertTrue("under the name", pill("LENT OUT").top.value >= bounds("Example Drill").bottom.value - HALF)
+    }
+
+    /**
+     * The #71 frames (320/1.0, 360/1.0, 412/2.0) with every lifecycle badge, the overdue loan's and the
+     * disc on one row: every word whole on one line, inside the name column, and nothing overlapping —
+     * the row wraps instead of clipping.
+     */
+    @Test fun aNarrowLargeFontRowWraps() {
+        val lent = row(
+            "Old pump", retiredOn = "2026-01-01", status = AssetStatus.ARCHIVED, outOfSeason = true,
+            tagged = true, loan = LoanStanding.OVERDUE,
+        )
+        val badges = listOf("RETIRED", "OUT OF SEASON", "ARCHIVED", "LOAN OVERDUE")
+        for ((width, scale) in FRAMES) {
+            draw(width, scale, listOf(lent))
+            val where = "the lent row at ${width.value.toInt()}/$scale"
+            val row = rowBounds(lent.asset.name)
+            val disc = disc()
+            val column = DpRect(row.left + 16.dp, row.top, disc.left - 8.dp, row.bottom)
+            val pills = badges.map(::pill)
+            badges.forEachIndexed { i, word ->
+                assertUnclipped(where, word)
+                assertEquals("$where: '$word' keeps one line", 1, textLayout(word).lineCount)
+                assertInside("$where: '$word'", pills[i], column)
+            }
+            assertInside("$where: the disc", disc, row)
+            val all = pills + disc
+            all.forEachIndexed { i, a ->
+                all.forEachIndexed { j, b -> if (i < j) assertFalse("$where: boxes $i $a and $j $b overlap", overlap(a, b)) }
+            }
+        }
+    }
+
+    /** [a] is drawn before [b]: left of it on the same line, or on an earlier line. */
+    private fun before(a: DpRect, b: DpRect): Boolean =
+        (a.right.value <= b.left.value + HALF && abs(a.top.value - b.top.value) <= HALF) || a.bottom.value <= b.top.value + HALF
+
     // --- drawing -------------------------------------------------------------------------------------
 
     /** Composes once; a later call swaps the frame in place, since a rule composes one content per test. */
@@ -270,6 +359,7 @@ class AssetsIndicatorsTest {
         status: AssetStatus = AssetStatus.ACTIVE,
         health: AssetHealthView? = null,
         tagged: Boolean = false,
+        loan: LoanStanding? = null,
     ) = AssetRow(
         asset = Asset(
             id = AssetId(name.lowercase().replace(' ', '-')),
@@ -283,6 +373,7 @@ class AssetsIndicatorsTest {
         outOfSeason = outOfSeason,
         hasWrittenTag = tagged,
         health = health,
+        loan = loan,
     )
 
     private fun subject(name: String, score: Int, band: HealthBand) = SubjectHealth(

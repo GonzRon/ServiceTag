@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
+import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.EventProfile
@@ -22,7 +23,7 @@ import com.loosecannon.servicetag.core.ports.StoredBytes
 import java.security.MessageDigest
 
 /**
- * The seventeen canonical tables. The first fourteen are **in the order a merge must write them**:
+ * The eighteen canonical tables. The first fourteen are **in the order a merge must write them**:
  * every reference a row makes points at a table declared before it (assets first, attachment rows
  * last, when every owner is in). The ordinal is also the first key decisions and conflicts are
  * sorted by, which is what makes a report deterministic.
@@ -53,11 +54,14 @@ import java.security.MessageDigest
  * and there they are also in dependency position again: a case points at its asset (its Incident and
  * repair links are soft, never owners), and an entry at its case, which is decided just before it.
  * [MergeWrites] writes them last, after the assets and the events.
+ *
+ * #72's [LOANS] is appended after [CASE_ENTRIES], so no shipped ordinal moves, and it is in dependency
+ * position too: a loan points only at its asset. [MergeWrites] writes loans last.
  */
 enum class MergeTable {
     ASSETS, GROUPS, DEFINITIONS, PROFILES, SCHEDULES, CLOSURES, LINKS, TAGS, EVENTS, ATTACHMENTS,
     REFERENCES, SEASON_ACTIVATIONS, CONDITIONS, HEALTH_SUBJECTS, CATEGORIES,
-    SERVICE_CASES, CASE_ENTRIES,
+    SERVICE_CASES, CASE_ENTRIES, LOANS,
 }
 
 /**
@@ -280,6 +284,17 @@ enum class MergeReason {
      * the built-in's label. [MergeDecision.detail] is the key.
      */
     CATEGORY_IS_BUILT_IN,
+
+    /**
+     * #72 (C7; R72-2). An incoming **open** loan whose asset holds a **different open loan here**: an
+     * asset is out on at most one loan, and the schema's unique index would refuse the second. A
+     * `CONFLICT` — who has the asset is the owner's to settle on the phone, by returning one of them —
+     * and [MergeDecision.detail] is the local open loan's id. Only the local side is asked: the backup
+     * graph check already holds an archive to one open loan per asset, so every case of this rule is
+     * reachable through a real decode. A returned incoming loan never meets it, since history never
+     * blocks.
+     */
+    ASSET_ALREADY_LENT,
 }
 
 /** A review hint (#44: "review hints only, never automatic identity"). It never blocks an apply. */
@@ -330,7 +345,8 @@ data class MergeTally(val insert: Int, val identical: Int, val conflict: Int, va
  * apply that wrote this value and nothing else leaves every accepted asset's category in the catalog.
  * [assets] carries each accepted asset in its **canonical** spelling — a local row's, an accepted
  * row's, or a built-in's label — with the archive's own `updatedAt`.
- * #79's [serviceCases] and their [caseEntries] come last: a case after its asset, an entry after its case.
+ * #79's [serviceCases] and their [caseEntries] come last: a case after its asset, an entry after its case —
+ * and #72's [loans] after them, each after its asset.
  */
 data class MergeWrites(
     val categories: List<AssetCategory> = emptyList(),
@@ -350,6 +366,7 @@ data class MergeWrites(
     val healthSubjects: List<HealthSubject> = emptyList(),
     val serviceCases: List<ServiceCase> = emptyList(),
     val caseEntries: List<ServiceCaseEntry> = emptyList(),
+    val loans: List<AssetLoan> = emptyList(),
 )
 
 /**
@@ -383,6 +400,8 @@ data class MergeSnapshot(
     /** #79 — the case headers and their timelines. */
     val serviceCases: List<ServiceCase> = emptyList(),
     val caseEntries: List<ServiceCaseEntry> = emptyList(),
+    /** #72 — the loans, open and returned. */
+    val loans: List<AssetLoan> = emptyList(),
     val storedBytes: Map<String, StoredBytes> = emptyMap(),
     val attachmentStoreConfigured: Boolean,
 )
@@ -416,9 +435,11 @@ data class MergeReport(
     val healthSubjects: MergeTally,
     /** #74 — in [MergeTable] order, although categories are written first. */
     val categories: MergeTally,
-    /** #79 — the case headers, then their timelines: the report is seventeen tables. */
+    /** #79 — the case headers, then their timelines. */
     val serviceCases: MergeTally,
     val caseEntries: MergeTally,
+    /** #72 — the loans: the report is eighteen tables. */
+    val loans: MergeTally,
     /** Deterministic: table order, then id. */
     val conflicts: List<MergeDecision>,
     val duplicateCandidates: List<DuplicateCandidate>,
@@ -492,6 +513,7 @@ class MergePlan internal constructor(
         categories = tally(MergeTable.CATEGORIES),
         serviceCases = tally(MergeTable.SERVICE_CASES),
         caseEntries = tally(MergeTable.CASE_ENTRIES),
+        loans = tally(MergeTable.LOANS),
         conflicts = conflicts,
         duplicateCandidates = duplicateCandidates,
     )

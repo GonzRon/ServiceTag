@@ -51,6 +51,26 @@ class NotificationPermissionTest {
     }
 
     /**
+     * #72 (C13, R72-9, R72-23): the lend form's rationale is its own ratified sentence (P72-33), the
+     * third beside the schedule editor's and the asset editor's, both unchanged.
+     */
+    @Test
+    fun theLoanRationaleIsItsOwnRatifiedSentenceBesideTheShippedOnes() {
+        assertEquals(
+            "ServiceTag needs notification permission to remind you when a loan is due back.",
+            LOAN_NOTIFICATION_RATIONALE,
+        )
+        assertEquals(
+            "ServiceTag needs notification permission to remind you before a warranty expires.",
+            WARRANTY_NOTIFICATION_RATIONALE,
+        )
+        assertEquals(
+            "ServiceTag needs notification permission to remind you when maintenance is due.",
+            NOTIFICATION_PERMISSION_RATIONALE,
+        )
+    }
+
+    /**
      * B05 fix round 2, finding 18 (blocking regression): registration must happen from
      * [AndroidNotificationPermission]'s constructor, not on the first read of `resumedActivity`.
      * The lazy variant this guards against registers only when `shouldExplain()`/`request()`

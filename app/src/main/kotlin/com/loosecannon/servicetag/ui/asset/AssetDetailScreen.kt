@@ -76,6 +76,7 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
+import com.loosecannon.servicetag.core.model.LoanStanding
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.OperationalCondition
@@ -137,6 +138,8 @@ import com.loosecannon.servicetag.ui.journal.quickActionLabel
 import com.loosecannon.servicetag.ui.journal.stateColors
 import com.loosecannon.servicetag.ui.journal.stateIcon
 import com.loosecannon.servicetag.ui.journal.stateLabel
+import com.loosecannon.servicetag.ui.loan.LendingSection
+import com.loosecannon.servicetag.ui.loan.LoanBadge
 import com.loosecannon.servicetag.ui.references.ReferencesSection
 import com.loosecannon.servicetag.ui.scan.identityLine
 import com.loosecannon.servicetag.ui.scan.placementOrNull
@@ -199,6 +202,10 @@ fun AssetDetailScreen(
      * first when it is null (`newServiceCaseRoute`). The tap writes nothing.
      */
     onNewServiceCase: (assetId: String, currentIncidentId: String?) -> Unit = { _, _ -> },
+    /** #72 (C16): "Lend out" — the host opens the lend form on this asset. The tap writes nothing. */
+    onLendOut: (assetId: String) -> Unit = {},
+    /** #72 (C16): "Edit loan" — the host opens the lend form on the open loan. The tap writes nothing. */
+    onEditLoan: (assetId: String, loanId: String) -> Unit = { _, _ -> },
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -350,6 +357,16 @@ fun AssetDetailScreen(
                 )
                 DetailsSection(current)
                 WarrantySection(current.warranty)
+                // #72 (C16, R72-22): custody, right after Warranty and before Condition — never among
+                // the maintenance facts. Its return and relink are the section's own writes.
+                LendingSection(
+                    graph = graph,
+                    assetId = assetId,
+                    facts = current.loans,
+                    snackbars = snackbars,
+                    onLendOut = { onLendOut(assetId) },
+                    onEditLoan = { loan -> onEditLoan(assetId, loan) },
+                )
                 // 1.4 — the three independent facts, always in this order (spec §10.3): condition
                 // first, so a DOWN asset's health is never drawn above its condition (inv. 119).
                 ConditionSection(
@@ -768,6 +785,8 @@ private fun plateBadges(facts: List<PlateFact>): (@Composable FlowRowScope.() ->
                     StatusBadge(label = OUT_OF_SEASON, colors = semantic.seasonInactive, icon = seasonIcon)
                 // The Season section's own badge, so S39 reads the same in both places (spec §10.6).
                 PlateFact.InSeason -> PhaseBadge(SeasonPhase.IN_SEASON)
+                // #72 (C16): the Lending section's own badge, so the plate and the block agree.
+                is PlateFact.Lent -> LoanBadge(if (fact.overdue) LoanStanding.OVERDUE else LoanStanding.LENT_OUT)
             }
         }
     }

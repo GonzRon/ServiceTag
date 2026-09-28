@@ -26,6 +26,10 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import com.loosecannon.servicetag.core.model.AssetLoan
+import com.loosecannon.servicetag.core.testing.archiveOf
+import com.loosecannon.servicetag.core.testing.loanOf
+import com.loosecannon.servicetag.core.testing.plainAssetOf
 import org.junit.jupiter.api.Test
 
 class BackupCodecTest {
@@ -242,6 +246,8 @@ class BackupCodecTest {
                 "assetCategories" to 0,
                 // Format 12's two keys (#79), at zero here for the same reason.
                 "serviceCases" to 0, "serviceCaseEntries" to 0,
+                // Format 13's key (#72), at zero here for the same reason.
+                "assetLoans" to 0,
             ),
             manifest.counts,
         )
@@ -467,6 +473,8 @@ class BackupCodecTest {
                 "assetCategories" to 0,
                 // Format 12's two keys (#79), at zero here for the same reason.
                 "serviceCases" to 0, "serviceCaseEntries" to 0,
+                // Format 13's key (#72), at zero here for the same reason.
+                "assetLoans" to 0,
             ),
             decoded.manifest.counts,
         )
@@ -1034,12 +1042,12 @@ class BackupCodecTest {
     }
 
     /**
-     * The numbers this tip carries: the format moved to 10 (#67), on to 11 (#79) and on to 12 (#79b),
-     * the legacy boundary did not.
+     * The numbers this tip carries: the format moved to 10 (#67), on to 11 (#79), on to 12 (#79b) and on
+     * to 13 (#72), the legacy boundary did not.
      */
     @Test
-    fun theFormatIsTwelveAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(12, BackupCodec.FORMAT_VERSION)
+    fun theFormatIsThirteenAndTheLegacyBoundaryStaysSeven() {
+        assertEquals(13, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 
@@ -1226,4 +1234,50 @@ class BackupCodecTest {
             .ifEmpty { "x" }
 
     private fun <T> Random.pick(items: List<T>): T = items[nextInt(items.size)]
+
+    // --- #72 (C2 iii, C6): the loans' graph -------------------------------------------------------
+
+    private fun lent(vararg loans: AssetLoan) = BackupData(
+        assets = listOf(plainAssetOf("a1", "Example Drill").toDto(), plainAssetOf("a2", "Example Ladder").toDto()),
+        nfcTags = emptyList(),
+        externalLinks = emptyList(),
+        assetLoans = loans.map { it.toDto() },
+    )
+
+    /**
+     * R72-2's third layer: an asset holds at most one open loan, and an archive saying otherwise could
+     * only abort a replace at the schema's unique index with the owner's data already wiped — so the graph
+     * check refuses it, beside the duplicate ids.
+     */
+    @Test
+    fun twoOpenLoansForOneAssetAreCorrupt() {
+        val refusal = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(archiveOf(lent(loanOf("l1"), loanOf("l2", lentOn = "2026-09-21"), loanOf("l3", assetId = "a2"))))
+        }
+        assertEquals("assetLoans: asset a1 holds two open loans, l1 and l2", refusal.message)
+    }
+
+    @Test
+    fun oneOpenAndManyReturnedLoansDecode() {
+        val history = lent(
+            loanOf("l1", lentOn = "2026-06-01", returnedOn = "2026-06-10"),
+            loanOf("l2", lentOn = "2026-07-01", returnedOn = "2026-07-10"),
+            loanOf("l3"),
+            loanOf("l4", assetId = "a2"),
+            loanOf("l5", assetId = "a2", lentOn = "2026-08-01", returnedOn = "2026-08-02"),
+        )
+        assertEquals(history, BackupCodec.decode(archiveOf(history)).data)
+    }
+
+    @Test
+    fun aLoanWhoseAssetIsNotInTheArchiveIsCorrupt() {
+        val cases = listOf(
+            lent(loanOf("l1", assetId = "a9")) to "assetLoans: loan l1 points at asset a9, which is not in assets",
+            lent(loanOf("l1", returnedOn = "2026-09-21"), loanOf("l1", assetId = "a2")) to "assetLoans: duplicate id l1",
+        )
+        for ((archive, expected) in cases) {
+            val refusal = assertFailsWith<BackupCorrupt>(expected) { BackupCodec.decode(archiveOf(archive)) }
+            assertEquals(expected, refusal.message)
+        }
+    }
 }

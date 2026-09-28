@@ -400,6 +400,8 @@ class DashboardViewModelMaintenanceTest {
                 AttentionKind.CONDITION -> "${entry.item.condition}:${entry.item.assetName}"
                 AttentionKind.HEALTH -> "${entry.item.band}:${entry.item.subjectName}"
             }
+            // #72 (C20): no case here lends anything; the kind exists, so the token does.
+            is SectionEntry.Loan -> "loan:${entry.row.assetName}"
         }
     }
 

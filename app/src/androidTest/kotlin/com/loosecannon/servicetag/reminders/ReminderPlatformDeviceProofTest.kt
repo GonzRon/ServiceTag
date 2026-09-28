@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.reminders
 
 import android.Manifest
+import android.app.Notification
 import android.content.Context
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
@@ -12,10 +13,15 @@ import androidx.work.ListenableWorker
 import androidx.work.WorkManager
 import androidx.work.testing.TestListenableWorkerBuilder
 import com.loosecannon.servicetag.ServiceTagApp
+import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetLoan
+import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.reminders.DeadlineKind
 import com.loosecannon.servicetag.core.reminders.SubjectKey
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.core.usecase.LoanTerms
 import com.loosecannon.servicetag.core.usecase.WarrantyReminderCommand
 import com.loosecannon.servicetag.ui.clearInstall
 import java.time.LocalDate
@@ -56,15 +62,17 @@ class ReminderPlatformDeviceProofTest {
      * Invariant 53 against the platform: after a first launch both channels exist, at the
      * importances D-20 fixed, and the app has created **no others**. `ServiceTagApp.onCreate`
      * created them; this is the only place that can confirm the platform agreed. #79 (R79-14b)
-     * amends invariant 53 with the third, `warranty_reminders`, at the default importance.
+     * amends invariant 53 with the third, `warranty_reminders`, at the default importance, and #72
+     * (R72-9) with the fourth, `loan_reminders`, at the default importance too.
      */
     @Test
-    fun theThreeChannelsExistAtTheirImportancesAfterAFirstLaunch() {
+    fun theFourChannelsExistAtTheirImportancesAfterAFirstLaunch() {
         val manager = NotificationManagerCompat.from(context)
 
         val due = manager.getNotificationChannelCompat(NotificationChannels.DUE)
         val overdue = manager.getNotificationChannelCompat(NotificationChannels.OVERDUE)
         val warranty = manager.getNotificationChannelCompat(NotificationChannels.WARRANTY)
+        val loans = manager.getNotificationChannelCompat(NotificationChannels.LOANS)
 
         assertEquals("Maintenance due", due?.name)
         assertEquals(NotificationManagerCompat.IMPORTANCE_DEFAULT, due?.importance)
@@ -73,10 +81,13 @@ class ReminderPlatformDeviceProofTest {
         assertEquals("Warranty reminders", warranty?.name)
         assertEquals("Reminders before a warranty expires.", warranty?.description)
         assertEquals(NotificationManagerCompat.IMPORTANCE_DEFAULT, warranty?.importance)
+        assertEquals("Loan reminders", loans?.name)
+        assertEquals("Reminders when a lent item is due back.", loans?.description)
+        assertEquals(NotificationManagerCompat.IMPORTANCE_DEFAULT, loans?.importance)
 
         assertEquals(
             "no supplies and no sync_problems channel, ever (D-20 = B)",
-            setOf(NotificationChannels.DUE, NotificationChannels.OVERDUE, NotificationChannels.WARRANTY),
+            setOf(NotificationChannels.DUE, NotificationChannels.OVERDUE, NotificationChannels.WARRANTY, NotificationChannels.LOANS),
             manager.notificationChannelsCompat.map { it.id }.toSet(),
         )
     }
@@ -276,6 +287,169 @@ class ReminderPlatformDeviceProofTest {
         assertTrue(awaitStanding(notifications, tag, false))
     }
 
+    /**
+     * #72 (C10, C11): the composition, through the real graph. A loan due **yesterday** — so the
+     * owner's digest hour on its due day has passed whatever it is set to — is posted by
+     * `reminderRuns.reconcileAll()`, the one sweep every receiver, the alarm and the backstop share:
+     * the loan builder is in `subjectsFor`, the facts source reads the loan, and the post rides its own
+     * channel under a `LOAN_DUE_BACK:<asset>/<loan>` tag, stamped once in the device-local table.
+     */
+    @Test
+    fun theGraphsSweepPostsALoanPastItsDueDay() {
+        val (asset, loan) = freshLoanDueYesterday()
+        val key = SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "${asset.id.value}/${loan.id.value}")
+
+        runBlocking { app.graph.reminderRuns.reconcileAll() }
+
+        assertTrue("the sweep posted the loan reminder", awaitTrue { warningFor(key) != null })
+        val posted = warningFor(key)!!
+        assertTrue(posted.tag.startsWith("LOAN_DUE_BACK:${asset.id.value}/${loan.id.value}|"))
+        assertEquals(key, keyOfTag(posted.tag))
+        assertEquals(NotificationChannels.LOANS, posted.notification.channelId)
+        assertEquals("NOT RETURNED", posted.notification.extras.getCharSequence(NotificationCompat.EXTRA_SUB_TEXT)?.toString())
+        assertEquals(
+            "and stamped it, once, in the device-local table",
+            listOf("LOAN_DUE_BACK" to key.subjectId),
+            runBlocking { app.graph.deadlineLocalDelivery.all() }.map { it.kind to it.subjectId },
+        )
+
+        NotificationManagerCompat.from(context).cancelAll()
+        clearInstall()
+    }
+
+    /**
+     * #72 (C12; invariants 54, 55, 57): the loan reminder the real sweep posted carries exactly one
+     * action, "Open" — an **immutable activity** intent, and the very one the shipped intents build
+     * for the loan's **asset**, never one aimed at the loan's own id.
+     */
+    @Test
+    fun aLoanPostHasOneImmutableOpenActionAimedAtItsAsset() {
+        val (asset, loan) = freshLoanDueYesterday()
+        val key = SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "${asset.id.value}/${loan.id.value}")
+
+        runBlocking { app.graph.reminderRuns.reconcileAll() }
+
+        assertTrue(awaitTrue { warningFor(key) != null })
+        val actions = warningFor(key)!!.notification.actions?.toList().orEmpty()
+        assertEquals(listOf("Open"), actions.map { it.title.toString() })
+        val open = actions.single().actionIntent
+        assertTrue("the one action is immutable (invariant 54)", open.isImmutable)
+        assertTrue("and opens a screen directly, never through a receiver (invariant 55)", open.isActivity)
+        val intents = AndroidQuickActionIntents(context)
+        assertEquals("aimed at the asset", intents.pendingIntentFor(QuickActionTarget.OpenAsset(asset.id)), open)
+        assertNotEquals(
+            "never at the loan",
+            intents.pendingIntentFor(QuickActionTarget.OpenAsset(AssetId(loan.id.value))),
+            open,
+        )
+
+        NotificationManagerCompat.from(context).cancelAll()
+        clearInstall()
+    }
+
+    /**
+     * #72 (C11, AC 8): marked returned, the loan leaves the subjects, so the next sweep takes its
+     * reminder down and forgets its stamp — through the real use case, graph and shade.
+     */
+    @Test
+    fun returningTheLoanThenSweepingTakesItDown() {
+        val (asset, loan) = freshLoanDueYesterday()
+        val key = SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "${asset.id.value}/${loan.id.value}")
+        runBlocking { app.graph.reminderRuns.reconcileAll() }
+        assertTrue(awaitTrue { warningFor(key) != null })
+
+        runBlocking {
+            app.graph.returnLoan.run(loan.id, LocalDate.now().toString())
+            app.graph.reminderRuns.reconcileAll()
+        }
+
+        assertTrue("the return took it down", awaitTrue { warningFor(key) == null })
+        assertEquals(emptyList<String>(), runBlocking { app.graph.deadlineLocalDelivery.all() }.map { it.subjectId })
+
+        NotificationManagerCompat.from(context).cancelAll()
+        clearInstall()
+    }
+
+    /**
+     * A clean install holding one in-service asset, lent three days ago and due back yesterday, with a
+     * Once reminder. The digest hour is set to 00:00 (fix round 1, R1-8): a loan is quiet between
+     * local midnight and the day's digest hour, and `clearInstall()` resets the hour to 09:00, so
+     * without this the loan cases would fail whenever the class runs before 09:00 local. The closing
+     * `clearInstall()` restores the default.
+     */
+    private fun freshLoanDueYesterday(): Pair<Asset, AssetLoan> {
+        clearInstall()
+        NotificationManagerCompat.from(context).cancelAll()
+        val graph = app.graph
+        graph.prefs.digestHour = 0
+        val today = LocalDate.now()
+        return runBlocking {
+            val drill = graph.createAsset.run(AssetCommand(name = "Example Drill"))
+            val loan = graph.lendAsset.run(
+                drill.id,
+                "Sample Borrower",
+                LoanTerms(
+                    lentOn = today.minusDays(3).toString(),
+                    dueOn = today.minusDays(1).toString(),
+                    reminderMode = LoanReminderMode.ONCE,
+                ),
+            )
+            drill to loan
+        }
+    }
+
+    /**
+     * #72 fix round 1 (MAJOR-2, owner ruling R72-B2): the one ruled departure in `Notifications.kt`,
+     * on a real `NotificationManager`. A loan announcement reads back **without**
+     * `FLAG_ONLY_ALERT_ONCE`, so it alerts as every shipped post does; the same tag re-posted as the
+     * Once refresh — the post-due words, `onlyAlertOnce` set — is still one notification under that
+     * tag, carries the new text, and carries the flag, so the update does not sound.
+     */
+    @Test
+    fun anOnlyAlertOncePostKeepsItsTagAndCarriesTheFlag() {
+        val notifications = AndroidReminderNotifications(context, AndroidQuickActionIntents(context))
+        val key = SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "0b4f3c2a-6d1e-4f8a-9b7c-5e2d1a0f3b6c/c9f0f895-fb98-4b91-99f5-1d5a2e7c0b3e")
+        val tag = itemTag(key, "fedcba9876543210ffff")
+        val announcement = ItemPost(
+            key = key,
+            tag = tag,
+            channelId = NotificationChannels.LOANS,
+            title = "Example Drill — Due back",
+            body = "Lent to Sample Borrower. Due back 30 Jun 2031.",
+            statusWord = DigestPolicy.WORD_DUE_BACK,
+            meter = false,
+            actions = listOf(DigestPolicy.ACTION_OPEN),
+        )
+        notifications.cancelItem(tag)
+        assertTrue(awaitStanding(notifications, tag, false))
+
+        notifications.postItem(announcement, app.graph.quickActions.forDeadline(key))
+        assertTrue(awaitStanding(notifications, tag, true))
+        assertEquals("an announcement alerts", 0, itemFor(tag)!!.notification.flags and Notification.FLAG_ONLY_ALERT_ONCE)
+
+        val refresh = announcement.copy(
+            body = "Lent to Sample Borrower. Was due back 30 Jun 2031.",
+            statusWord = DigestPolicy.WORD_NOT_RETURNED,
+            onlyAlertOnce = true,
+        )
+        notifications.postItem(refresh, app.graph.quickActions.forDeadline(key))
+        assertTrue(
+            "the refresh replaced it in place",
+            awaitTrue { itemFor(tag)?.notification?.extras?.getCharSequence(NotificationCompat.EXTRA_TEXT)?.toString() == refresh.body },
+        )
+        val standing = NotificationManagerCompat.from(context).activeNotifications
+            .filter { it.id == AndroidReminderNotifications.ITEM_ID && it.tag == tag }
+        assertEquals("one notification under its tag", 1, standing.size)
+        assertEquals(
+            "the refresh carries only-alert-once",
+            Notification.FLAG_ONLY_ALERT_ONCE,
+            standing.single().notification.flags and Notification.FLAG_ONLY_ALERT_ONCE,
+        )
+
+        notifications.cancelItem(tag)
+        assertTrue(awaitStanding(notifications, tag, false))
+    }
+
     /** #79 (R79-14c): the boot count a deadline's stamp records is readable on a real phone. */
     @Test
     fun theBootCountIsReadable() {
@@ -283,6 +457,11 @@ class ReminderPlatformDeviceProofTest {
         assertNotNull("Settings.Global.BOOT_COUNT", count)
         assertTrue("a phone that is running has started at least once", count!! >= 1)
     }
+
+    private fun itemFor(tag: String): StatusBarNotification? =
+        NotificationManagerCompat.from(context).activeNotifications.firstOrNull {
+            it.id == AndroidReminderNotifications.ITEM_ID && it.tag == tag
+        }
 
     private fun warningFor(key: SubjectKey.Deadline): StatusBarNotification? =
         NotificationManagerCompat.from(context).activeNotifications.firstOrNull {

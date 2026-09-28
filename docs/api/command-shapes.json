@@ -34,5 +34,11 @@
   },
   "caseEntry": {
     "keys": ["occurredOn", "occurredTime", "tzId", "note", "status"]
+  },
+  "loan": {
+    "keys": ["assetId", "borrowerName", "lentOn", "dueOn", "reminderMode", "notes"]
+  },
+  "loanReturn": {
+    "keys": ["returnedOn"]
   }
 }

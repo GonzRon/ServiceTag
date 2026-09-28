@@ -30,6 +30,7 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.SeasonActivation
+import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.ServiceCase
 import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.TagBinding
@@ -48,6 +49,7 @@ import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.StoredBytes
@@ -151,6 +153,16 @@ import java.security.MessageDigest
  * links are soft, never owners. Its entries are append-only: one held here is IDENTICAL or a CONFLICT,
  * one the phone lacks is an INSERT whose case must be here or accepted by this plan. No entry is ever
  * updated or deleted by a merge.
+ *
+ * ### Loans (#72, C7)
+ *
+ * Decided after the cases, in [MergeTable] order. A loan is its own row, identity by its id, compared on
+ * every field: IDENTICAL, or CONFLICT `CONTENT_DIFFERS` — there is **no UPDATE**, so a return, a re-date,
+ * a mode change, a relink or a note made on one phone after the other received the loan conflicts on
+ * re-merge (R72-18). One the phone lacks is `OWNER_NOT_AVAILABLE` when its asset is neither here nor
+ * inserted by this plan; `ASSET_ALREADY_LENT` when it is open and its asset holds a **different open loan
+ * here**; else INSERT. Only the local side is asked about open loans: the codec's graph check already
+ * holds the archive to one open loan per asset.
  *
  * ### Not total, and only for a hand-built [Backup]
  *
@@ -943,6 +955,32 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
         }
     }
 
+    // --- loans (#72, C7) ----------------------------------------------------------------------
+    // A loan by its id, every field compared — no UPDATE (R72-18). A new one needs its asset here or
+    // accepted by this plan, and an open one must not meet a different open loan of that asset here.
+    val localLoans = snapshot.loans.associateBy { it.id.value }
+    val localOpenLoanByAsset = snapshot.loans.filter { it.isOpen }.associateBy { it.assetId.value }
+    val loanWrites = mutableListOf<AssetLoan>()
+    for (dto in data.assetLoans) {
+        val id = dto.id
+        val local = localLoans[id]
+        val holder = localOpenLoanByAsset[dto.assetId]?.id?.value
+        decisions += when {
+            local != null && dto == local.toDto() ->
+                MergeDecision(MergeTable.LOANS, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.LOANS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            !assetAvailable(dto.assetId) ->
+                MergeDecision(MergeTable.LOANS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.assetId)
+            dto.returnedOn == null && holder != null && holder != id ->
+                MergeDecision(MergeTable.LOANS, id, MergeVerdict.CONFLICT, MergeReason.ASSET_ALREADY_LENT, holder)
+            else -> {
+                loanWrites += dto.toDomain()
+                MergeDecision(MergeTable.LOANS, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
     // --- review hints, which change nothing (#44 identity 3) --------------------------------
     val localBySignature = snapshot.assets
         .filter { it.manufacturer.isNotBlank() && it.model.isNotBlank() && it.serialNumber.isNotBlank() }
@@ -983,6 +1021,7 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
                 healthSubjects = subjectWrites,
                 serviceCases = caseWrites,
                 caseEntries = entryWrites,
+                loans = loanWrites,
             )
         },
         duplicateCandidates = candidates,
@@ -1112,7 +1151,7 @@ internal suspend fun storedBytesOf(
 }
 
 /**
- * Seventeen reads. **The caller owns the transaction** — see each use case for which one.
+ * Eighteen reads. **The caller owns the transaction** — see each use case for which one.
  *
  * Schema 8's other two tables are deliberately not among them, and are named nowhere in this
  * package: derived due state never appears in a plan, and device-local delivery state is never
@@ -1136,6 +1175,7 @@ internal suspend fun mergeSnapshotOf(
     categories: CategoryRepository,
     serviceCases: ServiceCaseRepository,
     caseEntries: ServiceCaseEntryRepository,
+    loans: AssetLoanRepository,
     storedBytes: Map<String, StoredBytes>,
     attachmentStoreConfigured: Boolean,
 ): MergeSnapshot = MergeSnapshot(
@@ -1156,6 +1196,7 @@ internal suspend fun mergeSnapshotOf(
     categories = categories.all(),
     serviceCases = serviceCases.all(),
     caseEntries = caseEntries.all(),
+    loans = loans.all(),
     storedBytes = storedBytes,
     attachmentStoreConfigured = attachmentStoreConfigured,
 )

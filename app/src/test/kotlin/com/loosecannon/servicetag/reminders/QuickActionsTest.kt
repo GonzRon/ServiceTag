@@ -225,6 +225,37 @@ class QuickActionsTest {
         assertEquals(warning.actions, built.map { it.label })
     }
 
+    /**
+     * #72 (C12, R72-8; invariants 54, 57): a loan reminder offers "Open" and nothing else, aimed at
+     * the loan's **asset** — read off the subject id, `<assetId>/<loanId>`, with no store read — and
+     * never at the loan. Nothing on it writes, so no nonce; its one label is the one the digest put
+     * on the post, label for label.
+     */
+    @Test
+    fun aLoanOffersOpenOnlyAimedAtItsAssetWithNoNonce() = runTest {
+        val key = SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "shed/a1/l1")
+
+        val built = actions.forDeadline(key)
+
+        assertEquals(listOf(QuickAction(DigestPolicy.ACTION_OPEN, QuickActionTarget.OpenAsset(AssetId("shed/a1")))), built)
+        assertEquals("no nonce was issued", 0, issued)
+        assertEquals(emptyList<ScheduleLocalDelivery>(), delivery.all())
+
+        val post = DigestPolicy.decide(
+            inputs = listOf(
+                DeadlineInput(
+                    Fixture.loan(assetId = "shed/a1", loanId = "l1"),
+                    Fixture.loanFacts(java.time.LocalDateTime.parse("2031-06-30T09:00")),
+                    null,
+                ),
+            ),
+            standingTags = emptySet(),
+            standingSummaryTag = null,
+            nowMillis = Fixture.millis(java.time.LocalDateTime.parse("2031-06-30T09:00")),
+        ).posts.single()
+        assertEquals(post.actions, built.map { it.label })
+    }
+
     private fun labelsFromTheNotificationBuild(groupTargeted: Boolean): List<String> {
         val decision = DigestPolicy.decide(
             inputs = listOf(

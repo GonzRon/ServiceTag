@@ -1,11 +1,18 @@
 package com.loosecannon.servicetag.core.reminders
 
+import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.testing.InMemoryAssetLoanRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.loanOf
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlinx.coroutines.test.runTest
 
 /**
  * #79 (C4, K2): the bytes that must not move.
@@ -50,5 +57,54 @@ class ContentHashTest {
 
         assertNotEquals(without, once)
         assertEquals("b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e", once)
+    }
+
+    /**
+     * #72 (C8, K2): a warranty subject's hash, as the real builder hands it over, is the value
+     * computed at #72 B2's base (9cb0b845): the loan work adds a kind and a repeat and moves no byte
+     * of the warranty's canonical form, so no standing warning is re-posted on upgrade.
+     */
+    @Test
+    fun aWarrantySubjectsHashIsTheBaseValue() = runTest {
+        val assets = InMemoryAssetRepository()
+        assets.upsert(
+            Asset(
+                id = AssetId("a1"),
+                name = "Example Heater",
+                createdAt = 1_000L,
+                updatedAt = 1_000L,
+                warrantyExpiresOn = "2031-06-30",
+                warrantyReminderLeadDays = 30,
+            ),
+        )
+        val subject = BuildDeadlineSubjects(assets).forProvider(ProviderId.LOCAL, LocalDate.parse("2031-06-01")).single()
+
+        assertEquals("b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e", subject.contentHash)
+    }
+
+    /**
+     * #72 (C9, R72-6): the reminder mode is content. A loan moved from Once to Until returned is a new
+     * occurrence — its old post is taken down and the new one announced — so the two hashes differ,
+     * and each is pinned to the value the builder hands over for a loan due 2026-10-04.
+     */
+    @Test
+    fun theModeMovesALoansHash() = runTest {
+        val loans = InMemoryAssetLoanRepository()
+        loans.upsert(loanOf("l1", assetId = "a1", reminderMode = LoanReminderMode.ONCE))
+        loans.upsert(loanOf("l2", assetId = "a2", reminderMode = LoanReminderMode.UNTIL_RETURNED))
+        val subjects = BuildLoanSubjects(loans).forProvider(ProviderId.LOCAL, LocalDate.parse("2026-10-01"))
+
+        assertEquals(listOf(LOAN_ONCE_HASH, LOAN_UNTIL_CLEARED_HASH), subjects.map { it.contentHash })
+        assertNotEquals(subjects[0].contentHash, subjects[1].contentHash)
+    }
+
+    private companion object {
+        /**
+         * The canonical form "Due back", "", 2026-10-04, 0, ACTIVE, the absent rule, then the repeat's
+         * name, joined by the unit separator — hashed outside this codebase, so a builder that dropped
+         * or reordered a field cannot agree with it by accident.
+         */
+        const val LOAN_ONCE_HASH = "74cc03459c7b0fa1be179aaa2e48944a811cfe1db646873c9d9aabf80b2a05b5"
+        const val LOAN_UNTIL_CLEARED_HASH = "8fb9e2a656f8742256a42929b8f89d7f6e68e217c81f94360c3c9c0e6791933b"
     }
 }

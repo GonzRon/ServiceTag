@@ -24,7 +24,8 @@ import com.loosecannon.servicetag.core.ports.TagRepository
  * `EventProfile` are deliberately not read: both carry a non-null `assetId` and the schema's
  * foreign key enforces it, so neither can exist without the asset it names and [assets] already
  * answers for them. #79's service cases are not read for the same reason — `service_case.asset_id`
- * is a CASCADE foreign key, and an entry's `case_id` another — so no seventh kind is added.
+ * is a CASCADE foreign key, and an entry's `case_id` another — and nor are #72's loans
+ * (`asset_loan.asset_id` is one too), so no seventh kind is added.
  *
  * That same argument applies to [events] today — `asset_event.asset_id` is non-null and cascades
  * from `asset` — so the events clause is defence in depth against a schema that later relaxes the

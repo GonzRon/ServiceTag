@@ -23,9 +23,10 @@ private val SerialDescriptor.names: List<String>
  * asserted equal to its request DTO's serializer descriptor, in order.
  *
  * **`docs/api/v1.md`** is the contract: it must name the archive formats this build imports, the
- * seventeen merge tables (#74's format 9 added the categories, #79b's format 12 the service cases and
- * their entries) and every 1.4 code a client can receive, #74's two category reasons, #79's two
- * warranty routes and their refusal family, and #79b's five service-case routes and theirs.
+ * eighteen merge tables (#74's format 9 added the categories, #79b's format 12 the service cases and
+ * their entries, #72's format 13 the loans) and every 1.4 code a client can receive, #74's two category
+ * reasons, #79's two warranty routes and their refusal family, #79b's five service-case routes and
+ * theirs, and #72's five loan routes and theirs.
  */
 class CommandShapesGoldenTest {
 
@@ -44,6 +45,8 @@ class CommandShapesGoldenTest {
                 "warrantyReminder",
                 // #79b (C24): the case header and its timeline entry, lowerCamel like every key here.
                 "serviceCase", "caseEntry",
+                // #72 (C21): the lend and the return; the replace is the lend's keys less two.
+                "loan", "loanReturn",
             ),
             shapes.keys.toList(),
         )
@@ -65,6 +68,17 @@ class CommandShapesGoldenTest {
         )
         assertEquals(keysOf("caseEntry"), CaseEntryRequest.serializer().descriptor.names)
         assertTrue("no header body writes the status", listOf("status", "closedOn").none { it in keysOf("serviceCase") })
+
+        // A loan is lent with its asset and borrower and replaced without either (R72-17); the return date
+        // is the return's alone; and no body takes a contact link (R72-4).
+        assertEquals(keysOf("loan"), LoanCreateRequest.serializer().descriptor.names)
+        assertEquals(keysOf("loan") - "assetId" - "borrowerName", LoanUpdateRequest.serializer().descriptor.names)
+        assertEquals(keysOf("loanReturn"), LoanReturnRequest.serializer().descriptor.names)
+        assertEquals(listOf("returnedOn"), keysOf("loanReturn"))
+        assertTrue(
+            "no loan body carries a link or the return date",
+            (keysOf("loan") + keysOf("loanReturn") - "returnedOn").none { "contact" in it || "Uri" in it || it == "returnedOn" },
+        )
 
         // A subject is created with its asset and replaced without it (inv. 120).
         assertEquals(keysOf("healthSubject"), HealthSubjectCreateRequest.serializer().descriptor.names)
@@ -96,20 +110,20 @@ class CommandShapesGoldenTest {
         assertEquals((keys + legacy).toSet(), row.map { rename[it] ?: it }.filter { it in command }.toSet())
     }
 
-    @Test fun theContractDocumentNamesFormat12AndSeventeenTables() {
+    @Test fun theContractDocumentNamesFormat13AndEighteenTables() {
         val doc = repoFile("docs/api/v1.md").readText()
         val lines = doc.lines()
         // Anchored to the two spellings: a bare "1–10" is also the health weight's range.
         assertEquals(
-            "the import range reads 1–12 at both sites",
+            "the import range reads 1–13 at both sites",
             2,
-            lines.count { "format **1–12**" in it || "**format 1–12**" in it },
+            lines.count { "format **1–13**" in it || "**format 1–13**" in it },
         )
         assertEquals(
             "a shipped spelling of an old import range survives",
             emptyList<String>(),
             lines.filter { line ->
-                listOf("1–7", "1–8", "1–9", "1–10", "1–11").any { "format **$it**" in line || "**format $it**" in line }
+                listOf("1–7", "1–8", "1–9", "1–10", "1–11", "1–12").any { "format **$it**" in line || "**format $it**" in line }
             },
         )
         // #67: the status line names the new numbers, and IDENTICAL states R67-12's rule for the role.
@@ -118,6 +132,8 @@ class CommandShapesGoldenTest {
         assertTrue("the status line says 11 since #79", lines.count { "11 since #79 (warranty reminders)" in it } >= 1)
         // #79b: and 12 since the service cases.
         assertTrue("the status line says 12 since #79", lines.count { "12 since #79 (service cases)" in it } >= 1)
+        // #72: and 13 since the loans.
+        assertTrue("the status line says 13 since #72", lines.count { "13 since #72 (loans)" in it } >= 1)
         val identical = lines.single { it.startsWith("| `IDENTICAL` |") }
         assertTrue("IDENTICAL must state the role rule: $identical", "document role" in identical && "format 10" in identical)
         assertTrue(
@@ -125,9 +141,10 @@ class CommandShapesGoldenTest {
             "`warrantyReminderLeadDays`" in identical && "format 11" in identical,
         )
         assertEquals(emptyList<String>(), lines.filter { "the eleven tables" in it.lowercase() })
-        assertTrue("the report's seventeen tables", "seventeen tables" in doc.lowercase())
+        assertTrue("the report's eighteen tables", "eighteen tables" in doc.lowercase())
         assertFalse("the report's old fourteen tables", "fourteen tables" in doc.lowercase())
         assertFalse("the report's old fifteen tables", "fifteen tables" in doc.lowercase())
+        assertFalse("the report's old seventeen tables", "seventeen tables" in doc.lowercase())
         // #74: the two reasons a category row can be declined with, and the new status key and tally.
         for (name in listOf("CATEGORY_KEY_HELD", "CATEGORY_IS_BUILT_IN", "assetCategories", "categories")) {
             assertTrue("docs/api/v1.md does not name $name", "`$name`" in doc)
@@ -148,6 +165,9 @@ class CommandShapesGoldenTest {
             "warranty_reminder_validation", "warrantyReminderLeadDays",
             // #79b: the case family, its 404, the two status counts and the two report tallies.
             "service_case_validation", "no_such_service_case", "serviceCases", "serviceCaseEntries", "caseEntries",
+            // #72: the loan family, its 404 and two 409s, the status count, the report tally and the merge reason.
+            "loan_validation", "no_such_loan", "asset_already_lent", "loan_returned", "assetLoans", "loans",
+            "ASSET_ALREADY_LENT",
         )) {
             assertTrue("docs/api/v1.md does not name $code", "`$code`" in doc)
         }
@@ -162,6 +182,8 @@ class CommandShapesGoldenTest {
             "/v1/assets/{id}/warranty", "/v1/assets/{id}/warranty-reminder",
             // #79b (C24): the case routes' four path shapes.
             "/v1/assets/{id}/service-cases", "/v1/service-cases", "/v1/service-cases/{id}", "/v1/service-cases/{id}/entries",
+            // #72 (C21): the loan routes' four path shapes.
+            "/v1/assets/{id}/loans", "/v1/loans", "/v1/loans/{id}", "/v1/loans/{id}/return",
         )) {
             assertTrue("docs/api/v1.md does not name $path", "`$path`" in doc || path in doc)
         }

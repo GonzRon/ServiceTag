@@ -82,6 +82,11 @@ EXPECTED_TOOLS = (
     "open_service_case",
     "update_service_case",
     "add_case_entry",
+    "list_loans",
+    "get_loan",
+    "lend_asset",
+    "update_loan",
+    "return_loan",
 )
 
 
@@ -95,16 +100,16 @@ def test_every_tool_the_design_names_is_registered() -> None:
         assert callable(getattr(server_module, name)), f"{name} is missing"
 
 
-def test_tool_names_are_sixty_three() -> None:
+def test_tool_names_are_sixty_eight() -> None:
     """Spec §9.4: fourteen new tools took the 1.3 server's forty-one to fifty-five, 1.4.1's provider
-    repair (#80) took it to fifty-six, #79's two warranty tools to fifty-eight, and its five service-case
-    tools take it to sixty-three; `TOOL_NAMES`,
+    repair (#80) took it to fifty-six, #79's two warranty tools to fifty-eight, its five service-case
+    tools to sixty-three, and #72's five loan tools take it to sixty-eight; `TOOL_NAMES`,
     the registered tools and the guard's `expected_count` all agree."""
-    assert len(EXPECTED_TOOLS) == 63
-    assert len(server_module.TOOL_NAMES) == 63
+    assert len(EXPECTED_TOOLS) == 68
+    assert len(server_module.TOOL_NAMES) == 68
     registered = {tool.name for tool in server_module.mcp._tool_manager.list_tools()}
     assert registered == set(server_module.TOOL_NAMES)
-    assert len(registered) == 63
+    assert len(registered) == 68
 
 
 def test_pair_stores_the_code_upper_cased(api) -> None:

@@ -6,6 +6,8 @@ import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetLoan
+import com.loosecannon.servicetag.core.model.AssetLoanId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.Attachment
@@ -36,6 +38,7 @@ import com.loosecannon.servicetag.core.model.ServiceCaseId
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
@@ -141,8 +144,9 @@ open class InMemoryAssetRepository : AssetRepository, Rollbackable, Witnessed {
     }
 
     /**
-     * #79 (C17): the schema's CASCADE from `asset`, for the stores that ask for it — today the service
-     * cases ([InMemoryServiceCaseRepository.cascadeFromAsset]). Every other table's cascade is still the
+     * #79 (C17): the schema's CASCADE from `asset`, for the stores that ask for it — the service cases
+     * ([InMemoryServiceCaseRepository.cascadeFromAsset]) and #72's loans
+     * ([InMemoryAssetLoanRepository.cascadeFromAsset]). Every other table's cascade is still the
      * Room tests' to prove; a double that registers nothing deletes the asset row alone, as before.
      */
     private val cascades = mutableListOf<(AssetId) -> Unit>()
@@ -950,5 +954,76 @@ class InMemoryServiceCaseEntryRepository : ServiceCaseEntryRepository, Rollbacka
 
     private companion object {
         val ORDER = compareBy<ServiceCaseEntry>({ it.occurredOn }, { it.occurredTime }, { it.createdAt }, { it.id.value })
+    }
+}
+
+/**
+ * #72's loans: upsert and query, and no delete, exactly as the port is. The schema's unique index on
+ * `(asset_id, open_marker)` is reproduced — an upsert that would leave an asset with two open loans is
+ * refused, never written — so a writer that forgot its own check fails here as it would on Room.
+ * [cascadeFromAsset] is not part of the port: it is how [InMemoryAssetRepository] reproduces the
+ * schema's CASCADE from `asset`. [failOnUpsert] rigs the Nth upsert to throw. [openForInWrite] records,
+ * per [openFor] call, whether a [FakeUnitOfWork] write transaction was open — so a writer's one-open-loan
+ * read can be shown to share the write it guards (C2 ii).
+ */
+class InMemoryAssetLoanRepository : AssetLoanRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, AssetLoan>()
+    override var witness: TransactionWitness? = null
+    private val rig = UpsertRig("loan")
+    private val version = MutableStateFlow(0)
+    var failOnUpsert: Int?
+        get() = rig.failOnUpsert
+        set(value) { rig.failOnUpsert = value }
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun upsert(loan: AssetLoan) {
+        rig.check()
+        if (loan.isOpen && rows.values.any { it.isOpen && it.assetId == loan.assetId && it.id != loan.id }) {
+            throw RiggedFailure("asset_loan already holds an open loan for ${loan.assetId.value}")
+        }
+        rows[loan.id.value] = loan
+        version.value += 1
+    }
+
+    override suspend fun get(id: AssetLoanId): AssetLoan? = rows[id.value]
+
+    override suspend fun forAsset(assetId: AssetId): List<AssetLoan> =
+        rows.values.filter { it.assetId == assetId }.sortedWith(BY_ASSET)
+
+    /** One entry per [openFor] call: true when it ran inside a write transaction. */
+    val openForInWrite = mutableListOf<Boolean>()
+
+    override suspend fun openFor(assetId: AssetId): AssetLoan? {
+        openForInWrite += witness?.inWrite == true
+        return rows.values.firstOrNull { it.isOpen && it.assetId == assetId }
+    }
+
+    override suspend fun open(): List<AssetLoan> = rows.values.filter { it.isOpen }.sortedBy { it.id.value }
+
+    override suspend fun all(): List<AssetLoan> {
+        witness?.observeAll()
+        return rows.values.sortedBy { it.id.value }
+    }
+
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<AssetLoan>> =
+        version.map { rows.values.filter { it.assetId == assetId }.sortedWith(BY_ASSET) }
+
+    override fun observeOpen(): Flow<List<AssetLoan>> =
+        version.map { rows.values.filter { it.isOpen }.sortedBy { it.id.value } }
+
+    /** The schema's CASCADE from `asset`: this asset's loans go, open and returned alike. */
+    fun cascadeFromAsset(assetId: AssetId) {
+        rows.values.removeAll { it.assetId == assetId }
+        version.value += 1
+    }
+
+    private companion object {
+        val BY_ASSET = compareByDescending<AssetLoan> { it.lentOn }.thenBy { it.id.value }
     }
 }

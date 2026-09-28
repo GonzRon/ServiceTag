@@ -45,6 +45,8 @@ class ApiReadsWriteNothingTest {
             // #79b's aggregate: the header and its append-only timeline.
             "service_case" to graph.serviceCases.all().toSet(),
             "service_case_entry" to graph.serviceCaseEntries.all().toSet(),
+            // #72's aggregate: the loans, open and returned.
+            "asset_loan" to graph.loans.all().toSet(),
         )
     }
 
@@ -102,6 +104,12 @@ class ApiReadsWriteNothingTest {
             CaseEntryResponse.serializer(), "POST", "/v1/service-cases/$case/entries",
             """{"occurredOn":"2026-01-20","tzId":"UTC","note":"Sent out","status":"SENT_OUT"}""", status = 201,
         )
+        // #72: a loan past its due date by the read's today — overdue is derived at read time, never stored.
+        val loan = api.ok(
+            LoanResponse.serializer(), "POST", "/v1/loans",
+            """{"assetId":"$generator","borrowerName":"Sample Borrower","lentOn":"2026-01-19","dueOn":"2026-02-01","reminderMode":"ONCE"}""",
+            status = 201,
+        ).loan.id
 
         graph.today = LocalDate.parse("2026-02-10")
         graph.now = dayMillis("2026-02-10")
@@ -122,6 +130,9 @@ class ApiReadsWriteNothingTest {
             // #79b: an asset's cases, and one case with its timeline.
             "/v1/assets/$generator/service-cases",
             "/v1/service-cases/$case",
+            // #72: an asset's loans, and one loan.
+            "/v1/assets/$generator/loans",
+            "/v1/loans/$loan",
             "/v1/schedules",
             "/v1/status",
         )) {
@@ -207,6 +218,27 @@ class ApiReadsWriteNothingTest {
         assertEquals(
             setOf("service_case_entry", "service_case"),
             tablesWrittenBy { api.call("POST", "/v1/service-cases/$case/entries", """{"occurredOn":"2026-02-10","tzId":"UTC","status":"CLOSED"}""") },
+        )
+
+        // #72 (C21; R72-13, R72-15): a loan writes its own row and nothing else — no event, no condition, no
+        // schedule or its state, no health value — and its reminder settles at the next sweep, not here.
+        var loan = ""
+        assertEquals(
+            setOf("asset_loan"),
+            tablesWrittenBy {
+                api.call(
+                    "POST", "/v1/loans",
+                    """{"assetId":"$heater","borrowerName":"Sample Borrower","lentOn":"2026-02-09","dueOn":"2026-02-20","reminderMode":"ONCE"}""",
+                ).also { loan = ApiJson.decodeFromString(LoanResponse.serializer(), it.bodyText()).loan.id }
+            },
+        )
+        assertEquals(
+            setOf("asset_loan"),
+            tablesWrittenBy { api.call("PATCH", "/v1/loans/$loan", """{"lentOn":"2026-02-09","dueOn":"2026-02-21","reminderMode":"UNTIL_RETURNED"}""") },
+        )
+        assertEquals(
+            setOf("asset_loan"),
+            tablesWrittenBy { api.call("POST", "/v1/loans/$loan/return", """{"returnedOn":"2026-02-10"}""") },
         )
 
         val battery = runBlocking { graph.healthSubjects.all() }.single().id.value

@@ -30,9 +30,15 @@ const val NOTIFICATION_PERMISSION_RATIONALE =
 const val WARRANTY_NOTIFICATION_RATIONALE = "ServiceTag needs notification permission to remind you before a warranty expires."
 
 /**
+ * #72, P72-33 (RATIFIED verbatim, R72-9, R72-23): the lend form's rationale, the permission's third
+ * requester after the schedule editor and the asset editor (SPEC12 §5.1 amended); B3's form draws it.
+ */
+const val LOAN_NOTIFICATION_RATIONALE = "ServiceTag needs notification permission to remind you when a loan is due back."
+
+/**
  * The permission state and the request plumbing (master plan §12, decision 23). `request()` never
  * throws on a denial — a denial is an answer, not an error (D-22) — and its intended callers are
- * B14's editor and, since #79 (R79-16), the asset editor: nothing under the navigation host, `MainActivity.kt` or `ServiceTagApp.kt` may
+ * B14's editor, since #79 (R79-16) the asset editor and, since #72 (R72-9), the lend form: nothing under the navigation host, `MainActivity.kt` or `ServiceTagApp.kt` may
  * reference this type (#24 AC 1). One Android-backed implementation, [AndroidNotificationPermission].
  */
 interface NotificationPermission {

@@ -122,6 +122,14 @@ internal fun DashboardFilters.admitsAssetRow(rowCategory: String?, condition: Op
         (conditions.isEmpty() || conditions.any { it.matches(condition) })
 
 /**
+ * #72 (C20; R72-14 b): the filter over a **loan** row, whose Asset is in [rowCategory]. A loan row is
+ * no maintenance status and no condition, so **any** status or condition chip hides it; the category
+ * applies as it does to every other row.
+ */
+internal fun DashboardFilters.admitsLoanRow(rowCategory: String?): Boolean =
+    status == null && conditions.isEmpty() && (category == null || rowCategory == category)
+
+/**
  * The filters over the drawn sections: each row is kept or dropped where it stands, and a section
  * left with no rows is dropped — **nothing is re-sorted, re-ranked or moved between sections**.
  */
@@ -132,6 +140,7 @@ internal fun DashboardFilters.narrow(sections: List<AttentionGroup>): List<Atten
                 when (entry) {
                     is SectionEntry.Schedule -> admits(entry.item)
                     is SectionEntry.AssetLevel -> admitsAssetRow(entry.category, entry.item.assetCondition)
+                    is SectionEntry.Loan -> admitsLoanRow(entry.row.category)
                 }
             }
             .takeIf { it.isNotEmpty() }

@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.dashboard
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
@@ -20,6 +21,7 @@ import com.loosecannon.servicetag.core.health.HealthBand
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
+import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
@@ -39,6 +41,7 @@ import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
 import com.loosecannon.servicetag.core.usecase.HealthSubjectCommand
+import com.loosecannon.servicetag.core.usecase.LoanTerms
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.app
@@ -404,6 +407,69 @@ class DashboardAttentionTest {
         val order = listOf("ATTENTION", "Generator", "Blade sharpen", "Battery pack", "Filter age CRITICAL", "UPCOMING", "Belt age WARNING")
         val tops = order.map(::top)
         check(tops == tops.sorted()) { "drawn out of order: ${order.zip(tops)}" }
+    }
+
+    /**
+     * #72 (C20; R72-14 b, R72-10; §3 row 33): an open overdue loan of an in-service asset is one row
+     * **after** ATTENTION's four ratified tiers — the DOWN unit, the schedule row, the DEGRADED
+     * component, the independent CRITICAL subject — and before UPCOMING: the asset's name, "LOAN
+     * OVERDUE" (never the bare OVERDUE) and P72-44. A loan due today is still lent out, and a retired
+     * asset's overdue loan is not drawn here (it still reminds). A condition chip hides the row.
+     */
+    @Test fun anOverdueLoanRowAfterTheRatifiedTiers() {
+        val graph = app.graph
+        val today = LocalDate.now()
+        runBlocking {
+            val generator = graph.createAsset.run(AssetCommand(name = "Generator", category = "Power")).id
+            graph.recordCondition.run(
+                generator,
+                ConditionCommand(OperationalCondition.DOWN, occurredOn = today.minusDays(1).toString(), tzId = zone(), reason = "Fuel line cracked"),
+            )
+            val pack = graph.createAsset.run(AssetCommand(name = "Battery pack", category = "Power", parentAssetId = generator)).id
+            graph.recordCondition.run(
+                pack,
+                ConditionCommand(OperationalCondition.DEGRADED, occurredOn = today.minusDays(2).toString(), tzId = zone()),
+            )
+            val mower = graph.createAsset.run(AssetCommand(name = "Mower", category = "Yard"))
+            seed(
+                graph,
+                scheduleOf(
+                    id = "b3-overdue", assetId = mower.id.value, title = "Blade sharpen",
+                    timeInterval = 3, timeUnit = RecurrenceUnit.MONTH, anchorOn = "2026-01-01", createdOn = "2026-01-01",
+                ),
+            )
+            ageSubject(graph, "Hot tub", "Filter age", daysAgo = 90)
+            ageSubject(graph, "Snowblower", "Belt age", daysAgo = 50)
+            val drill = graph.createAsset.run(AssetCommand(name = "Example Drill", category = "Tools")).id
+            graph.lendAsset.run(drill, "Sample Borrower", LoanTerms(today.minusDays(9).toString(), today.minusDays(2).toString(), LoanReminderMode.NONE))
+            val saw = graph.createAsset.run(AssetCommand(name = "Example Saw", category = "Tools")).id
+            graph.lendAsset.run(saw, "Sample Borrower", LoanTerms(today.minusDays(9).toString(), today.toString(), LoanReminderMode.NONE))
+            val ladder = graph.createAsset.run(AssetCommand(name = "Example Ladder", category = "Tools")).id
+            graph.lendAsset.run(ladder, "Example Rentals Ltd", LoanTerms(today.minusDays(9).toString(), today.minusDays(3).toString(), LoanReminderMode.NONE))
+            graph.retireAsset.retire(ladder, today.minusDays(1).toString())
+        }
+        draw(graph)
+
+        rule.awaitText("Belt age WARNING")
+        rule.awaitText("Lent to Sample Borrower · due back ${displayDate(today.minusDays(2))}")
+        rule.onAllNodesWithText("LOAN OVERDUE", useUnmergedTree = true).assertCountEquals(1)
+        // The row's own words: "LOAN OVERDUE", never the bare maintenance OVERDUE the mower's schedule row
+        // rightly carries above it.
+        val words = rule.onNode(hasText("Example Drill") and hasClickAction()).fetchSemanticsNode()
+            .config[SemanticsProperties.Text].map { it.text }
+        check("LOAN OVERDUE" in words && "OVERDUE" !in words) { "the loan row says $words" }
+        rule.onAllNodesWithText("Lent to Example Rentals Ltd", substring = true).assertCountEquals(0)
+
+        val order = listOf(
+            "ATTENTION", "Generator", "Blade sharpen", "Battery pack", "Filter age CRITICAL", "Example Drill",
+            "UPCOMING", "Belt age WARNING",
+        )
+        val tops = order.map(::top)
+        check(tops == tops.sorted()) { "drawn out of order: ${order.zip(tops)}" }
+
+        rule.onNodeWithText(ConditionChip.DOWN.label).performClick()
+        rule.waitUntil(5_000L) { rule.onAllNodesWithText("LOAN OVERDUE", useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
+        rule.onAllNodesWithText("Lent to Sample Borrower", substring = true).assertCountEquals(0)
     }
 
     /**

@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.di
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
@@ -14,9 +15,12 @@ import com.loosecannon.servicetag.attachments.AttachmentRoot
 import com.loosecannon.servicetag.attachments.DocumentTreeRoot
 import com.loosecannon.servicetag.attachments.SafAttachmentStorage
 import com.loosecannon.servicetag.attachments.Thumbnails
+import com.loosecannon.servicetag.contacts.PickedContactReader
+import com.loosecannon.servicetag.contacts.ResolverContactRowQuery
 import com.loosecannon.servicetag.core.condition.needsIncident
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
+import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
@@ -45,6 +49,7 @@ import com.loosecannon.servicetag.core.ports.UuidGenerator
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.references.StreamSourcePolicy
 import com.loosecannon.servicetag.core.reminders.BuildDeadlineSubjects
+import com.loosecannon.servicetag.core.reminders.BuildLoanSubjects
 import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
 import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
@@ -77,6 +82,7 @@ import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
+import com.loosecannon.servicetag.core.usecase.LendAsset
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.OpenServiceCase
 import com.loosecannon.servicetag.core.usecase.PauseSchedule
@@ -87,6 +93,7 @@ import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
+import com.loosecannon.servicetag.core.usecase.RelinkLoanContact
 import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
@@ -94,6 +101,7 @@ import com.loosecannon.servicetag.core.usecase.ReorderProfiles
 import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.core.usecase.RestoreArtifacts
 import com.loosecannon.servicetag.core.usecase.RetireAsset
+import com.loosecannon.servicetag.core.usecase.ReturnLoan
 import com.loosecannon.servicetag.core.usecase.SaveDefinition
 import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.core.usecase.SaveGroup
@@ -110,6 +118,7 @@ import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
+import com.loosecannon.servicetag.core.usecase.UpdateLoan
 import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.MIGRATION_1_2
@@ -123,6 +132,8 @@ import com.loosecannon.servicetag.data.room.MIGRATION_8_9
 import com.loosecannon.servicetag.data.room.MIGRATION_9_10
 import com.loosecannon.servicetag.data.room.MIGRATION_10_11
 import com.loosecannon.servicetag.data.room.MIGRATION_11_12
+import com.loosecannon.servicetag.data.room.MIGRATION_12_13
+import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomCategoryRepository
@@ -213,7 +224,7 @@ class AppGraph(private val context: Context) {
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
-            MIGRATION_11_12,
+            MIGRATION_11_12, MIGRATION_12_13,
         )
         .build()
 
@@ -258,6 +269,12 @@ class AppGraph(private val context: Context) {
     val serviceCases: ServiceCaseRepository = RoomServiceCaseRepository(db.serviceCaseDao())
     val serviceCaseEntries: ServiceCaseEntryRepository = RoomServiceCaseEntryRepository(db.serviceCaseEntryDao())
 
+    /**
+     * #72's one data port (C1): the loans, upserted and never deleted — "Mark returned" is a loan's only
+     * exit, and a returned loan stays as history. Its rules live in the four loan use cases below.
+     */
+    val loans: AssetLoanRepository = RoomAssetLoanRepository(db.assetLoanDao())
+
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
 
@@ -287,6 +304,9 @@ class AppGraph(private val context: Context) {
 
     /** #79 (C5): the warranty dates every provider is asked to hold, from the assets alone. */
     val buildDeadlineSubjects: BuildDeadlineSubjects = BuildDeadlineSubjects(assets)
+
+    /** #72 (C9): the open loans' due-back dates every provider is asked to hold, from the loans alone. */
+    val buildLoanSubjects: BuildLoanSubjects = BuildLoanSubjects(loans)
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
 
     // #24 — the platform-ownership seams B06, B07, B10 and B14 compile against (master plan §12).
@@ -354,8 +374,9 @@ class AppGraph(private val context: Context) {
         prefs = prefs,
         clock = clock,
         quickActions = quickActions,
-        // #79 (C6, C7): a warranty warning's facts and its device-local stamp.
-        deadlineFacts = DeadlineDeliveryFacts(assets, today),
+        // #79 (C6, C7): a warranty warning's facts and its device-local stamp. #72 (C10): a loan's too,
+        // its day anchored to the owner's digest hour, read on every sweep.
+        deadlineFacts = DeadlineDeliveryFacts(assets, today, loans, clock, digestHour = { prefs.digestHour }),
         deadlineDelivery = deadlineLocalDelivery,
     )
 
@@ -365,9 +386,12 @@ class AppGraph(private val context: Context) {
      */
     val reminderRuns: ReminderRuns = ReminderRuns(
         rebuildAll = { recomputeSchedules.all() },
-        // #79 (C6): schedule subjects, then deadline subjects — one list, one reconcile.
+        // #79 (C6): schedule subjects, then deadline subjects — one list, one reconcile. #72 (C10):
+        // then the loan subjects, the second deadline kind.
         subjectsFor = { provider, on ->
-            buildReminderSubjects.forProvider(provider, on) + buildDeadlineSubjects.forProvider(provider, on)
+            buildReminderSubjects.forProvider(provider, on) +
+                buildDeadlineSubjects.forProvider(provider, on) +
+                buildLoanSubjects.forProvider(provider, on)
         },
         provider = localReminderProvider,
         alarm = digestAlarm,
@@ -471,14 +495,14 @@ class AppGraph(private val context: Context) {
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
+        serviceCases, serviceCaseEntries, loans, uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
     )
 
     /** Wipe-and-load import. Replace is the only mode Phase 1A ships (D7 1A). */
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, attachmentStorage, uow,
         // Derived state is rebuilt after any import, and the wipe took it with the schedule rows.
         rebuildAll = { recomputeSchedules.all() },
     )
@@ -492,12 +516,12 @@ class AppGraph(private val context: Context) {
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, attachmentStorage, uow,
     )
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, attachmentStorage, uow,
         // The total post-apply recompute, wired to the engine: an imported event, membership row,
         // closure or meter reading can each move a due date, and rebuilding every schedule inside
         // the apply's own transaction is cheaper than enumerating which.
@@ -508,8 +532,8 @@ class AppGraph(private val context: Context) {
 
     /**
      * #40 — is there anything on this phone a restore would replace? The Backup screen asks once,
-     * per picked file, and the answer chooses the confirmation. Definitions, profiles and #79's
-     * service cases are not read: none can exist without its asset, so `assets` answers for them. A
+     * per picked file, and the answer chooses the confirmation. Definitions, profiles, #79's service
+     * cases and #72's loans are not read: none can exist without its asset, so `assets` answers for them. A
      * category row can (#74: it outlives its assets), so `categories` is the sixth kind.
      */
     val storeIsEmpty: StoreIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links, categories)
@@ -590,6 +614,22 @@ class AppGraph(private val context: Context) {
         AddServiceCaseEntry(serviceCases, serviceCaseEntries, uow, ids, clock, today)
     /** #79 (C23): read-only — whether a case names an event; the Incident's delete confirm asks it. */
     val caseLinks: CaseLinks = caseLinksOf(events, serviceCases)
+
+    // #72 — loans (C3). Each writes the loan's own row and nothing else; one open loan per asset.
+    val lendAsset: LendAsset = LendAsset(assets, loans, uow, ids, clock, today)
+    val updateLoan: UpdateLoan = UpdateLoan(loans, uow, clock, today)
+    val returnLoan: ReturnLoan = ReturnLoan(loans, uow, clock, today)
+    val relinkLoanContact: RelinkLoanContact = RelinkLoanContact(loans, uow, clock)
+
+    /**
+     * #72 (C15): what a picked contact reads as — its `_ID`, `LOOKUP_KEY` and `DISPLAY_NAME` through the
+     * pick's one-shot grant, read once in the pick's callback by the lend form and the Lending section's
+     * relink. ServiceTag holds no contacts permission; nothing else ever reads a contact. Its log is a
+     * fixed reason with no exception attached: a refused read's message names the lookup URI.
+     */
+    val pickedContactReader: PickedContactReader = PickedContactReader(
+        ResolverContactRowQuery(context.applicationContext.contentResolver),
+    ) { reason -> Log.w("PickedContact", reason) }
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, today, recomputeSchedules, applyTemplate,
         promoteCategory,
@@ -827,6 +867,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 12
+        const val SCHEMA_VERSION = 13
     }
 }

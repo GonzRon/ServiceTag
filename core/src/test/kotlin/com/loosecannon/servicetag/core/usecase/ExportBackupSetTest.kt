@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.CaseStatus
 import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
+import com.loosecannon.servicetag.core.testing.loanOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
 import kotlin.test.assertEquals
 import kotlinx.coroutines.runBlocking
@@ -31,7 +32,7 @@ class ExportBackupSetTest {
 
         val decoded = BackupCodec.decode(install.export.run().data)
 
-        assertEquals(12, decoded.manifest.formatVersion)   // this build's export: format 12 since #79b
+        assertEquals(13, decoded.manifest.formatVersion)   // this build's export: format 13 since #72
         assertEquals(rows, decoded.data.assetCategories.map { it.toDomain() })
         assertEquals(2, decoded.manifest.counts["assetCategories"])
     }
@@ -112,5 +113,39 @@ class ExportBackupSetTest {
         val again = source.build.run(bytes)
         assertEquals(true, again.applicable)
         assertEquals(emptyList(), again.writes.serviceCases + again.writes.caseEntries, "IDENTICAL against the phone it came from")
+    }
+
+    /**
+     * #72 (C6, C7): a loan leaves with its asset — the open one and the returned history, the contact link
+     * beside the name snapshot, a name-only loan's null link as it is — and lands with it, field for
+     * field, by a replace and by a merge into an install without them; and this install's own export
+     * re-plans IDENTICAL.
+     */
+    @Test
+    fun loansTravelWithTheirAsset() = runBlocking<Unit> {
+        val source = BackupInstall()
+        source.assets.upsert(plainAssetOf("a1", "Example Drill"))
+        val loans = listOf(
+            loanOf("l1", lentOn = "2026-08-01", returnedOn = "2026-08-02"),
+            loanOf("l2", contactLookupUri = null, borrowerName = "Example Rentals Ltd"),
+        )
+        loans.forEach { source.loans.upsert(it) }
+        val bytes = source.export.run().data
+
+        val decoded = BackupCodec.decode(bytes)
+        assertEquals(loans, decoded.data.assetLoans.map { it.toDomain() })
+        assertEquals(2, decoded.manifest.counts["assetLoans"])
+
+        val replaced = BackupInstall()
+        replaced.replace.run(bytes)
+        assertEquals(loans, replaced.loans.all(), "by a replace")
+
+        val merged = BackupInstall()
+        merged.apply.run(merged.build.run(bytes))
+        assertEquals(loans, merged.loans.all(), "by a merge into an install without them")
+
+        val again = source.build.run(bytes)
+        assertEquals(true, again.applicable)
+        assertEquals(emptyList(), again.writes.loans, "IDENTICAL against the phone it came from")
     }
 }

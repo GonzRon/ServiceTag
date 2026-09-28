@@ -50,6 +50,7 @@ class ReferenceRoutesTest {
             seasonHealthHandlersFor(graph),
             warrantyHandlersFor(graph),
             serviceCaseHandlersFor(graph),
+            loanHandlersFor(graph),
             appVersion = "1.3.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -475,6 +476,8 @@ class ReferenceRoutesTest {
                 "assetCategories",
                 // #79b's two, under the archive's own list names (format 12).
                 "serviceCases", "serviceCaseEntries",
+                // #72's one, under the archive's own list name (format 13).
+                "assetLoans",
             ),
             counts.keys,
         )
@@ -530,35 +533,36 @@ class ReferenceRoutesTest {
         // 1.4 (B09): format 8 made the report fourteen tables, the import range 1–8 and the asset
         // sub-resources sixteen; #74's format 9 made them fifteen and 1–9, #67's format 10 made the
         // range 1–10, #79's format 11 made it 1–11 and its two warranty routes the sub-resources
-        // eighteen, and #79b's format 12 made the report seventeen tables, the range 1–12 and its case
-        // list the nineteenth sub-resource. These pins moved with the document.
+        // eighteen, #79b's format 12 made the report seventeen tables, the range 1–12 and its case
+        // list the nineteenth sub-resource, and #72's format 13 made the report eighteen tables, the range
+        // 1–13 and its loan list the twentieth. These pins moved with the document.
         assertFalse(
-            "the merge report is seventeen tables now",
-            "eleven tables" in text || "fourteen tables" in text || "fifteen tables" in text,
+            "the merge report is eighteen tables now",
+            "eleven tables" in text || "fourteen tables" in text || "fifteen tables" in text || "seventeen tables" in text,
         )
-        assertTrue("the merge report must say seventeen tables", "seventeen tables" in text)
+        assertTrue("the merge report must say eighteen tables", "eighteen tables" in text)
         // The bare string, both sites: the document spells the emphasis two ways, and a pattern
         // pinned to one asterisk placement would leave the other stale and still report clean.
-        assertFalse("the import endpoints read format 1–12 now", "1–7" in text || "1–8" in text || "1–9" in text)
-        // "1–10" and "1–11" only in their two emphasis spellings, because a bare "1–10" is also the
+        assertFalse("the import endpoints read format 1–13 now", "1–7" in text || "1–8" in text || "1–9" in text)
+        // "1–10" … "1–12" only in their two emphasis spellings, because a bare "1–10" is also the
         // health weight's range.
         assertFalse(
-            "the import endpoints read format 1–12 now",
-            listOf("1–10", "1–11").any { "format **$it**" in text || "**format $it**" in text },
+            "the import endpoints read format 1–13 now",
+            listOf("1–10", "1–11", "1–12").any { "format **$it**" in text || "**format $it**" in text },
         )
         // Both emphasis spellings.
         assertTrue(
-            "the import endpoints must say 1–12",
-            "format **1–12**" in text && "**format 1–12**" in text,
+            "the import endpoints must say 1–13",
+            "format **1–13**" in text && "**format 1–13**" in text,
         )
 
         assertFalse(
-            "there are nineteen asset sub-resources now",
-            listOf("nine", "sixteen", "eighteen").any { "$it `/v1/assets/{id}/…` sub-resources" in text },
+            "there are twenty asset sub-resources now",
+            listOf("nine", "sixteen", "eighteen", "nineteen").any { "$it `/v1/assets/{id}/…` sub-resources" in text },
         )
         assertTrue(
-            "the 405 row must name nineteen asset sub-resources",
-            "nineteen `/v1/assets/{id}/…` sub-resources" in text,
+            "the 405 row must name twenty asset sub-resources",
+            "twenty `/v1/assets/{id}/…` sub-resources" in text,
         )
 
         // The one code the mapper can spell and no route can return. The 1.2 subsection documents

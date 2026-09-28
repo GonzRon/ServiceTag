@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
 import com.loosecannon.servicetag.core.ports.StoreIoException
+import com.loosecannon.servicetag.core.usecase.AssetAlreadyLent
 import com.loosecannon.servicetag.core.usecase.AssetCycle
 import com.loosecannon.servicetag.core.usecase.AssetHasChildren
 import com.loosecannon.servicetag.core.usecase.AssetMembershipReferenced
@@ -27,6 +28,8 @@ import com.loosecannon.servicetag.core.usecase.HealthScheduleTaken
 import com.loosecannon.servicetag.core.usecase.HealthSubjectIsPrimary
 import com.loosecannon.servicetag.core.usecase.HealthValidation
 import com.loosecannon.servicetag.core.usecase.LegacyWriteCannotRepresent
+import com.loosecannon.servicetag.core.usecase.LoanReturned
+import com.loosecannon.servicetag.core.usecase.LoanValidation
 import com.loosecannon.servicetag.core.usecase.MemberCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.MergePlanStale
 import com.loosecannon.servicetag.core.usecase.MergeRefused
@@ -35,6 +38,7 @@ import com.loosecannon.servicetag.core.usecase.NoSuchDefinition
 import com.loosecannon.servicetag.core.usecase.NoSuchEvent
 import com.loosecannon.servicetag.core.usecase.NoSuchGroup
 import com.loosecannon.servicetag.core.usecase.NoSuchHealthSubject
+import com.loosecannon.servicetag.core.usecase.NoSuchLoan
 import com.loosecannon.servicetag.core.usecase.NoSuchProfile
 import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
 import com.loosecannon.servicetag.core.usecase.NoSuchServiceCase
@@ -515,6 +519,24 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     )
     // 1.1.0's lower-snake spelling for a row that is not there, beside `no_such_asset`.
     is NoSuchServiceCase -> errorResponse(404, "Not Found", "no_such_service_case", "no such service case")
+    // --- #72, the loan (C21) ------------------------------------------------------------------
+    //
+    // The same shape for its problems. The two state refusals come before them in every loan use case
+    // (existence, then state, then problems): a lend to an asset already lent out, or any write to a
+    // returned loan, is the 409 whatever the body says, because no field of it could change the answer.
+    is LoanValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::loanRefusal) ?: Refusal(LOAN_VALIDATION, "the loan was refused"),
+        e.problems.map { it.toString() },
+    )
+    is NoSuchLoan -> errorResponse(404, "Not Found", "no_such_loan", "no such loan")
+    // The open loan's id is a stored row's, never a value the caller sent: it is what to return first.
+    is AssetAlreadyLent -> errorResponse(
+        409, "Conflict", "asset_already_lent", "this asset is already lent out; return its open loan first",
+        listOf("AssetAlreadyLent(openLoanId=${e.openLoanId.value})"),
+    )
+    is LoanReturned -> errorResponse(
+        409, "Conflict", "loan_returned", "this loan has been returned, and a returned loan never changes",
+    )
     else -> errorResponse(
         500, "Internal Server Error", "internal", e.javaClass.simpleName,
     )

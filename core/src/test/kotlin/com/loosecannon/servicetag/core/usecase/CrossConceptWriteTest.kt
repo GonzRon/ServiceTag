@@ -37,6 +37,8 @@ import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.AssetLoan
+import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.ServiceCase
 import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.ServicePolicy
@@ -59,6 +61,7 @@ import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
+import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
@@ -82,9 +85,11 @@ import com.loosecannon.servicetag.core.testing.InMemoryReferenceRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAssetLoanRepository
 import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryServiceCaseRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
+import com.loosecannon.servicetag.core.testing.SAMPLE_LOOKUP_URI
 import com.loosecannon.servicetag.core.testing.SeasonFixtures
 import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.dayMillis
@@ -113,6 +118,8 @@ import org.junit.jupiter.api.Test
  *   writers write the case tables and nothing else: opening and editing a case write its header, a
  *   note-only entry writes the entry alone, and a status entry the entry and its header (C16) — never
  *   an event, a condition, a schedule or its derived state, so closing a case writes no condition.
+ * - #72: a loan's four writers — lend, edit, return and relink — write `asset_loan`, one row each, and
+ *   nothing else (C4): a loan is custody, not a maintenance fact.
  * - The journal's own writers — an event and a completion — write no condition (inv. 81).
  * - #74: `asset_category` is written by the three Asset commands only when they save a category
  *   nobody has saved before, by a rename and a delete, and by the two imports of backup format 9 —
@@ -144,10 +151,11 @@ class CrossConceptWriteTest {
     private val referenceRows = InMemoryReferenceRepository()
     private val caseEntryRows = InMemoryServiceCaseEntryRepository()
     private val caseRows = InMemoryServiceCaseRepository(caseEntryRows)
+    private val loanRows = InMemoryAssetLoanRepository()
     private val uow = FakeUnitOfWork(
         assetRows, eventRows, activationRows, conditionRows, subjectRows, closureRows, stateRows, scheduleRows,
         groupRows, definitionRows, profileRows, categoryRows, tagRows, linkRows, attachmentRows, referenceRows,
-        caseRows, caseEntryRows,
+        caseRows, caseEntryRows, loanRows,
     )
 
     private val assets = object : AssetRepository by assetRows {
@@ -234,6 +242,10 @@ class CrossConceptWriteTest {
             caseEntryRows.insert(entry).also { writes += "service_case_entry" }
         override suspend fun deleteAll() = caseEntryRows.deleteAll().also { writes += "service_case_entry" }
     }
+    private val loans = object : AssetLoanRepository by loanRows {
+        override suspend fun upsert(loan: AssetLoan) = loanRows.upsert(loan).also { writes += "asset_loan" }
+        override suspend fun deleteAll() = loanRows.deleteAll().also { writes += "asset_loan" }
+    }
 
     private var seq = 0
     private val ids = IdGenerator { "id-%03d".format(++seq) }
@@ -277,19 +289,23 @@ class CrossConceptWriteTest {
     private val openServiceCase = OpenServiceCase(assets, events, serviceCases, uow, ids, clock, today)
     private val updateServiceCase = UpdateServiceCase(events, serviceCases, uow, clock, today)
     private val addServiceCaseEntry = AddServiceCaseEntry(serviceCases, caseEntries, uow, ids, clock, today)
+    private val lendAsset = LendAsset(assets, loans, uow, ids, clock, today)
+    private val updateLoan = UpdateLoan(loans, uow, clock, today)
+    private val returnLoan = ReturnLoan(loans, uow, clock, today)
+    private val relinkLoanContact = RelinkLoanContact(loans, uow, clock)
     private val storage = FakeAttachmentStorage()
     private val buildMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
-        activations, conditions, subjects, categories, serviceCases, caseEntries, storage, uow,
+        activations, conditions, subjects, categories, serviceCases, caseEntries, loans, storage, uow,
     )
     private val applyMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
-        activations, conditions, subjects, categories, serviceCases, caseEntries, storage, uow,
+        activations, conditions, subjects, categories, serviceCases, caseEntries, loans, storage, uow,
         rebuildAll = { recompute.all() },
     )
     private val importBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
-        activations, conditions, subjects, categories, serviceCases, caseEntries, storage, uow,
+        activations, conditions, subjects, categories, serviceCases, caseEntries, loans, storage, uow,
         rebuildAll = { recompute.all() },
     )
 
@@ -354,6 +370,8 @@ class CrossConceptWriteTest {
         var planned: MergePlan? = null
         var serviceCase: ServiceCase? = null
         var closedStatus: CaseStatus? = null
+        var loan: AssetLoan? = null
+        var loansAfterTheReturn: List<AssetLoan> = emptyList()
         var keysBeforeTheImports: List<String> = emptyList()
         val s1 = scheduleRows.rows.getValue("s1")
         val cmdS1 = ScheduleCommand(
@@ -466,6 +484,20 @@ class CrossConceptWriteTest {
                     .run(serviceCase!!.id, CaseEntryCommand("2026-09-24", null, "UTC", "Repaired", CaseStatus.CLOSED))
                     .serviceCase.status
             },
+            wrote("LendAsset") {
+                loan = lendAsset.run(
+                    AssetId("a3"), "Sample Borrower",
+                    LoanTerms("2026-09-20", "2026-10-04", LoanReminderMode.ONCE, "With the spare battery"),
+                )
+            },
+            wrote("UpdateLoan") {
+                updateLoan.run(loan!!.id, LoanTerms("2026-09-20", "2026-10-11", LoanReminderMode.UNTIL_RETURNED, ""))
+            },
+            wrote("RelinkLoanContact") { relinkLoanContact.run(loan!!.id, SAMPLE_LOOKUP_URI, "Example Rentals Ltd") },
+            wrote("ReturnLoan") {
+                loan = returnLoan.run(loan!!.id, "2026-09-24")
+                loansAfterTheReturn = loanRows.rows.values.toList()
+            },
             wrote("CreateAsset, a new category") { compressor = createAsset.run(AssetCommand(name = "Compressor", category = "Appliance")) },
             wrote("CreateAsset, a built-in") { createAsset.run(AssetCommand(name = "Spare mower", category = "lawn  MOWER")) },
             wrote("SaveAssetSettings, a new category") {
@@ -521,6 +553,10 @@ class CrossConceptWriteTest {
             "UpdateServiceCase" to setOf("service_case"),
             "AddServiceCaseEntry, a note" to setOf("service_case_entry"),
             "AddServiceCaseEntry, a status" to setOf("service_case_entry", "service_case"),
+            "LendAsset" to setOf("asset_loan"),
+            "UpdateLoan" to setOf("asset_loan"),
+            "RelinkLoanContact" to setOf("asset_loan"),
+            "ReturnLoan" to setOf("asset_loan"),
             "CreateAsset, a new category" to setOf("asset", "asset_category"),
             "CreateAsset, a built-in" to setOf("asset"),
             "SaveAssetSettings, a new category" to setOf("asset", "asset_category"),
@@ -591,6 +627,14 @@ class CrossConceptWriteTest {
             assertTrue(cases.toMap().getValue(what).intersect(forbidden).isEmpty(), "$what wrote ${cases.toMap().getValue(what)}")
         }
         assertEquals(CaseStatus.CLOSED, closedStatus, "the closing entry took")
+
+        // #72 (C4): the loan writers write one loan row each and nothing else — a return included, which
+        // writes no event, no condition, no schedule and no derived state.
+        for (what in listOf("LendAsset", "UpdateLoan", "RelinkLoanContact", "ReturnLoan")) {
+            assertEquals(mapOf("asset_loan" to 1), counts.getValue(what), "$what wrote ${counts.getValue(what)}")
+        }
+        assertEquals(listOf(loan), loansAfterTheReturn, "the return took, and the returned loan stays as history")
+        assertEquals("2026-09-24", loan!!.returnedOn)
     }
 
     private companion object {
@@ -604,6 +648,8 @@ class CrossConceptWriteTest {
             "measurement_definition", "nfc_tag", "external_link", "asset_reference", "asset", "asset_category",
             // #79b: the case aggregate is wiped by name, its timeline before its headers.
             "service_case_entry", "service_case",
+            // #72: the loans, wiped by name too.
+            "asset_loan",
         )
     }
 }

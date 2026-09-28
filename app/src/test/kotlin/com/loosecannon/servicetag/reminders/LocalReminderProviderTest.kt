@@ -2,8 +2,10 @@ package com.loosecannon.servicetag.reminders
 
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.DeadlineLocalDelivery
@@ -13,6 +15,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleLocalDelivery
 import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.reminders.BuildDeadlineSubjects
+import com.loosecannon.servicetag.core.reminders.BuildLoanSubjects
 import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.reminders.ReconcileReport
 import com.loosecannon.servicetag.core.reminders.ReminderProvider
@@ -28,6 +31,7 @@ import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import java.io.File
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -45,6 +49,9 @@ internal class FakeReminderNotifications : ReminderNotifications {
     /** B07: the quick actions each post arrived with, in post order. */
     val postedActions = mutableListOf<List<QuickAction>>()
 
+    /** #72: every post and cancel in the order the provider made them. */
+    val log = mutableListOf<String>()
+
     override fun standingItems(): Set<String> = items.keys.toSet()
     override fun standingSummary(): String? = summary?.tag
 
@@ -52,6 +59,7 @@ internal class FakeReminderNotifications : ReminderNotifications {
         items[post.tag] = post
         postedItems += post
         postedActions += actions
+        log += "post ${post.tag}"
     }
 
     override fun postSummary(summary: SummaryPost) {
@@ -61,6 +69,7 @@ internal class FakeReminderNotifications : ReminderNotifications {
     override fun cancelItem(tag: String) {
         items.remove(tag)
         cancelled += tag
+        log += "cancel $tag"
     }
 
     override fun cancelSummary() {
@@ -142,7 +151,9 @@ class LocalReminderProviderTest {
     private val platform = MutablePlatformState()
     private val alarm = RecordingDigestAlarm(isArmed = true)
     private val prefs = AppPrefs(MapKeyValueStore())
-    private val clock = Clock { Fixture.NOW }
+    /** #72 fix round 1: the clock a test may move; every shipped case leaves it at `Fixture.NOW`. */
+    private var nowMillis: Long = Fixture.NOW
+    private val clock = Clock { nowMillis }
 
     /**
      * The status is the facts', never the date's — which is the whole of carry-forward (c). Subjects
@@ -184,9 +195,33 @@ class LocalReminderProviderTest {
             },
             nonces = NonceStore(delivery, IdGenerator { "quick-nonce" }, clock),
         ),
-        deadlineFacts = DeadlineDeliveryFacts(assets, Today { today }),
+        deadlineFacts = DeadlineDeliveryFacts(
+            assets,
+            Today { today },
+            loans,
+            clock,
+            digestHour = { 9 },
+            zone = { ZoneOffset.UTC },
+        ),
         deadlineDelivery = deadlines,
     )
+
+    // #72: the loan half — the real builder and the real facts source over the loans. `Fixture.NOW` is
+    // 2026-06-09 10:13 UTC, past that day's 09:00, so a loan due on or before it is past its digest hour.
+    private val loans = FakeAssetLoanRepository()
+
+    /** The loan subjects the sweep would hand this provider. */
+    private suspend fun lentOut() = BuildLoanSubjects(loans).forProvider(ProviderId.LOCAL, today)
+
+    private suspend fun drill(
+        dueOn: String? = "2026-06-05",
+        mode: LoanReminderMode = LoanReminderMode.ONCE,
+        returnedOn: String? = null,
+    ): AssetLoan {
+        assets.upsert(Asset(id = AssetId("a1"), name = "Example Drill", createdAt = 1_000L, updatedAt = 1_000L))
+        return sampleLoan(id = "l1", assetId = "a1", dueOn = dueOn, reminderMode = mode, returnedOn = returnedOn)
+            .also { loans.upsert(it) }
+    }
 
     /** The warranty subjects the sweep would hand this provider today. */
     private suspend fun warranties() = BuildDeadlineSubjects(assets).forProvider(ProviderId.LOCAL, today)
@@ -675,6 +710,155 @@ class LocalReminderProviderTest {
         )
         assertEquals(emptyList<ScheduleLocalDelivery>(), delivery.all())
         assertEquals(asset, assets.get(AssetId("a1")))
+    }
+
+    // #72 (C11, AC 8, 9): a loan's post, withdrawn by absence through the real provider.
+
+    /**
+     * Every way a loan stops being wanted — returned (Once and Until returned alike), its due date
+     * cleared, its reminder set to None, its asset deleted (the cascade takes the loan) — takes the
+     * post down and forgets the stamp, because the subject is **absent** and absence forgets. A
+     * returned loan is never a Completed subject (R72-20).
+     */
+    @Test
+    fun aReturnedLoanIsTakenDownAndForgotten() = runTest {
+        val provider = provider()
+        val ways: List<Pair<String, suspend () -> Unit>> = listOf(
+            "returned, Once" to { drill(returnedOn = "2026-06-09") },
+            "returned, Until returned" to { drill(mode = LoanReminderMode.UNTIL_RETURNED, returnedOn = "2026-06-09") },
+            "the due date cleared" to { drill(dueOn = null, mode = LoanReminderMode.NONE) },
+            "the reminder set to None" to { drill(mode = LoanReminderMode.NONE) },
+            "the asset deleted" to { assets.delete(AssetId("a1")); loans.rows.clear() },
+        )
+
+        ways.forEach { (way, change) ->
+            drill(mode = if (way.contains("Until")) LoanReminderMode.UNTIL_RETURNED else LoanReminderMode.ONCE)
+            provider.reconcile(lentOut())
+            assertEquals(way, 1, notifications.standingItems().size)
+            assertEquals(way, listOf("LOAN_DUE_BACK" to "a1/l1"), deadlines.all().map { it.kind to it.subjectId })
+
+            change()
+            val subjects = lentOut()
+            val report = provider.reconcile(subjects)
+
+            assertEquals(way, emptyList<ReminderSubject>(), subjects)
+            assertEquals(way, emptySet<String>(), notifications.standingItems())
+            assertEquals(way, emptyList<DeadlineLocalDelivery>(), deadlines.all())
+            assertEquals(way, 1, report.cleared)
+        }
+    }
+
+    /**
+     * A moved due date or a moved mode is new content: in one run the old tag is cancelled **first**
+     * and the new one posted, and the stamp carries the new hash.
+     */
+    @Test
+    fun aMovedDueDateOrModeCancelsTheOldTagFirst() = runTest {
+        val provider = provider()
+        listOf<Pair<String, suspend () -> Unit>>(
+            "re-dated" to { drill(dueOn = "2026-06-04") },
+            "mode moved" to { drill(mode = LoanReminderMode.UNTIL_RETURNED) },
+        ).forEach { (way, move) ->
+            drill()
+            provider.reconcile(lentOut())
+            val oldTag = notifications.standingItems().single()
+            notifications.log.clear()
+
+            move()
+            val moved = lentOut().single()
+            val report = provider.reconcile(listOf(moved))
+
+            val newTag = itemTag(moved.key, moved.contentHash)
+            assertNotEquals(way, oldTag, newTag)
+            assertEquals(way, listOf("cancel $oldTag", "post $newTag"), notifications.log)
+            assertEquals(way, listOf(moved.contentHash), deadlines.all().map { it.announcedHash })
+            assertEquals(way, ReconcileReport(1, 0, 0, emptyList()), report)
+        }
+    }
+
+    /**
+     * R72-10 (fix round 1, MINOR-1): a retired asset's open loan and an archived asset's open loan
+     * are both posted through the real builder, facts and provider, each named after its asset.
+     */
+    @Test
+    fun aRetiredOrArchivedAssetsOpenLoanStillPosts() = runTest {
+        val provider = provider()
+        assets.upsert(Asset(id = AssetId("a1"), name = "Example Drill", createdAt = 1_000L, updatedAt = 1_000L, retiredOn = "2026-06-01"))
+        assets.upsert(
+            Asset(id = AssetId("a2"), name = "Example Ladder", status = AssetStatus.ARCHIVED, createdAt = 1_000L, updatedAt = 1_000L),
+        )
+        loans.upsert(sampleLoan(id = "l1", assetId = "a1", dueOn = "2026-06-05"))
+        loans.upsert(sampleLoan(id = "l2", assetId = "a2", dueOn = "2026-06-05", reminderMode = LoanReminderMode.UNTIL_RETURNED))
+
+        assertEquals(ReconcileReport(2, 0, 0, emptyList()), provider.reconcile(lentOut()))
+        assertEquals(
+            listOf("Example Drill — Due back", "Example Ladder — Due back"),
+            notifications.postedItems.map { it.title },
+        )
+    }
+
+    /**
+     * Fix round 1 (MAJOR-1 (a)): posted on its due day, a Once still showing the next morning is
+     * re-posted in place — one post under the same tag, never a cancel — in the post-due words and
+     * only-alert-once, and the shade holds that one notification.
+     */
+    @Test
+    fun aStandingOnceIsRefreshedInPlaceAndNeverCancelled() = runTest {
+        val provider = provider()
+        today = LocalDate.parse("2026-06-09")
+        drill(dueOn = "2026-06-09")
+        assertEquals(1, provider.reconcile(lentOut()).posted)
+        val tag = notifications.standingItems().single()
+        assertEquals("DUE BACK", notifications.items.getValue(tag).statusWord)
+        notifications.log.clear()
+
+        today = LocalDate.parse("2026-06-10")
+        nowMillis = java.time.Instant.parse("2026-06-10T09:00:00Z").toEpochMilli()
+        val report = provider.reconcile(lentOut())
+
+        assertEquals(listOf("post $tag"), notifications.log)
+        assertEquals(setOf(tag), notifications.standingItems())
+        val refreshed = notifications.items.getValue(tag)
+        assertEquals("Lent to Sample Borrower. Was due back 9 Jun 2026.", refreshed.body)
+        assertTrue(refreshed.onlyAlertOnce)
+        assertEquals(ReconcileReport(0, 0, 1, emptyList()), report)
+    }
+
+    /** Reminders switched off: loan posts come down with everything else, and their stamps go too. */
+    @Test
+    fun silenceTakesLoanPostsDownAndForgetsThem() = runTest {
+        val provider = provider()
+        drill()
+        provider.reconcile(lentOut())
+
+        prefs.remindersEnabled = false
+        val report = provider.reconcile(lentOut())
+        assertEquals(emptySet<String>(), notifications.standingItems())
+        assertEquals(emptyList<DeadlineLocalDelivery>(), deadlines.all())
+        assertEquals(1, report.cleared)
+
+        prefs.remindersEnabled = true
+        assertEquals("switched back on, its stamp is gone and it is announced again", 1, provider.reconcile(lentOut()).posted)
+    }
+
+    /** AC 13: a loan post writes one device-local stamp and nothing else — no schedule row, no loan or asset write. */
+    @Test
+    fun aLoanPostWritesOneDeviceLocalRowAndNothingElse() = runTest {
+        val provider = provider()
+        val loan = drill()
+        val asset = assets.get(AssetId("a1"))
+        val subject = lentOut().single()
+
+        provider.reconcile(listOf(subject))
+
+        assertEquals(
+            listOf(DeadlineLocalDelivery("LOAN_DUE_BACK", "a1/l1", subject.contentHash, 1, Fixture.NOW)),
+            deadlines.all(),
+        )
+        assertEquals(emptyList<ScheduleLocalDelivery>(), delivery.all())
+        assertEquals(listOf(loan), loans.all())
+        assertEquals(asset, assets.get(AssetId("a1")))
+        assertEquals(listOf(NotificationChannels.LOANS), notifications.postedItems.map { it.channelId })
     }
 
     /**

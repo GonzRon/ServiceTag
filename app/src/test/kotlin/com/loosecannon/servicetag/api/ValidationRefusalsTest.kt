@@ -8,6 +8,8 @@ import com.loosecannon.servicetag.core.usecase.DefinitionProblem
 import com.loosecannon.servicetag.core.usecase.DefinitionValidation
 import com.loosecannon.servicetag.core.usecase.EventValidation
 import com.loosecannon.servicetag.core.usecase.FieldProblem
+import com.loosecannon.servicetag.core.usecase.LoanProblem
+import com.loosecannon.servicetag.core.usecase.LoanValidation
 import com.loosecannon.servicetag.core.usecase.ProfileProblem
 import com.loosecannon.servicetag.core.usecase.ProfileValidation
 import org.junit.Assert.assertEquals
@@ -302,6 +304,48 @@ class ValidationRefusalsTest {
     }
 
     /**
+     * #72 (C21, C23): every [LoanProblem] leaf, one row each — the three `BadDate` keys among them — with
+     * the sentence and key the plan's table fixes. `ContactLinkInvalid` names no key: no route sends a
+     * link, so it is unreachable on the wire, and its sentence names the rule, never a value. The fallback
+     * for a refusal that named no problem is the family's own sentence, unreachable as the others are.
+     */
+    @Test fun everyLoanProblem() {
+        val rows = listOf(
+            Row("L1", LoanProblem.BorrowerRequired, "BorrowerRequired", LOAN, "a loan needs a borrowerName", "borrowerName"),
+            Row(
+                "L2", LoanProblem.ContactLinkInvalid, "ContactLinkInvalid", LOAN,
+                "a contact link must be an Android Contacts lookup link, and only the phone makes one", null,
+            ),
+            Row("L3", LoanProblem.BadDate("lentOn"), "BadDate(field=lentOn)", LOAN, "lentOn must be an ISO YYYY-MM-DD date", "lentOn"),
+            Row("L4", LoanProblem.BadDate("dueOn"), "BadDate(field=dueOn)", LOAN, "dueOn must be an ISO YYYY-MM-DD date", "dueOn"),
+            Row(
+                "L5", LoanProblem.BadDate("returnedOn"), "BadDate(field=returnedOn)", LOAN,
+                "returnedOn must be an ISO YYYY-MM-DD date", "returnedOn",
+            ),
+            Row("L6", LoanProblem.LentAfterToday, "LentAfterToday", LOAN, "lentOn may not be later than today", "lentOn"),
+            Row("L7", LoanProblem.DueBeforeLent, "DueBeforeLent", LOAN, "dueOn may not be before lentOn", "dueOn"),
+            Row(
+                "L8", LoanProblem.ReminderWithoutDueDate, "ReminderWithoutDueDate", LOAN,
+                "a reminderMode other than NONE needs a dueOn", "reminderMode",
+            ),
+            Row("L9", LoanProblem.ReturnedBeforeLent, "ReturnedBeforeLent", LOAN, "returnedOn may not be before lentOn", "returnedOn"),
+            Row("L10", LoanProblem.ReturnedAfterToday, "ReturnedAfterToday", LOAN, "returnedOn may not be later than today", "returnedOn"),
+        )
+        assertEveryRow(rows, ::loanRefusal)
+        assertCoversEveryLeaf(LoanProblem::class.java, rows.map { it.problem })
+
+        val fallback = mapDomainFailure(LoanValidation(emptyList()))
+        assertEquals(422, fallback.status)
+        assertEquals(ApiErrorDetail(LOAN, "the loan was refused", emptyList(), null), fallback.errorDetail())
+        val several = mapDomainFailure(LoanValidation(listOf(LoanProblem.DueBeforeLent, LoanProblem.BorrowerRequired)))
+        assertEquals(
+            "the first problem's sentence and key, every problem by name",
+            ApiErrorDetail(LOAN, "dueOn may not be before lentOn", listOf("DueBeforeLent", "BorrowerRequired"), "dueOn"),
+            several.errorDetail(),
+        )
+    }
+
+    /**
      * One row of `docs/api/v1.md`'s **The 1.1.0 validation families**, cell by cell. [c] is the plan's
      * §5 row, or `fallback` for a family's shipped sentence. `…` stands for a value and `⟨field⟩` for
      * C5's key; both are wildcards when a row is matched to what the code produces.
@@ -464,5 +508,6 @@ class ValidationRefusalsTest {
         const val EVENT = "event_validation"
         const val DEFINITION = "definition_validation"
         const val PROFILE = "profile_validation"
+        const val LOAN = "loan_validation"
     }
 }

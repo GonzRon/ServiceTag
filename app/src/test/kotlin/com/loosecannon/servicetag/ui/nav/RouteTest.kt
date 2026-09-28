@@ -131,6 +131,20 @@ class RouteTest {
     }
 
     /**
+     * #72 (C17; §3 row 34): the lend form's route keeps its asset and, on an edit, its loan through a
+     * stored back stack; a new loan's route stores no loan, and it reads no tag.
+     */
+    @Test fun theLoanEditRouteRoundTrips() {
+        listOf(Route.LoanEdit("a1"), Route.LoanEdit("a1", loanId = "l1")).forEach { route ->
+            val stored = Json.encodeToString(Route.LoanEdit.serializer(), route)
+            assertEquals(route, Json.decodeFromString(Route.LoanEdit.serializer(), stored))
+            assertFalse("$route reads no tag", route.readsTags())
+        }
+        assertEquals(null, Route.LoanEdit("a1").loanId)
+        assertFalse("a new loan's route stores no loan", Json.encodeToString(Route.LoanEdit.serializer(), Route.LoanEdit("a1")).contains("loanId"))
+    }
+
+    /**
      * #79 (C20): the entry that hands over to the case editor keeps that on a stored back stack; one
      * stored before #79 has no `thenServiceCase` and decodes as a plain entry, and a plain entry
      * writes no such key.
