@@ -664,3 +664,67 @@ unless stated.
   keeps a dismissal durable. No platform call updates a notification only while it shows; the re-check and `setSilent`
   variants were declined (each a further departure that narrows or mutes but cannot close it). B2 stands at `4c0de0ac`.
   The strictly-once refinement for a backward clock, zone or date-line move across the due day is deferred to #84.
+
+## 14. Errata after implementation (controller, 2026-09-28 onward)
+
+Merged to master at 98ce02a4 (`merge issue-72`, branch head abeb9a45 on 002c520f) after B1–B4, one task review each (B2 and B3 each with one fix round and one scoped re-review; B3's fix-round implementer was stopped after two hours on the owner's objection and its committed work verified), one whole-branch review (MERGE; its one minor fixed before the merge) and one merged-tip gate. What the code does where the plan was silent, narrow or read literally:
+
+- **Each loan use case refuses by state before content:** existence, then the state refusal (409 `AssetAlreadyLent`
+  or `LoanReturned`), then the `LoanValidation` problems (422); a malformed command against a lent asset or a returned
+  loan answers 409.
+- **The one-open-loan index's constraint error is never mapped** (C2 ii): the use case reads the open loan inside the
+  same Room write transaction and answers `AssetAlreadyLent`; the index is the last line, proven by a Room-backed test.
+- **The merge's owner-availability arm for loans is reachable only from a hand-built archive:** through a real decode a
+  loan's asset is always present, so the case is pinned with a snapshot Room could not hold.
+- **Two shipped tests cannot see loans** (`MergePlannerReferenceTest`'s report order — its archive holds none — and the
+  in-memory asset double that cascades loans by itself); the new loan-tally tests and `CrossConceptWriteTest` carry
+  those mutations. #84 candidates.
+- **The docs and `/v1/status` lagged B1 until B4 by design:** exports were format 13 and the merge responses carried
+  `loans` from B1's commit on, while `v1.md`, the MCP and the status counts moved with B4.
+- **Every loan post waits for that day's digest hour**, first post included (C11 read literally waited only on the due
+  day): a loan created or re-dated after the digest hour, or a day the digest alarm did not fire, would otherwise post
+  at the midnight date-change sweep — against R72-7's own words. Fixed in B2's fix round.
+- **The C14 warranty matrix is a test resource** (1,474 lines) recorded at the base before any production edit and
+  unchanged at the tip.
+- **The hold before the day's digest hour covers every loan post** — first post, Until-returned re-alert and the
+  restart re-post; B2's first build let all three through between midnight and the digest hour (its report
+  overclaimed); fixed in B2's fix round.
+- **A standing Once turns to its post-due words silently** (owner ruling R72-B2): once, in place, with only-alert-once
+  set on that one post; a dismissed Once never returns. The one-flag edit to `Notifications.kt` is the ruled
+  departure from §10's fence; every other post keeps today's alerting.
+- **A known, accepted race (PD-2):** a swipe landing inside the milliseconds between the provider's read of the
+  standing notifications and the silent refresh re-creates that Once, audibly — at most once per Once loan; the
+  re-stamp keeps a later dismissal durable. Accepted as disclosed by the owner; no further `Notifications.kt` edit.
+- **Deferred to #84:** strictly-once through a backward clock, zone or date-line move across the due day (today such a
+  move after the Once posted cancels and re-arms it; the refinement holds when the stamp's hash is unchanged).
+- **The implementer could not write its own report file in B3** (the harness blocked subagent `.md` writes); the
+  controller saved the returned report verbatim in the workspace.
+- **The Dashboard loan row counts as the asset's one appearance** ("an asset appears exactly once"): the lent asset
+  leaves the plain CURRENT list, and a chip that hides the loan row does not move it back — as for schedule and
+  condition rows.
+- **The lend form asks the permission question after the write and before the sweep** (write → P72-33 → sweep →
+  saved), unlike the shipped asset editor, so a permission granted at "OK" delivers at once.
+- **The lookup-URI grep's one hit is the mapper's derivation** (`contactLinked = contactLookupUri != null` in
+  `LoanDtos.kt`); the rule's intent — no URI on any response, request, tool, command shape or doc example — holds,
+  proven by a mutation over the response body and `LoanDto`'s fields. The §12 grep reads "→ 1, the derivation".
+- **`reminderMode` defaults to `NONE` when omitted** on the lend and the full-replace PATCH (`lentOn` has no default);
+  the 409 `asset_already_lent` names the open loan's id in `problems` (the `HealthScheduleTaken` precedent).
+- **The API timing sentence is exact for posts and an upper bound for withdrawals:** a loan reminder posts only at a
+  sweep at or after the day's digest hour, but a returned loan's standing post comes down at the next sweep of any
+  kind, the midnight sweep included.
+- **`DeadlineFacts` shipped differently from the plan's words:** `opensAt` became `dayOpensAt` (today at the digest
+  hour, not the due day's), `wordsTurnAt` was added for the silent refresh, C11's "Forget before opensAt" became a
+  hold, and a `Refresh` step sits beside `Realert`.
+- **Row 23's reasoning ("due yesterday, so any digest hour has passed") is false under the hold;** the device fixture
+  sets the digest hour to 0.
+- **"Logged" in C15 means a fixed reason plus at most the exception's class name, never its message** (the log
+  callback takes a reason string only).
+- **Back on the P72-33 notification question is "Not now"** (owner ruling): no request; the sweep still runs once.
+- **The Dashboard loan row does not name a component's parent** — a #84 candidate.
+- **A pick delivered after process death, before the lend form loaded, was dropped** — found at the branch gate and
+  fixed before the merge (the pick is held and applied once when the form loads).
+- **The return-timing wording is exact in v1.md, the MCP `return_loan` docstring and README;** the same overstatement
+  remains in comments only (`server.py`'s loan block comment, `test_loan_tools.py`'s module docstring, `update_loan`'s
+  docstring for a mode turned off or a due date cleared) and `LoanEditViewModel`'s class comment still says the pick is
+  read "in the pick's callback" — #84 candidates.
+- **The merged-tip gate on 98ce02a4 had one flaky device failure:** 50 classes / 265 tests, 264 passing — `AttachmentsDeviceProofTest.theSheetRenamesAndReKindsTheRow` failed once at its `performScrollTo()` step; the same class passed 12/12 in two diagnostic re-runs on the same tip and in every earlier run (B3's re-runs, #79's gates). Recorded, not re-gated (owner: finish the gate once); stabilising it belongs to the device-suite ticket before #77. The device portion measured ~12 min for 50 classes (~25 % orchestration overhead), the whole gate ~20 min.
