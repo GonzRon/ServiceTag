@@ -45,10 +45,11 @@ class ResolverContactRowQuery(private val resolver: ContentResolver) : ContactRo
 class ContactPick internal constructor(val launch: () -> Unit)
 
 /**
- * #72 (C15; C25's seam): the system contact picker, launched through [contract] — `PickContact()` on
- * the phone; `ContactGrantBoundaryTest` aims it at the test-only sender's picker instead, so the grant
- * really crosses from another UID. The result's string reaches [onPicked] in the result callback and
- * nowhere else; a cancelled pick says nothing. A phone with no picker at all is [onNoPicker] (P72-45).
+ * #72 (C15; C25's seam): the system contact picker, launched through [contract] — the platform's
+ * `PickContact` contract on the phone; `ContactGrantBoundaryTest` aims it at the test-only sender's
+ * picker instead, so the grant really crosses from another UID. The result's string reaches [onPicked]
+ * in the result callback and nowhere else; a cancelled pick says nothing. A phone with no picker at
+ * all is [onNoPicker] (P72-45).
  *
  * No persistable grant is taken: the name is read once, now, and only the link and the name are kept.
  */

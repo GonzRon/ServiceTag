@@ -155,7 +155,9 @@ private fun ReturnDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(MARK_RETURNED_QUESTION) },
-        text = { DateField(value = prompt.date, onValueChange = onDate, label = RETURNED_ON, problem = prompt.problem) },
+        text = {
+            DateField(value = prompt.date, onValueChange = onDate, label = RETURNED_ON, problem = prompt.problem)
+        },
         confirmButton = { TextButton(onClick = onConfirm, enabled = !prompt.saving) { Text(MARK_RETURNED) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

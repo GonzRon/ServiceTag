@@ -109,7 +109,12 @@ class LoanEditViewModel(
     private val reconcile: ReminderReconcile? = null,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph, assetId: String, loanId: String?, reader: PickedContactReader = graph.pickedContactReader) : this(
+    constructor(
+        graph: AppGraph,
+        assetId: String,
+        loanId: String?,
+        reader: PickedContactReader = graph.pickedContactReader,
+    ) : this(
         graph.assets, graph.loans, graph.lendAsset, graph.updateLoan, reader, graph.today,
         AssetId(assetId), loanId?.let(::AssetLoanId),
         notifications = graph.notificationPermission,
@@ -295,7 +300,8 @@ class LoanEditViewModel(
     private fun holdForRationale(written: AssetLoan): Boolean {
         val permission = notifications ?: return false
         val before = loaded?.reminderMode ?: LoanReminderMode.NONE
-        if (rationaleAsked || before != LoanReminderMode.NONE || written.reminderMode == LoanReminderMode.NONE) return false
+        if (rationaleAsked || before != LoanReminderMode.NONE) return false
+        if (written.reminderMode == LoanReminderMode.NONE) return false
         if (permission.granted()) return false
         rationaleAsked = true
         afterRationale = written

@@ -110,7 +110,11 @@ fun LoanEditScreen(
         ) {
             FieldLabel(BORROWER)
             if (state.borrower.isNotBlank()) {
-                Text(state.borrower, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    text = state.borrower,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
             }
             if (state.isNew) {
                 OutlinedButton(onClick = pick.launch, enabled = !state.saving && !state.reading, shape = ControlShape) {
