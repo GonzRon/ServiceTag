@@ -34,6 +34,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -71,12 +72,24 @@ class EventDetailCaseLinksTest {
         },
     )["${model::class.java.name}-${System.identityHashCode(model)}", model::class.java]
 
-    private suspend fun TestScope.detail(id: String): EventDetailState {
+    /** The entry's page, open: its state collected as the screen collects it. */
+    private suspend fun TestScope.page(id: String): EventDetailViewModel {
         val model = held(
             EventDetailViewModel(graph.events, graph.definitions, graph.assets, graph.deleteEvent, EventId(id), graph.caseLinks),
         )
         backgroundScope.launch { model.state.collect() }
-        return model.state.first { it != null }!!
+        model.state.first { it != null }
+        return model
+    }
+
+    private suspend fun TestScope.detail(id: String): EventDetailState = page(id).state.value!!
+
+    /** Delete, tapped: the confirm as asked, then dismissed ("Cancel") — nothing is deleted. */
+    private suspend fun EventDetailViewModel.confirmAsked(): DeleteConfirm {
+        askDelete()
+        val asked = deleteConfirm.first { it != null }!!
+        dismissDelete()
+        return asked
     }
 
     private fun eventOf(
@@ -114,15 +127,17 @@ class EventDetailCaseLinksTest {
     /**
      * R79-4: deleting a linked entry is allowed and leaves a readable dangling link; the confirm says so
      * with P79-60 after "Its readings go with it." — for the case's Incident and its repair record alike,
-     * and only when a case names the entry.
+     * and only when a case names the entry. The link is read when Delete is tapped, so a case started
+     * while the Incident's page is open (P79-20, and back) counts.
      */
     @Test fun theDeleteConfirmAddsP79_60WhenACaseLinksIt() = runTest {
         graph.assets.upsert(assetRow("heater", name = "Example Heater"))
         graph.events.upsert(eventOf("inc", "heater"))
         graph.events.upsert(eventOf("maint", "heater", kind = EventKind.MAINTENANCE, title = "Element replaced"))
         graph.events.upsert(eventOf("other", "heater", title = "Tripped once"))
+        val incident = page("inc")
 
-        assertFalse("no case yet", detail("inc").linkedByCase)
+        assertFalse("no case yet", incident.confirmAsked().linkedByCase)
         assertEquals(listOf("Its readings go with it."), deleteConfirmLines(linkedByCase = false))
 
         val command = ServiceCaseCommand(
@@ -131,9 +146,11 @@ class EventDetailCaseLinksTest {
         )
         graph.openServiceCase.run(AssetId("heater"), command, EventId("inc"))
 
-        assertTrue("the case's Incident", detail("inc").linkedByCase)
-        assertTrue("the case's repair record", detail("maint").linkedByCase)
-        assertFalse("an entry no case names", detail("other").linkedByCase)
+        assertTrue("the case's Incident, on the page already open", incident.confirmAsked().linkedByCase)
+        assertNull("dismissed: no confirm, nothing deleted", incident.deleteConfirm.value)
+        assertEquals("inc", graph.events.get(EventId("inc"))?.id?.value)
+        assertTrue("the case's repair record", page("maint").confirmAsked().linkedByCase)
+        assertFalse("an entry no case names", page("other").confirmAsked().linkedByCase)
         assertEquals(
             listOf("Its readings go with it.", "A service case links this entry. Its documents go with it."),
             deleteConfirmLines(linkedByCase = true),

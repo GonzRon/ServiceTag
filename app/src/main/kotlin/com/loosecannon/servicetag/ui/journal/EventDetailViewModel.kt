@@ -19,10 +19,12 @@ import com.loosecannon.servicetag.core.usecase.DeleteEvent
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.health.inService
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -50,9 +52,10 @@ data class EventDetailState(
      * service**, the one rule with the asset detail's P79-19.
      */
     val startsServiceCase: Boolean = false,
-    /** #79 (C23, R79-4): a service case names this entry, so the delete confirm adds P79-60. */
-    val linkedByCase: Boolean = false,
 )
+
+/** #79 (C23, R79-4): the delete confirm as asked — with P79-60 when a service case names the entry. */
+data class DeleteConfirm(val linkedByCase: Boolean)
 
 /**
  * #79 (C23): whether a service case names an event — as its Incident or its repair record. Read-only,
@@ -102,7 +105,6 @@ class EventDetailViewModel(
                     assetName = asset?.name.orEmpty(),
                     derived = derivedFor(it, byId),
                     startsServiceCase = it.kind == EventKind.INCIDENT && it.scheduleId == null && asset?.inService == true,
-                    linkedByCase = caseLinks.linking(it.id),
                 )
             }
         }
@@ -111,6 +113,24 @@ class EventDetailViewModel(
     val missing: StateFlow<Boolean> = row
         .map { it == null }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), false)
+
+    /**
+     * #79 (C23, R79-4): the delete confirm, or null while none is asked. Whether a case links the entry
+     * is read when Delete is tapped, not when the page opened: a case started from this very entry
+     * (P79-20) and back again is counted.
+     */
+    private val _deleteConfirm = MutableStateFlow<DeleteConfirm?>(null)
+    val deleteConfirm: StateFlow<DeleteConfirm?> = _deleteConfirm.asStateFlow()
+
+    /** Delete, tapped: the one read the confirm needs, then the confirm. Nothing is written. */
+    fun askDelete() {
+        viewModelScope.launch { _deleteConfirm.value = DeleteConfirm(linkedByCase = caseLinks.linking(id)) }
+    }
+
+    /** "Cancel", any dismissal, and the confirm itself: the dialog goes. */
+    fun dismissDelete() {
+        _deleteConfirm.value = null
+    }
 
     /** One shot, so the screen pops on the delete it asked for rather than on the row vanishing. */
     private val _deleted = MutableSharedFlow<Unit>(replay = 0, extraBufferCapacity = 1)

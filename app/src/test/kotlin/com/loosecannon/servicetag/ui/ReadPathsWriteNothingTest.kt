@@ -413,6 +413,9 @@ class ReadPathsWriteNothingTest {
             fresh.state.await("the new case form") { it.loaded }
             edit.state.await("the edit form") { it.loaded }
             incidentDetail.state.await("the Incident detail") { it != null }
+            // Delete, tapped: the confirm's one read, and nothing is deleted or written.
+            incidentDetail.askDelete()
+            incidentDetail.deleteConfirm.await("the delete confirm") { it != null }
 
             assertEquals("zero writes anywhere", emptyList<String>(), writes)
             // The loads did real work: the section's row, the timeline, both forms and the link check.
@@ -420,7 +423,7 @@ class ReadPathsWriteNothingTest {
             assertEquals("Battery replaced", screen.state.value!!.repair!!.title)
             assertEquals("Will not heat", fresh.state.value.title)
             assertEquals("Heater claim", edit.state.value.title)
-            assertTrue(incidentDetail.state.value!!.linkedByCase)
+            assertTrue(incidentDetail.deleteConfirm.value!!.linkedByCase)
             page.cancel()
             case.cancel()
             entry.cancel()

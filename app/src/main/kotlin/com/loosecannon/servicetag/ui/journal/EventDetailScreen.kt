@@ -79,7 +79,7 @@ fun EventDetailScreen(
     val state by model.state.collectAsStateWithLifecycle()
     val missing by model.missing.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
-    var confirming by remember { mutableStateOf(false) }
+    val confirm by model.deleteConfirm.collectAsStateWithLifecycle()
 
     // Deleting an entry makes it missing too, so both routes out are funnelled through one latch:
     // two pops would take the asset screen with them.
@@ -120,7 +120,7 @@ fun EventDetailScreen(
                     if (current != null) {
                         EntryOverflow(
                             onEdit = { onEdit(current.event.assetId.value, current.event.id.value) },
-                            onDelete = { confirming = true },
+                            onDelete = model::askDelete,
                             onStartServiceCase = if (current.startsServiceCase) {
                                 { onStartServiceCase(current.event.assetId.value, current.event.id.value) }
                             } else {
@@ -136,12 +136,12 @@ fun EventDetailScreen(
             QuietLine("Loading…", Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
-        if (confirming) {
+        confirm?.let { asked ->
             DeleteDialog(
-                linkedByCase = current.linkedByCase,
-                onDismiss = { confirming = false },
+                linkedByCase = asked.linkedByCase,
+                onDismiss = model::dismissDelete,
                 onConfirm = {
-                    confirming = false
+                    model.dismissDelete()
                     model.delete()
                 },
             )
