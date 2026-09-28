@@ -177,16 +177,23 @@ def test_open_service_case_sends_exactly_the_golden_keys(paired) -> None:
     four the API requires are required here too, with no default, and nothing else is invented."""
     paired.reply("GET", "/v1/status", 200, STATUS_12)
     server_module.open_service_case(
-        asset_id="a1", title="Heater claim", type="WARRANTY_SERVICE", opened_on="2026-09-12",
-        coverage="IN_WARRANTY", incident_event_id="e-incident", provider="Northwind Service",
-        contact="+1 555 0100", case_ref="RMA-0001", outbound_tracking="T-1", outbound_carrier="Parcel Co",
-        return_tracking="T-2", return_carrier="Parcel Co", cost_minor=0, currency="EUR", notes="n",
+        asset_id="a1", title="Heater claim", type="OTHER_SERVICE", opened_on="2026-09-12",
+        coverage="PARTLY_COVERED", incident_event_id="e-incident", provider="Northwind Service",
+        contact="+1 555 0100", case_ref="RMA-0001", outbound_tracking="T-OUT-1", outbound_carrier="Parcel Co",
+        return_tracking="T-RET-2", return_carrier="Freight Ltd", cost_minor=0, currency="EUR", notes="Boxed",
         resolution_event_id="e-repair",
     )
     sent = paired.last()
     assert (sent.method, sent.path) == ("POST", "/v1/service-cases")
     assert sorted(body_of(sent)) == sorted(golden("serviceCase"))
-    assert body_of(sent)["costMinor"] == 0, "zero is no charge, and is sent"
+    # Every value under its own key — no two alike, so a swapped or dropped argument cannot pass.
+    assert body_of(sent) == {
+        "assetId": "a1", "title": "Heater claim", "type": "OTHER_SERVICE", "openedOn": "2026-09-12",
+        "provider": "Northwind Service", "contact": "+1 555 0100", "caseRef": "RMA-0001",
+        "coverage": "PARTLY_COVERED", "outboundTracking": "T-OUT-1", "outboundCarrier": "Parcel Co",
+        "returnTracking": "T-RET-2", "returnCarrier": "Freight Ltd", "costMinor": 0, "currency": "EUR",
+        "notes": "Boxed", "incidentEventId": "e-incident", "resolutionEventId": "e-repair",
+    }, "zero is no charge, and is sent"
 
     server_module.open_service_case(
         asset_id="a1", title="Pump", type="REPAIR", opened_on="2026-09-12", coverage="UNKNOWN",

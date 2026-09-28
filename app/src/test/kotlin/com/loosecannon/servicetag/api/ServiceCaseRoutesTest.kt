@@ -116,6 +116,52 @@ class ServiceCaseRoutesTest {
     }
 
     /**
+     * Every header field sent is the field stored and read back, on the open and on the full-replace
+     * `PATCH`: fifteen distinct values each time — no two text fields alike, so a dropped or swapped
+     * mapping line cannot pass — checked on the response, on the stored row and on the `GET`.
+     */
+    @Test fun everyHeaderFieldSentIsStoredAndReadBack() {
+        val asset = heater()
+        val incident = event(asset, "INCIDENT", "Will not heat")
+        val repair = event(asset, "MAINTENANCE", "Element replaced", on = "2026-09-18")
+        val swap = event(asset, "REPLACEMENT", "Unit swapped", on = "2026-09-19")
+        fun header(v: String, type: String, coverage: String, openedOn: String, cost: Long, currency: String, resolution: String) =
+            """"title":"title-$v","type":"$type","openedOn":"$openedOn","provider":"provider-$v","contact":"contact-$v",
+               "caseRef":"ref-$v","coverage":"$coverage","outboundTracking":"out-track-$v","outboundCarrier":"out-carrier-$v",
+               "returnTracking":"ret-track-$v","returnCarrier":"ret-carrier-$v","costMinor":$cost,"currency":"$currency",
+               "notes":"notes-$v","resolutionEventId":"$resolution""""
+        fun expected(v: String, type: String, coverage: String, openedOn: String, cost: Long, currency: String, resolution: String, id: String, createdAt: Long) =
+            ServiceCaseDto(
+                id = id, assetId = asset, title = "title-$v", type = type, openedOn = openedOn, closedOn = null,
+                provider = "provider-$v", contact = "contact-$v", caseRef = "ref-$v", coverage = coverage, status = "OPEN",
+                outboundTracking = "out-track-$v", outboundCarrier = "out-carrier-$v", returnTracking = "ret-track-$v",
+                returnCarrier = "ret-carrier-$v", costMinor = cost, currency = currency, notes = "notes-$v",
+                incidentEventId = incident, resolutionEventId = resolution, createdAt = createdAt, updatedAt = graph.now,
+            )
+        fun readBack(id: String) = api.ok(ServiceCaseDetailResponse.serializer(), "GET", "/v1/service-cases/$id").serviceCase
+
+        val opened = api.ok(
+            ServiceCaseResponse.serializer(), "POST", "/v1/service-cases",
+            """{"assetId":"$asset","incidentEventId":"$incident",${header("a", "OTHER_SERVICE", "PARTLY_COVERED", "2026-09-12", 12_345, "EUR", repair)}}""",
+            status = 201,
+        ).serviceCase
+        val first = expected("a", "OTHER_SERVICE", "PARTLY_COVERED", "2026-09-12", 12_345, "EUR", repair, opened.id, graph.now)
+        assertEquals(first, opened)
+        assertEquals(first, stored(opened.id).toDto())
+        assertEquals(first, readBack(opened.id))
+
+        graph.now += 86_400_000L
+        val replaced = api.ok(
+            ServiceCaseResponse.serializer(), "PATCH", "/v1/service-cases/${opened.id}",
+            "{${header("b", "REPAIR", "OUT_OF_WARRANTY", "2026-09-11", 67_890, "USD", swap)}}",
+        ).serviceCase
+        val second = expected("b", "REPAIR", "OUT_OF_WARRANTY", "2026-09-11", 67_890, "USD", swap, opened.id, first.createdAt)
+        assertEquals(second, replaced)
+        assertEquals(second, stored(opened.id).toDto())
+        assertEquals(second, readBack(opened.id))
+    }
+
+    /**
      * The two reads: an asset's cases newest opened first, then by id, as the archive rows; one case with
      * its whole timeline in the timeline's order `(occurredOn, occurredTime nulls first, createdAt, id)`.
      * A missing asset is `no_such_asset`, a missing case `no_such_service_case`; the asset's new
@@ -258,6 +304,13 @@ class ServiceCaseRoutesTest {
 
         for (method in listOf("GET", "PATCH", "DELETE")) {
             assertEquals(method, 405, api.call(method, "/v1/service-cases/$case/entries", if (method == "GET") "" else "{}").status)
+        }
+        // The other two shapes the document's 405 row names answer the same way.
+        for ((method, path) in listOf(
+            "GET" to "/v1/service-cases", "DELETE" to "/v1/service-cases",
+            "POST" to "/v1/service-cases/$case", "DELETE" to "/v1/service-cases/$case",
+        )) {
+            assertEquals("$method $path", 405, api.call(method, path, if (method == "GET") "" else "{}").status)
         }
         val missing = api.call("POST", "/v1/service-cases/no-such-case/entries", """{"occurredOn":"2026-09-13","tzId":"UTC","note":"x"}""")
         assertEquals(404, missing.status)
