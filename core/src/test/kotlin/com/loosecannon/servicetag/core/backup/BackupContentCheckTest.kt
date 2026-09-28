@@ -26,6 +26,9 @@ import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
 import com.loosecannon.servicetag.core.testing.loanOf
+import com.loosecannon.servicetag.core.testing.transferOf
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.testing.conditionOf
 import com.loosecannon.servicetag.core.testing.groupOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
@@ -497,6 +500,52 @@ class BackupContentCheckTest {
     fun aLoanIdHoldingASlash() {
         val refusal = refused(lent(loanOf("l/1")))
         assertEquals("assetLoans: loan l/1 has an id holding a '/'", refusal)
+    }
+
+    // --- #77 (C7): transfer records, format 14 ----------------------------------------------------
+
+    private fun recorded(vararg records: TransferRecord) = data().copy(transferRecords = records.map { it.toDto() })
+
+    /** Each field rule, one row at a time; the held asset `a9` is soft, never in the file. */
+    @Test
+    fun eachRecordFieldRule() {
+        val cases = listOf(
+            transferOf("", assetId = "a9") to "transferRecords: a record has a blank id",
+            transferOf("r1", assetId = " ") to "transferRecords: record r1 has a blank assetId",
+            transferOf("r1", assetId = "a9", packId = "") to "transferRecords: record r1 has a blank packId",
+            transferOf("r1", assetId = "a9", nameSnapshot = "  ") to "transferRecords: record r1 has a blank nameSnapshot",
+            transferOf("r1", assetId = "a9", packSha256 = "AB".repeat(32)) to
+                "transferRecords: record r1 has a packSha256 that is not 64 lowercase hex",
+            transferOf("r1", assetId = "a9", packSha256 = "ab".repeat(31)) to
+                "transferRecords: record r1 has a packSha256 that is not 64 lowercase hex",
+            transferOf("r1", assetId = "a9", at = 0) to "transferRecords: record r1 has at 0, not after the epoch",
+            transferOf("r1", assetId = "a9", note = "x".repeat(201)) to
+                "transferRecords: record r1 has a note over 200 characters or not one line",
+            transferOf("r1", assetId = "a9", note = "two\nlines") to
+                "transferRecords: record r1 has a note over 200 characters or not one line",
+        )
+        for ((row, expected) in cases) assertEquals(expected, refused(recorded(row)), expected)
+    }
+
+    /** A withdrawal names the pack of an OUT of the same asset in the same file; without one it is refused. */
+    @Test
+    fun aWithdrawalWithoutItsOutIsRefused() {
+        val orphan = recorded(transferOf("r1", assetId = "a9", kind = TransferKind.WITHDRAWN, packId = "pack-s"))
+        assertEquals("transferRecords: record r1 withdraws pack pack-s, which no OUT of asset a9 in the archive names", refused(orphan))
+        val otherAsset = recorded(
+            transferOf("r1", assetId = "a8", packId = "pack-s"),
+            transferOf("r2", assetId = "a9", kind = TransferKind.WITHDRAWN, packId = "pack-s"),
+        )
+        assertEquals(
+            "transferRecords: record r2 withdraws pack pack-s, which no OUT of asset a9 in the archive names",
+            refused(otherAsset),
+        )
+
+        val paired = recorded(
+            transferOf("r1", assetId = "a9", packId = "pack-s", note = "x".repeat(200)),
+            transferOf("r2", assetId = "a9", kind = TransferKind.WITHDRAWN, packId = "pack-s"),
+        )
+        assertEquals(paired, BackupCodec.decode(archiveOf(paired)).data)
     }
 
     /** No rule is relative to the importing device's today: a loan lent and returned far ahead restores. */

@@ -34,6 +34,7 @@ import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.ServiceCaseId
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
+import com.loosecannon.servicetag.core.model.TransferRecord
 import kotlinx.coroutines.flow.Flow
 
 interface AssetRepository {
@@ -441,4 +442,22 @@ interface AssetLoanRepository {
     fun observeForAsset(assetId: AssetId): Flow<List<AssetLoan>>
     /** Every open loan, live, by id — the Assets list's and the Dashboard's one read. */
     fun observeOpen(): Flow<List<AssetLoan>>
+}
+
+/**
+ * #77 (C6; R77-3, R77-12). The transfer records: **append and query only** — no update and no delete of
+ * one row anywhere. [append] **aborts** on an id already held, never overwriting it. There is no foreign
+ * key: a record names its asset softly and outlives it (`DeleteAsset` keeps it, R77-4). `deleteAll` is the
+ * replace import's wipe, which is its only caller. [all] orders by id; [forAsset] by `(at, id)`.
+ * [heldIds] is `heldIds(all())`, the one rule, asked in the caller's transaction.
+ */
+interface TransferRecordRepository {
+    suspend fun append(record: TransferRecord)
+    suspend fun all(): List<TransferRecord>
+    suspend fun forAsset(assetId: AssetId): List<TransferRecord>
+    /** The assets with an open OUT — `heldIds(all())`. */
+    suspend fun heldIds(): Set<AssetId>
+    /** [heldIds], live. */
+    fun observeHeldIds(): Flow<Set<AssetId>>
+    suspend fun deleteAll()
 }

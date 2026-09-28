@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
@@ -761,7 +762,7 @@ class ScheduleOperationsTest {
             references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(),
             InMemoryHealthSubjectRepository(), categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(),
-            InMemoryAssetLoanRepository(), uow, IdGenerator { "set-1" }, clock, appVersion = "1.2.0", schemaVersion = 6,
+            InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(), uow, IdGenerator { "set-1" }, clock, appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
 
         fun restore(rebuildAll: suspend () -> Unit) = ImportBackupReplace(
@@ -769,7 +770,7 @@ class ScheduleOperationsTest {
             references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(),
             InMemoryHealthSubjectRepository(), categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(),
-            InMemoryAssetLoanRepository(), storage, uow, rebuildAll = rebuildAll,
+            InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(), storage, uow, rebuildAll = rebuildAll,
         )
 
         // Once, and after the last insert: everything the file carried was already in when it ran.

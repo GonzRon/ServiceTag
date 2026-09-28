@@ -1,12 +1,17 @@
 package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.backup.BackupCodec
+import com.loosecannon.servicetag.core.backup.TransferredOutInArchive
 import com.loosecannon.servicetag.core.backup.toDomain
 import com.loosecannon.servicetag.core.journal.AssetRow
 import com.loosecannon.servicetag.core.journal.CategoryBackfill
 import com.loosecannon.servicetag.core.journal.CategoryCatalog
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.DefinitionKind
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.heldIds
+import com.loosecannon.servicetag.core.model.returnsHere
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
@@ -26,6 +31,7 @@ import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 data class ImportReport(
@@ -64,6 +70,11 @@ data class ImportReport(
  * is not an owner's edit. So a format-9 archive whose rows are complete adds nothing, and a format
  * ≤8 archive, or one whose assets name a category it does not carry, gets the rows it needs: a
  * restore always leaves every non-blank asset category in the catalog.
+ *
+ * **The transfer records (#77, C9; R77-13).** Wiped by name and reloaded from the archive, last. Before the
+ * wipe, in the same write, the archive is compared with this phone's open OUTs: one carrying the graph of an
+ * asset held here is refused with [TransferredOutInArchive] — nothing wiped — unless its own records hold an
+ * IN whose lineage names this phone's OUT of that asset (open, or withdrawn by mistake: rm-8).
  */
 class ImportBackupReplace(
     private val assets: AssetRepository,
@@ -88,6 +99,8 @@ class ImportBackupReplace(
     private val caseEntries: ServiceCaseEntryRepository,
     /** #72 — the loans (format 13): wiped by name, restored after their assets. */
     private val loans: AssetLoanRepository,
+    /** #77 — the transfer records (format 14): wiped and reloaded; a held graph is refused first (R77-13). */
+    private val transfers: TransferRecordRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -116,7 +129,22 @@ class ImportBackupReplace(
             promotion.rewrites[asset.id]?.let { asset.copy(category = it) } ?: asset
         }
 
+        // #77 (R77-13): the archive's own INs, by asset — what may legitimately bring a held asset back.
+        val incomingIns = data.transferRecords.map { it.toDomain() }.filter { it.kind == TransferKind.IN }.groupBy { it.assetId }
+        val archivedAssetIds = data.assets.map { AssetId(it.id) }.toSet()
+
         val orphaned = uow.write {
+            // R77-13, before anything is wiped and in the same write: an archive carrying the graph of an asset
+            // this phone holds as transferred out is refused — a stale pre-transfer backup never silently brings
+            // it back — unless the archive's own records carry an IN whose lineage names this phone's OUT of it
+            // (C15's closing rule, rm-8 included): the Replace restore from the installation it returned to.
+            val local = transfers.all()
+            val resurrected = heldIds(local)
+                .filter { it in archivedAssetIds }
+                .filterNot { asset -> incomingIns[asset].orEmpty().any { returnsHere(local, asset, it.lineage) } }
+                .sortedBy { it.value }
+            if (resurrected.isNotEmpty()) throw TransferredOutInArchive(resurrected)
+
             // The bytes of everything about to be replaced, read before the wipe.
             val doomed = attachments.all().map { it.storageLocator }
 
@@ -142,6 +170,8 @@ class ImportBackupReplace(
             // #72's loans likewise: the CASCADE would take them with their assets, and they are wiped by
             // name so that no reader of this list has to know it.
             loans.deleteAll()
+            // #77's records have no foreign key, so nothing would take them: wiped by name, reloaded last.
+            transfers.deleteAll()
             // The three 1.4 tables need no line: activations and conditions point only at an
             // asset and subjects at an asset or a schedule, all ON DELETE CASCADE, and neither fact
             // table has a delete of its own because its rows are immutable.
@@ -191,6 +221,9 @@ class ImportBackupReplace(
             data.assetLoans.forEach { loans.upsert(it.toDomain()) }
             // Attachment rows go last: every owner, asset or event, is already in.
             data.attachments.forEach { attachments.upsert(it.toDomain()) }
+            // #77: the transfer records after every row, as a merge appends them — the archive's own records,
+            // which the codec proved hold none of the assets it lands.
+            data.transferRecords.forEach { transfers.append(it.toDomain()) }
 
             // After every write, inside the same transaction, once.
             rebuildAll()

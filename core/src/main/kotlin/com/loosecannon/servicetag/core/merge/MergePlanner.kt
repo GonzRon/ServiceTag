@@ -1,5 +1,24 @@
 package com.loosecannon.servicetag.core.merge
 
+import com.loosecannon.servicetag.core.backup.BackupData
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.LinkId
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ServiceCaseId
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.core.model.closes
+import com.loosecannon.servicetag.core.model.heldIds
+import com.loosecannon.servicetag.core.model.openOuts
+import com.loosecannon.servicetag.core.model.shortPackId
+import com.loosecannon.servicetag.core.transfer.EntangledRef
+import com.loosecannon.servicetag.core.transfer.OwnerLookup
+import com.loosecannon.servicetag.core.transfer.OwnerRef
+import com.loosecannon.servicetag.core.transfer.TransferGraph
+import com.loosecannon.servicetag.core.transfer.TransferOwnership
+import com.loosecannon.servicetag.core.transfer.TransferRetention
 import com.loosecannon.servicetag.core.backup.AssetDto
 import com.loosecannon.servicetag.core.backup.AssetEventDto
 import com.loosecannon.servicetag.core.backup.AttachmentDto
@@ -50,6 +69,7 @@ import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.StoredBytes
@@ -981,6 +1001,148 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
         }
     }
 
+    // --- transfer records (#77, C10; R77-5, R77-12) ---------------------------------------------
+    // A record by its id, every field compared — no UPDATE. One this phone lacks meets M1 against R', this
+    // phone's records and every incoming one absent here: an IN or WITHDRAWN that would close an OUT open
+    // **here** is refused (an ordinary archive never supersedes; a withdrawal never propagates); an OUT that
+    // would leave its asset with two open OUTs in R' is the double mark; anything else lands, so another
+    // installation's OUT makes the asset held here too.
+    val localRecords = snapshot.transfers
+    val localRecordsById = localRecords.associateBy { it.id }
+    val incomingRecords = data.transferRecords.map { it.toDomain() }
+    val recordsPrime = localRecords + incomingRecords.filter { it.id !in localRecordsById }
+    val openHere = openOuts(localRecords)
+    val openPrime = openOuts(recordsPrime)
+    val transferWrites = mutableListOf<TransferRecord>()
+    for (record in incomingRecords) {
+        val id = record.id
+        val local = localRecordsById[id]
+        val rival = if (record.kind == TransferKind.OUT && openPrime.any { it.id == id }) {
+            openPrime.filter { it.assetId == record.assetId && it.id != id }
+                .minWithOrNull(compareBy({ it.id !in localRecordsById }, { it.id }))
+        } else {
+            null
+        }
+        decisions += when {
+            local != null && local == record ->
+                MergeDecision(MergeTable.TRANSFERS, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.TRANSFERS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            openHere.any { closes(record, it) } ->
+                MergeDecision(
+                    MergeTable.TRANSFERS, id, MergeVerdict.CONFLICT, MergeReason.ASSET_TRANSFERRED_OUT, record.assetId.value,
+                )
+            rival != null ->
+                MergeDecision(
+                    MergeTable.TRANSFERS, id, MergeVerdict.CONFLICT, MergeReason.TRANSFER_DIVERGED,
+                    "${rival.packId} (${shortPackId(rival.packId)}), ${record.packId} (${shortPackId(record.packId)})",
+                )
+            else -> {
+                transferWrites += record
+                MergeDecision(MergeTable.TRANSFERS, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
+    // --- M2 and M3: nothing lands for, or against, an asset held here (#77, C10) -------------------
+    // With the records this plan would insert, `heldAfter` is what the phone will hold. M2: a row the rules
+    // above would INSERT whose owning asset (`TransferOwnership`, the write guard's own rule) is held is
+    // refused, so a plan never calls applicable what the guard would refuse (rm-2). M3: what stays after the
+    // merge must still retain cleanly (C3) — an inserted row naming a row a held asset drops is refused on
+    // that row; a local row naming one is refused on the inserted OUT that made it held. An entanglement no
+    // incoming row introduced is not this plan's (the export reports it).
+    val heldAfter = heldIds(localRecords + transferWrites)
+    if (heldAfter.isNotEmpty()) {
+        val eventsById = (snapshot.events + eventWrites).associateBy { it.id }
+        val casesById = (snapshot.serviceCases + caseWrites).associateBy { it.id }
+        val schedulesById = (snapshot.schedules + scheduleWrites).associateBy { it.id }
+        val groupsById = (snapshot.groups + groupWrites).associateBy { it.id }
+        val linksById = (snapshot.links + linkWrites).associateBy { it.id }
+        val lookup = object : OwnerLookup {
+            override fun event(id: EventId) = eventsById[id]
+            override fun case(id: ServiceCaseId) = casesById[id]
+            override fun schedule(id: ScheduleId) = schedulesById[id]
+            override fun group(id: GroupId) = groupsById[id]
+            override fun link(id: LinkId) = linksById[id]
+        }
+        val inserted = decisions.withIndex()
+            .filter { it.value.verdict == MergeVerdict.INSERT }
+            .associate { (it.value.table to it.value.id) to it.index }
+        fun refuseInsert(table: MergeTable, id: String, detail: String) {
+            val at = inserted[table to id] ?: return
+            if (decisions[at].verdict != MergeVerdict.INSERT) return
+            decisions[at] = MergeDecision(table, id, MergeVerdict.CONFLICT, MergeReason.ASSET_TRANSFERRED_OUT, detail)
+        }
+        fun heldOwner(refs: List<OwnerRef>): String? =
+            TransferOwnership.resolve(refs, lookup).filter { it in heldAfter }.minOfOrNull { it.value }
+
+        // M2 — every table a merge inserts into but the records' own.
+        val owned: List<Triple<MergeTable, String, List<OwnerRef>>> =
+            canonicalAssetWrites.map { Triple(MergeTable.ASSETS, it.id.value, TransferOwnership.of(it)) } +
+                groupWrites.map { Triple(MergeTable.GROUPS, it.id.value, TransferOwnership.of(it)) } +
+                definitionWrites.map { Triple(MergeTable.DEFINITIONS, it.id.value, TransferOwnership.of(it)) } +
+                profileWrites.map { Triple(MergeTable.PROFILES, it.id.value, TransferOwnership.of(it)) } +
+                scheduleWrites.map { Triple(MergeTable.SCHEDULES, it.id.value, TransferOwnership.of(it)) } +
+                closureWrites.map { Triple(MergeTable.CLOSURES, it.id, TransferOwnership.of(it)) } +
+                linkWrites.map { Triple(MergeTable.LINKS, it.id.value, TransferOwnership.of(it)) } +
+                tagWrites.map { Triple(MergeTable.TAGS, it.id.value, TransferOwnership.of(it)) } +
+                eventWrites.map { Triple(MergeTable.EVENTS, it.id.value, TransferOwnership.of(it)) } +
+                attachmentWrites.map { Triple(MergeTable.ATTACHMENTS, it.id.value, TransferOwnership.of(it)) } +
+                referenceWrites.map { Triple(MergeTable.REFERENCES, it.id.value, TransferOwnership.of(it)) } +
+                activationWrites.map { Triple(MergeTable.SEASON_ACTIVATIONS, it.id, TransferOwnership.of(it)) } +
+                conditionWrites.map { Triple(MergeTable.CONDITIONS, it.id, TransferOwnership.of(it)) } +
+                subjectWrites.map { Triple(MergeTable.HEALTH_SUBJECTS, it.id.value, TransferOwnership.of(it)) } +
+                caseWrites.map { Triple(MergeTable.SERVICE_CASES, it.id.value, TransferOwnership.of(it)) } +
+                entryWrites.map { Triple(MergeTable.CASE_ENTRIES, it.id.value, TransferOwnership.of(it)) } +
+                loanWrites.map { Triple(MergeTable.LOANS, it.id.value, TransferOwnership.of(it)) }
+        for ((table, id, refs) in owned) heldOwner(refs)?.let { refuseInsert(table, id, it) }
+
+        // M3 — the phone as this plan would leave it, cut by what it would hold.
+        val after = BackupData(
+            assets = (snapshot.assets + canonicalAssetWrites).map { it.toDto() },
+            nfcTags = (snapshot.tags + tagWrites).map { it.toDto() },
+            externalLinks = (snapshot.links + linkWrites).map { it.toDto() },
+            measurementDefinitions = (snapshot.definitions + definitionWrites).map { it.toDto() },
+            eventProfiles = (snapshot.profiles + profileWrites).map { it.toDto() },
+            assetEvents = (snapshot.events + eventWrites).map { it.toDto() },
+            attachments = (snapshot.attachments + attachmentWrites).map { it.toDto() },
+            maintenanceGroups = groupsById.values.map { it.toDto() },
+            maintenanceSchedules = schedulesById.values.map { it.toDto() },
+            occurrenceClosures = (snapshot.closures + closureWrites).map { it.toDto() },
+            assetReferences = (snapshot.references + referenceWrites).map { it.toDto() },
+            seasonActivations = (snapshot.seasonActivations + activationWrites).map { it.toDto() },
+            assetConditions = (snapshot.conditions + conditionWrites).map { it.toDto() },
+            healthSubjects = (snapshot.healthSubjects + subjectWrites).map { it.toDto() },
+            serviceCases = casesById.values.map { it.toDto() },
+            serviceCaseEntries = (snapshot.caseEntries + entryWrites).map { it.toDto() },
+            assetLoans = (snapshot.loans + loanWrites).map { it.toDto() },
+        )
+        val retention = TransferGraph.retain(after, heldAfter)
+        if (retention is TransferRetention.Entangled) {
+            val newlyHeld = heldAfter - heldIds(localRecords)
+            val definitionsById = (snapshot.definitions + definitionWrites).associateBy { it.id.value }
+            val profilesById = (snapshot.profiles + profileWrites).associateBy { it.id.value }
+            fun targetOwners(ref: EntangledRef): List<OwnerRef> = when (ref.targetTable) {
+                "assets" -> listOf(OwnerRef.OfAsset(AssetId(ref.targetId)))
+                "maintenanceSchedules" -> listOf(OwnerRef.OfSchedule(ScheduleId(ref.targetId)))
+                "measurementDefinitions" -> definitionsById[ref.targetId]?.let(TransferOwnership::of).orEmpty()
+                "eventProfiles" -> profilesById[ref.targetId]?.let(TransferOwnership::of).orEmpty()
+                else -> emptyList()
+            }
+            for (ref in retention.refs) {
+                val owners = TransferOwnership.resolve(targetOwners(ref), lookup).filter { it in heldAfter }
+                val table = MERGE_TABLE_OF.getValue(ref.table)
+                if ((table to ref.rowId) in inserted) {
+                    owners.minOfOrNull { it.value }?.let { refuseInsert(table, ref.rowId, it) }
+                } else {
+                    transferWrites
+                        .filter { it.kind == TransferKind.OUT && it.assetId in newlyHeld && it.assetId in owners }
+                        .forEach { refuseInsert(MergeTable.TRANSFERS, it.id, ref.rowId) }
+                }
+            }
+        }
+    }
+
     // --- review hints, which change nothing (#44 identity 3) --------------------------------
     val localBySignature = snapshot.assets
         .filter { it.manufacturer.isNotBlank() && it.model.isNotBlank() && it.serialNumber.isNotBlank() }
@@ -1022,11 +1184,22 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
                 serviceCases = caseWrites,
                 caseEntries = entryWrites,
                 loans = loanWrites,
+                transfers = transferWrites,
             )
         },
         duplicateCandidates = candidates,
     )
 }
+
+/** M3's entangling rows, by the archive's list names (`TransferGraph.retain` names tables so). */
+private val MERGE_TABLE_OF: Map<String, MergeTable> = mapOf(
+    "assets" to MergeTable.ASSETS,
+    "maintenanceGroups" to MergeTable.GROUPS,
+    "maintenanceSchedules" to MergeTable.SCHEDULES,
+    "eventProfiles" to MergeTable.PROFILES,
+    "assetEvents" to MergeTable.EVENTS,
+    "healthSubjects" to MergeTable.HEALTH_SUBJECTS,
+)
 
 /** The first id [claimed] already holds, or the first that repeats within [ids]; null if none. */
 private fun firstTaken(ids: List<String>, claimed: Map<String, String>): String? {
@@ -1151,7 +1324,7 @@ internal suspend fun storedBytesOf(
 }
 
 /**
- * Eighteen reads. **The caller owns the transaction** — see each use case for which one.
+ * Nineteen reads. **The caller owns the transaction** — see each use case for which one.
  *
  * Schema 8's other two tables are deliberately not among them, and are named nowhere in this
  * package: derived due state never appears in a plan, and device-local delivery state is never
@@ -1176,6 +1349,7 @@ internal suspend fun mergeSnapshotOf(
     serviceCases: ServiceCaseRepository,
     caseEntries: ServiceCaseEntryRepository,
     loans: AssetLoanRepository,
+    transfers: TransferRecordRepository,
     storedBytes: Map<String, StoredBytes>,
     attachmentStoreConfigured: Boolean,
 ): MergeSnapshot = MergeSnapshot(
@@ -1197,6 +1371,7 @@ internal suspend fun mergeSnapshotOf(
     serviceCases = serviceCases.all(),
     caseEntries = caseEntries.all(),
     loans = loans.all(),
+    transfers = transfers.all(),
     storedBytes = storedBytes,
     attachmentStoreConfigured = attachmentStoreConfigured,
 )

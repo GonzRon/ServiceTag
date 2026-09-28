@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.backup
 
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
@@ -192,14 +193,14 @@ class BackupFormat6Test {
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), uow, IdGenerator { "set-format-6" },
+            categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(), uow, IdGenerator { "set-format-6" },
             Clock { 1_758_400_000_000L }, appVersion = "1.2.0", schemaVersion = 6,
         )
         val restore = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), storage, uow, rebuildAll = { },
+            categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(), storage, uow, rebuildAll = { },
         )
     }
 
@@ -274,13 +275,13 @@ class BackupFormat6Test {
         assertEquals(listOf("scheduleId", "occurrenceOn", "detailsPending"), eventFields.takeLast(3))
         assertEquals(18, eventFields.size)
         val tables = BackupData.serializer().descriptor.elementNames.toList()
-        // By position, not `takeLast`: formats 7, 8, 9, 12 and 13 append their tables after these three, and
+        // By position, not `takeLast`: formats 7, 8, 9, 12, 13 and 14 append their tables after these three, and
         // where format 6's tables sit is the claim this line makes.
         assertEquals(
             listOf("maintenanceGroups", "maintenanceSchedules", "occurrenceClosures"),
             tables.subList(7, 10),
         )
-        assertEquals(18, tables.size)
+        assertEquals(19, tables.size)
         // and neither derived nor delivery state is a table of this format
         assertTrue(tables.none { it.startsWith("scheduleState") || it.startsWith("scheduleLocal") })
     }
@@ -350,8 +351,8 @@ class BackupFormat6Test {
         // That is what makes the assertion above a statement about ordering and not about the row.
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(unreadable)) }
 
-        // What a 1.1.x build sees: 13 is greater than the 5 it supported, so its gate fires too.
-        assertEquals(13, BackupCodec.FORMAT_VERSION)
+        // What a 1.1.x build sees: 14 is greater than the 5 it supported, so its gate fires too.
+        assertEquals(14, BackupCodec.FORMAT_VERSION)
         assertTrue(BackupCodec.FORMAT_VERSION > LAST_1_1_X_FORMAT)
     }
 
@@ -388,10 +389,12 @@ class BackupFormat6Test {
                 "serviceCases" to 0, "serviceCaseEntries" to 0,
                 // Format 13's key (#72), at zero here for the same reason.
                 "assetLoans" to 0,
+                // Format 14's key (#77), at zero here for the same reason.
+                "transferRecords" to 0,
             ),
             manifest.counts,
         )
-        assertEquals(24, manifest.counts.size)
+        assertEquals(25, manifest.counts.size)
     }
 
     // --- determinism -----------------------------------------------------------------------------

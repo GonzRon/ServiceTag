@@ -56,6 +56,9 @@ import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.core.model.heldIds as heldIdsOf
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import kotlinx.coroutines.flow.Flow
@@ -1026,4 +1029,42 @@ class InMemoryAssetLoanRepository : AssetLoanRepository, Rollbackable, Witnessed
     private companion object {
         val BY_ASSET = compareByDescending<AssetLoan> { it.lentOn }.thenBy { it.id.value }
     }
+}
+
+/**
+ * #77 (C6) — the transfer records: append and query only, an id already held aborting the append, and
+ * **no cascade** from the asset double — a record outlives its asset (R77-4). [onAppend] lets a test see
+ * what the rest of the install held when a record landed (the merge writes records last).
+ */
+class InMemoryTransferRecordRepository : TransferRecordRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, TransferRecord>()
+    override var witness: TransactionWitness? = null
+    private val version = MutableStateFlow(0)
+    var onAppend: ((TransferRecord) -> Unit)? = null
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun append(record: TransferRecord) {
+        if (record.id in rows) throw RiggedFailure("asset_transfer already holds ${record.id}")
+        onAppend?.invoke(record)
+        rows[record.id] = record
+        version.value += 1
+    }
+
+    override suspend fun all(): List<TransferRecord> {
+        witness?.observeAll()
+        return rows.values.sortedBy { it.id }
+    }
+
+    override suspend fun forAsset(assetId: AssetId): List<TransferRecord> =
+        rows.values.filter { it.assetId == assetId }.sortedWith(compareBy({ it.at }, { it.id }))
+
+    override suspend fun heldIds(): Set<AssetId> = heldIdsOf(rows.values.toList())
+
+    override fun observeHeldIds(): Flow<Set<AssetId>> = version.map { heldIdsOf(rows.values.toList()) }
+
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
 }

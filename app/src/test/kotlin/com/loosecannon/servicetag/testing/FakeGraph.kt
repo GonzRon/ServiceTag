@@ -7,6 +7,11 @@ import com.loosecannon.servicetag.core.condition.needsIncident
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.model.lineageFor
+import com.loosecannon.servicetag.core.usecase.BackupRepositories
+import com.loosecannon.servicetag.core.usecase.CreateTransferPack
+import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
@@ -95,6 +100,7 @@ import com.loosecannon.servicetag.core.usecase.UpdateLoan
 import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
+import com.loosecannon.servicetag.data.room.RoomTransferRecordRepository
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomCategoryRepository
@@ -195,6 +201,8 @@ class FakeGraph(
     val serviceCaseEntries: ServiceCaseEntryRepository = RoomServiceCaseEntryRepository(db.serviceCaseEntryDao())
     /** #72's loan port, mirroring `AppGraph`'s field by name. */
     val loans: AssetLoanRepository = RoomAssetLoanRepository(db.assetLoanDao())
+    /** #77's transfer records, mirroring `AppGraph`'s field by name. */
+    val transferRecords: TransferRecordRepository = RoomTransferRecordRepository(db.transferRecordDao())
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
 
     /** `T`, injected: a test says which day it is and the engine answers the same way every run. */
@@ -379,12 +387,12 @@ class FakeGraph(
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
+        serviceCases, serviceCaseEntries, loans, transferRecords, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
     )
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, attachmentStorage, uow,
         // The real engine: "once, inside the transaction, after the last insert" is proved against
         // the seam in `:core`, so there is no counter to keep here.
         rebuildAll = { recomputeSchedules.all() },
@@ -392,7 +400,7 @@ class FakeGraph(
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, attachmentStorage, uow,
     )
 
     /** How many times an apply asked for the total recompute. Mirrors `AppGraph`'s no-op seam. */
@@ -401,11 +409,25 @@ class FakeGraph(
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, attachmentStorage, uow,
         rebuildAll = { rebuilds += 1 },
     )
     val importBackupMerge: ImportBackupMerge =
         ImportBackupMerge(buildBackupMergePlan, applyBackupMergePlan)
+
+    /** #77 (C5, C8) — creation and marking over the same stores, mirroring `AppGraph`'s fields by name. */
+    private val backupRepositories = BackupRepositories(
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
+        seasonActivations, conditions, healthSubjects, categories, serviceCases, serviceCaseEntries, loans,
+        transferRecords,
+    )
+    val createTransferPack: CreateTransferPack = CreateTransferPack(
+        backupRepositories, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
+        lineageOf = { id -> lineageFor(transferRecords.all(), id) },
+    )
+    val markTransferredOut: MarkTransferredOut = MarkTransferredOut(backupRepositories, uow, ids, clock) {
+        recomputeSchedules.forAsset(it)
+    }
 
     /**
      * 1.2 — the group completion path, so a read-model or view-model test marks members done

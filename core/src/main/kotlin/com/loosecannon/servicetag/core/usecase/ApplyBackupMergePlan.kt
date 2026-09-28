@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -102,6 +103,8 @@ class ApplyBackupMergePlan(
     private val caseEntries: ServiceCaseEntryRepository,
     /** #72 — the loans (format 13). */
     private val loans: AssetLoanRepository,
+    /** #77 — the transfer records (format 14). */
+    private val transfers: TransferRecordRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -125,7 +128,7 @@ class ApplyBackupMergePlan(
                 mergeSnapshotOf(
                     assets, groups, tags, links, definitions, profiles, schedules, closures,
                     events, attachments, references, seasonActivations, conditions, healthSubjects,
-                    categories, serviceCases, caseEntries, loans, stored, configured,
+                    categories, serviceCases, caseEntries, loans, transfers, stored, configured,
                 ),
             )
             // Order matters — see the class KDoc.
@@ -153,6 +156,8 @@ class ApplyBackupMergePlan(
             fresh.writes.caseEntries.forEach { caseEntries.insert(it) }
             // #72: the loans after their assets; the plan held each asset to one open loan.
             fresh.writes.loans.forEach { loans.upsert(it) }
+            // #77: the transfer records last of all, after every row they describe (C10).
+            fresh.writes.transfers.forEach { transfers.append(it) }
 
             // After every write, inside the same transaction, once.
             rebuildAll()

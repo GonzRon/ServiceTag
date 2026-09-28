@@ -52,6 +52,8 @@ object TransferTables {
         "serviceCases" to TransferTableClass.ASSET_OWNED,
         "serviceCaseEntries" to TransferTableClass.ASSET_OWNED,
         "assetLoans" to TransferTableClass.SENDER_ONLY,
+        // #77 (B2a): the transfer records are this installation's own custody facts; a pack never carries one.
+        "transferRecords" to TransferTableClass.SENDER_ONLY,
     )
 
     /** Whether any row of [table] can be in a pack. An unclassified list never travels. */
@@ -222,6 +224,7 @@ object TransferGraph {
             serviceCases = cases,
             serviceCaseEntries = carry("serviceCaseEntries", data.serviceCaseEntries) { it.caseId in caseIds },
             assetLoans = carry("assetLoans", data.assetLoans) { it.assetId in selected },
+            transferRecords = carry("transferRecords", data.transferRecords) { false },
         ).sorted()
         return TransferSelection.Selected(
             rootIds = roots.map(::AssetId),
@@ -338,5 +341,6 @@ object TransferGraph {
         serviceCases = serviceCases.sortedBy { it.id },
         serviceCaseEntries = serviceCaseEntries.sortedBy { it.id },
         assetLoans = assetLoans.sortedBy { it.id },
+        transferRecords = transferRecords.sortedBy { it.id },
     )
 }

@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.backup
 
 import com.loosecannon.servicetag.core.journal.derivedProblems
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentMode
@@ -10,6 +11,7 @@ import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.Season
 import com.loosecannon.servicetag.core.model.SeasonMode
+import com.loosecannon.servicetag.core.model.heldIds
 import com.loosecannon.servicetag.core.model.isCode
 import com.loosecannon.servicetag.core.model.shapeMatches
 import com.loosecannon.servicetag.core.usecase.isIsoDate
@@ -24,7 +26,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
 /**
- * Backup format v13: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
+ * Backup format v14: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
  * backup set pairs it with an artifacts archive, and `backupSetId` is what ties the two together.
  *
  * ```
@@ -36,7 +38,7 @@ import kotlinx.serialization.json.JsonObject
  *                    occurrenceClosures: [...], assetReferences: [...],
  *                    seasonActivations: [...], assetConditions: [...], healthSubjects: [...],
  *                    assetCategories: [...], serviceCases: [...], serviceCaseEntries: [...],
- *                    assetLoans: [...] }
+ *                    assetLoans: [...], transferRecords: [...] }
  * ```
  *
  * IDs are written verbatim, lists are sorted by id (children by sortOrder within their parent, and
@@ -103,6 +105,15 @@ import kotlinx.serialization.json.JsonObject
  * wiped. What a loan command refuses about the row itself is the content check's. The Room layer's open
  * marker and a loan's standing are never in the archive.
  *
+ * **Format 14 (#77, C7) adds one list and no upgrade.** `transferRecords` — the append-only OUT, IN and
+ * WITHDRAWN records, sorted by id, each with its pack's lineage — defaults to empty, so a format ≤13 archive
+ * decodes through the same strict decode with none; `LAST_LEGACY_FORMAT` stays 7. One that carries a row
+ * was built by hand and is refused; an empty list is accepted. A record's asset is **soft**: an ordinary
+ * backup carries every record and never the graph of an asset they hold (C9), so **no asset in the archive
+ * may be held by the archive's own records** — a cross-row rule, the graph check's, beside the duplicate
+ * ids; a replace would otherwise land an asset its own records say is gone. What a record says about itself
+ * is the content check's.
+ *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
@@ -110,7 +121,7 @@ import kotlinx.serialization.json.JsonObject
  * at read time (inv. 111).
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 13
+    const val FORMAT_VERSION = 14
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -134,6 +145,9 @@ object BackupCodec {
 
     /** The first format that can carry a loan (#72). */
     private const val FIRST_LOAN_FORMAT = 13
+
+    /** The first format that can carry a transfer record (#77). */
+    private const val FIRST_TRANSFER_FORMAT = 14
 
     /** Lowercase hex, 64 chars — the shape every attachment row promises for its bytes. */
     private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
@@ -203,6 +217,8 @@ object BackupCodec {
             serviceCaseEntries = data.serviceCaseEntries.sortedBy { it.id },
             // Format 13: open and returned loans alike, each its own row.
             assetLoans = data.assetLoans.sortedBy { it.id },
+            // Format 14: OUT, IN and WITHDRAWN alike, each its own row.
+            transferRecords = data.transferRecords.sortedBy { it.id },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
         // The artifact tallies are derived here, in one place, from the rows themselves: a MANAGED
@@ -238,6 +254,7 @@ object BackupCodec {
                 "serviceCases" to sorted.serviceCases.size,
                 "serviceCaseEntries" to sorted.serviceCaseEntries.size,
                 "assetLoans" to sorted.assetLoans.size,
+                "transferRecords" to sorted.transferRecords.size,
             ),
             dataSha256 = sha256Hex(dataBytes),
             backupSetId = backupSetId,
@@ -343,6 +360,12 @@ object BackupCodec {
             throw BackupCorrupt("assetLoans: a format ${manifest.formatVersion} archive cannot carry loans")
         }
 
+        // #77, the same rule for the transfer records: the list did not exist before format 14, so a row in an
+        // older archive was put there by hand. An empty list is accepted.
+        if (manifest.formatVersion < FIRST_TRANSFER_FORMAT && data.transferRecords.isNotEmpty()) {
+            throw BackupCorrupt("transferRecords: a format ${manifest.formatVersion} archive cannot carry transfer records")
+        }
+
         // Every row must be nameable in the domain, otherwise the caller would only find out
         // halfway through a destructive import. Result discarded; this is a validation pass.
         data.assets.forEach { it.toDomain() }
@@ -363,6 +386,7 @@ object BackupCodec {
         data.serviceCases.forEach { it.toDomain() }
         data.serviceCaseEntries.forEach { it.toDomain() }
         data.assetLoans.forEach { it.toDomain() }
+        data.transferRecords.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
         // replays the insert loops in one transaction: a duplicate id or a reference to a row
@@ -378,7 +402,7 @@ object BackupCodec {
     }
 
     /**
-     * The version dispatch: formats 8 to 13 decode strictly as they stand; formats 1–7 are rewritten as a
+     * The version dispatch: formats 8 to 14 decode strictly as they stand; formats 1–7 are rewritten as a
      * tree by [LegacyArchive] first and then go through the very same strict decode.
      * `SerializationException` is an `IllegalArgumentException`, and so is the malformed-number
      * failure a tree decode can raise, so one catch covers both.
@@ -716,6 +740,17 @@ object BackupCodec {
                     throw BackupCorrupt("assetLoans: asset ${loan.assetId} holds two open loans, $first and ${loan.id}")
                 }
             }
+        }
+
+        // --- transfer records (format 14) ---------------------------------------------------------
+        // A record's asset is soft — no foreign key, and the held asset is never in the file its records
+        // travel in (#77, C7, C9). So the rule is the other way round: **no asset in the archive may be held by
+        // the archive's own records**. A replace would otherwise land a graph its own records call gone.
+
+        uniqueIds("transferRecords", data.transferRecords.map { it.id })
+        val held = heldIds(data.transferRecords.map { it.toDomain() })
+        data.assets.firstOrNull { AssetId(it.id) in held }?.let { asset ->
+            throw BackupCorrupt("transferRecords: asset ${asset.id} is in the archive and held by its own records")
         }
 
         // --- events ------------------------------------------------------------------------------

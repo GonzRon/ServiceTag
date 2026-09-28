@@ -6,9 +6,12 @@ import com.loosecannon.servicetag.core.backup.ArtifactsPlanEntry
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.AttachmentDto
 import com.loosecannon.servicetag.core.backup.BackupData
+import com.loosecannon.servicetag.core.backup.TransferredGraphEntangled
+import com.loosecannon.servicetag.core.backup.toDomain
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentMode
+import com.loosecannon.servicetag.core.model.heldIds
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
@@ -29,7 +32,10 @@ import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.transfer.TransferGraph
+import com.loosecannon.servicetag.core.transfer.TransferRetention
 
 /** The data archive's bytes, and the plan for the second archive that goes with it. */
 data class BackupSet(val data: ByteArray, val plan: ArtifactsPlan) {
@@ -46,6 +52,10 @@ data class BackupSet(val data: ByteArray, val plan: ArtifactsPlan) {
  *
  * With zero attachments the plan is empty, and the app still writes the artifacts archive: a set
  * is always two files (spec §7.3).
+ *
+ * **#77 (C9): never a transferred graph.** The archive is `TransferGraph.retain` of the snapshot with the
+ * assets the records hold — their rows gone, every record kept — and the artifacts plan is built from that
+ * retained data's MANAGED rows only (MJ-1). An archived asset that is not held leaves as it always did.
  */
 class ExportBackupSet(
     private val assets: AssetRepository,
@@ -70,6 +80,8 @@ class ExportBackupSet(
     private val caseEntries: ServiceCaseEntryRepository,
     /** #72 — the loans (format 13): open and returned alike, the contact link beside the name. */
     private val loans: AssetLoanRepository,
+    /** #77 — the transfer records (format 14): every record, and never the graph of an asset they hold. */
+    private val transfers: TransferRecordRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -78,23 +90,35 @@ class ExportBackupSet(
 ) {
     private val repos = BackupRepositories(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
-        seasonActivations, conditions, healthSubjects, categories, serviceCases, caseEntries, loans,
+        seasonActivations, conditions, healthSubjects, categories, serviceCases, caseEntries, loans, transfers,
     )
 
+    /**
+     * @throws TransferredGraphEntangled when a row that stays names a row of a held asset (P77-58): no byte
+     *   exists yet, and none is made.
+     */
     suspend fun run(): BackupSet {
         val backupSetId = ids.newId()
         val createdAt = clock.nowMillis()
         val data = uow.read { readSnapshot(repos) }
+        // #77 (C9; AC 11–13): never the graph of an asset held here — only its records. What stays must
+        // still decode, so a staying row naming a held row stops the export before any byte exists.
+        val held = heldIds(data.transferRecords.map { it.toDomain() })
+        val kept = when (val retention = TransferGraph.retain(data, held)) {
+            is TransferRetention.Retained -> retention.data
+            is TransferRetention.Entangled -> throw TransferredGraphEntangled(retention.refs)
+        }
         return BackupSet(
-            data = BackupCodec.encode(data, appVersion, schemaVersion, createdAt, backupSetId),
-            plan = artifactsPlanOf(data, backupSetId, createdAt),
+            data = BackupCodec.encode(kept, appVersion, schemaVersion, createdAt, backupSetId),
+            // MJ-1: the plan from what is exported, so the two archives never name different documents.
+            plan = artifactsPlanOf(kept, backupSetId, createdAt),
         )
     }
 }
 
 /**
- * The eighteen canonical stores an archive is read from, in `ExportBackupSet`'s order — one value to hand
- * [readSnapshot] instead of eighteen ports (#77, mn-8).
+ * The nineteen canonical stores an archive is read from, in `ExportBackupSet`'s order — one value to hand
+ * [readSnapshot] instead of nineteen ports (#77, mn-8).
  */
 class BackupRepositories(
     val assets: AssetRepository,
@@ -115,6 +139,8 @@ class BackupRepositories(
     val serviceCases: ServiceCaseRepository,
     val caseEntries: ServiceCaseEntryRepository,
     val loans: AssetLoanRepository,
+    /** #77 — the transfer records (format 14). */
+    val transfers: TransferRecordRepository,
 )
 
 /**
@@ -150,6 +176,8 @@ suspend fun readSnapshot(repos: BackupRepositories): BackupData = with(repos) {
         serviceCaseEntries = caseEntries.all().map { it.toDto() },
         // Format 13: every loan, the returned history included.
         assetLoans = loans.all().map { it.toDto() },
+        // Format 14: every transfer record, OUT, IN and WITHDRAWN alike.
+        transferRecords = transfers.all().map { it.toDto() },
     )
 }
 

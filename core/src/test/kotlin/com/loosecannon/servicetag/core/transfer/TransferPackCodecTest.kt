@@ -3,9 +3,11 @@ package com.loosecannon.servicetag.core.transfer
 import com.loosecannon.servicetag.core.backup.ArtifactsCodec
 import com.loosecannon.servicetag.core.backup.ArtifactsPlanEntry
 import com.loosecannon.servicetag.core.backup.BackupCodec
+import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.ANODE
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.HEATER
+import com.loosecannon.servicetag.core.testing.transferOf
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting.Raw
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting.artifactsOf
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting.entriesOf
@@ -223,6 +225,30 @@ class TransferPackCodecTest {
 
         val legacyArtifacts = legacyZipOf(entriesOf(artifactsOf(draft.plan)) + Raw("artifacts/caf\u00e9.pdf", "Example".toByteArray()))
         assertIs<TransferPackRead.Damaged>(read(seal(draft, legacyArtifacts).first), "inside artifacts.zip")
+    }
+
+    /**
+     * #77 (B2a, C4/C7): a pack never carries transfer records — they are the sender's own facts (C1's
+     * SENDER_ONLY) — so an inner archive holding one was not made by creation, whatever else agrees with it.
+     */
+    @Test
+    fun aPackCarryingRecordsIsDamaged() {
+        val inner = BackupCodec.decode(draft.data).data
+        val recorded = BackupCodec.encode(
+            inner.copy(transferRecords = listOf(transferOf("r1", assetId = "a9").toDto())), "1.4.1", 13, draft.createdAt,
+            draft.packId,
+        )
+        val manifest = BackupCodec.decode(recorded).manifest
+        val tampered = TransferPackDraft(
+            packId = draft.packId, createdAt = draft.createdAt, appVersion = draft.appVersion,
+            schemaVersion = draft.schemaVersion, dataFormatVersion = draft.dataFormatVersion,
+            artifactFormatVersion = draft.artifactFormatVersion, rootAssetIds = draft.rootAssetIds,
+            assetIds = draft.assetIds, lineage = draft.lineage, counts = manifest.counts, attachments = draft.attachments,
+            attachmentBytes = draft.attachmentBytes, contentSha256 = manifest.dataSha256, note = draft.note,
+            data = recorded, plan = draft.plan,
+        )
+
+        damaged(seal(tampered).first, "transfer records")
     }
 
     // --- inner formats, disagreement, the manifest cap (mn-3) ---------------------------------------

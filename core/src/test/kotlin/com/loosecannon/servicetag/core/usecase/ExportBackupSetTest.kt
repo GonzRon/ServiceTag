@@ -1,5 +1,14 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.backup.TransferredGraphEntangled
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.testing.completionOf
+import com.loosecannon.servicetag.core.testing.transferOf
+import com.loosecannon.servicetag.core.transfer.EntangledRef
+import com.loosecannon.servicetag.core.transfer.TransferFixtures
+import kotlin.test.assertFailsWith
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.toDomain
 import com.loosecannon.servicetag.core.model.AssetCategory
@@ -32,7 +41,7 @@ class ExportBackupSetTest {
 
         val decoded = BackupCodec.decode(install.export.run().data)
 
-        assertEquals(13, decoded.manifest.formatVersion)   // this build's export: format 13 since #72
+        assertEquals(14, decoded.manifest.formatVersion)   // this build's export: format 14 since #77
         assertEquals(rows, decoded.data.assetCategories.map { it.toDomain() })
         assertEquals(2, decoded.manifest.counts["assetCategories"])
     }
@@ -147,5 +156,101 @@ class ExportBackupSetTest {
         val again = source.build.run(bytes)
         assertEquals(true, again.applicable)
         assertEquals(emptyList(), again.writes.loans, "IDENTICAL against the phone it came from")
+    }
+
+    // --- #77 (C9; AC 11–13): an ordinary backup never carries a transferred graph -------------------
+
+    /** The fixtures' estate with the heater and its anode held here: an OUT each, as marking appends. */
+    private suspend fun heldEstate(): BackupInstall {
+        val install = BackupInstall()
+        TransferFixtures.seed(install)
+        install.transfers.append(transferOf("r1", assetId = TransferFixtures.HEATER, packId = "pack-q"))
+        install.transfers.append(transferOf("r2", assetId = TransferFixtures.ANODE, packId = "pack-q"))
+        return install
+    }
+
+    /**
+     * The held assets, everything they own, the group wholly theirs with its schedule and closure, their tags,
+     * the returned loan, the 2.6 link and its tag: none of it leaves. What stays decodes, the unrelated
+     * compressor and the archived opener included, and the empty group is still here.
+     */
+    @Test
+    fun aHeldGraphIsNotExportedAndDecodes() = runBlocking<Unit> {
+        val decoded = BackupCodec.decode(heldEstate().export.run().data)
+
+        val data = decoded.data
+        assertEquals(listOf("g1", "x1"), data.assets.map { it.id })
+        assertEquals(listOf("t3", "t5"), data.nfcTags.map { it.id })
+        assertEquals(emptyList(), data.externalLinks)
+        assertEquals(listOf("G0"), data.maintenanceGroups.map { it.id })
+        assertEquals(listOf("s2"), data.maintenanceSchedules.map { it.id })
+        assertEquals(listOf("cl3"), data.occurrenceClosures.map { it.id })
+        assertEquals(listOf("e3"), data.assetEvents.map { it.id })
+        assertEquals(listOf("d2"), data.measurementDefinitions.map { it.id })
+        assertEquals(emptyList(), data.eventProfiles + data.assetReferences + data.seasonActivations + data.assetConditions)
+        assertEquals(listOf("hs2"), data.healthSubjects.map { it.id })
+        assertEquals(listOf("sc2") to listOf("n2"), data.serviceCases.map { it.id } to data.serviceCaseEntries.map { it.id })
+        assertEquals(listOf("l2"), data.assetLoans.map { it.id }, "the heater's returned loan stays with the sender only")
+        assertEquals(TransferFixtures.categories.map { it.key }, data.assetCategories.map { it.key }, "categories always stay")
+    }
+
+    /** MJ-1: the plan comes from what is exported, so the artifacts archive names no held document. */
+    @Test
+    fun theArtifactsPlanNamesNoHeldAttachment() = runBlocking<Unit> {
+        val set = heldEstate().export.run()
+
+        assertEquals(listOf("at3"), set.plan.entries.map { it.attachmentId.value })
+        assertEquals(listOf("at3"), BackupCodec.decode(set.data).data.attachments.map { it.id })
+    }
+
+    @Test
+    fun artifactCountEqualsThePlan() = runBlocking<Unit> {
+        val set = heldEstate().export.run()
+        val manifest = BackupCodec.decode(set.data).manifest
+
+        assertEquals(set.plan.entries.size, manifest.artifactCount)
+        assertEquals(set.plan.entries.sumOf { it.sizeBytes }, manifest.artifactBytes)
+    }
+
+    /** Every record leaves, the held assets' OUTs included: they are what a restore needs to stay correct. */
+    @Test
+    fun recordsAreExported() = runBlocking<Unit> {
+        val install = heldEstate()
+        install.transfers.append(transferOf("r0", assetId = "a9", kind = TransferKind.IN, packId = "pack-o"))
+
+        val decoded = BackupCodec.decode(install.export.run().data)
+
+        assertEquals(install.transfers.all(), decoded.data.transferRecords.map { it.toDomain() })
+        assertEquals(3, decoded.manifest.counts["transferRecords"])
+    }
+
+    /** AC 11: archive is not transfer — an archived, retired asset nobody transferred leaves as it always did. */
+    @Test
+    fun archivedButNotHeldStillExports() = runBlocking<Unit> {
+        val install = BackupInstall()
+        TransferFixtures.seed(install)
+        check(install.assets.get(AssetId(TransferFixtures.OPENER))!!.status == AssetStatus.ARCHIVED)
+        install.assets.upsert(install.assets.get(AssetId(TransferFixtures.COMPRESSOR))!!.copy(status = AssetStatus.ARCHIVED))
+
+        val decoded = BackupCodec.decode(install.export.run().data)
+
+        assertEquals(listOf("g1", "h1", "h2", "x1"), decoded.data.assets.map { it.id })
+        assertEquals(listOf("at1", "at2", "at3"), decoded.data.attachments.map { it.id })
+    }
+
+    /**
+     * C3's `Entangled` stops the export before any byte exists (P77-58, mapped by the Backup screen): a
+     * staying row — the compressor's event, set by hand onto the heater's schedule — names a held row.
+     */
+    @Test
+    fun entangledFailsBeforeWriting() = runBlocking<Unit> {
+        val install = heldEstate()
+        install.events.upsert(
+            completionOf("e9", "2026-05-01", "2026-05-01", assetId = TransferFixtures.COMPRESSOR, scheduleId = "s1"),
+        )
+
+        val refusal = assertFailsWith<TransferredGraphEntangled> { install.export.run() }
+
+        assertEquals(listOf(EntangledRef("assetEvents", "e9", "maintenanceSchedules", "s1")), refusal.refs)
     }
 }

@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 
 /**
  * Whether this phone holds any records at all (2.7.1, issue #40).
@@ -16,11 +17,14 @@ import com.loosecannon.servicetag.core.ports.TagRepository
  * does not exist. So "empty" has to mean *nothing at all*, and a single row of any kind is enough
  * to make the answer false.
  *
- * **Six kinds, and exactly six.** Assets, tag bindings, journal events, attachment rows, the 2.6
+ * **Seven kinds, and exactly seven.** Assets, tag bindings, journal events, attachment rows, the 2.6
  * tombstone link rows — because nothing in ServiceTag displays a link any more, and a row nobody can
  * see is still a record a restore would delete — and, since #74, the owner's own categories: a
  * category row exists **without any asset by design** (it outlives the last asset that used it),
- * so [assets] cannot answer for it, and a restore deletes it like any other record. `MeasurementDefinition` and
+ * so [assets] cannot answer for it, and a restore deletes it like any other record — and, since #77, the
+ * transfer records: a record names its asset softly and outlives it by design (a phone that transferred
+ * its only asset out and deleted it still holds the record), so neither can [assets] answer for them, and
+ * a restore wipes them too. `MeasurementDefinition` and
  * `EventProfile` are deliberately not read: both carry a non-null `assetId` and the schema's
  * foreign key enforces it, so neither can exist without the asset it names and [assets] already
  * answers for them. #79's service cases are not read for the same reason — `service_case.asset_id`
@@ -34,12 +38,12 @@ import com.loosecannon.servicetag.core.ports.TagRepository
  * `CHECK`, so an owner-less row is representable.
  *
  * **Cheapest query each, and short-circuiting.** [AttachmentRepository.count] is a count; the other
- * five ports expose no count at all, so `all()` it is — and for [LinkRepository], narrowed to four
+ * six ports expose no count at all, so `all()` it is — and for [LinkRepository], narrowed to four
  * members in 2.6, `all()` is the only row-returning member there is. The `&&` chain means the usual
- * answer on a populated phone is one query that comes back non-empty and five that never run.
+ * answer on a populated phone is one query that comes back non-empty and six that never run.
  *
  * There is no read transaction: the question is asked once, on a store nothing else is writing to,
- * and no invariant spans the six reads. A transaction would force all six and buy nothing.
+ * and no invariant spans the seven reads. A transaction would force all seven and buy nothing.
  */
 class StoreIsEmpty(
     private val assets: AssetRepository,
@@ -48,6 +52,8 @@ class StoreIsEmpty(
     private val attachments: AttachmentRepository,
     private val links: LinkRepository,
     private val categories: CategoryRepository,
+    /** #77 — the transfer records, the seventh kind: they outlive their assets by design. */
+    private val transfers: TransferRecordRepository,
 ) {
     suspend fun run(): Boolean =
         assets.all().isEmpty() &&
@@ -55,5 +61,6 @@ class StoreIsEmpty(
             events.all().isEmpty() &&
             attachments.count() == 0 &&
             links.all().isEmpty() &&
-            categories.all().isEmpty()
+            categories.all().isEmpty() &&
+            transfers.all().isEmpty()
 }

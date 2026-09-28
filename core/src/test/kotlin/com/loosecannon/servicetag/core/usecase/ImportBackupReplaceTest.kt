@@ -1,5 +1,12 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.backup.TransferredOutInArchive
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.testing.transferOf
+import com.loosecannon.servicetag.core.transfer.TransferFixtures
+import com.loosecannon.servicetag.core.transfer.TransferPackTesting
+import kotlin.test.assertFailsWith
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
@@ -200,5 +207,90 @@ class ImportBackupReplaceTest {
 
         assertEquals(loans, install.loans.all())
         assertEquals(1, install.uow.commits)
+    }
+
+    // --- #77 (C9, R77-13): records are wiped and reloaded; a held graph is refused first -------------
+
+    private val heater = AssetId(TransferFixtures.HEATER)
+    private val anode = AssetId(TransferFixtures.ANODE)
+
+    private suspend fun seeded(): BackupInstall = BackupInstall().also { TransferFixtures.seed(it) }
+
+    private suspend fun BackupInstall.snapshot() = readSnapshot(TransferPackTesting.repositoriesOf(this))
+
+    /** A post-transfer backup lands its records and what stays, and nothing of the held graph (AC 12). */
+    @Test
+    fun aPostTransferBackupRestoresTheRecordsOnly() = runBlocking<Unit> {
+        val source = seeded()
+        source.transfers.append(transferOf("r1", assetId = heater.value, packId = "pack-q"))
+        source.transfers.append(transferOf("r2", assetId = anode.value, packId = "pack-q"))
+        val bytes = source.export.run().data
+        val target = BackupInstall()
+        target.assets.upsert(plainAssetOf("z1", "Example Pump"))
+        target.transfers.append(transferOf("r9", assetId = "z9", kind = TransferKind.IN, packId = "pack-z"))
+
+        target.replace.run(bytes)
+
+        assertEquals(source.transfers.all(), target.transfers.all(), "wiped, then reloaded from the archive")
+        assertEquals(listOf("g1", "x1"), target.assets.all().map { it.id.value }.sorted())
+        assertEquals(setOf(heater, anode), target.transfers.heldIds())
+    }
+
+    /**
+     * R77-13: a stale pre-transfer backup must never silently bring back what this phone transferred out.
+     * Checked against this phone's open OUTs before the wipe, in the same write: refused, nothing wiped.
+     */
+    @Test
+    fun aReplaceOfAPreTransferBackupIsRefusedForAHeldAsset() = runBlocking<Unit> {
+        val install = seeded()
+        val preTransfer = install.export.run().data
+        install.transfers.append(transferOf("r1", assetId = heater.value, packId = "pack-q"))
+        install.transfers.append(transferOf("r2", assetId = anode.value, packId = "pack-q"))
+        val before = install.snapshot() to install.transfers.all()
+        val commits = install.uow.commits
+
+        val refusal = assertFailsWith<TransferredOutInArchive> { install.replace.run(preTransfer) }
+
+        assertEquals(listOf(heater, anode), refusal.assetIds)
+        assertEquals(before, install.snapshot() to install.transfers.all(), "nothing wiped")
+        assertEquals(commits, install.uow.commits)
+        assertEquals(0, install.rebuilds)
+    }
+
+    /**
+     * R77-13's recovery path: a Replace restore from the installation the assets legitimately came back to —
+     * its own records carry INs whose lineage names this phone's OUT — restores, the returned assets included.
+     * rm-8: a lineage naming an OUT this phone withdrew by mistake still closes it. An asset whose IN does not
+     * name this phone's OUT is still refused.
+     */
+    @Test
+    fun aReplaceCarryingALaterClosingInRestores() = runBlocking<Unit> {
+        val other = seeded()
+        other.transfers.append(transferOf("i1", assetId = heater.value, kind = TransferKind.IN, packId = "pack-p", lineage = listOf("pack-q")))
+        other.transfers.append(transferOf("i2", assetId = anode.value, kind = TransferKind.IN, packId = "pack-p", lineage = listOf("pack-q")))
+        val returned = other.export.run().data
+
+        // Only the records matter to the check; the rows here are wiped either way.
+        val here = BackupInstall()
+        here.transfers.append(transferOf("r1", assetId = heater.value, packId = "pack-q"))
+        here.transfers.append(transferOf("r2", assetId = anode.value, packId = "pack-q2"))
+        here.transfers.append(transferOf("r3", assetId = anode.value, packId = "pack-q"))
+        here.transfers.append(transferOf("r4", assetId = anode.value, kind = TransferKind.WITHDRAWN, packId = "pack-q"))
+        check(here.transfers.heldIds() == setOf(heater, anode))
+
+        here.replace.run(returned)
+
+        assertEquals(other.transfers.all(), here.transfers.all())
+        assertEquals(emptySet(), here.transfers.heldIds())
+        assertEquals(TransferFixtures.assets.map { it.id.value }.sorted(), here.assets.all().map { it.id.value }.sorted())
+
+        val foreign = seeded()
+        foreign.transfers.append(transferOf("i1", assetId = heater.value, kind = TransferKind.IN, packId = "pack-p", lineage = listOf("pack-q")))
+        foreign.transfers.append(transferOf("i2", assetId = anode.value, kind = TransferKind.IN, packId = "pack-p", lineage = listOf("pack-x")))
+        val stranger = BackupInstall()
+        stranger.transfers.append(transferOf("r1", assetId = heater.value, packId = "pack-q"))
+        stranger.transfers.append(transferOf("r2", assetId = anode.value, packId = "pack-q"))
+        val refusal = assertFailsWith<TransferredOutInArchive> { stranger.replace.run(foreign.export.run().data) }
+        assertEquals(listOf(anode), refusal.assetIds)
     }
 }

@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -32,15 +33,15 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * Four steps and no more: decode — which refuses a corrupt or future-format file before anything
  * else happens — ask whether there is an attachment folder at all, hash and size whatever that
- * folder holds for the locators the archive names, and read the eighteen canonical tables in one
- * `uow.read` so the planner sees a single consistent point in time rather than eighteen. The decision
+ * folder holds for the locators the archive names, and read the nineteen canonical tables in one
+ * `uow.read` so the planner sees a single consistent point in time rather than nineteen. The decision
  * itself is `mergePlanOf`, a pure function.
  *
- * The same twenty collaborators, in the same order, as [ImportBackupReplace] — because the two are
+ * The same twenty-one collaborators, in the same order, as [ImportBackupReplace] — because the two are
  * the two halves of the same question, and a reader comparing them should have nothing to subtract.
  * #74's [categories] is read like the rest: the planner decides the archive's category rows against
  * it and plans the rows its accepted assets need; and so are #79's [serviceCases] and [caseEntries], and
- * #72's [loans].
+ * #72's [loans], and #77's [transfers].
  */
 class BuildBackupMergePlan(
     private val assets: AssetRepository,
@@ -65,6 +66,8 @@ class BuildBackupMergePlan(
     private val caseEntries: ServiceCaseEntryRepository,
     /** #72 — the loans (format 13). */
     private val loans: AssetLoanRepository,
+    /** #77 — the transfer records (format 14). */
+    private val transfers: TransferRecordRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
 ) {
@@ -81,7 +84,7 @@ class BuildBackupMergePlan(
             mergeSnapshotOf(
                 assets, groups, tags, links, definitions, profiles, schedules, closures,
                 events, attachments, references, seasonActivations, conditions, healthSubjects,
-                categories, serviceCases, caseEntries, loans, stored, configured,
+                categories, serviceCases, caseEntries, loans, transfers, stored, configured,
             )
         }
         return mergePlanOf(backup, snapshot)

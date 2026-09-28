@@ -82,7 +82,7 @@ class BackupViewModelTest {
 
     private fun viewModel() = BackupViewModel(
         graph.exportBackupSet, graph.importBackupReplace, graph.restoreArtifacts,
-        StoreIsEmpty(graph.assets, graph.tags, graph.events, graph.attachments, graph.links, graph.categories),
+        StoreIsEmpty(graph.assets, graph.tags, graph.events, graph.attachments, graph.links, graph.categories, graph.transferRecords),
         graph.attachmentStorage, graph.prefs, graph.clock,
     )
 

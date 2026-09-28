@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.merge.MergePlan
@@ -296,16 +297,16 @@ class CrossConceptWriteTest {
     private val storage = FakeAttachmentStorage()
     private val buildMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
-        activations, conditions, subjects, categories, serviceCases, caseEntries, loans, storage, uow,
+        activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(), storage, uow,
     )
     private val applyMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
-        activations, conditions, subjects, categories, serviceCases, caseEntries, loans, storage, uow,
+        activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(), storage, uow,
         rebuildAll = { recompute.all() },
     )
     private val importBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
-        activations, conditions, subjects, categories, serviceCases, caseEntries, loans, storage, uow,
+        activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(), storage, uow,
         rebuildAll = { recompute.all() },
     )
 

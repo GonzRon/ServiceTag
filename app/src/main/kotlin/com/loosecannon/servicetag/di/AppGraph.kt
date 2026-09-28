@@ -21,6 +21,11 @@ import com.loosecannon.servicetag.core.condition.needsIncident
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.model.lineageFor
+import com.loosecannon.servicetag.core.usecase.BackupRepositories
+import com.loosecannon.servicetag.core.usecase.CreateTransferPack
+import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
@@ -133,6 +138,8 @@ import com.loosecannon.servicetag.data.room.MIGRATION_9_10
 import com.loosecannon.servicetag.data.room.MIGRATION_10_11
 import com.loosecannon.servicetag.data.room.MIGRATION_11_12
 import com.loosecannon.servicetag.data.room.MIGRATION_12_13
+import com.loosecannon.servicetag.data.room.MIGRATION_13_14
+import com.loosecannon.servicetag.data.room.RoomTransferRecordRepository
 import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
@@ -224,7 +231,7 @@ class AppGraph(private val context: Context) {
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
-            MIGRATION_11_12, MIGRATION_12_13,
+            MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
         )
         .build()
 
@@ -274,6 +281,13 @@ class AppGraph(private val context: Context) {
      * exit, and a returned loan stays as history. Its rules live in the four loan use cases below.
      */
     val loans: AssetLoanRepository = RoomAssetLoanRepository(db.assetLoanDao())
+
+    /**
+     * #77's one data port (C6): the transfer records, appended and never updated or deleted one by one — no
+     * foreign key, so they outlive their assets. Written by marking (and, later, the withdrawal and the pack
+     * import), the merge and the replace restore.
+     */
+    val transferRecords: TransferRecordRepository = RoomTransferRecordRepository(db.transferRecordDao())
 
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
@@ -495,14 +509,15 @@ class AppGraph(private val context: Context) {
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
+        serviceCases, serviceCaseEntries, loans, transferRecords, uow, ids, clock, BuildConfig.VERSION_NAME,
+        SCHEMA_VERSION,
     )
 
     /** Wipe-and-load import. Replace is the only mode Phase 1A ships (D7 1A). */
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, attachmentStorage, uow,
         // Derived state is rebuilt after any import, and the wipe took it with the schedule rows.
         rebuildAll = { recomputeSchedules.all() },
     )
@@ -516,12 +531,12 @@ class AppGraph(private val context: Context) {
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, attachmentStorage, uow,
     )
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, attachmentStorage, uow,
         // The total post-apply recompute, wired to the engine: an imported event, membership row,
         // closure or meter reading can each move a due date, and rebuilding every schedule inside
         // the apply's own transaction is cheaper than enumerating which.
@@ -534,9 +549,29 @@ class AppGraph(private val context: Context) {
      * #40 — is there anything on this phone a restore would replace? The Backup screen asks once,
      * per picked file, and the answer chooses the confirmation. Definitions, profiles, #79's service
      * cases and #72's loans are not read: none can exist without its asset, so `assets` answers for them. A
-     * category row can (#74: it outlives its assets), so `categories` is the sixth kind.
+     * category row can (#74: it outlives its assets), so `categories` is the sixth kind, and so can a transfer
+     * record (#77: it outlives its asset by design), the seventh.
      */
-    val storeIsEmpty: StoreIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links, categories)
+    val storeIsEmpty: StoreIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links, categories, transferRecords)
+
+    /**
+     * #77 (C5, C8) — a Transfer Pack's contents, and the marking that follows its ready screen. Creation reads
+     * and writes nothing; its lineage is the records' `lineageFor`, asked inside its read. Marking is one write
+     * that re-reads, re-hashes and re-validates the pack, archives and rebuilds each asset, and appends the OUTs
+     * last. The screens are B4's.
+     */
+    private val backupRepositories = BackupRepositories(
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
+        seasonActivations, conditions, healthSubjects, categories, serviceCases, serviceCaseEntries, loans,
+        transferRecords,
+    )
+    val createTransferPack: CreateTransferPack = CreateTransferPack(
+        backupRepositories, uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
+        lineageOf = { id -> lineageFor(transferRecords.all(), id) },
+    )
+    val markTransferredOut: MarkTransferredOut = MarkTransferredOut(backupRepositories, uow, ids, clock) {
+        recomputeSchedules.forAsset(it)
+    }
 
     /** Process-wide scope for work that must outlive a finishing activity (e.g. abandoning a row). */
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -867,6 +902,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 13
+        const val SCHEMA_VERSION = 14
     }
 }

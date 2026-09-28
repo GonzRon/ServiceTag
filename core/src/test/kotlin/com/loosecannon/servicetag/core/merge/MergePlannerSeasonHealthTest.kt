@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.merge
 
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
@@ -125,12 +126,12 @@ class MergePlannerSeasonHealthTest {
     /**
      * Hazard: merge order. The eighteen members are asserted as a list, the three 1.4 ones after
      * `REFERENCES`, #74's `CATEGORIES` appended after them (listed last, written first), #79's two
-     * case tables after it and #72's loans after those; and an
+     * case tables after it, #72's loans after those and #77's transfer records last; and an
      * archive whose asset, schedule, facts and subject arrive together inserts every row, because
      * each owner is an INSERT of this same plan by the time its row is decided.
      */
     @Test
-    fun theEighteenTablesAreInTheirPinnedOrder() {
+    fun theNineteenTablesAreInTheirPinnedOrder() {
         assertEquals(
             listOf(
                 MergeTable.ASSETS, MergeTable.GROUPS, MergeTable.DEFINITIONS, MergeTable.PROFILES,
@@ -140,6 +141,7 @@ class MergePlannerSeasonHealthTest {
                 MergeTable.CATEGORIES,
                 MergeTable.SERVICE_CASES, MergeTable.CASE_ENTRIES,
                 MergeTable.LOANS,
+                MergeTable.TRANSFERS,
             ),
             MergeTable.entries.toList(),
         )
@@ -508,11 +510,11 @@ class MergePlannerSeasonHealthTest {
         )
         val build = BuildBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-            references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, storage, uow,
+            references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(), storage, uow,
         )
         val apply = ApplyBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-            references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, storage, uow,
+            references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(), storage, uow,
             rebuildAll = { log += "rebuild" },
         )
         val bytes = archiveOf(

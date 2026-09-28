@@ -164,7 +164,7 @@ class Migration11To12Test {
                             assertEquals("$table foreign keys", f.foreignKeysOf(table), m.foreignKeysOf(table))
                             assertEquals("$table indices", f.indexDefinitionsOn(table), m.indexDefinitionsOn(table))
                         }
-                        assertEquals("the two new tables", V12_TABLES, m.tableNames() - ROOM_INTERNAL - v11Tables() - V13_TABLES)
+                        assertEquals("the two new tables", V12_TABLES, m.tableNames() - ROOM_INTERNAL - v11Tables() - V13_TABLES - V14_TABLES)
                         assertEquals("no column moved on asset", 30, m.columnsOf("asset").size)
                     }
                 }

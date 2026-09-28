@@ -366,8 +366,10 @@ class MergePlannerReferenceTest {
             // #79: the case headers and their timelines close the list.
             MergeTable.SERVICE_CASES to report.serviceCases,
             MergeTable.CASE_ENTRIES to report.caseEntries,
-            // #72: the loans close it.
+            // #72: the loans follow them.
             MergeTable.LOANS to report.loans,
+            // #77: the transfer records close it.
+            MergeTable.TRANSFERS to report.transfers,
         )
         assertEquals(MergeTable.entries.toList(), byName.map { it.first })
         assertEquals(MergeTable.entries.map { plan.tally(it) }, byName.map { it.second })
