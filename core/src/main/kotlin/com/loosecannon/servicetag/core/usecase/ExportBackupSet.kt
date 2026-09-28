@@ -4,9 +4,10 @@ import com.loosecannon.servicetag.core.backup.ArtifactsCodec
 import com.loosecannon.servicetag.core.backup.ArtifactsPlan
 import com.loosecannon.servicetag.core.backup.ArtifactsPlanEntry
 import com.loosecannon.servicetag.core.backup.BackupCodec
+import com.loosecannon.servicetag.core.backup.AttachmentDto
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
-import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -75,61 +76,102 @@ class ExportBackupSet(
     private val appVersion: String,
     private val schemaVersion: Int,
 ) {
+    private val repos = BackupRepositories(
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
+        seasonActivations, conditions, healthSubjects, categories, serviceCases, caseEntries, loans,
+    )
+
     suspend fun run(): BackupSet {
         val backupSetId = ids.newId()
         val createdAt = clock.nowMillis()
-        val (data, rows) = uow.read {
-            val rows = attachments.all()
-            BackupData(
-                assets = assets.all().map { it.toDto() },
-                nfcTags = tags.all().map { it.toDto() },
-                externalLinks = links.all().map { it.toDto() },
-                measurementDefinitions = definitions.all().map { it.toDto() },
-                eventProfiles = profiles.all().map { it.toDto() },
-                assetEvents = events.all().map { it.toDto() },
-                attachments = rows.map { it.toDto() },
-                // Schema 8's other two tables are deliberately not read here: the first is
-                // derived and is rebuilt after any import, the second is device-local delivery
-                // bookkeeping. Neither has a port on this use case that could reach it.
-                maintenanceGroups = groups.all().map { it.toDto() },
-                maintenanceSchedules = schedules.all().map { it.toDto() },
-                occurrenceClosures = closures.all().map { it.toDto() },
-                assetReferences = references.all().map { it.toDto() },
-                // Format 8: two fact tables and the subjects' configuration. No health value is
-                // read here, because none is stored (inv. 111).
-                seasonActivations = seasonActivations.all().map { it.toDto() },
-                assetConditions = conditions.all().map { it.toDto() },
-                healthSubjects = healthSubjects.all().map { it.toDto() },
-                // Format 9: every row, used or not — a category outlives the last Asset using it.
-                assetCategories = categories.all().map { it.toDto() },
-                // Format 12: every case header, then every timeline entry as its own row.
-                serviceCases = serviceCases.all().map { it.toDto() },
-                serviceCaseEntries = caseEntries.all().map { it.toDto() },
-                // Format 13: every loan, the returned history included.
-                assetLoans = loans.all().map { it.toDto() },
-            ) to rows
-        }
-        val plan = ArtifactsPlan(
-            backupSetId = backupSetId,
-            dataFormatVersion = BackupCodec.FORMAT_VERSION,
-            createdAt = createdAt,
-            entries = rows
-                .filter { it.mode == AttachmentMode.MANAGED }
-                .sortedBy { it.id.value }
-                .map { it.planEntry() },
-        )
+        val data = uow.read { readSnapshot(repos) }
         return BackupSet(
             data = BackupCodec.encode(data, appVersion, schemaVersion, createdAt, backupSetId),
-            plan = plan,
+            plan = artifactsPlanOf(data, backupSetId, createdAt),
         )
     }
+}
 
-    private fun Attachment.planEntry() = ArtifactsPlanEntry(
-        attachmentId = id,
-        entryName = ArtifactsCodec.entryName(id, storageLocator),
-        locator = storageLocator,
-        sha256 = sha256,
-        sizeBytes = sizeBytes,
-        mimeType = mimeType,
+/**
+ * The eighteen canonical stores an archive is read from, in `ExportBackupSet`'s order — one value to hand
+ * [readSnapshot] instead of eighteen ports (#77, mn-8).
+ */
+class BackupRepositories(
+    val assets: AssetRepository,
+    val groups: GroupRepository,
+    val tags: TagRepository,
+    val links: LinkRepository,
+    val definitions: DefinitionRepository,
+    val profiles: ProfileRepository,
+    val schedules: ScheduleRepository,
+    val closures: ClosureRepository,
+    val events: EventRepository,
+    val attachments: AttachmentRepository,
+    val references: ReferenceRepository,
+    val seasonActivations: SeasonActivationRepository,
+    val conditions: ConditionRepository,
+    val healthSubjects: HealthSubjectRepository,
+    val categories: CategoryRepository,
+    val serviceCases: ServiceCaseRepository,
+    val caseEntries: ServiceCaseEntryRepository,
+    val loans: AssetLoanRepository,
+)
+
+/**
+ * Every canonical table as the archive names it (#77, C5: extracted from `ExportBackupSet` unchanged).
+ * It only reads, and it opens no transaction: each caller wraps it in its own — a read for the export and
+ * for creating a Transfer Pack, the write for marking one (a read nested in a write is illegal).
+ */
+suspend fun readSnapshot(repos: BackupRepositories): BackupData = with(repos) {
+    BackupData(
+        assets = assets.all().map { it.toDto() },
+        nfcTags = tags.all().map { it.toDto() },
+        externalLinks = links.all().map { it.toDto() },
+        measurementDefinitions = definitions.all().map { it.toDto() },
+        eventProfiles = profiles.all().map { it.toDto() },
+        assetEvents = events.all().map { it.toDto() },
+        attachments = attachments.all().map { it.toDto() },
+        // Schema 8's other two tables are deliberately not read here: the first is
+        // derived and is rebuilt after any import, the second is device-local delivery
+        // bookkeeping. Neither has a port here that could reach it.
+        maintenanceGroups = groups.all().map { it.toDto() },
+        maintenanceSchedules = schedules.all().map { it.toDto() },
+        occurrenceClosures = closures.all().map { it.toDto() },
+        assetReferences = references.all().map { it.toDto() },
+        // Format 8: two fact tables and the subjects' configuration. No health value is
+        // read here, because none is stored (inv. 111).
+        seasonActivations = seasonActivations.all().map { it.toDto() },
+        assetConditions = conditions.all().map { it.toDto() },
+        healthSubjects = healthSubjects.all().map { it.toDto() },
+        // Format 9: every row, used or not — a category outlives the last Asset using it.
+        assetCategories = categories.all().map { it.toDto() },
+        // Format 12: every case header, then every timeline entry as its own row.
+        serviceCases = serviceCases.all().map { it.toDto() },
+        serviceCaseEntries = caseEntries.all().map { it.toDto() },
+        // Format 13: every loan, the returned history included.
+        assetLoans = loans.all().map { it.toDto() },
     )
 }
+
+/**
+ * The artifacts archive's plan for [data]: its MANAGED rows, sorted by id, built from the rows the data
+ * archive carries — so the two archives of a set can never name different documents (#77, MJ-1).
+ */
+fun artifactsPlanOf(data: BackupData, backupSetId: String, createdAt: Long): ArtifactsPlan = ArtifactsPlan(
+    backupSetId = backupSetId,
+    dataFormatVersion = BackupCodec.FORMAT_VERSION,
+    createdAt = createdAt,
+    entries = data.attachments
+        .filter { it.mode == AttachmentMode.MANAGED.name }
+        .sortedBy { it.id }
+        .map { it.planEntry() },
+)
+
+private fun AttachmentDto.planEntry() = ArtifactsPlanEntry(
+    attachmentId = AttachmentId(id),
+    entryName = ArtifactsCodec.entryName(AttachmentId(id), storageLocator),
+    locator = storageLocator,
+    sha256 = sha256,
+    sizeBytes = sizeBytes,
+    mimeType = mimeType,
+)
