@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.attachments.Thumbnails
 import com.loosecannon.servicetag.core.condition.needsIncident
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
+import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
@@ -77,6 +78,7 @@ import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
+import com.loosecannon.servicetag.core.usecase.LendAsset
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.OpenServiceCase
 import com.loosecannon.servicetag.core.usecase.PauseSchedule
@@ -87,6 +89,7 @@ import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
+import com.loosecannon.servicetag.core.usecase.RelinkLoanContact
 import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
@@ -94,6 +97,7 @@ import com.loosecannon.servicetag.core.usecase.ReorderProfiles
 import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.core.usecase.RestoreArtifacts
 import com.loosecannon.servicetag.core.usecase.RetireAsset
+import com.loosecannon.servicetag.core.usecase.ReturnLoan
 import com.loosecannon.servicetag.core.usecase.SaveDefinition
 import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.core.usecase.SaveGroup
@@ -110,6 +114,7 @@ import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
+import com.loosecannon.servicetag.core.usecase.UpdateLoan
 import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.MIGRATION_1_2
@@ -123,6 +128,8 @@ import com.loosecannon.servicetag.data.room.MIGRATION_8_9
 import com.loosecannon.servicetag.data.room.MIGRATION_9_10
 import com.loosecannon.servicetag.data.room.MIGRATION_10_11
 import com.loosecannon.servicetag.data.room.MIGRATION_11_12
+import com.loosecannon.servicetag.data.room.MIGRATION_12_13
+import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomCategoryRepository
@@ -213,7 +220,7 @@ class AppGraph(private val context: Context) {
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
-            MIGRATION_11_12,
+            MIGRATION_11_12, MIGRATION_12_13,
         )
         .build()
 
@@ -257,6 +264,12 @@ class AppGraph(private val context: Context) {
      */
     val serviceCases: ServiceCaseRepository = RoomServiceCaseRepository(db.serviceCaseDao())
     val serviceCaseEntries: ServiceCaseEntryRepository = RoomServiceCaseEntryRepository(db.serviceCaseEntryDao())
+
+    /**
+     * #72's one data port (C1): the loans, upserted and never deleted — "Mark returned" is a loan's only
+     * exit, and a returned loan stays as history. Its rules live in the four loan use cases below.
+     */
+    val loans: AssetLoanRepository = RoomAssetLoanRepository(db.assetLoanDao())
 
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
@@ -590,6 +603,12 @@ class AppGraph(private val context: Context) {
         AddServiceCaseEntry(serviceCases, serviceCaseEntries, uow, ids, clock, today)
     /** #79 (C23): read-only — whether a case names an event; the Incident's delete confirm asks it. */
     val caseLinks: CaseLinks = caseLinksOf(events, serviceCases)
+
+    // #72 — loans (C3). Each writes the loan's own row and nothing else; one open loan per asset.
+    val lendAsset: LendAsset = LendAsset(assets, loans, uow, ids, clock, today)
+    val updateLoan: UpdateLoan = UpdateLoan(loans, uow, clock, today)
+    val returnLoan: ReturnLoan = ReturnLoan(loans, uow, clock, today)
+    val relinkLoanContact: RelinkLoanContact = RelinkLoanContact(loans, uow, clock)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, today, recomputeSchedules, applyTemplate,
         promoteCategory,
@@ -827,6 +846,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 12
+        const val SCHEMA_VERSION = 13
     }
 }

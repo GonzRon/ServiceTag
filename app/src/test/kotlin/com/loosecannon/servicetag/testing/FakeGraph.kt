@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.attachments.Thumbnails
 import com.loosecannon.servicetag.core.condition.needsIncident
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.nfc.NdefCodec
+import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
@@ -58,6 +59,7 @@ import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
+import com.loosecannon.servicetag.core.usecase.LendAsset
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.OpenServiceCase
 import com.loosecannon.servicetag.core.usecase.PauseSchedule
@@ -72,7 +74,9 @@ import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
 import com.loosecannon.servicetag.core.usecase.ReorderProfiles
 import com.loosecannon.servicetag.core.usecase.RestoreArtifacts
+import com.loosecannon.servicetag.core.usecase.RelinkLoanContact
 import com.loosecannon.servicetag.core.usecase.RetireAsset
+import com.loosecannon.servicetag.core.usecase.ReturnLoan
 import com.loosecannon.servicetag.core.usecase.SaveAssetSettings
 import com.loosecannon.servicetag.core.usecase.SaveDefinition
 import com.loosecannon.servicetag.core.usecase.SaveGroup
@@ -87,8 +91,10 @@ import com.loosecannon.servicetag.core.usecase.SetWarrantyReminder
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
+import com.loosecannon.servicetag.core.usecase.UpdateLoan
 import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.data.room.AppDatabase
+import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomCategoryRepository
@@ -187,6 +193,8 @@ class FakeGraph(
     /** #79's two case ports, mirroring `AppGraph`'s fields by name. */
     val serviceCases: ServiceCaseRepository = RoomServiceCaseRepository(db.serviceCaseDao())
     val serviceCaseEntries: ServiceCaseEntryRepository = RoomServiceCaseEntryRepository(db.serviceCaseEntryDao())
+    /** #72's loan port, mirroring `AppGraph`'s field by name. */
+    val loans: AssetLoanRepository = RoomAssetLoanRepository(db.assetLoanDao())
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
 
     /** `T`, injected: a test says which day it is and the engine answers the same way every run. */
@@ -302,6 +310,11 @@ class FakeGraph(
     val addServiceCaseEntry: AddServiceCaseEntry =
         AddServiceCaseEntry(serviceCases, serviceCaseEntries, uow, ids, clock, todayPort)
     val caseLinks: CaseLinks = caseLinksOf(events, serviceCases)
+    // #72 — the four loan writers, mirroring `AppGraph`'s fields by name.
+    val lendAsset: LendAsset = LendAsset(assets, loans, uow, ids, clock, todayPort)
+    val updateLoan: UpdateLoan = UpdateLoan(loans, uow, clock, todayPort)
+    val returnLoan: ReturnLoan = ReturnLoan(loans, uow, clock, todayPort)
+    val relinkLoanContact: RelinkLoanContact = RelinkLoanContact(loans, uow, clock)
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, todayPort, recomputeSchedules,
         applyTemplate, promoteCategory,
