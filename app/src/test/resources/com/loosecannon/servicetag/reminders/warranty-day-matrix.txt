@@ -1,0 +1,1474 @@
+day -31 (2031-05-30), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -31 (2031-05-30), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  summary null cancelSummary false
+  schedule rows []
+  forgotten [WARRANTY_EXPIRY:a1]
+  report 0/1/0 []
+day -31 (2031-05-30), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten [WARRANTY_EXPIRY:a1]
+  report 0/0/0 []
+day -31 (2031-05-30), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten [WARRANTY_EXPIRY:a1]
+  report 0/0/0 []
+day -31 (2031-05-30), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -30 (2031-05-31), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -30 (2031-05-31), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -30 (2031-05-31), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -30 (2031-05-31), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -30 (2031-05-31), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -29 (2031-06-01), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -29 (2031-06-01), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -29 (2031-06-01), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -29 (2031-06-01), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -29 (2031-06-01), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -28 (2031-06-02), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -28 (2031-06-02), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -28 (2031-06-02), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -28 (2031-06-02), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -28 (2031-06-02), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -27 (2031-06-03), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -27 (2031-06-03), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -27 (2031-06-03), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -27 (2031-06-03), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -27 (2031-06-03), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -26 (2031-06-04), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -26 (2031-06-04), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -26 (2031-06-04), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -26 (2031-06-04), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -26 (2031-06-04), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -25 (2031-06-05), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -25 (2031-06-05), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -25 (2031-06-05), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -25 (2031-06-05), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -25 (2031-06-05), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -24 (2031-06-06), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -24 (2031-06-06), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -24 (2031-06-06), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -24 (2031-06-06), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -24 (2031-06-06), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -23 (2031-06-07), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -23 (2031-06-07), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -23 (2031-06-07), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -23 (2031-06-07), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -23 (2031-06-07), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -22 (2031-06-08), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -22 (2031-06-08), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -22 (2031-06-08), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -22 (2031-06-08), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -22 (2031-06-08), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -21 (2031-06-09), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -21 (2031-06-09), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -21 (2031-06-09), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -21 (2031-06-09), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -21 (2031-06-09), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -20 (2031-06-10), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -20 (2031-06-10), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -20 (2031-06-10), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -20 (2031-06-10), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -20 (2031-06-10), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -19 (2031-06-11), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -19 (2031-06-11), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -19 (2031-06-11), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -19 (2031-06-11), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -19 (2031-06-11), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -18 (2031-06-12), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -18 (2031-06-12), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -18 (2031-06-12), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -18 (2031-06-12), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -18 (2031-06-12), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -17 (2031-06-13), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -17 (2031-06-13), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -17 (2031-06-13), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -17 (2031-06-13), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -17 (2031-06-13), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -16 (2031-06-14), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -16 (2031-06-14), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -16 (2031-06-14), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -16 (2031-06-14), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -16 (2031-06-14), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -15 (2031-06-15), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -15 (2031-06-15), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -15 (2031-06-15), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -15 (2031-06-15), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -15 (2031-06-15), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -14 (2031-06-16), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -14 (2031-06-16), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -14 (2031-06-16), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -14 (2031-06-16), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -14 (2031-06-16), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -13 (2031-06-17), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -13 (2031-06-17), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -13 (2031-06-17), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -13 (2031-06-17), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -13 (2031-06-17), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -12 (2031-06-18), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -12 (2031-06-18), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -12 (2031-06-18), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -12 (2031-06-18), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -12 (2031-06-18), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -11 (2031-06-19), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -11 (2031-06-19), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -11 (2031-06-19), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -11 (2031-06-19), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -11 (2031-06-19), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -10 (2031-06-20), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -10 (2031-06-20), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -10 (2031-06-20), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -10 (2031-06-20), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -10 (2031-06-20), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -9 (2031-06-21), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -9 (2031-06-21), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -9 (2031-06-21), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -9 (2031-06-21), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -9 (2031-06-21), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -8 (2031-06-22), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -8 (2031-06-22), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -8 (2031-06-22), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -8 (2031-06-22), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -8 (2031-06-22), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -7 (2031-06-23), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -7 (2031-06-23), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -7 (2031-06-23), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -7 (2031-06-23), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -7 (2031-06-23), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -6 (2031-06-24), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -6 (2031-06-24), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -6 (2031-06-24), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -6 (2031-06-24), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -6 (2031-06-24), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -5 (2031-06-25), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -5 (2031-06-25), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -5 (2031-06-25), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -5 (2031-06-25), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -5 (2031-06-25), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -4 (2031-06-26), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -4 (2031-06-26), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -4 (2031-06-26), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -4 (2031-06-26), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -4 (2031-06-26), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -3 (2031-06-27), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -3 (2031-06-27), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -3 (2031-06-27), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -3 (2031-06-27), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -3 (2031-06-27), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -2 (2031-06-28), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -2 (2031-06-28), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -2 (2031-06-28), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -2 (2031-06-28), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -2 (2031-06-28), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -1 (2031-06-29), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -1 (2031-06-29), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day -1 (2031-06-29), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day -1 (2031-06-29), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day -1 (2031-06-29), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day 0 (2031-06-30), nothing standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day 0 (2031-06-30), standing
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/1 []
+day 0 (2031-06-30), stamped this boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day 0 (2031-06-30), another boot
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  post tag=WARRANTY_EXPIRY:a1|b934b705123fd877 | channel=warranty_reminders | title=Example Heater — Warranty | body=Warranty expires 30 Jun 2031. | word=EXPIRES SOON | meter=false | actions=[Open]
+  shown [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  stamp WARRANTY_EXPIRY a1 b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e boot 1 at 1781000000000
+  forgotten []
+  report 1/0/0 []
+day 0 (2031-06-30), muted
+  subject WARRANTY_EXPIRY:a1 | title=Warranty | body= | dueOn=2031-06-30 | lead=30 | state=Active | rule=null | repeat=ONCE | hash=b934b705123fd8773912363c7508d26cbce128ff02753d5a2992dedefca8cf4e
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day 1 (2031-07-01), nothing standing
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day 1 (2031-07-01), standing
+  shown []
+  cancel [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/1/0 []
+day 1 (2031-07-01), stamped this boot
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day 1 (2031-07-01), another boot
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day 1 (2031-07-01), muted
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day 2 (2031-07-02), nothing standing
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day 2 (2031-07-02), standing
+  shown []
+  cancel [WARRANTY_EXPIRY:a1|b934b705123fd877]
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/1/0 []
+day 2 (2031-07-02), stamped this boot
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day 2 (2031-07-02), another boot
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []
+day 2 (2031-07-02), muted
+  shown []
+  cancel []
+  summary null cancelSummary false
+  schedule rows []
+  forgotten []
+  report 0/0/0 []

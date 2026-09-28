@@ -1,20 +1,26 @@
 package com.loosecannon.servicetag.reminders
 
+import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.ports.DeadlineLocalDelivery
 import com.loosecannon.servicetag.core.ports.ScheduleLocalDelivery
+import com.loosecannon.servicetag.core.reminders.BuildDeadlineSubjects
 import com.loosecannon.servicetag.core.reminders.ContentHash
 import com.loosecannon.servicetag.core.reminders.DeadlineKind
 import com.loosecannon.servicetag.core.reminders.DeadlineRepeat
+import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.reminders.ReminderSubject
 import com.loosecannon.servicetag.core.reminders.RuleFacts
 import com.loosecannon.servicetag.core.reminders.SubjectKey
 import com.loosecannon.servicetag.core.reminders.SubjectState
 import com.loosecannon.servicetag.core.schedule.DueStatus
+import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -706,6 +712,114 @@ class DigestPolicyTest {
         assertEquals(ReconcileCounters(0, 1, 1), scheduleGone.report.counters())
     }
 
+    // #72 (C14; K1, K2): the warranty warning is byte-identical across the loan work.
+
+    /**
+     * The warranty's whole day matrix — expiry −31 … +2, each day under five conditions — through the
+     * real builder and the real `decide`, rendered field by field: the subject the builder hands over,
+     * then every post's tag, channel, title, body, word, meter and actions, every tag kept, cancelled
+     * or stamped, every stamp forgotten and the three counters. The expected text,
+     * `warranty-day-matrix.txt`, was **recorded at #72 B2's base (9cb0b845) before any production
+     * edit**; the warranty's `once`, post and window are never edited after it, so the same text at
+     * any later commit is the claim that the loan work moved nothing a warranty does.
+     *
+     * The five conditions: nothing standing and no stamp; the warning standing (and stamped); swiped
+     * but stamped in this boot; stamped in another boot (a restart took it down); and its channel
+     * muted with nothing standing. The facts are built directly, not through the facts source, so
+     * this test's own source need not move when that source's constructor does.
+     */
+    @Test
+    fun theWarrantyDayMatrixIsTheBaseMatrix() = runTest {
+        val actual = warrantyDayMatrix()
+        val expected = DigestPolicyTest::class.java.getResource(WARRANTY_MATRIX)?.readText()
+        if (expected != actual) {
+            // For a reviewer's diff only; the assertion below is the verdict.
+            File("build").takeIf { it.isDirectory }?.let { File(it, "warranty-day-matrix.actual.txt").writeText(actual) }
+        }
+        assertEquals("the warranty's day matrix is the one recorded at B2's base", expected, actual)
+    }
+
+    private suspend fun warrantyDayMatrix(): String {
+        val assets = FakeAssetRepository()
+        assets.upsert(
+            Asset(
+                id = AssetId("a1"),
+                name = "Example Heater",
+                createdAt = 1_000L,
+                updatedAt = 1_000L,
+                warrantyExpiresOn = EXPIRY.toString(),
+                warrantyReminderLeadDays = 30,
+            ),
+        )
+        val builder = BuildDeadlineSubjects(assets)
+        val reference = builder.forProvider(ProviderId.LOCAL, EXPIRY).single()
+        val referenceTag = itemTag(reference.key, reference.contentHash)
+        val conditions = listOf(
+            MatrixCondition("nothing standing", standing = false, row = null, muted = false),
+            MatrixCondition("standing", standing = true, row = Fixture.stamp(reference, boot = 1), muted = false),
+            MatrixCondition("stamped this boot", standing = false, row = Fixture.stamp(reference, boot = 1), muted = false),
+            MatrixCondition("another boot", standing = false, row = Fixture.stamp(reference, boot = 0), muted = false),
+            MatrixCondition("muted", standing = false, row = null, muted = true),
+        )
+        return (-31..2).flatMap { offset ->
+            val today = EXPIRY.plusDays(offset.toLong())
+            val subjects = builder.forProvider(ProviderId.LOCAL, today)
+            conditions.map { condition ->
+                val decision = decide(
+                    subjects.map { DeadlineInput(it, Fixture.warrantyFacts(today), condition.row) },
+                    standing = if (condition.standing) setOf(referenceTag) else emptySet(),
+                    muted = if (condition.muted) setOf(NotificationChannels.WARRANTY) else emptySet(),
+                    boot = 1,
+                )
+                buildString {
+                    append("day ").append(offset).append(" (").append(today).append("), ").append(condition.name).append('\n')
+                    subjects.forEach { append("  subject ").append(renderSubject(it)).append('\n') }
+                    decision.posts.forEach { append("  post ").append(renderPost(it)).append('\n') }
+                    append("  shown ").append(decision.shown.map { it.tag }).append('\n')
+                    append("  cancel ").append(decision.cancelTags).append('\n')
+                    append("  summary ").append(decision.summary).append(" cancelSummary ").append(decision.cancelSummary).append('\n')
+                    append("  schedule rows ").append(decision.rows).append('\n')
+                    decision.deadlineRows.forEach {
+                        append("  stamp ").append(it.kind).append(' ').append(it.subjectId).append(' ').append(it.announcedHash)
+                            .append(" boot ").append(it.announcedBoot).append(" at ").append(it.updatedAt).append('\n')
+                    }
+                    append("  forgotten ").append(decision.deadlineForgotten.map { "${it.kind.name}:${it.subjectId}" }).append('\n')
+                    append("  report ").append(decision.report.posted).append('/').append(decision.report.cleared)
+                        .append('/').append(decision.report.unchanged).append(' ').append(decision.report.problems)
+                }
+            }
+        }.joinToString("\n", postfix = "\n")
+    }
+
+    private fun renderSubject(subject: ReminderSubject): String = listOf(
+        subject.key.let { key -> if (key is SubjectKey.Deadline) "${key.kind.name}:${key.subjectId}" else key.toString() },
+        "title=${subject.title}",
+        "body=${subject.body}",
+        "dueOn=${subject.dueOn}",
+        "lead=${subject.leadDays}",
+        "state=${subject.state}",
+        "rule=${subject.rule}",
+        "repeat=${subject.repeat}",
+        "hash=${subject.contentHash}",
+    ).joinToString(" | ")
+
+    private fun renderPost(post: ItemPost): String = listOf(
+        "tag=${post.tag}",
+        "channel=${post.channelId}",
+        "title=${post.title}",
+        "body=${post.body}",
+        "word=${post.statusWord}",
+        "meter=${post.meter}",
+        "actions=${post.actions}",
+    ).joinToString(" | ")
+
+    private data class MatrixCondition(
+        val name: String,
+        val standing: Boolean,
+        val row: DeadlineLocalDelivery?,
+        val muted: Boolean,
+    )
+
     /** The counters, as a value, so a report can be compared in one assertion. */
     private data class ReconcileCounters(val posted: Int, val cleared: Int, val unchanged: Int)
 
@@ -714,6 +828,9 @@ class DigestPolicyTest {
 
     private companion object {
         val EXPIRY: LocalDate = LocalDate.parse("2031-06-30")
+
+        /** C14's record, beside this class on the test classpath. */
+        const val WARRANTY_MATRIX = "warranty-day-matrix.txt"
         const val UUID_1 = "8f14e45f-ceea-467a-9575-3f1c2e5d6a7b"
         const val UUID_2 = "c9f0f895-fb98-4b91-99f5-1d5a2e7c0b3e"
     }
