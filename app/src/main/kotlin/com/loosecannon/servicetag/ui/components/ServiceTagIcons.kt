@@ -52,6 +52,9 @@ object ServiceTagIcons {
     val SignalCellularNodata: ImageVector @Composable get() =
         ImageVector.vectorResource(R.drawable.ic_signal_cellular_nodata)
     val EventAvailable: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_event_available)
+
+    /** #72 (C19, R72-22): the loan glyph beside "Lent out" and "Loan overdue" — custody, never a fault. */
+    val Outbox: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_outbox)
 }
 
 /**

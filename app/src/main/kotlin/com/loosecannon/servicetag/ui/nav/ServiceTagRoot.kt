@@ -31,6 +31,7 @@ import com.loosecannon.servicetag.ui.dashboard.DashboardScreen
 import com.loosecannon.servicetag.ui.health.HealthSubjectEditScreen
 import com.loosecannon.servicetag.ui.journal.EventDetailScreen
 import com.loosecannon.servicetag.ui.journal.EventEntryScreen
+import com.loosecannon.servicetag.ui.loan.LoanEditScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupDetailScreen
 import com.loosecannon.servicetag.ui.maintenance.GroupEditScreen
 import com.loosecannon.servicetag.ui.maintenance.LogMaintenancePicker
@@ -212,6 +213,9 @@ fun ServiceTagRoot(
                         // failure's Incident, or a new Incident entry first that hands over on its save.
                         onOpenServiceCase = { backStack.add(Route.ServiceCase(it)) },
                         onNewServiceCase = { asset, incident -> backStack.add(newServiceCaseRoute(asset, incident)) },
+                        // #72 (C16, C17): "Lend out" and "Edit loan" open the lend form; neither tap writes.
+                        onLendOut = { backStack.add(Route.LoanEdit(it)) },
+                        onEditLoan = { asset, loan -> backStack.add(Route.LoanEdit(asset, loan)) },
                     )
                 }
                 entry<Route.AssetEdit> { key ->
@@ -345,6 +349,17 @@ fun ServiceTagRoot(
                             backStack.removeLastOrNull()
                             if (key.caseId == null) backStack.add(Route.ServiceCase(id))
                         },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
+                }
+                entry<Route.LoanEdit> { key ->
+                    LoanEditScreen(
+                        graph = graph,
+                        assetId = key.assetId,
+                        loanId = key.loanId,
+                        // Saved, the form is done: the asset's own screen behind it is already watching
+                        // the loan rows, so it redraws the section and the plate itself.
+                        onDone = { backStack.removeLastOrNull() },
                         onBack = { backStack.removeLastOrNull() },
                     )
                 }

@@ -78,6 +78,12 @@ sealed interface Route : NavKey {
         val incidentId: String? = null,
     ) : Route
 
+    /**
+     * #72 (C17): the lend form — "Lend out" (P72-14) on [assetId] when [loanId] is null, otherwise
+     * "Edit loan" (P72-13) on that open loan, whose own asset and borrower always win.
+     */
+    @Serializable data class LoanEdit(val assetId: String, val loanId: String? = null) : Route
+
     @Serializable data object Scan : Route
     @Serializable data class TagResult(val format: String, val key: String) : Route
     @Serializable data class WriteTag(val targetKind: String, val targetId: String?, val label: String?) : Route

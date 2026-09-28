@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.Attachment
@@ -30,6 +31,7 @@ import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.HealthSubjectId
+import com.loosecannon.servicetag.core.model.LoanStanding
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.OperationalCondition
@@ -47,6 +49,7 @@ import com.loosecannon.servicetag.core.model.isWrittenFor
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.ByteSource
@@ -124,6 +127,8 @@ import com.loosecannon.servicetag.ui.health.driverLines
 import com.loosecannon.servicetag.ui.health.healthBadgeLabel
 import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.health.needsAttention
+import com.loosecannon.servicetag.ui.loan.LoanFacts
+import com.loosecannon.servicetag.ui.loan.loanFactsOf
 import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.ENTER_THE_NUMBER_OF_DAYS
@@ -188,6 +193,12 @@ data class AssetRow(
      * and null otherwise, when the row draws no health and no condition beside it ([rowHealthOf]).
      */
     val health: AssetHealthView? = null,
+    /**
+     * #72 (C19, R72-22): the asset's open loan's standing — P72-1 or P72-2 on the row, after the
+     * lifecycle badges and before condition and health — or null when nothing is lent. Every
+     * lifecycle: a retired or archived asset's open loan is still out.
+     */
+    val loan: LoanStanding? = null,
 )
 
 /**
@@ -301,10 +312,16 @@ class AssetsViewModel(
     tags: TagRepository,
     health: AssetHealthReadModel,
     private val today: Today,
+    /**
+     * #72 (C19): every open loan, observed once and joined to the rows by asset id. Null lends
+     * nothing — a test that is not about loans; `AppGraph` passes the real repository.
+     */
+    loans: AssetLoanRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph) : this(
         graph.assets, graph.categories, graph.seasonActivations, graph.tags, graph.assetHealthReadModel, graph.today,
+        loans = graph.loans,
     )
 
     private val filters = MutableStateFlow(AssetFilters())
@@ -368,12 +385,18 @@ class AssetsViewModel(
      * restart ([rowHealth]).
      */
     private val facts: Flow<Facts> =
-        combine(seasonal, tags.observeAll(), rowHealth) { (rows, activationsOf), tagRows, views ->
-            Facts(rows, activationsOf, writtenTagsOf(tagRows), views)
+        combine(
+            seasonal,
+            tags.observeAll(),
+            rowHealth,
+            // #72 (C19): one read of every open loan, keyed by asset — at most one each (C2).
+            (loans?.observeOpen() ?: flowOf(emptyList())).map { open -> open.associateBy { it.assetId } },
+        ) { (rows, activationsOf), tagRows, views, lent ->
+            Facts(rows, activationsOf, writtenTagsOf(tagRows), views, lent)
         }
 
     val state: StateFlow<AssetsState> =
-        combine(facts, filters, categories.observeAll(), queries) { (rows, activationsOf, tagged, views), picked, custom, query ->
+        combine(facts, filters, categories.observeAll(), queries) { (rows, activationsOf, tagged, views, lent), picked, custom, query ->
             val choices = CategoryCatalog.choices(custom)
             val stale = picked.type?.takeIf { key -> choices.none { it.key == key } }
             // C4: a chosen category the catalog no longer holds (renamed to a new key, or deleted)
@@ -400,6 +423,7 @@ class AssetsViewModel(
                             outOfSeason = outOfSeasonOn(row, activationsOf[row.id].orEmpty(), day),
                             hasWrittenTag = row.id in tagged,
                             health = rowHealthOf(row, views[row.id]),
+                            loan = lent[row.id]?.standingOn(day),
                         )
                     },
                 filters = controls,
@@ -435,12 +459,13 @@ class AssetsViewModel(
     /** The asset rows and, keyed by asset, the activation rows of the MANUAL ones. */
     private data class Seasonal(val rows: List<Asset>, val activationsOf: Map<AssetId, List<SeasonActivation>>)
 
-    /** [Seasonal] beside the assets with a written tag and the row health (#71). */
+    /** [Seasonal] beside the assets with a written tag and the row health (#71), and the open loans (#72). */
     private data class Facts(
         val rows: List<Asset>,
         val activationsOf: Map<AssetId, List<SeasonActivation>>,
         val tagged: Set<AssetId>,
         val views: Map<AssetId, AssetHealthView>,
+        val lent: Map<AssetId, AssetLoan>,
     )
 }
 
@@ -650,6 +675,8 @@ data class AssetDetailState(
      * as [leadsWithLogIncident]. P79-19 opens the case editor on it, or — null — an Incident entry first.
      */
     val currentIncidentId: String? = null,
+    /** #72 (C16): the Lending section's facts, from one `observeForAsset` and `Today`. */
+    val loans: LoanFacts = LoanFacts(),
 ) {
     /** The current condition (S1–S3, or S4 when null), from the same read as [health]. */
     val condition: ConditionView? get() = health.condition
@@ -660,8 +687,8 @@ data class AssetDetailState(
      */
     val outOfSeason: Boolean get() = season.phase == SeasonPhase.OUT_OF_SEASON
 
-    /** The identity plate's badges: condition, then retired, archived, and the season phase. */
-    val plate: List<PlateFact> get() = plateFacts(asset, condition, season)
+    /** The identity plate's badges: condition, then retired, archived, an open loan, and the season phase. */
+    val plate: List<PlateFact> get() = plateFacts(asset, condition, season, loans.standing)
 
     /** The Health section, in its order (spec §6.5, inv. 119). */
     val healthBlocks: List<HealthBlock> get() = healthBlocksOf(health)
@@ -742,6 +769,11 @@ class AssetDetailViewModel(
      * test that is not about cases; `AppGraph` passes the real repository.
      */
     serviceCases: ServiceCaseRepository? = null,
+    /**
+     * #72 (C16): this asset's loans, observed once for the Lending section and the plate. Null lends
+     * nothing — a test that is not about loans; `AppGraph` passes the real repository.
+     */
+    loans: AssetLoanRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String) : this(
@@ -753,6 +785,7 @@ class AssetDetailViewModel(
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
         graph.applyTemplate, graph.uow, graph.clock, graph.today, AssetId(id),
         serviceCases = graph.serviceCases,
+        loans = graph.loans,
     )
 
     /** The zone the retirement dialog's today is read in: the user's calendar day. */
@@ -816,6 +849,14 @@ class AssetDetailViewModel(
         .map { rows -> serviceCaseRowsOf(rows) }
         .distinctUntilChanged()
 
+    /**
+     * #72 (C16): the Lending section's one observation — this asset's loans. Folded in after the page's
+     * own combine, as [cases] is, so a lend or a return re-derives the section and the plate and never
+     * rebuilds the page. The standing is `Today`'s, never the clock's.
+     */
+    private val loanRows: Flow<List<AssetLoan>> = (loans?.observeForAsset(id) ?: flowOf(emptyList()))
+        .distinctUntilChanged()
+
     val state: StateFlow<AssetDetailState?> =
         combine(rows, tags.observeForAsset(id), journal, maintenance, facts) { all, tagRows, j, groupRows, _ ->
             val row = all.firstOrNull { it.id == id } ?: return@combine null
@@ -860,6 +901,9 @@ class AssetDetailViewModel(
             )
         }.combine(purchaseDocument) { page, document -> page?.copy(purchaseDocument = document) }
             .combine(cases) { page, rows -> page?.copy(cases = rows) }
+            .combine(loanRows) { page, rows ->
+                page?.copy(loans = loanFactsOf(rows, today.localDate(), page.asset.inService))
+            }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), null)
 
     val missing: StateFlow<Boolean> = asset
@@ -1218,6 +1262,12 @@ sealed interface PlateFact {
 
     /** S39 IN SEASON (spec §10.6: "plate, season section"). */
     data object InSeason : PlateFact
+
+    /**
+     * #72 (C16, R72-22): an open loan — P72-1 "Lent out", or P72-2 "Loan overdue" once [overdue] (after
+     * the due day), with the loan glyph in the neutral tone. Custody, never maintenance (AC 13).
+     */
+    data class Lent(val overdue: Boolean) : PlateFact
 }
 
 /**
@@ -1226,11 +1276,19 @@ sealed interface PlateFact {
  * §5.1) — then retired and archived, each only when true, then the season phase: out of season, or
  * S39 IN SEASON (spec §10.6, "plate, season section") wherever the Season section draws a phase word
  * — CALENDAR and MANUAL. A YEAR_ROUND asset has no phase word (its section draws S29), so nothing.
+ *
+ * #72 (C16): an open loan's [loan] standing sits after the lifecycle facts and before the season.
  */
-fun plateFacts(asset: Asset, condition: ConditionView?, season: SeasonView): List<PlateFact> = buildList {
+fun plateFacts(
+    asset: Asset,
+    condition: ConditionView?,
+    season: SeasonView,
+    loan: LoanStanding? = null,
+): List<PlateFact> = buildList {
     add(PlateFact.Condition(condition))
     if (asset.isRetired) add(PlateFact.Retired)
     statusLabel(asset.status)?.let { add(PlateFact.Archived(it)) }
+    loan?.let { add(PlateFact.Lent(overdue = it == LoanStanding.OVERDUE)) }
     when {
         season.phase == SeasonPhase.OUT_OF_SEASON -> add(PlateFact.OutOfSeason)
         season.seasonMode != SeasonMode.YEAR_ROUND -> add(PlateFact.InSeason)
