@@ -16,7 +16,11 @@ import com.loosecannon.servicetag.core.model.ServiceCase
 import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.ServiceCaseEntryId
 import com.loosecannon.servicetag.core.model.ServiceCaseId
+import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
+import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
+import com.loosecannon.servicetag.core.usecase.AddServiceCaseEntry
 import com.loosecannon.servicetag.core.usecase.ServiceCaseCommand
+import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.conditionRow
@@ -27,7 +31,9 @@ import com.loosecannon.servicetag.ui.condition.EntryOffers
 import com.loosecannon.servicetag.ui.condition.EventOffers
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
@@ -84,11 +90,15 @@ class ServiceCaseViewModelTest {
     )["${model::class.java.name}-${System.identityHashCode(model)}", model::class.java]
 
     /** The case screen on [id], with its state collected as the screen collects it. */
-    private fun TestScope.screen(id: ServiceCaseId): ServiceCaseViewModel {
+    private fun TestScope.screen(
+        id: ServiceCaseId,
+        update: UpdateServiceCase = graph.updateServiceCase,
+        addEntry: AddServiceCaseEntry = graph.addServiceCaseEntry,
+    ): ServiceCaseViewModel {
         val model = held(
             ServiceCaseViewModel(
                 graph.serviceCases, graph.serviceCaseEntries, graph.events,
-                graph.updateServiceCase, graph.addServiceCaseEntry, graph.todayPort, id,
+                update, addEntry, graph.todayPort, id,
                 zone = { berlin },
             ),
         )
@@ -332,5 +342,51 @@ class ServiceCaseViewModelTest {
         assertEquals(LINKED_RECORD_REMOVED, shown.repair!!.removedLine)
         assertFalse("a dangling repair record is still a link", shown.offersLinkRepair)
         assertNull("an existing link says nothing more", CaseLink(REPAIR_RECORD, "m", "t", "d", true, true).removedLine)
+    }
+
+    /**
+     * C22: a failure no field of the sheet explains — here the entry's write itself — is the shipped
+     * "Could not save this entry.", on the sheet, which stays open as typed and can be saved again;
+     * nothing is written.
+     */
+    @Test fun anEntryThatCannotBeWrittenSaysCouldNotSaveThisEntry() = runTest {
+        val case = openCase()
+        val broken = object : ServiceCaseEntryRepository by graph.serviceCaseEntries {
+            override suspend fun insert(entry: ServiceCaseEntry) = throw IllegalStateException("disk full")
+        }
+        val addEntry = AddServiceCaseEntry(graph.serviceCases, broken, graph.uow, graph.ids, graph.clock, graph.todayPort)
+        val model = screen(case.id, addEntry = addEntry)
+        model.shown()
+        model.openUpdate()
+        model.onUpdateNote("Shipped to the service center")
+        model.onUpdateStatus(CaseStatus.SENT_OUT)
+
+        model.saveUpdate()
+        val failed = model.sheet.first { it?.saving == false }!!
+
+        assertEquals("Could not save this entry.", failed.failure)
+        assertEquals("the sheet stays as typed", UpdateSheet("2028-07-15", note = "Shipped to the service center", status = CaseStatus.SENT_OUT, failure = failed.failure), failed)
+        assertTrue("and can be saved again", failed.canSave)
+        assertEquals(0, graph.serviceCaseEntries.forCase(case.id).size)
+        assertEquals("the header is untouched", case, graph.serviceCases.get(case.id))
+    }
+
+    /** A link whose header write fails is P79-61, once; the link is as it was and the picker may be used again. */
+    @Test fun aLinkThatCannotBeWrittenSaysP79_61() = runTest {
+        val case = openCase()
+        graph.events.upsert(eventOf("m-1", EventKind.MAINTENANCE, "2028-07-10", "Element replaced"))
+        val broken = object : ServiceCaseRepository by graph.serviceCases {
+            override suspend fun upsert(case: ServiceCase) = throw IllegalStateException("disk full")
+        }
+        val update = UpdateServiceCase(graph.events, broken, graph.uow, graph.clock, graph.todayPort)
+        val model = screen(case.id, update = update)
+        model.shown { it.offersLinkRepair }
+        val said = backgroundScope.async(start = CoroutineStart.UNDISPATCHED) { model.messages.first() }
+
+        model.linkRepair("m-1")
+
+        assertEquals("Could not save this case.", said.await())
+        assertFalse("the link may be tried again", model.linking.first { !it })
+        assertEquals(case, graph.serviceCases.get(case.id))
     }
 }
