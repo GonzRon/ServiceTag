@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.di
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
@@ -14,6 +15,8 @@ import com.loosecannon.servicetag.attachments.AttachmentRoot
 import com.loosecannon.servicetag.attachments.DocumentTreeRoot
 import com.loosecannon.servicetag.attachments.SafAttachmentStorage
 import com.loosecannon.servicetag.attachments.Thumbnails
+import com.loosecannon.servicetag.contacts.PickedContactReader
+import com.loosecannon.servicetag.contacts.ResolverContactRowQuery
 import com.loosecannon.servicetag.core.condition.needsIncident
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
@@ -617,6 +620,15 @@ class AppGraph(private val context: Context) {
     val updateLoan: UpdateLoan = UpdateLoan(loans, uow, clock, today)
     val returnLoan: ReturnLoan = ReturnLoan(loans, uow, clock, today)
     val relinkLoanContact: RelinkLoanContact = RelinkLoanContact(loans, uow, clock)
+
+    /**
+     * #72 (C15): what a picked contact reads as — its `_ID`, `LOOKUP_KEY` and `DISPLAY_NAME` through the
+     * pick's one-shot grant, read once in the pick's callback by the lend form and the Lending section's
+     * relink. ServiceTag holds no contacts permission; nothing else ever reads a contact.
+     */
+    val pickedContactReader: PickedContactReader = PickedContactReader(
+        ResolverContactRowQuery(context.applicationContext.contentResolver),
+    ) { message, error -> Log.w("PickedContact", message, error) }
     val saveAssetSettings: SaveAssetSettings = SaveAssetSettings(
         assets, schedules, healthSubjects, seasonActivations, uow, ids, clock, today, recomputeSchedules, applyTemplate,
         promoteCategory,
