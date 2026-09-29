@@ -37,11 +37,11 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * Four steps and no more: decode — which refuses a corrupt or future-format file before anything
  * else happens — ask whether there is an attachment folder at all, hash and size whatever that
- * folder holds for the locators the archive names, and read the nineteen canonical tables in one
- * `uow.read` so the planner sees a single consistent point in time rather than nineteen. The decision
+ * folder holds for the locators the archive names, and read the twenty canonical tables in one
+ * `uow.read` so the planner sees a single consistent point in time rather than twenty. The decision
  * itself is `mergePlanOf`, a pure function.
  *
- * The same twenty-one collaborators, in the same order, as [ImportBackupReplace] — because the two are
+ * The same twenty-two collaborators, in the same order, as [ImportBackupReplace] — because the two are
  * the two halves of the same question, and a reader comparing them should have nothing to subtract.
  * #74's [categories] is read like the rest: the planner decides the archive's category rows against
  * it and plans the rows its accepted assets need; and so are #79's [serviceCases] and [caseEntries], and
