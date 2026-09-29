@@ -733,3 +733,11 @@ where they differ.**
     schedule. The reference semantics are `TransferGraph.retain`'s, the one canonical definition; there is no separate
     list. The refusal is `AssetTransferredOut` / API 409, and there is no new phone string because the path is
     API-reachable.
+- **R77-B3-RETURN (owner, 2026-09-28; the B2a review's NOTE 2) — C15 amended.** A Transfer Pack is accepted as a
+  return only if importing it leaves the asset **not held** on this installation. `returnsHere(...)` establishes
+  legitimate return ancestry; it is necessary, not sufficient. Before any scoped replacement, C15 computes the
+  transfer state that would exist once the incoming IN is appended. If **any** OUT of that asset would stay open, it
+  answers the ratified stale/foreign refusal **P77-67** for that asset and performs no write and no byte replacement.
+  The rm-8 shape is the case in point: a withdrawn OUT named by the lineage, plus an unrelated open OUT. Recovery is
+  explicit: withdraw the remaining OUT (C23), then import again. A withdrawn OUT still establishes ancestry (rm-8);
+  it never grants a pack permission to erase or ignore a different outstanding transfer. No new string.
