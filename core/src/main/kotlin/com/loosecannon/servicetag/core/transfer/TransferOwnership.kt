@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
@@ -18,6 +19,7 @@ import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
+import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonActivation
@@ -43,6 +45,10 @@ sealed interface OwnerRef {
     data class OfGroup(val id: GroupId) : OwnerRef
     /** A tag on a 2.6 link: the link's asset, if it names one. */
     data class OfLink(val id: LinkId) : OwnerRef
+    /** A measurement definition an entangled reference lands on: its asset owns it (NOTE 2). */
+    data class OfDefinition(val id: DefinitionId) : OwnerRef
+    /** An event profile an entangled reference lands on: its asset owns it (NOTE 2). */
+    data class OfProfile(val id: ProfileId) : OwnerRef
 }
 
 /** How a caller answers an [OwnerRef] that names another row. `null`: the row is not there. */
@@ -52,6 +58,8 @@ interface OwnerLookup {
     fun schedule(id: ScheduleId): MaintenanceSchedule?
     fun group(id: GroupId): MaintenanceGroup?
     fun link(id: LinkId): ExternalLink?
+    fun definition(id: DefinitionId): MeasurementDefinition?
+    fun profile(id: ProfileId): EventProfile?
 }
 
 /**
@@ -109,8 +117,34 @@ object TransferOwnership {
                 is OwnerRef.OfSchedule -> lookup.schedule(ref.id)?.let { owners += resolve(of(it), lookup) }
                 is OwnerRef.OfGroup -> lookup.group(ref.id)?.let { owners += resolve(of(it), lookup) }
                 is OwnerRef.OfLink -> lookup.link(ref.id)?.let { owners += resolve(of(it), lookup) }
+                is OwnerRef.OfDefinition -> lookup.definition(ref.id)?.let { owners += resolve(of(it), lookup) }
+                is OwnerRef.OfProfile -> lookup.profile(ref.id)?.let { owners += resolve(of(it), lookup) }
             }
         }
         return owners
+    }
+
+    /**
+     * The row an [EntangledRef] lands on (`TransferGraph.entangledRefs`' four target tables), as an [OwnerRef]; null for
+     * a target table this map does not know. A caller that reads ahead fetches it before [heldOwnersOf] resolves it.
+     */
+    fun targetOf(ref: EntangledRef): OwnerRef? = when (ref.targetTable) {
+        "assets" -> OwnerRef.OfAsset(AssetId(ref.targetId))
+        "maintenanceSchedules" -> OwnerRef.OfSchedule(ScheduleId(ref.targetId))
+        "measurementDefinitions" -> OwnerRef.OfDefinition(DefinitionId(ref.targetId))
+        "eventProfiles" -> OwnerRef.OfProfile(ProfileId(ref.targetId))
+        else -> null
+    }
+
+    /**
+     * #77 (NOTE 2) — **the one map** from an [EntangledRef] to the assets of [held] that own the row it lands on: M3
+     * (C10) refuses by it and the write guard (C12, R77-B2b-GUARD) names its refusal by it. It fails **closed**: a
+     * target table [targetOf] does not know, or a target [lookup] cannot resolve to a held asset, is owned by every
+     * asset of [held] (in id order), never by none — so a reference added later can slip past neither.
+     */
+    fun heldOwnersOf(ref: EntangledRef, held: Set<AssetId>, lookup: OwnerLookup): Set<AssetId> {
+        val every = held.sortedBy { it.value }.toCollection(LinkedHashSet())
+        val target = targetOf(ref) ?: return every
+        return resolve(listOf(target), lookup).filterTo(LinkedHashSet()) { it in held }.ifEmpty { every }
     }
 }

@@ -163,7 +163,7 @@ class HeldWriteGuard(
             val dropped = TransferGraph.droppedBy(heldGraph(), held)
             val kept = stored?.let { TransferGraph.entangledRefs(it, dropped) }.orEmpty().toSet()
             val ref = TransferGraph.entangledRefs(row, dropped).firstOrNull { it !in kept } ?: return
-            throw AssetTransferredOut(targetOwner(ref) ?: held.minBy { it.value })
+            throw AssetTransferredOut(targetOwner(ref))
         }
 
         /**
@@ -182,17 +182,11 @@ class HeldWriteGuard(
             )
         }
 
-        /** The held asset whose row [ref] names. */
-        private suspend fun targetOwner(ref: EntangledRef): AssetId? {
-            val target: List<OwnerRef> = when (ref.targetTable) {
-                "assets" -> listOf(OwnerRef.OfAsset(AssetId(ref.targetId)))
-                "maintenanceSchedules" -> listOf(OwnerRef.OfSchedule(ScheduleId(ref.targetId)))
-                "measurementDefinitions" ->
-                    definitions.get(DefinitionId(ref.targetId))?.let(TransferOwnership::of).orEmpty()
-                "eventProfiles" -> profiles.get(ProfileId(ref.targetId))?.let(TransferOwnership::of).orEmpty()
-                else -> emptyList()
-            }
-            return ownersOf(target).firstOrNull { it in held }
+        /** The held asset whose row [ref] names: [TransferOwnership.heldOwnersOf]'s first, which fails closed. */
+        private suspend fun targetOwner(ref: EntangledRef): AssetId {
+            val lookup = Lookup()
+            TransferOwnership.targetOf(ref)?.let { lookup.fetch(it) }
+            return TransferOwnership.heldOwnersOf(ref, held, lookup).first()
         }
     }
 
@@ -210,6 +204,8 @@ class HeldWriteGuard(
         private val schedulesById = HashMap<ScheduleId, MaintenanceSchedule>()
         private val groupsById = HashMap<GroupId, MaintenanceGroup>()
         private val linksById = HashMap<LinkId, ExternalLink>()
+        private val definitionsById = HashMap<DefinitionId, MeasurementDefinition>()
+        private val profilesById = HashMap<ProfileId, EventProfile>()
 
         suspend fun fetch(ref: OwnerRef) {
             when (ref) {
@@ -223,6 +219,8 @@ class HeldWriteGuard(
                 is OwnerRef.OfLink -> if (ref.id !in linksById) {
                     links.get(ref.id)?.let { linksById[ref.id] = it; TransferOwnership.of(it).forEach { r -> fetch(r) } }
                 }
+                is OwnerRef.OfDefinition -> definitions.get(ref.id)?.let { definitionsById[ref.id] = it }
+                is OwnerRef.OfProfile -> profiles.get(ref.id)?.let { profilesById[ref.id] = it }
             }
         }
 
@@ -231,6 +229,8 @@ class HeldWriteGuard(
         override fun schedule(id: ScheduleId): MaintenanceSchedule? = schedulesById[id]
         override fun group(id: GroupId): MaintenanceGroup? = groupsById[id]
         override fun link(id: LinkId): ExternalLink? = linksById[id]
+        override fun definition(id: DefinitionId): MeasurementDefinition? = definitionsById[id]
+        override fun profile(id: ProfileId): EventProfile? = profilesById[id]
     }
 }
 

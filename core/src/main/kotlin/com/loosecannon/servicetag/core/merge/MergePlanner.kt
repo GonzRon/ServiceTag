@@ -2,9 +2,11 @@ package com.loosecannon.servicetag.core.merge
 
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.LinkId
+import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ServiceCaseId
 import com.loosecannon.servicetag.core.model.TransferKind
@@ -13,7 +15,6 @@ import com.loosecannon.servicetag.core.model.closes
 import com.loosecannon.servicetag.core.model.heldIds
 import com.loosecannon.servicetag.core.model.openOuts
 import com.loosecannon.servicetag.core.model.shortPackId
-import com.loosecannon.servicetag.core.transfer.EntangledRef
 import com.loosecannon.servicetag.core.transfer.OwnerLookup
 import com.loosecannon.servicetag.core.transfer.OwnerRef
 import com.loosecannon.servicetag.core.transfer.TransferGraph
@@ -1084,12 +1085,16 @@ internal fun mergePlanOf(
         val schedulesById = (snapshot.schedules + scheduleWrites).associateBy { it.id }
         val groupsById = (snapshot.groups + groupWrites).associateBy { it.id }
         val linksById = (snapshot.links + linkWrites).associateBy { it.id }
+        val definitionsById = (snapshot.definitions + definitionWrites).associateBy { it.id }
+        val profilesById = (snapshot.profiles + profileWrites).associateBy { it.id }
         val lookup = object : OwnerLookup {
             override fun event(id: EventId) = eventsById[id]
             override fun case(id: ServiceCaseId) = casesById[id]
             override fun schedule(id: ScheduleId) = schedulesById[id]
             override fun group(id: GroupId) = groupsById[id]
             override fun link(id: LinkId) = linksById[id]
+            override fun definition(id: DefinitionId) = definitionsById[id]
+            override fun profile(id: ProfileId) = profilesById[id]
         }
         val inserted = decisions.withIndex()
             .filter { it.value.verdict == MergeVerdict.INSERT }
@@ -1146,17 +1151,9 @@ internal fun mergePlanOf(
         val retention = TransferGraph.retain(after, heldAfter)
         if (retention is TransferRetention.Entangled) {
             val newlyHeld = heldAfter - heldIds(localRecords)
-            val definitionsById = (snapshot.definitions + definitionWrites).associateBy { it.id.value }
-            val profilesById = (snapshot.profiles + profileWrites).associateBy { it.id.value }
-            fun targetOwners(ref: EntangledRef): List<OwnerRef> = when (ref.targetTable) {
-                "assets" -> listOf(OwnerRef.OfAsset(AssetId(ref.targetId)))
-                "maintenanceSchedules" -> listOf(OwnerRef.OfSchedule(ScheduleId(ref.targetId)))
-                "measurementDefinitions" -> definitionsById[ref.targetId]?.let(TransferOwnership::of).orEmpty()
-                "eventProfiles" -> profilesById[ref.targetId]?.let(TransferOwnership::of).orEmpty()
-                else -> emptyList()
-            }
             for (ref in retention.refs) {
-                val owners = TransferOwnership.resolve(targetOwners(ref), lookup).filter { it in heldAfter }
+                // NOTE 2: the one EntangledRef → owner map, the guard's too; it fails closed.
+                val owners = TransferOwnership.heldOwnersOf(ref, heldAfter, lookup)
                 val table = MERGE_TABLE_OF.getValue(ref.table)
                 if ((table to ref.rowId) in inserted) {
                     owners.minOfOrNull { it.value }?.let { refuseInsert(table, ref.rowId, it) }
