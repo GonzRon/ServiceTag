@@ -206,9 +206,12 @@ class TransferImportViewModel(
         return done
     }
 
-    /** Cancel writes nothing: the copy goes, and the screen leaves. Refused while an import is running. */
+    /**
+     * Cancel writes nothing: the copy goes, and the screen leaves. Refused while an import is running, and after the
+     * hand-off (#84 m-1): the Backup door is already leaving, and a back tap during that pop must not pop again.
+     */
     fun cancel() {
-        if (_state.value.importing) return
+        if (_state.value.importing || handedOff) return
         deleteCopy()
         _state.update { it.copy(finished = true) }
     }

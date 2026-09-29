@@ -128,6 +128,8 @@ class TransferImportViewModelTest {
         assertEquals(model.state.value.done, model.handOff())
         assertNull("once", model.handOff())
         assertFalse("not Cancel's exit", model.state.value.finished)
+        model.cancel()
+        assertFalse("a back after the hand-off does not pop again", model.state.value.finished)
 
         val refused = model(copyOf(zipOf(listOf("readme.txt" to "Example".toByteArray()))))
         advanceUntilIdle()
