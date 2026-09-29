@@ -51,6 +51,9 @@ class AttachmentSourceTest {
         assertNotNull(problem(u = "https://manuals.example.invalid/a b.pdf"))
         assertNotNull(problem(u = "https://manuals.example.invalid/a\n.pdf"))
         assertNotNull(problem(u = "https://manuals.example.invalid/a\u0000.pdf"))
+        // B1b hand-off MINOR-1: the resolved URI too, since the codec is where a hostile file arrives
+        assertNotNull(problem(r = "https://cdn.example.invalid/a b.pdf"))
+        assertNotNull(problem(r = "https://cdn.example.invalid/a\u0000.pdf"))
     }
 
     @Test fun aResolvedUriWithAQueryFragmentPathParameterOrUserinfoIsRefused() {

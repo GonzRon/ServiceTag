@@ -76,6 +76,7 @@ fun attachmentSourceProblem(uri: String?, resolvedUri: String?, retrievedAt: Lon
     if (resolvedUri != null) {
         if (!resolvedUri.startsWith(HTTPS, ignoreCase = true)) return "a resolved uri must be https"
         if (resolvedUri.length > MAX_REFERENCE_URI_CHARS) return "a resolved uri is over $MAX_REFERENCE_URI_CHARS characters"
+        if (resolvedUri.any { it.isWhitespace() || it.isISOControl() }) return "a resolved uri has whitespace or a control character"
         if (resolvedUri.any { it == '?' || it == '#' || it == ';' }) return "a resolved uri keeps no query, fragment or path parameter"
         if ('@' in resolvedUri.substring(HTTPS.length).substringBefore('/')) return "a resolved uri keeps no userinfo"
         if (resolvedUri == uri) return "a resolved uri is stored only when it differs"
