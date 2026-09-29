@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
 import com.loosecannon.servicetag.core.model.MimeTypes
 import com.loosecannon.servicetag.core.model.accepts
+import com.loosecannon.servicetag.core.model.attachmentSourceProblem
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
@@ -45,6 +46,9 @@ class AddAttachment(
         // #67, C1: first, so a role on an event can never reach `put`. Not a refusal the section
         // draws — no screen offers a role on an event's file — but a caller's mistake.
         require(owner.accepts(cmd.role)) { "a document role belongs on an asset's attachment, not an event's" }
+        // #85, C12: provenance never enters malformed. A caller's mistake too, and just as early.
+        val sourceProblem = cmd.source?.let { attachmentSourceProblem(it.uri, it.resolvedUri, it.retrievedAt, it.name) }
+        require(sourceProblem == null) { "a malformed attachment source: $sourceProblem" }
         val name = cmd.displayName.trim()
         if (name.isEmpty()) return AttachmentResult.Refused(AttachmentProblem.BlankName)
         if (!ownerExists(owner)) return AttachmentResult.Refused(AttachmentProblem.OwnerMissing)
@@ -61,7 +65,13 @@ class AddAttachment(
 
         val id = AttachmentId(ids.newId())
         val mimeType = MimeTypes.normalise(cmd.mimeType)
-        val locator = AttachmentLocator.forOwner(owner, id, name, mimeType)
+        // #85, planner finding 5: a sourced add's name is a reference's title, not a filename, so the type alone
+        // picks its extension (an empty name has none). Every other add is the shipped call, untouched.
+        val locator = if (cmd.source == null) {
+            AttachmentLocator.forOwner(owner, id, name, mimeType)
+        } else {
+            AttachmentLocator.forOwner(owner, id, "", mimeType)
+        }
         val stored = store.put(locator, source)
         // A provider that under-reported its size (or reported none) is caught here instead.
         if (stored.sizeBytes > MAX_ATTACHMENT_BYTES) {
@@ -84,6 +94,7 @@ class AddAttachment(
             createdAt = now,
             updatedAt = now,
             role = cmd.role,
+            source = cmd.source,
         )
         try {
             uow.write { attachments.upsert(row) }
