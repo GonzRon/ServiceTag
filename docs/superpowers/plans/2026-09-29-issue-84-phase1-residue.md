@@ -554,3 +554,37 @@ device mutation run; **3 hours**. **Stop also** if C15 needs a file other than `
 `DigestPolicyTest` assertion or the warranty matrix moves; if the device case needs more than its two assertions; if
 `AssetDetailKeyDocumentsTest` fails its run (reported with the log; never rerun). **Size:** about 30 production and 100
 test lines; 2 device-test lines.
+
+## 13. Errata after the merge (2026-09-29)
+
+Merged as `17365781` (`merge --no-ff issue-84`, 16 branch commits). `versionName` stays 1.4.1, schema and format stay
+at 14, and the gitlink is `7e0377a`.
+
+- **Every brief closed within its caps.**
+  - B1 used 1 of 3 mutation runs. The controller then tightened its test so each operation's count is taken only
+    after the scheduler has drained, and proved it by mutating the edit alone.
+  - B2 used 6 of 8. The controller added a guard so a Back tap after the hand-off cannot pop a second time.
+  - B3 used 4 of 6.
+  - B4 used 5 of 7 JVM runs and 1 of 1 device run.
+  - Each brief had one task review. There were no fix rounds; the controller made three small fixes after
+    inspection.
+  - The whole-branch review said READY TO MERGE. Its minor and notes were folded in before the merge: KDoc wording,
+    and `handOff()` now refuses after a cancel.
+- **Wording erratum for B4's device mutation run.** One JUnit case stops at its first failed assertion, so the run
+  proves `:211` by execution and `:212` by reading: a wrong role, or a missing Key documents overflow, keeps `:211`
+  true and fails `:212`. No further device run was needed.
+- **Accepted by the owner (R84-4).** While the clock is set back, a held Once keeps the words it was posted with,
+  for example "Was due back". It is `Standing` and never re-posted: sent history is kept, and on-screen state is
+  never recreated.
+- **Recorded, not changed.**
+  - `onImported`'s plan-specified default `{}` is a trap for any future Backup-door caller.
+  - `AppGraph.kt:711` still says "in the pick's callback" (§7).
+  - The about 119 other un-scrolled taps and the three "Cancel" taps remain #90's.
+- **The merged-tip gate** ran once at `17365781`, with no reruns, and passed.
+  - Results: JVM core 1319 and app 1491; the 54 shipped device classes, with #84 adding none; MCP 379 at 68 tools.
+  - **Timing: 11.30 min** start to GATE DONE: JVM 47 s, device 10.33 min.
+  - That is 2.57 min under #77's 13.87 min. Every class is faster (median −1.8 s, largest −11 s, in the render-heavy
+    classes), and #84 changed no class's cost. **Hypothesis, not a measured cause:** the environment. The emulator
+    was relaunched at 09:15 with guest Vulkan off (`-feature -Vulkan`), after a second host-GPU memory-import crash.
+- **Emulator.** The session's third loss was the host-GPU `error: 1285` again, about 1.5 h after a relaunch. With
+  guest Vulkan off, it stayed up for the rest of #84, which was about 1.7 h including the gate.
