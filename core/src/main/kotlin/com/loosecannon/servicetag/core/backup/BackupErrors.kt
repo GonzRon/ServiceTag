@@ -45,9 +45,8 @@ class TransferredGraphEntangled(val refs: List<EntangledRef>) :
 /**
  * #77 (R77-13, C9 amended): a Replace restore of an archive that carries the graph of [assetIds] — assets
  * this phone transferred out and holds as such — with no later IN in the archive's own records whose lineage
- * closes this phone's OUT. Thrown **before** anything is wiped. Its sentence is still to be ratified (B3 maps
- * the type); until then the Backup screen's generic restore failure shows this type's name and the ids, so
- * the message is deliberately code, not a sentence.
+ * closes this phone's OUT. Thrown **before** anything is wiped. The Backup screen maps it to the ratified P77-68
+ * (one asset by name, several by count); the message here is deliberately code, not a sentence.
  */
 class TransferredOutInArchive(val assetIds: List<AssetId>) :
     Exception("TransferredOutInArchive(${assetIds.joinToString { it.value }})")

@@ -28,7 +28,18 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.model.DefinitionId
+import com.loosecannon.servicetag.core.model.EventProfile
+import com.loosecannon.servicetag.core.model.ExternalLink
+import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.LinkId
+import com.loosecannon.servicetag.core.model.MeasurementDefinition
+import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.ServiceCase
+import com.loosecannon.servicetag.core.model.ServiceCaseId
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
+import com.loosecannon.servicetag.core.transfer.OwnerLookup
+import com.loosecannon.servicetag.core.transfer.TransferOwnership
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -485,12 +496,13 @@ class ScheduleDetailViewModel(
         }
     }
 
-    /** #77 (C19): the owner is held when its asset is, or when any row of its group, current or removed, names one. */
+    /**
+     * #77 (C19, MN-2): the owner is held when any asset [TransferOwnership] — the one home of ownership — names for the
+     * schedule is held: its asset, or any asset a row of its group, current or removed, names. Resolved over the
+     * schedule and group this screen already read ([InHand]).
+     */
     private fun heldOwner(schedule: MaintenanceSchedule, group: MaintenanceGroup?, held: Set<AssetId>): Boolean =
-        when (val target = schedule.target) {
-            is ScheduleTarget.AssetTarget -> target.assetId in held
-            is ScheduleTarget.GroupTarget -> group?.members.orEmpty().any { it.assetId in held }
-        }
+        TransferOwnership.resolve(TransferOwnership.of(schedule), InHand(schedule, group)).any { it in held }
 
     /** Cancel on the link-guard dialog: it closes and nothing is written. */
     fun cancelLinkGuard() = _state.update { it.copy(linkGuard = null) }
@@ -521,4 +533,15 @@ class ScheduleDetailViewModel(
             _state.update { it.copy(busy = false, linkGuard = prompt) }
         }
     }
+}
+
+/** #77 (MN-2): the one schedule and group a screen already read, as a [TransferOwnership] lookup; no other row is here. */
+private class InHand(private val schedule: MaintenanceSchedule, private val group: MaintenanceGroup?) : OwnerLookup {
+    override fun event(id: EventId): AssetEvent? = null
+    override fun case(id: ServiceCaseId): ServiceCase? = null
+    override fun schedule(id: ScheduleId): MaintenanceSchedule? = schedule.takeIf { it.id == id }
+    override fun group(id: GroupId): MaintenanceGroup? = group?.takeIf { it.id == id }
+    override fun link(id: LinkId): ExternalLink? = null
+    override fun definition(id: DefinitionId): MeasurementDefinition? = null
+    override fun profile(id: ProfileId): EventProfile? = null
 }

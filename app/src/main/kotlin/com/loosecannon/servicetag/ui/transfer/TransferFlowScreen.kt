@@ -51,6 +51,7 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.maintenance.NOT_NOW
+import com.loosecannon.servicetag.ui.maintenance.partOfLine
 import com.loosecannon.servicetag.ui.theme.ControlShape
 
 /**
@@ -198,7 +199,7 @@ private fun ChoiceRow(choice: TransferChoice, onToggle: (String) -> Unit) {
             Text(text = choice.name, style = MaterialTheme.typography.bodyLarge)
             choice.parentName?.let { parent ->
                 Text(
-                    text = "Part of $parent",
+                    text = partOfLine(parent),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
