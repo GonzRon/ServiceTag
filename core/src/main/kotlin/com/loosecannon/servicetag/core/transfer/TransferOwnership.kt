@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DefinitionId
@@ -68,7 +69,8 @@ interface OwnerLookup {
  * applicable an insert the guard would refuse (rm-2). An asset is owned by itself **and its parent**; a group
  * by every asset any of its rows names, current or removed; a schedule by its asset, or its group's owners;
  * a closure by its schedule's; an event's attachment by the event's asset; an entry by its case's asset; a
- * tag by the asset it targets (a link's tag by the link's asset). Everything else by its own `assetId`.
+ * tag by the asset it targets (a link's tag by the link's asset); a succession by both its assets (#86). Everything
+ * else by its own `assetId`.
  * A guard also asks about a tag's **current** target — the stored row — which is a second call, not a rule.
  */
 object TransferOwnership {
@@ -105,6 +107,10 @@ object TransferOwnership {
     fun of(case: ServiceCase): List<OwnerRef> = listOf(OwnerRef.OfAsset(case.assetId))
     fun of(entry: ServiceCaseEntry): List<OwnerRef> = listOf(OwnerRef.OfCase(entry.caseId))
     fun of(loan: AssetLoan): List<OwnerRef> = listOf(OwnerRef.OfAsset(loan.assetId))
+
+    /** #86 (C4 M2, C6): a succession is owned by both its assets — a new row may name a held asset at neither end. */
+    fun of(succession: AssetSuccession): List<OwnerRef> =
+        listOf(OwnerRef.OfAsset(succession.predecessorAssetId), OwnerRef.OfAsset(succession.successorAssetId))
 
     /** Every asset [refs] reach through [lookup]; a row the lookup cannot find owns nothing more. */
     fun resolve(refs: List<OwnerRef>, lookup: OwnerLookup): Set<AssetId> {

@@ -51,6 +51,9 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.AssetLoan
+import com.loosecannon.servicetag.core.model.AssetSuccession
+import com.loosecannon.servicetag.core.model.SuccessionProblem
+import com.loosecannon.servicetag.core.model.successionProblems
 import com.loosecannon.servicetag.core.model.ServiceCase
 import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.TagBinding
@@ -197,6 +200,18 @@ import java.security.MessageDigest
  * `Retained` — an entangling inserted row, or the inserted OUT a local row entangles, → `ASSET_TRANSFERRED_OUT`.
  * The records are written last of all. The one exception to M1 is a Transfer Pack's explicit return (C15): an IN
  * of an asset the import names `returning` closes this phone's OUT, and the import appends it first.
+ *
+ * ### Successions (#86, C4; R86-19)
+ *
+ * Decided after the transfer records, before M2. A succession by its id, every field compared: IDENTICAL, or CONFLICT
+ * `CONTENT_DIFFERS` — **no UPDATE** (MS1). One the phone lacks, with S′ = this phone's rows and the plan's rows still
+ * INSERT: **MS2** an end neither here nor inserted by this plan → `OWNER_NOT_AVAILABLE`, naming that asset; **MS3**
+ * another row of S′ naming its predecessor or its successor → `SUCCESSION_TAKEN`, naming the holder — this phone's
+ * rows hold first, then the archive's in id order; **MS4** an inserted row on a cycle of S′ → `SUCCESSION_CYCLE` on
+ * each inserted row of it; then **M2** below refuses an insert naming a held asset at either end
+ * (`TransferOwnership`). `successionProblems` is the one home of MS3's and MS4's rules. The dev ↔ production limit
+ * stands: a replacement made elsewhere retired the predecessor there, so merging it into a phone that holds the
+ * predecessor unretired conflicts on that asset's row, and nothing lands.
  *
  * ### Not total, and only for a hand-built [Backup]
  *
@@ -1071,6 +1086,57 @@ internal fun mergePlanOf(
         }
     }
 
+    // --- successions (#86, C4; R86-19) ------------------------------------------------------------
+    // MS1 by its id, every field compared — no UPDATE. MS2 both ends here or inserted by this plan. MS3 no other row of
+    // S′ naming its predecessor or its successor: this phone's rows first, so a taken end names this phone's holder
+    // whenever there is one, then the archive's in id order. MS4 no cycle in S′ — this phone's rows and the inserts
+    // MS3 left standing. M2 is below, with every other table's.
+    val localSuccessions = snapshot.successions
+    val localSuccessionsById = localSuccessions.associateBy { it.id }
+    val successionDecisions = LinkedHashMap<String, MergeDecision>()
+    val successionCandidates = mutableListOf<AssetSuccession>()
+    for (dto in data.assetSuccessions) {
+        val id = dto.id
+        val row = dto.toDomain()
+        val local = localSuccessionsById[id]
+        val missing = listOf(dto.predecessorAssetId, dto.successorAssetId).firstOrNull { !assetAvailable(it) }
+        successionDecisions[id] = when {
+            local != null && local == row ->
+                MergeDecision(MergeTable.SUCCESSIONS, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.SUCCESSIONS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            missing != null ->
+                MergeDecision(MergeTable.SUCCESSIONS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missing)
+            else -> {
+                successionCandidates += row
+                MergeDecision(MergeTable.SUCCESSIONS, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+    fun refuseSuccession(id: String, reason: MergeReason, detail: String) {
+        if (successionDecisions.getValue(id).verdict == MergeVerdict.INSERT) {
+            successionDecisions[id] = MergeDecision(MergeTable.SUCCESSIONS, id, MergeVerdict.CONFLICT, reason, detail)
+        }
+    }
+    val candidateIds = successionCandidates.mapTo(HashSet()) { it.id }
+    // MS3.
+    for (problem in successionProblems(localSuccessions + successionCandidates)) {
+        when (problem) {
+            is SuccessionProblem.PredecessorTaken ->
+                if (problem.id in candidateIds) refuseSuccession(problem.id, MergeReason.SUCCESSION_TAKEN, problem.holder)
+            is SuccessionProblem.SuccessorTaken ->
+                if (problem.id in candidateIds) refuseSuccession(problem.id, MergeReason.SUCCESSION_TAKEN, problem.holder)
+            is SuccessionProblem.SelfLink, is SuccessionProblem.Cycle -> Unit
+        }
+    }
+    // MS4, on S′ as MS3 left it.
+    val standing = successionCandidates.filter { successionDecisions.getValue(it.id).verdict == MergeVerdict.INSERT }
+    for (cycle in successionProblems(localSuccessions + standing).filterIsInstance<SuccessionProblem.Cycle>()) {
+        cycle.ids.filter { it in candidateIds }.forEach { refuseSuccession(it, MergeReason.SUCCESSION_CYCLE, cycle.ids.joinToString()) }
+    }
+    decisions += successionDecisions.values
+    val successionWrites = successionCandidates.filter { successionDecisions.getValue(it.id).verdict == MergeVerdict.INSERT }
+
     // --- M2 and M3: nothing lands for, or against, an asset held here (#77, C10) -------------------
     // With the records this plan would insert, `heldAfter` is what the phone will hold. M2: a row the rules
     // above would INSERT whose owning asset (`TransferOwnership`, the write guard's own rule) is held is
@@ -1125,7 +1191,8 @@ internal fun mergePlanOf(
                 subjectWrites.map { Triple(MergeTable.HEALTH_SUBJECTS, it.id.value, TransferOwnership.of(it)) } +
                 caseWrites.map { Triple(MergeTable.SERVICE_CASES, it.id.value, TransferOwnership.of(it)) } +
                 entryWrites.map { Triple(MergeTable.CASE_ENTRIES, it.id.value, TransferOwnership.of(it)) } +
-                loanWrites.map { Triple(MergeTable.LOANS, it.id.value, TransferOwnership.of(it)) }
+                loanWrites.map { Triple(MergeTable.LOANS, it.id.value, TransferOwnership.of(it)) } +
+                successionWrites.map { Triple(MergeTable.SUCCESSIONS, it.id, TransferOwnership.of(it)) }
         for ((table, id, refs) in owned) heldOwner(refs)?.let { refuseInsert(table, id, it) }
 
         // M3 — the phone as this plan would leave it, cut by what it would hold.
@@ -1207,6 +1274,7 @@ internal fun mergePlanOf(
                 serviceCases = caseWrites,
                 caseEntries = entryWrites,
                 loans = loanWrites,
+                successions = successionWrites,
                 transfers = transferWrites,
             )
         },
