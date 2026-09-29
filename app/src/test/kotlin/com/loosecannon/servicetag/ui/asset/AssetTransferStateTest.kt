@@ -32,6 +32,10 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.LoanReminderMode
+import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.ui.maintenance.CompletionAnswer
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import com.loosecannon.servicetag.testing.assetRow
@@ -427,6 +431,97 @@ class AssetTransferStateTest {
         assertFalse(group.state.value!!.editable)
     }
 
+    /**
+     * MJ-1 (fix round 1): a standing post's "Done" opens the schedule with `complete = true`. For a held owner it asks
+     * nothing — no "When was this done?" and no form — writes nothing, and says P77-35. A QUICK and a FORM schedule.
+     */
+    @Test fun aDoneDeepLinkForAHeldOwnerAsksNothingAndSaysP77_35() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.schedules.upsert(scheduleOf("s1", assetId = "h1", title = "Flush the tank"))
+        graph.schedules.upsert(scheduleOf("s2", assetId = "h1", title = "Anode check", completionMode = CompletionMode.FORM))
+        graph.recomputeSchedules.all()
+        out("h1") // the post outlived the hold
+
+        val quick = scheduleModel("s1")
+        val saidQuick = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { quick.messages.toList(saidQuick) }
+        advanceUntilIdle()
+        quick.complete()
+        advanceUntilIdle()
+        assertNull("no \"When was this done?\"", graph.completionFlow.prompt.value)
+        assertEquals(listOf("This asset was transferred out."), saidQuick)
+
+        val form = scheduleModel("s2")
+        val saidForm = mutableListOf<String>()
+        val forms = mutableListOf<Any>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { form.messages.toList(saidForm) }
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { form.needsForm.toList(forms) }
+        advanceUntilIdle()
+        form.complete()
+        advanceUntilIdle()
+        assertEquals("no form is opened", emptyList<Any>(), forms)
+        assertEquals(listOf("This asset was transferred out."), saidForm)
+        assertEquals("nothing written", emptyList<Any>(), graph.events.all())
+    }
+
+    /** MJ-1 (2): a write a stale schedule screen still reaches is refused and says P77-35, never folded silently. */
+    @Test fun aStaleSchedulePauseSaysP77_35() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.schedules.upsert(scheduleOf("s1", assetId = "h1", title = "Flush the tank"))
+        graph.recomputeSchedules.all()
+        val vm = scheduleModel("s1")
+        val said = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { vm.messages.toList(said) }
+        advanceUntilIdle()
+        out("h1")
+
+        vm.pause(true)
+        advanceUntilIdle()
+
+        assertEquals(listOf("This asset was transferred out."), said)
+        assertEquals(ScheduleStatus.ACTIVE, graph.schedules.get(ScheduleId("s1"))!!.status)
+    }
+
+    /** mn-1: the group detail's refused writes say P77-35 — the archive, and a completion the guard refuses. */
+    @Test fun aGroupDetailsRefusedWritesSayP77_35() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.assets.upsert(assetRow("g1", name = "Sample Garage Door Opener"))
+        graph.groups.upsert(groupOf("G1", members = listOf(Triple("h1", "2026-01-01", null), Triple("g1", "2026-01-01", null))))
+        graph.schedules.upsert(scheduleOf("s-group", groupId = "G1", title = "Lubricate", anchorOn = "2026-01-01", leadDays = 0))
+        graph.recomputeSchedules.all()
+        val group = groupModel("G1")
+        val said = mutableListOf<String>()
+        backgroundScope.launch { group.state.collect() }
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { group.messages.toList(said) }
+        advanceUntilIdle()
+        out("h1")
+
+        group.setArchived(true)
+        advanceUntilIdle()
+        group.completeAll(ScheduleId("s-group"))
+        advanceUntilIdle()
+        graph.completionFlow.prompt.first { it != null }
+        assertTrue(graph.completionFlow.submit(CompletionAnswer(occurredOn = "2026-09-28")))
+        advanceUntilIdle()
+
+        assertEquals(listOf("This asset was transferred out.", "This asset was transferred out."), said)
+        assertNull(graph.groups.get(GroupId("G1"))!!.archivedAt)
+        assertEquals(emptyList<Any>(), graph.events.all())
+    }
+
+    /** NOTE 2: a held asset's open loan (merged history) draws no reminder line — the reminder is quiesced (R77-20). */
+    @Test fun aHeldAssetsOpenLoanDrawsNoReminderLine() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.loans.upsert(
+            loanRow("l1", assetId = "h1", lentOn = "2026-09-20", dueOn = "2026-10-01", mode = LoanReminderMode.ONCE, borrower = "Example Buyer"),
+        )
+        out("h1")
+
+        val open = loaded(detailModel("h1")).loans.open!!
+
+        assertNull(open.reminderLine)
+    }
+
     // ---------------------------------------------------------------- the pickers (C19, rm-5)
 
     /** A held-but-ACTIVE heater beside an ordinary opener: a picker keyed on status would offer both. */
@@ -439,7 +534,7 @@ class AssetTransferStateTest {
     @Test fun scanToBindNeverOffersAHeldAsset() = runTest(scheduler) {
         heldActiveHeater()
         val model = TagResultViewModel(
-            ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock),
+            ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock, graph.transferRecords),
             BindTag(graph.tags, graph.assets, graph.uow, graph.clock),
             graph.assets,
             { false },

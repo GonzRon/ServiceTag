@@ -20,8 +20,12 @@ import com.loosecannon.servicetag.core.usecase.ArchiveGroup
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -153,6 +157,10 @@ class GroupDetailViewModel(
 
     private val _busy = MutableStateFlow(false)
 
+    /** #77 (C19): P77-35, once, when a write is refused because the group names a transferred-out asset. */
+    private val _messages = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
+    val messages: SharedFlow<String> = _messages.asSharedFlow()
+
     /** Whether a completion is in flight; the round's actions are disabled while it is. */
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
@@ -181,7 +189,7 @@ class GroupDetailViewModel(
             try {
                 archiveGroup.run(id, archived)
             } catch (e: AssetTransferredOut) {
-                return@launch
+                _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
             }
         }
     }
@@ -192,11 +200,11 @@ class GroupDetailViewModel(
      * The member list is derived inside `CompleteGroupMembers`, not here, which is what stops a
      * surface completing somebody the round does not oblige (invariants 28, 29).
      */
-    fun completeAll(scheduleId: ScheduleId) = operate { completion.completeAll(scheduleId) }
+    fun completeAll(scheduleId: ScheduleId) = operate { sayIfHeld(completion.completeAll(scheduleId)) }
 
     /** **"Complete selected"**: exactly the members named, and no other (invariants 28, 29). */
     fun completeSelected(scheduleId: ScheduleId, assetIds: List<AssetId>) = operate {
-        if (assetIds.isNotEmpty()) completion.completeSelected(scheduleId, assetIds)
+        if (assetIds.isNotEmpty()) sayIfHeld(completion.completeSelected(scheduleId, assetIds))
     }
 
     /**
@@ -209,7 +217,12 @@ class GroupDetailViewModel(
      * that cannot be taken.
      */
     fun completeMember(scheduleId: ScheduleId, assetId: AssetId) = operate {
-        completion.complete(scheduleId, assetId)
+        sayIfHeld(completion.complete(scheduleId, assetId))
+    }
+
+    /** mn-1: a completion the guard refused (the group came to name a held asset) says P77-35. */
+    private fun sayIfHeld(outcome: CompletionOutcome) {
+        if ((outcome as? CompletionOutcome.Refused)?.cause is AssetTransferredOut) _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
     }
 
     /**
@@ -225,7 +238,8 @@ class GroupDetailViewModel(
             try {
                 block()
             } catch (e: AssetTransferredOut) {
-                // #77: refused by the guard; the state redraws read only, with nothing written.
+                // #77: refused by the guard; nothing written, the state redraws read only, and P77-35 says why.
+                _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
             } finally {
                 _busy.value = false
             }

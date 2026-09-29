@@ -26,6 +26,10 @@ import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
 import com.loosecannon.servicetag.core.usecase.occurrenceWindowOpensOn
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
+import com.loosecannon.servicetag.core.model.MaintenanceSchedule
+import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -276,6 +280,10 @@ class ScheduleDetailViewModel(
     )
     val needsForm: SharedFlow<CompletionOutcome.NeedsForm> = _needsForm.asSharedFlow()
 
+    /** #77 (C19): P77-35, once, when a write is refused because the owner was transferred out. */
+    private val _messages = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
+    val messages: SharedFlow<String> = _messages.asSharedFlow()
+
     init {
         refresh()
     }
@@ -303,11 +311,7 @@ class ScheduleDetailViewModel(
         val group = (schedule.target as? ScheduleTarget.GroupTarget)?.let { groups.get(it.groupId) }
         val asset = (schedule.target as? ScheduleTarget.AssetTarget)?.let { assets.get(it.assetId) }
         // #77 (C19): the owner is held when its asset is, or when any row of its group names a held asset.
-        val held = transfers?.heldIds().orEmpty()
-        val editable = when (val target = schedule.target) {
-            is ScheduleTarget.AssetTarget -> target.assetId !in held
-            is ScheduleTarget.GroupTarget -> group?.members.orEmpty().none { it.assetId in held }
-        }
+        val editable = !heldOwner(schedule, group, transfers?.heldIds().orEmpty())
 
         val names = mutableMapOf<String, String>()
         suspend fun nameOf(id: AssetId): String =
@@ -385,18 +389,43 @@ class ScheduleDetailViewModel(
         )
     }
 
-    /** **Complete**: the canonical flow, then re-derive. It clears the postponement only if set. */
+    /**
+     * **Complete**: the canonical flow, then re-derive. It clears the postponement only if set.
+     *
+     * #77 (MJ-1): a standing post's "Done" reaches here with `complete = true` whatever the screen draws, so a
+     * transferred-out owner is refused **before** the flow: no prompt, no form, nothing written, and P77-35.
+     */
     fun complete(assetId: AssetId? = null) = operate {
+        if (refusedAsHeld()) return@operate
         val outcome = completion.complete(scheduleId, assetId)
         if (outcome is CompletionOutcome.NeedsForm) _needsForm.tryEmit(outcome)
+        sayIfHeld(outcome)
     }
 
     /** "Complete all": every outstanding required member of the round, in one write. */
-    fun completeAll() = operate { completion.completeAll(scheduleId) }
+    fun completeAll() = operate {
+        if (refusedAsHeld()) return@operate
+        sayIfHeld(completion.completeAll(scheduleId))
+    }
 
     /** "Complete selected": the members named, and no other (invariants 28, 29). */
     fun completeSelected(assetIds: List<AssetId>) = operate {
-        if (assetIds.isNotEmpty()) completion.completeSelected(scheduleId, assetIds)
+        if (refusedAsHeld()) return@operate
+        if (assetIds.isNotEmpty()) sayIfHeld(completion.completeSelected(scheduleId, assetIds))
+    }
+
+    /** MJ-1: whether this schedule's owner is transferred out here — `load()`'s rule, read now — and P77-35 if so. */
+    private suspend fun refusedAsHeld(): Boolean {
+        val schedule = schedules.get(scheduleId) ?: return false
+        val group = (schedule.target as? ScheduleTarget.GroupTarget)?.let { groups.get(it.groupId) }
+        if (!heldOwner(schedule, group, transfers?.heldIds().orEmpty())) return false
+        _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+        return true
+    }
+
+    /** A completion the guard refused after all (a race with the hold) says P77-35 too. */
+    private fun sayIfHeld(outcome: CompletionOutcome) {
+        if ((outcome as? CompletionOutcome.Refused)?.cause is AssetTransferredOut) _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
     }
 
     /**
@@ -456,6 +485,13 @@ class ScheduleDetailViewModel(
         }
     }
 
+    /** #77 (C19): the owner is held when its asset is, or when any row of its group, current or removed, names one. */
+    private fun heldOwner(schedule: MaintenanceSchedule, group: MaintenanceGroup?, held: Set<AssetId>): Boolean =
+        when (val target = schedule.target) {
+            is ScheduleTarget.AssetTarget -> target.assetId in held
+            is ScheduleTarget.GroupTarget -> group?.members.orEmpty().any { it.assetId in held }
+        }
+
     /** Cancel on the link-guard dialog: it closes and nothing is written. */
     fun cancelLinkGuard() = _state.update { it.copy(linkGuard = null) }
 
@@ -477,7 +513,10 @@ class ScheduleDetailViewModel(
         if (_state.value.busy) return
         _state.update { it.copy(busy = true, linkGuard = null) }
         viewModelScope.launch {
-            val prompt = runCatching { block() }.getOrNull()
+            val result = runCatching { block() }
+            // #77 (MJ-1): a write the guard refused from a stale screen is said, not folded (C19).
+            if (result.exceptionOrNull() is AssetTransferredOut) _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+            val prompt = result.getOrNull()
             load()
             _state.update { it.copy(busy = false, linkGuard = prompt) }
         }

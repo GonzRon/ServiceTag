@@ -84,7 +84,13 @@ fun TransferFlowScreen(graph: AppGraph, preselect: String?, onBack: () -> Unit, 
     }
     val readyShown = made.phase == PackPhase.READY || made.phase == PackPhase.MARKING || made.phase == PackPhase.MARKED
     val back: () -> Unit = {
-        if (!readyShown && chosen.review != null && made.phase != PackPhase.CREATING) selection.backToSelection() else onBack()
+        if (!readyShown && chosen.review != null && made.phase != PackPhase.CREATING) {
+            // mn-2: a refused Create's lines answered this review; they leave with it.
+            pack.clearErrors()
+            selection.backToSelection()
+        } else {
+            onBack()
+        }
     }
     BackHandler(enabled = made.phase == PackPhase.MARKING) { }
     BackHandler(enabled = made.phase != PackPhase.MARKING, onBack = back)
@@ -131,8 +137,8 @@ fun TransferFlowScreen(graph: AppGraph, preselect: String?, onBack: () -> Unit, 
             )
             else -> TransferSelectionContent(
                 state = chosen,
-                onToggle = selection::toggle,
-                onReview = selection::review,
+                onToggle = { id -> pack.clearErrors(); selection.toggle(id) },
+                onReview = { pack.clearErrors(); selection.review() },
                 modifier = modifier,
             )
         }

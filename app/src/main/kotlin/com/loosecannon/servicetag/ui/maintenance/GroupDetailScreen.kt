@@ -26,6 +26,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -33,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -99,7 +102,11 @@ fun GroupDetailScreen(
     LaunchedEffect(missing) { if (missing) onBack() }
 
     val current = state
+    // #77 (mn-1, C19): P77-35 when a write is refused because the group names a transferred-out asset.
+    val snackbars = remember { SnackbarHostState() }
+    LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(
                 title = {

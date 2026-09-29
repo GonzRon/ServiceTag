@@ -250,6 +250,11 @@ class TransferPackViewModel(
         }
     }
 
+    /** mn-2: a refused Create's lines belong to the review they answered; a changed selection clears them. */
+    fun clearErrors() {
+        _state.update { if (it.phase == PackPhase.IDLE) it.copy(errors = emptyList()) else it }
+    }
+
     /** The reused `Not now`: nothing is written; the flow ends and leaving deletes the pack. */
     fun notNow() {
         _events.tryEmit(TransferPackEvent.Leave)

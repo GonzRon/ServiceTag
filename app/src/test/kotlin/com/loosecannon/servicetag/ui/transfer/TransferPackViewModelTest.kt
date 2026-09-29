@@ -13,6 +13,8 @@ import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.AttachmentStore
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.core.usecase.BackupRepositories
+import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
 import com.loosecannon.servicetag.testing.loanRow
 import com.loosecannon.servicetag.transfer.TransferPackWriter
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
@@ -81,11 +83,12 @@ class TransferPackViewModelTest {
     private fun model(
         saved: SavedStateHandle = SavedStateHandle(),
         storage: AttachmentStorage = graph.attachmentStorage,
+        mark: MarkTransferredOut = graph.markTransferredOut,
     ): TransferPackViewModel {
         val factory = viewModelFactory {
             initializer {
                 TransferPackViewModel(
-                    graph.createTransferPack, TransferPackWriter(cache, storage), graph.markTransferredOut, reconcile,
+                    graph.createTransferPack, TransferPackWriter(cache, storage), mark, reconcile,
                     graph.assets, graph.groups, saved, zone = ZoneOffset.UTC, io = StandardTestDispatcher(scheduler),
                     transfers = graph.transferRecords,
                 )
@@ -178,6 +181,92 @@ class TransferPackViewModelTest {
         assertEquals(listOf("These assets are already marked transferred out."), vm.state.value.errors)
         assertEquals(emptyList<String>(), packs())
         assertEquals(emptyList<String>(), workFiles())
+    }
+
+    /** mn-2: a refused Create's line belongs to its review; changing the selection clears it before the next review. */
+    @Test fun aRefusedCreatesLineDoesNotOutliveItsReview() = runTest(scheduler) {
+        TransferPackAppFixtures.seedHeater(graph)
+        graph.assets.upsert(
+            com.loosecannon.servicetag.core.model.Asset(
+                id = AssetId("a1"), name = "Example Anode Rod", parentAssetId = AssetId(HEATER), createdAt = 100L, updatedAt = 100L,
+            ),
+        )
+        graph.transferRecords.append(
+            TransferRecord(
+                id = "out-a1", assetId = AssetId("a1"), kind = TransferKind.OUT, packId = "0f1e2d3c-a1",
+                lineage = emptyList(), at = 1_758_960_000_000L, packSha256 = "ab".repeat(32),
+                nameSnapshot = "Example Anode Rod", note = "",
+            ),
+        )
+        val vm = model()
+        vm.create(listOf(AssetId(HEATER)), "")
+        advanceUntilIdle()
+        assertEquals(listOf("These assets are already marked transferred out."), vm.state.value.errors)
+
+        vm.clearErrors() // the owner goes back and changes the selection
+
+        assertEquals(emptyList<String>(), vm.state.value.errors)
+        assertEquals(PackPhase.IDLE, vm.state.value.phase)
+    }
+
+    /**
+     * mn-4: marking refused because the estate left behind would be entangled says P77-70 and writes nothing. The
+     * entanglement is merged history's: a held pump whose motor, not held, still names it as its parent.
+     */
+    @Test fun anEntangledEstateIsP77_70() = runTest(scheduler) {
+        graph.assets.upsert(com.loosecannon.servicetag.core.model.Asset(AssetId("p1"), "Example Pump", createdAt = 100L, updatedAt = 100L))
+        graph.assets.upsert(
+            com.loosecannon.servicetag.core.model.Asset(
+                AssetId("m1"), "Example Pump Motor", parentAssetId = AssetId("p1"), createdAt = 100L, updatedAt = 100L,
+            ),
+        )
+        graph.assets.upsert(com.loosecannon.servicetag.core.model.Asset(AssetId("g1"), "Sample Garage Door Opener", createdAt = 100L, updatedAt = 100L))
+        graph.transferRecords.append(
+            TransferRecord(
+                id = "out-p1", assetId = AssetId("p1"), kind = TransferKind.OUT, packId = "0f1e2d3c-p1",
+                lineage = emptyList(), at = 1_758_960_000_000L, packSha256 = "ab".repeat(32),
+                nameSnapshot = "Example Pump", note = "",
+            ),
+        )
+        val vm = model()
+        vm.create(listOf(AssetId("g1")), "")
+        advanceUntilIdle()
+        assertEquals(PackPhase.READY, vm.state.value.phase)
+
+        vm.mark()
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("Could not mark these assets: records on this phone still point to a transferred asset. Nothing was changed."),
+            vm.state.value.errors,
+        )
+        assertEquals(listOf("out-p1"), graph.transferRecords.all().map { it.id })
+        assertEquals(0, sweeps)
+    }
+
+    /** mn-4: a mark that fails outright says P77-53, and nothing is written or swept. */
+    @Test fun aMarkThatFailsIsP77_53() = runTest(scheduler) {
+        TransferPackAppFixtures.seedHeater(graph)
+        val failing = MarkTransferredOut(
+            BackupRepositories(
+                graph.assets, graph.groups, graph.tags, graph.links, graph.definitions, graph.profiles, graph.schedules,
+                graph.closures, graph.events, graph.attachments, graph.references, graph.seasonActivations,
+                graph.conditions, graph.healthSubjects, graph.categories, graph.serviceCases, graph.serviceCaseEntries,
+                graph.loans, graph.transferRecords,
+            ),
+            graph.uow, graph.ids, graph.clock,
+        ) { throw IllegalStateException("the store would not take the mark") }
+        val vm = model(mark = failing)
+        vm.create(listOf(AssetId(HEATER)), "")
+        advanceUntilIdle()
+
+        vm.mark()
+        advanceUntilIdle()
+
+        assertEquals(listOf("Could not mark these assets. Nothing was changed."), vm.state.value.errors)
+        assertEquals(emptyList<TransferRecord>(), graph.transferRecords.all())
+        assertEquals(AssetStatus.ACTIVE, graph.assets.get(AssetId(HEATER))!!.status)
+        assertEquals(0, sweeps)
     }
 
     @Test fun cancelLeavesNoFileAndNoRecord() = runTest(scheduler) {

@@ -1019,7 +1019,10 @@ class AssetDetailViewModel(
                 page?.copy(
                     loans = loanFactsOf(rows, today.localDate(), page.asset.inService && !page.held).let { facts ->
                         if (!page.held) facts else facts.copy(
-                            open = facts.open?.let { block -> block.copy(actions = block.actions.filter { it == LoanAction.OPEN_CONTACT }) },
+                            // NOTE 2 (R77-20): and no reminder line — its reminders are quiesced, as the warranty's is.
+                            open = facts.open?.let { block ->
+                                block.copy(actions = block.actions.filter { it == LoanAction.OPEN_CONTACT }, reminderLine = null)
+                            },
                         )
                     },
                 )
