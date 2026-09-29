@@ -37,7 +37,7 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
     /** #77's transfer records; no cascade — a record outlives its asset. */
     val transfers = InMemoryTransferRecordRepository()
     /** #86's successions; the asset double's delete takes a row naming it at either end, as the schema does. */
-    val successions = InMemoryAssetSuccessionRepository()
+    val successions = InMemoryAssetSuccessionRepository().also { assets.cascadesTo(it::cascadeFromAsset) }
     val storage = FakeAttachmentStorage()
     val uow = FakeUnitOfWork(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,

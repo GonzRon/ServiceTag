@@ -45,4 +45,70 @@ sealed interface SuccessionProblem {
  * The order of the answer is the rows' own: each row's self-link, predecessor and successor problems, then every
  * cycle, by its first id.
  */
-fun successionProblems(rows: List<AssetSuccession>): List<SuccessionProblem> = emptyList()
+fun successionProblems(rows: List<AssetSuccession>): List<SuccessionProblem> {
+    val problems = mutableListOf<SuccessionProblem>()
+    val predecessorHolder = HashMap<AssetId, String>()
+    val successorHolder = HashMap<AssetId, String>()
+    for (row in rows) {
+        if (row.predecessorAssetId == row.successorAssetId) problems += SuccessionProblem.SelfLink(row.id)
+        predecessorHolder.putIfAbsent(row.predecessorAssetId, row.id)?.let {
+            problems += SuccessionProblem.PredecessorTaken(row.id, it)
+        }
+        successorHolder.putIfAbsent(row.successorAssetId, row.id)?.let {
+            problems += SuccessionProblem.SuccessorTaken(row.id, it)
+        }
+    }
+    return problems + cyclesOf(rows.filter { it.predecessorAssetId != it.successorAssetId })
+}
+
+/** I4's walk: Tarjan's strongly connected sets over the rows' edges, iteratively, so a long chain never recurses. */
+private fun cyclesOf(rows: List<AssetSuccession>): List<SuccessionProblem.Cycle> {
+    val edges = LinkedHashMap<AssetId, MutableList<AssetId>>()
+    rows.forEach { edges.getOrPut(it.predecessorAssetId) { mutableListOf() } += it.successorAssetId }
+    val index = HashMap<AssetId, Int>()
+    val low = HashMap<AssetId, Int>()
+    val onStack = HashSet<AssetId>()
+    val stack = ArrayDeque<AssetId>()
+    val components = mutableListOf<Set<AssetId>>()
+    var next = 0
+    for (start in edges.keys) {
+        if (start in index) continue
+        val work = ArrayDeque<Pair<AssetId, Int>>()
+        work.addLast(start to 0)
+        while (work.isNotEmpty()) {
+            val (node, at) = work.removeLast()
+            if (at == 0) {
+                index[node] = next
+                low[node] = next
+                next += 1
+                stack.addLast(node)
+                onStack += node
+            }
+            val outs = edges[node].orEmpty()
+            if (at < outs.size) {
+                work.addLast(node to at + 1)
+                val target = outs[at]
+                if (target !in index) {
+                    work.addLast(target to 0)
+                } else if (target in onStack) {
+                    low[node] = minOf(low.getValue(node), index.getValue(target))
+                }
+                continue
+            }
+            if (low[node] == index[node]) {
+                val component = LinkedHashSet<AssetId>()
+                do {
+                    val member = stack.removeLast()
+                    onStack -= member
+                    component += member
+                } while (member != node)
+                if (component.size > 1) components += component
+            }
+            work.lastOrNull()?.let { (parent, _) -> low[parent] = minOf(low.getValue(parent), low.getValue(node)) }
+        }
+    }
+    return components
+        .map { set -> rows.filter { it.predecessorAssetId in set && it.successorAssetId in set }.map { it.id }.sorted() }
+        .sortedBy { it.first() }
+        .map { SuccessionProblem.Cycle(it) }
+}
