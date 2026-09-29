@@ -56,7 +56,7 @@ object ServiceTagIcons {
     /** #72 (C19, R72-22): the loan glyph beside "Lent out" and "Loan overdue" — custody, never a fault. */
     val Outbox: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_outbox)
 
-    /** #77 (R77-24): P77-31's glyph beside "Transferred" — an asset handed out of this phone. */
+    /** #77 (R77-24): P77-31's glyph beside its word — an asset handed out of this phone. */
     val Handover: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_handover)
 }
 

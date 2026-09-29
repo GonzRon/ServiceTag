@@ -88,7 +88,7 @@ internal object TransferStrings {
     /** P77-30 — under the mark question. */
     const val MARK_CONSEQUENCE = "Their reminders stop and they leave your lists. You can still open them under Archived."
 
-    /** P77-31 — the plate and list badge (drawn upper-case by `StatusBadge`, read "Transferred"). */
+    /** P77-31 — the plate and list badge (drawn upper-case by `StatusBadge`, read as written). */
     const val TRANSFERRED = "Transferred"
 
     /** P77-32 — the detail block's SectionHeader. */
