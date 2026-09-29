@@ -41,7 +41,7 @@ schedule listings — every schedule, one asset's, one group's — because §10 
 three are one question asked of three scopes. The registered total was 21 + 17 = **38** at 1.2,
 **41** after 1.3's three reference tools, **55** after 1.4's fourteen, **56** after 1.4.1's
 `repair_schedule_providers`, **58** after #79's two warranty tools, **63** after #79's five
-service-case tools, and is **68** since #72's five loan tools, which `test_argument_guard.py` pins."""
+service-case tools, is 68 after #72's five loan tools, and is **69** since #86's `get_asset_succession`, which `test_argument_guard.py` pins."""
 
 
 def body_of(recorded) -> dict:
