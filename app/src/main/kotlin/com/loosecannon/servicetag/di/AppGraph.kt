@@ -26,6 +26,8 @@ import com.loosecannon.servicetag.core.model.lineageFor
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
 import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
+import com.loosecannon.servicetag.core.usecase.WithdrawTransferRecord
+import com.loosecannon.servicetag.transfer.TransferPackWriter
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
@@ -600,6 +602,14 @@ class AppGraph(private val context: Context) {
     val markTransferredOut: MarkTransferredOut = MarkTransferredOut(backupRepositories, uow, ids, clock) {
         recomputeSchedules.forAsset(it)
     }
+
+    /**
+     * #77 (C5, C18, C22; R77-18) — the sender's pack files: sealed into `cache/transfer/` (the one directory the
+     * `.files` provider exposes), the artifacts work file in `cache/transfer-work/`, and the start-up sweep of both
+     * and of B3's `cache/transfer-in/`. [withdrawTransferRecord] is C23's phone-only withdrawal.
+     */
+    val transferPackWriter: TransferPackWriter = TransferPackWriter(context.applicationContext.cacheDir, attachmentStorage)
+    val withdrawTransferRecord: WithdrawTransferRecord = WithdrawTransferRecord(transferRecords, uow, ids, clock)
 
     /**
      * #77 (C14, C15; R77-2) — the Transfer Pack import, additively through the merge core and the guarded ports: the

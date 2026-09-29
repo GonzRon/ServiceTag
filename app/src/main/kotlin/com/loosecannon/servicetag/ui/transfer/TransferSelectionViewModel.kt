@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
-import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
@@ -156,15 +155,8 @@ class TransferSelectionViewModel(
         }
     }
 
-    private suspend fun refusalLine(refusal: TransferRefusal): String = when (refusal) {
-        is TransferRefusal.MixedGroup -> TransferStrings.mixedGroup(
-            groups.get(GroupId(refusal.groupId))?.name ?: refusal.groupId,
-            refusal.stayingIds.joinToString(", ") { nameOf(it) },
-        )
-        is TransferRefusal.ParentNotSelected -> TransferStrings.parentNotSelected(nameOf(refusal.childId), nameOf(refusal.parentId))
-        is TransferRefusal.OpenLoan -> TransferStrings.lentOut(nameOf(refusal.assetId))
-        is TransferRefusal.OutsideReference -> TransferStrings.outsideReference(nameOf(refusal.assetId))
-    }
+    private suspend fun refusalLine(refusal: TransferRefusal): String =
+        refusalLineOf(refusal, { nameOf(it) }, { groups.get(it)?.name ?: it.value })
 
     private fun nameOf(id: AssetId): String = everything.firstOrNull { it.id == id }?.name ?: id.value
 
