@@ -33,6 +33,8 @@ import com.loosecannon.servicetag.core.testing.transferOf
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.testing.plainAssetOf
+import com.loosecannon.servicetag.core.testing.successionOf
+import com.loosecannon.servicetag.core.model.AssetSuccession
 import org.junit.jupiter.api.Test
 
 class BackupCodecTest {
@@ -1326,5 +1328,68 @@ class BackupCodecTest {
             val refusal = assertFailsWith<BackupCorrupt>(expected) { BackupCodec.decode(archiveOf(archive)) }
             assertEquals(expected, refusal.message)
         }
+    }
+
+    // --- #86 (C3): the successions' graph -----------------------------------------------------------
+
+    private fun succeeded(vararg rows: AssetSuccession) = BackupData(
+        assets = listOf(plainAssetOf("a1", "Example Water Heater"), plainAssetOf("a2", "Sample Pool Pump"), plainAssetOf("a3", "Example Garage Door Opener"))
+            .map { it.toDto() },
+        nfcTags = emptyList(), externalLinks = emptyList(),
+        assetSuccessions = rows.map { it.toDto() },
+    )
+
+    private fun refusedWith(data: BackupData): String =
+        assertFailsWith<BackupCorrupt> { BackupCodec.decode(archiveOf(data)) }.message!!
+
+    /** I5: both ends are real foreign keys, so each must be in the file; and the ids are unique. */
+    @Test
+    fun anEndpointMissingIsCorrupt() {
+        assertEquals(
+            "assetSuccessions: succession s1 names predecessor a9, which is not in assets",
+            refusedWith(succeeded(successionOf("s1", predecessor = "a9", successor = "a1"))),
+        )
+        assertEquals(
+            "assetSuccessions: succession s1 names successor a9, which is not in assets",
+            refusedWith(succeeded(successionOf("s1", predecessor = "a1", successor = "a9"))),
+        )
+        assertEquals(
+            "assetSuccessions: duplicate id s1",
+            refusedWith(succeeded(successionOf("s1"), successionOf("s1", predecessor = "a2", successor = "a3"))),
+        )
+        val chain = succeeded(successionOf("s1", predecessor = "a1", successor = "a2"), successionOf("s2", predecessor = "a2", successor = "a3"))
+        assertEquals(chain, BackupCodec.decode(archiveOf(chain)).data, "a chain is two rows and decodes")
+    }
+
+    /** I2, each side: the schema's unique indexes would refuse the second row only after a replace wiped the phone. */
+    @Test
+    fun twoSuccessorsOfOnePredecessorAreCorrupt() {
+        assertEquals(
+            "assetSuccessions: succession s2 names predecessor a1, which succession s1 already names",
+            refusedWith(succeeded(successionOf("s1", predecessor = "a1", successor = "a2"), successionOf("s2", predecessor = "a1", successor = "a3"))),
+        )
+        assertEquals(
+            "assetSuccessions: succession s2 names successor a3, which succession s1 already names",
+            refusedWith(succeeded(successionOf("s1", predecessor = "a1", successor = "a3"), successionOf("s2", predecessor = "a2", successor = "a3"))),
+        )
+    }
+
+    /** I4: following successors never comes back round; every row on the cycle is named. */
+    @Test
+    fun aCycleIsCorrupt() {
+        assertEquals(
+            "assetSuccessions: successions s1, s2, s3 form a cycle",
+            refusedWith(
+                succeeded(
+                    successionOf("s3", predecessor = "a3", successor = "a1"),
+                    successionOf("s1", predecessor = "a1", successor = "a2"),
+                    successionOf("s2", predecessor = "a2", successor = "a3"),
+                ),
+            ),
+        )
+        assertEquals(
+            "assetSuccessions: successions s1, s2 form a cycle",
+            refusedWith(succeeded(successionOf("s1", predecessor = "a1", successor = "a2"), successionOf("s2", predecessor = "a2", successor = "a1"))),
+        )
     }
 }

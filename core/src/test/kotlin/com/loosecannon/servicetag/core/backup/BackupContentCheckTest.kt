@@ -27,6 +27,8 @@ import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
 import com.loosecannon.servicetag.core.testing.loanOf
 import com.loosecannon.servicetag.core.testing.transferOf
+import com.loosecannon.servicetag.core.testing.successionOf
+import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.testing.conditionOf
@@ -553,5 +555,26 @@ class BackupContentCheckTest {
     fun aLoanIsNeverJudgedByToday() {
         val ahead = lent(loanOf("l1", lentOn = "2099-01-01", dueOn = "2099-02-01", returnedOn = "2099-01-15"))
         assertEquals(ahead, BackupCodec.decode(archiveOf(ahead)).data)
+    }
+
+    // --- #86 (C3): successions, format 15 -----------------------------------------------------------
+
+    private fun succeeded(vararg rows: AssetSuccession) =
+        data(assets = listOf(generator, plainAssetOf("a2", "Sample Pool Pump"))).copy(assetSuccessions = rows.map { it.toDto() })
+
+    /** Each rule about the row itself, one row at a time: a blank id, a self-link, a bad date, a stamp not after the epoch. */
+    @Test
+    fun eachSuccessionFieldRule() {
+        val cases = listOf(
+            successionOf("") to "assetSuccessions: a succession has a blank id",
+            successionOf("s1", predecessor = "a1", successor = "a1") to "assetSuccessions: succession s1 names asset a1 at both ends",
+            successionOf("s1", replacedOn = "2026-13-01") to "assetSuccessions: succession s1 has a replacedOn \"2026-13-01\" that is not an ISO date",
+            successionOf("s1", replacedOn = "20 Sep 2026") to "assetSuccessions: succession s1 has a replacedOn \"20 Sep 2026\" that is not an ISO date",
+            successionOf("s1", createdAt = 0) to "assetSuccessions: succession s1 has createdAt 0, not after the epoch",
+        )
+        for ((row, expected) in cases) assertEquals(expected, refused(succeeded(row)), expected)
+
+        val fine = succeeded(successionOf("s1", replacedOn = "2099-01-01"))
+        assertEquals(fine, BackupCodec.decode(archiveOf(fine)).data, "a date is never judged by today here")
     }
 }
