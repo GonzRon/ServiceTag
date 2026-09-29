@@ -15,6 +15,8 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.AttachmentSource
+import com.loosecannon.servicetag.core.model.attachmentSourceProblem
 import com.loosecannon.servicetag.core.model.CaseCoverage
 import com.loosecannon.servicetag.core.model.CaseStatus
 import com.loosecannon.servicetag.core.model.CaseType
@@ -368,6 +370,10 @@ data class OccurrenceClosureDto(
  * [role] is format 10's (#67, C4): a `DocumentRole` name or null, written as `"role": null` when
  * unset (the codec encodes defaults). It defaults to null so a format ≤9 archive, which never had
  * the key, still decodes; `BackupCodec` refuses a non-null one in such an archive.
+ *
+ * The four `source…` fields are format 16's (#85, C4): the attachment's source provenance, written as
+ * explicit nulls when unset, like [role]. They default to null so a format ≤15 archive still decodes;
+ * `BackupCodec` refuses a non-null one in such an archive, and [toDomain] refuses a malformed set.
  */
 @Serializable
 data class AttachmentDto(
@@ -387,6 +393,10 @@ data class AttachmentDto(
     val createdAt: Long,
     val updatedAt: Long,
     val role: String? = null,
+    val sourceUri: String? = null,
+    val sourceResolvedUri: String? = null,
+    val sourceRetrievedAt: Long? = null,
+    val sourceName: String? = null,
 )
 
 /**
@@ -991,12 +1001,18 @@ fun Attachment.toDto(): AttachmentDto = AttachmentDto(
     createdAt = createdAt,
     updatedAt = updatedAt,
     role = role?.name,
+    sourceUri = source?.uri,
+    sourceResolvedUri = source?.resolvedUri,
+    sourceRetrievedAt = source?.retrievedAt,
+    sourceName = source?.name,
 )
 
 /**
  * The owner and the role are checked first (#67, C1): a role must be one of [DocumentRole]'s names,
- * and only an asset's file may carry one (R67-11). The decode's naming pass and `validateGraph` both
- * run through here, so an archive breaking either rule is refused before anything is written.
+ * and only an asset's file may carry one (R67-11). Then the source (#85, C4): the four fields must pass
+ * [attachmentSourceProblem], the one home of the shape rule, on any owner — so a half-set source is a
+ * refusal naming the row, and never reaches a constructor. The decode's naming pass and `validateGraph`
+ * both run through here, so an archive breaking any rule is refused before anything is written.
  */
 fun AttachmentDto.toDomain(): Attachment {
     if ((assetId == null) == (eventId == null)) {
@@ -1008,6 +1024,10 @@ fun AttachmentDto.toDomain(): Attachment {
     if (!owner.accepts(documentRole)) {
         throw BackupCorrupt("attachment $id is an entry's file and carries a document role; only an asset's may")
     }
+    attachmentSourceProblem(sourceUri, sourceResolvedUri, sourceRetrievedAt, sourceName)?.let { problem ->
+        throw BackupCorrupt("attachment $id carries a malformed source: $problem")
+    }
+    val source = sourceUri?.let { AttachmentSource(it, sourceResolvedUri, checkNotNull(sourceRetrievedAt), sourceName) }
     return Attachment(
         id = AttachmentId(id),
         owner = owner,
@@ -1026,6 +1046,7 @@ fun AttachmentDto.toDomain(): Attachment {
         createdAt = createdAt,
         updatedAt = updatedAt,
         role = documentRole,
+        source = source,
     )
 }
 

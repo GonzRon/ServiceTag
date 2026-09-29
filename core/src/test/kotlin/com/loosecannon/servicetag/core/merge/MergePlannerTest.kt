@@ -11,6 +11,7 @@ import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.ConsumableUsage
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
@@ -1353,6 +1354,49 @@ class MergePlannerTest {
 
         assertFalse(plan.applicable)
         assertEquals(differs(), plan.decision(MergeTable.ATTACHMENTS, "att1"))
+    }
+
+    // --- #85: the source provenance, compared whole and with no exception (C5) -------------------
+
+    private val provenance = AttachmentSource(
+        uri = "https://manuals.example.invalid/pool-pump/manual.pdf",
+        resolvedUri = "https://cdn.example.invalid/files/manual.pdf",
+        retrievedAt = 1_758_900_000_000L,
+        name = "Example Pool Pump manual",
+    )
+
+    /** C5, format 16: the four fields compare like any field, and the same source matches. */
+    @Test
+    fun aFormat16IdenticalSourcedRowIsIdentical() {
+        val saved = manual(null).copy(source = provenance)
+        assertEquals(identical(), roleDecision(saved, 16, saved))
+    }
+
+    /** C5, format 16: a merge never updates, so a source that disagrees — its name here — is a conflict. */
+    @Test
+    fun aDifferentSourceNameIsContentDiffers() {
+        val saved = manual(null).copy(source = provenance)
+        val renamed = saved.copy(source = provenance.copy(name = "Sample Water Heater manual"))
+        assertEquals(differs(), roleDecision(renamed, 16, saved))
+    }
+
+    /**
+     * No R67-12-style exception (C5): provenance is only ever set on a new id and never added to an existing
+     * row, so a format-15 archive — which cannot carry one — against a sourced row with the same id differs.
+     */
+    @Test
+    fun aFormat15ArchiveAgainstALocalSourcedRowIsContentDiffers() {
+        assertEquals(differs(), roleDecision(manual(null), 15, manual(null).copy(source = provenance)))
+    }
+
+    /** The format ≤9 path sets the role aside, never the source: the local row's source still takes part. */
+    @Test
+    fun aFormat9ArchiveAgainstALocalSourcedRowIsContentDiffers() {
+        assertEquals(differs(), roleDecision(manual(null), 9, manual(null).copy(source = provenance)))
+        // and on R67-12's own arm, a row here with a role and the stamp its save moved
+        val tagged = taggedInTheApp(manual(null), DocumentRole.USER_MANUAL)
+        assertEquals(identical(), roleDecision(manual(null), 9, tagged))
+        assertEquals(differs(), roleDecision(manual(null), 9, tagged.copy(source = provenance)))
     }
 
     // --- hints, and the shape of the report -------------------------------------------------

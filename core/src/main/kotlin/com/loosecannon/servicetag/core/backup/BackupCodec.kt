@@ -125,6 +125,15 @@ import kotlinx.serialization.json.JsonObject
  * abort a replace with the owner's data already wiped. What a row says about itself — a blank id, one asset at both
  * ends, a date that is not ISO, a stamp not after the epoch — is the content check's.
  *
+ * **Format 16 (#85, C4) adds four attachment fields and no upgrade.** `sourceUri`, `sourceResolvedUri`,
+ * `sourceRetrievedAt` and `sourceName` — where a document saved from a reference came from, a write-once snapshot
+ * with no key (R85-2, R85-3) — are written as explicit nulls when unset, like the role, and default to null, so a
+ * format ≤15 archive decodes through the same strict decode with no source; `LAST_LEGACY_FORMAT` stays 7. No shipped
+ * writer put a source into a format ≤15 archive, so one whose attachment carries **any** of the four non-null is a
+ * hand-built file and is refused; explicit nulls are accepted. The four must also be well formed together
+ * (`attachmentSourceProblem`, the one home of the shape rule, on any owner), checked before the row is built. The
+ * merge planner compares them like any other field, with no exception: provenance is only ever set on a new id.
+ *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
@@ -132,7 +141,7 @@ import kotlinx.serialization.json.JsonObject
  * at read time (inv. 111).
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 15
+    const val FORMAT_VERSION = 16
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -162,6 +171,9 @@ object BackupCodec {
 
     /** The first format that can carry an asset succession (#86). */
     private const val FIRST_SUCCESSION_FORMAT = 15
+
+    /** The first format that can carry an attachment's source provenance (#85). */
+    private const val FIRST_SOURCE_FORMAT = 16
 
     /** Lowercase hex, 64 chars — the shape every attachment row promises for its bytes. */
     private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
@@ -347,6 +359,19 @@ object BackupCodec {
             }
         }
 
+        // #85, the same rule for the source provenance: the four keys did not exist before format 16, so any
+        // non-null one in an older archive was put there by hand. Explicit nulls are accepted.
+        if (manifest.formatVersion < FIRST_SOURCE_FORMAT) {
+            data.attachments.firstOrNull {
+                it.sourceUri != null || it.sourceResolvedUri != null || it.sourceRetrievedAt != null || it.sourceName != null
+            }?.let { sourced ->
+                throw BackupCorrupt(
+                    "attachments: a format ${manifest.formatVersion} archive cannot carry a source " +
+                        "(attachment ${sourced.id})",
+                )
+            }
+        }
+
         // #79, the same rule for the warranty reminder's lead: the key did not exist before format 11,
         // so a non-null one in an older archive was put there by hand. An explicit null is accepted.
         if (manifest.formatVersion < FIRST_LEAD_FORMAT) {
@@ -426,7 +451,7 @@ object BackupCodec {
     }
 
     /**
-     * The version dispatch: formats 8 to 15 decode strictly as they stand; formats 1–7 are rewritten as a
+     * The version dispatch: formats 8 to 16 decode strictly as they stand; formats 1–7 are rewritten as a
      * tree by [LegacyArchive] first and then go through the very same strict decode.
      * `SerializationException` is an `IllegalArgumentException`, and so is the malformed-number
      * failure a tree decode can raise, so one catch covers both.

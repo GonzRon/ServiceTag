@@ -5,7 +5,9 @@ import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.references.MAX_REFERENCE_URI_CHARS
 import com.loosecannon.servicetag.core.model.EventId
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -1054,11 +1056,11 @@ class BackupCodecTest {
 
     /**
      * The numbers this tip carries: the format moved to 10 (#67), on to 11 (#79), on to 12 (#79b) and on
-     * to 13 (#72), the legacy boundary did not.
+     * to 13 (#72), and on to 16 (#85), the legacy boundary did not.
      */
     @Test
-    fun theFormatIsFifteenAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(15, BackupCodec.FORMAT_VERSION)
+    fun theFormatIsSixteenAndTheLegacyBoundaryStaysSeven() {
+        assertEquals(16, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 
@@ -1182,6 +1184,123 @@ class BackupCodecTest {
         )
         // and a format-10 file whose writer left the key out is the same file
         assertEquals(data, BackupCodec.decode(withoutTheRoleKey(bytes)).data)
+    }
+
+    // --- #85: the attachment's source provenance (format 16, C4) -------------------------------------
+
+    private val sourceUri = "https://manuals.example.invalid/pool-pump/manual.pdf"
+    private val resolvedUri = "https://cdn.example.invalid/files/manual.pdf"
+    private val sourceKeys = listOf("sourceUri", "sourceResolvedUri", "sourceRetrievedAt", "sourceName")
+
+    /** [dto] carrying a whole, well-formed source: a redirect, a retrieval time and the reference's name. */
+    private fun sourced(dto: AttachmentDto) = dto.copy(
+        sourceUri = sourceUri,
+        sourceResolvedUri = resolvedUri,
+        sourceRetrievedAt = 1_758_900_000_000L,
+        sourceName = "Example Pool Pump manual",
+    )
+
+    /**
+     * Hazard: provenance dropped in transit. The four fields are written as they are, an unset source as
+     * four explicit nulls (never left out), and they read back onto the domain row both ways round.
+     */
+    @Test
+    fun aSourceRoundTrips() {
+        val saved = sourced(attachmentDto("att-1"))
+        val plain = attachmentDto("att-2", locator = "assets/a1/att-2.pdf")
+        val bytes = encoded(roleData(saved, plain))
+
+        val decoded = BackupCodec.decode(bytes)
+
+        assertEquals(BackupCodec.FORMAT_VERSION, decoded.manifest.formatVersion)
+        assertEquals(listOf(saved, plain), decoded.data.attachments)
+        assertEquals(
+            listOf(AttachmentSource(sourceUri, resolvedUri, 1_758_900_000_000L, "Example Pool Pump manual"), null),
+            decoded.data.attachments.map { it.toDomain().source },
+        )
+        val written = attachmentsWritten(bytes)
+        assertEquals(sourceUri, written[0].getValue("sourceUri").jsonPrimitive.content)
+        assertEquals("1758900000000", written[0].getValue("sourceRetrievedAt").jsonPrimitive.content)
+        for (key in sourceKeys) assertEquals(JsonNull, written[1].getValue(key), key)
+        // domain and back, the unmoved destination and the nameless source included
+        for (row in listOf(saved, saved.copy(sourceResolvedUri = null, sourceName = null), plain)) {
+            assertEquals(row, row.toDomain().toDto())
+        }
+    }
+
+    /**
+     * No shipped writer put a source into a format ≤15 archive — the keys did not exist — so one that carries
+     * any of the four, even alone, was built by hand and is refused before a row is named, through the strict
+     * decode (15, 10) and the ≤7 upgrade alike. An explicit null is what this build's own DTO reads anyway.
+     */
+    @Test
+    fun aFormat15ArchiveWithAnySourceFieldIsCorrupt() {
+        val plain = attachmentDto("att-1")
+        val eachAlone = listOf(
+            plain.copy(sourceUri = sourceUri),
+            plain.copy(sourceResolvedUri = resolvedUri),
+            plain.copy(sourceRetrievedAt = 1_758_900_000_000L),
+            plain.copy(sourceName = "Example Pool Pump manual"),
+        )
+        for ((key, row) in sourceKeys.zip(eachAlone)) {
+            val refusal = assertFailsWith<BackupCorrupt>(key) { BackupCodec.decode(archiveAt(15, roleData(row))) }
+
+            assertTrue(refusal.message!!.startsWith("attachments:"), "$key: ${refusal.message}")
+            assertTrue("format 15" in refusal.message!! && "att-1" in refusal.message!!, "$key: ${refusal.message}")
+        }
+        for (format in listOf(15, 10, 7)) {
+            val refusal = assertFailsWith<BackupCorrupt>("format $format") {
+                BackupCodec.decode(archiveAt(format, roleData(sourced(plain))))
+            }
+            assertTrue("format $format" in refusal.message!! && "att-1" in refusal.message!!, refusal.message)
+        }
+        assertEquals(listOf(plain), BackupCodec.decode(archiveAt(15, roleData(plain))).data.attachments)
+    }
+
+    /** C1's one shape rule, read at format 16: each breach is a hand-built file, named by its attachment. */
+    @Test
+    fun eachShapeBreachIsCorrupt() {
+        val good = sourced(attachmentDto("att-1"))
+        val prefix = "https://manuals.example.invalid/"
+        val breaches = mapOf(
+            "a uri without a date" to good.copy(sourceRetrievedAt = null),
+            "a date without a uri" to attachmentDto("att-1").copy(sourceRetrievedAt = 1_758_900_000_000L),
+            "ftp" to good.copy(sourceUri = "ftp://manuals.example.invalid/manual.pdf"),
+            "2,049 characters" to good.copy(sourceUri = prefix + "a".repeat(MAX_REFERENCE_URI_CHARS + 1 - prefix.length)),
+            "a resolved uri with a query" to good.copy(sourceResolvedUri = "$resolvedUri?token=abc"),
+        )
+        for ((case, row) in breaches) {
+            val refusal = assertFailsWith<BackupCorrupt>(case) { BackupCodec.decode(encoded(roleData(row))) }
+
+            assertTrue("att-1" in refusal.message!!, "$case, unhelpful: ${refusal.message}")
+            assertFailsWith<BackupCorrupt>(case) { row.toDomain() }
+        }
+    }
+
+    /**
+     * B1b hand-off MINOR-2: a half-set source — a uri with no retrieval time — is a refusal the reader names,
+     * never an exception thrown while building the row, because the shape rule runs before any row is built.
+     */
+    @Test
+    fun aHalfSetSourceIsRefusedNotThrown() {
+        val halfSet = attachmentDto("att-1").copy(sourceUri = sourceUri)
+        val bytes = encoded(roleData(halfSet))   // the encoder never validates
+
+        val refusal = assertFailsWith<Exception> { BackupCodec.decode(bytes) }
+
+        assertEquals(BackupCorrupt::class, refusal::class, "refused, not thrown: $refusal")
+        assertTrue("att-1" in refusal.message!! && "retrieval time" in refusal.message!!, refusal.message)
+    }
+
+    /** Unlike a role (R67-11), a source is allowed on an entry's file: the shape rule applies on any owner. */
+    @Test
+    fun anEventAttachmentMayCarryASource() {
+        val onAnEntry = sourced(attachmentDto("att-1", assetId = null, eventId = "e1", locator = "events/e1/att-1.pdf"))
+
+        val row = BackupCodec.decode(encoded(roleData(onAnEntry))).data.attachments.single().toDomain()
+
+        assertEquals(AttachmentOwner.OfEvent(EventId("e1")), row.owner)
+        assertEquals(AttachmentSource(sourceUri, resolvedUri, 1_758_900_000_000L, "Example Pool Pump manual"), row.source)
     }
 
     // --- random fixture generation (ids pre-sorted, so the identity is literal) -----------------

@@ -771,6 +771,8 @@ internal fun mergePlanOf(
     // R67-12 (option B): see the KDoc's canonical-content paragraph. Giving a document its role in
     // the app (the sheet, through `UpdateAttachment`) moves the stamp too, so against an older archive
     // a row here that carries a role is compared without both; one without a role compares as always.
+    // #85 (C5): the four source fields take part on every arm, with no such exception, because provenance is
+    // only ever set on a new id and never added to an existing row, so an older archive against a sourced row differs.
     val rolesCompared = backup.manifest.formatVersion >= BackupCodec.FIRST_ROLE_FORMAT
     fun sameAttachment(incoming: AttachmentDto, here: AttachmentDto): Boolean = when {
         rolesCompared -> incoming == here

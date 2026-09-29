@@ -4,6 +4,8 @@ import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.backup.TransferredGraphEntangled
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.transferOf
@@ -42,7 +44,7 @@ class ExportBackupSetTest {
 
         val decoded = BackupCodec.decode(install.export.run().data)
 
-        assertEquals(15, decoded.manifest.formatVersion)   // this build's export: format 15 since #86
+        assertEquals(16, decoded.manifest.formatVersion)   // this build's export: format 16 since #85
         assertEquals(rows, decoded.data.assetCategories.map { it.toDomain() })
         assertEquals(2, decoded.manifest.counts["assetCategories"])
     }
@@ -57,6 +59,25 @@ class ExportBackupSetTest {
 
         assertEquals(emptyList(), decoded.data.assetCategories)
         assertEquals(0, decoded.manifest.counts["assetCategories"])
+    }
+
+    /** #85 C5: a document's source provenance leaves with it, field for field; an unsourced one leaves none. */
+    @Test
+    fun theSourceIsExported() = runBlocking<Unit> {
+        val install = BackupInstall()
+        install.assets.upsert(plainAssetOf("h1", "Example Water Heater"))
+        install.assets.upsert(plainAssetOf("x1", "Example Compressor"))
+        val saved = TransferFixtures.attachmentOf("at1", AttachmentOwner.OfAsset(AssetId("h1")), "assets/h1/at1.pdf", "application/pdf")
+            .copy(source = SAVED_SOURCE)
+        val plain = TransferFixtures.attachmentOf("at3", AttachmentOwner.OfAsset(AssetId("x1")), "assets/x1/at3.pdf", "application/pdf")
+        install.attachments.upsert(saved)
+        install.attachments.upsert(plain)
+
+        val decoded = BackupCodec.decode(install.export.run().data)
+
+        assertEquals(listOf(saved, plain), decoded.data.attachments.map { it.toDomain() })
+        assertEquals(SAVED_SOURCE.resolvedUri, decoded.data.attachments.first().sourceResolvedUri)
+        assertEquals(null, decoded.data.attachments.last().sourceUri)
     }
 
     /**
@@ -307,5 +328,15 @@ class ExportBackupSetTest {
         assertEquals(listOf(staying), decoded.data.assetSuccessions.map { it.toDomain() })
         assertEquals(1, decoded.manifest.counts["assetSuccessions"])
         assertEquals(3, install.successions.all().size, "the rows stay here; only the export leaves them out")
+    }
+
+    private companion object {
+        /** A whole source, redirect included: fictional names only. */
+        val SAVED_SOURCE = AttachmentSource(
+            uri = "https://manuals.example.invalid/heater/manual.pdf",
+            resolvedUri = "https://cdn.example.invalid/heater/manual.pdf",
+            retrievedAt = 1_758_900_000_000L,
+            name = "Example Water Heater manual",
+        )
     }
 }

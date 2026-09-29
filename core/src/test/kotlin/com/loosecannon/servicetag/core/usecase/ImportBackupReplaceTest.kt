@@ -3,6 +3,8 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.backup.TransferredOutInArchive
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.testing.transferOf
 import com.loosecannon.servicetag.core.transfer.TransferFixtures
@@ -355,5 +357,29 @@ class ImportBackupReplaceTest {
 
         assertEquals(emptyList(), install.successions.all())
         assertEquals(listOf("a1"), install.assets.all().map { it.id.value })
+    }
+
+    // --- #85 (C5): the attachment's source provenance ---------------------------------------------------
+
+    /** A Replace restore lands each document's source as the archive carries it, and none where it carries none. */
+    @Test
+    fun theSourceIsRestored() = runBlocking<Unit> {
+        val install = BackupInstall()
+        val provenance = AttachmentSource(
+            uri = "https://manuals.example.invalid/heater/manual.pdf",
+            resolvedUri = "https://cdn.example.invalid/heater/manual.pdf",
+            retrievedAt = 1_758_900_000_000L,
+            name = "Example Water Heater manual",
+        )
+        val saved = TransferFixtures.attachmentOf("at1", AttachmentOwner.OfAsset(AssetId("h1")), "assets/h1/at1.pdf", "application/pdf")
+            .copy(source = provenance)
+        val plain = TransferFixtures.attachmentOf("at3", AttachmentOwner.OfAsset(AssetId("x1")), "assets/x1/at3.pdf", "application/pdf")
+        val archive = data(listOf(plainAssetOf("h1", "Example Water Heater"), plainAssetOf("x1", "Example Compressor")))
+            .copy(attachments = listOf(saved, plain).map { it.toDto() })
+
+        install.replace.run(archiveOf(archive))
+
+        assertEquals(listOf(saved, plain), install.attachments.all().sortedBy { it.id.value })
+        assertEquals(1, install.uow.commits)
     }
 }
