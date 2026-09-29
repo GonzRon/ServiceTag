@@ -56,7 +56,8 @@ import com.loosecannon.servicetag.di.AppGraph
  * `transferRecords` count is read here too, from [transferRecords]: there is no transfer route at all
  * (R77-17) — no pack, mark, import or withdrawal — so no collaborator exists to ask. #86's `assetSuccessions`
  * count and its one read-only route, [getSuccession], read [successions] here on the same terms (R86-18): only the
- * phone's Replace asset writes a succession, so there is no write route and no collaborator for one.
+ * phone's Replace asset records a succession, and the merge apply only inserts an archive's rows, so there is no
+ * write route and no collaborator for one.
  *
  * The asset `PATCH` keeps 1.3's exact command (spec §9.3): its `MM-DD` pair is the one
  * compatibility input, and `UpdateAsset` refuses what the pair cannot represent — a different pair
@@ -99,7 +100,10 @@ internal class ApiHandlers(
     private val categories: CategoryRepository,
     /** #77 — read for the `transferRecords` status count only; nothing here writes a transfer record. */
     private val transferRecords: TransferRecordRepository,
-    /** #86 — read for the `assetSuccessions` count and [getSuccession] only; nothing here writes a succession. */
+    /**
+     * #86 — read for the `assetSuccessions` count and [getSuccession] only; never written through here (a merge apply
+     * inserts an archive's rows through [importBackupMerge]).
+     */
     private val successions: AssetSuccessionRepository,
     private val createAsset: CreateAsset,
     private val updateAsset: UpdateAsset,
@@ -257,7 +261,7 @@ internal class ApiHandlers(
     /**
      * `GET /v1/assets/{id}/succession` (C20; R86-18): the row naming the asset as successor ([SuccessionResponse.replaces])
      * and the row naming it as predecessor ([SuccessionResponse.replacedBy]), each the archive's own DTO or null; a 404
-     * for an asset that is not there. Writes nothing — only the phone's Replace asset appends a succession.
+     * for an asset that is not there. Writes nothing.
      */
     suspend fun getSuccession(id: String): ApiResponse {
         val assetId = asset(id).id

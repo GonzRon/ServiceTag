@@ -100,8 +100,9 @@ internal class ApiRouter(
      * contact (R72-3, R72-4): a link is made on the phone alone. None runs a reminder sweep (R72-15).
      *
      * #86 added one row over one shape: the twenty-first `/v1/assets/{id}/…` sub-resource, an asset's succession,
-     * read only. **Nothing writes a succession here** (R86-18): only the phone's Replace asset appends one, so no
-     * verb makes, amends or removes one, and `AssetDto` carries no succession field.
+     * read only. **No route records a succession** (R86-18): only the phone's Replace asset records one, and the
+     * import-merge apply only inserts an archive's rows, so no verb here makes, amends or removes one, and
+     * `AssetDto` carries no succession field.
      */
     private suspend fun route(request: ApiRequest): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly

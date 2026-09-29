@@ -24,8 +24,8 @@ import org.junit.Test
  * `GET /v1/assets/{id}/succession` answers 200 `{"replaces": <row>|null, "replacedBy": <row>|null}`, each row the
  * archive's own `{id, predecessorAssetId, successorAssetId, replacedOn, createdAt}`, both keys always present; an
  * asset that is not there is the shipped 404 `no_such_asset`, and any other verb is a 404 — the `/v1/assets/{id}/…`
- * sub-resource convention. **Nothing writes a succession over the API**: only the phone's Replace asset does, so no
- * verb or path here appends, amends or removes one. The answers are read as raw JSON, so the wire shape — its key
+ * sub-resource convention. **No route records a succession**: only the phone's Replace asset does (a merge apply
+ * only inserts an archive's rows), so no verb or path here appends, amends or removes one. The answers are read as raw JSON, so the wire shape — its key
  * names, its explicit nulls — is what is pinned, not a Kotlin class that could drift with it.
  */
 class SuccessionRoutesTest {

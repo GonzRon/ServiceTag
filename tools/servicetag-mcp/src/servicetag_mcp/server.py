@@ -1148,12 +1148,12 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     asset transferred out from the phone would own, or a row that would name one of its rows, conflicts as
     `ASSET_TRANSFERRED_OUT`;
     format 15 adds the asset successions — one row per asset replaced by a distinct new one — which a merge
-    only ever inserts, never updating one: a succession whose predecessor or successor a succession on the
-    phone already names conflicts as `SUCCESSION_TAKEN`, one that would close a loop with the phone's
-    successions as `SUCCESSION_CYCLE`, and one naming an asset transferred out from the phone as
-    `ASSET_TRANSFERRED_OUT`. A merge never retires anything: a replacement made on another phone retired its
-    predecessor there, so merging it into a phone that holds that asset unretired conflicts on the asset's
-    row, and nothing lands).
+    only ever inserts, never updating one: a succession whose predecessor a succession on the phone already
+    names as a predecessor, or whose successor one already names as a successor, conflicts as
+    `SUCCESSION_TAKEN`, one that would close a loop with the phone's successions as `SUCCESSION_CYCLE`, and
+    one naming an asset transferred out from the phone as `ASSET_TRANSFERRED_OUT`. A merge never retires
+    anything: a replacement made on another phone retired its predecessor there, so merging it into a phone
+    that holds that asset unretired conflicts on the asset's row, and nothing lands).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
@@ -2732,8 +2732,8 @@ def return_loan(loan_id: str, returned_on: str) -> dict[str, Any]:
 # --- #86, the asset successions (docs/api/v1.md, **Asset successions (#86)**) ------------------------------
 #
 # One read-only route a phone below schema 15 does not have, so the tool refuses such a phone by name before
-# anything is sent. Only the phone's "Replace asset" writes a succession: no route or tool replaces an asset,
-# appends, amends or removes a succession.
+# anything is sent. Only the phone's "Replace asset" records a succession: no route or tool replaces an asset or
+# records, amends or removes one, and `import_merge` only inserts an archive's rows.
 
 
 @mcp.tool()
@@ -2742,7 +2742,8 @@ def get_asset_succession(asset_id: str) -> dict[str, Any]:
     `{id, predecessorAssetId, successorAssetId, replacedOn, createdAt}` or null — `replaces` is the row
     naming this asset as the successor, `replacedBy` the row naming it as the predecessor; both keys are
     always present. A chain answers both on its middle asset. `replacedOn` is ISO `YYYY-MM-DD`. Read only:
-    only the phone's "Replace asset" makes a succession, and nothing here makes, edits or removes one.
+    only the phone's "Replace asset" records a succession, and no tool records, edits or removes one;
+    `import_merge` only inserts an archive's rows (format 15).
     Needs a phone at schema 15 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is
     sent.
     """

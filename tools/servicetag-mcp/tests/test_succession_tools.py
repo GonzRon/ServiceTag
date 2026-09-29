@@ -6,8 +6,8 @@ replacedOn, createdAt}` or null. The route is not on a phone below schema 15, so
 by name, with nothing sent beyond the pairing's one `/v1/status` read; the global write minimum stays 8 and
 every other per-tool minimum is untouched.
 
-**It is the whole succession surface**: only the phone's Replace asset makes a succession, so no tool replaces
-an asset or makes, edits or removes one (R86-18).
+**It is the whole succession surface**: only the phone's Replace asset records a succession (`import_merge`
+only inserts an archive's rows), so no tool replaces an asset or makes, edits or removes one (R86-18).
 """
 
 from __future__ import annotations

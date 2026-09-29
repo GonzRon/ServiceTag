@@ -172,7 +172,8 @@ at the next sweep of any kind, the midnight sweep included. Nothing deletes or r
 from one asset to a different, new one and records the pair as a succession. The tool answers
 `{replaces, replacedBy}` for an asset — the succession naming it as the new asset and the one naming it as
 the old, each `{id, predecessorAssetId, successorAssetId, replacedOn, createdAt}` or null — and is read
-only: no tool replaces an asset or makes, edits or removes a succession, and an asset's own answer carries
+only: no tool replaces an asset or records, edits or removes a succession (`import_merge` only inserts an
+archive's rows, below), and an asset's own answer carries
 no succession field. `status` counts them as `assetSuccessions`. Deleting either asset, on the phone,
 deletes its succession; there is no unlink. `docs/api/v1.md`'s **Asset successions (#86)** section is the
 contract.
@@ -331,8 +332,8 @@ an ordinary archive — no `IN` recorded, nothing replaced — so only the phone
 asset back.
 
 An asset succession (format 15, the last of the report's twenty tables) is an immutable fact too, only
-ever inserted: one whose old or new asset a succession on the phone already names conflicts as
-`SUCCESSION_TAKEN`, one that would close a loop with the phone's successions as `SUCCESSION_CYCLE`, and one
+ever inserted: one whose old asset a succession on the phone already names as an old asset, or whose new
+asset one already names as a new asset, conflicts as `SUCCESSION_TAKEN`, one that would close a loop with the phone's successions as `SUCCESSION_CYCLE`, and one
 naming an asset transferred out from the phone as `ASSET_TRANSFERRED_OUT`. A merge never retires anything:
 a replacement made on another phone that retired its old asset there conflicts on that asset's row when
 this phone holds it unretired, and nothing lands — make the replacement on the phone that should keep it.
@@ -356,8 +357,8 @@ archiving, and health is computed at read time. Since #79 there is no tool that 
 case** or **amends or deletes a timeline entry**, and none but `add_case_entry` moves a case's status.
 Since #77 there is no tool that **makes, imports or marks a Transfer Pack**, **withdraws a transfer
 record** or lists the records: each is the phone's alone. Since #86 there is no tool that **replaces an
-asset** or **makes, edits or removes a succession**: only the phone's Replace asset records one, and
-`get_asset_succession` only reads.
+asset** or **records, edits or removes a succession**: only the phone's Replace asset records one,
+`import_merge` only inserts an archive's rows, and `get_asset_succession` only reads.
 
 ## Tests
 
