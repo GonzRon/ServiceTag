@@ -159,7 +159,23 @@ data class ReplaceResult(val successor: Asset, val succession: AssetSuccession)
 class ReplaceStale(val assetId: AssetId) :
     IllegalStateException("asset ${assetId.value} or a row reviewed with it changed; nothing was replaced")
 
-/** #86 (B2) — tests first: the API only; every answer is empty and the write is not there yet. */
+/**
+ * #86 (C8–C15; R86-3…14, R86-13a) — **Replace asset**: the old asset gives way to a *different* one. In one write
+ * it retires the old asset (unless it already is), creates the new one, copies only what the owner ticked as new
+ * rows with new ids and no history, moves only the tags the owner chose, and appends one succession row.
+ *
+ * - [offer] and [plan] only read, each through its in-transaction body; nothing is written before [run] (R86-4).
+ * - [run] opens the one write and re-reads the offer and the plan through the same bodies: a held old asset is
+ *   [AssetTransferredOut]; one with a successor, a problem, or any difference from the reviewed sources is
+ *   [ReplaceStale]. Then, in order: the retirement (R86-3), the new asset, set-up, schedules, groups, tags, and the
+ *   row.
+ * - It never nests another use case: it calls their in-transaction bodies (C15), since the transaction is not
+ *   re-entrant.
+ * - **The old asset is history (R86-C1).** Its one change is the retirement; its schedules, windows, activations,
+ *   events, closures, documents, references, conditions, cases, loans and children are never written.
+ * - **The date (R86-3, R86-13 amended, R86-13a).** The succession, the retirement and a MANUAL successor's one
+ *   activation all carry the replacement date; one later than today is refused.
+ */
 class ReplaceAsset(
     private val assets: AssetRepository,
     private val schedules: ScheduleRepository,
@@ -180,20 +196,247 @@ class ReplaceAsset(
     private val saveGroup: SaveGroup,
     private val bindTag: BindTag,
 ) {
-    suspend fun offer(predecessorId: AssetId): ReplaceOffer {
-        val predecessor = assets.get(predecessorId) ?: throw NoSuchAsset(predecessorId)
+    /** C8: what [predecessorId] offers, read in one snapshot. */
+    suspend fun offer(predecessorId: AssetId): ReplaceOffer =
+        uow.read { offerInTransaction(predecessorId) } ?: throw NoSuchAsset(predecessorId)
+
+    /** C9: the review of [draft]. It writes nothing. */
+    suspend fun plan(draft: ReplaceDraft): ReplacePlan = uow.read {
+        val offer = offerInTransaction(draft.predecessorId) ?: throw NoSuchAsset(draft.predecessorId)
+        planInTransaction(draft, offer)
+    }
+
+    /** C10: the one write, after the final confirm of [reviewed]. */
+    suspend fun run(draft: ReplaceDraft, reviewed: ReplacePlan): ReplaceResult = uow.write {
+        val offer = offerInTransaction(draft.predecessorId) ?: throw ReplaceStale(draft.predecessorId)
+        if (offer.held) throw AssetTransferredOut(draft.predecessorId)
+        if (offer.replacedBy != null) throw ReplaceStale(draft.predecessorId)
+        val fresh = planInTransaction(draft, offer)
+        if (fresh.problems.isNotEmpty() || fresh.sources != reviewed.sources || fresh.replacedOn != reviewed.replacedOn) {
+            throw ReplaceStale(draft.predecessorId)
+        }
+        replaceInTransaction(draft, fresh)
+    }
+
+    /** C8's body, inside the caller's transaction; null when the asset does not exist. */
+    internal suspend fun offerInTransaction(predecessorId: AssetId): ReplaceOffer? {
+        val predecessor = assets.get(predecessorId) ?: return null
+        val all = assets.all()
+        val held = transfers.heldIds()
+        val blocked = AssetTree.descendants(all, predecessorId) + predecessorId
+        val parentChoices = all
+            .filterNot { it.id in blocked || it.id in held }
+            .sortedWith(compareBy({ it.name.lowercase() }, { it.id.value }))
         return ReplaceOffer(
-            predecessor, held = false, replacedBy = null, schedules = emptyList(), groups = emptyList(),
-            setupOffered = false, seasonOffered = false, notesOffered = false, tags = emptyList(),
-            parentChoices = emptyList(), prefill = AssetCommand(name = ""), childNames = emptyList(), openLoan = false,
+            predecessor = predecessor,
+            held = predecessorId in held,
+            replacedBy = successions.replacedBy(predecessorId),
+            schedules = schedules.forAsset(predecessorId)
+                .filter { it.status != ScheduleStatus.ARCHIVED }
+                .sortedWith(compareBy({ it.title }, { it.id.value })),
+            groups = groups.forAsset(predecessorId)
+                .filter { group -> group.archivedAt == null && group.members.none { it.assetId in held } }
+                .sortedWith(compareBy({ it.name }, { it.id.value })),
+            setupOffered = definitions.forAsset(predecessorId).any { it.archivedAt == null } ||
+                profiles.forAsset(predecessorId).any { it.archivedAt == null },
+            seasonOffered = predecessor.seasonMode != SeasonMode.YEAR_ROUND ||
+                predecessor.blackoutStartMmdd != null || predecessor.blackoutEndMmdd != null,
+            notesOffered = predecessor.description.isNotBlank() || predecessor.notes.isNotBlank(),
+            tags = tags.forAsset(predecessorId)
+                .filter { it.status == TagStatus.ACTIVE && it.target == TagTarget.AssetTarget(predecessorId) }
+                .sortedWith(compareBy({ it.createdAt }, { it.id.value })),
+            parentChoices = parentChoices,
+            prefill = AssetCommand(
+                name = predecessor.name,
+                category = predecessor.category,
+                location = predecessor.location,
+                parentAssetId = predecessor.parentAssetId?.takeIf { parent -> parentChoices.any { it.id == parent } },
+            ),
+            childNames = AssetTree.children(all, predecessorId).map { it.name },
+            openLoan = loans.openFor(predecessorId) != null,
         )
     }
 
-    suspend fun plan(draft: ReplaceDraft): ReplacePlan {
-        val predecessor = assets.get(draft.predecessorId) ?: throw NoSuchAsset(draft.predecessorId)
-        val sources = ReplaceSources(predecessor, null, emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
-        return ReplacePlan(emptyList(), sources, draft.retiredOn.orEmpty())
+    /** C9's body, inside the caller's transaction, over [offer] read in the same one. */
+    internal suspend fun planInTransaction(draft: ReplaceDraft, offer: ReplaceOffer): ReplacePlan {
+        val predecessor = offer.predecessor
+        val problems = mutableListOf<ReplaceProblem>()
+        val replacedOn = predecessor.retiredOn ?: draft.retiredOn?.trim().orEmpty()
+        if (predecessor.retiredOn == null && !isIsoDate(replacedOn)) problems += ReplaceProblem.BadDate("retiredOn")
+        problems += successorProblems(draft.successor, offer.parentChoices)
+
+        val offered = offer.schedules.associateBy { it.id }
+        val ticked = draft.scheduleIds.sortedBy { it.value }
+        ticked.filterNot { it in offered }.forEach { problems += ReplaceProblem.NotOffered(it.value) }
+        val offeredGroups = offer.groups.map { it.id }.toSet()
+        draft.groupIds.sortedBy { it.value }.filterNot { it in offeredGroups }
+            .forEach { problems += ReplaceProblem.NotOffered(it.value) }
+        val offeredTags = offer.tags.map { it.id }.toSet()
+        draft.movedTagIds.sortedBy { it.value }.filterNot { it in offeredTags }
+            .forEach { problems += ReplaceProblem.NotOffered(it.value) }
+
+        val carried = ticked.mapNotNull { offered[it] }
+        if (carried.any { it.timeInterval != null } && !isIsoDate(draft.scheduleStartOn?.trim().orEmpty())) {
+            problems += ReplaceProblem.BadDate("scheduleStartOn")
+        }
+        // A PRE_SERVICE copy counts back from the new asset's boundary, which only a ticked season with one carries.
+        val carriesBoundary = draft.carrySeason && predecessor.boundaryKind() != BoundaryKind.NONE
+        carried.forEach { schedule ->
+            if (!draft.carrySetup && (schedule.meterDefinitionId != null || schedule.profileId != null)) {
+                problems += ReplaceProblem.NeedsSetup(schedule.id)
+            }
+            if (schedule.servicePolicy == ServicePolicy.PRE_SERVICE && !carriesBoundary) {
+                problems += ReplaceProblem.NeedsSeason(schedule.id)
+            }
+        }
+        if (draft.carrySeason && predecessor.seasonMode == SeasonMode.MANUAL && draft.manualPhase == null) {
+            problems += ReplaceProblem.PhaseRequired
+        }
+        // R86-13a: the one read of today — a replacement date later than it is refused, typed or stored.
+        if (isIsoDate(replacedOn) && LocalDate.parse(replacedOn) > today.localDate()) {
+            problems += ReplaceProblem.ReplacedOnAfterToday
+        }
+        return ReplacePlan(problems, sourcesOf(draft, predecessor), replacedOn)
     }
 
-    suspend fun run(draft: ReplaceDraft, reviewed: ReplacePlan): ReplaceResult = TODO("#86 B2: the one write")
+    /** The new asset's fields by the editor's rule, the parent judged against the offer's parent choices. */
+    private fun successorProblems(cmd: AssetCommand, parentChoices: List<Asset>): List<ReplaceProblem> = try {
+        validateAsset(cmd, parentChoices, id = null)
+        emptyList()
+    } catch (e: AssetValidation) {
+        e.problems.map { problem ->
+            when (problem) {
+                AssetProblem.NameRequired -> ReplaceProblem.NameRequired
+                is AssetProblem.BadDate -> ReplaceProblem.BadDate(problem.field)
+                AssetProblem.UnknownParent -> ReplaceProblem.NotOffered(cmd.parentAssetId!!.value)
+                else -> ReplaceProblem.Successor(problem)
+            }
+        }
+    }
+
+    private suspend fun sourcesOf(draft: ReplaceDraft, predecessor: Asset) = ReplaceSources(
+        predecessor = predecessor,
+        successorRow = successions.replacedBy(predecessor.id),
+        schedules = draft.scheduleIds.sortedBy { it.value }.mapNotNull { schedules.get(it) },
+        groups = draft.groupIds.sortedBy { it.value }.mapNotNull { groups.get(it) },
+        tags = draft.movedTagIds.sortedBy { it.value }.mapNotNull { tags.get(it) },
+        definitions = if (draft.carrySetup) definitions.forAsset(predecessor.id).sortedBy { it.id.value } else emptyList(),
+        profiles = if (draft.carrySetup) profiles.forAsset(predecessor.id).sortedBy { it.id.value } else emptyList(),
+    )
+
+    /** C10's steps 2–8, inside the one write, over a [plan] that has just passed again. */
+    private suspend fun replaceInTransaction(draft: ReplaceDraft, plan: ReplacePlan): ReplaceResult {
+        val now = clock.nowMillis()
+        val predecessor = plan.sources.predecessor
+        // (2) R86-3: retired with the replacement date, unless it already is — then its row is not written at all.
+        if (predecessor.retiredOn == null) retire.retireInTransaction(predecessor, plan.replacedOn, now)
+        // (3) C13: a new identity; a MANUAL season's one activation is dated the replacement date (R86-13 amended).
+        var successor = saveAssetSettings.saveInTransaction(
+            id = null,
+            cmd = settingsFor(draft, predecessor),
+            templateKey = null,
+            activationDay = LocalDate.parse(plan.replacedOn),
+        )
+        // (4) C12: set-up, iff ticked, with the old asset's template key as provenance.
+        val clone = if (draft.carrySetup) {
+            cloneSetup(successor.id, plan.sources, now, ids, definitions, profiles)
+        } else {
+            SetupClone.NONE
+        }
+        if (draft.carrySetup && predecessor.templateKey != null && successor.templateKey == null) {
+            successor = successor.copy(templateKey = predecessor.templateKey, updatedAt = now)
+            assets.upsert(successor)
+        }
+        // (5) C11: each ticked schedule, in id order, as a create.
+        plan.sources.schedules.forEach { source ->
+            saveSchedule.createInTransaction(copyOf(source, successor.id, draft.scheduleStartOn, clone))
+        }
+        // (6) C13: each ticked group keeps every open window by id and gains one for the new asset.
+        plan.sources.groups.forEach { group -> saveGroup.saveInTransaction(group.id, joining(group, successor.id)) }
+        // (7) C14: each moved tag retargeted in place; no tag is written to.
+        plan.sources.tags.forEach { tag ->
+            bindTag.bindInTransaction(tag.payloadFormat, tag.payloadKey, TagTarget.AssetTarget(successor.id), label = null)
+        }
+        // (8) The row, dated the old asset's stored retirement; the new row goes last, so any problem names it (NT-3).
+        val row = AssetSuccession(
+            id = ids.newId(),
+            predecessorAssetId = predecessor.id,
+            successorAssetId = successor.id,
+            replacedOn = checkNotNull(assets.get(predecessor.id)?.retiredOn) { "the old asset is retired by now" },
+            createdAt = now,
+        )
+        check(row.predecessorAssetId != row.successorAssetId) { "a succession never names one asset twice" }
+        check(successionProblems(successions.all() + row).none { it.names(row.id) }) {
+            "succession ${row.id} breaks the one-successor rule or makes a cycle"
+        }
+        successions.append(row)
+        return ReplaceResult(successor, row)
+    }
+
+    private fun settingsFor(draft: ReplaceDraft, predecessor: Asset): AssetSettingsCommand {
+        val mode = predecessor.seasonMode
+        return AssetSettingsCommand(
+            asset = draft.successor.copy(
+                description = if (draft.carryNotes) predecessor.description else "",
+                notes = if (draft.carryNotes) predecessor.notes else "",
+            ),
+            seasonMode = if (draft.carrySeason) {
+                SeasonModeCommand(
+                    seasonMode = mode,
+                    seasonStartMmdd = predecessor.seasonStartMmdd.takeIf { mode == SeasonMode.CALENDAR },
+                    seasonEndMmdd = predecessor.seasonEndMmdd.takeIf { mode == SeasonMode.CALENDAR },
+                    manualPhase = draft.manualPhase.takeIf { mode == SeasonMode.MANUAL },
+                )
+            } else {
+                SeasonModeCommand(SeasonMode.YEAR_ROUND)
+            },
+            maintenanceBreak = if (draft.carrySeason) {
+                BreakCommand(predecessor.blackoutStartMmdd, predecessor.blackoutEndMmdd)
+            } else {
+                BreakCommand(null, null)
+            },
+            healthPolicy = HealthPolicyCommand(HealthAggregation.WORST),
+            warrantyReminder = null,
+        )
+    }
+
+    /** C11: the configuration, never the history; one reviewed anchor, and no meter anchor. */
+    private fun copyOf(source: MaintenanceSchedule, successor: AssetId, startOn: String?, clone: SetupClone) =
+        ScheduleCommand(
+            targetAssetId = successor,
+            targetGroupId = null,
+            title = source.title,
+            description = source.description,
+            timeInterval = source.timeInterval,
+            timeUnit = source.timeUnit,
+            timeBasis = source.timeBasis,
+            anchorOn = if (source.timeInterval != null) startOn?.trim() else null,
+            leadDays = source.leadDays,
+            meterDefinitionId = source.meterDefinitionId?.let { clone.definitions.getValue(it) },
+            meterInterval = source.meterInterval,
+            anchorMeter = null,
+            meterLead = source.meterLead,
+            servicePolicy = source.servicePolicy,
+            policyOffsetDays = source.policyOffsetDays,
+            completionMode = source.completionMode,
+            profileId = source.profileId?.let { clone.profiles.getValue(it) },
+            remindersEnabled = source.remindersEnabled,
+            providers = source.providers,
+        )
+
+    /** C13 (MN-2): every open window kept by id — an omitted one would be closed — and one new window, last. */
+    private fun joining(group: MaintenanceGroup, successor: AssetId) = GroupCommand(
+        name = group.name,
+        description = group.description,
+        members = group.members.filter { it.removedAt == null }.map { GroupMemberInput(it.assetId, it.id, it.sortOrder) } +
+            GroupMemberInput(successor, id = null, sortOrder = (group.members.maxOfOrNull { it.sortOrder } ?: -1) + 1),
+    )
+}
+
+/** Whether this problem is about the row [id]. */
+private fun SuccessionProblem.names(id: String): Boolean = when (this) {
+    is SuccessionProblem.SelfLink -> this.id == id
+    is SuccessionProblem.PredecessorTaken -> this.id == id
+    is SuccessionProblem.SuccessorTaken -> this.id == id
+    is SuccessionProblem.Cycle -> id in ids
 }
