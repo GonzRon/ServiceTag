@@ -22,6 +22,7 @@ import com.loosecannon.servicetag.ui.maintenance.statusLabel
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -298,6 +299,25 @@ class DashboardFiltersTest {
         assertEquals("Example Ladder", rows.first().assetName)
         assertEquals("Tools", rows[1].category)
         assertEquals("Lent to Sample Borrower · due back 19 Sep 2026", rows[1].line)
+    }
+
+    /** #84 (C8, D-2): a lent component's row names its parent; a root's row names none (inv. 122). */
+    @Test fun aLentComponentsLoanRowNamesItsParent() {
+        val today = LocalDate.parse("2026-09-20")
+        val assets = listOf(
+            assetRow("tub", name = "Example Hot Tub"),
+            assetRow("cover", name = "Example Cover", parent = "tub"),
+            assetRow("ladder", name = "Example Ladder"),
+        )
+        val loans = listOf(
+            loanRow("l-cover", "cover", lentOn = "2026-09-01", dueOn = "2026-09-10"),
+            loanRow("l-ladder", "ladder", lentOn = "2026-09-01", dueOn = "2026-09-11"),
+        )
+
+        val rows = loanAttentionRowsOf(loans, assets, today, held = emptySet())
+
+        assertEquals("Example Hot Tub", rows.single { it.loanId == "l-cover" }.parentName)
+        assertNull(rows.single { it.loanId == "l-ladder" }.parentName)
     }
 
     private companion object {
