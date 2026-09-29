@@ -225,6 +225,13 @@ class ReplaceAssetViewModelTest {
         assertFalse(vm.state.value.reviewEnabled)
         assertTrue("a ticked time rule asks its start", vm.state.value.asksScheduleStart)
         assertEquals("the start follows the in-service date", TODAY, vm.state.value.form.scheduleStartOn)
+        vm.onInServiceOn("2026-06-10")
+        advanceUntilIdle()
+        assertEquals("the start follows an in-service date of its own", "2026-06-10", vm.state.value.form.scheduleStartOn)
+        vm.onScheduleStartOn("2026-06-12")
+        vm.onInServiceOn("2026-06-11")
+        advanceUntilIdle()
+        assertEquals("an edited start stays", "2026-06-12", vm.state.value.form.scheduleStartOn)
         vm.onCarrySeason(true)
         advanceUntilIdle()
         assertEquals(emptyList<String>(), vm.schedule("s-pre").needs)
@@ -383,6 +390,40 @@ class ReplaceAssetViewModelTest {
         assertTrue(state.reviewEnabled)
         assertTrue(snapshot().assetSuccessions.isEmpty())
         assertTrue(sweeps.isEmpty())
+    }
+
+    @Test fun aStaleRefusalThatFindsTheAssetReplacedStaysOnTheFormAndSaysP86_25() = runTest(scheduler) {
+        pump()
+        graph.assets.upsert(assetRow("x1", name = "Example Pool Pump Elsewhere"))
+        val vm = open()
+        vm.onName("Sample Pool Pump II")
+        advanceUntilIdle()
+        vm.review()
+        advanceUntilIdle()
+        graph.assetSuccessions.append(
+            AssetSuccession(
+                id = "sc-elsewhere", predecessorAssetId = AssetId("p1"), successorAssetId = AssetId("x1"),
+                replacedOn = TODAY, createdAt = 1L,
+            ),
+        )
+
+        vm.confirm()
+        advanceUntilIdle()
+
+        val state = vm.state.value
+        assertEquals("never a silent exit", ReplacePhase.FORM, state.phase)
+        assertEquals(ReplaceStrings.CHANGED_WHILE_REVIEWING, state.error)
+        assertFalse(state.reviewEnabled)
+        assertFalse(state.saving)
+        assertNull(state.review)
+        assertNull(state.done)
+        assertEquals("no row of ours", listOf("sc-elsewhere"), snapshot().assetSuccessions.map { it.id })
+        assertTrue(sweeps.isEmpty())
+        vm.onName("Sample Pool Pump III")
+        vm.review()
+        advanceUntilIdle()
+        assertEquals("the form is inert", "Sample Pool Pump II", vm.state.value.form.name)
+        assertEquals(ReplacePhase.FORM, vm.state.value.phase)
     }
 
     @Test fun aHeldRefusalSaysP77_35() = runTest(scheduler) {

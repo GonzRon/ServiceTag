@@ -48,8 +48,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Where the Replace screen is (C17): reading the offer, the FORM, the REVIEW, or GONE — the old asset is missing,
- * held, or already replaced, so there is nothing to replace and the screen leaves. GONE says nothing of its own.
+ * Where the Replace screen is (C17): reading the offer, the FORM, the REVIEW, or GONE — at open, the old asset is
+ * missing, held, or already replaced, so there is nothing to replace and the screen leaves. GONE says nothing of its
+ * own. After a confirm the same finding is P86-25 on an inert FORM instead (MN-1), never GONE.
  */
 enum class ReplacePhase { LOADING, FORM, REVIEW, GONE }
 
@@ -254,8 +255,8 @@ class ReplaceAssetViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ReplaceStale) {
-                // Matched before any other IllegalStateException (hand-off 3).
-                _state.update { it.copy(phase = ReplacePhase.FORM, review = null, saving = false) }
+                // Matched before any other IllegalStateException (hand-off 3). The REVIEW stays, saving, until the
+                // re-read lands, so no edit or second Review can slip in against the old offer (N1).
                 load(keep = current.form, error = ReplaceStrings.CHANGED_WHILE_REVIEWING)
                 return@launch
             } catch (e: AssetTransferredOut) {
@@ -317,7 +318,17 @@ class ReplaceAssetViewModel(
         }
         if (read == null || !read.eligible) {
             offer = null
-            _state.update { it.copy(phase = ReplacePhase.GONE, saving = false) }
+            plan = null
+            _state.update {
+                if (error == null) {
+                    // At open: nothing to replace, and nothing was tried — the screen leaves without a word.
+                    it.copy(phase = ReplacePhase.GONE, saving = false)
+                } else {
+                    // After a confirm (MN-1): the asset was deleted or replaced elsewhere. P86-25 stays on an inert
+                    // FORM — Review disabled, every edit a no-op (no offer) — and Back leaves.
+                    it.copy(phase = ReplacePhase.FORM, review = null, saving = false, reviewEnabled = false, error = error)
+                }
+            }
             return
         }
         offer = read

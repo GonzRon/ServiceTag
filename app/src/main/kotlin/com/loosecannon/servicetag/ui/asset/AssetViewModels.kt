@@ -2901,12 +2901,12 @@ internal fun seasonStrands(titles: List<String>): String =
 internal fun breakStrands(titles: List<String>): String =
     BREAK_STRANDS_PRE_SERVICE.replace("<titles>", titles.joinToString(", "))
 
-/** Also the case editor's currency refusal (#79, C21): reused through this home. */
 /** #86 (plan §6, reused 16): the name refusal, hoisted byte-identical so Replace asset draws it from here. */
 const val GIVE_THE_ASSET_A_NAME = "Give the asset a name"
 
 /** #86 (plan §6, reused 17): every bad or blank required date, hoisted byte-identical. */
 const val ENTER_A_DATE_AS_YYYY_MM_DD = "Enter a date as YYYY-MM-DD"
 
+/** Also the case editor's currency refusal (#79, C21): reused through this home. */
 internal const val BAD_CURRENCY = "Currency is a three-letter code like USD"
 private const val CURRENCY_REQUIRED = "A price needs a currency"
