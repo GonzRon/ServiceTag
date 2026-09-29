@@ -88,6 +88,7 @@ EXPECTED_TOOLS = (
     "lend_asset",
     "update_loan",
     "return_loan",
+    "get_asset_succession",
 )
 
 
@@ -101,16 +102,16 @@ def test_every_tool_the_design_names_is_registered() -> None:
         assert callable(getattr(server_module, name)), f"{name} is missing"
 
 
-def test_tool_names_are_sixty_eight() -> None:
+def test_tool_names_are_sixty_nine() -> None:
     """Spec §9.4: fourteen new tools took the 1.3 server's forty-one to fifty-five, 1.4.1's provider
     repair (#80) took it to fifty-six, #79's two warranty tools to fifty-eight, its five service-case
-    tools to sixty-three, and #72's five loan tools take it to sixty-eight; `TOOL_NAMES`,
-    the registered tools and the guard's `expected_count` all agree."""
-    assert len(EXPECTED_TOOLS) == 68
-    assert len(server_module.TOOL_NAMES) == 68
+    tools to sixty-three, #72's five loan tools to sixty-eight, and #86's succession read takes it to
+    sixty-nine; `TOOL_NAMES`, the registered tools and the guard's `expected_count` all agree."""
+    assert len(EXPECTED_TOOLS) == 69
+    assert len(server_module.TOOL_NAMES) == 69
     registered = {tool.name for tool in server_module.mcp._tool_manager.list_tools()}
     assert registered == set(server_module.TOOL_NAMES)
-    assert len(registered) == 68
+    assert len(registered) == 69
 
 
 def test_pair_stores_the_code_upper_cased(api) -> None:
@@ -754,28 +755,33 @@ def test_max_import_bytes_is_four_mebibytes() -> None:
     assert client_module.MAX_IMPORT_BYTES == 4 * 1024 * 1024
 
 
-# --- #77: format 14, nineteen tallies, the two transfer reasons -----------------------------------
+# --- #77 and #86: format 15, twenty tallies, the transfer and succession reasons -------------------
 
-# The report's tallies, in the order `docs/api/v1.md` lists them: `transfers` (format 14) closes the list.
-NINETEEN_TALLIES = (
+# The report's tallies, in the order `docs/api/v1.md` lists them: `transfers` (format 14), then `successions`
+# (format 15), close the list.
+TWENTY_TALLIES = (
     "assets", "groups", "definitions", "profiles", "schedules", "closures", "links", "tags", "events",
     "attachments", "references", "seasonActivations", "conditions", "healthSubjects", "categories",
-    "serviceCases", "caseEntries", "loans", "transfers",
+    "serviceCases", "caseEntries", "loans", "transfers", "successions",
 )
 README = Path(__file__).resolve().parents[1] / "README.md"
 
 
-def test_import_merge_returns_the_nineteen_tallies_and_a_transfer_conflict_as_sent(paired, tmp_path) -> None:
-    """The tool never reshapes the report: every one of the nineteen tallies, `transfers` included, and a
-    `TRANSFERS` conflict with its reason reach the caller exactly as the phone sent them — and a plan with
-    that conflict is never applied."""
-    assert len(NINETEEN_TALLIES) == 19
+def test_import_merge_returns_the_twenty_tallies_and_the_conflicts_as_sent(paired, tmp_path) -> None:
+    """The tool never reshapes the report: every one of the twenty tallies, `transfers` and `successions`
+    included, and a `TRANSFERS` and a `SUCCESSIONS` conflict with their reasons reach the caller exactly as
+    the phone sent them — and a plan with those conflicts is never applied."""
+    assert len(TWENTY_TALLIES) == 20
     tally = {"insert": 0, "identical": 1, "conflict": 0, "skipped": 0}
-    conflict = {"table": "TRANSFERS", "id": "rec-in", "verdict": "CONFLICT", "reason": "ASSET_TRANSFERRED_OUT",
-                "detail": "asset-1"}
-    report = {"formatVersion": 14, "backupSetId": "set-1", "applicable": False,
-              **{name: dict(tally) for name in NINETEEN_TALLIES},
-              "conflicts": [conflict], "duplicateCandidates": []}
+    conflicts = [
+        {"table": "TRANSFERS", "id": "rec-in", "verdict": "CONFLICT", "reason": "ASSET_TRANSFERRED_OUT",
+         "detail": "asset-1"},
+        {"table": "SUCCESSIONS", "id": "s2", "verdict": "CONFLICT", "reason": "SUCCESSION_TAKEN",
+         "detail": "s1"},
+    ]
+    report = {"formatVersion": 15, "backupSetId": "set-1", "applicable": False,
+              **{name: dict(tally) for name in TWENTY_TALLIES},
+              "conflicts": conflicts, "duplicateCandidates": []}
     paired.reply("POST", "/v1/import-merge/plan", 200, report)
 
     result = server_module.import_merge(archive_path=str(an_archive(tmp_path)))
@@ -784,22 +790,23 @@ def test_import_merge_returns_the_nineteen_tallies_and_a_transfer_conflict_as_se
     assert [r.path for r in paired.requests] == ["/v1/import-merge/plan"]
 
 
-def test_import_merge_docs_say_formats_1_to_14_nineteen_tables_and_the_two_reasons() -> None:
-    """#77 (C24): the tool's docstring and the README's `import_merge` section name the range 1–14, the
-    nineteen tables, the `transfers` tally and the two reasons a transfer record conflicts with; the README
-    lists the nineteen tallies in the report's order."""
+def test_import_merge_docs_say_formats_1_to_15_twenty_tables_and_the_four_reasons() -> None:
+    """#77 (C24) and #86 (C21): the tool's docstring and the README's `import_merge` section name the range
+    1–15, the twenty tables, the `transfers` and `successions` tallies, the two reasons a transfer record
+    conflicts with and the two a succession does; the README lists the twenty tallies in the report's order."""
     doc = " ".join((server_module.import_merge.__doc__ or "").split())
-    assert "format 1–14" in doc
-    assert "nineteen tables" in doc and "eighteen" not in doc
-    for word in ("`transfers`", "`ASSET_TRANSFERRED_OUT`", "`TRANSFER_DIVERGED`"):
+    assert "format 1–15" in doc
+    assert "twenty tables" in doc and "nineteen" not in doc
+    for word in ("`transfers`", "`successions`", "`ASSET_TRANSFERRED_OUT`", "`TRANSFER_DIVERGED`",
+                 "`SUCCESSION_TAKEN`", "`SUCCESSION_CYCLE`"):
         assert word in doc, word
 
     readme = README.read_text(encoding="utf-8")
     section = readme.split("### `import_merge`", 1)[1].split("\n## ", 1)[0]
     flat = " ".join(section.split())
-    assert "format **1–14**" in flat
-    assert "each of **nineteen** tables" in flat and "eighteen" not in flat
-    for word in ("`ASSET_TRANSFERRED_OUT`", "`TRANSFER_DIVERGED`"):
+    assert "format **1–15**" in flat
+    assert "each of **twenty** tables" in flat and "nineteen" not in flat
+    for word in ("`ASSET_TRANSFERRED_OUT`", "`TRANSFER_DIVERGED`", "`SUCCESSION_TAKEN`", "`SUCCESSION_CYCLE`"):
         assert word in flat, word
-    listed = flat.split("each of **nineteen** tables — ", 1)[1].split(".", 1)[0]
-    assert [name.strip(" `") for name in listed.split(",")] == list(NINETEEN_TALLIES)
+    listed = flat.split("each of **twenty** tables — ", 1)[1].split(".", 1)[0]
+    assert [name.strip(" `") for name in listed.split(",")] == list(TWENTY_TALLIES)

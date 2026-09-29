@@ -144,6 +144,8 @@ TOOL_NAMES: tuple[str, ...] = (
     "lend_asset",
     "update_loan",
     "return_loan",
+    # #86 — an asset's succession, read only, at a schema-15 minimum. One, taking the total to 69.
+    "get_asset_succession",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -174,6 +176,11 @@ _MIN_LOAN_SCHEMA_VERSION = 13
 """The Room schema that carries the loans (#72). The five loan tools speak routes an older app does not
 have, so each refuses — the two reads too — a phone below it, with nothing sent: a per-tool minimum on the
 case tools' pattern. The global write minimum stays 8."""
+
+_MIN_SUCCESSION_SCHEMA_VERSION = 15
+"""The Room schema that carries the asset successions (#86). `get_asset_succession` reads a route an older
+app does not have, so it refuses a phone below it, with nothing sent: a per-tool minimum on the loan tools'
+pattern. The global write minimum stays 8."""
 
 _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
     {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan"}
@@ -250,6 +257,11 @@ def _require_case_schema(tool: str) -> None:
 def _require_loan_schema(tool: str) -> None:
     """One of #72's five loan tools, on a phone below schema 13."""
     _require_tool_schema(tool, _MIN_LOAN_SCHEMA_VERSION, "the loans")
+
+
+def _require_succession_schema(tool: str) -> None:
+    """#86's one succession tool, on a phone below schema 15."""
+    _require_tool_schema(tool, _MIN_SUCCESSION_SCHEMA_VERSION, "the asset successions")
 
 
 def _read_for_write(path: str) -> dict[str, Any]:
@@ -481,10 +493,11 @@ def status() -> dict[str, Any]:
     row count per table (since 1.4 also `seasonActivations`, `assetConditions` and
     `healthSubjects`; since the durable category catalog also `assetCategories`; since #79's service
     cases also `serviceCases` and `serviceCaseEntries`; since #72's loans also `assetLoans`; since #77's
-    transfers also `transferRecords`, every transfer record, OUT, IN and WITHDRAWN). Every write
+    transfers also `transferRecords`, every transfer record, OUT, IN and WITHDRAWN; since #86's
+    successions also `assetSuccessions`, every succession). Every write
     tool reads `schemaVersion` once per pairing and refuses with `APP_SCHEMA_TOO_OLD` below 8 (ServiceTag
     1.4.0); `get_warranty` and `set_warranty_reminder` refuse below 11, the five service-case tools below
-    12, and the five loan tools below 13."""
+    12, the five loan tools below 13, and `get_asset_succession` below 15."""
     return _call("GET", "/v1/status")
 
 
@@ -1115,7 +1128,7 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a `ServiceTag-data-*.zip` of format 1–14 (format 8, from ServiceTag
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–15 (format 8, from ServiceTag
     1.4.0, adds season activations, conditions and health subjects; format 9 adds the owner's own
     asset categories; format 10 adds each attachment's document role; an older archive's
     attachments are compared without the role and, when the phone's row carries one, without the
@@ -1133,7 +1146,14 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     `ASSET_TRANSFERRED_OUT`, and an OUT that would leave its asset with two open OUTs as
     `TRANSFER_DIVERGED`, resolved only by withdrawing one on the phone; and, whatever the format, a row an
     asset transferred out from the phone would own, or a row that would name one of its rows, conflicts as
-    `ASSET_TRANSFERRED_OUT`).
+    `ASSET_TRANSFERRED_OUT`;
+    format 15 adds the asset successions — one row per asset replaced by a distinct new one — which a merge
+    only ever inserts, never updating one: a succession whose predecessor or successor a succession on the
+    phone already names conflicts as `SUCCESSION_TAKEN`, one that would close a loop with the phone's
+    successions as `SUCCESSION_CYCLE`, and one naming an asset transferred out from the phone as
+    `ASSET_TRANSFERRED_OUT`. A merge never retires anything: a replacement made on another phone retired its
+    predecessor there, so merging it into a phone that holds that asset unretired conflicts on the asset's
+    row, and nothing lands).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
@@ -1143,7 +1163,7 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     `plan_only=True`, or when the plan does have conflicts, it stops and returns the plan — whose
     `conflicts` list names each one by table, id and a stable reason code, in a deterministic order.
     Read `applicable` to know which happened. The report tallies `{insert, identical, conflict,
-    skipped}` for each of nineteen tables, `transfers` last.
+    skipped}` for each of twenty tables, `transfers` and then `successions` last.
 
     A Transfer Pack is not a data archive, and the phone refuses one here: packs are made, imported,
     marked and withdrawn on the phone only, and no tool does any of it. The `data.zip` inside a pack is
@@ -2707,6 +2727,28 @@ def return_loan(loan_id: str, returned_on: str) -> dict[str, Any]:
     path = f"/v1/loans/{_path_id(loan_id, field='loan_id')}/return"
     _require_loan_schema("return_loan")
     return _call("POST", path, json_body={"returnedOn": returned_on}, content_type="application/json")
+
+
+# --- #86, the asset successions (docs/api/v1.md, **Asset successions (#86)**) ------------------------------
+#
+# One read-only route a phone below schema 15 does not have, so the tool refuses such a phone by name before
+# anything is sent. Only the phone's "Replace asset" writes a succession: no route or tool replaces an asset,
+# appends, amends or removes a succession.
+
+
+@mcp.tool()
+def get_asset_succession(asset_id: str) -> dict[str, Any]:
+    """Which asset this one replaces, and which replaced it: `{replaces, replacedBy}`, each a succession row
+    `{id, predecessorAssetId, successorAssetId, replacedOn, createdAt}` or null — `replaces` is the row
+    naming this asset as the successor, `replacedBy` the row naming it as the predecessor; both keys are
+    always present. A chain answers both on its middle asset. `replacedOn` is ISO `YYYY-MM-DD`. Read only:
+    only the phone's "Replace asset" makes a succession, and nothing here makes, edits or removes one.
+    Needs a phone at schema 15 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is
+    sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/succession"
+    _require_succession_schema("get_asset_succession")
+    return _call("GET", path)
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"
