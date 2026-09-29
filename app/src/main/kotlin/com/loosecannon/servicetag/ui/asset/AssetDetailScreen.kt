@@ -363,6 +363,10 @@ fun AssetDetailScreen(
                 current.parentName?.let { parent ->
                     PartOfLine(parent) { current.parentId?.let(onOpenAsset) }
                 }
+                // #86 (C16): P86-26 and P86-27, each opening the other asset; a chain draws both, and a held
+                // endpoint's read-only detail draws its line too (navigating writes nothing).
+                current.replacedBy?.let { SuccessionLink(it, onOpenAsset) }
+                current.replaces?.let { SuccessionLink(it, onOpenAsset) }
                 // #77 (C19, C23): a held asset opens with its transfer record(s) and nothing it could write.
                 if (current.held) TransferredOutBlock(current.transferredOut, onWithdraw = model::askWithdraw)
                 ReadingsSection(current.readings)
@@ -859,6 +863,19 @@ private fun PartOfLine(parentName: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
+            .heightIn(min = 44.dp)
+            .padding(top = 10.dp, bottom = 4.dp),
+    )
+}
+
+/** #86 (C16): "Replaced by" or "Replaces" under the plate, on [PartOfLine]'s pattern, tapping through to the other asset. */
+@Composable
+private fun SuccessionLink(line: SuccessionLine, onOpenAsset: (String) -> Unit) {
+    QuietLine(
+        text = line.line,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpenAsset(line.assetId) }
             .heightIn(min = 44.dp)
             .padding(top = 10.dp, bottom = 4.dp),
     )

@@ -77,6 +77,7 @@ import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.health.RESTORE_SUBJECT
 import com.loosecannon.servicetag.ui.maintenance.NOT_NOW
 import com.loosecannon.servicetag.ui.maintenance.REMIND_ME_N_DAYS_EARLY
+import com.loosecannon.servicetag.ui.replace.ReplaceStrings
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.MonoText
@@ -341,7 +342,7 @@ fun AssetEditScreen(
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(
-                title = { Text(if (state.editing) "Edit asset" else "New asset") },
+                title = { Text(if (state.editing) "Edit asset" else ReplaceStrings.NEW_ASSET) },
                 navigationIcon = {
                     // #67, R67-8 (C6): held throughout the copies, same as the back gesture above.
                     IconButton(onClick = onBack, enabled = !state.saving) {
@@ -869,10 +870,11 @@ internal fun FormField(
  *
  * #74 (C16): [choices] is the durable catalog — the built-ins, then the owner's own categories — and
  * one of the owner's reads exactly like a built-in. Nothing here writes it; a save does.
+ * Internal since #86 (MN-3): Replace asset draws the new asset's Category with it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CategoryField(value: String, choices: List<CategoryChoice>, onValueChange: (String) -> Unit) {
+internal fun CategoryField(value: String, choices: List<CategoryChoice>, onValueChange: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val matches = choices.filter {
         value.isBlank() || it.display.startsWith(value.trim(), ignoreCase = true)
@@ -901,10 +903,13 @@ private fun CategoryField(value: String, choices: List<CategoryChoice>, onValueC
     }
 }
 
-/** A read-only field over a fixed list — "Part of", whose first row is always "None" (spec §5). */
+/**
+ * A read-only field over a fixed list — "Part of", whose first row is always "None" (spec §5).
+ * Internal since #86 (MN-3): Replace asset draws the new asset's Part of with it.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ChoiceField(
+internal fun ChoiceField(
     label: String,
     choices: List<ParentChoice>,
     selected: String?,

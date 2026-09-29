@@ -26,7 +26,7 @@ internal object ReplaceStrings {
     fun wasRetiredOn(old: String, on: String): String =
         "$old was retired on ${day(on)}. Its history, documents and service record are kept as they are."
 
-    /** P86-5 — the form's SectionHeader. */
+    /** P86-5 — the form's SectionHeader; the one home of these words, read by the editor's create title too. */
     const val NEW_ASSET = "New asset"
 
     /** P86-6 — the form's QuietLine under P86-5. */
