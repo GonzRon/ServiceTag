@@ -25,8 +25,8 @@ class Migration9To10Test {
         migrating { file, before ->
             withConnection(file) { c ->
                 for (row in SEEDED) {
-                    // The chain runs on to v11, whose one asset column `Migration10To11Test` owns.
-                    val after = c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V11_ASSET_COLUMNS }
+                    // The chain runs on to v16: v11's one asset column `Migration10To11Test` owns, v16's four attachment columns `Migration15To16Test` owns.
+                    val after = c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V11_ASSET_COLUMNS + V16_ATTACHMENT_COLUMNS }
                     val expected = if (row.table == "attachment") before.getValue(row) + "document_role=NULL" else before.getValue(row)
                     assertEquals("$row", expected, after)
                 }
@@ -64,9 +64,9 @@ class Migration9To10Test {
                         // The one new column, last, nullable and with no default: nothing is backfilled.
                         assertEquals(
                             "document_role TEXT notnull=0 default=- pk=0",
-                            m.columnsOf("attachment").last(),
+                            m.columnsOf("attachment").dropLast(V16_ATTACHMENT_COLUMNS.size).last(),
                         )
-                        assertEquals(16, m.columnsOf("attachment").size)
+                        assertEquals(20, m.columnsOf("attachment").size)
                     }
                 }
             }

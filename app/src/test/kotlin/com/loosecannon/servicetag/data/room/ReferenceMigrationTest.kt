@@ -75,7 +75,7 @@ class ReferenceMigrationTest {
                     when (key.first) {
                         "asset" -> row.without(V8_NEW_ASSET_COLUMNS + V11_ASSET_COLUMNS)
                         "maintenance_schedule" -> row.without(V8_SCHEDULE_COLUMNS)
-                        "attachment" -> row.without(V10_ATTACHMENT_COLUMNS)
+                        "attachment" -> row.without(V10_ATTACHMENT_COLUMNS + V16_ATTACHMENT_COLUMNS)
                         else -> row
                     }
                 },

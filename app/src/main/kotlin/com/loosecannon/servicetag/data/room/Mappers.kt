@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.ExternalLink
@@ -187,6 +188,15 @@ fun AttachmentEntity.toDomain(): Attachment = Attachment(
     createdAt = createdAt,
     updatedAt = updatedAt,
     role = documentRole?.let(DocumentRole::valueOf),
+    source = sourceUri?.let {
+        AttachmentSource(
+            uri = it,
+            resolvedUri = sourceResolvedUri,
+            // a row with a uri and no date is a corrupt row, the way an unknown enum name is
+            retrievedAt = requireNotNull(sourceRetrievedAt) { "attachment '$id' has a source uri and no retrieval time" },
+            name = sourceName,
+        )
+    },
 )
 
 fun Attachment.toEntity(): AttachmentEntity = AttachmentEntity(
@@ -206,6 +216,10 @@ fun Attachment.toEntity(): AttachmentEntity = AttachmentEntity(
     createdAt = createdAt,
     updatedAt = updatedAt,
     documentRole = role?.name,
+    sourceUri = source?.uri,
+    sourceResolvedUri = source?.resolvedUri,
+    sourceRetrievedAt = source?.retrievedAt,
+    sourceName = source?.name,
 )
 
 // #74: a catalog row passes through unchanged in both directions; its key rule lives in core.

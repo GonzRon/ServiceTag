@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.StorageProvider
 import com.loosecannon.servicetag.data.room.entities.AssetEventEntity
@@ -96,6 +97,35 @@ class AttachmentDaoTest {
         assertEquals(emptyList<Attachment>(), attachments.all())
     }
 
+    /** #85, C2: the four source columns travel both ways; a row with none reads back with no source at all. */
+    @Test fun aSourceRoundTripsAndNullStaysNull() = runTest {
+        seedAsset("a1")
+        seedEvent("e1", "a1")
+        val full = attachment("att-s1", AttachmentOwner.OfAsset(AssetId("a1")), "assets/a1/att-s1.pdf")
+            .copy(
+                source = AttachmentSource(
+                    uri = "https://manuals.example.invalid/pump.pdf?rev=2",
+                    resolvedUri = "https://cdn.example.invalid/files/pump.pdf",
+                    retrievedAt = 1_758_900_000_123L,
+                    name = "Example Pool Pump manual",
+                ),
+            )
+        val bare = attachment("att-s2", AttachmentOwner.OfEvent(EventId("e1")), "events/e1/att-s2.pdf", createdAt = 2L)
+            .copy(source = AttachmentSource("https://manuals.example.invalid/x.pdf", null, 5L, null))
+        val none = attachment("att-s3", AttachmentOwner.OfAsset(AssetId("a1")), "assets/a1/att-s3.pdf", createdAt = 3L)
+        attachments.upsert(full)
+        attachments.upsert(bare)
+        attachments.upsert(none)
+
+        assertEquals(full, attachments.get(AttachmentId("att-s1")))
+        assertEquals(1_758_900_000_123L, attachments.get(AttachmentId("att-s1"))!!.source!!.retrievedAt)
+        assertEquals(bare, attachments.get(AttachmentId("att-s2")))
+        assertNull(attachments.get(AttachmentId("att-s2"))!!.source!!.resolvedUri)
+        assertNull(attachments.get(AttachmentId("att-s2"))!!.source!!.name)
+        assertNull(attachments.get(AttachmentId("att-s3"))!!.source)
+        assertNull(none.toEntity().sourceUri)
+    }
+
     @Test fun deletingTheAssetCascadesItsAttachmentRows() = runTest {
         seedAsset("a1")
         seedAsset("a2")
@@ -175,6 +205,7 @@ class AttachmentDaoTest {
             sha256 = "a".repeat(64), storageProvider = "SAF_TREE",
             storageLocator = "assets/a1/x.pdf", capturedOn = null, notes = "",
             createdAt = 1L, updatedAt = 1L, documentRole = null,
+            sourceUri = null, sourceResolvedUri = null, sourceRetrievedAt = null, sourceName = null,
         )
         assertThrows(IllegalArgumentException::class.java) { both.requireExactlyOneOwner() }
 

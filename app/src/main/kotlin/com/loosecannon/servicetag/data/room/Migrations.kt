@@ -727,6 +727,22 @@ val MIGRATION_14_15: Migration = object : Migration(14, 15) {
 }
 
 /**
+ * Schema v15 -> v16: `attachment` gains four provenance columns (#85, C2) — `source_uri`,
+ * `source_resolved_uri`, `source_retrieved_at`, `source_name`. All nullable, **no default, no index
+ * and no backfill**: a row written before #85 was not saved from a reference and has no source, and no
+ * timestamp moves, so a pre-upgrade export still re-plans IDENTICAL. No recreate and no copy. Each
+ * statement is copied from the exported `16.json`, so Room validates the types on open.
+ */
+val MIGRATION_15_16: Migration = object : Migration(15, 16) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `attachment` ADD COLUMN `source_uri` TEXT")
+        connection.execSQL("ALTER TABLE `attachment` ADD COLUMN `source_resolved_uri` TEXT")
+        connection.execSQL("ALTER TABLE `attachment` ADD COLUMN `source_retrieved_at` INTEGER")
+        connection.execSQL("ALTER TABLE `attachment` ADD COLUMN `source_name` TEXT")
+    }
+}
+
+/**
  * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
  * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
  */
