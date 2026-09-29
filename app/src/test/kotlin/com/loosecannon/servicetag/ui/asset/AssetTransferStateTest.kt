@@ -33,6 +33,8 @@ import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.loanRow
+import com.loosecannon.servicetag.ui.loan.LoanAction
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
 import com.loosecannon.servicetag.ui.transfer.TransferStrings
 import java.time.LocalDate
@@ -149,6 +151,19 @@ class AssetTransferStateTest {
         assertFalse("no lending", state.loans.offersLendOut)
         assertTrue("P77-31 on the plate", PlateFact.Transferred in state.plate)
         assertTrue("never Archived beside it", state.plate.none { it is PlateFact.Archived })
+    }
+
+    /** Merged history can hold an asset lent out here: its open loan is still drawn, and only "Open contact" is offered. */
+    @Test fun anOpenLoanOnAHeldAssetOffersNoWrite() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.loans.upsert(loanRow("l1", assetId = "h1", lentOn = "2026-09-20", borrower = "Example Buyer"))
+        out("h1")
+
+        val loans = loaded(detailModel("h1")).loans
+
+        assertTrue("the open loan is still drawn", loans.open != null)
+        assertTrue(loans.open!!.actions.all { it == LoanAction.OPEN_CONTACT })
+        assertFalse(loans.offersLendOut)
     }
 
     @Test fun heldButActiveIsHiddenWithoutTheArchivedControl() = runTest(scheduler) {

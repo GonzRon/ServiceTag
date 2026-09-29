@@ -136,6 +136,7 @@ import com.loosecannon.servicetag.ui.health.driverLines
 import com.loosecannon.servicetag.ui.health.healthBadgeLabel
 import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.health.needsAttention
+import com.loosecannon.servicetag.ui.loan.LoanAction
 import com.loosecannon.servicetag.ui.loan.LoanFacts
 import com.loosecannon.servicetag.ui.loan.loanFactsOf
 import com.loosecannon.servicetag.ui.maintenance.DueItem
@@ -1012,8 +1013,15 @@ class AssetDetailViewModel(
             .combine(purchaseDocument) { page, document -> page?.copy(purchaseDocument = document) }
             .combine(cases) { page, rows -> page?.copy(cases = rows) }
             .combine(loanRows) { page, rows ->
-                // #77 (C19): a held asset offers no lending, whatever its lifecycle.
-                page?.copy(loans = loanFactsOf(rows, today.localDate(), page.asset.inService && !page.held))
+                // #77 (C19): a held asset offers no lending, whatever its lifecycle — and an open loan merged history
+                // left on one keeps only "Open contact", which writes nothing.
+                page?.copy(
+                    loans = loanFactsOf(rows, today.localDate(), page.asset.inService && !page.held).let { facts ->
+                        if (!page.held) facts else facts.copy(
+                            open = facts.open?.let { block -> block.copy(actions = block.actions.filter { it == LoanAction.OPEN_CONTACT }) },
+                        )
+                    },
+                )
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), null)
 
