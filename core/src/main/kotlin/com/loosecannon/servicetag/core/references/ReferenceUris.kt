@@ -25,6 +25,29 @@ object ReferenceUris {
         return host.ifEmpty { null }
     }
 
+    /** An `@` inside the authority: userinfo, which a fetch never sends (C9). */
+    fun hasUserInfo(uri: String): Boolean = authorityOf(uri)?.contains('@') == true
+
+    /**
+     * `scheme://authority/path` and nothing else (R85-2, R85-14): the scheme and the host ASCII-lowercased,
+     * the userinfo dropped, the query and the fragment dropped, and in **each** path segment everything from
+     * its first `;` to the segment's end dropped — never a cut at the first `;` of the whole path, so
+     * `/a;x=1/b;jsessionid=AB12/m.pdf` keeps `/a/b/m.pdf`. The ordinary path is kept as sent (no decoding,
+     * no case change) and an empty one is `/`. Null when there is no authority or no host.
+     */
+    fun destinationOf(uri: String): String? {
+        val scheme = SCHEME.find(uri) ?: return null
+        val authority = authorityOf(uri) ?: return null
+        val hostAndPort = authority.substringAfterLast('@')
+        if (hostAndPort.isEmpty()) return null
+        val path = uri.substring(scheme.value.length + 2 + authority.length)
+            .takeWhile { it != '?' && it != '#' }
+            .ifEmpty { "/" }
+            .split('/')
+            .joinToString("/") { segment -> segment.substringBefore(';') }
+        return asciiLowercase(scheme.value) + "//" + asciiLowercase(hostAndPort) + path
+    }
+
     /**
      * The authority: from the `//` after the scheme to the first `/`, `?` or `#`. Null without a scheme,
      * without a `//`, or when it is empty.
@@ -38,6 +61,10 @@ object ReferenceUris {
         val authority = if (end < 0) afterSlashes else afterSlashes.substring(0, end)
         return authority.ifEmpty { null }
     }
+
+    /** A-Z to a-z and nothing else: no locale, no Unicode case mapping, no length change. */
+    internal fun asciiLowercase(text: String): String =
+        buildString(text.length) { for (c in text) append(if (c in 'A'..'Z') c + ('a' - 'A') else c) }
 
     /** RFC 3986's scheme production and its colon, as `LinkLaunchPolicy.schemeOf` reads it, but untrimmed. */
     private val SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.\\-]*:")
