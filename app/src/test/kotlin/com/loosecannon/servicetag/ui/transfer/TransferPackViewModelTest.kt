@@ -87,6 +87,7 @@ class TransferPackViewModelTest {
                 TransferPackViewModel(
                     graph.createTransferPack, TransferPackWriter(cache, storage), graph.markTransferredOut, reconcile,
                     graph.assets, graph.groups, saved, zone = ZoneOffset.UTC, io = StandardTestDispatcher(scheduler),
+                    transfers = graph.transferRecords,
                 )
             }
         }
@@ -152,6 +153,31 @@ class TransferPackViewModelTest {
 
         assertEquals(listOf("Choose an attachment folder in Settings first"), vm.state.value.errors)
         assertEquals(emptyList<String>(), packs())
+    }
+
+    /** B4 hand-off 2: a component that left since the review is refused at Create, before any file exists. */
+    @Test fun aHeldComponentForcedInIsRefusedBeforeAnyFile() = runTest(scheduler) {
+        TransferPackAppFixtures.seedHeater(graph)
+        graph.assets.upsert(
+            com.loosecannon.servicetag.core.model.Asset(
+                id = AssetId("a1"), name = "Example Anode Rod", parentAssetId = AssetId(HEATER), createdAt = 100L, updatedAt = 100L,
+            ),
+        )
+        graph.transferRecords.append(
+            TransferRecord(
+                id = "out-a1", assetId = AssetId("a1"), kind = TransferKind.OUT, packId = "0f1e2d3c-a1",
+                lineage = emptyList(), at = 1_758_960_000_000L, packSha256 = "ab".repeat(32),
+                nameSnapshot = "Example Anode Rod", note = "",
+            ),
+        )
+        val vm = model()
+
+        vm.create(listOf(AssetId(HEATER)), "")
+        advanceUntilIdle()
+
+        assertEquals(listOf("These assets are already marked transferred out."), vm.state.value.errors)
+        assertEquals(emptyList<String>(), packs())
+        assertEquals(emptyList<String>(), workFiles())
     }
 
     @Test fun cancelLeavesNoFileAndNoRecord() = runTest(scheduler) {

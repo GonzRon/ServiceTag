@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.transfer.TransferPack
 import com.loosecannon.servicetag.core.transfer.TransferRefusal
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
@@ -112,11 +113,13 @@ class TransferPackViewModel(
     private val saved: SavedStateHandle,
     private val zone: ZoneId = ZoneId.systemDefault(),
     private val io: CoroutineContext = Dispatchers.IO,
+    /** The held set, asked again at Create (B4 hand-off 2). Null holds nothing — a test that is not about it. */
+    private val transfers: TransferRecordRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, saved: SavedStateHandle) : this(
         graph.createTransferPack, graph.transferPackWriter, graph.markTransferredOut, graph.reminderReconcile,
-        graph.assets, graph.groups, saved,
+        graph.assets, graph.groups, saved, transfers = graph.transferRecords,
     )
 
     private var ready: ReadyPack? = saved.get<String>(KEY)?.let { stored ->
@@ -177,6 +180,10 @@ class TransferPackViewModel(
             is CreateTransferPackResult.TooLarge -> listOf(TransferStrings.TOO_LARGE)
             is CreateTransferPackResult.Created -> {
                 val draft = result.draft
+                // B4 hand-off 2: a held component forced in by a parent that is not held is refused before any
+                // file exists — again here, since an asset can leave between the review and Create.
+                val held = transfers?.heldIds().orEmpty()
+                if (draft.assetIds.any { AssetId(it) in held }) return listOf(TransferStrings.ALREADY_TRANSFERRED)
                 val name = TransferStrings.packFileName(draft.createdAt, zone, draft.packId)
                 val written = writer.write(draft, name)
                 val pack = CreatedPack.of(draft, written.packSha256)
