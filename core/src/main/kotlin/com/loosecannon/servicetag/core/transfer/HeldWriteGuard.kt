@@ -72,19 +72,24 @@ class AssetTransferredOut(val assetId: AssetId) :
  *   parent; a group with any row, current or removed, naming a held asset, so a save that soft-removes a held
  *   member or adds a staying one is refused; a schedule by its asset or its group; a closure by its schedule; an
  *   attachment by its asset or its event's asset; an entry by its case's asset; everything else by `assetId`);
- * - or (R77-B2b-GUARD) the row being written would name a row the held graph owns — a staying event naming a held
- *   schedule, profile or measured definition, a subject naming a held schedule, a schedule naming a held meter
- *   definition or profile, a profile field naming a held definition — by exactly [TransferGraph.retain]'s rules:
- *   [TransferGraph.droppedBy] over the held graph's rows and [TransferGraph.entangledRefs] over the one row. There is
- *   no second list of references, so an ordinary write can never make the next ordinary export entangled (P77-58).
+ * - or (R77-B2b-GUARD) the row being written would **gain** a reference to a row the held graph owns — a staying
+ *   event naming a held schedule, profile or measured definition, a subject naming a held schedule, a schedule naming
+ *   a held meter definition or profile, a profile field naming a held definition — by exactly
+ *   [TransferGraph.retain]'s rules: [TransferGraph.droppedBy] over the held graph's rows and
+ *   [TransferGraph.entangledRefs] over the one row, less the references the stored row already carries. There is no
+ *   second list of references, so an ordinary write can never make the next ordinary export entangled (P77-58); an
+ *   edit that keeps an earlier reference (merged history) gains nothing and passes — that one is the export's to
+ *   report.
  *
  * A command that fails its own validation still answers its own refusal first: the guard fires at the write.
  *
  * **Not guarded, each by ruling:**
  * - `AssetRepository.delete` — `DeleteAsset`, the explicit destructive "forget this local history" (R77-4); the
  *   transfer records have no foreign key and survive it.
- * - an asset upsert that changes only `category` and `updatedAt` — the catalog commands `RenameCategory` and
- *   `PromoteCategory`, which rewrite every asset of a category, held ones included.
+ * - the catalog command's category rewrite — `RenameCategory` alone, which rewrites every asset of a category, held
+ *   ones included — and only through [catalogAssets]: a rewrite there that changes nothing but `category` and
+ *   `updatedAt` passes. Every other asset write, a category-only edit or an idempotent lifecycle call included, is a
+ *   mutation and is refused (R77-17: every mutation answers 409). `PromoteCategory` writes catalog rows only.
  * - every port's `deleteAll` — the Replace restore's wipe, which wipes the records first (R77-13 refuses a held
  *   graph before anything is wiped).
  * - the derived and device-local tables (schedule state, the two delivery tables), the 2.6 link tombstones, the
@@ -109,6 +114,13 @@ class HeldWriteGuard(
 ) {
 
     fun assets(port: AssetRepository): AssetRepository = GuardedAssets(port, this)
+
+    /**
+     * The catalog command's asset port (mn-1): a rewrite of a stored asset that changes only its `category` and
+     * `updatedAt` passes; every other write goes through [assets]'s guard. `AppGraph` hands it to `RenameCategory`
+     * and to nothing else.
+     */
+    fun catalogAssets(port: AssetRepository): AssetRepository = CatalogAssets(port, assets(port))
     fun tags(port: TagRepository): TagRepository = GuardedTags(port, this)
     fun definitions(port: DefinitionRepository): DefinitionRepository = GuardedDefinitions(port, this)
     fun profiles(port: ProfileRepository): ProfileRepository = GuardedProfiles(port, this)
@@ -143,12 +155,14 @@ class HeldWriteGuard(
         }
 
         /**
-         * R77-B2b-GUARD: refuses when [row] — the one row being written, as the archive names it — makes a hard
-         * reference into the held graph, by [TransferGraph.retain]'s own rules.
+         * R77-B2b-GUARD: refuses when [row] — the one row being written, as the archive names it — would **gain** a
+         * hard reference into the held graph, by [TransferGraph.retain]'s own rules: the references [row] makes, less
+         * those [stored] — the row it replaces, if any — already makes.
          */
-        suspend fun references(row: BackupData) {
-            val ref = TransferGraph.entangledRefs(row, TransferGraph.droppedBy(heldGraph(), held)).firstOrNull()
-                ?: return
+        suspend fun references(row: BackupData, stored: BackupData?) {
+            val dropped = TransferGraph.droppedBy(heldGraph(), held)
+            val kept = stored?.let { TransferGraph.entangledRefs(it, dropped) }.orEmpty().toSet()
+            val ref = TransferGraph.entangledRefs(row, dropped).firstOrNull { it !in kept } ?: return
             throw AssetTransferredOut(targetOwner(ref) ?: held.minBy { it.value })
         }
 
@@ -230,14 +244,25 @@ private class GuardedAssets(private val port: AssetRepository, private val guard
     override suspend fun upsert(asset: Asset) {
         guard.check {
             val stored = port.get(asset.id)
-            // The catalog commands' rewrite (RenameCategory, PromoteCategory): only the category and the stamp move.
-            if (stored != null && stored.copy(category = asset.category, updatedAt = asset.updatedAt) == asset) return@check
             owned(TransferOwnership.of(asset) + stored?.let(TransferOwnership::of).orEmpty())
-            references(NO_ROWS.copy(assets = listOf(asset.toDto())))
+            references(NO_ROWS.copy(assets = listOf(asset.toDto())), stored?.let { NO_ROWS.copy(assets = listOf(it.toDto())) })
         }
         port.upsert(asset)
     }
     // `delete` is DeleteAsset's (R77-4): allowed, and the records outlive it. `deleteAll` is the Replace wipe's.
+}
+
+/** [HeldWriteGuard.catalogAssets]: the category rewrite of `RenameCategory`, and the guarded port for the rest. */
+private class CatalogAssets(private val port: AssetRepository, private val guarded: AssetRepository) :
+    AssetRepository by guarded {
+    override suspend fun upsert(asset: Asset) {
+        val stored = port.get(asset.id)
+        if (stored != null && stored.copy(category = asset.category, updatedAt = asset.updatedAt) == asset) {
+            port.upsert(asset)
+        } else {
+            guarded.upsert(asset)
+        }
+    }
 }
 
 private class GuardedTags(private val port: TagRepository, private val guard: HeldWriteGuard) : TagRepository by port {
@@ -257,8 +282,12 @@ private class GuardedDefinitions(private val port: DefinitionRepository, private
     DefinitionRepository by port {
     override suspend fun upsert(d: MeasurementDefinition) {
         guard.check {
-            owned(TransferOwnership.of(d) + port.get(d.id)?.let(TransferOwnership::of).orEmpty())
-            references(NO_ROWS.copy(measurementDefinitions = listOf(d.toDto())))
+            val stored = port.get(d.id)
+            owned(TransferOwnership.of(d) + stored?.let(TransferOwnership::of).orEmpty())
+            references(
+                NO_ROWS.copy(measurementDefinitions = listOf(d.toDto())),
+                stored?.let { NO_ROWS.copy(measurementDefinitions = listOf(it.toDto())) },
+            )
         }
         port.upsert(d)
     }
@@ -273,8 +302,9 @@ private class GuardedProfiles(private val port: ProfileRepository, private val g
     ProfileRepository by port {
     override suspend fun upsert(p: EventProfile) {
         guard.check {
-            owned(TransferOwnership.of(p) + port.get(p.id)?.let(TransferOwnership::of).orEmpty())
-            references(NO_ROWS.copy(eventProfiles = listOf(p.toDto())))
+            val stored = port.get(p.id)
+            owned(TransferOwnership.of(p) + stored?.let(TransferOwnership::of).orEmpty())
+            references(NO_ROWS.copy(eventProfiles = listOf(p.toDto())), stored?.let { NO_ROWS.copy(eventProfiles = listOf(it.toDto())) })
         }
         port.upsert(p)
     }
@@ -289,8 +319,9 @@ private class GuardedEvents(private val port: EventRepository, private val guard
     EventRepository by port {
     override suspend fun upsert(e: AssetEvent) {
         guard.check {
-            owned(TransferOwnership.of(e) + port.get(e.id)?.let(TransferOwnership::of).orEmpty())
-            references(NO_ROWS.copy(assetEvents = listOf(e.toDto())))
+            val stored = port.get(e.id)
+            owned(TransferOwnership.of(e) + stored?.let(TransferOwnership::of).orEmpty())
+            references(NO_ROWS.copy(assetEvents = listOf(e.toDto())), stored?.let { NO_ROWS.copy(assetEvents = listOf(it.toDto())) })
         }
         port.upsert(e)
     }
@@ -305,8 +336,12 @@ private class GuardedGroups(private val port: GroupRepository, private val guard
     GroupRepository by port {
     override suspend fun upsert(group: MaintenanceGroup) {
         guard.check {
-            owned(TransferOwnership.of(group) + port.get(group.id)?.let(TransferOwnership::of).orEmpty())
-            references(NO_ROWS.copy(maintenanceGroups = listOf(group.toDto())))
+            val stored = port.get(group.id)
+            owned(TransferOwnership.of(group) + stored?.let(TransferOwnership::of).orEmpty())
+            references(
+                NO_ROWS.copy(maintenanceGroups = listOf(group.toDto())),
+                stored?.let { NO_ROWS.copy(maintenanceGroups = listOf(it.toDto())) },
+            )
         }
         port.upsert(group)
     }
@@ -316,10 +351,12 @@ private class GuardedSchedules(private val port: ScheduleRepository, private val
     ScheduleRepository by port {
     override suspend fun upsert(schedule: MaintenanceSchedule) {
         guard.check {
-            owned(
-                TransferOwnership.of(schedule) + port.get(schedule.id)?.let(TransferOwnership::of).orEmpty(),
+            val stored = port.get(schedule.id)
+            owned(TransferOwnership.of(schedule) + stored?.let(TransferOwnership::of).orEmpty())
+            references(
+                NO_ROWS.copy(maintenanceSchedules = listOf(schedule.toDto())),
+                stored?.let { NO_ROWS.copy(maintenanceSchedules = listOf(it.toDto())) },
             )
-            references(NO_ROWS.copy(maintenanceSchedules = listOf(schedule.toDto())))
         }
         port.upsert(schedule)
     }
@@ -381,8 +418,9 @@ private class GuardedSubjects(private val port: HealthSubjectRepository, private
     HealthSubjectRepository by port {
     override suspend fun upsert(subject: HealthSubject) {
         guard.check {
-            owned(TransferOwnership.of(subject) + port.get(subject.id)?.let(TransferOwnership::of).orEmpty())
-            references(NO_ROWS.copy(healthSubjects = listOf(subject.toDto())))
+            val stored = port.get(subject.id)
+            owned(TransferOwnership.of(subject) + stored?.let(TransferOwnership::of).orEmpty())
+            references(NO_ROWS.copy(healthSubjects = listOf(subject.toDto())), stored?.let { NO_ROWS.copy(healthSubjects = listOf(it.toDto())) })
         }
         port.upsert(subject)
     }

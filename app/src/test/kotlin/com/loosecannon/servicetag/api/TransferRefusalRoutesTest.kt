@@ -35,9 +35,13 @@ class TransferRefusalRoutesTest {
     private lateinit var event: String
     private lateinit var definition: String
 
-    /** "Example Water Heater" through the API, a reading and a note on it, then its OUT — marking's order. */
-    private fun holdTheHeater() = runBlocking {
+    /**
+     * "Example Water Heater" through the API, a reading and a note on it, then its OUT — marking's order. [archived]
+     * archives it first through the API, as marking leaves it.
+     */
+    private fun holdTheHeater(archived: Boolean = false) = runBlocking {
         heater = api.asset("Example Water Heater")
+        if (archived) api.ok(AssetResponse.serializer(), "POST", "/v1/assets/$heater/archive", """{"archived":true}""")
         graph.definitions.upsert(meterDefinitionOf("d-heater", assetId = heater))
         definition = "d-heater"
         event = graph.logEvent.run(
@@ -102,6 +106,25 @@ class TransferRefusalRoutesTest {
             val detail = response.errorDetail()
             assertEquals(family, "asset_transferred_out", detail.code)
             assertEquals(family, listOf("AssetTransferredOut(assetId=$heater)"), detail.problems)
+        }
+        assertEquals("a refused write writes nothing", before, everyRow())
+    }
+
+    /**
+     * mn-1 (fix round 1; R77-17 "every mutation answers 409"): a full-body `PATCH` whose one change is the category,
+     * and an archive of a held asset marking already archived, are mutations too — 409, nothing written.
+     */
+    @Test fun aCategoryOnlyPatchAndARepeatedArchiveAnswer409() {
+        holdTheHeater(archived = true)
+        val before = everyRow()
+        for ((family, call) in listOf(
+            "PATCH /v1/assets/{id} (the category alone)" to Triple("PATCH", "/v1/assets/$heater", """{"name":"Example Water Heater","category":"Appliance"}"""),
+            "POST /v1/assets/{id}/archive (already archived)" to Triple("POST", "/v1/assets/$heater/archive", """{"archived":true}"""),
+        )) {
+            val (method, path, body) = call
+            val response = api.call(method, path, body)
+            assertEquals("$family: ${response.bodyText()}", 409, response.status)
+            assertEquals(family, "asset_transferred_out", response.errorDetail().code)
         }
         assertEquals("a refused write writes nothing", before, everyRow())
     }

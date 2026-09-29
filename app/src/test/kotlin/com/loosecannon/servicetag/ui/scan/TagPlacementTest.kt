@@ -56,7 +56,7 @@ class TagPlacementTest {
     }
 
     private fun bindTag() = BindTag(graph.tags, graph.assets, graph.uow, graph.clock)
-    private fun resolveTag() = ResolveTag(graph.tags, graph.assets, graph.transferRecords, graph.uow, graph.clock)
+    private fun resolveTag() = ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock)
 
     private fun detailModel(id: AssetId) = AssetDetailViewModel(
         graph.assets, graph.tags,

@@ -20,11 +20,14 @@ import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.EventSource
+import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthAggregation
 import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
+import com.loosecannon.servicetag.core.model.LinkId
+import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.PayloadFormat
@@ -563,13 +566,43 @@ class HeldWriteGuardTest {
         assertEquals(TagTarget.AssetTarget(heater), install.tags.get(TagId("t1"))!!.target)
     }
 
-    /** The catalog commands rewrite every asset of a category, held ones included: only the category and stamp move. */
+    /**
+     * The catalog command rewrites every asset of a category, held ones included: only the category and stamp move,
+     * and only through its own port (mn-1), which `AppGraph` hands to `RenameCategory` alone.
+     */
     @Test
     fun aCategoryOnlyRewritePasses() = runTest {
         seed()
-        RenameCategory(install.categories, assets, uow, clock).run("appliance", "Appliances")
+        RenameCategory(install.categories, guard.catalogAssets(install.assets), uow, clock).run("appliance", "Appliances")
         assertEquals("Appliances", install.assets.get(heater)!!.category)
         assertEquals(1, uow.commits)
+    }
+
+    /**
+     * mn-1 (fix round 1; R77-17 "every mutation answers 409"): the catalog exception is the catalog command's only.
+     * An ordinary edit whose one change is the category is still a mutation of the held asset.
+     */
+    @Test
+    fun aCategoryOnlyEditOfAHeldAssetIsRefused() = runTest {
+        seed()
+        val update = UpdateAsset(assets, schedules, uow, clock, recompute, promote)
+        refused(
+            heater,
+            "UpdateAsset (the category alone)" to {
+                update.run(heater, AssetCommand(name = "Example Water Heater", category = "Garage", warrantyExpiresOn = "2027-03-01"))
+            },
+        )
+        assertEquals("Appliance", install.assets.get(heater)!!.category)
+    }
+
+    /** mn-1: archiving a held asset that marking already archived writes only a stamp — still a mutation, still refused. */
+    @Test
+    fun archivingAnAlreadyArchivedHeldAssetIsRefused() = runTest {
+        seed()
+        val archived = install.assets.get(heater)!!.copy(status = AssetStatus.ARCHIVED)
+        install.assets.upsert(archived)
+        refused(heater, "ArchiveAsset (already archived)" to { ArchiveAsset(assets, uow, clock) { recompute.forAsset(it) }.run(heater) })
+        assertEquals(archived, install.assets.get(heater))
     }
 
     /** R77-4: DeleteAsset stays the explicit "forget this local history"; the transfer records outlive it. */
@@ -594,11 +627,34 @@ class HeldWriteGuardTest {
     @Test
     fun aHeldTagScanIsNotStamped() = runTest {
         seed()
-        val scan = ResolveTag(tags, assets, install.transfers, uow, clock)
+        val scan = ResolveTag(tags, assets, uow, clock)
         val tagId = TagId("123e4567-e89b-12d3-a456-426614174001")
         val resolution = scan.run(TagPayload.V1(tagId))
         assertIs<Resolution.OpenAsset>(resolution)
         assertNull(install.tags.get(TagId("t1"))!!.lastScannedAt, "not stamped")
+    }
+
+    /**
+     * mn-2 (fix round 1; R77-11): a 2.6 link tag whose tombstone link names a held asset scans as `PreSplitLink`,
+     * unstamped and without a refusal — ownership through the guard's one rule, the tombstones untouched.
+     */
+    @Test
+    fun aHeldAssetsPreSplitLinkTagScansUnstamped() = runTest {
+        seed()
+        install.links.upsert(
+            ExternalLink(
+                id = LinkId("L1"), assetId = heater, kind = LinkKind.WEB, label = "Example notes",
+                uri = "https://example.com/notes", createdAt = 100L, updatedAt = 100L,
+            ),
+        )
+        install.tags.upsert(tagOf("t4", "123e4567-e89b-12d3-a456-426614174004", TagTarget.LinkTarget(LinkId("L1"))))
+        val scan = ResolveTag(tags, assets, uow, clock)
+
+        val resolution = scan.run(TagPayload.V1(TagId("123e4567-e89b-12d3-a456-426614174004")))
+
+        assertIs<Resolution.PreSplitLink>(resolution)
+        assertNull(install.tags.get(TagId("t4"))!!.lastScannedAt, "not stamped")
+        assertEquals(heater, install.links.get(LinkId("L1"))!!.assetId, "the tombstone is untouched")
     }
 
     /** AC 11: an ordinary archive stays reversible — an archived asset that is not held unarchives as before. */
@@ -637,12 +693,22 @@ class HeldWriteGuardTest {
     fun aStayingRowGainingAReferenceIntoAHeldGraphIsRefused() = runTest {
         seed()
         val staying = install.events.get(EventId("ex"))!!
+        val stayingSchedule = install.schedules.get(ScheduleId("sx"))!!
+        val stayingProfile = install.profiles.get(ProfileId("px"))!!
         val cases = listOf<Pair<String, suspend () -> Unit>>(
             "an event naming a held schedule" to { events.upsert(staying.copy(scheduleId = ScheduleId("s1"), occurrenceOn = "2026-02-01")) },
             "an event naming a held asset's quick action" to { events.upsert(staying.copy(profileId = ProfileId("p1"))) },
             "an event measuring a held asset's reading" to { events.upsert(staying.copy(measurements = listOf(measurementOf("d1", 9.0)))) },
             "a subject naming a held schedule" to { subjects.upsert(subjectOf("hs-x", "x1", scheduleId = "s1")) },
             "an event naming a wholly held group's schedule" to { events.upsert(staying.copy(scheduleId = ScheduleId("sg"), occurrenceOn = "2026-02-01")) },
+            // NOTE 2 (fix round 1): the schedule and quick-action ports carry references too.
+            "a staying schedule metering a held reading" to {
+                schedules.upsert(stayingSchedule.copy(meterDefinitionId = DefinitionId("d1"), meterInterval = 100.0, anchorMeter = 0.0))
+            },
+            "a staying schedule naming a held quick action" to { schedules.upsert(stayingSchedule.copy(profileId = ProfileId("p1"))) },
+            "a staying quick action reading a held definition" to {
+                profiles.upsert(stayingProfile.copy(fields = listOf(ProfileField("pfx", DefinitionId("d1"), required = false, sortOrder = 0))))
+            },
         )
         for ((name, write) in cases) {
             val refusal = written(name, write)
@@ -652,6 +718,25 @@ class HeldWriteGuardTest {
         assertEquals(0, uow.commits)
         assertEquals(staying, install.events.get(EventId("ex")), "the staying event is unchanged")
         assertNull(install.subjects.get(HealthSubjectId("hs-x")))
+        assertEquals(stayingSchedule, install.schedules.get(ScheduleId("sx")), "the staying schedule is unchanged")
+        assertEquals(stayingProfile, install.profiles.get(ProfileId("px")), "the staying quick action is unchanged")
+    }
+
+    /**
+     * NOTE 1 (fix round 1) — the ruling's "would **gain**": a staying event that already names a held schedule (merged
+     * history, laid down below the guard) is edited through `UpdateEvent`, which always keeps its schedule link. The
+     * edit gains nothing, so it passes; the reference it keeps is the export's to report (P77-58), not a new one.
+     */
+    @Test
+    fun anEditKeepingAnEarlierReferencePasses() = runTest {
+        seed()
+        install.events.upsert(install.events.get(EventId("ex"))!!.copy(scheduleId = ScheduleId("s1"), occurrenceOn = "2026-02-01"))
+        val edited = UpdateEvent(events, definitions, profiles, uow, ids, clock, recompute).run(
+            EventId("ex"), note(compressor).copy(title = "Example edited note", occurredOn = "2026-09-20"),
+        )
+        assertEquals("Example edited note", install.events.get(EventId("ex"))!!.title)
+        assertEquals(ScheduleId("s1"), edited.scheduleId, "the earlier reference is kept, not gained")
+        assertEquals(1, uow.commits)
     }
 
     @Test

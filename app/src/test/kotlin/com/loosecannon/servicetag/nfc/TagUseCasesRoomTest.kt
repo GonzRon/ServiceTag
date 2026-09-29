@@ -15,7 +15,6 @@ import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
-import com.loosecannon.servicetag.data.room.RoomTransferRecordRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +55,7 @@ class TagUseCasesRoomTest {
             val uow = RoomUnitOfWork(db)
             // two clocks, so `lastScannedAt` cannot pass by coinciding with the write time
             val provision = ProvisionTag(tags, assets, uow, UuidGenerator, Clock { 42L })
-            val resolve = ResolveTag(tags, assets, RoomTransferRecordRepository(db.transferRecordDao()), uow, Clock { 43L })
+            val resolve = ResolveTag(tags, assets, uow, Clock { 43L })
 
             uow.write { assets.upsert(Asset(AssetId("a1"), "Hot tub", createdAt = 1L, updatedAt = 1L)) }
             val row = provision.begin(TagTarget.AssetTarget(AssetId("a1")), "lid")

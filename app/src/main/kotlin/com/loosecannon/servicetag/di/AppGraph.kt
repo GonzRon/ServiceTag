@@ -267,7 +267,8 @@ class AppGraph(private val context: Context) {
         transferRecords, roomEvents, roomDefinitions, roomProfiles, roomGroups, roomSchedules, roomServiceCases, links,
     )
 
-    val assets: AssetRepository = heldWriteGuard.assets(RoomAssetRepository(db.assetDao()))
+    private val roomAssets = RoomAssetRepository(db.assetDao())
+    val assets: AssetRepository = heldWriteGuard.assets(roomAssets)
     val tags: TagRepository = heldWriteGuard.tags(RoomTagRepository(db.nfcTagDao()))
     val definitions: DefinitionRepository = heldWriteGuard.definitions(roomDefinitions)
     val profiles: ProfileRepository = heldWriteGuard.profiles(roomProfiles)
@@ -613,7 +614,7 @@ class AppGraph(private val context: Context) {
     )
     val ndefCodec: NdefCodec = NdefCodec(tagIdentity)
 
-    val resolveTag: ResolveTag = ResolveTag(tags, assets, transferRecords, uow, clock)
+    val resolveTag: ResolveTag = ResolveTag(tags, assets, uow, clock)
     val bindTag: BindTag = BindTag(tags, assets, uow, clock)
     val provisionTag: ProvisionTag = ProvisionTag(tags, assets, uow, ids, clock)
     val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
@@ -622,7 +623,8 @@ class AppGraph(private val context: Context) {
     // catalog's spelling and writes a first-use row beside the asset, after every refusal; rename and
     // delete are the Categories screen's two writes.
     val promoteCategory: PromoteCategory = PromoteCategory(categories)
-    val renameCategory: RenameCategory = RenameCategory(categories, assets, uow, clock)
+    // #77 (C12, mn-1): the catalog command's own asset port — its category rewrite passes the guard, nothing else does.
+    val renameCategory: RenameCategory = RenameCategory(categories, heldWriteGuard.catalogAssets(roomAssets), uow, clock)
     val deleteCategory: DeleteCategory = DeleteCategory(categories, assets, uow)
 
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate, promoteCategory)

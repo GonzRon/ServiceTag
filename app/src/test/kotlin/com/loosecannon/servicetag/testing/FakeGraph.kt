@@ -196,7 +196,8 @@ class FakeGraph(
         transferRecords, roomEvents, roomDefinitions, roomProfiles, roomGroups, roomSchedules, roomServiceCases, links,
     )
 
-    val assets: AssetRepository = heldWriteGuard.assets(RoomAssetRepository(db.assetDao()))
+    private val roomAssets = RoomAssetRepository(db.assetDao())
+    val assets: AssetRepository = heldWriteGuard.assets(roomAssets)
     val tags: TagRepository = heldWriteGuard.tags(RoomTagRepository(db.nfcTagDao()))
     val definitions: DefinitionRepository = heldWriteGuard.definitions(roomDefinitions)
     val profiles: ProfileRepository = heldWriteGuard.profiles(roomProfiles)
@@ -300,7 +301,7 @@ class FakeGraph(
 
     /** #74 — promotion, rename and delete, mirroring `AppGraph`'s three fields by name (C14). */
     val promoteCategory: PromoteCategory = PromoteCategory(categories)
-    val renameCategory: RenameCategory = RenameCategory(categories, assets, uow, clock)
+    val renameCategory: RenameCategory = RenameCategory(categories, heldWriteGuard.catalogAssets(roomAssets), uow, clock)
     val deleteCategory: DeleteCategory = DeleteCategory(categories, assets, uow)
 
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate, promoteCategory)

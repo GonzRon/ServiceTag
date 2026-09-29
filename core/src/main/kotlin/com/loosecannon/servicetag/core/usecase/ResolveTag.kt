@@ -10,8 +10,8 @@ import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.TagRepository
-import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 
 /** Every way a scan can end (D3 §9). The UI switches on this and nothing else. */
 sealed interface Resolution {
@@ -33,23 +33,24 @@ sealed interface Resolution {
 class ResolveTag(
     private val tags: TagRepository,
     private val assets: AssetRepository,
-    /** #77 (C12): read in the scan's write, so a tag of an asset transferred out from here is never stamped. */
-    private val transfers: TransferRecordRepository,
     private val uow: UnitOfWork,
     private val clock: Clock,
 ) {
     /**
      * A scan. Lookup is by (format, key) — never by row id (D4 §3). A hit records the scan — except on a tag whose
-     * asset is transferred out from this phone (#77, C12): that asset is ordinarily immutable here, so its tag is
-     * classified from the stored row and left exactly as it was, never refused.
+     * owning asset is transferred out from this phone (#77, C12, R77-11): the guarded tag port refuses the stamp
+     * before it writes, by the one ownership rule (a 2.6 link tag through its tombstone link included), and the scan
+     * classifies the stored row, unstamped, rather than failing.
      */
     suspend fun run(payload: TagPayload): Resolution = resolve(payload) { format, key ->
         uow.write {
             val row = tags.findByPayload(format, key) ?: return@write null
-            val target = (row.target as? TagTarget.AssetTarget)?.assetId
-            if (target != null && target in transfers.heldIds()) return@write classify(row)
             val tag = row.copy(lastScannedAt = clock.nowMillis())
-            tags.upsert(tag)
+            try {
+                tags.upsert(tag)
+            } catch (e: AssetTransferredOut) {
+                return@write classify(row)
+            }
             classify(tag)
         }
     }
