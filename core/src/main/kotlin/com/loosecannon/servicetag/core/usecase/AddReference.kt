@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.references.MAX_REFERENCE_DESCRIPTION_CHAR
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_URI_CHARS
 import com.loosecannon.servicetag.core.references.ReferenceKinds
 import com.loosecannon.servicetag.core.references.ReferenceText
+import com.loosecannon.servicetag.core.references.ReferenceUris
 
 /**
  * The only way a reference is ever created — a share, the "Add link" sheet, the loopback API and
@@ -103,22 +104,6 @@ class AddReference(
         val rest = uri.substring(scheme.length + 1)
         if (rest.isEmpty()) return false
         val hierarchical = rest.startsWith("//") || scheme == "http" || scheme == "https"
-        return !hierarchical || hostOf(rest) != null
-    }
-
-    /** The authority's host, if the scheme-specific part declares one at all. */
-    private fun hostOf(rest: String): String? {
-        if (!rest.startsWith("//")) return null
-        val afterSlashes = rest.substring(2)
-        val end = afterSlashes.indexOfFirst { it == '/' || it == '?' || it == '#' }
-        val authority = if (end < 0) afterSlashes else afterSlashes.substring(0, end)
-        if (authority.isEmpty()) return null
-        val hostAndPort = authority.substringAfterLast('@')          // userinfo is not the host
-        val host = if (hostAndPort.startsWith("[")) {
-            hostAndPort.substringBefore(']').removePrefix("[")       // an IPv6 literal
-        } else {
-            hostAndPort.substringBefore(':')                         // the port is not the host
-        }
-        return host.ifEmpty { null }
+        return !hierarchical || ReferenceUris.hostOf(uri) != null
     }
 }
