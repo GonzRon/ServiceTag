@@ -77,6 +77,7 @@ import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.health.RESTORE_SUBJECT
 import com.loosecannon.servicetag.ui.maintenance.NOT_NOW
 import com.loosecannon.servicetag.ui.maintenance.REMIND_ME_N_DAYS_EARLY
+import com.loosecannon.servicetag.ui.replace.ReplaceStrings
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.MonoText
@@ -220,6 +221,35 @@ const val ADD_SERVICE_MANUAL = "Add service manual"
 /** P67-10, a staged file's quiet line; replaced by the problem sentence after a failed copy. */
 const val ATTACHED_WHEN_YOU_SAVE = "Attached when you save"
 
+// #86 (plan §6, reused 1–9): the editor's field labels, hoisted byte-identical so Replace asset draws them from here.
+
+/** The Name field's label. */
+const val NAME_FIELD = "Name"
+
+/** The Manufacturer field's label. */
+const val MANUFACTURER_FIELD = "Manufacturer"
+
+/** The Model field's label. */
+const val MODEL_FIELD = "Model"
+
+/** The Serial number field's label. */
+const val SERIAL_NUMBER_FIELD = "Serial number"
+
+/** The Location field's label. */
+const val LOCATION_FIELD = "Location"
+
+/** The parent picker's label. */
+const val PART_OF_FIELD = "Part of"
+
+/** The Purchase date field's label. */
+const val PURCHASE_DATE_FIELD = "Purchase date"
+
+/** The In service date field's label. */
+const val IN_SERVICE_DATE_FIELD = "In service date"
+
+/** The Category field's label. */
+const val CATEGORY_FIELD = "Category"
+
 /**
  * Create ([assetId] null) or edit one asset: the grouped form of spec §9 — IDENTITY, PLACEMENT,
  * PURCHASE, WARRANTY, NOTES, and on a new asset only, TEMPLATE. Save sits in the app bar and
@@ -312,7 +342,7 @@ fun AssetEditScreen(
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(
-                title = { Text(if (state.editing) "Edit asset" else "New asset") },
+                title = { Text(if (state.editing) "Edit asset" else ReplaceStrings.NEW_ASSET) },
                 navigationIcon = {
                     // #67, R67-8 (C6): held throughout the copies, same as the back gesture above.
                     IconButton(onClick = onBack, enabled = !state.saving) {
@@ -384,14 +414,14 @@ private fun IdentityBlock(state: AssetEditState, model: AssetEditViewModel) {
     FormField(
         value = state.name,
         onValueChange = model::onName,
-        label = "Name",
+        label = NAME_FIELD,
         problem = state.problems[AssetField.NAME],
     )
     val choices by model.categoryChoices.collectAsStateWithLifecycle()
     CategoryField(value = state.category, choices = choices, onValueChange = model::onCategory)
-    FormField(value = state.manufacturer, onValueChange = model::onManufacturer, label = "Manufacturer")
-    FormField(value = state.model, onValueChange = model::onModel, label = "Model")
-    FormField(value = state.serialNumber, onValueChange = model::onSerialNumber, label = "Serial number")
+    FormField(value = state.manufacturer, onValueChange = model::onManufacturer, label = MANUFACTURER_FIELD)
+    FormField(value = state.model, onValueChange = model::onModel, label = MODEL_FIELD)
+    FormField(value = state.serialNumber, onValueChange = model::onSerialNumber, label = SERIAL_NUMBER_FIELD)
     FormField(value = state.description, onValueChange = model::onDescription, label = "Description")
 }
 
@@ -399,9 +429,9 @@ private fun IdentityBlock(state: AssetEditState, model: AssetEditViewModel) {
 @Composable
 private fun PlacementBlock(state: AssetEditState, model: AssetEditViewModel) {
     SectionHeader(title = "Placement")
-    FormField(value = state.location, onValueChange = model::onLocation, label = "Location")
+    FormField(value = state.location, onValueChange = model::onLocation, label = LOCATION_FIELD)
     ChoiceField(
-        label = "Part of",
+        label = PART_OF_FIELD,
         choices = state.parentChoices,
         selected = state.parentId,
         onSelect = model::onParent,
@@ -557,13 +587,13 @@ private fun PurchaseBlock(
     DateField(
         value = state.purchaseOn,
         onValueChange = model::onPurchaseOn,
-        label = "Purchase date",
+        label = PURCHASE_DATE_FIELD,
         problem = state.problems[AssetField.PURCHASE_ON],
     )
     DateField(
         value = state.inServiceOn,
         onValueChange = model::onInServiceOn,
-        label = "In service date",
+        label = IN_SERVICE_DATE_FIELD,
         problem = state.problems[AssetField.IN_SERVICE_ON],
     )
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -840,10 +870,11 @@ internal fun FormField(
  *
  * #74 (C16): [choices] is the durable catalog — the built-ins, then the owner's own categories — and
  * one of the owner's reads exactly like a built-in. Nothing here writes it; a save does.
+ * Internal since #86 (MN-3): Replace asset draws the new asset's Category with it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CategoryField(value: String, choices: List<CategoryChoice>, onValueChange: (String) -> Unit) {
+internal fun CategoryField(value: String, choices: List<CategoryChoice>, onValueChange: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val matches = choices.filter {
         value.isBlank() || it.display.startsWith(value.trim(), ignoreCase = true)
@@ -853,7 +884,7 @@ private fun CategoryField(value: String, choices: List<CategoryChoice>, onValueC
         OutlinedTextField(
             value = value,
             onValueChange = { typed -> onValueChange(typed); expanded = true },
-            label = { Text("Category") },
+            label = { Text(CATEGORY_FIELD) },
             singleLine = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
             shape = ControlShape,
@@ -872,10 +903,13 @@ private fun CategoryField(value: String, choices: List<CategoryChoice>, onValueC
     }
 }
 
-/** A read-only field over a fixed list — "Part of", whose first row is always "None" (spec §5). */
+/**
+ * A read-only field over a fixed list — "Part of", whose first row is always "None" (spec §5).
+ * Internal since #86 (MN-3): Replace asset draws the new asset's Part of with it.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ChoiceField(
+internal fun ChoiceField(
     label: String,
     choices: List<ParentChoice>,
     selected: String?,

@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetLoanId
+import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.Attachment
@@ -567,6 +568,21 @@ data class TransferRecordDto(
     val note: String,
 )
 
+/**
+ * Format 15 (#86, C3; R86-1, R86-20). One succession: the `asset_succession` table's columns, in column order, with
+ * no defaults — a format-15 row that omits one is corrupt. Both assets must be in the file; an asset is replaced at
+ * most once and replaces at most one, and following successors never comes back round (the graph check's, through
+ * `successionProblems`). [replacedOn] is an ISO date. No note and no event link (R86-17).
+ */
+@Serializable
+data class AssetSuccessionDto(
+    val id: String,
+    val predecessorAssetId: String,
+    val successorAssetId: String,
+    val replacedOn: String,
+    val createdAt: Long,
+)
+
 /** The canonical tables. Everything derived is rebuilt after an import. */
 @Serializable
 data class BackupData(
@@ -614,6 +630,12 @@ data class BackupData(
      * accepted). An ordinary backup carries every record and never the graph of an asset they hold.
      */
     val transferRecords: List<TransferRecordDto> = emptyList(),
+    /**
+     * Format 15 (#86); the successions, ordered by id. Empty on every format ≤14 archive, which never carries a
+     * **row** — the codec refuses one that does (an empty list is accepted). An ordinary backup never carries a row
+     * naming an asset transferred out from this phone (`TransferGraph.retain` drops it).
+     */
+    val assetSuccessions: List<AssetSuccessionDto> = emptyList(),
 )
 
 /** A decoded archive: what it claims about itself, and what it holds. */
@@ -1390,4 +1412,22 @@ fun TransferRecordDto.toDomain(): TransferRecord = TransferRecord(
     packSha256 = packSha256,
     nameSnapshot = nameSnapshot,
     note = note,
+)
+
+// --- format 15: successions ----------------------------------------------------------------------
+
+fun AssetSuccession.toDto(): AssetSuccessionDto = AssetSuccessionDto(
+    id = id,
+    predecessorAssetId = predecessorAssetId.value,
+    successorAssetId = successorAssetId.value,
+    replacedOn = replacedOn,
+    createdAt = createdAt,
+)
+
+fun AssetSuccessionDto.toDomain(): AssetSuccession = AssetSuccession(
+    id = id,
+    predecessorAssetId = AssetId(predecessorAssetId),
+    successorAssetId = AssetId(successorAssetId),
+    replacedOn = replacedOn,
+    createdAt = createdAt,
 )

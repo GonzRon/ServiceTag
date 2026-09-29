@@ -34,11 +34,18 @@ class RetireAsset(
 
     private suspend fun save(id: AssetId, retiredOn: String?): Asset {
         val current = assets.get(id) ?: throw NoSuchAsset(id)
-        val saved = current.copy(retiredOn = retiredOn, updatedAt = clock.nowMillis())
-        uow.write {
-            assets.upsert(saved)
-            onLifecycleChanged(id)
-        }
+        val now = clock.nowMillis()
+        return uow.write { retireInTransaction(current, retiredOn, now) }
+    }
+
+    /**
+     * #86 (C15): the write itself — the row with [retiredOn] stamped at [now], and the rebuild that follows — inside
+     * the caller's transaction, so `ReplaceAsset` retires its old asset in its own one write.
+     */
+    internal suspend fun retireInTransaction(current: Asset, retiredOn: String?, now: Long): Asset {
+        val saved = current.copy(retiredOn = retiredOn, updatedAt = now)
+        assets.upsert(saved)
+        onLifecycleChanged(current.id)
         return saved
     }
 }

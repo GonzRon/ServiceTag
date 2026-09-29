@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetLoanId
 import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentOwner
@@ -467,4 +468,22 @@ interface TransferRecordRepository {
     /** [heldIds], live. */
     fun observeHeldIds(): Flow<Set<AssetId>>
     suspend fun deleteAll()
+}
+
+/**
+ * #86 (C1, C2; R86-1, R86-15). The successions: **append and query only** — no update and no delete of one row
+ * anywhere. [append] **aborts** on an id already held, and on a predecessor or a successor another row already
+ * names (the two unique indexes, I2). A row leaves only by an endpoint's CASCADE: deleting either asset removes it,
+ * with no refusal and no re-linking. `deleteAll` is the replace import's wipe, which is its only caller. [all]
+ * orders by id; [observeForAsset] is every row naming the asset at either end, by id.
+ */
+interface AssetSuccessionRepository {
+    suspend fun append(row: AssetSuccession)
+    suspend fun all(): List<AssetSuccession>
+    /** The row whose predecessor is [predecessor] — what replaced it — or null. */
+    suspend fun replacedBy(predecessor: AssetId): AssetSuccession?
+    /** The row whose successor is [successor] — what it replaces — or null. */
+    suspend fun replaces(successor: AssetId): AssetSuccession?
+    suspend fun deleteAll()
+    fun observeForAsset(assetId: AssetId): Flow<List<AssetSuccession>>
 }

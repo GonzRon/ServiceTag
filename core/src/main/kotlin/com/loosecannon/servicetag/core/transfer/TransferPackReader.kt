@@ -174,6 +174,8 @@ object TransferPackReader {
         if (backup.data.assets.map { it.id }.sorted() != manifest.assetIds) damaged("assetIds are not the pack's assets")
         // #77 (B2a): the records are the sender's own facts (C1's SENDER_ONLY); creation never puts one in a pack.
         if (backup.data.transferRecords.isNotEmpty()) damaged("${TransferPack.DATA_ENTRY} carries transfer records")
+        // #86 (C6): the successions are the sender's own lineage (SENDER_ONLY); creation never puts one in a pack.
+        if (backup.data.assetSuccessions.isNotEmpty()) damaged("${TransferPack.DATA_ENTRY} carries asset successions")
     }
 
     private fun checkArtifacts(manifest: TransferPackManifest, backup: Backup, seen: ArtifactsSeen) {

@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.backup.AssetDto
 import com.loosecannon.servicetag.core.backup.AssetEventDto
+import com.loosecannon.servicetag.core.backup.AssetSuccessionDto
 import com.loosecannon.servicetag.core.backup.EventProfileDto
 import com.loosecannon.servicetag.core.backup.MeasurementDefinitionDto
 import com.loosecannon.servicetag.core.backup.NfcTagDto
@@ -51,7 +52,7 @@ internal data class StatusResponse(
      * One key per table — assets, **groups**, definitions, profiles, **schedules**, **closures**,
      * links, tags, events, attachments, **references**, **seasonActivations**, **assetConditions**,
      * **healthSubjects**, **assetCategories**, **serviceCases**, **serviceCaseEntries**, **assetLoans**,
-     * **transferRecords** — listed here in
+     * **transferRecords**, **assetSuccessions** — listed here in
      * `MergeTable`'s order for reading, which is **not** the JSON's key order and is not contract; a
      * client reads by key. (The sentence claimed
      * that order before 1.3 and the list was not in it: `tags` and `links` sat ahead of `definitions`
@@ -63,7 +64,8 @@ internal data class StatusResponse(
      * with #74 (format 9) — the owner's own categories, never the compiled built-ins; and
      * **serviceCases** and **serviceCaseEntries** with #79b (format 12), **assetLoans** with #72 (format
      * 13) and **transferRecords** with #77 (format 14) — every record, OUT, IN and WITHDRAWN, never a count
-     * of the assets held — each under the archive's own list names. `schedule_state` and `schedule_local_delivery` are **not** here, because derived and
+     * of the assets held — and **assetSuccessions** with #86 (format 15), every succession row, each under the
+     * archive's own list names. `schedule_state` and `schedule_local_delivery` are **not** here, because derived and
      * device-local rows are not tables a client counts, and no health value is here because none is
      * stored anywhere.
      */
@@ -104,6 +106,17 @@ internal data class EventResponse(val event: AssetEventDto)
 
 @Serializable
 internal data class TagListResponse(val tags: List<NfcTagDto>)
+
+/**
+ * #86 (C20; R86-18) — `GET /v1/assets/{id}/succession`: the row naming the asset as successor ([replaces]) and the
+ * row naming it as predecessor ([replacedBy]), each the archive's own [AssetSuccessionDto] or `null`. Both keys are
+ * always on the wire (`explicitNulls`); a chain's middle asset answers both. `AssetDto` gains nothing.
+ */
+@Serializable
+internal data class SuccessionResponse(
+    val replaces: AssetSuccessionDto?,
+    val replacedBy: AssetSuccessionDto?,
+)
 
 /*
  * The merge report, on the wire. It is a 1:1 mirror of Task 1's `MergeReport` rather than that
@@ -153,9 +166,9 @@ internal data class MergeReportResponse(
     // group, a closure references a schedule, a reference an asset; an activation and a condition
     // reference an asset, and a health subject an asset and, softly, a schedule. #74's `categories`
     // follows here, as in the enum, though a merge writes categories **first** (`MergeWrites`), and
-    // #79's `serviceCases` and `caseEntries` follow, as they follow in the enum, then #72's `loans`, and #77's
-    // `transfers` closes the list. Fifteen tables since format 9, seventeen since format 12, eighteen since
-    // 13, nineteen since 14.
+    // #79's `serviceCases` and `caseEntries` follow, as they follow in the enum, then #72's `loans`, #77's
+    // `transfers`, and #86's `successions` closes the list. Fifteen tables since format 9, seventeen since format
+    // 12, eighteen since 13, nineteen since 14, twenty since 15.
     val assets: MergeTallyDto,
     val groups: MergeTallyDto,
     val definitions: MergeTallyDto,
@@ -179,6 +192,8 @@ internal data class MergeReportResponse(
     val loans: MergeTallyDto,
     /** #77 — the transfer records, OUT, IN and WITHDRAWN (format 14). */
     val transfers: MergeTallyDto,
+    /** #86 — the successions (format 15). */
+    val successions: MergeTallyDto,
     /** Deterministic: table order, then id. Empty when [applicable]. */
     val conflicts: List<MergeDecisionDto>,
     val duplicateCandidates: List<DuplicateCandidateDto>,
@@ -215,6 +230,7 @@ internal fun MergeReport.toResponse() = MergeReportResponse(
     caseEntries = caseEntries.dto(),
     loans = loans.dto(),
     transfers = transfers.dto(),
+    successions = successions.dto(),
     conflicts = conflicts.map { it.dto() },
     duplicateCandidates = duplicateCandidates.map { it.dto() },
 )

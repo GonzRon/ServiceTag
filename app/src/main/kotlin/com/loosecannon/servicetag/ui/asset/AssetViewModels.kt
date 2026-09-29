@@ -22,6 +22,7 @@ import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentKind
@@ -52,6 +53,7 @@ import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.model.seasonInputs
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
+import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.ByteSource
@@ -145,6 +147,7 @@ import com.loosecannon.servicetag.ui.maintenance.DueItem
 import com.loosecannon.servicetag.ui.maintenance.DueReadModel
 import com.loosecannon.servicetag.ui.maintenance.ENTER_THE_NUMBER_OF_DAYS
 import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
+import com.loosecannon.servicetag.ui.replace.ReplaceStrings
 import com.loosecannon.servicetag.ui.service.ServiceCaseRow
 import com.loosecannon.servicetag.ui.service.openServiceCasesLine
 import com.loosecannon.servicetag.ui.service.serviceCaseRowsOf
@@ -671,8 +674,23 @@ data class TransferOutRow(
     val withdrawTitle: String,
 )
 
-/** The detail overflow's items, in the order drawn (#77 adds [TRANSFER], P77-1, before the destructive one). */
-enum class DetailMenuItem { EDIT, ARCHIVE, UNARCHIVE, RETIRE, UNRETIRE, TRANSFER, DELETE }
+/**
+ * The detail overflow's items, in the order drawn (#77 adds [TRANSFER], P77-1, before the destructive one; #86 adds
+ * [REPLACE], P86-1, after the retirement item and before [TRANSFER]).
+ */
+enum class DetailMenuItem { EDIT, ARCHIVE, UNARCHIVE, RETIRE, UNRETIRE, REPLACE, TRANSFER, DELETE }
+
+/**
+ * #86 (C16): one end of this asset's succession as the detail draws it — the other asset ([assetId], [name]), the
+ * succession's [replacedOn] (ISO), and [line], already composed: P86-26 on the old asset, P86-27 on the new one. The
+ * line is tappable and opens the other asset; navigation writes nothing, so a held endpoint draws it too.
+ */
+data class SuccessionLine(
+    val assetId: String,
+    val name: String,
+    val replacedOn: String,
+    val line: String,
+)
 
 /**
  * Everything the detail screen draws about one asset, or null while it is still unknown.
@@ -745,6 +763,10 @@ data class AssetDetailState(
      * held-but-ACTIVE one (merged history) is read-only all the same.
      */
     val transferredOut: List<TransferOutRow> = emptyList(),
+    /** #86 (C16): what replaced this asset (P86-26), from one `observeForAsset`; null while nothing has. */
+    val replacedBy: SuccessionLine? = null,
+    /** #86 (C16): what this asset replaces (P86-27); null for an asset that replaces nothing. A chain has both. */
+    val replaces: SuccessionLine? = null,
 ) {
     /** #77 (C19): transferred out from this phone by an open OUT. */
     val held: Boolean get() = transferredOut.isNotEmpty()
@@ -755,15 +777,19 @@ data class AssetDetailState(
      */
     val offersWrites: Boolean get() = !held
 
-    /** The overflow: Delete alone for a held asset (R77-4's one destructive exception); else the shipped four and P77-1. */
+    /**
+     * The overflow: Delete alone for a held asset (R77-4's one destructive exception); else the shipped four, P86-1 —
+     * only while nothing has replaced this asset (#86 C16, R86-5) — and P77-1.
+     */
     val menu: List<DetailMenuItem>
         get() = if (held) {
             listOf(DetailMenuItem.DELETE)
         } else {
-            listOf(
+            listOfNotNull(
                 DetailMenuItem.EDIT,
                 if (asset.status == AssetStatus.ACTIVE) DetailMenuItem.ARCHIVE else DetailMenuItem.UNARCHIVE,
                 if (asset.isRetired) DetailMenuItem.UNRETIRE else DetailMenuItem.RETIRE,
+                DetailMenuItem.REPLACE.takeIf { replacedBy == null },
                 DetailMenuItem.TRANSFER,
                 DetailMenuItem.DELETE,
             )
@@ -874,6 +900,11 @@ class AssetDetailViewModel(
     private val withdrawTransfer: WithdrawTransferRecord? = null,
     /** #77 (C22, R77-23): the one sweep after a lifecycle write or a withdrawal. Null sweeps nothing. */
     private val reconcile: ReminderReconcile? = null,
+    /**
+     * #86 (C16): the successions, observed once for this asset's two ends. Null links nothing — a test that is not
+     * about successions; `AppGraph` passes the real repository.
+     */
+    successions: AssetSuccessionRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String) : this(
@@ -889,6 +920,7 @@ class AssetDetailViewModel(
         transfers = graph.transferRecords,
         withdrawTransfer = graph.withdrawTransferRecord,
         reconcile = graph.reminderReconcile,
+        successions = graph.assetSuccessions,
     )
 
     /** The zone the retirement dialog's today is read in: the user's calendar day. */
@@ -969,6 +1001,15 @@ class AssetDetailViewModel(
             ?: flowOf(emptyList())
         ).distinctUntilChanged()
 
+    /**
+     * #86 (C16): this asset's two succession ends from one observation, each named from the asset rows — folded in
+     * after the page's own combine, as [openOutRecords] is, so a Replace redraws the two lines and never the page.
+     */
+    private val succession: Flow<Pair<SuccessionLine?, SuccessionLine?>> =
+        (successions?.observeForAsset(id) ?: flowOf(emptyList()))
+            .combine(rows) { links, all -> successionLinesOf(links, all) }
+            .distinctUntilChanged()
+
     val state: StateFlow<AssetDetailState?> =
         combine(rows, tags.observeForAsset(id), journal, maintenance, facts) { all, tagRows, j, groupRows, _ ->
             val row = all.firstOrNull { it.id == id } ?: return@combine null
@@ -1012,6 +1053,7 @@ class AssetDetailViewModel(
                     .map { AssetGroupRow(it.id, it.name) },
             )
         }.combine(openOutRecords) { page, open -> page?.withTransfer(open) }
+            .combine(succession) { page, (by, of) -> page?.copy(replacedBy = by, replaces = of) }
             .combine(purchaseDocument) { page, document -> page?.copy(purchaseDocument = document) }
             .combine(cases) { page, rows -> page?.copy(cases = rows) }
             .combine(loanRows) { page, rows ->
@@ -1107,6 +1149,25 @@ class AssetDetailViewModel(
             leadsWithLogIncident = false,
             warranty = warranty.copy(inService = false),
         )
+    }
+
+    /**
+     * #86 (C16): P86-26 from the row naming this asset as the predecessor, P86-27 from the one naming it as the
+     * successor; an end whose other asset is not among [all] draws nothing.
+     */
+    private fun successionLinesOf(links: List<AssetSuccession>, all: List<Asset>): Pair<SuccessionLine?, SuccessionLine?> {
+        fun nameOf(other: AssetId): String? = all.firstOrNull { it.id == other }?.name
+        val by = links.firstOrNull { it.predecessorAssetId == id }?.let { row ->
+            nameOf(row.successorAssetId)?.let { name ->
+                SuccessionLine(row.successorAssetId.value, name, row.replacedOn, ReplaceStrings.replacedBy(name, row.replacedOn))
+            }
+        }
+        val of = links.firstOrNull { it.successorAssetId == id }?.let { row ->
+            nameOf(row.predecessorAssetId)?.let { name ->
+                SuccessionLine(row.predecessorAssetId.value, name, row.replacedOn, ReplaceStrings.replaces(name))
+            }
+        }
+        return by to of
     }
 
     /** #77 (R77-23): archive, unarchive, retire and unretire each sweep once, after a successful write. */
@@ -1259,7 +1320,7 @@ class AssetDetailViewModel(
                     sweepOnce()
                     _prompt.update { DetailPrompt.LogWhatHappened }
                 }
-                is AssetValidation -> refuse("Enter a date as YYYY-MM-DD")
+                is AssetValidation -> refuse(ENTER_A_DATE_AS_YYYY_MM_DD)
                 is AssetTransferredOut -> refuse(TransferImportStrings.ASSET_TRANSFERRED_OUT)
                 else -> refuse("Could not retire this asset.")
             }
@@ -1870,6 +1931,26 @@ data class AssetEditState(
 
 /** The label of the empty choice in the "Part of" picker, and of the asset with no parent. */
 const val NO_PARENT = "None"
+
+/**
+ * The "Part of" picker of spec §5, over [all]: [NO_PARENT] first, then everything but [self] and everything under
+ * it, so choosing a parent can never be the move that creates the cycle. Archived rows are offered and marked —
+ * archive is not delete (R-9), and a component of an archived machine is still its component. #86 (C17) extracted
+ * it from the editor so the Replace form draws the same rule.
+ */
+internal fun parentChoicesIn(all: Collection<Asset>, held: Set<AssetId>, self: AssetId?): List<ParentChoice> {
+    val blocked = self?.let { AssetTree.descendants(all, it) + it }.orEmpty()
+    return listOf(ParentChoice(null, NO_PARENT)) + all
+        // #77 (C19, rm-5): a transferred-out asset is never offered as a parent.
+        .filterNot { it.id in blocked || it.id in held }
+        .sortedBy { it.name.lowercase() }
+        .map { row ->
+            ParentChoice(
+                id = row.id.value,
+                label = if (row.status == AssetStatus.ARCHIVED) "${row.name} (archived)" else row.name,
+            )
+        }
+}
 
 /**
  * #78 — what the editor asks after a save has been written and before it closes. It writes nothing
@@ -2627,24 +2708,8 @@ class AssetEditViewModel(
         )
     }
 
-    /**
-     * The picker of spec §5: everything but this asset and everything under it, so choosing a
-     * parent can never be the move that creates the cycle. Archived rows are offered and marked —
-     * archive is not delete (R-9), and a component of an archived machine is still its component.
-     */
-    private fun choicesIn(all: Collection<Asset>, held: Set<AssetId>): List<ParentChoice> {
-        val blocked = id?.let { self -> AssetTree.descendants(all, self) + self }.orEmpty()
-        return listOf(ParentChoice(null, NO_PARENT)) + all
-            // #77 (C19, rm-5): a transferred-out asset is never offered as a parent.
-            .filterNot { it.id in blocked || it.id in held }
-            .sortedBy { it.name.lowercase() }
-            .map { row ->
-                ParentChoice(
-                    id = row.id.value,
-                    label = if (row.status == AssetStatus.ARCHIVED) "${row.name} (archived)" else row.name,
-                )
-            }
-    }
+    /** The picker of spec §5 for this asset: the one rule, [parentChoicesIn]. */
+    private fun choicesIn(all: Collection<Asset>, held: Set<AssetId>): List<ParentChoice> = parentChoicesIn(all, held, id)
 
     /** The refused parent by name, so the line says which asset it was; its id if it has gone. */
     private suspend fun nameOf(parentId: AssetId): String =
@@ -2780,12 +2845,12 @@ private fun localeCurrencyCode(): String = try {
  * requires both dates would make false (the controller's ruling on I10).
  */
 private fun markFor(problem: AssetProblem): Pair<String, String>? = when (problem) {
-    AssetProblem.NameRequired -> AssetField.NAME to "Give the asset a name"
+    AssetProblem.NameRequired -> AssetField.NAME to GIVE_THE_ASSET_A_NAME
     AssetProblem.BadCurrency -> AssetField.CURRENCY to BAD_CURRENCY
     AssetProblem.CurrencyRequired -> AssetField.CURRENCY to CURRENCY_REQUIRED
     AssetProblem.NegativePrice -> AssetField.PRICE to "Price cannot be negative"
     AssetProblem.UnknownParent -> AssetField.PARENT to "That asset is no longer there"
-    is AssetProblem.BadDate -> problem.field to "Enter a date as YYYY-MM-DD"
+    is AssetProblem.BadDate -> problem.field to ENTER_A_DATE_AS_YYYY_MM_DD
     is AssetProblem.Season -> when (val season = problem.p) {
         SeasonWindow.Problem.BothOrNeither -> null
         is SeasonWindow.Problem.BadDate ->
@@ -2835,6 +2900,12 @@ internal fun seasonStrands(titles: List<String>): String =
 /** S64 with its one substitution: the stranded schedules' titles. */
 internal fun breakStrands(titles: List<String>): String =
     BREAK_STRANDS_PRE_SERVICE.replace("<titles>", titles.joinToString(", "))
+
+/** #86 (plan §6, reused 16): the name refusal, hoisted byte-identical so Replace asset draws it from here. */
+const val GIVE_THE_ASSET_A_NAME = "Give the asset a name"
+
+/** #86 (plan §6, reused 17): every bad or blank required date, hoisted byte-identical. */
+const val ENTER_A_DATE_AS_YYYY_MM_DD = "Enter a date as YYYY-MM-DD"
 
 /** Also the case editor's currency refusal (#79, C21): reused through this home. */
 internal const val BAD_CURRENCY = "Currency is a three-letter code like USD"

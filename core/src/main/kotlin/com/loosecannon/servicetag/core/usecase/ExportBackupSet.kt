@@ -33,6 +33,7 @@ import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.transfer.TransferGraph
 import com.loosecannon.servicetag.core.transfer.TransferRetention
@@ -56,6 +57,9 @@ data class BackupSet(val data: ByteArray, val plan: ArtifactsPlan) {
  * **#77 (C9): never a transferred graph.** The archive is `TransferGraph.retain` of the snapshot with the
  * assets the records hold — their rows gone, every record kept — and the artifacts plan is built from that
  * retained data's MANAGED rows only (MJ-1). An archived asset that is not held leaves as it always did.
+ *
+ * **#86 (C5, C6): a succession naming a held asset at either end never leaves** — `retain` drops it, as it drops a
+ * loan, and never answers `Entangled` for one — so the archive still decodes on the next restore.
  */
 class ExportBackupSet(
     private val assets: AssetRepository,
@@ -82,6 +86,8 @@ class ExportBackupSet(
     private val loans: AssetLoanRepository,
     /** #77 — the transfer records (format 14): every record, and never the graph of an asset they hold. */
     private val transfers: TransferRecordRepository,
+    /** #86 — the successions (format 15): every row but those naming an asset held here (`retain` drops them). */
+    private val successions: AssetSuccessionRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -91,6 +97,7 @@ class ExportBackupSet(
     private val repos = BackupRepositories(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         seasonActivations, conditions, healthSubjects, categories, serviceCases, caseEntries, loans, transfers,
+        successions,
     )
 
     /**
@@ -117,8 +124,8 @@ class ExportBackupSet(
 }
 
 /**
- * The nineteen canonical stores an archive is read from, in `ExportBackupSet`'s order — one value to hand
- * [readSnapshot] instead of nineteen ports (#77, mn-8).
+ * The twenty canonical stores an archive is read from, in `ExportBackupSet`'s order — one value to hand
+ * [readSnapshot] instead of twenty ports (#77, mn-8; #86 adds the successions).
  */
 class BackupRepositories(
     val assets: AssetRepository,
@@ -141,6 +148,8 @@ class BackupRepositories(
     val loans: AssetLoanRepository,
     /** #77 — the transfer records (format 14). */
     val transfers: TransferRecordRepository,
+    /** #86 — the successions (format 15). */
+    val successions: AssetSuccessionRepository,
 )
 
 /**
@@ -178,6 +187,8 @@ suspend fun readSnapshot(repos: BackupRepositories): BackupData = with(repos) {
         assetLoans = loans.all().map { it.toDto() },
         // Format 14: every transfer record, OUT, IN and WITHDRAWN alike.
         transferRecords = transfers.all().map { it.toDto() },
+        // Format 15: every succession; the export's `retain` drops a row naming a held asset (#86, C6).
+        assetSuccessions = successions.all().map { it.toDto() },
     )
 }
 

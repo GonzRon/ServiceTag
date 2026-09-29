@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
 import com.loosecannon.servicetag.core.backup.ArtifactsCodec
 import com.loosecannon.servicetag.core.backup.ArtifactsPlan
 import com.loosecannon.servicetag.core.backup.ArtifactsPlanEntry
@@ -80,7 +81,8 @@ class ArtifactsUseCasesTest {
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references,
         InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-        categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(), uow,
+        categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(),
+        InMemoryAssetSuccessionRepository(), uow,
         IdGenerator { "set-1" }, Clock { 1_726_000_000_000L }, appVersion = "2.4", schemaVersion = 5,
     )
     private val restore = RestoreArtifacts(attachments, storage)

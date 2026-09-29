@@ -43,6 +43,7 @@ import com.loosecannon.servicetag.ui.maintenance.MaintenanceSheet
 import com.loosecannon.servicetag.ui.maintenance.ReminderHealthScreen
 import com.loosecannon.servicetag.ui.maintenance.ScheduleDetailScreen
 import com.loosecannon.servicetag.ui.maintenance.ScheduleEditScreen
+import com.loosecannon.servicetag.ui.replace.ReplaceAssetScreen
 import com.loosecannon.servicetag.ui.nfc.ReaderMode
 import com.loosecannon.servicetag.ui.nfc.rememberReaderMode
 import com.loosecannon.servicetag.ui.scan.ScanScreen
@@ -235,6 +236,18 @@ fun ServiceTagRoot(
                         onLendOut = { backStack.add(Route.LoanEdit(it)) },
                         onEditLoan = { asset, loan -> backStack.add(Route.LoanEdit(asset, loan)) },
                         onTransfer = { backStack.add(Route.TransferAssets(preselect = it)) },
+                        // #86 (C18): P86-1 in the overflow opens Replace asset; the tap writes nothing.
+                        onReplace = { backStack.add(Route.ReplaceAsset(it)) },
+                    )
+                }
+                // #86 (C18): a finished replace swaps this entry for the new asset's detail, so Back returns to the
+                // old one; leaving before the confirm pops and writes nothing.
+                entry<Route.ReplaceAsset> { key ->
+                    ReplaceAssetScreen(
+                        graph = graph,
+                        assetId = key.assetId,
+                        onBack = { backStack.removeLastOrNull() },
+                        onDone = { backStack.removeLastOrNull(); backStack.add(Route.AssetDetail(it)) },
                     )
                 }
                 entry<Route.AssetEdit> { key ->

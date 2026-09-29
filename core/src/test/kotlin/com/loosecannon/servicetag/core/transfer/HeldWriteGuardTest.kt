@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.transfer
 
+import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.core.model.Asset
@@ -803,4 +804,27 @@ class HeldWriteGuardTest {
         status = if (target == TagTarget.None) com.loosecannon.servicetag.core.model.TagStatus.UNBOUND else com.loosecannon.servicetag.core.model.TagStatus.ACTIVE,
         createdAt = 100L, updatedAt = 100L,
     )
+
+    /**
+     * #86 (C6, I8; R86-16): no **new** succession may name a held asset, at either end — refused before the port
+     * writes, and nothing commits. A row naming neither writes as before.
+     */
+    @Test
+    fun aSuccessionNamingAHeldAssetIsRefused() = runTest {
+        seed()
+        val successions = guard.successions(install.successions)
+
+        refused(
+            heater,
+            "a held predecessor" to { uow.write { successions.append(successionOf("s1", predecessor = "h1", successor = "x1")) } },
+        )
+        refused(
+            anode,
+            "a held successor" to { uow.write { successions.append(successionOf("s2", predecessor = "o1", successor = "h2")) } },
+        )
+        assertEquals(emptyList(), install.successions.all())
+
+        uow.write { successions.append(successionOf("s3", predecessor = "o1", successor = "x1")) }
+        assertEquals(listOf("s3"), install.successions.all().map { it.id })
+    }
 }

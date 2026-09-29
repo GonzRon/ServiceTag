@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.merge.MergeSnapshot
 import com.loosecannon.servicetag.core.model.AssetLoan
+import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.ExternalLink
@@ -41,6 +42,7 @@ import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -121,6 +123,13 @@ class ApplyBackupMergePlan(
     private val loans: AssetLoanRepository,
     /** #77 — the transfer records (format 14). */
     private val transfers: TransferRecordRepository,
+    /**
+     * #86 — the successions (format 15): the **raw** port, never the write guard's (C6, MJ-2). A transfer back writes
+     * the kept rows through it — they existed before the transaction, so I8 (no **new** row names a held asset) does
+     * not apply, and the other end may still be held — and M2 already refuses a held end in the plan this apply
+     * rebuilds inside its own write.
+     */
+    private val successions: AssetSuccessionRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -138,7 +147,7 @@ class ApplyBackupMergePlan(
      * assets' stale local graph ([ReturnScope]); in the same write their IN records are appended **first**, closing
      * this phone's OUT (the write guard refuses anything else), that graph is removed through the ports' deletes, the
      * plan's rows are inserted, and the sender-local returned loans and 2.6 link rows with their tags are written back
-     * unchanged as history. It sweeps nothing: [AppliedMerge.removedLocators] are the removed documents' bytes the
+     * unchanged as history, and so are #86's successions naming a returning asset at either end (C6). It sweeps nothing: [AppliedMerge.removedLocators] are the removed documents' bytes the
      * pack does not name, for the caller to sweep **after** it knows the write committed (MJ-1).
      */
     suspend fun runReturning(plan: MergePlan, returning: Set<AssetId>): AppliedMerge {
@@ -155,7 +164,7 @@ class ApplyBackupMergePlan(
                 mergeSnapshotOf(
                     assets, groups, tags, links, definitions, profiles, schedules, closures,
                     events, attachments, references, seasonActivations, conditions, healthSubjects,
-                    categories, serviceCases, caseEntries, loans, transfers, stored, configured,
+                    categories, serviceCases, caseEntries, loans, transfers, successions, stored, configured,
                 ),
                 returning,
             )
@@ -179,6 +188,8 @@ class ApplyBackupMergePlan(
             scope.keptLinks.forEach { links.upsert(it) }
             scope.keptLinkTags.forEach { tags.upsert(it) }
             scope.keptLoans.forEach { loans.upsert(it) }
+            // #86 (C6, Hazard 2; MJ-2): the successions the cascades above took, back unchanged, through the raw port.
+            scope.keptSuccessions.forEach { successions.append(it) }
             fresh.writes.groups.forEach { groups.upsert(it) }
             fresh.writes.definitions.forEach { definitions.upsert(it) }
             fresh.writes.profiles.forEach { profiles.upsert(it) }
@@ -197,6 +208,8 @@ class ApplyBackupMergePlan(
             fresh.writes.caseEntries.forEach { caseEntries.insert(it) }
             // #72: the loans after their assets; the plan held each asset to one open loan.
             fresh.writes.loans.forEach { loans.upsert(it) }
+            // #86: the successions after both their assets and the loans, before the records (C4).
+            fresh.writes.successions.forEach { successions.append(it) }
             // #77: the transfer records last of all, after every row they describe (C10).
             records.forEach { transfers.append(it) }
 
@@ -225,7 +238,9 @@ class AppliedMerge(val report: MergeReport, val removedLocators: List<String>)
  * Removed through the ports: [groups], then the asset-targeted [tags], then the [assets] themselves, children first;
  * the asset's other rows go by the schema's cascades. Kept as history and written back unchanged after the pack's
  * asset: [keptLoans] (the sender-local returned loans, R77-25 (a)), [keptLinks] and [keptLinkTags] (the 2.6
- * tombstones, never re-purposed or dropped). [locators] are the removed documents' bytes, for the sweep.
+ * tombstones, never re-purposed or dropped), and #86's [keptSuccessions] — every local succession naming a returning
+ * asset at either end, which the cascades take (C6, Hazard 2); the pack never carries one (SENDER_ONLY), so no second
+ * copy can collide. [locators] are the removed documents' bytes, for the sweep.
  *
  * A staying row that names a removed one would be changed by those cascades, and a removed group that also names a
  * staying asset would take its rows with it (mn-1), so either refuses the return ([IllegalStateException]) — at the
@@ -239,12 +254,15 @@ internal class ReturnScope private constructor(
     val keptLinks: List<ExternalLink>,
     val keptLinkTags: List<TagBinding>,
     val keptLoans: List<AssetLoan>,
+    val keptSuccessions: List<AssetSuccession>,
     val locators: List<String>,
 ) {
     companion object {
         fun of(full: MergeSnapshot, returning: Set<AssetId>): ReturnScope {
             if (returning.isEmpty()) {
-                return ReturnScope(full, emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+                return ReturnScope(
+                    full, emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
+                )
             }
             val groups = full.groups.filter { g -> g.members.any { it.assetId in returning } }
             val groupIds = groups.mapTo(HashSet()) { it.id }
@@ -318,6 +336,7 @@ internal class ReturnScope private constructor(
                 keptLinks = keptLinks,
                 keptLinkTags = keptLinkTags,
                 keptLoans = full.loans.filter { it.assetId in returning },
+                keptSuccessions = full.successions.filter { it.predecessorAssetId in returning || it.successorAssetId in returning },
                 locators = attachments.map { it.storageLocator },
             )
         }

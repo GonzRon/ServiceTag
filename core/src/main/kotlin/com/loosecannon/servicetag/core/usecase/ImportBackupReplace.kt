@@ -32,6 +32,7 @@ import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 data class ImportReport(
@@ -75,6 +76,9 @@ data class ImportReport(
  * wipe, in the same write, the archive is compared with this phone's open OUTs: one carrying the graph of an
  * asset held here is refused with [TransferredOutInArchive] — nothing wiped — unless its own records hold an
  * IN whose lineage names this phone's OUT of that asset (open, or withdrawn by mistake: rm-8).
+ *
+ * **The successions (#86, C5).** Wiped by name before the assets and reloaded after them, beside the loans; R77-13's
+ * held check above is untouched. A format ≤14 archive carries none, so its restore leaves the table empty.
  */
 class ImportBackupReplace(
     private val assets: AssetRepository,
@@ -101,6 +105,8 @@ class ImportBackupReplace(
     private val loans: AssetLoanRepository,
     /** #77 — the transfer records (format 14): wiped and reloaded; a held graph is refused first (R77-13). */
     private val transfers: TransferRecordRepository,
+    /** #86 — the successions (format 15): wiped by name, restored after their assets. */
+    private val successions: AssetSuccessionRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -170,6 +176,8 @@ class ImportBackupReplace(
             // #72's loans likewise: the CASCADE would take them with their assets, and they are wiped by
             // name so that no reader of this list has to know it.
             loans.deleteAll()
+            // #86's successions likewise: both keys CASCADE from `asset`, and they are wiped by name all the same.
+            successions.deleteAll()
             // #77's records have no foreign key, so nothing would take them: wiped by name, reloaded last.
             transfers.deleteAll()
             // The three 1.4 tables need no line: activations and conditions point only at an
@@ -219,6 +227,9 @@ class ImportBackupReplace(
             // #72: the loans after their assets. The graph check held the file to one open loan per
             // asset, so the schema's unique index has nothing to refuse here.
             data.assetLoans.forEach { loans.upsert(it.toDomain()) }
+            // #86: the successions after both their assets. The graph check held the file to one row per end and no
+            // cycle, so the schema's unique indexes have nothing to refuse here.
+            data.assetSuccessions.forEach { successions.append(it.toDomain()) }
             // Attachment rows go last: every owner, asset or event, is already in.
             data.attachments.forEach { attachments.upsert(it.toDomain()) }
             // #77: the transfer records after every row, as a merge appends them — the archive's own records,

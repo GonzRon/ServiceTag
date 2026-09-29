@@ -1,6 +1,9 @@
 package com.loosecannon.servicetag.core.backup
 
 import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.SuccessionProblem
+import com.loosecannon.servicetag.core.model.successionProblems
+import com.loosecannon.servicetag.core.usecase.isIsoDate
 import com.loosecannon.servicetag.core.transfer.TransferPack
 import com.loosecannon.servicetag.core.journal.CategoryKey
 import com.loosecannon.servicetag.core.model.ScheduleTarget
@@ -62,6 +65,9 @@ import com.loosecannon.servicetag.core.usecase.wellFormedZone
  *   not 64 lowercase hex, an `at` not after the epoch or a note breaking the pack note's rule — and, as the
  *   plan places it here, a WITHDRAWN with no OUT of its asset and pack in the file. An asset held by the
  *   archive's own records is the graph check's.
+ *
+ * - a succession (#86, C3) with a blank id, one asset at both ends (I1), a `replacedOn` that is not an ISO date, or a
+ *   `createdAt` not after the epoch. A missing end, a taken end and a cycle are the graph check's.
  *
  * What depends on **other rows or on today** is deliberately not asked: a subject naming an archived
  * or retargeted schedule (NOT TRACKED, which a merge may bring — plan decision 17), a TRACK_ONE
@@ -126,6 +132,20 @@ internal object BackupContentCheck {
         checkServiceCases(data)
         checkLoans(data)
         checkTransferRecords(data)
+        checkSuccessions(data)
+    }
+
+    /** #86 (C3): each succession by its form, one row at a time; the rules about other rows are the graph check's. */
+    private fun checkSuccessions(data: BackupData) {
+        data.assetSuccessions.forEach { row ->
+            if (row.id.isBlank()) throw BackupCorrupt("assetSuccessions: a succession has a blank id")
+            fun refuse(problem: String): Nothing = throw BackupCorrupt("assetSuccessions: succession ${row.id} $problem")
+            if (successionProblems(listOf(row.toDomain())).any { it is SuccessionProblem.SelfLink }) {
+                refuse("names asset ${row.predecessorAssetId} at both ends")
+            }
+            if (!isIsoDate(row.replacedOn)) refuse("has a replacedOn \"${row.replacedOn}\" that is not an ISO date")
+            if (row.createdAt <= 0) refuse("has createdAt ${row.createdAt}, not after the epoch")
+        }
     }
 
     /**

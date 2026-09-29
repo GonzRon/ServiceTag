@@ -19,8 +19,8 @@ the one body key it is about, then the `problems` in parentheses.
   **1.3.0 or later**, the fourteen season, condition and health tools need **1.4.0 or later** and
   `repair_schedule_providers` needs **1.4.1 or later**; on an older build their routes are not there
   and every call answers 404. The two warranty tools need an app whose `schemaVersion` is **11 or
-  later**, the five service-case tools one at **12 or later**, and the five loan tools one at **13 or
-  later**; each checks it itself (below).
+  later**, the five service-case tools one at **12 or later**, the five loan tools one at **13 or
+  later**, and `get_asset_succession` one at **15 or later**; each checks it itself (below).
 - **Every write needs ServiceTag 1.4.0.** Before its first write under a pairing, the server reads
   `/v1/status` once and refuses to write to an app whose `schemaVersion` is below 8 — a `ToolError`
   carrying `APP_SCHEMA_TOO_OLD`, with nothing sent. The answer is kept for that pairing, and a new
@@ -30,14 +30,17 @@ the one body key it is about, then the `problems` in parentheses.
 - **The warranty tools need schema 11.** `get_warranty` and `set_warranty_reminder` — the read as well
   as the write — refuse an app whose `schemaVersion` is below 11 the same way, with `APP_SCHEMA_TOO_OLD`
   and nothing sent, from the same one `/v1/status` read per pairing. Every tool but these two, the
-  five service-case tools and the five loan tools below keeps the minimum of 8.
+  five service-case tools, the five loan tools and the succession tool below keeps the minimum of 8.
 - **The service-case tools need schema 12.** `list_service_cases`, `get_service_case`,
   `open_service_case`, `update_service_case` and `add_case_entry` — the reads as well as the writes —
   refuse an app whose `schemaVersion` is below 12 the same way, from the same read.
 - **The loan tools need schema 13.** `list_loans`, `get_loan`, `lend_asset`, `update_loan` and
   `return_loan` — the reads as well as the writes — refuse an app whose `schemaVersion` is below 13 the
-  same way, from the same read. The minima are therefore 8 for every write, 11 for the warranty tools,
-  12 for the case tools and 13 for the loan tools.
+  same way, from the same read.
+- **The succession tool needs schema 15.** `get_asset_succession` — a read — refuses an app whose
+  `schemaVersion` is below 15 the same way, from the same read. The minima are therefore 8 for every
+  write, 11 for the warranty tools, 12 for the case tools, 13 for the loan tools and 15 for the
+  succession tool.
 
 ## Using it
 
@@ -80,7 +83,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Sixty-eight: `pair` plus one per API operation.
+Sixty-nine: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -164,6 +167,16 @@ returned loan is frozen. The reminder is the phone's own and has no tool; a loan
 at the phone's next sweep at or after its digest hour, but a returned loan's standing reminder comes down
 at the next sweep of any kind, the midnight sweep included. Nothing deletes or relinks a loan.
 `docs/api/v1.md`'s **Loans (#72)** section is the contract.
+
+**Asset successions (needs schema 15)** — `get_asset_succession`. The phone's **Replace asset** gives way
+from one asset to a different, new one and records the pair as a succession. The tool answers
+`{replaces, replacedBy}` for an asset — the succession naming it as the new asset and the one naming it as
+the old, each `{id, predecessorAssetId, successorAssetId, replacedOn, createdAt}` or null — and is read
+only: no tool replaces an asset or records, edits or removes a succession (`import_merge` only inserts an
+archive's rows, below), and an asset's own answer carries
+no succession field. `status` counts them as `assetSuccessions`. Deleting either asset, on the phone,
+deletes its succession; there is no unlink. `docs/api/v1.md`'s **Asset successions (#86)** section is the
+contract.
 
 ### The schedule's two forms, and the deprecated season arguments
 
@@ -283,12 +296,12 @@ the new target **and** clearing the old one in the same call.
 
 ### `import_merge`
 
-Takes a local path to a `ServiceTag-data-*.zip` of format **1–14** and merges it into the phone. A
+Takes a local path to a `ServiceTag-data-*.zip` of format **1–15** and merges it into the phone. A
 format-6 archive adds the maintenance groups, the schedules and the occurrence closures, format 7 the
 references, format 8 the season activations, the conditions and the health subjects, format 9 the
 owner's own categories, format 10 each attachment's document role, format 11 each asset's warranty
-reminder lead, format 12 the service cases and their timeline entries, format 13 the loans and format
-14 the transfer records; an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
+reminder lead, format 12 the service cases and their timeline entries, format 13 the loans, format
+14 the transfer records and format 15 the asset successions; an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
 - a row whose id is not on the phone is **inserted**, with its UUID preserved exactly;
@@ -302,10 +315,10 @@ deletes anything:
   that closed the same round on the same day merge cleanly and a genuine disagreement about *when*
   a round was closed is a conflict for a person.
 
-The report carries a `{insert, identical, conflict, skipped}` tally for each of **nineteen**
+The report carries a `{insert, identical, conflict, skipped}` tally for each of **twenty**
 tables — `assets`, `groups`, `definitions`, `profiles`, `schedules`, `closures`, `links`, `tags`,
 `events`, `attachments`, `references`, `seasonActivations`, `conditions`, `healthSubjects`,
-`categories`, `serviceCases`, `caseEntries`, `loans`, `transfers`. A season activation, a condition and a case's timeline
+`categories`, `serviceCases`, `caseEntries`, `loans`, `transfers`, `successions`. A season activation, a condition and a case's timeline
 entry are immutable facts: each is only ever inserted or found identical. A loan is never updated
 either: one returned, re-dated or relinked on one phone after the other received it conflicts, and an
 open loan whose asset already holds a different open loan here conflicts as `ASSET_ALREADY_LENT`. A
@@ -317,6 +330,13 @@ it, in different packs — conflicts as `TRANSFER_DIVERGED`, resolved only by wi
 A Transfer Pack is not a data archive and the phone refuses it here; the `data.zip` inside one merges as
 an ordinary archive — no `IN` recorded, nothing replaced — so only the phone's own pack import brings an
 asset back.
+
+An asset succession (format 15, the last of the report's twenty tables) is an immutable fact too, only
+ever inserted: one whose old asset a succession on the phone already names as an old asset, or whose new
+asset one already names as a new asset, conflicts as `SUCCESSION_TAKEN`, one that would close a loop with the phone's successions as `SUCCESSION_CYCLE`, and one
+naming an asset transferred out from the phone as `ASSET_TRANSFERRED_OUT`. A merge never retires anything:
+a replacement made on another phone that retired its old asset there conflicts on that asset's row when
+this phone holds it unretired, and nothing lands — make the replacement on the phone that should keep it.
 
 The tool asks for the plan and applies it only when the plan has no conflicts. Pass
 `plan_only=True` to stop after the plan. Either way the result has `applicable` and, when it is
@@ -336,7 +356,9 @@ no tool that **amends or deletes a condition or an activation**, **deletes a hea
 archiving, and health is computed at read time. Since #79 there is no tool that **deletes a service
 case** or **amends or deletes a timeline entry**, and none but `add_case_entry` moves a case's status.
 Since #77 there is no tool that **makes, imports or marks a Transfer Pack**, **withdraws a transfer
-record** or lists the records: each is the phone's alone.
+record** or lists the records: each is the phone's alone. Since #86 there is no tool that **replaces an
+asset** or **records, edits or removes a succession**: only the phone's Replace asset records one,
+`import_merge` only inserts an archive's rows, and `get_asset_succession` only reads.
 
 ## Tests
 

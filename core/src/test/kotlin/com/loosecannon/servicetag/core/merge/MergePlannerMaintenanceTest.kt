@@ -267,8 +267,10 @@ class MergePlannerMaintenanceTest {
                 MergeTable.SERVICE_CASES, MergeTable.CASE_ENTRIES,
                 // #72 (format 13; `MergePlannerLoanTest`): appended after them, a loan after its asset.
                 MergeTable.LOANS,
-                // #77 (format 14; `MergePlannerTransferTest`): appended last, the records written last of all.
+                // #77 (format 14; `MergePlannerTransferTest`): appended after it, the records written last of all.
                 MergeTable.TRANSFERS,
+                // #86 (format 15; `MergePlannerSuccessionTest`): appended last, written after the assets and loans.
+                MergeTable.SUCCESSIONS,
             ),
             MergeTable.entries.toList(),
         )

@@ -94,7 +94,7 @@ class StageABundleConformanceTest {
         assertEquals(
             BackupData.serializer().descriptor.elementNames.toSet() -
                 FORMAT_6_TABLES - FORMAT_7_TABLES - FORMAT_8_TABLES - FORMAT_9_TABLES - FORMAT_12_TABLES - FORMAT_13_TABLES -
-                FORMAT_14_TABLES,
+                FORMAT_14_TABLES - FORMAT_15_TABLES,
             data.keys,
             "data.json root",
         )
@@ -205,5 +205,6 @@ class StageABundleConformanceTest {
         private val FORMAT_12_TABLES = setOf("serviceCases", "serviceCaseEntries")
         private val FORMAT_13_TABLES = setOf("assetLoans")
         private val FORMAT_14_TABLES = setOf("transferRecords")
+        private val FORMAT_15_TABLES = setOf("assetSuccessions")
     }
 }

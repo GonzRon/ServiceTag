@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
@@ -53,7 +54,10 @@ import com.loosecannon.servicetag.di.AppGraph
  * from [categories]. There is still no categories route (R74-8): a category is written only by an
  * asset save, and the API's asset create and update promote through core like the editor's. #77's
  * `transferRecords` count is read here too, from [transferRecords]: there is no transfer route at all
- * (R77-17) — no pack, mark, import or withdrawal — so no collaborator exists to ask.
+ * (R77-17) — no pack, mark, import or withdrawal — so no collaborator exists to ask. #86's `assetSuccessions`
+ * count and its one read-only route, [getSuccession], read [successions] here on the same terms (R86-18): only the
+ * phone's Replace asset records a succession, and the merge apply only inserts an archive's rows, so there is no
+ * write route and no collaborator for one.
  *
  * The asset `PATCH` keeps 1.3's exact command (spec §9.3): its `MM-DD` pair is the one
  * compatibility input, and `UpdateAsset` refuses what the pair cannot represent — a different pair
@@ -61,7 +65,7 @@ import com.loosecannon.servicetag.di.AppGraph
  * schedule 409 `SEASON_MODE_STRANDS_POLICY` — which [mapDomainFailure] names. Condition is never in
  * it (#61 AC 9).
  *
- * **Twenty-seven collaborators plus two values, named one by one, with a `constructor(graph)` beside
+ * **Twenty-eight collaborators plus two values, named one by one, with a `constructor(graph)` beside
  * them.** That is this app's pattern, stated at `AssetViewModels.kt:59`–`61`: *"Each takes the `AppGraph` members it
  * actually uses — the secondary constructor is what the Compose entry calls, the primary one is
  * what a test builds on a Room-backed fake graph."* It is the reason `ApiRouterTest` can drive the
@@ -94,8 +98,16 @@ internal class ApiHandlers(
     private val attachments: AttachmentRepository,
     /** #74 — read for the `assetCategories` status count only; nothing here writes a category. */
     private val categories: CategoryRepository,
-    /** #77 — read for the `transferRecords` status count only; nothing here writes a transfer record. */
+    /**
+     * #77 — read for the `transferRecords` status count only; never written through here (a merge apply inserts an
+     * archive's records through [importBackupMerge]).
+     */
     private val transferRecords: TransferRecordRepository,
+    /**
+     * #86 — read for the `assetSuccessions` count and [getSuccession] only; never written through here (a merge apply
+     * inserts an archive's rows through [importBackupMerge]).
+     */
+    private val successions: AssetSuccessionRepository,
     private val createAsset: CreateAsset,
     private val updateAsset: UpdateAsset,
     private val retireAsset: RetireAsset,
@@ -149,7 +161,7 @@ internal class ApiHandlers(
 ) {
     constructor(graph: AppGraph) : this(
         graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles, graph.events,
-        graph.attachments, graph.categories, graph.transferRecords,
+        graph.attachments, graph.categories, graph.transferRecords, graph.assetSuccessions,
         graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
         graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
         graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
@@ -187,6 +199,8 @@ internal class ApiHandlers(
                 // Format 14's (#77), under the archive's own list name: every record, OUT, IN and
                 // WITHDRAWN — a count of records, never of the assets held.
                 "transferRecords" to transferRecords.all().size,
+                // Format 15's (#86), under the archive's own list name: every succession row.
+                "assetSuccessions" to successions.all().size,
             ) + maintenance.counts() + seasonHealth.counts() + serviceCases.counts() + loans.counts(),
         ),
     )
@@ -243,6 +257,24 @@ internal class ApiHandlers(
         val body = request.decode(ArchiveRequest.serializer())
         val saved = if (body.archived) archiveAsset.run(AssetId(id)) else archiveAsset.unarchive(AssetId(id))
         return ok(AssetResponse.serializer(), AssetResponse(saved.toDto()))
+    }
+
+    // --- the succession, read only (#86) ---------------------------------------------------
+
+    /**
+     * `GET /v1/assets/{id}/succession` (C20; R86-18): the row naming the asset as successor ([SuccessionResponse.replaces])
+     * and the row naming it as predecessor ([SuccessionResponse.replacedBy]), each the archive's own DTO or null; a 404
+     * for an asset that is not there. Writes nothing.
+     */
+    suspend fun getSuccession(id: String): ApiResponse {
+        val assetId = asset(id).id
+        return ok(
+            SuccessionResponse.serializer(),
+            SuccessionResponse(
+                replaces = successions.replaces(assetId)?.toDto(),
+                replacedBy = successions.replacedBy(assetId)?.toDto(),
+            ),
+        )
     }
 
     // --- definitions ----------------------------------------------------------------------

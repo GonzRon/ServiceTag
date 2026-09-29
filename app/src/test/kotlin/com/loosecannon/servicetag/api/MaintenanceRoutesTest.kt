@@ -87,7 +87,7 @@ class MaintenanceRoutesTest {
     private fun router(): ApiRouter = ApiRouter(
         ApiHandlers(
             graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles,
-            graph.events, graph.attachments, graph.categories, graph.transferRecords,
+            graph.events, graph.attachments, graph.categories, graph.transferRecords, graph.assetSuccessions,
             graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
             graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
@@ -1154,7 +1154,7 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(14, report.formatVersion)
+        assertEquals(15, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)
@@ -1205,6 +1205,8 @@ class MaintenanceRoutesTest {
                 "loans",
                 // #77 (format 14): table 19, the transfer records.
                 "transfers",
+                // #86 (format 15): table 20, the successions.
+                "successions",
                 "conflicts", "duplicateCandidates",
             ),
             MergeReportResponse.serializer().descriptor.elementNames.toList(),
@@ -1275,9 +1277,9 @@ class MaintenanceRoutesTest {
         assertEquals(2, inserts("serviceCases"))
         assertEquals(3, inserts("caseEntries"))
         assertEquals(
-            "after categories, in table order, before #72's loans and #77's transfers",
+            "after categories, in table order, before #72's loans, #77's transfers and #86's successions",
             listOf("serviceCases", "caseEntries", "loans"),
-            wire.keys.toList().dropLast(3).takeLast(3),
+            wire.keys.toList().dropLast(4).takeLast(3),
         )
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
@@ -1327,7 +1329,7 @@ class MaintenanceRoutesTest {
         fun inserts(key: String) = wire.getValue(key).jsonObject.getValue("insert").jsonPrimitive.content.toInt()
         assertEquals(2, inserts("assets"))
         assertEquals(5, inserts("loans"))
-        assertEquals("after the case entries, before #77's transfers", "loans", wire.keys.toList().dropLast(3).last())
+        assertEquals("after the case entries, before #77's transfers and #86's successions", "loans", wire.keys.toList().dropLast(4).last())
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
         runBlocking {
@@ -1477,9 +1479,11 @@ class MaintenanceRoutesTest {
      * carries them); #72 moves the schema to 13 (the loan table) and then the format to 13 (the archive
      * that carries the loans); #77 moves both to 14 (the transfer record table and the archive that carries
      * the records), and its B5 adds the `transferRecords` count (mn-14): every record, OUT, IN and WITHDRAWN,
-     * under the archive's own list name — none on a fresh phone, and each appended one counted.
+     * under the archive's own list name — none on a fresh phone, and each appended one counted. #86 moves both to 15
+     * (the succession table and the archive that carries the successions), and its B4 adds the `assetSuccessions`
+     * count — none here; `SuccessionRoutesTest` counts appended ones.
      */
-    @Test fun statusReports14And14AndTheNewCounts() {
+    @Test fun statusReports15And15AndTheNewCounts() {
         val tub = createAsset("Hot tub")
         assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
         assertEquals(
@@ -1496,8 +1500,8 @@ class MaintenanceRoutesTest {
         )
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
-        assertEquals(14, status.schemaVersion)
-        assertEquals(14, status.backupFormatVersion)
+        assertEquals(15, status.schemaVersion)
+        assertEquals(15, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
         assertEquals(1, status.counts["healthSubjects"])
@@ -1508,6 +1512,8 @@ class MaintenanceRoutesTest {
         assertEquals(0, status.counts["assetLoans"])
         // #77: the transfer records' count, under the archive's own list name — none made here yet.
         assertEquals(0, status.counts["transferRecords"])
+        // #86: the successions' count, under the archive's own list name — none replaced here.
+        assertEquals(0, status.counts["assetSuccessions"])
 
         // An OUT and the WITHDRAWN of it: two records, and the asset live again — the count is of records,
         // never of held assets.
@@ -1526,11 +1532,11 @@ class MaintenanceRoutesTest {
     }
 
     /**
-     * Import-merge reads a **format-14** archive (this build's export) and reports **nineteen** tables: the donor's
+     * Import-merge reads a **format-15** archive (this build's export) and reports **twenty** tables: the donor's
      * activation, condition and health subject each tally one INSERT on the wire, its two categories
      * (#74) two, and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
-    @Test fun importMergeReadsFormat14AndReportsNineteenTables() {
+    @Test fun importMergeReadsFormat15AndReportsTwentyTables() {
         val archive = donorArchive()
         fun post(path: String) = router().handle(
             ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
@@ -1540,9 +1546,9 @@ class MaintenanceRoutesTest {
         assertEquals(planned.text(), 200, planned.status)
         val wire = ApiJson.parseToJsonElement(planned.text()).jsonObject
         val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
-        assertEquals(19, tallies.size)
+        assertEquals(20, tallies.size)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(14, report.formatVersion)
+        assertEquals(15, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         val one = MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0)
         assertEquals(one, report.seasonActivations)

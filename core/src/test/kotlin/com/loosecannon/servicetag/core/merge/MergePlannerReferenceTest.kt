@@ -368,8 +368,10 @@ class MergePlannerReferenceTest {
             MergeTable.CASE_ENTRIES to report.caseEntries,
             // #72: the loans follow them.
             MergeTable.LOANS to report.loans,
-            // #77: the transfer records close it.
+            // #77: the transfer records follow them.
             MergeTable.TRANSFERS to report.transfers,
+            // #86: the successions close it.
+            MergeTable.SUCCESSIONS to report.successions,
         )
         assertEquals(MergeTable.entries.toList(), byName.map { it.first })
         assertEquals(MergeTable.entries.map { plan.tally(it) }, byName.map { it.second })

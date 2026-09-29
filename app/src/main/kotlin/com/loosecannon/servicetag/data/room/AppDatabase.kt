@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.data.room.dao.AssetConditionDao
 import com.loosecannon.servicetag.data.room.dao.AssetDao
 import com.loosecannon.servicetag.data.room.dao.AssetLoanDao
 import com.loosecannon.servicetag.data.room.dao.TransferRecordDao
+import com.loosecannon.servicetag.data.room.dao.AssetSuccessionDao
 import com.loosecannon.servicetag.data.room.dao.AssetReferenceDao
 import com.loosecannon.servicetag.data.room.dao.AttachmentDao
 import com.loosecannon.servicetag.data.room.dao.DeadlineLocalDeliveryDao
@@ -30,6 +31,7 @@ import com.loosecannon.servicetag.data.room.entities.AssetEntity
 import com.loosecannon.servicetag.data.room.entities.AssetEventEntity
 import com.loosecannon.servicetag.data.room.entities.AssetLoanEntity
 import com.loosecannon.servicetag.data.room.entities.TransferRecordEntity
+import com.loosecannon.servicetag.data.room.entities.AssetSuccessionEntity
 import com.loosecannon.servicetag.data.room.entities.AssetReferenceEntity
 import com.loosecannon.servicetag.data.room.entities.AssetSeasonActivationEntity
 import com.loosecannon.servicetag.data.room.entities.AttachmentEntity
@@ -83,8 +85,9 @@ import com.loosecannon.servicetag.data.room.entities.ServiceCaseEntryEntity
         ServiceCaseEntryEntity::class,
         AssetLoanEntity::class,
         TransferRecordEntity::class,
+        AssetSuccessionEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -110,4 +113,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun serviceCaseEntryDao(): ServiceCaseEntryDao
     abstract fun assetLoanDao(): AssetLoanDao
     abstract fun transferRecordDao(): TransferRecordDao
+    abstract fun assetSuccessionDao(): AssetSuccessionDao
 }

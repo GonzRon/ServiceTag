@@ -54,6 +54,8 @@ object TransferTables {
         "assetLoans" to TransferTableClass.SENDER_ONLY,
         // #77 (B2a): the transfer records are this installation's own custody facts; a pack never carries one.
         "transferRecords" to TransferTableClass.SENDER_ONLY,
+        // #86 (C6; R86-16): a succession is this installation's own lineage; a pack never carries one.
+        "assetSuccessions" to TransferTableClass.SENDER_ONLY,
     )
 
     /** Whether any row of [table] can be in a pack. An unclassified list never travels. */
@@ -241,6 +243,8 @@ object TransferGraph {
             serviceCaseEntries = carry("serviceCaseEntries", data.serviceCaseEntries) { it.caseId in caseIds },
             assetLoans = carry("assetLoans", data.assetLoans) { it.assetId in selected },
             transferRecords = carry("transferRecords", data.transferRecords) { false },
+            // #86 (C6): lineage never travels, and never forces a selection.
+            assetSuccessions = carry("assetSuccessions", data.assetSuccessions) { false },
         ).sorted()
         return TransferSelection.Selected(
             rootIds = roots.map(::AssetId),
@@ -251,8 +255,8 @@ object TransferGraph {
 
     /**
      * C3 — the archive without [held]: the held assets and their asset-owned rows, each group wholly in
-     * [held] with its schedules and closures, and every tag, loan and 2.6 link naming a held asset (with
-     * the tags on those links). Exactly the held set: no descendant or group member is added to it. A row
+     * [held] with its schedules and closures, and every tag, loan, succession (#86, either end) and 2.6 link
+     * naming a held asset (with the tags on those links). Exactly the held set: no descendant or group member is added to it. A row
      * that stays and names a dropped row makes the whole answer [TransferRetention.Entangled], naming
      * every such reference — a later archive of what stays must still decode.
      */
@@ -282,6 +286,11 @@ object TransferGraph {
             serviceCases = data.serviceCases.filterNot { it.id in droppedCases },
             serviceCaseEntries = data.serviceCaseEntries.filterNot { it.caseId in droppedCases },
             assetLoans = data.assetLoans.filterNot { it.assetId in heldIds },
+            // #86 (C6, Hazard 1): a succession naming a held asset at either end drops, as a loan does — and is never
+            // entangled, so it can refuse nothing.
+            assetSuccessions = data.assetSuccessions.filterNot {
+                it.predecessorAssetId in heldIds || it.successorAssetId in heldIds
+            },
         )
 
         val refs = entangledRefs(kept, dropped)
@@ -390,5 +399,6 @@ object TransferGraph {
         serviceCaseEntries = serviceCaseEntries.sortedBy { it.id },
         assetLoans = assetLoans.sortedBy { it.id },
         transferRecords = transferRecords.sortedBy { it.id },
+        assetSuccessions = assetSuccessions.sortedBy { it.id },
     )
 }

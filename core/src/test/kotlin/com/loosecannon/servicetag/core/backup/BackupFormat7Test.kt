@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.backup
 
 import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.ports.Clock
@@ -145,14 +146,16 @@ class BackupFormat7Test {
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(), uow, IdGenerator { "set-format-7" },
+            categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(),
+            InMemoryAssetSuccessionRepository(), uow, IdGenerator { "set-format-7" },
             Clock { 1_758_400_000_000L }, appVersion = "1.3.0", schemaVersion = 7,
         )
         val restore = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(), storage, uow, rebuildAll = { },
+            categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(),
+            InMemoryAssetSuccessionRepository(), storage, uow, rebuildAll = { },
         )
     }
 
@@ -213,7 +216,7 @@ class BackupFormat7Test {
         // By position: format 8 appends its three tables after this one, format 9 one more, format 12 two,
         // format 13 one and format 14 one.
         assertEquals("assetReferences", tables[10])
-        assertEquals(19, tables.size)
+        assertEquals(20, tables.size)
         // and the tombstone is still its own list, neither bumped nor renamed (I-5)
         assertTrue("externalLinks" in tables)
     }
@@ -287,7 +290,7 @@ class BackupFormat7Test {
         val manifest = BackupCodec.decode(encoded(fixture())).manifest
 
         assertEquals(2, manifest.counts["assetReferences"])
-        assertEquals(25, manifest.counts.size)
+        assertEquals(26, manifest.counts.size)
         assertEquals(
             mapOf(
                 "assets" to 1, "nfcTags" to 0, "externalLinks" to 1,
@@ -309,6 +312,8 @@ class BackupFormat7Test {
                 "assetLoans" to 0,
                 // Format 14's key (#77), at zero here for the same reason.
                 "transferRecords" to 0,
+                // Format 15's key (#86), at zero here for the same reason.
+                "assetSuccessions" to 0,
             ),
             manifest.counts,
         )

@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleStatus
@@ -78,6 +79,26 @@ class SaveSchedule(
     private val healthSubjects: HealthSubjectRepository,
 ) {
     suspend fun run(id: ScheduleId?, cmd: ScheduleCommand, unlinkHealthSubject: Boolean = false): MaintenanceSchedule {
+        val prepared = prepare(id, cmd)
+        return uow.write { commit(prepared, cmd, unlinkHealthSubject) }
+    }
+
+    /**
+     * #86 (C15): the create path — the same reads, refusals and write as [run] with no id — inside the caller's
+     * transaction, so `ReplaceAsset` copies a schedule in its own one write.
+     */
+    internal suspend fun createInTransaction(cmd: ScheduleCommand): MaintenanceSchedule =
+        commit(prepare(null, cmd), cmd, unlinkHealthSubject = false)
+
+    /** What [run] reads and decides before its write: the stored row, the target asset and the row to save. */
+    private class Prepared(
+        val existing: MaintenanceSchedule?,
+        val targetAsset: Asset?,
+        val saved: MaintenanceSchedule,
+        val now: Long,
+    )
+
+    private suspend fun prepare(id: ScheduleId?, cmd: ScheduleCommand): Prepared {
         val existing = id?.let { schedules.get(it) ?: throw NoSuchSchedule(it) }
 
         val profileAssetId = cmd.profileId?.let { profiles.get(it)?.assetId }
@@ -162,26 +183,35 @@ class SaveSchedule(
         } else {
             candidate
         }
+        return Prepared(existing, targetAsset, saved, now)
+    }
 
-        return uow.write {
-            // The guard's 422: its remedy is the flag in this very body.
-            val driven = if (existing != null && breaksHealthLink(existing, saved)) {
-                guardDriven(existing.id, unlinkHealthSubject, healthSubjects)
-            } else {
-                emptyList()
-            }
-            // A 409, after every 422: the body is well formed, and the remedy is the asset — give it a
-            // season or a break for PRE_SERVICE to count back from (spec §4.3, §9.2; inv. 99).
-            if (targetAsset != null && cmd.servicePolicy == ServicePolicy.PRE_SERVICE &&
-                targetAsset.boundaryKind() == BoundaryKind.NONE
-            ) {
-                throw PreServiceNeedsDates(targetAsset.id)
-            }
-            unlinkDriven(driven, assets, healthSubjects, now)
-            schedules.upsert(saved)
-            recompute.forSchedule(saved.id)
-            saved
+    /** [run]'s write body: the guard, the 409, the unlink, the row and its recompute. */
+    private suspend fun commit(
+        prepared: Prepared,
+        cmd: ScheduleCommand,
+        unlinkHealthSubject: Boolean,
+    ): MaintenanceSchedule {
+        val existing = prepared.existing
+        val targetAsset = prepared.targetAsset
+        val saved = prepared.saved
+        // The guard's 422: its remedy is the flag in this very body.
+        val driven = if (existing != null && breaksHealthLink(existing, saved)) {
+            guardDriven(existing.id, unlinkHealthSubject, healthSubjects)
+        } else {
+            emptyList()
         }
+        // A 409, after every 422: the body is well formed, and the remedy is the asset — give it a
+        // season or a break for PRE_SERVICE to count back from (spec §4.3, §9.2; inv. 99).
+        if (targetAsset != null && cmd.servicePolicy == ServicePolicy.PRE_SERVICE &&
+            targetAsset.boundaryKind() == BoundaryKind.NONE
+        ) {
+            throw PreServiceNeedsDates(targetAsset.id)
+        }
+        unlinkDriven(driven, assets, healthSubjects, prepared.now)
+        schedules.upsert(saved)
+        recompute.forSchedule(saved.id)
+        return saved
     }
 
     /**

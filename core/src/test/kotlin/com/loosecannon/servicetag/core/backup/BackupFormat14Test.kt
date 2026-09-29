@@ -45,11 +45,11 @@ class BackupFormat14Test {
 
         val decoded = BackupCodec.decode(bytes)
 
-        assertEquals(14, decoded.manifest.formatVersion)
+        assertEquals(15, decoded.manifest.formatVersion)
         assertEquals(listOf("r0", "r1", "r2", "r3"), decoded.data.transferRecords.map { it.id }, "sorted by id")
         assertEquals(listOf(inP, outS, outQ, withdrawnS), decoded.data.transferRecords.map { it.toDomain() })
         val tree = dataTreeOf(bytes)
-        assertEquals("transferRecords", tree.keys.last(), "the list closes data.json, after the loans")
+        assertEquals("transferRecords", tree.keys.toList().dropLast(1).last(), "the list follows the loans; format 15's successions close data.json")
         val row = tree.getValue("transferRecords").jsonArray.first().jsonObject
         assertEquals(
             listOf("id", "assetId", "kind", "packId", "lineage", "at", "packSha256", "nameSnapshot", "note"),
@@ -62,7 +62,7 @@ class BackupFormat14Test {
         val manifest = BackupCodec.decode(archiveOf(data(listOf(outQ, outS, withdrawnS)))).manifest
 
         assertEquals(3, manifest.counts["transferRecords"])
-        assertEquals(25, manifest.counts.size, "twenty-four through format 13, and the records")
+        assertEquals(26, manifest.counts.size, "twenty-four through format 13, the records, and format 15's successions")
         assertEquals(0, BackupCodec.decode(archiveOf(data())).manifest.counts["transferRecords"], "present at zero")
     }
 

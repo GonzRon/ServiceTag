@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.transfer
 
+import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.backup.ArtifactsCodec
 import com.loosecannon.servicetag.core.backup.ArtifactsPlanEntry
 import com.loosecannon.servicetag.core.backup.BackupCodec
@@ -285,5 +286,29 @@ class TransferPackCodecTest {
     @Test
     fun aBrokenInnerArchiveIsDamaged() {
         damaged(seal(redraft(draft, data = "not an archive".toByteArray())).first, "data.zip:")
+    }
+
+    /**
+     * #86 (C6; R86-16): a pack never carries a succession — SENDER_ONLY, like the records — so an inner archive
+     * holding one was not made by creation, even when both its ends are the pack's own assets.
+     */
+    @Test
+    fun aPackCarryingSuccessionsIsDamaged() {
+        val inner = BackupCodec.decode(draft.data).data
+        val lineaged = BackupCodec.encode(
+            inner.copy(assetSuccessions = listOf(successionOf("s1", predecessor = "h2", successor = "h1").toDto())),
+            "1.4.1", draft.schemaVersion, draft.createdAt, draft.packId,
+        )
+        val manifest = BackupCodec.decode(lineaged).manifest
+        val tampered = TransferPackDraft(
+            packId = draft.packId, createdAt = draft.createdAt, appVersion = draft.appVersion,
+            schemaVersion = draft.schemaVersion, dataFormatVersion = draft.dataFormatVersion,
+            artifactFormatVersion = draft.artifactFormatVersion, rootAssetIds = draft.rootAssetIds,
+            assetIds = draft.assetIds, lineage = draft.lineage, counts = manifest.counts, attachments = draft.attachments,
+            attachmentBytes = draft.attachmentBytes, contentSha256 = manifest.dataSha256, note = draft.note,
+            data = lineaged, plan = draft.plan,
+        )
+
+        damaged(seal(tampered).first, "asset successions")
     }
 }

@@ -696,6 +696,37 @@ val MIGRATION_13_14: Migration = object : Migration(13, 14) {
 }
 
 /**
+ * Schema v14 -> v15 (#86, C2; R86-1, R86-15): the successions, one new table, and nothing existing moves — no
+ * column, no row and no timestamp, so a pre-upgrade export still re-plans IDENTICAL.
+ *
+ *  1. `asset_succession`, one append-only row per asset replaced by a distinct successor, with **two foreign keys** to
+ *     `asset`, both `ON DELETE CASCADE`: deleting either end takes the row, and nothing re-links around it.
+ *  2. `index_asset_succession_predecessor_asset_id` and `index_asset_succession_successor_asset_id`, each unique: an
+ *     asset is replaced at most once and replaces at most one (I2).
+ *
+ * Each statement is copied verbatim from the exported `15.json`, so Room validates it on open.
+ */
+val MIGRATION_14_15: Migration = object : Migration(14, 15) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `asset_succession` (`id` TEXT NOT NULL, `predecessor_asset_id` TEXT NOT NULL, " +
+                "`successor_asset_id` TEXT NOT NULL, `replaced_on` TEXT NOT NULL, `created_at` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`), " +
+                "FOREIGN KEY(`predecessor_asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                "FOREIGN KEY(`successor_asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_asset_succession_predecessor_asset_id` " +
+                "ON `asset_succession` (`predecessor_asset_id`)",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_asset_succession_successor_asset_id` " +
+                "ON `asset_succession` (`successor_asset_id`)",
+        )
+    }
+}
+
+/**
  * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
  * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
  */

@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.backup.TransferredOutInArchive
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.TransferKind
@@ -323,5 +324,36 @@ class ImportBackupReplaceTest {
         assertEquals(listOf(heater, anode), refusal.assetIds)
         assertEquals(before, sender.snapshot() to sender.transfers.all(), "nothing wiped")
         assertEquals(commits, sender.uow.commits)
+    }
+
+    // --- #86 (C5): the successions --------------------------------------------------------------------
+
+    /** Wiped by name before the assets and reloaded after them: this install's rows go, the archive's land. */
+    @Test
+    fun successionsAreWipedAndReloaded() = runBlocking<Unit> {
+        val install = BackupInstall()
+        listOf("a1", "a2", "a3").forEach { install.assets.upsert(plainAssetOf(it, "Example Water Heater $it")) }
+        install.successions.append(successionOf("old", predecessor = "a1", successor = "a2"))
+        val incoming = listOf(successionOf("s1", predecessor = "a2", successor = "a3"), successionOf("s0", predecessor = "b1", successor = "b2"))
+        val archive = data(listOf("a2", "a3", "b1", "b2").map { plainAssetOf(it, "Sample Pool Pump $it") })
+            .copy(assetSuccessions = incoming.map { it.toDto() })
+
+        install.replace.run(archiveOf(archive))
+
+        assertEquals(incoming.sortedBy { it.id }, install.successions.all())
+        assertEquals(1, install.uow.commits)
+    }
+
+    /** A format ≤14 archive carries no successions, so a Replace restore of one leaves the table empty. */
+    @Test
+    fun aFormat14RestoreEmptiesTheTable() = runBlocking<Unit> {
+        val install = BackupInstall()
+        listOf("a1", "a2").forEach { install.assets.upsert(plainAssetOf(it, "Example Water Heater $it")) }
+        install.successions.append(successionOf("s1", predecessor = "a1", successor = "a2"))
+
+        install.replace.run(archiveOf(data(listOf(plainAssetOf("a1", "Example Water Heater"))), formatVersion = 14))
+
+        assertEquals(emptyList(), install.successions.all())
+        assertEquals(listOf("a1"), install.assets.all().map { it.id.value })
     }
 }

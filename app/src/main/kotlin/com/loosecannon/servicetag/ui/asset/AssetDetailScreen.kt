@@ -148,6 +148,7 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import com.loosecannon.servicetag.ui.transfer.TransferStrings
 import com.loosecannon.servicetag.ui.transfer.TransferredBadge
+import com.loosecannon.servicetag.ui.replace.ReplaceStrings
 import java.time.Instant
 import java.time.LocalDate
 import java.time.MonthDay
@@ -157,6 +158,20 @@ import kotlin.math.roundToInt
 
 /** #78 — the [AssetDetailScreen] `section` that opens it with its maintenance sections in view. Never drawn. */
 const val SECTION_SCHEDULES = "schedules"
+
+// #86 (plan §6, reused 12–15): four labels this screen draws, hoisted byte-identical so Replace asset draws them from here.
+
+/** The retire dialog's date field. */
+const val RETIRED_ON_FIELD = "Retired on"
+
+/** The action grid's set-up button. */
+const val READINGS_AND_ACTIONS = "Readings & actions"
+
+/** The Tags section's header. */
+const val TAGS_SECTION = "Tags"
+
+/** The retire dialog's dismiss (MN-4); the file's other inline `Cancel` sites stay as they are. */
+const val CANCEL_BUTTON = "Cancel"
 
 /**
  * One asset, as the Apollo Service Binder draws it (D12 §8, G1 §1.1): identity plate, the current
@@ -210,6 +225,8 @@ fun AssetDetailScreen(
     onEditLoan: (assetId: String, loanId: String) -> Unit = { _, _ -> },
     /** #77 (C17): P77-1 in the overflow — the transfer selection, this asset preselected. The tap writes nothing. */
     onTransfer: (assetId: String) -> Unit = {},
+    /** #86 (C16): P86-1 in the overflow — the Replace screen for this asset. The tap writes nothing. */
+    onReplace: (assetId: String) -> Unit = {},
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -276,6 +293,7 @@ fun AssetDetailScreen(
                                 DetailMenuItem.UNARCHIVE -> model.unarchive()
                                 DetailMenuItem.RETIRE -> model.askRetire()
                                 DetailMenuItem.UNRETIRE -> model.unretire()
+                                DetailMenuItem.REPLACE -> onReplace(assetId)
                                 DetailMenuItem.TRANSFER -> onTransfer(assetId)
                                 DetailMenuItem.DELETE -> model.askDelete()
                             }
@@ -345,6 +363,10 @@ fun AssetDetailScreen(
                 current.parentName?.let { parent ->
                     PartOfLine(parent) { current.parentId?.let(onOpenAsset) }
                 }
+                // #86 (C16): P86-26 and P86-27, each opening the other asset; a chain draws both, and a held
+                // endpoint's read-only detail draws its line too (navigating writes nothing).
+                current.replacedBy?.let { SuccessionLink(it, onOpenAsset) }
+                current.replaces?.let { SuccessionLink(it, onOpenAsset) }
                 // #77 (C19, C23): a held asset opens with its transfer record(s) and nothing it could write.
                 if (current.held) TransferredOutBlock(current.transferredOut, onWithdraw = model::askWithdraw)
                 ReadingsSection(current.readings)
@@ -490,7 +512,7 @@ private fun detailActions(
         add(ActionSpec("Write tag", nfc, outlined = true) { onWriteTag(assetId) })
         add(ActionSpec("Edit", Icons.Outlined.Edit, outlined = true) { onEdit(assetId) })
         // What this asset measures and what can be logged against it, both editable (spec §9).
-        add(ActionSpec("Readings & actions", ServiceTagIcons.Speed, outlined = true) { onSetup(assetId) })
+        add(ActionSpec(READINGS_AND_ACTIONS, ServiceTagIcons.Speed, outlined = true) { onSetup(assetId) })
         add(ActionSpec("Backup", backup, outlined = false, onClick = onBackup))
         if (bare) add(ActionSpec("Set up from template", Icons.Outlined.Add, outlined = true, onClick = onSetUp))
     }
@@ -623,6 +645,7 @@ private fun DetailOverflow(items: List<DetailMenuItem>, onPick: (DetailMenuItem)
                         DetailMenuItem.UNARCHIVE -> Text("Unarchive")
                         DetailMenuItem.RETIRE -> Text("Retire")
                         DetailMenuItem.UNRETIRE -> Text("Unretire")
+                        DetailMenuItem.REPLACE -> Text(ReplaceStrings.REPLACE_ASSET)
                         DetailMenuItem.TRANSFER -> Text(TransferStrings.TRANSFER_ASSETS)
                         DetailMenuItem.DELETE ->
                             Text("Delete", color = ServiceTagTheme.semanticColors.destructiveAction.foreground)
@@ -723,11 +746,11 @@ private fun RetireDialog(initial: String, onDismiss: () -> Unit, onConfirm: (Str
             Column {
                 Text("It keeps its history and its tags still resolve.")
                 Spacer(Modifier.height(12.dp))
-                DateField(value = date, onValueChange = { date = it }, label = "Retired on")
+                DateField(value = date, onValueChange = { date = it }, label = RETIRED_ON_FIELD)
             }
         },
         confirmButton = { TextButton(onClick = { onConfirm(date) }) { Text("Retire") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(CANCEL_BUTTON) } },
     )
 }
 
@@ -840,6 +863,19 @@ private fun PartOfLine(parentName: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
+            .heightIn(min = 44.dp)
+            .padding(top = 10.dp, bottom = 4.dp),
+    )
+}
+
+/** #86 (C16): "Replaced by" or "Replaces" under the plate, on [PartOfLine]'s pattern, tapping through to the other asset. */
+@Composable
+private fun SuccessionLink(line: SuccessionLine, onOpenAsset: (String) -> Unit) {
+    QuietLine(
+        text = line.line,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpenAsset(line.assetId) }
             .heightIn(min = 44.dp)
             .padding(top = 10.dp, bottom = 4.dp),
     )
@@ -1290,7 +1326,7 @@ private fun componentLine(child: ComponentRow): String = listOfNotNull(
  */
 @Composable
 internal fun TagsSection(tags: List<TagBinding>, onEditLabel: (TagId, String?) -> Unit, editable: Boolean = true) {
-    SectionHeader(title = "Tags")
+    SectionHeader(title = TAGS_SECTION)
     if (tags.isEmpty()) {
         QuietLine("No tag yet · Write tag to add one")
         return

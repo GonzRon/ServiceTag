@@ -102,6 +102,12 @@ sealed interface Route : NavKey {
      * the flow's saved state, never here.
      */
     @Serializable data class TransferAssets(val preselect: String? = null) : Route
+
+    /**
+     * #86 (C17, C18) — Replace asset for [assetId], reached only from its detail's overflow. The draft lives in the
+     * screen's model, never here; a finished replace swaps this entry for the new asset's detail.
+     */
+    @Serializable data class ReplaceAsset(val assetId: String) : Route
     @Serializable data object Settings : Route
 
     /**

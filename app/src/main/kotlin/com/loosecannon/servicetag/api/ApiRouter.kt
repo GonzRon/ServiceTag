@@ -54,7 +54,7 @@ internal class ApiRouter(
     }
 
     /**
-     * The whole surface. Fifty-nine path shapes over seventy-one method-and-path rows; anything
+     * The whole surface. Sixty path shapes over seventy-two method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -98,6 +98,11 @@ internal class ApiRouter(
      * verb it does not take. **Nothing destructive came with them either** (R72-17): no verb deletes a
      * loan — "Mark returned" is the exit, and the row stays as history — and none relinks one or reads a
      * contact (R72-3, R72-4): a link is made on the phone alone. None runs a reminder sweep (R72-15).
+     *
+     * #86 added one row over one shape: the twenty-first `/v1/assets/{id}/…` sub-resource, an asset's succession,
+     * read only. **No route records a succession** (R86-18): only the phone's Replace asset records one, and the
+     * import-merge apply only inserts an archive's rows, so no verb here makes, amends or removes one, and
+     * `AssetDto` carries no succession field.
      */
     private suspend fun route(request: ApiRequest): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -158,6 +163,8 @@ internal class ApiRouter(
                 "service-cases" to "GET" -> handlers.serviceCases.listForAsset(rest[1])
                 // #72 — the twentieth: the asset's loans, open and returned, read only.
                 "loans" to "GET" -> handlers.loans.listForAsset(rest[1])
+                // #86 — the twenty-first: which asset this one replaces and which replaced it, read only.
+                "succession" to "GET" -> handlers.getSuccession(rest[1])
                 else -> throw ApiFailure.notFound(request.path)
             }
 

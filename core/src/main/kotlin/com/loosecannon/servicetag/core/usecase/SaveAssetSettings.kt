@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
+import java.time.LocalDate
 
 /**
  * Everything the asset editor saves in one tap (spec §10.4): the asset, its season, its break and its
@@ -71,6 +72,19 @@ class SaveAssetSettings(
     private val promoteCategory: PromoteCategory,
 ) {
     suspend fun run(id: AssetId?, cmd: AssetSettingsCommand, templateKey: String? = null): Asset = uow.write {
+        saveInTransaction(id, cmd, templateKey, today.localDate())
+    }
+
+    /**
+     * #86 (C15): the whole save inside the caller's transaction, with [activationDay] the date a switch into MANUAL
+     * writes its one activation on — [run] passes today; `ReplaceAsset` passes the replacement date (R86-13 amended).
+     */
+    internal suspend fun saveInTransaction(
+        id: AssetId?,
+        cmd: AssetSettingsCommand,
+        templateKey: String?,
+        activationDay: LocalDate,
+    ): Asset {
         val all = assets.all()
         val current = id?.let { wanted -> all.firstOrNull { it.id == wanted } ?: throw NoSuchAsset(wanted) }
 
@@ -120,7 +134,7 @@ class SaveAssetSettings(
         )
 
         if (current != null) {
-            if (next.copy(updatedAt = current.updatedAt) == current) return@write current
+            if (next.copy(updatedAt = current.updatedAt) == current) return current
             // The 409: the kind before this save against the kind after both parts apply.
             val stranded = strandedBy(current, next, schedules.forAsset(current.id))
             if (stranded.isNotEmpty()) {
@@ -136,7 +150,7 @@ class SaveAssetSettings(
 
         assets.upsert(next)
         promoteCategory.write(promotion)
-        manualSwitchActivation(next.id, modeBefore, mode, today.localDate(), now, ids)
+        manualSwitchActivation(next.id, modeBefore, mode, activationDay, now, ids)
             ?.let { activations.insert(it) }
         if (current == null) {
             template?.let { applyTemplate.applyInTransaction(next.id, it) }
@@ -144,7 +158,7 @@ class SaveAssetSettings(
             recompute.forAsset(next.id)
         }
         // The row as stored: a template stamps its key on the asset it seeds.
-        assets.get(next.id) ?: next
+        return assets.get(next.id) ?: next
     }
 
     /** Whether the season or the break — the inputs every schedule's state reads from the asset — changed. */

@@ -36,10 +36,13 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
     val loans = InMemoryAssetLoanRepository().also { assets.cascadesTo(it::cascadeFromAsset) }
     /** #77's transfer records; no cascade — a record outlives its asset. */
     val transfers = InMemoryTransferRecordRepository()
+    /** #86's successions; the asset double's delete takes a row naming it at either end, as the schema does. */
+    val successions = InMemoryAssetSuccessionRepository().also { assets.cascadesTo(it::cascadeFromAsset) }
     val storage = FakeAttachmentStorage()
     val uow = FakeUnitOfWork(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
+        successions,
     )
 
     var rebuilds = 0
@@ -47,20 +50,24 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
     val export = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
+        successions,
         uow, IdGenerator { setId }, Clock { now }, appVersion = "1.4.1", schemaVersion = 9,
     )
     val replace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-        references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers, storage, uow,
+        references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
+        successions, storage, uow,
         rebuildAll = { rebuilds += 1 },
     )
     val build = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-        references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers, storage, uow,
+        references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
+        successions, storage, uow,
     )
     val apply = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-        references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers, storage, uow,
+        references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
+        successions, storage, uow,
         rebuildAll = { rebuilds += 1 },
     )
 }
