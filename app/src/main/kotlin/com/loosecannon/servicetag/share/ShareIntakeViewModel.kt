@@ -11,21 +11,30 @@ import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_DESCRIPTION_CHARS
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_NAME_CHARS
 import com.loosecannon.servicetag.core.references.ReferenceText
+import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
+import com.loosecannon.servicetag.core.transfer.TransferPack
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.AddReferenceCommand
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.EventCommand
+import com.loosecannon.servicetag.core.usecase.ImportTransferPack
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.NoSuchAsset
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
 import com.loosecannon.servicetag.core.usecase.ReferenceResult
 import com.loosecannon.servicetag.ui.attachments.ROLE_HEADER
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportViewModel
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackInbox
+import java.io.File
+import java.util.zip.ZipInputStream
 import java.io.IOException
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
@@ -78,8 +87,12 @@ internal object IntakeStrings {
     fun savedTo(assetName: String): String = "Saved to $assetName"
 }
 
-/** Which of the three save paths this share is on. The screen's button text follows from it. */
-internal enum class IntakePath { LINK, BYTES, NOTE }
+/**
+ * Which of the three save paths this share is on. The screen's button text follows from it. #77 (C16, R77-2):
+ * [TRANSFER_PACK] is a ZIP whose first local entry is `transfer-manifest.json` — not a save path at all: the intake
+ * hosts the Transfer Pack import screen over its copy instead of the form.
+ */
+internal enum class IntakePath { LINK, BYTES, NOTE, TRANSFER_PACK }
 
 /** One chooser row. The id is carried as a string so the state holds no value class. */
 internal data class AssetChoice(val id: String, val name: String)
@@ -112,6 +125,8 @@ internal data class ShareIntakeState(
     /** "Saved to \<asset\>". The activity finishes once this is set. */
     val saved: String? = null,
     val cancelled: Boolean = false,
+    /** #77 (C14 (0)): the pack's copy in `cache/transfer-in/`, made while the share's grant lived. */
+    val packCopy: File? = null,
 ) {
     /** A byte share on a phone with no attachment folder: the sentence, and Save disabled. */
     val noFolder: Boolean get() = path == IntakePath.BYTES && !storeReady
@@ -127,7 +142,8 @@ internal data class ShareIntakeState(
         saved == null &&
         chosen != null &&
         ReferenceText.sanitiseName(name).isNotEmpty() &&
-        (path != IntakePath.BYTES || storeReady)
+        (path != IntakePath.BYTES || storeReady) &&
+        path != IntakePath.TRANSFER_PACK
 
     val finished: Boolean get() = saved != null || cancelled
 }
@@ -155,6 +171,10 @@ internal class ShareIntakeViewModel(
     private val today: () -> String,
     private val zoneId: () -> String,
     private val io: CoroutineContext = Dispatchers.IO,
+    /** #77 (rm-5): the assets transferred out from this phone, never offered in "Attach to". */
+    private val heldIds: suspend () -> Set<AssetId> = { emptySet() },
+    /** #77 (C14 (0)): where a shared Transfer Pack is copied; null leaves every ZIP on the byte form. */
+    private val packInbox: TransferPackInbox? = null,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ShareIntakeState())
@@ -187,9 +207,25 @@ internal class ShareIntakeViewModel(
                 withContext(io) {
                     val found = readShare()
                     share = found
+                    // #77 (C16): a ZIP whose first local entry is the pack manifest is a Transfer Pack, whatever
+                    // it is called; it is copied now, while the share's grant lives, and never offered as a file.
+                    val copy = packInbox
+                        ?.takeIf { found.content is ShareContent.Bytes }
+                        ?.let { inbox -> found.bytes?.takeIf(::isTransferPack)?.let { inbox.copyIn(it) } }
+                    if (copy != null) {
+                        return@withContext ShareIntakeState(
+                            loading = false,
+                            path = IntakePath.TRANSFER_PACK,
+                            received = (found.content as ShareContent.Bytes).suggestedName,
+                            packCopy = copy,
+                        )
+                    }
+                    // rm-5: an asset transferred out from this phone is never offered.
+                    val held = heldIds()
                     loadedState(
                         content = found.content,
                         choices = assets.all()
+                            .filter { it.id !in held }
                             .map { AssetChoice(it.id.value, it.name) }
                             .sortedBy { it.name.lowercase() },
                         store = storage.state(),
@@ -264,6 +300,7 @@ internal class ShareIntakeViewModel(
             IntakePath.LINK -> saveLink(current, choice, confirmedUnknownScheme)
             IntakePath.BYTES -> saveBytes(current, choice)
             IntakePath.NOTE -> saveNote(current, choice)
+            IntakePath.TRANSFER_PACK -> Unit
         }
     }
 
@@ -274,15 +311,19 @@ internal class ShareIntakeViewModel(
     ) {
         val uri = (share?.content as? ShareContent.Link)?.uri
             ?: return refuse(IntakeStrings.UNREADABLE)
-        val result = addReference.run(
-            AssetId(choice.id),
-            AddReferenceCommand(
-                uri = uri,
-                displayName = current.name,
-                description = current.description,
-                confirmedUnknownScheme = confirmedUnknownScheme,
-            ),
-        )
+        val result = try {
+            addReference.run(
+                AssetId(choice.id),
+                AddReferenceCommand(
+                    uri = uri,
+                    displayName = current.name,
+                    description = current.description,
+                    confirmedUnknownScheme = confirmedUnknownScheme,
+                ),
+            )
+        } catch (_: AssetTransferredOut) {
+            return refuse(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+        }
         when (result) {
             is ReferenceResult.Ok -> succeed(choice)
             is ReferenceResult.Refused -> when (val problem = result.problem) {
@@ -342,6 +383,9 @@ internal class ShareIntakeViewModel(
             )
         } catch (e: CancellationException) {
             throw e
+        } catch (_: AssetTransferredOut) {
+            // #77 (C12): the asset was transferred out after the chooser listed it; nothing was written.
+            return refuse(TransferImportStrings.ASSET_TRANSFERRED_OUT)
         } catch (_: IOException) {
             // A source that dies mid-copy, or a store that cannot write: the store removes what it
             // half-wrote and no row was ever built, so this is a read failure and nothing else.
@@ -390,6 +434,8 @@ internal class ShareIntakeViewModel(
             // The one fact the no-assets sentence names: the chosen asset was deleted between the
             // chooser listing it and Save. Nothing else is told to go and create an asset.
             return ownerGone()
+        } catch (_: AssetTransferredOut) {
+            return refuse(TransferImportStrings.ASSET_TRANSFERRED_OUT)
         } catch (_: IOException) {
             return refuse(IntakeStrings.UNREADABLE)
         } catch (_: SecurityException) {
@@ -454,4 +500,27 @@ internal class ShareIntakeViewModel(
             deadEnd = base.deadEnd ?: IntakeStrings.NO_ASSETS.takeIf { choices.isEmpty() },
         )
     }
+}
+
+/**
+ * #77 (C16, R77-2) — the import screen the intake hosts for a shared Transfer Pack: the same state machine as the
+ * Backup screen's door, with the intake's own folder sentence.
+ */
+internal fun shareTransferImport(
+    importPack: ImportTransferPack,
+    inbox: TransferPackInbox,
+    copy: File?,
+    io: CoroutineContext = Dispatchers.IO,
+): TransferImportViewModel = TransferImportViewModel(importPack, inbox, copy, IntakeStrings.NO_FOLDER, io = io)
+
+/**
+ * #77 (C16): whether a shared stream is a Transfer Pack — a ZIP whose **first local entry** is `transfer-manifest.json`.
+ * The content decides, never the file name; anything unreadable as a ZIP is not a pack.
+ */
+internal fun isTransferPack(source: ByteSource): Boolean = try {
+    source.open().use { input -> ZipInputStream(input).nextEntry?.name == TransferPack.MANIFEST_ENTRY }
+} catch (_: IOException) {
+    false
+} catch (_: IllegalArgumentException) {
+    false
 }

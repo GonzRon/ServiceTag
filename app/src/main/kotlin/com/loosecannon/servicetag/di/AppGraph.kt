@@ -87,6 +87,9 @@ import com.loosecannon.servicetag.core.usecase.DeleteProfile
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
+import com.loosecannon.servicetag.core.usecase.ImportTransferPack
+import com.loosecannon.servicetag.ui.transfer.`import`.CacheTransferPackInbox
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackInbox
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LendAsset
 import com.loosecannon.servicetag.core.usecase.LogEvent
@@ -597,6 +600,17 @@ class AppGraph(private val context: Context) {
     val markTransferredOut: MarkTransferredOut = MarkTransferredOut(backupRepositories, uow, ids, clock) {
         recomputeSchedules.forAsset(it)
     }
+
+    /**
+     * #77 (C14, C15; R77-2) — the Transfer Pack import, additively through the merge core and the guarded ports: the
+     * Backup screen's button and a share into ServiceTag copy the pack into `cache/transfer-in/` ([transferPackInbox])
+     * and read only that copy.
+     */
+    val importTransferPack: ImportTransferPack = ImportTransferPack(
+        buildBackupMergePlan, applyBackupMergePlan, transferRecords, assets, tags, attachmentStorage, uow, clock,
+    )
+    val transferPackInbox: TransferPackInbox =
+        CacheTransferPackInbox(File(context.applicationContext.cacheDir, "transfer-in"), ids)
 
     /** Process-wide scope for work that must outlive a finishing activity (e.g. abandoning a row). */
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

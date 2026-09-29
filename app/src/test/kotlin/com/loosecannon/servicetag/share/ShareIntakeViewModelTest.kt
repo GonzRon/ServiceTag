@@ -10,6 +10,9 @@ import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackAppFixtures
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_DESCRIPTION_CHARS
@@ -29,6 +32,7 @@ import kotlin.properties.Delegates
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -753,6 +757,135 @@ class ShareIntakeViewModelTest {
             IntakeStrings.confirmBody("zotero"),
         )
         assertEquals("Saved to Cub Cadet XT1", IntakeStrings.savedTo("Cub Cadet XT1"))
+    }
+
+    // --- #77 (B3; C16, row 25): a shared Transfer Pack, and a held asset --------------------------------------
+
+    /** A model with #77's two collaborators: the held set, and the inbox a shared pack is copied into. */
+    private fun packModel(content: ShareContent, source: ByteSource?): ShareIntakeViewModel {
+        val factory = viewModelFactory {
+            initializer {
+                ShareIntakeViewModel(
+                    readShare = { SharedShare(content, streamUri = null, bytes = source) },
+                    assets = graph.assets,
+                    storage = graph.attachmentStorage,
+                    addReference = addReference,
+                    addAttachment = graph.addAttachment,
+                    logEvent = graph.logEvent,
+                    today = { "2026-09-23" },
+                    zoneId = { "UTC" },
+                    io = StandardTestDispatcher(scheduler),
+                    heldIds = { graph.transferRecords.heldIds() },
+                    packInbox = graph.transferPackInbox,
+                )
+            }
+        }
+        val vm = ViewModelProvider.create(store, factory)["model-${models++}", ShareIntakeViewModel::class]
+        scheduler.advanceUntilIdle()
+        return vm
+    }
+
+    /** A pack made by the production creation on another installation: "Example Water Heater" and its manual. */
+    private suspend fun heaterPack(): ByteArray {
+        val sender = FakeGraph(queryContext = StandardTestDispatcher(scheduler))
+        TransferPackAppFixtures.seedHeater(sender)
+        return TransferPackAppFixtures.seal(sender, TransferPackAppFixtures.HEATER).bytes.also { sender.close() }
+    }
+
+    private fun zipShare(bytes: ByteArray, name: String) =
+        ShareContent.Bytes(name, "application/zip", bytes.size.toLong()) to ByteSource { bytes.inputStream() }
+
+    private fun heldOut(asset: AssetId) = TransferRecord(
+        id = "out-${asset.value}", assetId = asset, kind = TransferKind.OUT, packId = "pack-elsewhere",
+        lineage = emptyList(), at = 1_758_960_000_000L, packSha256 = "ab".repeat(32),
+        nameSnapshot = "Example Water Heater", note = "",
+    )
+
+    @Test fun aManifestFirstZipRoutesToImport() = runTest(scheduler) {
+        mower()
+        val (content, source) = zipShare(heaterPack(), "Download.zip")
+
+        val vm = packModel(content, source)
+
+        assertEquals(IntakePath.TRANSFER_PACK, vm.state.value.path)
+        assertTrue(vm.state.value.packCopy != null)
+        assertNull(vm.state.value.deadEnd)
+        assertFalse(vm.state.value.saveEnabled)
+    }
+
+    /** Named like a pack, but its first entry is not the manifest: it stays an ordinary document. */
+    @Test fun otherZipsKeepTheByteForm() = runTest(scheduler) {
+        mower()
+        val other = TransferPackAppFixtures.zipOf(listOf("readme.txt" to "Example".toByteArray(), "transfer-manifest.json" to "{}".toByteArray()))
+        val (content, source) = zipShare(other, "servicetag-transfer-2026-09-27-abcdef12.zip")
+
+        val vm = packModel(content, source)
+
+        assertEquals(IntakePath.BYTES, vm.state.value.path)
+        assertNull(vm.state.value.packCopy)
+    }
+
+    @Test fun thePackIsCopiedBeforeFinish() = runTest(scheduler) {
+        val pack = heaterPack()
+        val (content, source) = zipShare(pack, "Download.zip")
+
+        val vm = packModel(content, source)
+
+        val copy = vm.state.value.packCopy!!
+        assertFalse(vm.state.value.finished)
+        assertTrue(copy.isFile)
+        assertTrue(pack.contentEquals(copy.readBytes()))
+    }
+
+    @Test fun noFolderSaysTheIntakesSentence() = runTest(scheduler) {
+        val (content, source) = zipShare(heaterPack(), "Download.zip")
+        graph.attachmentStorage.state = StoreState.NotConfigured
+        val vm = packModel(content, source)
+
+        val import = shareTransferImport(graph.importTransferPack, graph.transferPackInbox, vm.state.value.packCopy, StandardTestDispatcher(scheduler))
+        advanceUntilIdle()
+
+        assertEquals(IntakeStrings.NO_FOLDER, import.state.value.refusal)
+    }
+
+    @Test fun successShowsTheLineThenCloseFinishes() = runTest(scheduler) {
+        val (content, source) = zipShare(heaterPack(), "Download.zip")
+        val vm = packModel(content, source)
+        val import = shareTransferImport(graph.importTransferPack, graph.transferPackInbox, vm.state.value.packCopy, StandardTestDispatcher(scheduler))
+        advanceUntilIdle()
+
+        import.import()
+        advanceUntilIdle()
+        assertEquals("Transfer Pack imported: 1 asset, 1 NFC tag, 1 document or photo", import.state.value.done)
+        assertFalse(import.state.value.finished)
+        import.close()
+
+        assertTrue(import.state.value.finished)
+        assertEquals("Example Water Heater", graph.assets.get(AssetId(TransferPackAppFixtures.HEATER))?.name)
+    }
+
+    @Test fun attachToNeverOffersAHeldAsset() = runTest(scheduler) {
+        val id = mower()
+        val held = graph.createAsset.run(AssetCommand(name = "Example Water Heater"))
+        graph.transferRecords.append(heldOut(held.id))
+
+        val vm = packModel(link(manualUrl), null)
+
+        assertEquals(listOf(id), vm.state.value.assets.map { it.id })
+    }
+
+    /** Listed, then transferred out before Save: the write is refused with P77-35 and nothing is written. */
+    @Test fun aHeldTargetRefusalSaysP77_35() = runTest(scheduler) {
+        val id = mower()
+        val vm = packModel(link(manualUrl), null)
+        vm.choose(id)
+        graph.transferRecords.append(heldOut(AssetId(id)))
+
+        vm.saveAndSettle()
+
+        assertEquals("This asset was transferred out.", vm.state.value.message)
+        assertNull(vm.state.value.saved)
+        assertEquals(0, references())
     }
 
     /** Some bytes, then a failure: the shape the store has to survive without leaving a file. */

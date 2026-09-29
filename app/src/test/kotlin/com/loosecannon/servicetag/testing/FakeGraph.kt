@@ -64,6 +64,8 @@ import com.loosecannon.servicetag.core.usecase.DeleteProfile
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
+import com.loosecannon.servicetag.core.usecase.ImportTransferPack
+import com.loosecannon.servicetag.ui.transfer.`import`.CacheTransferPackInbox
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LendAsset
 import com.loosecannon.servicetag.core.usecase.LogEvent
@@ -447,6 +449,15 @@ class FakeGraph(
     val markTransferredOut: MarkTransferredOut = MarkTransferredOut(backupRepositories, uow, ids, clock) {
         recomputeSchedules.forAsset(it)
     }
+
+    /** #77 (C14, C15) — the Transfer Pack import over the same guarded stores, mirroring `AppGraph`'s fields by name. */
+    val importTransferPack: ImportTransferPack = ImportTransferPack(
+        buildBackupMergePlan, applyBackupMergePlan, transferRecords, assets, tags, attachmentStorage, uow, clock,
+    )
+
+    /** `cache/transfer-in/`, in a temporary directory of its own. */
+    val transferPackInbox: CacheTransferPackInbox =
+        CacheTransferPackInbox(kotlin.io.path.createTempDirectory("transfer-in").toFile(), ids)
 
     /**
      * 1.2 — the group completion path, so a read-model or view-model test marks members done
