@@ -16,6 +16,19 @@ class HopPolicyTest {
     private val resolver = FakeHostResolver()
     private val policy = HopPolicy(resolver)
 
+    /** A name of exactly [length] characters, labels at most 63, ending `.example.invalid`. */
+    private fun nameOfLength(length: Int): String {
+        val suffix = ".example.invalid"
+        val labels = mutableListOf<String>()
+        var left = length - suffix.length
+        while (left > 0) {
+            val label = minOf(63, if (labels.isEmpty()) left else left - 1)
+            labels += "n".repeat(label)
+            left -= label + if (labels.size > 1) 1 else 0
+        }
+        return (labels.joinToString(".") + suffix).also { check(it.length == length) { "built ${it.length}" } }
+    }
+
     private fun assertEach(expected: FetchProblem?, urls: List<String>) {
         for (url in urls) assertEquals(expected, policy.staticProblem(url), "for <$url>")
     }
@@ -114,6 +127,9 @@ class HopPolicyTest {
             "https://manuals.example.invalid\t/pump.pdf",
             "https://manuals .example.invalid/pump.pdf",
             "https://manuals.example.invalid\u0000/pump.pdf",
+            "https://manuals.example.invalid\r\n/pump.pdf",
+            "https://manuals.example.invalid\n/pump.pdf",
+            "https://manuals\r.example.invalid/pump.pdf",
             // empty labels
             "https://manuals..example.invalid/pump.pdf",
             "https://.example.invalid/pump.pdf",
@@ -122,6 +138,8 @@ class HopPolicyTest {
             // label and name lengths
             "https://${"a".repeat(64)}.example.invalid/pump.pdf",
             "https://${List(64) { "abc" }.joinToString(".")}.invalid/pump.pdf",
+            "https://${nameOfLength(254)}/pump.pdf",
+            "https://${nameOfLength(254)}./pump.pdf",
             // hyphens at a label's edge
             "https://-manuals.example.invalid/pump.pdf",
             "https://manuals-.example.invalid/pump.pdf",
@@ -131,6 +149,10 @@ class HopPolicyTest {
             // malformed ports
             "https://manuals.example.invalid:/pump.pdf",
             "https://manuals.example.invalid:0/pump.pdf",
+            "https://manuals.example.invalid:00/pump.pdf",
+            "https://manuals.example.invalid:0443/pump.pdf",
+            "https://manuals.example.invalid:00443/pump.pdf",
+            "https://[2001:db8::10]:08443/pump.pdf",
             "https://manuals.example.invalid:65536/pump.pdf",
             "https://manuals.example.invalid:123456/pump.pdf",
             "https://manuals.example.invalid:44a/pump.pdf",
@@ -191,8 +213,28 @@ class HopPolicyTest {
             "https://[203.0.113.10::]/pump.pdf",
             "https://[:2001:db8::10]/pump.pdf",
             "https://[2001:db8::g]/pump.pdf",
+            "https://[1.2::203.0.113.10]/pump.pdf",             // a dot in a group that is not the last
+            "https://[::1.2:203.0.113.10]/pump.pdf",
         ),
     )
+
+    /** Review MAJOR 1: the rule is total. Every malformed bracketed literal is refused, and none throws. */
+    @Test
+    fun aMalformedBracketedLiteralNeverThrows() {
+        val literals = listOf(
+            "a.b::1.2.3.4", "::1.2:1.2.3.4", "1.2:0:0:0:0:0:1.2.3.4", "1.2::203.0.113.10", "::1.2:203.0.113.10",
+            "1.2.3.4:1.2.3.4", "::ffff:1.2.3.4.5", "::1.2.3.", "::.1.2.3", "1::2::3", ":", ":::", ".", "..", "::.",
+            "fe80::1%25eth0", "fe80::1%eth0", "203.0.113.10", "manuals.example.invalid", "", "12345::", "::1:2:3:4:5:6:7:8",
+            "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", "::-1", "::+1", "::0x1", "::1 ", "::\uFF11",
+        )
+        for (literal in literals) {
+            for (url in listOf("https://[$literal]/pump.pdf", "https://[$literal", "https://[$literal]:443/pump.pdf")) {
+                val answer = runCatching { policy.staticProblem(url) }
+                assertEquals(Result.success(FetchProblem.NotHttps), answer, "for <$url>")
+            }
+        }
+        assertTrue(resolver.asked.isEmpty())
+    }
 
     @Test
     fun punycodeUnderscoreCanonicalLiteralsAndAPortPass() = assertEach(
@@ -217,6 +259,8 @@ class HopPolicyTest {
             "https://manuals.example.invalid?x=1",
             "https://manuals.example.invalid#p2",
             "https://${"a".repeat(63)}.example.invalid/pump.pdf",
+            "https://${nameOfLength(253)}/pump.pdf",
+            "https://${nameOfLength(253)}./pump.pdf",
             "https://m.example.invalid/a\\b%20c/pump.pdf?q=%2e#ü",
         ),
     )

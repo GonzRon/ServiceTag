@@ -58,8 +58,8 @@ class HopPolicy(private val resolver: HostResolver) {
 }
 
 /**
- * The authority allowlist (R85-15, review M1): a host plus an optional port (`:` and 1–5 ASCII digits,
- * 1–65535). The host is exactly one of a DNS name in ASCII label syntax, a canonical dotted quad, or a
+ * The authority allowlist (R85-15, review M1): a host plus an optional port (`:` and a canonical decimal
+ * 1–65535, no leading zero). The host is exactly one of a DNS name in ASCII label syntax, a canonical dotted quad, or a
  * bracketed IPv6 literal equal to its RFC 5952 text. Anything else — a Unicode character, a `%` escape, a
  * `\`, whitespace or a control character, an empty label or host, a malformed port — is refused.
  */
@@ -72,9 +72,11 @@ private fun isAllowedAuthority(authority: String): Boolean {
     return if (host.startsWith("[")) isCanonicalIpv6(host.substring(1, host.length - 1)) else isAllowedName(host)
 }
 
+/** `:` then a canonical decimal 1–65535: 1–5 ASCII digits, no leading zero (controller ruling, fix round 1). */
 private fun isPort(port: String): Boolean {
     val digits = port.removePrefix(":")
-    return port.startsWith(":") && digits.length in 1..5 && digits.all(::isAsciiDigit) && digits.toInt() in 1..65_535
+    return port.startsWith(":") && digits.length in 1..5 && digits.all(::isAsciiDigit) && digits[0] != '0' &&
+        digits.toInt() in 1..65_535
 }
 
 /**
@@ -119,7 +121,7 @@ private fun isCanonicalIpv6(text: String): Boolean {
     if (halves.size > 2) return false
     val head = if (halves[0].isEmpty()) emptyList() else halves[0].split(':')
     val tail = if (halves.size < 2 || halves[1].isEmpty()) emptyList() else halves[1].split(':')
-    if ((head + tail).any { it.length !in 1..4 }) return false
+    if ((head + tail).any { it.length !in 1..4 || !it.all(::isHexDigit) }) return false   // a '.' only in the quad
     val count = head.size + tail.size
     if (if (halves.size == 2) count > 7 else count != 8) return false
     val groups = head.map { it.toInt(16) } + List(8 - count) { 0 } + tail.map { it.toInt(16) }
