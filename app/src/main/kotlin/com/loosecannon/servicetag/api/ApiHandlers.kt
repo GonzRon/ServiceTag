@@ -98,7 +98,10 @@ internal class ApiHandlers(
     private val attachments: AttachmentRepository,
     /** #74 — read for the `assetCategories` status count only; nothing here writes a category. */
     private val categories: CategoryRepository,
-    /** #77 — read for the `transferRecords` status count only; nothing here writes a transfer record. */
+    /**
+     * #77 — read for the `transferRecords` status count only; never written through here (a merge apply inserts an
+     * archive's records through [importBackupMerge]).
+     */
     private val transferRecords: TransferRecordRepository,
     /**
      * #86 — read for the `assetSuccessions` count and [getSuccession] only; never written through here (a merge apply
