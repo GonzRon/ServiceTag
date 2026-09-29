@@ -96,7 +96,7 @@ class TagWriteControllerTest {
     private fun TestScope.controller(
         target: TagTarget = TagTarget.None,
         label: String? = null,
-        resolveTag: ResolveTag = ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock),
+        resolveTag: ResolveTag = ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock, graph.transferRecords),
     ): TagWriteController {
         val scope = CoroutineScope(backgroundScope.coroutineContext + dispatcher)
         return TagWriteController(
@@ -109,6 +109,7 @@ class TagWriteControllerTest {
             scope = scope,
             resolveTag = resolveTag,
             ioDispatcher = dispatcher,
+            zone = { java.time.ZoneOffset.UTC },
         )
     }
 
@@ -659,7 +660,7 @@ class TagWriteControllerTest {
             return delegate.findByPayload(format, key)
         }
 
-        fun resolver() = ResolveTag(this, graph.assets, graph.uow, graph.clock)
+        fun resolver() = ResolveTag(this, graph.assets, graph.uow, graph.clock, graph.transferRecords)
     }
 
     /** Two distinct handles can be told apart: the consent rule is about which one does the write. */

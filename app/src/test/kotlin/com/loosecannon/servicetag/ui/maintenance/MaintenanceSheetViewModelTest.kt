@@ -1186,7 +1186,7 @@ class MaintenanceSheetViewModelTest {
             graph.tags.deleteAll()
             val scanned = seedTag()
             val model = TagResultViewModel(
-                ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock),
+                ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock, graph.transferRecords),
                 BindTag(graph.tags, graph.assets, graph.uow, graph.clock),
                 graph.assets,
                 { error("a $name resolution must never be asked about the sheet") },
@@ -1198,7 +1198,7 @@ class MaintenanceSheetViewModelTest {
         }
         // And "not ours at all", which never reaches `ResolveTag`'s tag lookup either.
         val foreign = TagResultViewModel(
-            ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock),
+            ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock, graph.transferRecords),
             BindTag(graph.tags, graph.assets, graph.uow, graph.clock),
             graph.assets,
             { error("a NotOurs resolution must never be asked about the sheet") },

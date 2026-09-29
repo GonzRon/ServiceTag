@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.transfer
 
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetCategory
@@ -623,11 +624,15 @@ class HeldWriteGuardTest {
         assertNotNull(states.get(ScheduleId("s1")), "the held schedule's state row was written")
     }
 
-    /** A scan of a held asset's tag resolves without stamping it and without a refusal. */
+    /**
+     * A scan of a held asset's tag resolves without stamping it and without a refusal. The resolver is handed an empty
+     * record view (B4 made `transfers` required), so this case keeps proving the guard's backstop on the stamp; B4's
+     * `ResolveTagTest` proves the resolver's own `TransferredOut`.
+     */
     @Test
     fun aHeldTagScanIsNotStamped() = runTest {
         seed()
-        val scan = ResolveTag(tags, assets, uow, clock)
+        val scan = ResolveTag(tags, assets, uow, clock, InMemoryTransferRecordRepository())
         val tagId = TagId("123e4567-e89b-12d3-a456-426614174001")
         val resolution = scan.run(TagPayload.V1(tagId))
         assertIs<Resolution.OpenAsset>(resolution)
@@ -648,7 +653,7 @@ class HeldWriteGuardTest {
             ),
         )
         install.tags.upsert(tagOf("t4", "123e4567-e89b-12d3-a456-426614174004", TagTarget.LinkTarget(LinkId("L1"))))
-        val scan = ResolveTag(tags, assets, uow, clock)
+        val scan = ResolveTag(tags, assets, uow, clock, InMemoryTransferRecordRepository())
 
         val resolution = scan.run(TagPayload.V1(TagId("123e4567-e89b-12d3-a456-426614174004")))
 

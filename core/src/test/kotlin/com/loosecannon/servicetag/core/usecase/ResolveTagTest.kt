@@ -27,7 +27,7 @@ class ResolveTagTest {
     private val tags = InMemoryTagRepository()
     private val uow = FakeUnitOfWork(assets, tags)
     private val clock = Clock { 9_000L }
-    private val resolve = ResolveTag(tags, assets, uow, clock)
+    private val resolve = ResolveTag(tags, assets, uow, clock, InMemoryTransferRecordRepository())
 
     private val v1Id = TagId("123e4567-e89b-12d3-a456-426614174000")
     private val asset = Asset(AssetId("a1"), "Hot tub", createdAt = 1L, updatedAt = 1L)

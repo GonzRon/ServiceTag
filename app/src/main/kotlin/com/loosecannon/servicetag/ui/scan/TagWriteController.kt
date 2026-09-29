@@ -83,6 +83,8 @@ class TagWriteController(
     /** Read-only here: only [ResolveTag.peek] is called, never the scan-recording `run`. */
     private val resolveTag: ResolveTag,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** #77 (C20): the zone P77-37's date is read in. */
+    private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) {
     constructor(graph: AppGraph, io: TagIo, target: TagTarget, label: String?, scope: CoroutineScope) :
         this(graph.provisionTag, graph.appScope, io, graph.ndefCodec, target, label, scope, graph.resolveTag)
@@ -206,7 +208,7 @@ class TagWriteController(
                     _state.value = WriteState.Error(
                         TransferStrings.handedOver(
                             resolution.asset.name,
-                            TransferStrings.day(resolution.record.at, ZoneId.systemDefault()),
+                            TransferStrings.day(resolution.record.at, zone()),
                         ),
                     )
                     return false

@@ -46,8 +46,8 @@ class ResolveTag(
     private val assets: AssetRepository,
     private val uow: UnitOfWork,
     private val clock: Clock,
-    /** #77 (C20): the transfer records, asked inside the same transaction. Null holds nothing. */
-    private val transfers: TransferRecordRepository? = null,
+    /** #77 (C20): the transfer records, asked inside the same transaction. Required: a missing one would fail open. */
+    private val transfers: TransferRecordRepository,
 ) {
     /**
      * A scan. Lookup is by (format, key) — never by row id (D4 §3). A hit records the scan — except on a tag whose
@@ -90,7 +90,7 @@ class ResolveTag(
 
     /** The open OUT that holds [asset] here — the latest by `at`, then id — or null when it is not held. */
     private suspend fun heldBy(asset: AssetId): TransferRecord? =
-        transfers?.let { repo -> openOuts(repo.forAsset(asset)).maxWithOrNull(compareBy({ it.at }, { it.id })) }
+        openOuts(transfers.forAsset(asset)).maxWithOrNull(compareBy({ it.at }, { it.id }))
 
     /** The one interpretation of a known row; [run] and [peek] both end here. */
     private suspend fun classify(tag: TagBinding): Resolution = when {
