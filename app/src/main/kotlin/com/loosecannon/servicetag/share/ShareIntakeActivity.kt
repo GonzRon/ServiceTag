@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.share
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -86,6 +87,8 @@ class ShareIntakeActivity : ComponentActivity() {
                     }
                     val importState by importModel.state.collectAsStateWithLifecycle()
                     LaunchedEffect(importState.finished) { if (importState.finished) finish() }
+                    // MJ-1: back does nothing while the import runs; finishing would cancel it mid-write.
+                    BackHandler(enabled = importState.importing) { }
                     TransferImportContent(
                         state = importState,
                         door = TransferDoor.SHARE,

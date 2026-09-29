@@ -785,13 +785,6 @@ class BackupViewModelTest {
         assertEquals(report.lastRestoredBackupSetId, vm.state.value.lastRestoredBackupSetId)
     }
 
-    // --- the restore prompt (#40) -----------------------------------------------------------
-
-    /**
-     * #40 — a phone with nothing on it. The Backup screen asks this before it raises a dialog, and
-     * the answer is what decides between the typed `REPLACE` confirmation and a plain one. Nothing
-     * is seeded here, so the fixture *is* the empty install.
-     */
     // --- #77 (B3): the two transfer refusals, in the shipped error lines ---------------------------------------
 
     private fun outOf(asset: AssetId, name: String) = TransferRecord(
@@ -853,6 +846,13 @@ class BackupViewModelTest {
         assertEquals(2, graph.assets.all().size)
     }
 
+    // --- the restore prompt (#40) -----------------------------------------------------------
+
+    /**
+     * #40 — a phone with nothing on it. The Backup screen asks this before it raises a dialog, and
+     * the answer is what decides between the typed `REPLACE` confirmation and a plain one. Nothing
+     * is seeded here, so the fixture *is* the empty install.
+     */
     @Test fun anUntouchedInstallReportsAnEmptyStore() = runTest {
         assertTrue(viewModel().isStoreEmpty())
     }

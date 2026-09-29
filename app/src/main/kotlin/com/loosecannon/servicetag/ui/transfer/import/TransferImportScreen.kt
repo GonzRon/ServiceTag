@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.transfer.`import`
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -55,6 +56,9 @@ fun TransferImportScreen(graph: AppGraph, copy: String, onBack: () -> Unit) {
     }
     val state by model.state.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
+    // MJ-1: back does nothing while the import runs — leaving would cancel it mid-write. The precedent is the asset
+    // editor's save (`AssetEditScreen`).
+    BackHandler(enabled = state.importing) { }
     LaunchedEffect(state.finished) { if (state.finished) onBack() }
     LaunchedEffect(state.done) { state.done?.let { snackbars.showSnackbar(it) } }
 

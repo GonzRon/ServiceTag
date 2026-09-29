@@ -138,8 +138,11 @@ class TransferStagingMismatch(val locator: String) : IOException("the staged byt
  *
  * **[import]** stages each document whose locator is absent from the folder, never overwriting, each verified by
  * size and sha256 against the pack's manifest and row, remembering every locator it wrote; then applies through
- * [ApplyBackupMergePlan], which re-plans inside its one write. On any refusal or failure it sweeps exactly what it
- * staged. Known limit (C14): a crash between staging and the apply leaves unnamed files for the sweep to find.
+ * [ApplyBackupMergePlan], which re-plans inside its one write. On any refusal or failure **before the write commits**
+ * it sweeps exactly what it staged; once it has committed — or a cancellation arrives after Room committed, which this
+ * pack's IN records being here shows — the staged bytes are the committed rows' and stay (MJ-1). The removed
+ * documents of a return are swept after the commit, not cancellably. Known limit (C14): a crash between staging and
+ * the apply leaves unnamed files for the sweep to find.
  *
  * An IN record's id is derived from the pack and the asset, and a re-import reuses the IN already here, so importing
  * one pack twice plans every row IDENTICAL (P77-43).
@@ -200,7 +203,9 @@ class ImportTransferPack(
             locatorOf.getValue(entry.attachmentId) to StoredBytes(entry.sha256, entry.sizeBytes)
         }
         val backup = pack.backup.copy(data = data.copy(transferRecords = ins.map { it.toDto() }))
-        val plan = build.run(backup, incoming, returning)
+        // A pack that leaves any held asset behind is never imported (P77-67), so its plan is not a return's: the
+        // replaced graph is computed — and mn-1's refusal checked — only for a pack that can come back whole.
+        val plan = build.run(backup, incoming, if (refused.isEmpty()) returning else emptySet())
 
         val assetNames = localAssets.associate { it.id.value to it.name }
         val tagsById = localTags.associateBy { it.id.value }
@@ -239,18 +244,37 @@ class ImportTransferPack(
         val store = storage.store()
         if (entries.isNotEmpty() && store == null) return TransferImportResult.NoAttachmentFolder
         val written = mutableListOf<String>()
+        // MJ-1: once the write has committed, the staged bytes belong to its rows and are never swept.
+        var committed = false
         return try {
             if (store != null && entries.isNotEmpty()) stage(ready.pack, store, open, written)
-            val report = apply.run(ready.plan, ready.returning.mapTo(LinkedHashSet()) { it.id })
-            TransferImportResult.Imported(ready.manifest, report)
+            val applied = apply.runReturning(ready.plan, ready.returning.mapTo(LinkedHashSet()) { it.id })
+            committed = true
+            // C15: the removed documents' bytes the pack does not name — after the commit, best effort, and not
+            // cancellable, so a back press here can neither undo nor half-do anything.
+            withContext(NonCancellable) {
+                try {
+                    storage.sweepBytes(applied.removedLocators)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // An orphaned file, never a failed import: the rows are committed.
+                }
+            }
+            TransferImportResult.Imported(ready.manifest, applied.report)
         } catch (e: CancellationException) {
-            withContext(NonCancellable) { storage.sweepBytes(written) }
+            withContext(NonCancellable) {
+                // Room can commit and then deliver the cancellation on resume: this pack's INs being here says so.
+                val planned = ready.plan.writes.transfers.mapTo(HashSet()) { it.id }
+                val landed = committed || (planned.isNotEmpty() && transfers.all().any { it.id in planned })
+                if (!landed) storage.sweepBytes(written)
+            }
             throw e
         } catch (e: MergeRefused) {
-            storage.sweepBytes(written)
+            if (!committed) storage.sweepBytes(written)
             TransferImportResult.Conflicted(e.report)
         } catch (e: Exception) {
-            storage.sweepBytes(written)
+            if (!committed) storage.sweepBytes(written)
             TransferImportResult.Failed(e)
         }
     }

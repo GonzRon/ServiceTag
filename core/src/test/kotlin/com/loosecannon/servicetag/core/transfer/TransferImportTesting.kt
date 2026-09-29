@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.lineageFor
+import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.testing.BackupInstall
@@ -36,8 +37,14 @@ internal class SealedPack(val bytes: ByteArray, val created: CreatedPack)
  * stores reproduce the schema's cascades from `asset` and `maintenance_group` (the Room tests prove the real ones),
  * so a return's scoped replace leaves exactly what the database would.
  */
-internal class TransferInstall(setId: String = "set-install", private val now: Long = IMPORT_NOW) {
+internal class TransferInstall(
+    setId: String = "set-install",
+    private val now: Long = IMPORT_NOW,
+    /** The folder the merge and the import see; a test wraps the raw one to rig a failure. */
+    storageOf: (AttachmentStorage) -> AttachmentStorage = { it },
+) {
     val raw = BackupInstall(setId)
+    val storage: AttachmentStorage = storageOf(raw.storage)
     private val guard = HeldWriteGuard(
         raw.transfers, raw.events, raw.definitions, raw.profiles, raw.groups, raw.schedules, raw.serviceCases, raw.links,
     )
@@ -65,14 +72,14 @@ internal class TransferInstall(setId: String = "set-install", private val now: L
     )
     val build = BuildBackupMergePlan(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
-        activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers, raw.storage, raw.uow,
+        activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers, storage, raw.uow,
     )
     val apply = ApplyBackupMergePlan(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
-        activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers, raw.storage, raw.uow,
+        activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers, storage, raw.uow,
         rebuildAll = { rebuilds += 1 },
     )
-    val importer = ImportTransferPack(build, apply, raw.transfers, assets, tags, raw.storage, raw.uow, Clock { now })
+    val importer = ImportTransferPack(build, apply, raw.transfers, assets, tags, storage, raw.uow, Clock { now })
 
     private var recordIds = 0
 

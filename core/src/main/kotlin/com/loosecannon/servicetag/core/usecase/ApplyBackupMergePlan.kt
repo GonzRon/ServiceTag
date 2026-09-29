@@ -130,15 +130,18 @@ class ApplyBackupMergePlan(
      */
     private val rebuildAll: suspend () -> Unit,
 ) {
+    suspend fun run(plan: MergePlan): MergeReport = runReturning(plan, emptySet()).report
+
     /**
      * [returning] (#77, C15; R77-25, R77-B3-RETURN) is a Transfer Pack's return, as [ImportTransferPack] decided it —
-     * empty for every other merge, which is unchanged. For a return the plan runs on the snapshot without those
+     * empty for every other merge, which [run] is, unchanged. For a return the plan runs on the snapshot without those
      * assets' stale local graph ([ReturnScope]); in the same write their IN records are appended **first**, closing
      * this phone's OUT (the write guard refuses anything else), that graph is removed through the ports' deletes, the
      * plan's rows are inserted, and the sender-local returned loans and 2.6 link rows with their tags are written back
-     * unchanged as history. After the commit, the bytes of every removed document the pack does not name are swept.
+     * unchanged as history. It sweeps nothing: [AppliedMerge.removedLocators] are the removed documents' bytes the
+     * pack does not name, for the caller to sweep **after** it knows the write committed (MJ-1).
      */
-    suspend fun run(plan: MergePlan, returning: Set<AssetId> = emptySet()): MergeReport {
+    suspend fun runReturning(plan: MergePlan, returning: Set<AssetId>): AppliedMerge {
         // The cheap refusal first, so a plan the caller already knows is conflicted never opens a
         // transaction at all.
         if (!plan.applicable) throw MergeRefused(plan.report())
@@ -203,14 +206,16 @@ class ApplyBackupMergePlan(
             removed = scope
             fresh.report()
         }
-        // #77 (C15): bytes after the commit, best effort — a removed document the pack does not name.
-        removed?.let { scope ->
-            val named = plan.backup.data.attachments.map { it.storageLocator }.toSet()
-            storage.sweepBytes(scope.locators.filterNot { it in named })
-        }
-        return report
+        val named = plan.backup.data.attachments.map { it.storageLocator }.toSet()
+        return AppliedMerge(report, removed?.locators.orEmpty().filterNot { it in named })
     }
 }
+
+/**
+ * What [ApplyBackupMergePlan.runReturning] committed: the report, and (#77, C15) the removed documents' locators the
+ * pack does not name — bytes the caller sweeps once the write is known to have committed. Empty for a merge.
+ */
+class AppliedMerge(val report: MergeReport, val removedLocators: List<String>)
 
 /**
  * #77 (C15; R77-25 (a), the 2.6 tombstone rule) — what a Transfer Pack's return replaces here, read from one snapshot:
@@ -222,8 +227,9 @@ class ApplyBackupMergePlan(
  * asset: [keptLoans] (the sender-local returned loans, R77-25 (a)), [keptLinks] and [keptLinkTags] (the 2.6
  * tombstones, never re-purposed or dropped). [locators] are the removed documents' bytes, for the sweep.
  *
- * A staying row that names a removed one would be changed by those cascades, so it refuses the return
- * ([IllegalStateException]); the guard and M3 keep that from arising.
+ * A staying row that names a removed one would be changed by those cascades, and a removed group that also names a
+ * staying asset would take its rows with it (mn-1), so either refuses the return ([IllegalStateException]) — at the
+ * preview, before anything is staged or written (P77-52).
  */
 internal class ReturnScope private constructor(
     val snapshot: MergeSnapshot,
@@ -298,7 +304,12 @@ internal class ReturnScope private constructor(
                 healthSubjects = reduced.healthSubjects.map { it.toDto() },
             )
             val entangled = TransferGraph.entangledRefs(kept, dropped)
-            check(entangled.isEmpty()) { "a staying row names a returning asset's graph: $entangled" }
+            // mn-1: a removed group must name returning assets only — one that also names a staying asset, held here
+            // or not, would take that asset's membership rows and the round's closures with it.
+            val shared = groups.filter { g -> g.members.any { it.assetId !in returning } }.map { it.id.value }
+            check(entangled.isEmpty() && shared.isEmpty()) {
+                "a staying row names a returning asset's graph: $entangled; groups also naming a staying asset: $shared"
+            }
             return ReturnScope(
                 snapshot = reduced,
                 groups = groups.map { it.id },

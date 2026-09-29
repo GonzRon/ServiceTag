@@ -1,6 +1,15 @@
 package com.loosecannon.servicetag.core.transfer
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.AttachmentStore
+import com.loosecannon.servicetag.core.testing.InMemoryAttachmentStore
+import com.loosecannon.servicetag.core.testing.groupOf
+import com.loosecannon.servicetag.core.testing.plainAssetOf
+import kotlin.coroutines.cancellation.CancellationException
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.GroupId
@@ -209,5 +218,151 @@ class TransferBackTest {
         assertEquals(records, s.raw.transfers.all())
         assertEquals(files, s.raw.storage.store.files)
         assertNull(s.raw.transfers.all().firstOrNull { it.kind == TransferKind.IN })
+    }
+
+    // --- fix round 1: MJ-1, mn-1, mn-2, mn-3 --------------------------------------------------------------------
+
+    /**
+     * MJ-1: the owner presses back once the return has committed — the removed documents' sweep is where the
+     * cancellation lands. The committed rows stay, and so do the bytes this import staged for them.
+     */
+    @Test
+    fun aCancellationAfterTheCommitKeepsTheStagedBytes() = runTest {
+        val sender = TransferInstall("set-sender", storageOf = { raw -> cancellingOn(raw, "assets/h1/at1.pdf") })
+            .also { TransferFixtures.seed(it.raw) }
+        val q1 = sender.pack("pack-q1", HEATER)
+        sender.mark(q1)
+        val r = recipientOf(q1)
+        val leaflet = "Example heater leaflet".toByteArray()
+        r.attachments.upsert(
+            Attachment(
+                id = AttachmentId("at9"), owner = AttachmentOwner.OfAsset(AssetId(HEATER)), kind = AttachmentKind.DOCUMENT,
+                displayName = "at9 file", mimeType = "application/pdf", sizeBytes = leaflet.size.toLong(),
+                sha256 = InMemoryAttachmentStore.sha256Hex(leaflet), storageLocator = "assets/h1/at9.pdf",
+                capturedOn = null, createdAt = IMPORT_NOW + 3, updatedAt = IMPORT_NOW + 3,
+            ),
+        )
+        r.raw.storage.store.files["assets/h1/at9.pdf"] = leaflet
+        val q2 = r.pack("pack-q2", HEATER)
+        val ready = sender.ready(q2.bytes)
+
+        val outcome = runCatching { sender.importer.import(ready) { q2.bytes.inputStream() } }
+
+        outcome.exceptionOrNull()?.let { assertIs<CancellationException>(it) }
+        assertEquals(emptySet(), heldIds(sender.raw.transfers.all()), "the return committed")
+        assertTrue(sender.data().attachments.any { it.id == "at9" }, "its document row committed")
+        assertTrue(leaflet.contentEquals(sender.raw.storage.store.files["assets/h1/at9.pdf"]), "and its staged bytes stay")
+    }
+
+    /**
+     * mn-1/mn-2 (a): the recipient deleted the pump its round also covered, so the pack brings the heater back with a
+     * group the phone still shares with the held pump. The preview refuses (P77-52); nothing is staged or written.
+     */
+    @Test
+    fun aReturnWhoseGroupNamesAnotherHeldAssetWritesNothing() = runTest {
+        val s = TransferInstall("set-sender").also { TransferFixtures.seed(it.raw) }
+        s.raw.assets.upsert(plainAssetOf("p1", "Sample Pump"))
+        s.raw.groups.upsert(
+            groupOf("G2", "Example Pump Round", members = listOf(Triple(HEATER, "2026-01-01", null), Triple("p1", "2026-01-01", null))),
+        )
+        val q1 = s.pack("pack-q1", HEATER, "p1")
+        s.mark(q1)
+        val r = recipientOf(q1)
+        r.raw.assets.delete(AssetId("p1"))
+        val q2 = r.pack("pack-q2", HEATER)
+        val before = s.data()
+        val records = s.raw.transfers.all()
+        val files = LinkedHashMap(s.raw.storage.store.files)
+
+        val refusal = runCatching { s.preview(q2.bytes) }.exceptionOrNull()
+
+        assertIs<IllegalStateException>(refusal, "the preview refuses: ${refusal ?: "it offered a plan"}")
+        assertEquals(before, s.data())
+        assertEquals(records, s.raw.transfers.all())
+        assertEquals(files, s.raw.storage.store.files)
+    }
+
+    /** mn-2 (b): a held component the pack does not carry still points at the returning parent — refused, nothing written. */
+    @Test
+    fun aHeldChildOfAReturningParentWritesNothing() = runTest {
+        val s = TransferInstall("set-sender")
+        s.raw.assets.upsert(plainAssetOf("p1", "Sample Pump"))
+        s.raw.assets.upsert(plainAssetOf("c1", "Sample Pump Motor").copy(parentAssetId = AssetId("p1")))
+        val q1 = s.pack("pack-q1", "p1")
+        s.mark(q1)
+        val r = TransferInstall("set-recipient")
+        assertIs<TransferImportResult.Imported>(r.import(q1.bytes))
+        val motor = r.raw.assets.get(AssetId("c1"))!!
+        r.assets.upsert(motor.copy(parentAssetId = null, updatedAt = IMPORT_NOW + 1))
+        val q2 = r.pack("pack-q2", "p1")
+        assertEquals(listOf("p1"), q2.created.assetIds.map { it.value })
+        val before = s.data()
+        val records = s.raw.transfers.all()
+        val files = LinkedHashMap(s.raw.storage.store.files)
+
+        val refusal = runCatching { s.preview(q2.bytes) }.exceptionOrNull()
+
+        assertIs<IllegalStateException>(refusal, "the preview refuses: ${refusal ?: "it offered a plan"}")
+        assertEquals(before, s.data())
+        assertEquals(records, s.raw.transfers.all())
+        assertEquals(files, s.raw.storage.store.files)
+    }
+
+    /** mn-3 (R77-B2a-MJ1): the very pack this phone marked out is its own departure, never a return. */
+    @Test
+    fun mySentPackItselfIsNotAReturn() = runTest {
+        val (s, q1) = senderAfterTheTransfer()
+        val before = s.data()
+        val records = s.raw.transfers.all()
+
+        val ready = s.ready(q1.bytes)
+
+        assertEquals(TransferImportOutcome.NOT_BROUGHT_BACK, ready.outcome)
+        assertEquals(setOf(AssetId(HEATER), AssetId(ANODE)), ready.refused.map { it.id }.toSet())
+        assertEquals(emptyList(), ready.returning)
+        assertEquals(before, s.data())
+        assertEquals(records, s.raw.transfers.all())
+    }
+
+    /**
+     * mn-3: out in q1, back in q2 — so q1's OUT is closed here and history. A pack whose lineage is `[q1]` then brings
+     * nothing back: after the return it is only what is already here, and once the heater is out again in q3 it is
+     * refused (P77-67).
+     */
+    @Test
+    fun aPackNamingAnOutAlreadyClosedHereIsRefused() = runTest {
+        val (s, q1) = senderAfterTheTransfer()
+        val r = recipientOf(q1)
+        val q2 = r.pack("pack-q2", HEATER)
+        assertEquals(listOf("pack-q1"), q2.created.lineage[HEATER])
+        assertIs<TransferImportResult.Imported>(s.import(q2.bytes))
+
+        val closed = s.ready(q2.bytes)
+        assertEquals(emptyList(), closed.returning, "a closed OUT is history, not a return")
+        assertEquals(TransferImportOutcome.ALREADY_HERE, closed.outcome)
+
+        s.mark(s.pack("pack-q3", HEATER))
+        val before = s.data()
+        val records = s.raw.transfers.all()
+
+        val stale = s.ready(q2.bytes)
+
+        assertEquals(TransferImportOutcome.NOT_BROUGHT_BACK, stale.outcome)
+        assertEquals(setOf(AssetId(HEATER), AssetId(ANODE)), stale.refused.map { it.id }.toSet())
+        assertEquals(before, s.data())
+        assertEquals(records, s.raw.transfers.all())
+    }
+
+    /** The folder [raw] hands out, whose store throws a cancellation when asked to delete [locator]. */
+    private fun cancellingOn(raw: AttachmentStorage, locator: String): AttachmentStorage = object : AttachmentStorage {
+        override fun state() = raw.state()
+        override fun store(): AttachmentStore? = raw.store()?.let { inner ->
+            object : AttachmentStore by inner {
+                override suspend fun delete(locator2: String) {
+                    if (locator2 == locator) throw CancellationException("the owner pressed back after the commit")
+                    inner.delete(locator2)
+                }
+            }
+        }
     }
 }
