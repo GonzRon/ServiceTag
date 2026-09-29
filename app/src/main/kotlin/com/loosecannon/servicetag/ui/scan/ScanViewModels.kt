@@ -24,6 +24,8 @@ import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
 import com.loosecannon.servicetag.ui.nav.Route
+import com.loosecannon.servicetag.ui.transfer.TransferStrings
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,6 +60,8 @@ internal fun Resolution.asTagResult(): Route.TagResult = when (this) {
         Route.TagResult(TagResultWire.FORMAT_NONE, "written by a newer ServiceTag (payload format $version)")
     is Resolution.NotOurs -> Route.TagResult(TagResultWire.FORMAT_NONE, describe(payload))
     is Resolution.PreSplitLink -> Route.TagResult(TagResultWire.wordFor(tag.payloadFormat), tag.payloadKey)
+    // #77 (C20): the pair, like any row we hold; the sheet re-resolves it to P77-36 / P77-37.
+    is Resolution.TransferredOut -> Route.TagResult(TagResultWire.wordFor(tag.payloadFormat), tag.payloadKey)
 }
 
 /**
@@ -169,6 +173,12 @@ sealed interface TagResult {
     /** A tag bound to a pre-split note link: one sentence, and nothing to do (2.6). */
     data class PreSplitLink(val tag: TagBinding) : TagResult
 
+    /**
+     * #77 (C20, R77-11): the tag's asset was transferred out from this phone — P77-36 over P77-37, and nothing to do:
+     * never the maintenance sheet, never an auto-open. [handedOver] is P77-37, already worded.
+     */
+    data class TransferredOut(val tag: TagBinding, val asset: Asset, val handedOver: String) : TagResult
+
     data class Unregistered(val tag: TagBinding) : TagResult
     data class Revoked(val tag: TagBinding) : TagResult
 
@@ -203,6 +213,8 @@ class TagResultViewModel(
     private val key: String,
     /** #77 (C19, rm-5): the held set, so the bind picker never offers a transferred-out asset. Null holds nothing. */
     transfers: TransferRecordRepository? = null,
+    /** #77 (C20): the zone P77-37's date is read in. */
+    private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) : ViewModel() {
 
     constructor(graph: AppGraph, format: String, key: String) :
@@ -247,6 +259,12 @@ class TagResultViewModel(
                     .getOrDefault(false),
             )
             is Resolution.PreSplitLink -> TagResult.PreSplitLink(resolution.tag)
+            // #77 (C20): never the sheet — the one branch that asks `sheetOffer` is OpenAsset's alone.
+            is Resolution.TransferredOut -> TagResult.TransferredOut(
+                resolution.tag,
+                resolution.asset,
+                TransferStrings.handedOver(resolution.asset.name, TransferStrings.day(resolution.record.at, zone())),
+            )
             is Resolution.Unbound -> TagResult.Unregistered(resolution.tag)
             is Resolution.Revoked -> TagResult.Revoked(resolution.tag)
             is Resolution.UnknownV1 -> TagResult.NotInRecords(resolution.tagId.value)

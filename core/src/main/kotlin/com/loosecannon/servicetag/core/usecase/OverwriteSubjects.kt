@@ -48,6 +48,8 @@ object OverwriteSubjects {
     /** No asset name reaches any line but the bound one: `Unbound` and `Revoked` carry no asset. */
     private fun lineFor(resolution: Resolution?): String = when (resolution) {
         is Resolution.OpenAsset -> identifies(resolution.asset.name)
+        // #77 (C20): never asked — the write screen offers no overwrite of a transferred-out asset's tag.
+        is Resolution.TransferredOut -> identifies(resolution.asset.name)
         is Resolution.Unbound -> NOT_ASSIGNED
         is Resolution.Revoked -> if (resolution.tag.status == TagStatus.LOST) MARKED_LOST else RETIRED
         is Resolution.PreSplitLink -> PRE_SPLIT_LINK
@@ -69,6 +71,7 @@ object OverwriteSubjects {
 
     private fun Resolution.knownRow(): TagBinding? = when (this) {
         is Resolution.OpenAsset -> tag
+        is Resolution.TransferredOut -> tag
         is Resolution.Unbound -> tag
         is Resolution.Revoked -> tag
         is Resolution.PreSplitLink -> tag

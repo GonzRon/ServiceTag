@@ -25,6 +25,10 @@ import com.loosecannon.servicetag.core.usecase.OverwriteSubjects
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.core.usecase.ResolveTag
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.ui.condition.displayDate
+import java.time.LocalDate
 import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.IOException
@@ -390,6 +394,32 @@ class TagWriteControllerTest {
     }
 
     // --- #70: the question names what the tag already identifies --------------------------------
+
+    /**
+     * #77 (C20; row 34): a tag that identifies an asset transferred out from this phone left with the asset, so the
+     * #70 question is never asked and nothing is offered: P77-37 says why, and nothing is written.
+     */
+    @Test fun theOverwriteOffersNothingForATransferredOutAssetsTag() = runTest(dispatcher) {
+        seedKnownRow()
+        graph.transferRecords.append(
+            TransferRecord(
+                id = "out-1", assetId = AssetId(ASSET_ID), kind = TransferKind.OUT, packId = "0f1e2d3c-pack",
+                lineage = emptyList(), at = 1_790_510_400_000L, packSha256 = "ab".repeat(32),
+                nameSnapshot = ASSET_NAME, note = "",
+            ),
+        )
+        controller = controller(resolveTag = ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock, graph.transferRecords))
+        io.inspection = holdingOtherTag
+
+        controller.onTag(handle); advanceUntilIdle()
+
+        val refused = assertIs<WriteState.Error>(controller.state.value)
+        assertEquals(
+            "Pump 3 was handed over on " + displayDate(LocalDate.of(2026, 9, 27)) + ". This phone no longer maintains it.",
+            refused.message,
+        )
+        assertEquals(0, io.writeAttempts)
+    }
 
     @Test fun aTagBoundToAnAssetIsNamedInTheQuestion() = runTest(dispatcher) {
         seedKnownRow()
