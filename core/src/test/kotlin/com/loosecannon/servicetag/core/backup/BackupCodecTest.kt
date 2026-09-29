@@ -1229,9 +1229,25 @@ class BackupCodecTest {
     }
 
     /**
-     * No shipped writer put a source into a format ≤15 archive — the keys did not exist — so one that carries
-     * any of the four, even alone, was built by hand and is refused before a row is named, through the strict
-     * decode (15, 10) and the ≤7 upgrade alike. An explicit null is what this build's own DTO reads anyway.
+     * The hazard only the guard stops: a whole, well-formed source passes the shape rule, so in a format ≤15
+     * archive — the strict decode (15, 10) or the ≤7 upgrade — nothing but the guard refuses it. No shipped writer
+     * put a source there, because the keys did not exist: it was built by hand.
+     */
+    @Test
+    fun aWellFormedSourceInAnOlderArchiveIsCorrupt() {
+        for (format in listOf(15, 10, 7)) {
+            val refusal = assertFailsWith<BackupCorrupt>("format $format") {
+                BackupCodec.decode(archiveAt(format, roleData(sourced(attachmentDto("att-1")))))
+            }
+
+            assertTrue(refusal.message!!.startsWith("attachments:"), refusal.message)
+            assertTrue("format $format" in refusal.message!! && "att-1" in refusal.message!!, refusal.message)
+        }
+    }
+
+    /**
+     * Any one of the four alone in a format-15 archive is refused by the guard, named by the format and the row,
+     * before a row is named. An explicit null is what this build's own DTO reads anyway, and is accepted.
      */
     @Test
     fun aFormat15ArchiveWithAnySourceFieldIsCorrupt() {
@@ -1248,13 +1264,34 @@ class BackupCodecTest {
             assertTrue(refusal.message!!.startsWith("attachments:"), "$key: ${refusal.message}")
             assertTrue("format 15" in refusal.message!! && "att-1" in refusal.message!!, "$key: ${refusal.message}")
         }
-        for (format in listOf(15, 10, 7)) {
-            val refusal = assertFailsWith<BackupCorrupt>("format $format") {
-                BackupCodec.decode(archiveAt(format, roleData(sourced(plain))))
-            }
-            assertTrue("format $format" in refusal.message!! && "att-1" in refusal.message!!, refusal.message)
-        }
         assertEquals(listOf(plain), BackupCodec.decode(archiveAt(15, roleData(plain))).data.attachments)
+    }
+
+    /**
+     * A real format 8–15 file never had the four keys at all — not explicit nulls, no key — so its attachment is
+     * written here by hand, the way that writer wrote it, never by this build's encoder; it reads with no source.
+     */
+    @Test
+    fun anOlderArchiveWithoutTheSourceKeysReadsWithNoSource() {
+        val handWritten = """
+            {"id": "att-1", "assetId": "a1", "eventId": null, "kind": "DOCUMENT", "mode": "MANAGED",
+             "displayName": "Manual.pdf", "mimeType": "application/pdf", "sizeBytes": 12, "sha256": "${"a".repeat(64)}",
+             "storageProvider": "SAF_TREE", "storageLocator": "assets/a1/att-1.pdf", "capturedOn": "2026-09-15",
+             "notes": "", "createdAt": 1, "updatedAt": 2, "role": null}
+        """.trimIndent()
+        assertFalse("source" in handWritten, "the fixture still carries a source key")
+        for (format in listOf(15, 10)) {
+            val bytes = archiveAt(format, roleData())   // no attachment from the encoder: the row is the literal
+            val tree = Json.parseToJsonElement(dataTextOf(bytes)).jsonObject
+            val attachments = JsonArray(listOf(Json.parseToJsonElement(handWritten)))
+            val text = Json.encodeToString(JsonObject.serializer(), JsonObject(tree + ("attachments" to attachments)))
+
+            val decoded = BackupCodec.decode(resealed(bytes, text.toByteArray(Charsets.UTF_8)))
+
+            assertEquals(format, decoded.manifest.formatVersion)
+            assertEquals(listOf(attachmentDto("att-1")), decoded.data.attachments)
+            assertEquals(null, decoded.data.attachments.single().toDomain().source)
+        }
     }
 
     /** C1's one shape rule, read at format 16: each breach is a hand-built file, named by its attachment. */
