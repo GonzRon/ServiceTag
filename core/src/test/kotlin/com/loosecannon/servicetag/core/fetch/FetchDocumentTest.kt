@@ -22,6 +22,7 @@ import com.loosecannon.servicetag.core.testing.FakeDocumentTransport.Served
 import com.loosecannon.servicetag.core.testing.FakeHostResolver
 import com.loosecannon.servicetag.core.testing.FakeStaging
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -457,6 +458,7 @@ class FetchDocumentTest {
         assertTrue(elapsed < 2_000, "took $elapsed ms")
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class) // testScheduler.currentTime
     @Test
     fun aSlowGetTimesOutInVirtualTime() = runTest {
         val t = transport {
