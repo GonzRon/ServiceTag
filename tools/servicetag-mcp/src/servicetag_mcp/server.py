@@ -480,7 +480,8 @@ def status() -> dict[str, Any]:
     """The app's version, the contract version, its `schemaVersion` and `backupFormatVersion`, and a
     row count per table (since 1.4 also `seasonActivations`, `assetConditions` and
     `healthSubjects`; since the durable category catalog also `assetCategories`; since #79's service
-    cases also `serviceCases` and `serviceCaseEntries`; since #72's loans also `assetLoans`). Every write
+    cases also `serviceCases` and `serviceCaseEntries`; since #72's loans also `assetLoans`; since #77's
+    transfers also `transferRecords`, every transfer record, OUT, IN and WITHDRAWN). Every write
     tool reads `schemaVersion` once per pairing and refuses with `APP_SCHEMA_TOO_OLD` below 8 (ServiceTag
     1.4.0); `get_warranty` and `set_warranty_reminder` refuse below 11, the five service-case tools below
     12, and the five loan tools below 13."""
@@ -1114,7 +1115,7 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a `ServiceTag-data-*.zip` of format 1–13 (format 8, from ServiceTag
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–14 (format 8, from ServiceTag
     1.4.0, adds season activations, conditions and health subjects; format 9 adds the owner's own
     asset categories; format 10 adds each attachment's document role; an older archive's
     attachments are compared without the role and, when the phone's row carries one, without the
@@ -1127,7 +1128,11 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     a new entry beside an identical case; format 13 adds the loans, open and returned — a loan
     returned, re-dated or relinked on one phone after the other received it conflicts on re-merge, and
     an open loan whose asset already holds a different open loan here conflicts as
-    `ASSET_ALREADY_LENT`).
+    `ASSET_ALREADY_LENT`; format 14 adds the transfer records, OUT, IN and WITHDRAWN, which a merge only
+    ever inserts — an incoming IN or WITHDRAWN that would close an OUT open on the phone, a row an asset
+    transferred out from the phone would own, or a row that would name one of its rows conflicts as
+    `ASSET_TRANSFERRED_OUT`, and an OUT that would leave its asset with two open OUTs as
+    `TRANSFER_DIVERGED`, resolved only by withdrawing one on the phone).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
@@ -1137,7 +1142,13 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     `plan_only=True`, or when the plan does have conflicts, it stops and returns the plan — whose
     `conflicts` list names each one by table, id and a stable reason code, in a deterministic order.
     Read `applicable` to know which happened. The report tallies `{insert, identical, conflict,
-    skipped}` for each of eighteen tables.
+    skipped}` for each of nineteen tables, `transfers` last.
+
+    A Transfer Pack is not a data archive, and the phone refuses one here: packs are made, imported,
+    marked and withdrawn on the phone only, and no tool does any of it. The `data.zip` inside a pack is
+    an ordinary data archive and merges like one — its documents SKIPPED unless their bytes are already
+    in the attachment folder, no IN recorded, nothing replaced — so it never brings an asset back; only
+    the phone's pack import does.
 
     The plan writes nothing, so it is asked of any app. The apply is a write: against an app below
     schema 8 (older than ServiceTag 1.4.0) it is refused after the plan with `APP_SCHEMA_TOO_OLD`
@@ -1200,7 +1211,10 @@ def repair_schedule_providers(plan_only: bool = True) -> dict[str, Any]:
     not archived, reminders are on and none of its providers is enabled; it is *repairable* when it
     is also `ACTIVE` and has no provider row at all. Every other matched schedule is *skipped* with a
     `reason`: `PAUSED` (any status but `ACTIVE`) or `PROVIDERS_DISABLED` (a provider row that is
-    there and disabled — a bulk repair never turns one on).
+    there and disabled — a bulk repair never turns one on). Since #77 a schedule whose target is no
+    longer maintained on the phone — on an asset that is archived, retired or transferred out, or on a
+    group that is archived or wholly transferred out — is never matched, so the apply skips a
+    transferred-out asset's schedule instead of meeting its 409.
 
     `plan_only=False` applies: the phone plans again inside its own write — it never replays an
     earlier plan — and gives each repairable schedule exactly one `LOCAL` provider, enabled, moving

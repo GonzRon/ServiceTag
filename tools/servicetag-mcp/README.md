@@ -120,8 +120,16 @@ health subject, or writes a health value; a subject leaves only by `archive_heal
 reminders are on but that nothing delivers (issue #80) and, **only with `plan_only=False`**, gives
 each ACTIVE, providerless one a single enabled `LOCAL` provider. The default is the plan, which
 writes nothing; the apply plans again on the phone inside its own write, skips a paused schedule and
-a disabled provider, and a second apply repairs nothing. `docs/api/v1.md`'s **Repairs** section is
-the contract.
+a disabled provider, and a second apply repairs nothing. Since #77 it never matches a schedule whose
+target is no longer maintained on the phone — an archived, retired or transferred-out asset, or a group
+that is archived or wholly transferred out. `docs/api/v1.md`'s **Repairs** section is the contract.
+
+**Transferred-out assets (#77)** — no tool. Transfer Packs are made, imported, marked and withdrawn on
+the phone only. A write tool that reaches a row of an asset transferred out from the phone — a
+category-only `update_asset` or a repeated `archive_asset` included — fails with the phone's **409
+`asset_transferred_out`**, whatever the asset's `status` reads, and writes nothing; reads keep working.
+`status` counts the transfer records as `transferRecords`. `docs/api/v1.md`'s **Transferred-out assets
+(#77)** section is the contract.
 
 **Warranty (needs schema 11)** — `get_warranty`, `set_warranty_reminder`. `get_warranty` answers
 the asset's warranty status — `IN_WARRANTY`, `OUT_OF_WARRANTY` or `NOT_RECORDED` — derived on the
@@ -274,12 +282,12 @@ the new target **and** clearing the old one in the same call.
 
 ### `import_merge`
 
-Takes a local path to a `ServiceTag-data-*.zip` of format **1–13** and merges it into the phone. A
+Takes a local path to a `ServiceTag-data-*.zip` of format **1–14** and merges it into the phone. A
 format-6 archive adds the maintenance groups, the schedules and the occurrence closures, format 7 the
 references, format 8 the season activations, the conditions and the health subjects, format 9 the
 owner's own categories, format 10 each attachment's document role, format 11 each asset's warranty
-reminder lead, format 12 the service cases and their timeline entries and format 13 the loans; an older archive simply has
-none of them. **It plans before it writes**, and it never overwrites or
+reminder lead, format 12 the service cases and their timeline entries, format 13 the loans and format
+14 the transfer records; an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
 - a row whose id is not on the phone is **inserted**, with its UUID preserved exactly;
@@ -293,13 +301,21 @@ deletes anything:
   that closed the same round on the same day merge cleanly and a genuine disagreement about *when*
   a round was closed is a conflict for a person.
 
-The report carries a `{insert, identical, conflict, skipped}` tally for each of **eighteen**
+The report carries a `{insert, identical, conflict, skipped}` tally for each of **nineteen**
 tables — `assets`, `groups`, `definitions`, `profiles`, `schedules`, `closures`, `links`, `tags`,
 `events`, `attachments`, `references`, `seasonActivations`, `conditions`, `healthSubjects`,
-`categories`, `serviceCases`, `caseEntries`, `loans`. A season activation, a condition and a case's timeline
+`categories`, `serviceCases`, `caseEntries`, `loans`, `transfers`. A season activation, a condition and a case's timeline
 entry are immutable facts: each is only ever inserted or found identical. A loan is never updated
 either: one returned, re-dated or relinked on one phone after the other received it conflicts, and an
-open loan whose asset already holds a different open loan here conflicts as `ASSET_ALREADY_LENT`.
+open loan whose asset already holds a different open loan here conflicts as `ASSET_ALREADY_LENT`. A
+transfer record (`OUT`, `IN` or `WITHDRAWN`) is an immutable fact too, and a merge never undoes a
+transfer: an incoming `IN` or `WITHDRAWN` that would close an `OUT` open on the phone, a row that an
+asset transferred out from the phone would own, and a row that would name one of its rows each conflict
+as `ASSET_TRANSFERRED_OUT`; an `OUT` that would leave its asset with two open `OUT`s — two phones marked
+it, in different packs — conflicts as `TRANSFER_DIVERGED`, resolved only by withdrawing one on the phone.
+A Transfer Pack is not a data archive and the phone refuses it here; the `data.zip` inside one merges as
+an ordinary archive — no `IN` recorded, nothing replaced — so only the phone's own pack import brings an
+asset back.
 
 The tool asks for the plan and applies it only when the plan has no conflicts. Pass
 `plan_only=True` to stop after the plan. Either way the result has `applicable` and, when it is
@@ -318,6 +334,8 @@ no tool that **amends or deletes a condition or an activation**, **deletes a hea
 **writes a health value**: facts are appended and never rewritten, a subject leaves only by
 archiving, and health is computed at read time. Since #79 there is no tool that **deletes a service
 case** or **amends or deletes a timeline entry**, and none but `add_case_entry` moves a case's status.
+Since #77 there is no tool that **makes, imports or marks a Transfer Pack**, **withdraws a transfer
+record** or lists the records: each is the phone's alone.
 
 ## Tests
 
