@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
+import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.schedule.SeasonPhase
 import com.loosecannon.servicetag.core.usecase.ReplaceAsset
 import com.loosecannon.servicetag.core.usecase.readSnapshot
@@ -91,6 +92,16 @@ class ReplaceAssetViewModelTest {
         advanceUntilIdle()
         return vm
     }
+
+    /** `FakeGraph`'s own wiring of [ReplaceAsset], with one port swapped for a case that needs to count or fail. */
+    private fun replaceOver(
+        uow: UnitOfWork = graph.uow,
+        successions: AssetSuccessionRepository = graph.assetSuccessions,
+    ) = ReplaceAsset(
+        graph.assets, graph.schedules, graph.groups, graph.tags, graph.definitions, graph.profiles, graph.loans,
+        graph.transferRecords, successions, uow, graph.ids, graph.clock, graph.todayPort,
+        graph.retireAsset, graph.saveAssetSettings, graph.saveSchedule, graph.saveGroup, graph.bindTag,
+    )
 
     private suspend fun snapshot() = graph.uow.read { readSnapshot(graph.backupRepositories) }
 
@@ -304,7 +315,14 @@ class ReplaceAssetViewModelTest {
 
     @Test fun aDoubleTapReplacesOnce() = runTest(scheduler) {
         pump()
-        val vm = open()
+        var writes = 0
+        val counted = object : UnitOfWork by graph.uow {
+            override suspend fun <T> write(block: suspend () -> T): T {
+                writes += 1
+                return graph.uow.write(block)
+            }
+        }
+        val vm = open(replace = replaceOver(uow = counted))
         vm.onName("Sample Pool Pump II")
         advanceUntilIdle()
         vm.review()
@@ -314,6 +332,7 @@ class ReplaceAssetViewModelTest {
         vm.confirm()
         advanceUntilIdle()
 
+        assertEquals("one write opened", 1, writes)
         assertEquals(1, snapshot().assetSuccessions.size)
         assertEquals("one sweep", 1, sweeps.size)
         assertNull("no refusal from a second run", vm.state.value.error)
@@ -398,12 +417,7 @@ class ReplaceAssetViewModelTest {
                 throw IllegalStateException("rigged")
             }
         }
-        val replace = ReplaceAsset(
-            graph.assets, graph.schedules, graph.groups, graph.tags, graph.definitions, graph.profiles, graph.loans,
-            graph.transferRecords, rigged, graph.uow, graph.ids, graph.clock, graph.todayPort,
-            graph.retireAsset, graph.saveAssetSettings, graph.saveSchedule, graph.saveGroup, graph.bindTag,
-        )
-        val vm = open(replace = replace)
+        val vm = open(replace = replaceOver(successions = rigged))
         vm.review()
         advanceUntilIdle()
 
