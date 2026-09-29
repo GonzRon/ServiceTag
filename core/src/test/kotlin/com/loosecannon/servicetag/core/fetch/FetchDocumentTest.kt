@@ -23,6 +23,7 @@ import com.loosecannon.servicetag.core.testing.FakeHostResolver
 import com.loosecannon.servicetag.core.testing.FakeStaging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -456,6 +457,20 @@ class FetchDocumentTest {
         assertTrue(t.served.single().closed)
         assertTrue(staging.files.single().discarded)
         assertTrue(elapsed < 2_000, "took $elapsed ms")
+    }
+
+    @Test
+    fun aCancelLandingAfterTheBodyIsDoneStillDiscards() = runTest {
+        // review m1: the cancel lands once the file is kept (the response closes after download) but before run returns
+        lateinit var job: Job
+        val staging = FakeStaging()
+        val t = transport { route(doc) { Served(200, body = FakeBody(pdf), onClose = { job.cancel() }) } }
+        var result: Result<FetchOutcome>? = null
+        job = launch { result = runCatching { fetcher(t, staging = staging).run(doc) } }
+        job.join()
+        assertIs<CancellationException>(result?.exceptionOrNull(), "a cancel is never a problem: $result")
+        assertTrue(t.served.single().closed)
+        assertTrue(staging.files.single().discarded, "the dropped Fetched's staging file is discarded")
     }
 
     @OptIn(ExperimentalCoroutinesApi::class) // testScheduler.currentTime

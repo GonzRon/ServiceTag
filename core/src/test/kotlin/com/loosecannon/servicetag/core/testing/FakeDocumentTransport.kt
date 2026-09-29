@@ -19,13 +19,17 @@ class FakeDocumentTransport : DocumentTransport {
     val served = mutableListOf<Served>()
     private val routes = mutableMapOf<String, suspend () -> Served>()
 
-    /** One answer and its body; [closes] counts `close()` calls on the response. */
+    /**
+     * One answer and its body; [closes] counts `close()` calls on the response. [onClose] runs on every
+     * close, so a test can land a cancel at that exact point.
+     */
     class Served(
         val status: Int,
         val location: String? = null,
         val contentType: String? = null,
         val contentLength: Long? = null,
         val body: FakeBody = FakeBody(ByteArray(0)),
+        private val onClose: () -> Unit = {},
     ) {
         @Volatile var closes = 0
         val closed get() = closes > 0
@@ -33,6 +37,7 @@ class FakeDocumentTransport : DocumentTransport {
         fun response() = TransportResponse(status, location, contentType, contentLength, body) {
             closes++
             body.abort()
+            onClose()
         }
     }
 

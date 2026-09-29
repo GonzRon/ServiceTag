@@ -11,7 +11,8 @@ import java.io.OutputStream
  * cookie, a credential or an `Authorization` header; it sends exactly three request properties, the
  * last of them the fixed [USER_AGENT] (R85-13). It connects within [CONNECT_TIMEOUT_MILLIS] and gives up
  * on a read idle for [IDLE_TIMEOUT_MILLIS] (R85-7), both surfacing as `TransportFailure(TIMED_OUT)`.
- * Every failure is thrown as a [TransportFailure], already classified. Cancelling [get] disconnects.
+ * Every failure is thrown as a [TransportFailure], already classified. Cancelling [get] disconnects, and
+ * a response that arrives after the cancel is closed by the transport and never returned (review m3).
  */
 interface DocumentTransport {
     /** One GET of [url]. Never follows a redirect, never sends a cookie or credential. Throws [TransportFailure]. */
@@ -32,8 +33,9 @@ interface DocumentTransport {
 /**
  * One answer. [body] is read only for a 200 or 203, and only after the declared type and length have
  * been judged; its read failures surface as `TransportFailure(INTERRUPTED | TIMED_OUT)`. [close] closes
- * the connection: it is idempotent and unblocks a read pending on another thread, which is how a
- * cancel or the overall deadline reaches a stalled body.
+ * the connection: it is idempotent, never throws, and unblocks a read pending on another thread, which is
+ * how a cancel or the overall deadline reaches a stalled body. It runs in `finally` blocks and cancel
+ * paths, where a throw would replace the cancellation.
  */
 class TransportResponse(
     val status: Int,
@@ -54,7 +56,7 @@ interface StagingArea {
     fun create(): StagingFile
 }
 
-/** One staged download. [discard] is idempotent. */
+/** One staged download. [discard] is idempotent and never throws: it runs on cleanup and cancel paths. */
 interface StagingFile {
     fun output(): OutputStream
     fun source(): ByteSource

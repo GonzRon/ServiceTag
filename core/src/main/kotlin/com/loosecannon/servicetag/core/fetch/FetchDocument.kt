@@ -24,7 +24,8 @@ import kotlin.coroutines.cancellation.CancellationException
  * the way in; the staged file is never read back.
  *
  * **Cleanup.** Every outcome but [FetchOutcome.Fetched], every exception and every cancellation discards
- * the staging file, and every response is closed. **Cancellation reaches a blocked read:** the body is
+ * the staging file, and every response is closed. A kept file is either handed to the caller or
+ * discarded, even when a cancel or the deadline lands after the body is done but before [run] returns. **Cancellation reaches a blocked read:** the body is
  * read in a child on [io], and when this call is cancelled (or the deadline passes) the response is
  * closed at once, which unblocks the read; a failure raised after that rethrows the cancellation. A
  * cancel is never a problem.
@@ -40,12 +41,30 @@ class FetchDocument(
     private val limits: FetchLimits = FetchLimits(),
     private val io: CoroutineContext = Dispatchers.IO,
 ) {
-    /** The block never answers null, so only this deadline reads as [FetchProblem.TimedOut]; an outer cancel propagates. */
-    suspend fun run(url: String, onProgress: (done: Long, total: Long?) -> Unit = { _, _ -> }): FetchOutcome =
-        kotlinx.coroutines.withTimeoutOrNull(limits.overallMillis) { follow(url, onProgress) }
-            ?: FetchOutcome.Refused(FetchProblem.TimedOut)
+    /**
+     * The block never answers null, so only this deadline reads as [FetchProblem.TimedOut]; an outer cancel
+     * propagates. The deadline and a cancel are asynchronous: either can land after `download` kept the file
+     * but before this returns, which drops the finished outcome (review m1). The hand-over remembers the kept
+     * file, and the `finally` discards it unless it is the answer.
+     */
+    suspend fun run(url: String, onProgress: (done: Long, total: Long?) -> Unit = { _, _ -> }): FetchOutcome {
+        val handOver = HandOver()
+        var answer: FetchOutcome? = null
+        try {
+            answer = kotlinx.coroutines.withTimeoutOrNull(limits.overallMillis) { follow(url, onProgress, handOver) }
+                ?: FetchOutcome.Refused(FetchProblem.TimedOut)
+            return answer
+        } finally {
+            handOver.kept?.let { if (it !== answer) it.staged.discard() }
+        }
+    }
 
-    private suspend fun follow(first: String, onProgress: (Long, Long?) -> Unit): FetchOutcome {
+    /** The one [FetchOutcome.Fetched] this run kept, once `download` has decided to keep it. */
+    private class HandOver {
+        var kept: FetchOutcome.Fetched? = null
+    }
+
+    private suspend fun follow(first: String, onProgress: (Long, Long?) -> Unit, handOver: HandOver): FetchOutcome {
         var url = first
         var redirects = 0
         while (true) {
@@ -64,7 +83,7 @@ class FetchDocument(
                         redirects++
                     }
                     401, 403, 407 -> return refused(FetchProblem.NeedsSignIn)
-                    200, 203 -> return download(url, response, onProgress)
+                    200, 203 -> return download(url, response, onProgress, handOver)
                     else -> return refused(FetchProblem.ServerError(response.status))
                 }
             } finally {
@@ -74,7 +93,12 @@ class FetchDocument(
     }
 
     /** Steps 5–9: the headers, then one streamed pass, then the sniff. */
-    private suspend fun download(url: String, response: TransportResponse, onProgress: (Long, Long?) -> Unit): FetchOutcome {
+    private suspend fun download(
+        url: String,
+        response: TransportResponse,
+        onProgress: (Long, Long?) -> Unit,
+        handOver: HandOver,
+    ): FetchOutcome {
         val declared = response.contentType?.let(MimeTypes::normalise)
         if (declared != null && declared in NOT_DOCUMENTS) return refused(FetchProblem.NotADocument)
         if ((response.contentLength ?: 0L) > limits.maxBytes) return refused(FetchProblem.TooLarge)
@@ -98,6 +122,7 @@ class FetchDocument(
                 is Streamed.Failed -> refused(streamed.problem)
                 is Streamed.Done -> judged(url, staged, streamed)
             }
+            if (outcome is FetchOutcome.Fetched) handOver.kept = outcome
             keep = outcome is FetchOutcome.Fetched
             return outcome
         } finally {
