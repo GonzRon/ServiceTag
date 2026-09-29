@@ -102,7 +102,7 @@ class ReferenceMigrationTest {
                     assertEquals(
                         "UNTOUCHED must name every table the migration found",
                         m.tableNames() - REFERENCE - ROOM_INTERNAL - V8_TABLES - V9_TABLES - V11_TABLES - V12_TABLES - V13_TABLES -
-                            V14_TABLES,
+                            V14_TABLES - V15_TABLES,
                         UNTOUCHED,
                     )
                     assertEquals("asset_reference columns", f.columnsOf(REFERENCE), m.columnsOf(REFERENCE))
