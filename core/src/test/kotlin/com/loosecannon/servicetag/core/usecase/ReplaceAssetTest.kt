@@ -3,7 +3,15 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentId
+import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
@@ -42,7 +50,11 @@ import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
+import com.loosecannon.servicetag.core.testing.activationOf
+import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
+import com.loosecannon.servicetag.core.testing.conditionOf
+import com.loosecannon.servicetag.core.testing.subjectOf
 import com.loosecannon.servicetag.core.testing.closureOf
 import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.dayMillis
@@ -223,6 +235,9 @@ class ReplaceAssetTest {
         assertFalse(bare.setupOffered, "an archived definition alone is nothing to carry")
         assertFalse(bare.seasonOffered, "YEAR_ROUND with no break")
         assertFalse(bare.notesOffered, "no description, no notes")
+        // MN-1: a live schedule naming an archived meter needs the item, so it is offered — never a blocked tick.
+        h.put(scheduleOf("s-hours", assetId = PRED, title = "Burner hours", meterDefinitionId = "d-old", meterInterval = 500.0))
+        assertTrue(h.replace.offer(AssetId(PRED)).setupOffered, "a schedule naming an archived definition offers set-up")
 
         h.put(h.profileRow("p-flush", fields = emptyList()))
         h.put(h.assetRow(PRED, "Example Water Heater").copy(blackoutStartMmdd = "07-01", blackoutEndMmdd = "07-14", notes = "Anode checked every spring"))
@@ -423,6 +438,9 @@ class ReplaceAssetTest {
     @Test fun thePredecessorChangesOnlyItsRetirement() = runTest {
         h.richEstate()
         val before = rowsOf(h.snapshot())
+        for (table in listOf("seasonActivations", "attachments", "assetReferences", "assetConditions", "healthSubjects", "serviceCaseEntries")) {
+            assertTrue(before.getValue(table).isNotEmpty(), "the fixture holds a $table row (MN-3)")
+        }
 
         val result = h.replaceWith(h.fullDraft())
         val after = rowsOf(h.snapshot())
@@ -512,6 +530,19 @@ class ReplaceAssetTest {
             assertEquals(0, x.uow.commits, what)
             assertEquals(before, x.snapshot(), what)
         }
+    }
+
+    /** MN-2: only the draft the owner reviewed is written — a changed tick or phase is stale, before any write. */
+    @Test fun aDraftOtherThanTheReviewedOneIsStale() = runTest {
+        h.richEstate()
+        val plan = h.replace.plan(h.fullDraft())
+        val before = h.snapshot()
+
+        for (other in listOf(h.fullDraft().copy(carryNotes = false), h.fullDraft().copy(manualPhase = SeasonPhase.IN_SEASON))) {
+            assertFailsWith<ReplaceStale>("$other") { h.replace.run(other, plan) }
+        }
+        assertEquals(0, h.uow.commits)
+        assertEquals(before, h.snapshot())
     }
 
     @Test fun theRowCarriesTheRetirementDate() = runTest {
@@ -1029,7 +1060,8 @@ internal class ReplaceHarness(today: String = REPLACE_TODAY) {
     /**
      * An old asset with every kind of row around it: a parent and a child, a chain behind it, set-up with a derived
      * definition over an archived source, three schedules (a form, a meter and a pre-season one) with history, an
-     * archived schedule, two groups, tags of every status, a loan, a case, a completion and a closure.
+     * archived schedule, two groups, tags of every status, a loan, a case and its entry, a completion and a closure,
+     * a season activation, a document, a reference, a condition and a health subject.
      */
     suspend fun richEstate() {
         put(assetRow(HOUSE, "Example Plant Room"))
@@ -1087,5 +1119,22 @@ internal class ReplaceHarness(today: String = REPLACE_TODAY) {
 
         raw.loans.rows["loan-1"] = loanOf("loan-1", assetId = PRED)
         raw.serviceCases.rows["case-1"] = caseOf("case-1", assetId = PRED)
+
+        // MN-3: one row of each other kind R86-C1 keeps as history, so the invariant sees every one.
+        raw.activations.rows["act-1"] = activationOf("act-1", assetId = PRED, occurredOn = "2026-04-01")
+        raw.attachments.rows["doc-1"] = Attachment(
+            id = AttachmentId("doc-1"), owner = AttachmentOwner.OfAsset(AssetId(PRED)), kind = AttachmentKind.MANUAL,
+            displayName = "Example heater manual", mimeType = "application/pdf", sizeBytes = 3L, sha256 = "ab".repeat(32),
+            storageLocator = "docs/doc-1.pdf", capturedOn = null, createdAt = 1_000L, updatedAt = 1_000L,
+            role = DocumentRole.USER_MANUAL,
+        )
+        raw.references.rows["ref-1"] = AssetReference(
+            id = ReferenceId("ref-1"), assetId = AssetId(PRED), kind = ReferenceKind.WEB_URL,
+            uri = "https://example.com/heater", displayName = "Example heater page", description = "",
+            scheme = "https", createdAt = 1_000L, updatedAt = 1_000L,
+        )
+        raw.conditions.rows["cond-1"] = conditionOf("cond-1", assetId = PRED)
+        raw.subjects.rows["hs-1"] = subjectOf("hs-1", assetId = PRED, scheduleId = "s-flush")
+        raw.caseEntries.rows["entry-1"] = caseEntryOf("entry-1", caseId = "case-1")
     }
 }

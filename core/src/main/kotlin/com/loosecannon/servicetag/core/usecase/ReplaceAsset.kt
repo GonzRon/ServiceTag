@@ -147,6 +147,8 @@ data class ReplacePlan(
     val sources: ReplaceSources,
     /** The typed retirement date, or the stored one once retired (R86-3); never after today (R86-13a). */
     val replacedOn: String,
+    /** The draft this plan reviewed; the write refuses any other (C10). */
+    val draft: ReplaceDraft,
 )
 
 /** #86 (C10) — the new asset as stored, and the succession row that names both. */
@@ -165,7 +167,8 @@ class ReplaceStale(val assetId: AssetId) :
  * rows with new ids and no history, moves only the tags the owner chose, and appends one succession row.
  *
  * - [offer] and [plan] only read, each through its in-transaction body; nothing is written before [run] (R86-4).
- * - [run] opens the one write and re-reads the offer and the plan through the same bodies: a held old asset is
+ * - [run] refuses a draft other than the one reviewed ([ReplaceStale]) before anything is opened. Then it opens the
+ *   one write and re-reads the offer and the plan through the same bodies: a held old asset is
  *   [AssetTransferredOut]; one with a successor, a problem, or any difference from the reviewed sources is
  *   [ReplaceStale]. Then, in order: the retirement (R86-3), the new asset, set-up, schedules, groups, tags, and the
  *   row.
@@ -206,16 +209,19 @@ class ReplaceAsset(
         planInTransaction(draft, offer)
     }
 
-    /** C10: the one write, after the final confirm of [reviewed]. */
-    suspend fun run(draft: ReplaceDraft, reviewed: ReplacePlan): ReplaceResult = uow.write {
-        val offer = offerInTransaction(draft.predecessorId) ?: throw ReplaceStale(draft.predecessorId)
-        if (offer.held) throw AssetTransferredOut(draft.predecessorId)
-        if (offer.replacedBy != null) throw ReplaceStale(draft.predecessorId)
-        val fresh = planInTransaction(draft, offer)
-        if (fresh.problems.isNotEmpty() || fresh.sources != reviewed.sources || fresh.replacedOn != reviewed.replacedOn) {
-            throw ReplaceStale(draft.predecessorId)
+    /** C10: the one write, after the final confirm of [reviewed]. Only the draft [reviewed] was planned for is written. */
+    suspend fun run(draft: ReplaceDraft, reviewed: ReplacePlan): ReplaceResult {
+        if (draft != reviewed.draft) throw ReplaceStale(draft.predecessorId)
+        return uow.write {
+            val offer = offerInTransaction(draft.predecessorId) ?: throw ReplaceStale(draft.predecessorId)
+            if (offer.held) throw AssetTransferredOut(draft.predecessorId)
+            if (offer.replacedBy != null) throw ReplaceStale(draft.predecessorId)
+            val fresh = planInTransaction(draft, offer)
+            if (fresh.problems.isNotEmpty() || fresh.sources != reviewed.sources || fresh.replacedOn != reviewed.replacedOn) {
+                throw ReplaceStale(draft.predecessorId)
+            }
+            replaceInTransaction(draft, fresh)
         }
-        replaceInTransaction(draft, fresh)
     }
 
     /** C8's body, inside the caller's transaction; null when the asset does not exist. */
@@ -227,18 +233,22 @@ class ReplaceAsset(
         val parentChoices = all
             .filterNot { it.id in blocked || it.id in held }
             .sortedWith(compareBy({ it.name.lowercase() }, { it.id.value }))
+        val offeredSchedules = schedules.forAsset(predecessorId)
+            .filter { it.status != ScheduleStatus.ARCHIVED }
+            .sortedWith(compareBy({ it.title }, { it.id.value }))
         return ReplaceOffer(
             predecessor = predecessor,
             held = predecessorId in held,
             replacedBy = successions.replacedBy(predecessorId),
-            schedules = schedules.forAsset(predecessorId)
-                .filter { it.status != ScheduleStatus.ARCHIVED }
-                .sortedWith(compareBy({ it.title }, { it.id.value })),
+            schedules = offeredSchedules,
             groups = groups.forAsset(predecessorId)
                 .filter { group -> group.archivedAt == null && group.members.none { it.assetId in held } }
                 .sortedWith(compareBy({ it.name }, { it.id.value })),
+            // Also whenever an offered schedule names a meter or a profile (P86-13's trigger), even an archived one,
+            // so a schedule that needs the item is never blocked by an item the form does not draw.
             setupOffered = definitions.forAsset(predecessorId).any { it.archivedAt == null } ||
-                profiles.forAsset(predecessorId).any { it.archivedAt == null },
+                profiles.forAsset(predecessorId).any { it.archivedAt == null } ||
+                offeredSchedules.any { it.meterDefinitionId != null || it.profileId != null },
             seasonOffered = predecessor.seasonMode != SeasonMode.YEAR_ROUND ||
                 predecessor.blackoutStartMmdd != null || predecessor.blackoutEndMmdd != null,
             notesOffered = predecessor.description.isNotBlank() || predecessor.notes.isNotBlank(),
@@ -296,7 +306,7 @@ class ReplaceAsset(
         if (isIsoDate(replacedOn) && LocalDate.parse(replacedOn) > today.localDate()) {
             problems += ReplaceProblem.ReplacedOnAfterToday
         }
-        return ReplacePlan(problems, sourcesOf(draft, predecessor), replacedOn)
+        return ReplacePlan(problems, sourcesOf(draft, predecessor), replacedOn, draft)
     }
 
     /** The new asset's fields by the editor's rule, the parent judged against the offer's parent choices. */
