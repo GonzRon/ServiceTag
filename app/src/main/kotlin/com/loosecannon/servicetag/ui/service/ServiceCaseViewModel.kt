@@ -28,6 +28,7 @@ import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import com.loosecannon.servicetag.ui.asset.LINKED_RECORD_REMOVED
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.condition.displayDate
+import com.loosecannon.servicetag.ui.journal.CANNOT_SAVE
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.coroutines.cancellation.CancellationException
@@ -252,7 +253,7 @@ class ServiceCaseViewModel(
             val failed = refused == null || refused.any { entryMarkFor(it) == null }
             if (refused != null && failed) Log.w(TAG, "an update the sheet could not mark was refused: $refused")
             _sheet.update {
-                it?.copy(saving = false, problems = marks, failure = if (failed) "Could not save this entry." else null)
+                it?.copy(saving = false, problems = marks, failure = if (failed) CANNOT_SAVE else null)
             }
         }
     }
