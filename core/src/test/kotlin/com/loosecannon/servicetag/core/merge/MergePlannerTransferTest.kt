@@ -379,8 +379,8 @@ class MergePlannerTransferTest {
             plan.of(MergeTable.TRANSFERS).first(),
         )
         assertEquals(MergeTally(insert = 1, identical = 1, conflict = 1, skipped = 0), plan.report().transfers)
-        assertEquals(MergeTable.entries.last(), MergeTable.TRANSFERS)
-        assertEquals(19, MergeTable.entries.size, "nineteen tables")
+        assertEquals(MergeTable.entries[18], MergeTable.TRANSFERS)
+        assertEquals(20, MergeTable.entries.size, "twenty tables")
     }
 
     /** The fixtures' estate, one install, as a sanity check that nothing here moves a merge without records. */

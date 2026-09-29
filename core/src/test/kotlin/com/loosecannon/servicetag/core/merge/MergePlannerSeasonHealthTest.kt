@@ -131,7 +131,7 @@ class MergePlannerSeasonHealthTest {
      * each owner is an INSERT of this same plan by the time its row is decided.
      */
     @Test
-    fun theNineteenTablesAreInTheirPinnedOrder() {
+    fun theTwentyTablesAreInTheirPinnedOrder() {
         assertEquals(
             listOf(
                 MergeTable.ASSETS, MergeTable.GROUPS, MergeTable.DEFINITIONS, MergeTable.PROFILES,
@@ -142,6 +142,7 @@ class MergePlannerSeasonHealthTest {
                 MergeTable.SERVICE_CASES, MergeTable.CASE_ENTRIES,
                 MergeTable.LOANS,
                 MergeTable.TRANSFERS,
+                MergeTable.SUCCESSIONS,
             ),
             MergeTable.entries.toList(),
         )
