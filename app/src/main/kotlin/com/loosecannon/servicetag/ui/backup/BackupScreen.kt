@@ -30,7 +30,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -52,6 +54,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -81,6 +84,10 @@ fun BackupScreen(
     onBack: () -> Unit,
     /** #77 (C16): opens the import screen over the picked pack's copy in `cache/transfer-in/`, by its bare name. */
     onImportPack: (String) -> Unit = {},
+    /** #84 C3 (D-3): P77-50 from a completed Transfer Pack import, carried back by the root; shown once. */
+    importedLine: String? = null,
+    /** Clears [importedLine] in the root as it starts showing, so a recomposition or a resume never shows it twice. */
+    onImportedLineShown: () -> Unit = {},
 ) {
     val model: BackupViewModel = viewModel(key = "backup") { BackupViewModel(graph) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -95,6 +102,18 @@ fun BackupScreen(
     var emptyStore by remember { mutableStateOf(false) }
 
     LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
+
+    // #84 C3 (D-3, M-1): the import's P77-50, cleared as it starts showing. The effect is keyed on the snackbar host
+    // and never on the line: clearing the line recomposes this screen with null, and an effect keyed on it would
+    // restart, cancel `showSnackbar` mid-show and take the snackbar down with it.
+    val pendingLine by rememberUpdatedState(importedLine)
+    val lineShown by rememberUpdatedState(onImportedLineShown)
+    LaunchedEffect(snackbars) {
+        snapshotFlow { pendingLine }.filterNotNull().collect { line ->
+            lineShown()
+            snackbars.showSnackbar(line)
+        }
+    }
 
     // A folder for this export only: no persistable grant is taken, so nothing accumulates and
     // the destination is not remembered (spec §11.2 — 3R is where a remembered one arrives).

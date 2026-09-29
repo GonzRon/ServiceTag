@@ -77,12 +77,15 @@ fun TransferFlowScreen(graph: AppGraph, preselect: String?, onBack: () -> Unit, 
     LaunchedEffect(pack) {
         pack.events.collect { event ->
             when (event) {
-                TransferPackEvent.Marked -> onMarked()
                 TransferPackEvent.Leave -> onBack()
                 is TransferPackEvent.Say -> snackbars.showSnackbar(event.line)
             }
         }
     }
+    // #84 C4 (77-2): a finished mark ends the flow from the state, collected or not. `switchTopLevel` clears and adds,
+    // so a second call lands on the same Assets list.
+    val marked = made.phase == PackPhase.MARKED
+    LaunchedEffect(marked) { if (marked) onMarked() }
     val readyShown = made.phase == PackPhase.READY || made.phase == PackPhase.MARKING || made.phase == PackPhase.MARKED
     val back: () -> Unit = {
         if (!readyShown && chosen.review != null && made.phase != PackPhase.CREATING) {
@@ -119,7 +122,8 @@ fun TransferFlowScreen(graph: AppGraph, preselect: String?, onBack: () -> Unit, 
                         try {
                             context.startActivity(TransferShare.chooser(context, file))
                         } catch (e: ActivityNotFoundException) {
-                            // No app can receive a file here; Save a copy still can.
+                            // R84-2: a recorded platform edge, deliberately silent. The system chooser owns the
+                            // no-receiver case and there is no ServiceTag string for it; Save a copy still works.
                         }
                     }
                 },

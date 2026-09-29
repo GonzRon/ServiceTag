@@ -19,15 +19,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -43,11 +40,12 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
 /**
  * #77 (C16, R77-2) — the Backup screen's door: [TransferImportContent] under the P77-38 title, over the copy the
  * Backup screen made in `cache/transfer-in/` ([copy] is its bare file name). Back cancels, which writes nothing and
- * deletes the copy; P77-50 is a snackbar.
+ * deletes the copy. #84 C3 (D-3): a completed import returns to the Backup screen through [onImported], which carries
+ * P77-50 there to be shown once as that screen's snackbar; this screen shows it nowhere.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TransferImportScreen(graph: AppGraph, copy: String, onBack: () -> Unit) {
+fun TransferImportScreen(graph: AppGraph, copy: String, onBack: () -> Unit, onImported: (String) -> Unit = {}) {
     val model: TransferImportViewModel = viewModel(key = "transfer-import-$copy") {
         TransferImportViewModel(
             graph.importTransferPack, graph.transferPackInbox, graph.transferPackInbox.find(copy),
@@ -55,12 +53,12 @@ fun TransferImportScreen(graph: AppGraph, copy: String, onBack: () -> Unit) {
         )
     }
     val state by model.state.collectAsStateWithLifecycle()
-    val snackbars = remember { SnackbarHostState() }
     // MJ-1: back does nothing while the import runs — leaving would cancel it mid-write. The precedent is the asset
     // editor's save (`AssetEditScreen`).
     BackHandler(enabled = state.importing) { }
+    // Cancel and Back leave here; DONE leaves only through [onImported], and `handOff()` answers once, so one pop.
     LaunchedEffect(state.finished) { if (state.finished) onBack() }
-    LaunchedEffect(state.done) { state.done?.let { snackbars.showSnackbar(it) } }
+    LaunchedEffect(state.phase) { if (state.phase == TransferImportPhase.DONE) model.handOff()?.let(onImported) }
 
     Scaffold(
         topBar = {
@@ -73,7 +71,6 @@ fun TransferImportScreen(graph: AppGraph, copy: String, onBack: () -> Unit) {
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbars) },
     ) { padding ->
         TransferImportContent(
             state = state,

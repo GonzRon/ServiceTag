@@ -23,9 +23,9 @@ import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -157,9 +157,12 @@ class GroupDetailViewModel(
 
     private val _busy = MutableStateFlow(false)
 
-    /** #77 (C19): P77-35, once, when a write is refused because the group names a transferred-out asset. */
-    private val _messages = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
-    val messages: SharedFlow<String> = _messages.asSharedFlow()
+    /**
+     * #77 (C19): P77-35, once, when a write is refused because the group names a transferred-out asset. #84 C5: held
+     * until a collector reads it, and read once.
+     */
+    private val _messages = Channel<String>(Channel.BUFFERED)
+    val messages: Flow<String> = _messages.receiveAsFlow()
 
     /** Whether a completion is in flight; the round's actions are disabled while it is. */
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
@@ -189,7 +192,7 @@ class GroupDetailViewModel(
             try {
                 archiveGroup.run(id, archived)
             } catch (e: AssetTransferredOut) {
-                _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+                _messages.trySend(TransferImportStrings.ASSET_TRANSFERRED_OUT)
             }
         }
     }
@@ -222,7 +225,7 @@ class GroupDetailViewModel(
 
     /** mn-1: a completion the guard refused (the group came to name a held asset) says P77-35. */
     private fun sayIfHeld(outcome: CompletionOutcome) {
-        if ((outcome as? CompletionOutcome.Refused)?.cause is AssetTransferredOut) _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+        if ((outcome as? CompletionOutcome.Refused)?.cause is AssetTransferredOut) _messages.trySend(TransferImportStrings.ASSET_TRANSFERRED_OUT)
     }
 
     /**
@@ -239,7 +242,7 @@ class GroupDetailViewModel(
                 block()
             } catch (e: AssetTransferredOut) {
                 // #77: refused by the guard; nothing written, the state redraws read only, and P77-35 says why.
-                _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+                _messages.trySend(TransferImportStrings.ASSET_TRANSFERRED_OUT)
             } finally {
                 _busy.value = false
             }

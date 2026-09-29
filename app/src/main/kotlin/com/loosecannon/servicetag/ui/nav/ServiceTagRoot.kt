@@ -9,6 +9,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -75,6 +76,10 @@ fun ServiceTagRoot(
     LaunchedEffect(Unit) { snackbars.collect { snackbarHost.showSnackbar(it) } }
 
     val current = backStack.lastOrNull()
+
+    // #84 C3 (D-3): P77-50 from the Backup door's import, carried back to the Backup screen and cleared as it shows.
+    // Saveable, so a rotation between the import's end and the snackbar keeps it.
+    var importedLine by rememberSaveable { mutableStateOf<String?>(null) }
 
     // #37 — one reader-mode session for the activity, held for as long as a tag-reading screen is
     // on top. The inspect screen used to end its own session the moment it pushed a result, with
@@ -431,10 +436,21 @@ fun ServiceTagRoot(
                         graph = graph,
                         onBack = { backStack.removeLastOrNull() },
                         onImportPack = { copy -> backStack.add(Route.TransferImport(copy)) },
+                        importedLine = importedLine,
+                        onImportedLineShown = { importedLine = null },
                     )
                 }
                 entry<Route.TransferImport> { key ->
-                    TransferImportScreen(graph = graph, copy = key.copy, onBack = { backStack.removeLastOrNull() })
+                    TransferImportScreen(
+                        graph = graph,
+                        copy = key.copy,
+                        onBack = { backStack.removeLastOrNull() },
+                        // The model hands the line over once, so this stores it and pops exactly once.
+                        onImported = { line ->
+                            importedLine = line
+                            backStack.removeLastOrNull()
+                        },
+                    )
                 }
                 entry<Route.Settings> {
                     SettingsScreen(
