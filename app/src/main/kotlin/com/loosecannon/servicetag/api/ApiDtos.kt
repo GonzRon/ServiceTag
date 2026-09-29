@@ -50,7 +50,8 @@ internal data class StatusResponse(
     /**
      * One key per table — assets, **groups**, definitions, profiles, **schedules**, **closures**,
      * links, tags, events, attachments, **references**, **seasonActivations**, **assetConditions**,
-     * **healthSubjects**, **assetCategories**, **serviceCases**, **serviceCaseEntries** — listed here in
+     * **healthSubjects**, **assetCategories**, **serviceCases**, **serviceCaseEntries**, **assetLoans**,
+     * **transferRecords** — listed here in
      * `MergeTable`'s order for reading, which is **not** the JSON's key order and is not contract; a
      * client reads by key. (The sentence claimed
      * that order before 1.3 and the list was not in it: `tags` and `links` sat ahead of `definitions`
@@ -60,8 +61,9 @@ internal data class StatusResponse(
      * 1.3's `asset_reference`, and its key is `assetReferences` — the name the archive's own table
      * carries; three arrived with 1.4, under the archive's own list names; and **assetCategories**
      * with #74 (format 9) — the owner's own categories, never the compiled built-ins; and
-     * **serviceCases** and **serviceCaseEntries** with #79b (format 12), under the archive's own list
-     * names. `schedule_state` and `schedule_local_delivery` are **not** here, because derived and
+     * **serviceCases** and **serviceCaseEntries** with #79b (format 12), **assetLoans** with #72 (format
+     * 13) and **transferRecords** with #77 (format 14) — every record, OUT, IN and WITHDRAWN, never a count
+     * of the assets held — each under the archive's own list names. `schedule_state` and `schedule_local_delivery` are **not** here, because derived and
      * device-local rows are not tables a client counts, and no health value is here because none is
      * stored anywhere.
      */

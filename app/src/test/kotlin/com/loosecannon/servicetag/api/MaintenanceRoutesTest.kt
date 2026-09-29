@@ -22,6 +22,8 @@ import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TerminationKind
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.usecase.AssetMembershipReferenced
 import com.loosecannon.servicetag.core.usecase.CreateAsset
@@ -85,7 +87,7 @@ class MaintenanceRoutesTest {
     private fun router(): ApiRouter = ApiRouter(
         ApiHandlers(
             graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles,
-            graph.events, graph.attachments, graph.categories,
+            graph.events, graph.attachments, graph.categories, graph.transferRecords,
             graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
             graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
@@ -1474,7 +1476,8 @@ class MaintenanceRoutesTest {
      * moves the schema to 12 (the service case tables) and then the format to 12 (the archive that
      * carries them); #72 moves the schema to 13 (the loan table) and then the format to 13 (the archive
      * that carries the loans); #77 moves both to 14 (the transfer record table and the archive that carries
-     * the records). Only the two numbers move with the schema here; the status counts are B5's (mn-14).
+     * the records), and its B5 adds the `transferRecords` count (mn-14): every record, OUT, IN and WITHDRAWN,
+     * under the archive's own list name — none on a fresh phone, and each appended one counted.
      */
     @Test fun statusReports14And14AndTheNewCounts() {
         val tub = createAsset("Hot tub")
@@ -1503,6 +1506,23 @@ class MaintenanceRoutesTest {
         assertEquals(1, status.counts["assetCategories"])
         // #72: the loans' count, under the archive's own list name — none lent here.
         assertEquals(0, status.counts["assetLoans"])
+        // #77: the transfer records' count, under the archive's own list name — none made here yet.
+        assertEquals(0, status.counts["transferRecords"])
+
+        // An OUT and the WITHDRAWN of it: two records, and the asset live again — the count is of records,
+        // never of held assets.
+        runBlocking {
+            for ((id, kind) in listOf("rec-out" to TransferKind.OUT, "rec-withdrawn" to TransferKind.WITHDRAWN)) {
+                graph.transferRecords.append(
+                    TransferRecord(
+                        id = id, assetId = AssetId(tub), kind = kind, packId = "0f1e2d3c-pack", lineage = emptyList(),
+                        at = 1_758_960_000_000L, packSha256 = "ab".repeat(32), nameSnapshot = "Hot tub", note = "",
+                    ),
+                )
+            }
+        }
+        val after = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
+        assertEquals(2, after.counts["transferRecords"])
     }
 
     /**

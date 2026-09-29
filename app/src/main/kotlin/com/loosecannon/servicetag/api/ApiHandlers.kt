@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.usecase.ArchiveAsset
 import com.loosecannon.servicetag.core.usecase.ArchiveDefinition
 import com.loosecannon.servicetag.core.usecase.ArchiveProfile
@@ -50,7 +51,9 @@ import com.loosecannon.servicetag.di.AppGraph
  * ten counts [status] gained, which it asks the first three of those collaborators, the fifth and the
  * sixth for — and #74's `assetCategories` count, which it reads itself
  * from [categories]. There is still no categories route (R74-8): a category is written only by an
- * asset save, and the API's asset create and update promote through core like the editor's.
+ * asset save, and the API's asset create and update promote through core like the editor's. #77's
+ * `transferRecords` count is read here too, from [transferRecords]: there is no transfer route at all
+ * (R77-17) — no pack, mark, import or withdrawal — so no collaborator exists to ask.
  *
  * The asset `PATCH` keeps 1.3's exact command (spec §9.3): its `MM-DD` pair is the one
  * compatibility input, and `UpdateAsset` refuses what the pair cannot represent — a different pair
@@ -58,7 +61,7 @@ import com.loosecannon.servicetag.di.AppGraph
  * schedule 409 `SEASON_MODE_STRANDS_POLICY` — which [mapDomainFailure] names. Condition is never in
  * it (#61 AC 9).
  *
- * **Twenty-six collaborators plus two values, named one by one, with a `constructor(graph)` beside
+ * **Twenty-seven collaborators plus two values, named one by one, with a `constructor(graph)` beside
  * them.** That is this app's pattern, stated at `AssetViewModels.kt:59`–`61`: *"Each takes the `AppGraph` members it
  * actually uses — the secondary constructor is what the Compose entry calls, the primary one is
  * what a test builds on a Room-backed fake graph."* It is the reason `ApiRouterTest` can drive the
@@ -91,6 +94,8 @@ internal class ApiHandlers(
     private val attachments: AttachmentRepository,
     /** #74 — read for the `assetCategories` status count only; nothing here writes a category. */
     private val categories: CategoryRepository,
+    /** #77 — read for the `transferRecords` status count only; nothing here writes a transfer record. */
+    private val transferRecords: TransferRecordRepository,
     private val createAsset: CreateAsset,
     private val updateAsset: UpdateAsset,
     private val retireAsset: RetireAsset,
@@ -144,7 +149,7 @@ internal class ApiHandlers(
 ) {
     constructor(graph: AppGraph) : this(
         graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles, graph.events,
-        graph.attachments, graph.categories,
+        graph.attachments, graph.categories, graph.transferRecords,
         graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
         graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
         graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
@@ -179,6 +184,9 @@ internal class ApiHandlers(
                 // Format 9's (#74), under the archive's own list name: the owner's rows, never the
                 // compiled built-ins.
                 "assetCategories" to categories.all().size,
+                // Format 14's (#77), under the archive's own list name: every record, OUT, IN and
+                // WITHDRAWN — a count of records, never of the assets held.
+                "transferRecords" to transferRecords.all().size,
             ) + maintenance.counts() + seasonHealth.counts() + serviceCases.counts() + loans.counts(),
         ),
     )
