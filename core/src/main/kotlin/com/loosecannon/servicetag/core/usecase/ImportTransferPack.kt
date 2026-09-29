@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.model.heldIds
 import com.loosecannon.servicetag.core.model.returnsHere
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.AttachmentStore
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.StoredBytes
@@ -239,37 +240,7 @@ class ImportTransferPack(
         if (entries.isNotEmpty() && store == null) return TransferImportResult.NoAttachmentFolder
         val written = mutableListOf<String>()
         return try {
-            if (store != null && entries.isNotEmpty()) {
-                val rows = ready.pack.backup.data.attachments.associateBy { it.id }
-                open().use { raw ->
-                    val outer = ZipInputStream(raw)
-                    while (true) {
-                        val entry = outer.nextEntry ?: throw IOException("the pack has no ${TransferPack.ARTIFACTS_ENTRY}")
-                        if (entry.name == TransferPack.ARTIFACTS_ENTRY) break
-                    }
-                    ArtifactsCodec.read(
-                        source = outer,
-                        onManifest = { manifest ->
-                            if (manifest.backupSetId != ready.manifest.packId) {
-                                throw IOException("${TransferPack.ARTIFACTS_ENTRY} belongs to another pack")
-                            }
-                        },
-                        onEntry = stage@{ entry, input ->
-                            val row = rows[entry.attachmentId] ?: return@stage
-                            val locator = row.storageLocator
-                            // Never overwrite: a locator that holds anything is the folder's, not this import's.
-                            if (store.exists(locator)) return@stage
-                            written += locator
-                            val stored = store.put(locator, ByteSource { input })
-                            if (stored.sha256 != entry.sha256 || stored.sizeBytes != entry.sizeBytes ||
-                                stored.sha256 != row.sha256 || stored.sizeBytes != row.sizeBytes
-                            ) {
-                                throw TransferStagingMismatch(locator)
-                            }
-                        },
-                    )
-                }
-            }
+            if (store != null && entries.isNotEmpty()) stage(ready.pack, store, open, written)
             val report = apply.run(ready.plan, ready.returning.mapTo(LinkedHashSet()) { it.id })
             TransferImportResult.Imported(ready.manifest, report)
         } catch (e: CancellationException) {
@@ -281,6 +252,48 @@ class ImportTransferPack(
         } catch (e: Exception) {
             storage.sweepBytes(written)
             TransferImportResult.Failed(e)
+        }
+    }
+
+    /**
+     * C14 (3): each document of [pack] whose locator is absent from [store] is written from `artifacts.zip` and
+     * verified against its manifest line and its row; a locator that holds anything is left alone. Every locator
+     * written is in [written] before its bytes are, so a failure mid-copy is swept too.
+     */
+    private suspend fun stage(
+        pack: TransferPackRead.Pack,
+        store: AttachmentStore,
+        open: () -> InputStream,
+        written: MutableList<String>,
+    ) {
+        val rows = pack.backup.data.attachments.associateBy { it.id }
+        open().use { raw ->
+            val outer = ZipInputStream(raw)
+            while (true) {
+                val entry = outer.nextEntry ?: throw IOException("the pack has no ${TransferPack.ARTIFACTS_ENTRY}")
+                if (entry.name == TransferPack.ARTIFACTS_ENTRY) break
+            }
+            ArtifactsCodec.read(
+                source = outer,
+                onManifest = { manifest ->
+                    if (manifest.backupSetId != pack.manifest.packId) {
+                        throw IOException("${TransferPack.ARTIFACTS_ENTRY} belongs to another pack")
+                    }
+                },
+                onEntry = stage@{ entry, input ->
+                    val row = rows[entry.attachmentId] ?: return@stage
+                    val locator = row.storageLocator
+                    // Never overwrite: a locator that holds anything is the folder's, not this import's.
+                    if (store.exists(locator)) return@stage
+                    written += locator
+                    val stored = store.put(locator, ByteSource { input })
+                    if (stored.sha256 != entry.sha256 || stored.sizeBytes != entry.sizeBytes ||
+                        stored.sha256 != row.sha256 || stored.sizeBytes != row.sizeBytes
+                    ) {
+                        throw TransferStagingMismatch(locator)
+                    }
+                },
+            )
         }
     }
 
