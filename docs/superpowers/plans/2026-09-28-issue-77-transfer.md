@@ -771,3 +771,50 @@ where they differ.**
     It is the Mark refusal under R77-B2a-MARK.
   
   Every #77 string is now ratified.
+
+## 15. Errata after the merge (2026-09-29)
+
+Merged as `363b567c` (`merge --no-ff issue-77`; 49 branch commits; `versionName` 1.4.1, schema/format 14 unreleased;
+gitlink `7e0377a`). What execution changed or learned, beside the §14 rulings:
+
+- **Caps moved with the rulings.**
+  - B2a used 20 counted REDs. Two of the implementer's 20 did not compile, so the controller re-ran them.
+  - B2b: 26 (24 + 2 for R77-B2b-GUARD).
+  - B3: 19 (17 + P77-68's mapping + R77-B3-RETURN).
+  - B4: 17 JVM / 2 device.
+  - B5: 4.
+  - Each brief had one task review and one bounded fix round. The whole-branch review had one fix round and the
+    one scoped re-review its MAJOR allowed.
+- **Fence exceptions, each ruled in the ledger:**
+  - `Format7RestoreContractTest` retargeted to format 14 (row 13 orders it).
+  - `ResolveTag.kt` / `OverwriteSubjects.kt` in B4, for C20's `Resolution.TransferredOut`.
+  - `clearInstall()` now clears `asset_transfer`, so a batched run cannot see a non-empty store.
+  - `TransferGraph.kt`'s verbatim extraction of the reference rules, shared by `retain`, the guard and M3. It
+    became one owner helper that fails closed.
+- **Behaviour the plan did not spell out, ruled by the controller and accepted in review:**
+  - The provider repair skips providerless schedules on archived and retired assets too (§2's "exactly as
+    `ReminderHealthCheck` does").
+  - Two partial-return shapes refuse at the preview with P77-52: a returning group naming a staying asset, and a
+    held child of a returning parent.
+  - The return deletes and re-inserts the kept loans, 2.6 links and their tags inside its one write.
+  - The review step shows creation's refusals before Create.
+- **Defects the reviews found and the fix rounds closed:**
+  - the recipient's silent hold (→ R77-B2a-MJ1);
+  - bytes swept after a committed import on a back press (B3 MJ-1);
+  - a notification "Done" deep link starting a completion on a held owner (B4 MJ-1);
+  - per-asset withdrawal entangling the estate (→ R77-WITHDRAW).
+- **The merged-tip gate** (`.superpowers/sdd/2026-09-28-issue-77/gate/`) ran once at `363b567c`: all green.
+  - Results: JVM core 1319 and app 1474; 54 device classes (50 shipped + `TransferShareContractTest`,
+    `TransferFlowScreenTest`, `AssetTransferDetailTest`, `TransferImportScreenTest`); MCP 379 at 68 tools.
+  - **Timing: 13.87 min from start to GATE DONE:** JVM 48 s, device 12.89 min, MCP 9 s. #77's four classes add
+    30 s. That is 8 s under the 14-min warning line and 68 s under the 15-min promotion line for #90.
+- **Emulator.** The windowless emulator died twice, and each time it was relaunched and the lane resumed:
+  - a host-GPU memory-import error after about 10 h;
+  - a desktop session restart, because `-no-window` still binds the owner's display.
+  
+  No device result was lost.
+- **Carried to #84 (polish):**
+  - the Backup door's empty DONE body;
+  - one-shot UI events (`Marked`; P77-35 emitted before the snackbar collector) should become state-backed;
+  - Share is silent when the verified file vanished or no receiver exists;
+  - a stale schedule detail's one-shot `editable` read.
