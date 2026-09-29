@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.reminders.QuickActionDispatch
 import com.loosecannon.servicetag.reminders.ReminderDispatch
 import com.loosecannon.servicetag.reminders.ReminderHealthDispatch
 import com.loosecannon.servicetag.reminders.ReminderRunDispatch
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class ServiceTagApp : Application() {
@@ -17,6 +18,8 @@ class ServiceTagApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // #77 (R77-18): taken first, so the start-up sweep below spares any copy this process makes.
+        val startedAt = System.currentTimeMillis()
         graph = AppGraph(this)
         // Idempotent: Android never rewrites an importance the user has changed, and CHANNELS'
         // importances are fixed, so calling this on every process start is safe (spec §5.5).
@@ -45,6 +48,16 @@ class ServiceTagApp : Application() {
         // process. It **repairs nothing** — the backstop is where the finding and its repair are
         // one pass — and it is off this thread, because the check reads the standby bucket and
         // queries WorkManager, neither of which belongs on `onCreate`.
+        // #77 (R77-18): the Transfer Pack files a previous process left — its intake copies and work files, and any
+        // pack older than a day. Off this thread, guarded like the health check below: cleaning a cache must never
+        // take the launch down.
+        graph.appScope.launch(Dispatchers.IO) {
+            try {
+                graph.transferPackWriter.sweepAtStart(startedAt, System.currentTimeMillis())
+            } catch (e: Exception) {
+                Log.w("ServiceTagApp", "the transfer cache sweep failed; the next start repeats it", e)
+            }
+        }
         graph.appScope.launch {
             // Guarded, because `appScope` carries no exception handler: an unguarded throw from a
             // Room read or WorkManager's future would reach the thread's uncaught handler and take

@@ -9,19 +9,19 @@ import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.LoanStanding
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ScheduleTarget
-import com.loosecannon.servicetag.core.model.isRetired
+import com.loosecannon.servicetag.core.model.maintainedHere
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.ScheduleStateRepository
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.reminders.ReminderHealthSeverity
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.ui.condition.displayDate
 import com.loosecannon.servicetag.ui.health.AssetHealthReadModel
-import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.loan.dashboardLoanLine
 import com.loosecannon.servicetag.ui.maintenance.AttentionItem
 import com.loosecannon.servicetag.ui.maintenance.AttentionKind
@@ -198,6 +198,11 @@ class DashboardViewModel(
     private val health: HealthSummary,
     private val prefs: AppPrefs,
     /**
+     * #77 (C11, R77-20): the transfer records, observed for the held set — the in-service set and the loan
+     * rows are the assets **maintained here**, so a transferred-out asset is never drawn, whatever its status.
+     */
+    private val transfers: TransferRecordRepository,
+    /**
      * #72 (C20): the open loans, observed for the overdue loan rows, and `Today` to judge them by. Null
      * draws none — a test that is not about loans; `AppGraph` passes the real ones.
      */
@@ -219,6 +224,7 @@ class DashboardViewModel(
         graph.assetHealthReadModel,
         health,
         graph.prefs,
+        graph.transferRecords,
         loans = graph.loans,
         today = graph.today,
     )
@@ -237,8 +243,10 @@ class DashboardViewModel(
         val conditions: Map<AssetId, OperationalCondition>,
         val worstSeverity: ReminderHealthSeverity?,
         val lastBackupAt: Long?,
-        /** #72 (C20): the Dashboard loan rows, already filtered to open, overdue and in service. */
+        /** #72 (C20): the Dashboard loan rows, already filtered to open, overdue and maintained here. */
         val loanRows: List<LoanAttentionRow> = emptyList(),
+        /** #77 (C11): the assets transferred out from this phone. */
+        val held: Set<AssetId> = emptySet(),
     )
 
     private val store: Flow<StoreView> =
@@ -253,10 +261,11 @@ class DashboardViewModel(
             // only ever be re-read when the *store* moved: a launch check landing after the first
             // emission would leave a ≥ WARN badge absent for the whole session.
             health.changes,
-            // #72 (C20): the open loans — one read of every one; the rows are judged against `Today`.
-            loans?.observeOpen() ?: flowOf(emptyList()),
-        ) { rows, _, _, _, open -> rows to open }
-            .map { (rows, open) ->
+            // #72 (C20): the open loans — one read of every one; the rows are judged against `Today`. #77 (C11):
+            // with the held set, which moves the in-service set and the loan rows.
+            combine(loans?.observeOpen() ?: flowOf(emptyList()), transfers.observeHeldIds()) { open, held -> open to held },
+        ) { rows, _, _, _, openAndHeld -> Triple(rows, openAndHeld.first, openAndHeld.second) }
+            .map { (rows, open, held) ->
                 StoreView(
                     rows = rows,
                     items = due.items(),
@@ -264,7 +273,8 @@ class DashboardViewModel(
                     conditions = currentConditions(),
                     worstSeverity = health.worstSeverity(),
                     lastBackupAt = prefs.lastBackupAt,
-                    loanRows = today?.let { loanAttentionRowsOf(open, rows, it.localDate()) }.orEmpty(),
+                    loanRows = today?.let { loanAttentionRowsOf(open, rows, it.localDate(), held) }.orEmpty(),
+                    held = held,
                 )
             }
 
@@ -289,7 +299,8 @@ class DashboardViewModel(
      */
     private fun build(view: StoreView, chosen: DashboardFilters): DashboardState {
         val active = view.rows.filter { it.status == AssetStatus.ACTIVE }
-        val inService = active.filterNot { it.isRetired }
+        // #77 (C11, R77-20): in service **and** not transferred out — a held asset reading ACTIVE is not drawn.
+        val inService = view.rows.filter { it.maintainedHere(view.held) }
         // Parent names come from every row, not just the in-service ones: a component of a
         // retired machine is itself in service and still has to say whose component it is.
         val byId = view.rows.associateBy { it.id }
@@ -415,16 +426,22 @@ internal fun assembleSections(
 
 /**
  * #72 (C20; R72-14 b, R72-10): the Dashboard's loan rows — every **open** loan that is **overdue** on
- * [today] (the due day itself is still lent out) of an asset **in service**, by due date, then the
- * asset's name, then the loan's id. A retired or archived asset's overdue loan still reminds, but is not
- * here: the Dashboard's ATTENTION shows in-service rows only.
+ * [today] (the due day itself is still lent out) of an asset **maintained here** — in service and not
+ * transferred out ([held], #77 C11) — by due date, then the asset's name, then the loan's id. A retired or
+ * archived asset's overdue loan still reminds, but is not here: the Dashboard's ATTENTION shows in-service
+ * rows only.
  */
-internal fun loanAttentionRowsOf(open: List<AssetLoan>, assets: List<Asset>, today: LocalDate): List<LoanAttentionRow> {
+internal fun loanAttentionRowsOf(
+    open: List<AssetLoan>,
+    assets: List<Asset>,
+    today: LocalDate,
+    held: Set<AssetId>,
+): List<LoanAttentionRow> {
     val byId = assets.associateBy { it.id }
     return open
         .filter { it.standingOn(today) == LoanStanding.OVERDUE }
         .mapNotNull { loan ->
-            val asset = byId[loan.assetId]?.takeIf { it.inService } ?: return@mapNotNull null
+            val asset = byId[loan.assetId]?.takeIf { it.maintainedHere(held) } ?: return@mapNotNull null
             val due = loan.dueOn ?: return@mapNotNull null
             LoanAttentionRow(
                 loanId = loan.id.value,

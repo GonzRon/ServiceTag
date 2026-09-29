@@ -15,6 +15,7 @@ import com.loosecannon.servicetag.core.usecase.GroupProblem
 import com.loosecannon.servicetag.core.usecase.GroupValidation
 import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -85,6 +86,8 @@ class GroupEditViewModel(
     private val assets: AssetRepository,
     private val saveGroup: SaveGroup,
     private val id: GroupId?,
+    /** #77 (C19, rm-5): the held set, so the member picker never offers a transferred-out asset. Null holds nothing. */
+    private val transfers: TransferRecordRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String?) : this(
@@ -92,6 +95,7 @@ class GroupEditViewModel(
         graph.assets,
         graph.saveGroup,
         id?.let(::GroupId),
+        transfers = graph.transferRecords,
     )
 
     private val _state = MutableStateFlow(GroupEditState(editing = id != null))
@@ -183,7 +187,10 @@ class GroupEditViewModel(
         val open = group?.members.orEmpty()
             .filter { it.removedAt == null }
             .associate { it.assetId to it.id }
+        val held = transfers?.heldIds().orEmpty()
         val candidates = assets.all()
+            // #77 (C19, rm-5): keyed on held, never on status — a held asset is never offered.
+            .filter { it.id !in held }
             .filter { (it.status == AssetStatus.ACTIVE && !it.isRetired) || it.id in open }
             .sortedWith(compareBy({ it.name.lowercase() }, { it.id.value }))
             .map {

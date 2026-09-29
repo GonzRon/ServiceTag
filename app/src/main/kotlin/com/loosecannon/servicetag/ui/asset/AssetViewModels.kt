@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.asset
 
+import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.condition.ConditionHistory
@@ -67,6 +68,15 @@ import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.core.model.openOuts
+import com.loosecannon.servicetag.core.model.shortPackId
+import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
+import com.loosecannon.servicetag.core.usecase.WithdrawTransferRecord
+import com.loosecannon.servicetag.core.usecase.WithdrawTransferResult
+import com.loosecannon.servicetag.ui.transfer.TransferStrings
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.schedule.SeasonContext
@@ -127,6 +137,7 @@ import com.loosecannon.servicetag.ui.health.driverLines
 import com.loosecannon.servicetag.ui.health.healthBadgeLabel
 import com.loosecannon.servicetag.ui.health.inService
 import com.loosecannon.servicetag.ui.health.needsAttention
+import com.loosecannon.servicetag.ui.loan.LoanAction
 import com.loosecannon.servicetag.ui.loan.LoanFacts
 import com.loosecannon.servicetag.ui.loan.loanFactsOf
 import com.loosecannon.servicetag.ui.maintenance.DueItem
@@ -199,6 +210,12 @@ data class AssetRow(
      * lifecycle: a retired or archived asset's open loan is still out.
      */
     val loan: LoanStanding? = null,
+    /**
+     * #77 (C19): the asset is **held** — transferred out from this phone by an open OUT record — keyed on the
+     * records, never on ARCHIVED. The row draws P77-31 (`Transferred`, `ic_handover`) instead of "Archived", no
+     * health, and is listed only with the Archived control on, whatever its status.
+     */
+    val transferred: Boolean = false,
 )
 
 /**
@@ -317,11 +334,17 @@ class AssetsViewModel(
      * nothing — a test that is not about loans; `AppGraph` passes the real repository.
      */
     loans: AssetLoanRepository? = null,
+    /**
+     * #77 (C19): the held set, observed once. Null holds nothing — a test that is not about transfers;
+     * `AppGraph` passes the real records.
+     */
+    transfers: TransferRecordRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph) : this(
         graph.assets, graph.categories, graph.seasonActivations, graph.tags, graph.assetHealthReadModel, graph.today,
         loans = graph.loans,
+        transfers = graph.transferRecords,
     )
 
     private val filters = MutableStateFlow(AssetFilters())
@@ -391,12 +414,14 @@ class AssetsViewModel(
             rowHealth,
             // #72 (C19): one read of every open loan, keyed by asset — at most one each (C2).
             (loans?.observeOpen() ?: flowOf(emptyList())).map { open -> open.associateBy { it.assetId } },
-        ) { (rows, activationsOf), tagRows, views, lent ->
-            Facts(rows, activationsOf, writtenTagsOf(tagRows), views, lent)
+            // #77 (C19): the held set, keyed on the records and never on ARCHIVED.
+            transfers?.observeHeldIds() ?: flowOf(emptySet()),
+        ) { (rows, activationsOf), tagRows, views, lent, held ->
+            Facts(rows, activationsOf, writtenTagsOf(tagRows), views, lent, held)
         }
 
     val state: StateFlow<AssetsState> =
-        combine(facts, filters, categories.observeAll(), queries) { (rows, activationsOf, tagged, views, lent), picked, custom, query ->
+        combine(facts, filters, categories.observeAll(), queries) { (rows, activationsOf, tagged, views, lent, held), picked, custom, query ->
             val choices = CategoryCatalog.choices(custom)
             val stale = picked.type?.takeIf { key -> choices.none { it.key == key } }
             // C4: a chosen category the catalog no longer holds (renamed to a new key, or deleted)
@@ -409,10 +434,10 @@ class AssetsViewModel(
             val byId = rows.associateBy { it.id }
             // The four predicates, ANDed: the three controls admit a row, and the query searches only
             // what they admitted (R73-1) — #39's six-field predicate, unchanged.
-            val matching = rows.filter { controls.admits(it) && it.matches(query) }
+            val matching = rows.filter { controls.admits(it, held) && it.matches(query) }
             AssetsState(
                 items = matching
-                    .sortedWith(compareBy({ lifecycleRank(it) }, { it.name.lowercase() }))
+                    .sortedWith(compareBy({ lifecycleRank(it, held) }, { it.name.lowercase() }))
                     .map { row ->
                         AssetRow(
                             asset = row,
@@ -422,16 +447,18 @@ class AssetsViewModel(
                             parentName = row.parentAssetId?.let { byId[it]?.name },
                             outOfSeason = outOfSeasonOn(row, activationsOf[row.id].orEmpty(), day),
                             hasWrittenTag = row.id in tagged,
-                            health = rowHealthOf(row, views[row.id]),
+                            // #77 (C11, C19): a held asset is quiesced — no health on its row.
+                            health = if (row.id in held) null else rowHealthOf(row, views[row.id]),
                             loan = lent[row.id]?.standingOn(day),
+                            transferred = row.id in held,
                         )
                     },
                 filters = controls,
-                archivedCount = rows.count { it.status != AssetStatus.ACTIVE },
+                archivedCount = rows.count { it.status != AssetStatus.ACTIVE || it.id in held },
                 query = query,
                 typeLabel = controls.type?.let { key -> choices.first { it.key == key }.display },
                 typeChoices = choices,
-                emptyReason = emptyReason(rows, controls, query, listed = matching.isNotEmpty()),
+                emptyReason = emptyReason(rows, controls, query, listed = matching.isNotEmpty(), held = held),
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), AssetsState())
 
@@ -466,6 +493,7 @@ class AssetsViewModel(
         val tagged: Set<AssetId>,
         val views: Map<AssetId, AssetHealthView>,
         val lent: Map<AssetId, AssetLoan>,
+        val held: Set<AssetId>,
     )
 }
 
@@ -473,8 +501,12 @@ class AssetsViewModel(
 private fun writtenTagsOf(tags: List<TagBinding>): Set<AssetId> =
     tags.mapNotNullTo(HashSet()) { tag -> (tag.target as? TagTarget.AssetTarget)?.assetId?.takeIf { tag.isWrittenFor(it) } }
 
-/** The Archived control's predicate: archived rows only while it is on. */
-private fun AssetFilters.admitsStatus(asset: Asset): Boolean = showArchived || asset.status == AssetStatus.ACTIVE
+/**
+ * The Archived control's predicate: archived rows only while it is on. #77 (C19): a held asset is listed only with
+ * the control on too, whatever its status — a held-but-ACTIVE row from merged history included.
+ */
+private fun AssetFilters.admitsStatus(asset: Asset, held: Set<AssetId> = emptySet()): Boolean =
+    showArchived || (asset.status == AssetStatus.ACTIVE && asset.id !in held)
 
 /** The Components control's predicate: a component's admission is this and its own status, never its parent's. */
 private fun AssetFilters.admitsPlace(asset: Asset): Boolean = showComponents || asset.parentAssetId == null
@@ -482,7 +514,8 @@ private fun AssetFilters.admitsPlace(asset: Asset): Boolean = showComponents || 
 /** The Type control's predicate, by key (R73-5): a spelling stored before promotion still matches. */
 private fun AssetFilters.admitsType(asset: Asset): Boolean = type == null || CategoryKey.of(asset.category) == type
 
-private fun AssetFilters.admits(asset: Asset): Boolean = admitsStatus(asset) && admitsPlace(asset) && admitsType(asset)
+private fun AssetFilters.admits(asset: Asset, held: Set<AssetId>): Boolean =
+    admitsStatus(asset, held) && admitsPlace(asset) && admitsType(asset)
 
 /**
  * C5's ordered table. [listed] is whether the list has a row at all; `hits` are the rows the query
@@ -491,12 +524,18 @@ private fun AssetFilters.admits(asset: Asset): Boolean = admitsStatus(asset) && 
  * precedence — so a mix of an active component and an archived root names both controls, and no
  * sentence is false for one of its rows.
  */
-internal fun emptyReason(rows: List<Asset>, filters: AssetFilters, query: String, listed: Boolean): EmptyReason {
+internal fun emptyReason(
+    rows: List<Asset>,
+    filters: AssetFilters,
+    query: String,
+    listed: Boolean,
+    held: Set<AssetId> = emptySet(),
+): EmptyReason {
     if (listed) return EmptyReason.NONE
     if (query.isBlank() && filters.type == null) {
         return when {
             rows.isEmpty() -> EmptyReason.NO_ASSETS
-            rows.none { filters.admitsStatus(it) } -> EmptyReason.NO_ACTIVE_ASSETS
+            rows.none { filters.admitsStatus(it, held) } -> EmptyReason.NO_ACTIVE_ASSETS
             else -> EmptyReason.ONLY_COMPONENTS
         }
     }
@@ -506,7 +545,7 @@ internal fun emptyReason(rows: List<Asset>, filters: AssetFilters, query: String
         return if (query.isNotBlank() && hits.isNotEmpty()) EmptyReason.TYPE_HIDDEN else EmptyReason.NOTHING_MATCHES
     }
     val byComponents = ofType.any { !filters.admitsPlace(it) }
-    val byArchived = ofType.any { !filters.admitsStatus(it) }
+    val byArchived = ofType.any { !filters.admitsStatus(it, held) }
     return when {
         byComponents && byArchived -> EmptyReason.BOTH_HIDDEN
         byComponents -> EmptyReason.COMPONENTS_HIDDEN
@@ -518,8 +557,8 @@ internal fun emptyReason(rows: List<Asset>, filters: AssetFilters, query: String
  * Active first, then retired, then archived (spec §9). Archived wins over retired, so an asset that
  * is both sorts with the archived tail: the chip that hides archived rows must hide all of them.
  */
-private fun lifecycleRank(asset: Asset): Int = when {
-    asset.status != AssetStatus.ACTIVE -> 2
+private fun lifecycleRank(asset: Asset, held: Set<AssetId>): Int = when {
+    asset.status != AssetStatus.ACTIVE || asset.id in held -> 2
     asset.isRetired -> 1
     else -> 0
 }
@@ -585,6 +624,12 @@ sealed interface DetailPrompt {
      * one holds the confirm rather than being worded (master dec. 46), and so does a later-than-today
      * date on an asset with no row, since S54 would have no `<date>` to name.
      */
+    /**
+     * #77 (C23, R77-5): the withdrawal question for the open OUT of [packId] — P77-63 ([title]), P77-64, P77-65 /
+     * `Cancel`. Nothing is written until the confirm; [saving] holds a second tap.
+     */
+    data class Withdraw(val packId: String, val title: String, val saving: Boolean = false) : DetailPrompt
+
     data class SeasonChange(
         val action: SeasonAction,
         val date: String,
@@ -611,6 +656,22 @@ private val ISO_DAY = Regex("""\d{4}-\d{2}-\d{2}""")
  * look like a current member.
  */
 data class AssetGroupRow(val id: GroupId, val name: String)
+
+/**
+ * #77 (C19, C23): one open OUT record naming this asset, as the P77-32 block draws it — P77-33 ([on]), P77-34
+ * ([pack]), the note when there is one, and P77-62, whose dialog is titled [withdrawTitle] (P77-63). Two rows only
+ * after a double mark (`TRANSFER_DIVERGED`), each withdrawable on its own.
+ */
+data class TransferOutRow(
+    val packId: String,
+    val on: String,
+    val pack: String,
+    val note: String?,
+    val withdrawTitle: String,
+)
+
+/** The detail overflow's items, in the order drawn (#77 adds [TRANSFER], P77-1, before the destructive one). */
+enum class DetailMenuItem { EDIT, ARCHIVE, UNARCHIVE, RETIRE, UNRETIRE, TRANSFER, DELETE }
 
 /**
  * Everything the detail screen draws about one asset, or null while it is still unknown.
@@ -677,7 +738,36 @@ data class AssetDetailState(
     val currentIncidentId: String? = null,
     /** #72 (C16): the Lending section's facts, from one `observeForAsset` and `Today`. */
     val loans: LoanFacts = LoanFacts(),
+    /**
+     * #77 (C19): the open OUT records naming this asset, latest first — non-empty iff the asset is **held** here.
+     * Keyed on the records, never on ARCHIVED: an ordinary archived asset keeps every action (AC 11), and a
+     * held-but-ACTIVE one (merged history) is read-only all the same.
+     */
+    val transferredOut: List<TransferOutRow> = emptyList(),
 ) {
+    /** #77 (C19): transferred out from this phone by an open OUT. */
+    val held: Boolean get() = transferredOut.isNotEmpty()
+
+    /**
+     * #77 (R77-4): a held asset is inspectable and offers no write — the action grid but Backup, every section
+     * action, and the overflow but Delete are hidden. Everything else offers what it always did.
+     */
+    val offersWrites: Boolean get() = !held
+
+    /** The overflow: Delete alone for a held asset (R77-4's one destructive exception); else the shipped four and P77-1. */
+    val menu: List<DetailMenuItem>
+        get() = if (held) {
+            listOf(DetailMenuItem.DELETE)
+        } else {
+            listOf(
+                DetailMenuItem.EDIT,
+                if (asset.status == AssetStatus.ACTIVE) DetailMenuItem.ARCHIVE else DetailMenuItem.UNARCHIVE,
+                if (asset.isRetired) DetailMenuItem.UNRETIRE else DetailMenuItem.RETIRE,
+                DetailMenuItem.TRANSFER,
+                DetailMenuItem.DELETE,
+            )
+        }
+
     /** The current condition (S1–S3, or S4 when null), from the same read as [health]. */
     val condition: ConditionView? get() = health.condition
 
@@ -688,7 +778,7 @@ data class AssetDetailState(
     val outOfSeason: Boolean get() = season.phase == SeasonPhase.OUT_OF_SEASON
 
     /** The identity plate's badges: condition, then retired, archived, an open loan, and the season phase. */
-    val plate: List<PlateFact> get() = plateFacts(asset, condition, season, loans.standing)
+    val plate: List<PlateFact> get() = plateFacts(asset, condition, season, loans.standing, held)
 
     /** The Health section, in its order (spec §6.5, inv. 119). */
     val healthBlocks: List<HealthBlock> get() = healthBlocksOf(health)
@@ -699,7 +789,7 @@ data class AssetDetailState(
      * surface (M1). A retired or archived asset's page still shows its condition and S6.
      */
     val offersMarkOperational: Boolean
-        get() = health.inService && condition?.condition?.needsAttention == true
+        get() = offersWrites && health.inService && condition?.condition?.needsAttention == true
 
     /**
      * #82 (C10, R82-7): whether the Condition section offers P82-10 "Log incident" — every asset **in
@@ -707,7 +797,7 @@ data class AssetDetailState(
      * INCIDENT entry; [leadsWithLogIncident] says whether it leads or follows S6.
      */
     val offersLogIncident: Boolean
-        get() = health.inService
+        get() = offersWrites && health.inService
 
     /** #79 (C20): P79-17/P79-18 above the case rows, or null — hidden — while none is open. */
     val openCasesLine: String?
@@ -715,7 +805,7 @@ data class AssetDetailState(
 
     /** #79 (C20, R79-17): P79-19 "New service case" only on an asset **in service**, as P82-10 and P79-20. */
     val offersNewServiceCase: Boolean
-        get() = health.inService
+        get() = offersWrites && health.inService
 }
 
 /**
@@ -774,6 +864,15 @@ class AssetDetailViewModel(
      * nothing — a test that is not about loans; `AppGraph` passes the real repository.
      */
     loans: AssetLoanRepository? = null,
+    /**
+     * #77 (C19): the transfer records, observed for this asset's open OUTs. Null holds nothing — a test that is
+     * not about transfers; `AppGraph` passes the real records.
+     */
+    transfers: TransferRecordRepository? = null,
+    /** #77 (C23): the phone-only withdrawal. Null withdraws nothing. */
+    private val withdrawTransfer: WithdrawTransferRecord? = null,
+    /** #77 (C22, R77-23): the one sweep after a lifecycle write or a withdrawal. Null sweeps nothing. */
+    private val reconcile: ReminderReconcile? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String) : this(
@@ -786,6 +885,9 @@ class AssetDetailViewModel(
         graph.applyTemplate, graph.uow, graph.clock, graph.today, AssetId(id),
         serviceCases = graph.serviceCases,
         loans = graph.loans,
+        transfers = graph.transferRecords,
+        withdrawTransfer = graph.withdrawTransferRecord,
+        reconcile = graph.reminderReconcile,
     )
 
     /** The zone the retirement dialog's today is read in: the user's calendar day. */
@@ -857,6 +959,15 @@ class AssetDetailViewModel(
     private val loanRows: Flow<List<AssetLoan>> = (loans?.observeForAsset(id) ?: flowOf(emptyList()))
         .distinctUntilChanged()
 
+    /**
+     * #77 (C19): this asset's open OUT records — re-read whenever the held set moves — folded in right after the
+     * page's own combine, so the loan facts that follow see [AssetDetailState.held].
+     */
+    private val openOutRecords: Flow<List<TransferRecord>> = (
+        transfers?.let { repo -> repo.observeHeldIds().map { held -> if (id in held) openOuts(repo.forAsset(id)) else emptyList() } }
+            ?: flowOf(emptyList())
+        ).distinctUntilChanged()
+
     val state: StateFlow<AssetDetailState?> =
         combine(rows, tags.observeForAsset(id), journal, maintenance, facts) { all, tagRows, j, groupRows, _ ->
             val row = all.firstOrNull { it.id == id } ?: return@combine null
@@ -899,10 +1010,22 @@ class AssetDetailViewModel(
                     .sortedWith(compareBy({ it.name.lowercase() }, { it.id.value }))
                     .map { AssetGroupRow(it.id, it.name) },
             )
-        }.combine(purchaseDocument) { page, document -> page?.copy(purchaseDocument = document) }
+        }.combine(openOutRecords) { page, open -> page?.withTransfer(open) }
+            .combine(purchaseDocument) { page, document -> page?.copy(purchaseDocument = document) }
             .combine(cases) { page, rows -> page?.copy(cases = rows) }
             .combine(loanRows) { page, rows ->
-                page?.copy(loans = loanFactsOf(rows, today.localDate(), page.asset.inService))
+                // #77 (C19): a held asset offers no lending, whatever its lifecycle — and an open loan merged history
+                // left on one keeps only "Open contact", which writes nothing.
+                page?.copy(
+                    loans = loanFactsOf(rows, today.localDate(), page.asset.inService && !page.held).let { facts ->
+                        if (!page.held) facts else facts.copy(
+                            // NOTE 2 (R77-20): and no reminder line — its reminders are quiesced, as the warranty's is.
+                            open = facts.open?.let { block ->
+                                block.copy(actions = block.actions.filter { it == LoanAction.OPEN_CONTACT }, reminderLine = null)
+                            },
+                        )
+                    },
+                )
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), null)
 
@@ -963,12 +1086,93 @@ class AssetDetailViewModel(
             )
         }
 
-    fun archive() {
-        viewModelScope.launch { archiveAsset.run(id) }
+    /**
+     * #77 (C19): the P77-32 block's rows, latest first; a held asset's facts that would offer a write or a reminder
+     * line (the incident lead, the warranty's reminder) are quiesced here, the rest through [AssetDetailState.held].
+     */
+    private fun AssetDetailState.withTransfer(open: List<TransferRecord>): AssetDetailState {
+        if (open.isEmpty()) return this
+        return copy(
+            transferredOut = open.sortedWith(compareByDescending<TransferRecord> { it.at }.thenBy { it.id }).map { out ->
+                val short = shortPackId(out.packId)
+                TransferOutRow(
+                    packId = out.packId,
+                    on = TransferStrings.transferredOn(TransferStrings.day(out.at, zone)),
+                    pack = TransferStrings.packLine(short),
+                    note = out.note.takeIf { it.isNotBlank() },
+                    withdrawTitle = TransferStrings.withdrawTitle(short),
+                )
+            },
+            leadsWithLogIncident = false,
+            warranty = warranty.copy(inService = false),
+        )
     }
 
-    fun unarchive() {
-        viewModelScope.launch { archiveAsset.unarchive(id) }
+    /** #77 (R77-23): archive, unarchive, retire and unretire each sweep once, after a successful write. */
+    fun archive() = lifecycle { archiveAsset.run(id) }
+
+    fun unarchive() = lifecycle { archiveAsset.unarchive(id) }
+
+    /** One lifecycle write, then — only if it landed — the one sweep. A write refused as transferred out says P77-35. */
+    private fun lifecycle(write: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                write()
+            } catch (e: AssetTransferredOut) {
+                refuse(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+                return@launch
+            }
+            sweepOnce()
+        }
+    }
+
+    /** R77-23's one sweep; a sweep that fails is the backstop's to repeat, never the write's failure. */
+    private suspend fun sweepOnce() {
+        val sweep = reconcile ?: return
+        try {
+            sweep.run()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The next sweep repeats it.
+        }
+    }
+
+    /** #77 (C23): P77-62 — asks before anything is written. Offered only for an open OUT. */
+    fun askWithdraw(packId: String) {
+        val row = state.value?.transferredOut?.firstOrNull { it.packId == packId } ?: return
+        _prompt.update { DetailPrompt.Withdraw(packId, row.withdrawTitle) }
+    }
+
+    /**
+     * #77 (C23, R77-WITHDRAW): P77-65 — withdraws the whole pack (a WITHDRAWN for each of its assets still held here),
+     * then one sweep (R77-23); its assets stay archived. A withdrawal that would leave the estate entangled says P77-72
+     * and any other failure P77-71; neither writes nor sweeps.
+     */
+    fun withdraw() {
+        val prompt = _prompt.value as? DetailPrompt.Withdraw ?: return
+        if (prompt.saving) return
+        val use = withdrawTransfer ?: return
+        _prompt.value = prompt.copy(saving = true)
+        viewModelScope.launch {
+            val result = try {
+                use.run(id, prompt.packId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                refuse(TransferStrings.COULD_NOT_WITHDRAW)
+                return@launch
+            }
+            when (result) {
+                is WithdrawTransferResult.Withdrawn -> sweepOnce()
+                is WithdrawTransferResult.Entangled -> {
+                    refuse(TransferStrings.WITHDRAW_ENTANGLED)
+                    return@launch
+                }
+                WithdrawTransferResult.NoOpenOut -> Unit
+            }
+            _prompt.update { null }
+        }
     }
 
     /** Opens the retirement dialog on today, which the user may then backdate (spec §7). */
@@ -1036,6 +1240,7 @@ class AssetDetailViewModel(
                     }
                 }
                 is SeasonNotManual -> _prompt.update { null }
+                is AssetTransferredOut -> refuse(TransferImportStrings.ASSET_TRANSFERRED_OUT)
                 else -> refuse(COULD_NOT_UPDATE_THIS_ASSET)
             }
         }
@@ -1049,8 +1254,12 @@ class AssetDetailViewModel(
     fun retire(on: String) {
         viewModelScope.launch {
             when (runCatching { retireAsset.retire(id, on) }.exceptionOrNull()) {
-                null -> _prompt.update { DetailPrompt.LogWhatHappened }
+                null -> {
+                    sweepOnce()
+                    _prompt.update { DetailPrompt.LogWhatHappened }
+                }
                 is AssetValidation -> refuse("Enter a date as YYYY-MM-DD")
+                is AssetTransferredOut -> refuse(TransferImportStrings.ASSET_TRANSFERRED_OUT)
                 else -> refuse("Could not retire this asset.")
             }
         }
@@ -1058,7 +1267,11 @@ class AssetDetailViewModel(
 
     fun unretire() {
         viewModelScope.launch {
-            if (runCatching { retireAsset.unretire(id) }.isFailure) refuse(COULD_NOT_UPDATE_THIS_ASSET)
+            when (runCatching { retireAsset.unretire(id) }.exceptionOrNull()) {
+                null -> sweepOnce()
+                is AssetTransferredOut -> refuse(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+                else -> refuse(COULD_NOT_UPDATE_THIS_ASSET)
+            }
         }
     }
 
@@ -1113,6 +1326,8 @@ class AssetDetailViewModel(
             }
             val outcome = runCatching { applyTemplate.run(id, template) }
             when {
+                outcome.exceptionOrNull() is AssetTransferredOut ->
+                    _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
                 outcome.isFailure -> _messages.tryEmit("Could not set up this asset.")
                 outcome.getOrNull() is ApplyResult.AlreadySetUp ->
                     _messages.tryEmit("This asset is already set up.")
@@ -1135,11 +1350,16 @@ class AssetDetailViewModel(
      */
     fun editTagLabel(id: TagId, label: String?) {
         viewModelScope.launch {
-            uow.write {
-                val row = tags.get(id) ?: return@write
-                val trimmed = label?.trim()?.takeIf { it.isNotEmpty() }
-                if (trimmed == row.label) return@write
-                tags.upsert(row.copy(label = trimmed, updatedAt = clock.nowMillis()))
+            try {
+                uow.write {
+                    val row = tags.get(id) ?: return@write
+                    val trimmed = label?.trim()?.takeIf { it.isNotEmpty() }
+                    if (trimmed == row.label) return@write
+                    tags.upsert(row.copy(label = trimmed, updatedAt = clock.nowMillis()))
+                }
+            } catch (e: AssetTransferredOut) {
+                // #77 (B4 hand-off 1): the guarded tag port refuses a held asset's tag; a stale screen says so.
+                _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
             }
         }
     }
@@ -1268,6 +1488,9 @@ sealed interface PlateFact {
      * the due day), with the loan glyph in the neutral tone. Custody, never maintenance (AC 13).
      */
     data class Lent(val overdue: Boolean) : PlateFact
+
+    /** #77 (C19, R77-24): P77-31 `Transferred` with `ic_handover`, in the `seasonInactive` tone, instead of Archived. */
+    data object Transferred : PlateFact
 }
 
 /**
@@ -1284,10 +1507,12 @@ fun plateFacts(
     condition: ConditionView?,
     season: SeasonView,
     loan: LoanStanding? = null,
+    /** #77 (C19): transferred out from this phone — P77-31 stands where "Archived" would. */
+    held: Boolean = false,
 ): List<PlateFact> = buildList {
     add(PlateFact.Condition(condition))
     if (asset.isRetired) add(PlateFact.Retired)
-    statusLabel(asset.status)?.let { add(PlateFact.Archived(it)) }
+    if (held) add(PlateFact.Transferred) else statusLabel(asset.status)?.let { add(PlateFact.Archived(it)) }
     loan?.let { add(PlateFact.Lent(overdue = it == LoanStanding.OVERDUE)) }
     when {
         season.phase == SeasonPhase.OUT_OF_SEASON -> add(PlateFact.OutOfSeason)
@@ -1698,6 +1923,8 @@ class AssetEditViewModel(
     private val notifications: NotificationPermission? = null,
     /** #79 (C11): the shipped sweep, run once after a save that moved the warranty date or lead. Null runs none. */
     private val reconcile: ReminderReconcile? = null,
+    /** #77 (C19, rm-5): the held set, so the parent choices never offer a transferred-out asset. Null holds nothing. */
+    private val transfers: TransferRecordRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String?, parentId: String? = null) : this(
@@ -1706,6 +1933,7 @@ class AssetEditViewModel(
         id?.let(::AssetId), parentId,
         notifications = graph.notificationPermission,
         reconcile = graph.reminderReconcile,
+        transfers = graph.transferRecords,
     )
 
     private val _state = MutableStateFlow(
@@ -1791,7 +2019,7 @@ class AssetEditViewModel(
             }
             _state.update { form ->
                 val filled = if (row == null) form else form.filledFrom(row, subjects)
-                filled.copy(parentChoices = choicesIn(all), attached = attached)
+                filled.copy(parentChoices = choicesIn(all, transfers?.heldIds().orEmpty()), attached = attached)
             }
         }
         // The subject list follows the store, so one added or archived in the subject editor is
@@ -2150,7 +2378,7 @@ class AssetEditViewModel(
                 }
                 else -> {
                     _state.update { it.copy(saving = false) }
-                    _messages.tryEmit("Could not save this asset.")
+                    _messages.tryEmit(failure.transferredOutOr("Could not save this asset."))
                     return
                 }
             }
@@ -2391,10 +2619,11 @@ class AssetEditViewModel(
      * parent can never be the move that creates the cycle. Archived rows are offered and marked —
      * archive is not delete (R-9), and a component of an archived machine is still its component.
      */
-    private fun choicesIn(all: Collection<Asset>): List<ParentChoice> {
+    private fun choicesIn(all: Collection<Asset>, held: Set<AssetId>): List<ParentChoice> {
         val blocked = id?.let { self -> AssetTree.descendants(all, self) + self }.orEmpty()
         return listOf(ParentChoice(null, NO_PARENT)) + all
-            .filterNot { it.id in blocked }
+            // #77 (C19, rm-5): a transferred-out asset is never offered as a parent.
+            .filterNot { it.id in blocked || it.id in held }
             .sortedBy { it.name.lowercase() }
             .map { row ->
                 ParentChoice(

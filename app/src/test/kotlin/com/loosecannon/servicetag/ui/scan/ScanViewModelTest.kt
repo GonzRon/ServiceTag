@@ -64,7 +64,7 @@ class ScanViewModelTest {
      */
     @Test fun aTagThatCannotBeReadSaysOneSentenceWithNoClassNameInIt() = runTest(dispatcher) {
         val viewModel = ScanViewModel(
-            ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock),
+            ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock, graph.transferRecords),
             ThrowingTagIo,
             graph.ndefCodec,
             dispatcher,
@@ -95,7 +95,7 @@ class ScanViewModelTest {
             )
         }
         val viewModel = ScanViewModel(
-            ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock),
+            ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock, graph.transferRecords),
             ReadableTagIo(graph.ndefCodec.encodeV1(TagId(key))),
             graph.ndefCodec,
             dispatcher,

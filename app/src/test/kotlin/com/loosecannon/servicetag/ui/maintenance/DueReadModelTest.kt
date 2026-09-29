@@ -51,6 +51,7 @@ class DueReadModelTest {
         // here, because what this projection owes its four surfaces is the value passed through
         // and not the table it came from.
         snoozedUntilOf = { snoozes[it.value] },
+        transfers = graph.transferRecords,
     )
 
     /** Writes the schedule and lets the engine derive its state, exactly as a save would. */

@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.loan
 
+import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -107,7 +108,7 @@ class LoanActionsViewModel(
             } catch (failed: Exception) {
                 Log.w(TAG, "a return failed", failed)
                 _returning.value = null
-                _messages.tryEmit(COULD_NOT_SAVE_THIS_LOAN)
+                _messages.tryEmit(failed.transferredOutOr(COULD_NOT_SAVE_THIS_LOAN))
                 return@launch
             }
             _returning.value = null
@@ -133,7 +134,7 @@ class LoanActionsViewModel(
                 } catch (failed: Exception) {
                     // A loan returned meanwhile (frozen), gone, or a store failure.
                     Log.w(TAG, "a relink failed", failed)
-                    _messages.tryEmit(COULD_NOT_SAVE_THIS_LOAN)
+                    _messages.tryEmit(failed.transferredOutOr(COULD_NOT_SAVE_THIS_LOAN))
                 }
             }
         }

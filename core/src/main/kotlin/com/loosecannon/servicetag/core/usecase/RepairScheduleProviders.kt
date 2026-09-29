@@ -4,11 +4,15 @@ import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.ScheduleProviderRow
 import com.loosecannon.servicetag.core.model.ScheduleStatus
+import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
+import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.schedule.listedForDue
+import com.loosecannon.servicetag.core.schedule.targetInService
 
 /** Why a matched schedule is left for a person rather than repaired. Status is judged first. */
 enum class ProviderRepairSkip { PAUSED, PROVIDERS_DISABLED }
@@ -32,8 +36,12 @@ data class ProviderRepairReport(val plan: ProviderRepairPlan, val repaired: List
  * before 1.4.1. The Reminder Health action and the `/v1` + MCP plan/apply tooling are adapters over
  * this class; none of them restates the predicate.
  *
- * - **Universe:** the non-archived rows ([listedForDue]), the health check's own. An ARCHIVED row is
- *   never matched, listed or written.
+ * - **Universe:** the non-archived rows ([listedForDue]) whose target is maintained here
+ *   ([targetInService] with the transfer records' held set) — exactly the health check's own
+ *   universe, so the repair its finding offers and the finding count the same rows. An ARCHIVED row,
+ *   and a row on an asset that is archived, retired or transferred out (or a group wholly transferred
+ *   out), is never matched, listed or written. A bulk writer **skips** a held row and never fails on
+ *   one (#77 RM-1): a held, providerless ACTIVE schedule never makes the repair meet the write guard.
  * - **Matched:** reminders on and no provider enabled.
  * - **Repairable (R3):** matched, `ACTIVE` and providerless. Anything else matched is skipped:
  *   not ACTIVE is [ProviderRepairSkip.PAUSED]; a non-empty set with nothing enabled is
@@ -52,16 +60,20 @@ data class ProviderRepairReport(val plan: ProviderRepairPlan, val repaired: List
  */
 class RepairScheduleProviders(
     private val schedules: ScheduleRepository,
+    /** #77 (RM-1): the targets and the transfer records the universe is bounded by, read with the rows. */
+    private val assets: AssetRepository,
+    private val groups: GroupRepository,
+    private val transfers: TransferRecordRepository,
     private val uow: UnitOfWork,
     private val clock: Clock,
 ) {
     /** What an apply would do now. Writes nothing. */
-    suspend fun plan(): ProviderRepairPlan = uow.read { planOf(schedules.all()) }
+    suspend fun plan(): ProviderRepairPlan = uow.read { planOf(schedules.all(), maintained()) }
 
     /** Re-plans inside one write and repairs what that plan calls repairable, and nothing else. */
     suspend fun apply(): ProviderRepairReport = uow.write {
         val rows = schedules.all().associateBy { it.id }
-        val plan = planOf(rows.values)
+        val plan = planOf(rows.values, maintained())
         // One repair act, one instant: every row this apply touches carries the same stamp.
         val now = clock.nowMillis()
         val repaired = plan.repairable.map { entry ->
@@ -77,8 +89,20 @@ class RepairScheduleProviders(
         ProviderRepairReport(plan, repaired)
     }
 
-    private fun planOf(rows: Collection<MaintenanceSchedule>): ProviderRepairPlan = ProviderRepairPlan(
+    /** The target bound, over one read of the assets, the groups and the held set. */
+    private suspend fun maintained(): (MaintenanceSchedule) -> Boolean {
+        val assetsById = assets.all().associateBy { it.id }
+        val groupsById = groups.all().associateBy { it.id }
+        val held = transfers.heldIds()
+        return { it.targetInService({ id -> assetsById[id] }, { id -> groupsById[id] }, held) }
+    }
+
+    private fun planOf(
+        rows: Collection<MaintenanceSchedule>,
+        maintained: (MaintenanceSchedule) -> Boolean,
+    ): ProviderRepairPlan = ProviderRepairPlan(
         rows.toList().listedForDue()
+            .filter(maintained)
             .filter { it.remindersEnabled && it.providers.none { provider -> provider.enabled } }
             .sortedWith(compareBy({ it.title }, { it.id.value }))
             .map { ProviderRepairEntry(it.id, it.title, skipOf(it)) },

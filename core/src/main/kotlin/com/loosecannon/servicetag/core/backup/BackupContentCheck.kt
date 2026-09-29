@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.core.backup
 
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.transfer.TransferPack
 import com.loosecannon.servicetag.core.journal.CategoryKey
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.usecase.BreakCommand
@@ -55,6 +57,11 @@ import com.loosecannon.servicetag.core.usecase.wellFormedZone
  *   mode with no due date, a contact link failing `CONTACT_LOOKUP_URI` (`loanProblems`, asked with no
  *   today) — and a loan id holding a `/`, which the reminder key `<assetId>/<loanId>` could not split.
  *   Two open loans for one asset is a rule about other rows, and is the graph check's.
+ *
+ * - a transfer record (#77, C7) with a blank id, asset id, pack id or name snapshot, a pack sha256 that is
+ *   not 64 lowercase hex, an `at` not after the epoch or a note breaking the pack note's rule — and, as the
+ *   plan places it here, a WITHDRAWN with no OUT of its asset and pack in the file. An asset held by the
+ *   archive's own records is the graph check's.
  *
  * What depends on **other rows or on today** is deliberately not asked: a subject naming an archived
  * or retargeted schedule (NOT TRACKED, which a merge may bring — plan decision 17), a TRACK_ONE
@@ -118,6 +125,33 @@ internal object BackupContentCheck {
         checkCategories(data)
         checkServiceCases(data)
         checkLoans(data)
+        checkTransferRecords(data)
+    }
+
+    /**
+     * #77 (C7): each transfer record by its form — a blank id, asset id, pack id or name snapshot; a pack
+     * sha256 that is not 64 lowercase hex; an `at` not after the epoch; a note over 200 characters or not one
+     * line (the pack note's rule) — and, the one rule about another row, a WITHDRAWN whose pack no OUT **of the
+     * same asset** in the file names: a withdrawal is only ever appended beside the OUT it withdraws, and an
+     * ordinary backup carries every record, so the pair always travels together.
+     */
+    private fun checkTransferRecords(data: BackupData) {
+        val outs = data.transferRecords.filter { it.kind == TransferKind.OUT.name }.map { it.assetId to it.packId }.toSet()
+        data.transferRecords.forEach { dto ->
+            val record = dto.toDomain()
+            val id = record.id
+            if (id.isBlank()) throw BackupCorrupt("transferRecords: a record has a blank id")
+            fun refuse(problem: String): Nothing = throw BackupCorrupt("transferRecords: record $id $problem")
+            if (record.assetId.value.isBlank()) refuse("has a blank assetId")
+            if (record.packId.isBlank()) refuse("has a blank packId")
+            if (record.nameSnapshot.isBlank()) refuse("has a blank nameSnapshot")
+            if (!SHA256_LOWER_HEX.matches(record.packSha256)) refuse("has a packSha256 that is not 64 lowercase hex")
+            if (record.at <= 0) refuse("has at ${record.at}, not after the epoch")
+            if (!TransferPack.noteAccepted(record.note)) refuse("has a note over 200 characters or not one line")
+            if (record.kind == TransferKind.WITHDRAWN && (dto.assetId to dto.packId) !in outs) {
+                refuse("withdraws pack ${record.packId}, which no OUT of asset ${record.assetId.value} in the archive names")
+            }
+        }
     }
 
     /** #72 (C6): each loan by the rules the loan commands ask, with no today, one row at a time. */
@@ -188,6 +222,9 @@ internal object BackupContentCheck {
             }
         }
     }
+
+    /** A transfer record's pack sha256: exactly 64 lowercase hex characters. */
+    private val SHA256_LOWER_HEX = Regex("^[0-9a-f]{64}$")
 
     private fun refuse(table: String, noun: String, id: String, problems: List<Any>) {
         if (problems.isNotEmpty()) {

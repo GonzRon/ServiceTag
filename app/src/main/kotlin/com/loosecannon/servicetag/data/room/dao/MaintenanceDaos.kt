@@ -81,6 +81,19 @@ interface MaintenanceGroupDao {
     suspend fun everForAsset(assetId: String): List<GroupWithMembers>
 
     /**
+     * #77 (C15) — one group, for a Transfer Pack's return only. Members are deleted explicitly, as [deleteAll]
+     * does; the group's schedules (and their providers, closures, state and subjects) go by their CASCADE.
+     */
+    @Transaction
+    suspend fun delete(id: String) {
+        deleteMembers(id)
+        deleteGroup(id)
+    }
+
+    @Query("DELETE FROM maintenance_group WHERE id = :id")
+    suspend fun deleteGroup(id: String)
+
+    /**
      * Clears the table. Members CASCADE from the group row, but they are deleted explicitly so the
      * intent reads here and not only in the schema, and so the behaviour does not depend on
      * `PRAGMA foreign_keys` being on.

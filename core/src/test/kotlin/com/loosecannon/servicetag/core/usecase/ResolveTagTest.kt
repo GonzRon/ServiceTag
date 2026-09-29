@@ -13,6 +13,8 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
+import com.loosecannon.servicetag.core.testing.transferOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,13 +27,36 @@ class ResolveTagTest {
     private val tags = InMemoryTagRepository()
     private val uow = FakeUnitOfWork(assets, tags)
     private val clock = Clock { 9_000L }
-    private val resolve = ResolveTag(tags, assets, uow, clock)
+    private val resolve = ResolveTag(tags, assets, uow, clock, InMemoryTransferRecordRepository())
 
     private val v1Id = TagId("123e4567-e89b-12d3-a456-426614174000")
     private val asset = Asset(AssetId("a1"), "Hot tub", createdAt = 1L, updatedAt = 1L)
 
     private fun row(id: String, format: PayloadFormat, key: String, target: TagTarget, status: TagStatus = TagStatus.ACTIVE) =
         TagBinding(TagId(id), format, key, target, status, createdAt = 1L, updatedAt = 1L)
+
+    /**
+     * #77 (C20, R77-11; row 34): a tag whose asset is transferred out from this phone answers TransferredOut with the
+     * asset and the open OUT that holds it — never OpenAsset — and a scan does not stamp it. The peek agrees.
+     */
+    @Test fun aHeldAssetsTagIsTransferredOutAndUnstamped() = runTest {
+        val transfers = InMemoryTransferRecordRepository()
+        val resolveHere = ResolveTag(tags, assets, uow, clock, transfers)
+        assets.rows["a1"] = asset
+        tags.rows[v1Id.value] = row(v1Id.value, PayloadFormat.V1, v1Id.value, TagTarget.AssetTarget(AssetId("a1")))
+        val out = transferOf("out-1", assetId = "a1", packId = "pack-q", nameSnapshot = "Hot tub")
+        transfers.append(out)
+
+        val scanned = resolveHere.run(TagPayload.V1(v1Id))
+        assertIs<Resolution.TransferredOut>(scanned)
+        assertEquals(asset, scanned.asset)
+        assertEquals(out, scanned.record)
+        assertNull(tags.rows[v1Id.value]!!.lastScannedAt, "a held asset's tag is never stamped")
+
+        val peeked = resolveHere.peek(TagPayload.V1(v1Id))
+        assertIs<Resolution.TransferredOut>(peeked)
+        assertEquals(out, peeked.record)
+    }
 
     @Test fun boundToAnAssetOpensIt() = runTest {
         assets.rows["a1"] = asset

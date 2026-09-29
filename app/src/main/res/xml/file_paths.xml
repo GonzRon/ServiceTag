@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="camera" path="camera/" />
+    <!-- #77 (C18, C21): the sealed Transfer Packs only; the intake and work copies stay unexposed. -->
+    <cache-path name="transfer" path="transfer/" />
 </paths>

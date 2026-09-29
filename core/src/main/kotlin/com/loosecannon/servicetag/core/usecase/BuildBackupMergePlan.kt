@@ -1,10 +1,12 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.backup.Backup
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.merge.MergePlan
 import com.loosecannon.servicetag.core.merge.mergePlanOf
 import com.loosecannon.servicetag.core.merge.mergeSnapshotOf
 import com.loosecannon.servicetag.core.merge.storedBytesOf
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
@@ -23,7 +25,9 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
+import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.ports.TagRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -32,15 +36,15 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * Four steps and no more: decode — which refuses a corrupt or future-format file before anything
  * else happens — ask whether there is an attachment folder at all, hash and size whatever that
- * folder holds for the locators the archive names, and read the eighteen canonical tables in one
- * `uow.read` so the planner sees a single consistent point in time rather than eighteen. The decision
+ * folder holds for the locators the archive names, and read the nineteen canonical tables in one
+ * `uow.read` so the planner sees a single consistent point in time rather than nineteen. The decision
  * itself is `mergePlanOf`, a pure function.
  *
- * The same twenty collaborators, in the same order, as [ImportBackupReplace] — because the two are
+ * The same twenty-one collaborators, in the same order, as [ImportBackupReplace] — because the two are
  * the two halves of the same question, and a reader comparing them should have nothing to subtract.
  * #74's [categories] is read like the rest: the planner decides the archive's category rows against
  * it and plans the rows its accepted assets need; and so are #79's [serviceCases] and [caseEntries], and
- * #72's [loans].
+ * #72's [loans], and #77's [transfers].
  */
 class BuildBackupMergePlan(
     private val assets: AssetRepository,
@@ -65,11 +69,20 @@ class BuildBackupMergePlan(
     private val caseEntries: ServiceCaseEntryRepository,
     /** #72 — the loans (format 13). */
     private val loans: AssetLoanRepository,
+    /** #77 — the transfer records (format 14). */
+    private val transfers: TransferRecordRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
 ) {
-    suspend fun run(bytes: ByteArray): MergePlan {
-        val backup = BackupCodec.decode(bytes)
+    suspend fun run(bytes: ByteArray): MergePlan = run(BackupCodec.decode(bytes), emptyMap(), emptySet())
+
+    /**
+     * #77 (C14, C15) — a Transfer Pack's plan. [incoming] is the pack's own documents (locator → sha256 and size),
+     * overlaid **only on locators absent from the folder**, so bytes the folder already holds are never masked — a
+     * locator holding other bytes stays `ATTACHMENT_BYTES_DIFFER`. [returning] are the assets the pack brings back:
+     * the plan runs on the snapshot without their stale local graph ([ReturnScope]). Both empty is [run] above.
+     */
+    suspend fun run(backup: Backup, incoming: Map<String, StoredBytes>, returning: Set<AssetId>): MergePlan {
         // Both store questions before the transaction: `store()` resolves a preference and a grant,
         // and `open` is a document-provider round trip. Neither belongs inside a Room transaction.
         // And `store()` is asked exactly once, so "is there a folder?" and "what is in it?" cannot
@@ -77,13 +90,14 @@ class BuildBackupMergePlan(
         val store = storage.store()
         val configured = store != null
         val stored = storedBytesOf(backup, store)
+        val overlay = incoming.filterKeys { locator -> locator !in stored && store?.exists(locator) == false }
         val snapshot = uow.read {
             mergeSnapshotOf(
                 assets, groups, tags, links, definitions, profiles, schedules, closures,
                 events, attachments, references, seasonActivations, conditions, healthSubjects,
-                categories, serviceCases, caseEntries, loans, stored, configured,
+                categories, serviceCases, caseEntries, loans, transfers, stored + overlay, configured,
             )
         }
-        return mergePlanOf(backup, snapshot)
+        return mergePlanOf(backup, ReturnScope.of(snapshot, returning).snapshot, returning)
     }
 }

@@ -50,7 +50,8 @@ internal data class StatusResponse(
     /**
      * One key per table — assets, **groups**, definitions, profiles, **schedules**, **closures**,
      * links, tags, events, attachments, **references**, **seasonActivations**, **assetConditions**,
-     * **healthSubjects**, **assetCategories**, **serviceCases**, **serviceCaseEntries** — listed here in
+     * **healthSubjects**, **assetCategories**, **serviceCases**, **serviceCaseEntries**, **assetLoans**,
+     * **transferRecords** — listed here in
      * `MergeTable`'s order for reading, which is **not** the JSON's key order and is not contract; a
      * client reads by key. (The sentence claimed
      * that order before 1.3 and the list was not in it: `tags` and `links` sat ahead of `definitions`
@@ -60,8 +61,9 @@ internal data class StatusResponse(
      * 1.3's `asset_reference`, and its key is `assetReferences` — the name the archive's own table
      * carries; three arrived with 1.4, under the archive's own list names; and **assetCategories**
      * with #74 (format 9) — the owner's own categories, never the compiled built-ins; and
-     * **serviceCases** and **serviceCaseEntries** with #79b (format 12), under the archive's own list
-     * names. `schedule_state` and `schedule_local_delivery` are **not** here, because derived and
+     * **serviceCases** and **serviceCaseEntries** with #79b (format 12), **assetLoans** with #72 (format
+     * 13) and **transferRecords** with #77 (format 14) — every record, OUT, IN and WITHDRAWN, never a count
+     * of the assets held — each under the archive's own list names. `schedule_state` and `schedule_local_delivery` are **not** here, because derived and
      * device-local rows are not tables a client counts, and no health value is here because none is
      * stored anywhere.
      */
@@ -151,8 +153,9 @@ internal data class MergeReportResponse(
     // group, a closure references a schedule, a reference an asset; an activation and a condition
     // reference an asset, and a health subject an asset and, softly, a schedule. #74's `categories`
     // follows here, as in the enum, though a merge writes categories **first** (`MergeWrites`), and
-    // #79's `serviceCases` and `caseEntries` follow, as they follow in the enum, and #72's `loans`
-    // closes the list. Fifteen tables since format 9, seventeen since format 12, eighteen since 13.
+    // #79's `serviceCases` and `caseEntries` follow, as they follow in the enum, then #72's `loans`, and #77's
+    // `transfers` closes the list. Fifteen tables since format 9, seventeen since format 12, eighteen since
+    // 13, nineteen since 14.
     val assets: MergeTallyDto,
     val groups: MergeTallyDto,
     val definitions: MergeTallyDto,
@@ -174,6 +177,8 @@ internal data class MergeReportResponse(
     val caseEntries: MergeTallyDto,
     /** #72 — the loans, open and returned (format 13). */
     val loans: MergeTallyDto,
+    /** #77 — the transfer records, OUT, IN and WITHDRAWN (format 14). */
+    val transfers: MergeTallyDto,
     /** Deterministic: table order, then id. Empty when [applicable]. */
     val conflicts: List<MergeDecisionDto>,
     val duplicateCandidates: List<DuplicateCandidateDto>,
@@ -209,6 +214,7 @@ internal fun MergeReport.toResponse() = MergeReportResponse(
     serviceCases = serviceCases.dto(),
     caseEntries = caseEntries.dto(),
     loans = loans.dto(),
+    transfers = transfers.dto(),
     conflicts = conflicts.map { it.dto() },
     duplicateCandidates = duplicateCandidates.map { it.dto() },
 )

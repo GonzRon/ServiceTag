@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.ui.journal
 
+import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
+import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -479,6 +481,8 @@ class EventEntryViewModel(
                 refuse(e)
             } catch (e: NoSuchEvent) {
                 refuse(e)
+            } catch (e: AssetTransferredOut) {
+                refuse(e)
             }
         }
     }
@@ -524,6 +528,8 @@ class EventEntryViewModel(
             // asset's, or the row refused. Nothing the form can fix, and no ratified words for it.
             Log.w(TAG, "the combined save was refused", gone)
             refuse(gone)
+        } catch (held: AssetTransferredOut) {
+            refuse(held)
         }
     }
 
@@ -617,7 +623,7 @@ class EventEntryViewModel(
      * the form names is not this asset's any more. Say so once and leave the form as it was typed.
      */
     private fun refuse(cause: Throwable) {
-        val line = if (cause is NoSuchEvent) "This entry is no longer there." else CANNOT_SAVE
+        val line = if (cause is NoSuchEvent) "This entry is no longer there." else cause.transferredOutOr(CANNOT_SAVE)
         _state.update { it.copy(saving = false, firstProblem = line) }
     }
 

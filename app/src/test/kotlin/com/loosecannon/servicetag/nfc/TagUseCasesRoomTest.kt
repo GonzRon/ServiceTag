@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.nfc
 
+import com.loosecannon.servicetag.testing.FakeTransferRecords
 import com.loosecannon.nfc.tagcore.TagIdentity
 import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.servicetag.core.model.Asset
@@ -55,7 +56,7 @@ class TagUseCasesRoomTest {
             val uow = RoomUnitOfWork(db)
             // two clocks, so `lastScannedAt` cannot pass by coinciding with the write time
             val provision = ProvisionTag(tags, assets, uow, UuidGenerator, Clock { 42L })
-            val resolve = ResolveTag(tags, assets, uow, Clock { 43L })
+            val resolve = ResolveTag(tags, assets, uow, Clock { 43L }, FakeTransferRecords())
 
             uow.write { assets.upsert(Asset(AssetId("a1"), "Hot tub", createdAt = 1L, updatedAt = 1L)) }
             val row = provision.begin(TagTarget.AssetTarget(AssetId("a1")), "lid")

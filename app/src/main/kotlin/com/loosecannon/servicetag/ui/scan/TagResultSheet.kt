@@ -50,6 +50,7 @@ import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.MonoText
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
+import com.loosecannon.servicetag.ui.transfer.TransferStrings
 import com.loosecannon.servicetag.ui.theme.SheetShape
 import com.loosecannon.servicetag.ui.theme.SheetSentence
 
@@ -159,6 +160,16 @@ fun TagResultSheet(
                 border = ServiceTagTheme.semanticColors.dueSoon.foreground,
                 glyph = Icons.Outlined.Info,
                 sentence = PRE_SPLIT_LINK_SENTENCE,
+                identifier = result.tag.identityLine(),
+                actions = { TextAction("Cancel", onDismiss) },
+            )
+
+            // #77 (C20): P77-36 over P77-37 — the asset left this phone; nothing here opens or writes it.
+            is TagResult.TransferredOut -> NfcSheet(
+                eyebrow = TransferStrings.SCAN_TITLE,
+                accent = ServiceTagTheme.semanticColors.seasonInactive.foreground,
+                glyph = ServiceTagIcons.Handover,
+                sentence = result.handedOver,
                 identifier = result.tag.identityLine(),
                 actions = { TextAction("Cancel", onDismiss) },
             )

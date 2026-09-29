@@ -17,11 +17,19 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.LoanReminderMode
+import com.loosecannon.servicetag.core.model.RecurrenceUnit
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.ScheduleProviderRow
+import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.reminders.DeadlineKind
+import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.reminders.SubjectKey
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.core.usecase.CreateTransferPackResult
+import com.loosecannon.servicetag.core.usecase.CreatedPack
 import com.loosecannon.servicetag.core.usecase.LoanTerms
+import com.loosecannon.servicetag.core.usecase.MarkTransferredOutResult
+import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.WarrantyReminderCommand
 import com.loosecannon.servicetag.ui.clearInstall
 import java.time.LocalDate
@@ -449,6 +457,53 @@ class ReminderPlatformDeviceProofTest {
         notifications.cancelItem(tag)
         assertTrue(awaitStanding(notifications, tag, false))
     }
+
+    /**
+     * #77 (R77-20, row 19): marking an asset transferred out takes its standing maintenance post down — the one
+     * place a standing post is observable. A due schedule's post stands after the graph's sweep; the real
+     * `MarkTransferredOut` writes the pack's OUT; the next `reminderRuns.reconcileAll()` withdraws the subject, and
+     * the tag is gone from the platform's active list.
+     */
+    @Test
+    fun markingAnAssetTransferredTakesItsMaintenancePostDown() {
+        clearInstall()
+        NotificationManagerCompat.from(context).cancelAll()
+        val graph = app.graph
+        val (heater, schedule) = runBlocking {
+            val heater = graph.createAsset.run(AssetCommand(name = "Example Water Heater"))
+            val schedule = graph.saveSchedule.run(
+                null,
+                ScheduleCommand(
+                    // COMPLETION with no completion is due **at** its anchor, so ten days ago is OVERDUE — a per-item post.
+                    targetAssetId = heater.id, targetGroupId = null, title = "Flush the tank", timeInterval = 1,
+                    timeUnit = RecurrenceUnit.MONTH, timeBasis = TimeBasis.COMPLETION,
+                    anchorOn = LocalDate.now().minusDays(10).toString(),
+                    providers = listOf(ScheduleProviderRow(ProviderId.LOCAL.name, enabled = true)),
+                ),
+            )
+            graph.reminderRuns.reconcileAll()
+            heater to schedule
+        }
+        val key = SubjectKey.Schedule(schedule.id)
+        assertTrue("the due schedule's post is standing", awaitTrue { postFor(key) != null })
+
+        runBlocking {
+            val created = graph.createTransferPack.run(listOf(heater.id)) as CreateTransferPackResult.Created
+            val marked = graph.markTransferredOut.run(CreatedPack.of(created.draft, "ab".repeat(32)))
+            assertTrue("marked: $marked", marked is MarkTransferredOutResult.Marked)
+            graph.reminderRuns.reconcileAll()
+        }
+
+        assertTrue("the transfer took the post down", awaitTrue { postFor(key) == null })
+
+        NotificationManagerCompat.from(context).cancelAll()
+        clearInstall()
+    }
+
+    private fun postFor(key: SubjectKey.Schedule): StatusBarNotification? =
+        NotificationManagerCompat.from(context).activeNotifications.firstOrNull {
+            it.id == AndroidReminderNotifications.ITEM_ID && it.tag?.let(::keyOfTag) == key
+        }
 
     /** #79 (R79-14c): the boot count a deadline's stamp records is readable on a real phone. */
     @Test

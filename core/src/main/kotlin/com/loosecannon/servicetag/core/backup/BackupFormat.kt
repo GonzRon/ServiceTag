@@ -69,6 +69,8 @@ import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.model.accepts
@@ -546,6 +548,25 @@ data class AssetLoanDto(
     val updatedAt: Long,
 )
 
+/**
+ * Format 14 (#77, C7; R77-3, R77-12). One transfer record: the `asset_transfer` table's columns, in column
+ * order, with no defaults — a format-14 row that omits one is corrupt. [assetId] is soft: a held asset is
+ * never in the archive its own records travel in (the graph check's rule), so it names nothing in the file.
+ * [lineage] is the pack ids before [packId], oldest first.
+ */
+@Serializable
+data class TransferRecordDto(
+    val id: String,
+    val assetId: String,
+    val kind: String,
+    val packId: String,
+    val lineage: List<String>,
+    val at: Long,
+    val packSha256: String,
+    val nameSnapshot: String,
+    val note: String,
+)
+
 /** The canonical tables. Everything derived is rebuilt after an import. */
 @Serializable
 data class BackupData(
@@ -587,6 +608,12 @@ data class BackupData(
      * which never carries a **row** — the codec refuses one that does (an empty list is accepted).
      */
     val assetLoans: List<AssetLoanDto> = emptyList(),
+    /**
+     * Format 14 (#77); the transfer records, OUT, IN and WITHDRAWN, ordered by id. Empty on every format
+     * ≤13 archive, which never carries a **row** — the codec refuses one that does (an empty list is
+     * accepted). An ordinary backup carries every record and never the graph of an asset they hold.
+     */
+    val transferRecords: List<TransferRecordDto> = emptyList(),
 )
 
 /** A decoded archive: what it claims about itself, and what it holds. */
@@ -1337,4 +1364,30 @@ fun AssetLoanDto.toDomain(): AssetLoan = AssetLoan(
     notes = notes,
     createdAt = createdAt,
     updatedAt = updatedAt,
+)
+
+// --- format 14: transfer records -----------------------------------------------------------------
+
+fun TransferRecord.toDto(): TransferRecordDto = TransferRecordDto(
+    id = id,
+    assetId = assetId.value,
+    kind = kind.name,
+    packId = packId,
+    lineage = lineage,
+    at = at,
+    packSha256 = packSha256,
+    nameSnapshot = nameSnapshot,
+    note = note,
+)
+
+fun TransferRecordDto.toDomain(): TransferRecord = TransferRecord(
+    id = id,
+    assetId = AssetId(assetId),
+    kind = enumOrCorrupt<TransferKind>(kind, "transfer kind", "transfer record $id"),
+    packId = packId,
+    lineage = lineage,
+    at = at,
+    packSha256 = packSha256,
+    nameSnapshot = nameSnapshot,
+    note = note,
 )

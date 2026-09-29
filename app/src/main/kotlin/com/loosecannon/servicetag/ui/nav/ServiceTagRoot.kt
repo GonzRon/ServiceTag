@@ -26,6 +26,8 @@ import com.loosecannon.servicetag.ui.asset.AssetEditScreen
 import com.loosecannon.servicetag.ui.asset.AssetsScreen
 import com.loosecannon.servicetag.ui.asset.SECTION_SCHEDULES
 import com.loosecannon.servicetag.ui.backup.BackupScreen
+import com.loosecannon.servicetag.ui.transfer.TransferFlowScreen
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportScreen
 import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.dashboard.DashboardScreen
 import com.loosecannon.servicetag.ui.health.HealthSubjectEditScreen
@@ -175,6 +177,17 @@ fun ServiceTagRoot(
                         graph = graph,
                         onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
                         onNewAsset = { backStack.add(Route.AssetEdit(null)) },
+                        onTransfer = { backStack.add(Route.TransferAssets()) },
+                    )
+                }
+                // #77 (C17, C18): the sender's flow. A mark ends on the Assets list; leaving it pops, and the
+                // popped entry's models delete the pack (R77-18).
+                entry<Route.TransferAssets> { key ->
+                    TransferFlowScreen(
+                        graph = graph,
+                        preselect = key.preselect,
+                        onBack = { backStack.removeLastOrNull() },
+                        onMarked = { backStack.switchTopLevel(Route.Assets) },
                     )
                 }
                 entry<Route.AssetDetail> { key ->
@@ -216,6 +229,7 @@ fun ServiceTagRoot(
                         // #72 (C16, C17): "Lend out" and "Edit loan" open the lend form; neither tap writes.
                         onLendOut = { backStack.add(Route.LoanEdit(it)) },
                         onEditLoan = { asset, loan -> backStack.add(Route.LoanEdit(asset, loan)) },
+                        onTransfer = { backStack.add(Route.TransferAssets(preselect = it)) },
                     )
                 }
                 entry<Route.AssetEdit> { key ->
@@ -413,7 +427,14 @@ fun ServiceTagRoot(
                     }
                 }
                 entry<Route.Backup> {
-                    BackupScreen(graph = graph, onBack = { backStack.removeLastOrNull() })
+                    BackupScreen(
+                        graph = graph,
+                        onBack = { backStack.removeLastOrNull() },
+                        onImportPack = { copy -> backStack.add(Route.TransferImport(copy)) },
+                    )
+                }
+                entry<Route.TransferImport> { key ->
+                    TransferImportScreen(graph = graph, copy = key.copy, onBack = { backStack.removeLastOrNull() })
                 }
                 entry<Route.Settings> {
                     SettingsScreen(

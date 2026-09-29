@@ -6,8 +6,10 @@ import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetLoanRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.loanOf
 import java.time.LocalDate
 import kotlin.test.Test
@@ -27,7 +29,7 @@ import kotlinx.coroutines.test.runTest
 class BuildLoanSubjectsTest {
 
     private val loans = InMemoryAssetLoanRepository()
-    private val builder = BuildLoanSubjects(loans)
+    private val builder = BuildLoanSubjects(loans, InMemoryTransferRecordRepository())
 
     private suspend fun lend(loan: AssetLoan): AssetLoan = loan.also { loans.upsert(it) }
 
@@ -104,19 +106,20 @@ class BuildLoanSubjectsTest {
 
         assertEquals(
             listOf("z/l1", "a/l2", "m/l3"),
-            BuildLoanSubjects(shuffled).forProvider(ProviderId.LOCAL, LocalDate.parse("2026-10-01"))
+            BuildLoanSubjects(shuffled, InMemoryTransferRecordRepository()).forProvider(ProviderId.LOCAL, LocalDate.parse("2026-10-01"))
                 .map { (it.key as SubjectKey.Deadline).subjectId },
         )
     }
 
     /**
      * Derived from the loans alone: the builder is handed nothing but the loan port — no asset port
-     * and no clock — and the day it is asked on does not change its answer.
+     * and no clock — and the day it is asked on does not change its answer. #77 (C11) adds the transfer
+     * records, custody and not lifecycle: still no asset port, still no clock.
      */
     @Test
     fun itReadsNoClockAndNoAsset() = runTest {
         assertEquals(
-            listOf(listOf(AssetLoanRepository::class.java)),
+            listOf(listOf(AssetLoanRepository::class.java, TransferRecordRepository::class.java)),
             BuildLoanSubjects::class.java.constructors.map { it.parameterTypes.toList() },
         )
         lend(loanOf("l1", assetId = "a1", dueOn = "2026-10-04"))

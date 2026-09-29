@@ -79,21 +79,25 @@ fun DocumentsSection(
     onAddFiles: () -> Unit,
     onTakePhoto: () -> Unit,
     onOpenSettings: () -> Unit,
+    /** #77 (C19): open only — no row overflow, no add actions, no folder card. */
+    readOnly: Boolean = false,
 ) {
+    val edit: ((AttachmentRowState) -> Unit)? = if (readOnly) null else onEdit
     // #67, C8 (R67-4): the role-tagged rows first, drawn from DOCUMENTS' own rows — every one of
     // them still listed below, unchanged.
-    KeyDocumentsBlock(state.keyDocuments, onOpen, onEdit)
+    KeyDocumentsBlock(state.keyDocuments, onOpen, edit)
     SectionHeader(
         title = if (state.rows.isEmpty()) "Documents" else "Documents · ${state.rows.size}",
     )
     if (state.rows.isNotEmpty()) {
-        Column { state.rows.forEach { row -> DocumentRow(row, onOpen, onEdit) } }
+        Column { state.rows.forEach { row -> DocumentRow(row, onOpen, edit) } }
     } else if (state.store is StoreState.Ready) {
         // Only a folder that is actually there can be empty; without one the status block below
         // is the whole story, and "No documents yet" over it would read as the wrong problem.
         QuietLine("No documents yet")
     }
     Spacer(Modifier.height(4.dp))
+    if (readOnly) return
     // Both add actions are hidden rather than disabled when there is no folder: there is nowhere
     // for the bytes to go, and a greyed button invites a tap that can only fail (spec §8.1).
     if (state.store is StoreState.Ready) {
@@ -140,6 +144,11 @@ fun AttachmentsSection(
     owner: AttachmentOwner,
     snackbars: SnackbarHostState,
     onOpenSettings: () -> Unit,
+    /**
+     * #77 (C19, R77-4): a transferred-out owner's documents — each opens, none can be added, edited or deleted, and
+     * no folder card is drawn (nothing can be added anyway).
+     */
+    readOnly: Boolean = false,
 ) {
     // Keyed by owner so an asset and one of its events never share a model within an entry.
     val model: AttachmentsSectionViewModel =
@@ -179,6 +188,7 @@ fun AttachmentsSection(
         onAddFiles = pickers.addFiles,
         onTakePhoto = pickers.takePhoto,
         onOpenSettings = onOpenSettings,
+        readOnly = readOnly,
     )
 
     // Read back out of the live state, so a rename or a delete redraws (or closes) the sheet.
@@ -202,7 +212,7 @@ fun AttachmentsSection(
 private fun KeyDocumentsBlock(
     groups: List<KeyDocumentGroup>,
     onOpen: (AttachmentRowState) -> Unit,
-    onEdit: (AttachmentRowState) -> Unit,
+    onEdit: ((AttachmentRowState) -> Unit)?,
 ) {
     if (groups.isEmpty()) return
     SectionHeader(title = KEY_DOCUMENTS)
@@ -225,7 +235,7 @@ private fun ActionButton(label: String, icon: ImageVector, onClick: () -> Unit) 
 private fun DocumentRow(
     row: AttachmentRowState,
     onOpen: (AttachmentRowState) -> Unit,
-    onEdit: (AttachmentRowState) -> Unit,
+    onEdit: ((AttachmentRowState) -> Unit)?,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -252,11 +262,13 @@ private fun DocumentRow(
                 QuietLine(row.notes, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        IconButton(onClick = { onEdit(row) }) {
-            Icon(
-                imageVector = Icons.Outlined.MoreVert,
-                contentDescription = "More for ${row.displayName}",
-            )
+        if (onEdit != null) {
+            IconButton(onClick = { onEdit(row) }) {
+                Icon(
+                    imageVector = Icons.Outlined.MoreVert,
+                    contentDescription = "More for ${row.displayName}",
+                )
+            }
         }
     }
 }

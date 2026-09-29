@@ -1,15 +1,22 @@
 package com.loosecannon.servicetag.core.reminders
 
+import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
 import com.loosecannon.servicetag.core.model.PolicyPhase
 import com.loosecannon.servicetag.core.model.ScheduleState
 import com.loosecannon.servicetag.core.model.ScheduleStatus
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.statusOf
+import com.loosecannon.servicetag.core.schedule.targetInService
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import java.time.LocalDate
 
@@ -28,15 +35,27 @@ import java.time.LocalDate
  * [SubjectState.Withdrawn] so a provider is told to let go of it, rather than disappearing and
  * leaving the provider to infer that from an absence. What is genuinely absent is a schedule nobody
  * asked to be reminded about — reminders switched off, or no enabled row for this provider.
+ *
+ * **Withdrawn is a schedule's lifecycle and its target's** (#77, C11, R77-20). An ARCHIVED schedule is
+ * withdrawn; so is a live schedule whose target is no longer maintained here — an asset that is
+ * archived, retired or transferred out from this phone, or a group wholly transferred out — by the one
+ * predicate every surface shares (`targetInService` with the transfer records' held set). This corrects
+ * the shipped defect that kept an archived or retired asset's live schedule reminding, and it quiesces a
+ * transferred-out asset by its record, independent of ARCHIVED. A group schedule stays Active while any
+ * member stays: a member's retirement or transfer alone withdraws nothing. An archived group's schedule
+ * is still absent, as before.
  */
 class BuildReminderSubjects(
     private val schedules: ScheduleRepository,
     private val groups: GroupRepository,
+    /** #77 (C11): read for the target's lifecycle only — whether it is still maintained here. */
+    private val assets: AssetRepository,
+    /** #77 (C11): the transfer records, read once per answer for the held set. */
+    private val transfers: TransferRecordRepository,
     /**
      * State is read through [RecomputeSchedules.readState], which derives a stale or missing row
-     * instead of skipping it, so this class never reads the state table directly; and nothing about
-     * an Asset is read here at all — where a parked subject comes back is the policy's answer,
-     * carried on the state.
+     * instead of skipping it, so this class never reads the state table directly; where a parked
+     * subject comes back is the policy's answer, carried on the state.
      */
     private val occurrences: RecomputeSchedules,
 ) {
@@ -48,11 +67,27 @@ class BuildReminderSubjects(
      * shape of this answer, or of the port that consumes it, knows how many there are. The order is
      * by schedule id — a stable order is what lets two consecutive answers be compared at all.
      */
-    suspend fun forProvider(provider: ProviderId, today: LocalDate): List<ReminderSubject> =
-        schedules.all()
+    suspend fun forProvider(provider: ProviderId, today: LocalDate): List<ReminderSubject> {
+        val targets = Targets(
+            assetsById = assets.all().associateBy { it.id },
+            groupsById = groups.all().associateBy { it.id },
+            held = transfers.heldIds(),
+        )
+        return schedules.all()
             .filter { it.remindersEnabled && it.isEnabledFor(provider) }
             .sortedBy { it.id.value }
-            .mapNotNull { subjectOf(it, today) }
+            .mapNotNull { subjectOf(it, today, targets) }
+    }
+
+    /** The assets, groups and held set one answer judges every target by, each read once. */
+    private class Targets(
+        val assetsById: Map<AssetId, Asset>,
+        val groupsById: Map<GroupId, MaintenanceGroup>,
+        val held: Set<AssetId>,
+    ) {
+        fun maintainedHere(schedule: MaintenanceSchedule): Boolean =
+            schedule.targetInService({ assetsById[it] }, { groupsById[it] }, held)
+    }
 
     /**
      * One list per provider, keyed by the provider.
@@ -85,13 +120,17 @@ class BuildReminderSubjects(
      * against, so a provider never says "overdue since" a date the status was not judged by. A
      * withdrawn subject keeps the effective date it was last shown with; a parked one has none.
      */
-    private suspend fun subjectOf(schedule: MaintenanceSchedule, today: LocalDate): ReminderSubject? {
-        if (targetGroupIsArchived(schedule)) return null
+    private suspend fun subjectOf(
+        schedule: MaintenanceSchedule,
+        today: LocalDate,
+        targets: Targets,
+    ): ReminderSubject? {
+        if (targetGroupIsArchived(schedule, targets)) return null
         val state = occurrences.readState(schedule)
         // The fail-safe PAUSED an archived row folds to is never asked for: withdrawal comes first.
         val status = statusOf(schedule, state, today)
 
-        val subjectState = subjectStateOf(schedule, state, status)
+        val subjectState = subjectStateOf(schedule, state, status, targets.maintainedHere(schedule))
         val dueOn = when (subjectState) {
             is SubjectState.Parked -> null
             SubjectState.Active -> state.actionableDueOn?.let(LocalDate::parse)
@@ -111,9 +150,9 @@ class BuildReminderSubjects(
         )
     }
 
-    private suspend fun targetGroupIsArchived(schedule: MaintenanceSchedule): Boolean {
+    private fun targetGroupIsArchived(schedule: MaintenanceSchedule, targets: Targets): Boolean {
         val target = schedule.target as? ScheduleTarget.GroupTarget ?: return false
-        return groups.get(target.groupId)?.archivedAt != null
+        return targets.groupsById[target.groupId]?.archivedAt != null
     }
 
     /**
@@ -128,6 +167,9 @@ class BuildReminderSubjects(
      *
      * - ARCHIVED → [SubjectState.Withdrawn], asked **first**, so a retired obligation is never
      *   reported parked and never reported active.
+     * - a target no longer maintained here ([targetMaintained] false: an archived, retired or
+     *   transferred-out asset, or a group wholly transferred out) → [SubjectState.Withdrawn], asked
+     *   second, so a pause or a season can never keep such a schedule's post standing (#77, R77-20).
      * - PAUSED → parked with no date: a pause has none.
      * - DORMANT → parked until the actionable date, the day the season lets it back in — none for
      *   a MANUAL asset, whose next START is never predicted.
@@ -140,8 +182,10 @@ class BuildReminderSubjects(
         schedule: MaintenanceSchedule,
         state: ScheduleState,
         status: DueStatus,
+        targetMaintained: Boolean,
     ): SubjectState = when {
         schedule.status == ScheduleStatus.ARCHIVED -> SubjectState.Withdrawn
+        !targetMaintained -> SubjectState.Withdrawn
         schedule.status == ScheduleStatus.PAUSED -> SubjectState.Parked(null)
         state.policyPhase == PolicyPhase.DORMANT -> SubjectState.Parked(state.actionableDueOn?.let(LocalDate::parse))
         status == DueStatus.DEFERRED -> SubjectState.Parked(state.actionableDueOn?.let(LocalDate::parse))

@@ -80,6 +80,7 @@ fun EventDetailScreen(
     val missing by model.missing.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
     val confirm by model.deleteConfirm.collectAsStateWithLifecycle()
+    LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
 
     // Deleting an entry makes it missing too, so both routes out are funnelled through one latch:
     // two pops would take the asset screen with them.
@@ -117,7 +118,8 @@ fun EventDetailScreen(
                     }
                 },
                 actions = {
-                    if (current != null) {
+                    // #77 (C19): a transferred-out asset's entry is read, never changed.
+                    if (current != null && current.editable) {
                         EntryOverflow(
                             onEdit = { onEdit(current.event.assetId.value, current.event.id.value) },
                             onDelete = model::askDelete,
@@ -169,6 +171,7 @@ fun EventDetailScreen(
                 owner = AttachmentOwner.OfEvent(EventId(eventId)),
                 snackbars = snackbars,
                 onOpenSettings = onOpenSettings,
+                readOnly = !current.editable,
             )
             MaterialsSection(current.event)
             NotesSection(current.event.notes)

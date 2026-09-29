@@ -49,6 +49,9 @@ class RoomGroupRepository(private val dao: MaintenanceGroupDao) : GroupRepositor
     override suspend fun allWindowsFor(assetId: AssetId): List<MaintenanceGroup> =
         dao.everForAsset(assetId.value).map { it.toDomain() }
 
+    /** #77 (C15): a Transfer Pack's return only. */
+    override suspend fun delete(id: GroupId) = dao.delete(id.value)
+
     override suspend fun deleteAll() = dao.deleteAll()
 
     override fun observeAll(): Flow<List<MaintenanceGroup>> =

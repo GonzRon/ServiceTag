@@ -675,6 +675,27 @@ val MIGRATION_12_13: Migration = object : Migration(12, 13) {
 }
 
 /**
+ * Schema v13 -> v14 (#77, C6; R77-3, R77-12): the transfer records, one new table, and nothing existing
+ * moves — no column, no row and no timestamp, so a pre-upgrade export still re-plans IDENTICAL.
+ *
+ *  1. `asset_transfer`, one append-only row per OUT, IN or WITHDRAWN, with **no foreign key**: a record names
+ *     its asset softly and outlives it (`DeleteAsset` keeps it, R77-4).
+ *  2. `index_asset_transfer_asset_id`, for the per-asset reads.
+ *
+ * Each statement is copied verbatim from the exported `14.json`, so Room validates it on open.
+ */
+val MIGRATION_13_14: Migration = object : Migration(13, 14) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `asset_transfer` (`id` TEXT NOT NULL, `asset_id` TEXT NOT NULL, " +
+                "`kind` TEXT NOT NULL, `pack_id` TEXT NOT NULL, `lineage` TEXT NOT NULL, `at` INTEGER NOT NULL, " +
+                "`pack_sha256` TEXT NOT NULL, `name_snapshot` TEXT NOT NULL, `note` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        )
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_asset_transfer_asset_id` ON `asset_transfer` (`asset_id`)")
+    }
+}
+
+/**
  * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
  * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
  */

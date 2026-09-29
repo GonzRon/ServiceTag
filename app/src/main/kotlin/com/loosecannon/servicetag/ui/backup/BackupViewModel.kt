@@ -8,10 +8,14 @@ import com.loosecannon.servicetag.core.backup.ArtifactsSetMismatch
 import com.loosecannon.servicetag.core.backup.ArtifactsWriteFailed
 import com.loosecannon.servicetag.core.backup.ArtifactsWritten
 import com.loosecannon.servicetag.core.backup.BackupSetIncomplete
+import com.loosecannon.servicetag.core.backup.TransferredGraphEntangled
+import com.loosecannon.servicetag.core.backup.TransferredOutInArchive
+import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.BackupIO
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.StoreIoException
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.usecase.ArtifactsReport
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
@@ -90,11 +94,13 @@ class BackupViewModel(
     private val storage: AttachmentStorage,
     private val prefs: AppPrefs,
     private val clock: Clock,
+    /** #77 (P77-68): the transfer records, which name a refused asset by the name it left with. */
+    private val transfers: TransferRecordRepository,
 ) : ViewModel() {
 
     constructor(graph: AppGraph) : this(
         graph.exportBackupSet, graph.importBackupReplace, graph.restoreArtifacts,
-        graph.storeIsEmpty, graph.attachmentStorage, graph.prefs, graph.clock,
+        graph.storeIsEmpty, graph.attachmentStorage, graph.prefs, graph.clock, graph.transferRecords,
     )
 
     private val _state = MutableStateFlow(
@@ -226,7 +232,9 @@ class BackupViewModel(
     }
 
     fun restoreDataFrom(io: BackupIO) = once {
-        restoreData(io).fold(::restoredLine, ::restoreReason)
+        restoreData(io).fold(::restoredLine) { error ->
+            if (error is TransferredOutInArchive) transferredOutLine(error) else restoreReason(error)
+        }
     }
 
     fun restoreFilesFrom(io: BackupIO) = once {
@@ -298,6 +306,9 @@ class BackupViewModel(
             "$base. Could not remove ${error.leftBehind.joinToString(", ")} — delete $pronoun yourself."
         }
         is NoAttachmentFolder -> reason(error)
+        // #77 (P77-58): a record here still names a transferred asset's graph; refused before any byte.
+        is TransferredGraphEntangled ->
+            "Export failed: records on this phone still point to a transferred asset. Nothing was saved."
         is BackupSetIncomplete -> "Backup not saved: " + error.wording()
         is ArtifactsWriteFailed ->
             "Export failed: the files archive could not be written. Nothing was saved."
@@ -310,6 +321,23 @@ class BackupViewModel(
                 "not ${error.expected.take(SHORT_ID)}"
         is StoreIoException -> "Choose an attachment folder in Settings first"
         else -> restoreReason(error)
+    }
+
+    /**
+     * #77 (P77-68, R77-13): the Replace restore refused a backup that still holds an asset this phone transferred out.
+     * One asset is named as it left (its OUT record's name); several are counted.
+     */
+    private suspend fun transferredOutLine(error: TransferredOutInArchive): String {
+        val ids = error.assetIds.distinct()
+        if (ids.size != 1) {
+            return "Restore failed: this backup still contains ${ids.size} assets that were transferred out from this phone. Nothing was replaced."
+        }
+        val name = transfers.forAsset(ids.single())
+            .filter { it.kind == TransferKind.OUT }
+            .maxWithOrNull(compareBy({ it.at }, { it.id }))
+            ?.nameSnapshot
+            ?: ids.single().value
+        return "Restore failed: this backup still contains $name, which was transferred out from this phone. Nothing was replaced."
     }
 
     /** The export side's lead-in, on the restore side: a bare exception message is not news. */
@@ -333,7 +361,7 @@ private suspend fun BackupSetSink.deleted(handle: String): Boolean =
  * The fallback is for the count-and-total half of `covers`: a write can fall short of the plan
  * with both lists empty, and "Backup not saved: " with nothing after it is not a sentence.
  */
-private fun BackupSetIncomplete.wording(): String = listOfNotNull(
+internal fun BackupSetIncomplete.wording(): String = listOfNotNull(
     missing.size.takeIf { it > 0 }?.let { n ->
         "$n attachment ${if (n == 1) "file is" else "files are"} missing"
     },

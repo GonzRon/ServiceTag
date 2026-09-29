@@ -27,6 +27,7 @@ import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.FakeTransferRecords
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.groupOf
@@ -107,6 +108,7 @@ internal class FakeGroupRepository : GroupRepository {
     override suspend fun all(): List<MaintenanceGroup> = rows.values.toList()
     override suspend fun forAsset(assetId: AssetId): List<MaintenanceGroup> = emptyList()
     override suspend fun allWindowsFor(assetId: AssetId): List<MaintenanceGroup> = emptyList()
+    override suspend fun delete(id: GroupId) { rows.remove(id.value) }
     override suspend fun deleteAll() = rows.clear()
     override fun observeAll(): Flow<List<MaintenanceGroup>> = flowOf(rows.values.toList())
     override fun observeForAsset(assetId: AssetId): Flow<List<MaintenanceGroup>> = flowOf(emptyList())
@@ -190,6 +192,7 @@ class ReminderHealthCheckTest {
     private val schedules = FakeScheduleRepository()
     private val assets = FakeAssetRepository()
     private val groups = FakeGroupRepository()
+    private val transfers = FakeTransferRecords()
     private val states = mutableMapOf<String, ScheduleState>()
     private val clock = Clock { dayMillis("2026-09-22") }
 
@@ -222,6 +225,7 @@ class ReminderHealthCheckTest {
         // The production check moves its blocking platform reads off the caller's thread; the
         // suite runs them on the test dispatcher so nothing is left in flight at assertion time.
         io = Dispatchers.Unconfined,
+        transfers = transfers,
     )
 
     private suspend fun codes(): List<String> = check().run().map { it.code }
@@ -610,6 +614,7 @@ class ReminderHealthCheckTest {
                 assets = graph.assets,
                 groups = graph.groups,
                 io = Dispatchers.Unconfined,
+                transfers = graph.transferRecords,
             )
             assertEquals("no stored row at all", emptyList<ScheduleState>(), graph.scheduleStates.all())
 

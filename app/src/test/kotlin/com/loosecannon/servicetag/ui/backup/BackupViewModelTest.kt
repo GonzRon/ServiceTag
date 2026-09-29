@@ -16,6 +16,12 @@ import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.StoreIsEmpty
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.testing.readingOf
+import com.loosecannon.servicetag.testing.scheduleOf
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -82,8 +88,8 @@ class BackupViewModelTest {
 
     private fun viewModel() = BackupViewModel(
         graph.exportBackupSet, graph.importBackupReplace, graph.restoreArtifacts,
-        StoreIsEmpty(graph.assets, graph.tags, graph.events, graph.attachments, graph.links, graph.categories),
-        graph.attachmentStorage, graph.prefs, graph.clock,
+        StoreIsEmpty(graph.assets, graph.tags, graph.events, graph.attachments, graph.links, graph.categories, graph.transferRecords),
+        graph.attachmentStorage, graph.prefs, graph.clock, graph.transferRecords,
     )
 
     // --- doubles ---------------------------------------------------------------------------
@@ -777,6 +783,67 @@ class BackupViewModelTest {
         assertEquals(assetsBefore, graph.assets.all().size)
         assertNotNull(report.lastRestoredBackupSetId)
         assertEquals(report.lastRestoredBackupSetId, vm.state.value.lastRestoredBackupSetId)
+    }
+
+    // --- #77 (B3): the two transfer refusals, in the shipped error lines ---------------------------------------
+
+    private fun outOf(asset: AssetId, name: String) = TransferRecord(
+        id = "out-${asset.value}", assetId = asset, kind = TransferKind.OUT, packId = "pack-q1", lineage = emptyList(),
+        at = 1_758_960_000_000L, packSha256 = "ab".repeat(32), nameSnapshot = name, note = "",
+    )
+
+    /** Row 27 (P77-58): a staying record names a transferred asset's schedule, so the export refuses before a byte. */
+    @Test fun anEntangledExportSaysP77_58() = runTest {
+        val heater = graph.createAsset.run("Example Water Heater", "Water")
+        val pump = graph.createAsset.run("Sample Pump", "Water")
+        graph.schedules.upsert(scheduleOf("s1", assetId = heater.id.value))
+        graph.events.upsert(
+            readingOf("e1", pump.id.value, "d-none", 1.0).copy(
+                kind = EventKind.NOTE, measurements = emptyList(), scheduleId = ScheduleId("s1"),
+            ),
+        )
+        graph.transferRecords.append(outOf(heater.id, "Example Water Heater"))
+        val vm = viewModel()
+        val sink = RecordingSink()
+
+        val said = async(Dispatchers.Main) { vm.messages.first() }
+        vm.exportSetTo(sink)
+
+        assertEquals(
+            "Export failed: records on this phone still point to a transferred asset. Nothing was saved.",
+            said.await(),
+        )
+        assertEquals(emptyList<String>(), sink.files.keys.toList())
+    }
+
+    /** P77-68 (R77-13), both forms: a pre-transfer backup still holds what this phone transferred out. */
+    @Test fun aReplaceRefusalSaysP77_68ForOneAndForSeveral() = runTest {
+        val heater = graph.createAsset.run("Example Water Heater", "Water")
+        val opener = graph.createAsset.run("Sample Garage Door Opener", "Garage")
+        graph.now = 7_000L
+        val vm = viewModel()
+        val sink = RecordingSink()
+        vm.exportSet(sink).getOrThrow()
+        val data = MemoryIO(sink.files.getValue(BackupSetNames.data(BackupSetNames.stamp(7_000L))))
+
+        graph.transferRecords.append(outOf(heater.id, "Example Water Heater"))
+        val one = async(Dispatchers.Main) { vm.messages.first() }
+        vm.restoreDataFrom(data)
+        assertEquals(
+            "Restore failed: this backup still contains Example Water Heater, which was transferred out from this " +
+                "phone. Nothing was replaced.",
+            one.await(),
+        )
+
+        graph.transferRecords.append(outOf(opener.id, "Sample Garage Door Opener"))
+        val several = async(Dispatchers.Main) { vm.messages.first() }
+        vm.restoreDataFrom(data)
+        assertEquals(
+            "Restore failed: this backup still contains 2 assets that were transferred out from this phone. " +
+                "Nothing was replaced.",
+            several.await(),
+        )
+        assertEquals(2, graph.assets.all().size)
     }
 
     // --- the restore prompt (#40) -----------------------------------------------------------

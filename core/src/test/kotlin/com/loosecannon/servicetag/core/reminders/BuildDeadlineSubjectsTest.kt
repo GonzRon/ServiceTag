@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,7 +22,7 @@ import kotlinx.coroutines.test.runTest
 class BuildDeadlineSubjectsTest {
 
     private val assets = InMemoryAssetRepository()
-    private val builder = BuildDeadlineSubjects(assets)
+    private val builder = BuildDeadlineSubjects(assets, InMemoryTransferRecordRepository())
 
     private suspend fun seed(
         id: String,

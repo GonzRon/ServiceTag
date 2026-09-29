@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
+import com.loosecannon.servicetag.core.testing.transferOf
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.AssetEvent
@@ -40,10 +42,11 @@ import kotlin.test.assertTrue
  *
  * One case per kind of record, each on its own, because the question the Backup screen asks is
  * whether *anything at all* is here: a phone holding one tombstone link row and nothing else has
- * something to lose, and offering it a plain confirm would be a lie. The six kinds are the six
+ * something to lose, and offering it a plain confirm would be a lie. The seven kinds are the seven
  * the use case reads; definitions and profiles are not among them because neither can exist
  * without the asset it names (`Journal.kt:10`, `Journal.kt:30`), so the asset check answers for
- * both. #74's category row is the sixth: it exists without any asset by design.
+ * both. #74's category row is the sixth: it exists without any asset by design; #77's transfer record
+ * is the seventh, for the same reason.
  */
 class StoreIsEmptyTest {
 
@@ -53,7 +56,8 @@ class StoreIsEmptyTest {
     private val attachments = InMemoryAttachmentRepository()
     private val links = InMemoryLinkRepository()
     private val categories = InMemoryCategoryRepository()
-    private val storeIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links, categories)
+    private val transfers = InMemoryTransferRecordRepository()
+    private val storeIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links, categories, transfers)
 
     /** An invented canonical UUID, the same one `ResolveTagTest` uses. Never a real tag's id. */
     private val tagKey = "123e4567-e89b-12d3-a456-426614174000"
@@ -157,6 +161,16 @@ class StoreIsEmptyTest {
 
         assertTrue(serviceCases.all().isEmpty() && caseEntries.all().isEmpty(), "the asset took its case and timeline")
         assertTrue(storeIsEmpty.run())
+    }
+
+    /**
+     * #77 (C9): the seventh kind. A transfer record names its asset softly and outlives it by design — a
+     * phone that transferred its only asset out and deleted it still holds the record a restore would wipe.
+     */
+    @Test fun transferRecordsAloneAreNotEmpty() = runTest {
+        transfers.append(transferOf("r1", assetId = "a1"))
+
+        assertFalse(storeIsEmpty.run())
     }
 
     /**

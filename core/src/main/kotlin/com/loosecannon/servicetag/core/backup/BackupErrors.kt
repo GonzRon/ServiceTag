@@ -1,6 +1,8 @@
 package com.loosecannon.servicetag.core.backup
 
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AttachmentId
+import com.loosecannon.servicetag.core.transfer.EntangledRef
 
 /** Anything that stops a backup from being read. Never thrown while writing one. */
 sealed class BackupException(message: String) : Exception(message)
@@ -31,3 +33,20 @@ class ArtifactsWriteFailed(message: String, cause: Throwable? = null) : Exceptio
 /** Thrown by the export when [ArtifactsWritten.covers] is false; the archives are already gone. */
 class BackupSetIncomplete(val missing: List<AttachmentId>, val mismatched: List<AttachmentId>) :
     Exception("backup set incomplete: ${missing.size} missing, ${mismatched.size} mismatched")
+
+/**
+ * #77 (C9; P77-58, mapped by the Backup screen): rows that stay on this phone name rows of an asset it has
+ * transferred out, so no ordinary backup of what stays would decode. Thrown by the export **before** any
+ * byte exists; [refs] names every such reference. Not a [BackupException]: nothing is being read.
+ */
+class TransferredGraphEntangled(val refs: List<EntangledRef>) :
+    Exception("${refs.size} rows here name rows of an asset transferred out")
+
+/**
+ * #77 (R77-13, C9 amended): a Replace restore of an archive that carries the graph of [assetIds] — assets
+ * this phone transferred out and holds as such — with no later IN in the archive's own records whose lineage
+ * closes this phone's OUT. Thrown **before** anything is wiped. The Backup screen maps it to the ratified P77-68
+ * (one asset by name, several by count); the message here is deliberately code, not a sentence.
+ */
+class TransferredOutInArchive(val assetIds: List<AssetId>) :
+    Exception("TransferredOutInArchive(${assetIds.joinToString { it.value }})")

@@ -21,6 +21,13 @@ import com.loosecannon.servicetag.core.condition.needsIncident
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.model.lineageFor
+import com.loosecannon.servicetag.core.usecase.BackupRepositories
+import com.loosecannon.servicetag.core.usecase.CreateTransferPack
+import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
+import com.loosecannon.servicetag.core.usecase.WithdrawTransferRecord
+import com.loosecannon.servicetag.transfer.TransferPackWriter
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
@@ -51,6 +58,7 @@ import com.loosecannon.servicetag.core.references.StreamSourcePolicy
 import com.loosecannon.servicetag.core.reminders.BuildDeadlineSubjects
 import com.loosecannon.servicetag.core.reminders.BuildLoanSubjects
 import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
+import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
 import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
 import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
@@ -81,6 +89,9 @@ import com.loosecannon.servicetag.core.usecase.DeleteProfile
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.GetAssetSeason
 import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
+import com.loosecannon.servicetag.core.usecase.ImportTransferPack
+import com.loosecannon.servicetag.ui.transfer.`import`.CacheTransferPackInbox
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackInbox
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LendAsset
 import com.loosecannon.servicetag.core.usecase.LogEvent
@@ -133,6 +144,8 @@ import com.loosecannon.servicetag.data.room.MIGRATION_9_10
 import com.loosecannon.servicetag.data.room.MIGRATION_10_11
 import com.loosecannon.servicetag.data.room.MIGRATION_11_12
 import com.loosecannon.servicetag.data.room.MIGRATION_12_13
+import com.loosecannon.servicetag.data.room.MIGRATION_13_14
+import com.loosecannon.servicetag.data.room.RoomTransferRecordRepository
 import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
@@ -224,35 +237,64 @@ class AppGraph(private val context: Context) {
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
-            MIGRATION_11_12, MIGRATION_12_13,
+            MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
         )
         .build()
 
     val clock: Clock = Clock { System.currentTimeMillis() }
     val ids: IdGenerator = UuidGenerator
     val uow: UnitOfWork = RoomUnitOfWork(db)
-    val assets: AssetRepository = RoomAssetRepository(db.assetDao())
-    val tags: TagRepository = RoomTagRepository(db.nfcTagDao())
     // The tombstone port: backup export and restore, and nothing else (2.6).
     val links: LinkRepository = RoomLinkRepository(db.externalLinkDao())
-    val definitions: DefinitionRepository = RoomDefinitionRepository(db.definitionDao())
-    val profiles: ProfileRepository = RoomProfileRepository(db.profileDao())
-    val events: EventRepository = RoomEventRepository(db.eventDao())
-    val attachments: AttachmentRepository = RoomAttachmentRepository(db.attachmentDao())
+
+    /**
+     * #77's one data port (C6): the transfer records, appended and never updated or deleted one by one — no
+     * foreign key, so they outlive their assets. Written by marking (and, later, the withdrawal and the pack
+     * import), the merge and the replace restore. Declared before the ports below because the write guard reads it.
+     */
+    val transferRecords: TransferRecordRepository = RoomTransferRecordRepository(db.transferRecordDao())
+
+    // #77 (C12, R77-4): the rows the write guard looks owners up in, unwrapped — reads are the same through either.
+    private val roomEvents = RoomEventRepository(db.eventDao())
+    private val roomDefinitions = RoomDefinitionRepository(db.definitionDao())
+    private val roomProfiles = RoomProfileRepository(db.profileDao())
+    private val roomGroups = RoomGroupRepository(db.maintenanceGroupDao())
+    private val roomSchedules = RoomScheduleRepository(db.maintenanceScheduleDao())
+    private val roomServiceCases = RoomServiceCaseRepository(db.serviceCaseDao())
+
+    /**
+     * #77 (C12) — the one write guard: every one of the sixteen asset-owned ports below is its wrapped port, so every
+     * use case, view model and route that writes through this graph refuses an ordinary write on a transferred-out
+     * asset's rows ([com.loosecannon.servicetag.core.transfer.AssetTransferredOut]). The derived and device-local
+     * tables, the link tombstones, the categories and the records are not among them.
+     */
+    private val heldWriteGuard = HeldWriteGuard(
+        transferRecords, roomEvents, roomDefinitions, roomProfiles, roomGroups, roomSchedules, roomServiceCases, links,
+    )
+
+    private val roomAssets = RoomAssetRepository(db.assetDao())
+    val assets: AssetRepository = heldWriteGuard.assets(roomAssets)
+    val tags: TagRepository = heldWriteGuard.tags(RoomTagRepository(db.nfcTagDao()))
+    val definitions: DefinitionRepository = heldWriteGuard.definitions(roomDefinitions)
+    val profiles: ProfileRepository = heldWriteGuard.profiles(roomProfiles)
+    val events: EventRepository = heldWriteGuard.events(roomEvents)
+    val attachments: AttachmentRepository = heldWriteGuard.attachments(RoomAttachmentRepository(db.attachmentDao()))
     // The three v6 data ports the backup and merge paths read and write. The queries the engine and
     // the group screens need are added to these ports, and to their adapters, together.
-    val groups: GroupRepository = RoomGroupRepository(db.maintenanceGroupDao())
-    val schedules: ScheduleRepository = RoomScheduleRepository(db.maintenanceScheduleDao())
-    val closures: ClosureRepository = RoomClosureRepository(db.occurrenceClosureDao())
+    val groups: GroupRepository = heldWriteGuard.groups(roomGroups)
+    val schedules: ScheduleRepository = heldWriteGuard.schedules(roomSchedules)
+    val closures: ClosureRepository = heldWriteGuard.closures(RoomClosureRepository(db.occurrenceClosureDao()))
 
     /** 1.3's one new data port: the URIs on an asset. Its rules live in the use cases. */
-    val references: ReferenceRepository = RoomReferenceRepository(db.assetReferenceDao())
+    val references: ReferenceRepository = heldWriteGuard.references(RoomReferenceRepository(db.assetReferenceDao()))
 
     // 1.4's three data ports. The two fact stores are insert and query only; the subjects are
     // configuration, upserted and never deleted. Their rules live in the use cases that write them.
-    val seasonActivations: SeasonActivationRepository = RoomSeasonActivationRepository(db.seasonActivationDao())
-    val conditions: ConditionRepository = RoomConditionRepository(db.assetConditionDao())
-    val healthSubjects: HealthSubjectRepository = RoomHealthSubjectRepository(db.healthSubjectDao())
+    val seasonActivations: SeasonActivationRepository =
+        heldWriteGuard.activations(RoomSeasonActivationRepository(db.seasonActivationDao()))
+    val conditions: ConditionRepository = heldWriteGuard.conditions(RoomConditionRepository(db.assetConditionDao()))
+    val healthSubjects: HealthSubjectRepository =
+        heldWriteGuard.subjects(RoomHealthSubjectRepository(db.healthSubjectDao()))
 
     /**
      * #74's one data port: the owner's own categories, beside the compiled built-ins. Written by a
@@ -266,14 +308,15 @@ class AppGraph(private val context: Context) {
      * #79's two data ports (C13): a service case's header, upserted and never deleted, and its
      * timeline, inserted and never amended. Their rules live in the three case use cases below.
      */
-    val serviceCases: ServiceCaseRepository = RoomServiceCaseRepository(db.serviceCaseDao())
-    val serviceCaseEntries: ServiceCaseEntryRepository = RoomServiceCaseEntryRepository(db.serviceCaseEntryDao())
+    val serviceCases: ServiceCaseRepository = heldWriteGuard.cases(roomServiceCases)
+    val serviceCaseEntries: ServiceCaseEntryRepository =
+        heldWriteGuard.entries(RoomServiceCaseEntryRepository(db.serviceCaseEntryDao()))
 
     /**
      * #72's one data port (C1): the loans, upserted and never deleted — "Mark returned" is a loan's only
      * exit, and a returned loan stays as history. Its rules live in the four loan use cases below.
      */
-    val loans: AssetLoanRepository = RoomAssetLoanRepository(db.assetLoanDao())
+    val loans: AssetLoanRepository = heldWriteGuard.loans(RoomAssetLoanRepository(db.assetLoanDao()))
 
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
@@ -300,13 +343,14 @@ class AppGraph(private val context: Context) {
      * one provider that delivers is [localReminderProvider] below; what is here is the question
      * every provider is asked.
      */
-    val buildReminderSubjects: BuildReminderSubjects = BuildReminderSubjects(schedules, groups, recomputeSchedules)
+    val buildReminderSubjects: BuildReminderSubjects =
+        BuildReminderSubjects(schedules, groups, assets, transferRecords, recomputeSchedules)
 
-    /** #79 (C5): the warranty dates every provider is asked to hold, from the assets alone. */
-    val buildDeadlineSubjects: BuildDeadlineSubjects = BuildDeadlineSubjects(assets)
+    /** #79 (C5): the warranty dates every provider is asked to hold, from the assets (#77: and the held set). */
+    val buildDeadlineSubjects: BuildDeadlineSubjects = BuildDeadlineSubjects(assets, transferRecords)
 
-    /** #72 (C9): the open loans' due-back dates every provider is asked to hold, from the loans alone. */
-    val buildLoanSubjects: BuildLoanSubjects = BuildLoanSubjects(loans)
+    /** #72 (C9): the open loans' due-back dates every provider is asked to hold (#77: none of a held asset). */
+    val buildLoanSubjects: BuildLoanSubjects = BuildLoanSubjects(loans, transferRecords)
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
 
     // #24 — the platform-ownership seams B06, B07, B10 and B14 compile against (master plan §12).
@@ -495,14 +539,15 @@ class AppGraph(private val context: Context) {
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
+        serviceCases, serviceCaseEntries, loans, transferRecords, uow, ids, clock, BuildConfig.VERSION_NAME,
+        SCHEMA_VERSION,
     )
 
     /** Wipe-and-load import. Replace is the only mode Phase 1A ships (D7 1A). */
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, attachmentStorage, uow,
         // Derived state is rebuilt after any import, and the wipe took it with the schedule rows.
         rebuildAll = { recomputeSchedules.all() },
     )
@@ -516,12 +561,12 @@ class AppGraph(private val context: Context) {
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, attachmentStorage, uow,
     )
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, attachmentStorage, uow,
         // The total post-apply recompute, wired to the engine: an imported event, membership row,
         // closure or meter reading can each move a due date, and rebuilding every schedule inside
         // the apply's own transaction is cheaper than enumerating which.
@@ -534,9 +579,48 @@ class AppGraph(private val context: Context) {
      * #40 — is there anything on this phone a restore would replace? The Backup screen asks once,
      * per picked file, and the answer chooses the confirmation. Definitions, profiles, #79's service
      * cases and #72's loans are not read: none can exist without its asset, so `assets` answers for them. A
-     * category row can (#74: it outlives its assets), so `categories` is the sixth kind.
+     * category row can (#74: it outlives its assets), so `categories` is the sixth kind, and so can a transfer
+     * record (#77: it outlives its asset by design), the seventh.
      */
-    val storeIsEmpty: StoreIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links, categories)
+    val storeIsEmpty: StoreIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links, categories, transferRecords)
+
+    /**
+     * #77 (C5, C8) — a Transfer Pack's contents, and the marking that follows its ready screen. Creation reads
+     * and writes nothing; its lineage is the records' `lineageFor`, asked inside its read. Marking is one write
+     * that re-reads, re-hashes and re-validates the pack, archives and rebuilds each asset, and appends the OUTs
+     * last. The screens are B4's.
+     */
+    private val backupRepositories = BackupRepositories(
+        assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
+        seasonActivations, conditions, healthSubjects, categories, serviceCases, serviceCaseEntries, loans,
+        transferRecords,
+    )
+    val createTransferPack: CreateTransferPack = CreateTransferPack(
+        backupRepositories, uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,
+        lineageOf = { id -> lineageFor(transferRecords.all(), id) },
+    )
+    val markTransferredOut: MarkTransferredOut = MarkTransferredOut(backupRepositories, uow, ids, clock) {
+        recomputeSchedules.forAsset(it)
+    }
+
+    /**
+     * #77 (C5, C18, C22; R77-18) — the sender's pack files: sealed into `cache/transfer/` (the one directory the
+     * `.files` provider exposes), the artifacts work file in `cache/transfer-work/`, and the start-up sweep of both
+     * and of B3's `cache/transfer-in/`. [withdrawTransferRecord] is C23's phone-only withdrawal.
+     */
+    val transferPackWriter: TransferPackWriter = TransferPackWriter(context.applicationContext.cacheDir, attachmentStorage)
+    val withdrawTransferRecord: WithdrawTransferRecord = WithdrawTransferRecord(backupRepositories, uow, ids, clock)
+
+    /**
+     * #77 (C14, C15; R77-2) — the Transfer Pack import, additively through the merge core and the guarded ports: the
+     * Backup screen's button and a share into ServiceTag copy the pack into `cache/transfer-in/` ([transferPackInbox])
+     * and read only that copy.
+     */
+    val importTransferPack: ImportTransferPack = ImportTransferPack(
+        buildBackupMergePlan, applyBackupMergePlan, transferRecords, assets, tags, attachmentStorage, uow, clock,
+    )
+    val transferPackInbox: TransferPackInbox =
+        CacheTransferPackInbox(File(context.applicationContext.cacheDir, "transfer-in"), ids)
 
     /** Process-wide scope for work that must outlive a finishing activity (e.g. abandoning a row). */
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -554,7 +638,7 @@ class AppGraph(private val context: Context) {
     )
     val ndefCodec: NdefCodec = NdefCodec(tagIdentity)
 
-    val resolveTag: ResolveTag = ResolveTag(tags, assets, uow, clock)
+    val resolveTag: ResolveTag = ResolveTag(tags, assets, uow, clock, transferRecords)
     val bindTag: BindTag = BindTag(tags, assets, uow, clock)
     val provisionTag: ProvisionTag = ProvisionTag(tags, assets, uow, ids, clock)
     val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
@@ -563,7 +647,8 @@ class AppGraph(private val context: Context) {
     // catalog's spelling and writes a first-use row beside the asset, after every refusal; rename and
     // delete are the Categories screen's two writes.
     val promoteCategory: PromoteCategory = PromoteCategory(categories)
-    val renameCategory: RenameCategory = RenameCategory(categories, assets, uow, clock)
+    // #77 (C12, mn-1): the catalog command's own asset port — its category rewrite passes the guard, nothing else does.
+    val renameCategory: RenameCategory = RenameCategory(categories, heldWriteGuard.catalogAssets(roomAssets), uow, clock)
     val deleteCategory: DeleteCategory = DeleteCategory(categories, assets, uow)
 
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate, promoteCategory)
@@ -674,7 +759,8 @@ class AppGraph(private val context: Context) {
     )
     // 1.4.1 (#80) — the one provider repair: `/v1` and the MCP call it through `MaintenanceHandlers`,
     // Reminder Health on an explicit tap. Never an automatic repair, never from the backstop.
-    val repairScheduleProviders: RepairScheduleProviders = RepairScheduleProviders(schedules, uow, clock)
+    val repairScheduleProviders: RepairScheduleProviders =
+        RepairScheduleProviders(schedules, assets, groups, transferRecords, uow, clock)
     val completeSchedule: CompleteSchedule =
         CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recomputeSchedules)
     val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)
@@ -700,12 +786,12 @@ class AppGraph(private val context: Context) {
      */
     val assetHealthReadModel: AssetHealthReadModel = AssetHealthReadModel(
         assets, healthSubjects, schedules, scheduleStates, events, profiles, seasonActivations, conditions,
-        recomputeSchedules, today, zone = { ZoneId.systemDefault() },
+        recomputeSchedules, today, zone = { ZoneId.systemDefault() }, transfers = transferRecords,
     )
 
     /** 1.4 — the asset-level attention rows (DOWN, DEGRADED, independent health), `/v1/attention`'s. */
     val attentionReadModel: AttentionReadModel =
-        AttentionReadModel(assets, assetHealthReadModel, today)
+        AttentionReadModel(assets, assetHealthReadModel, today, transferRecords)
 
     /**
      * 1.2 — the one due projection behind the dashboard, the Maintenance destination, the scan
@@ -721,6 +807,7 @@ class AppGraph(private val context: Context) {
     val dueReadModel: DueReadModel = DueReadModel(
         schedules, assets, groups, definitions, recomputeSchedules, today, assetHealthReadModel,
         snoozedUntilOf = { scheduleLocalDelivery.get(it)?.snoozedUntilAt },
+        transfers = transferRecords,
     )
 
     /**
@@ -746,6 +833,7 @@ class AppGraph(private val context: Context) {
         states = scheduleStateReader,
         assets = assets,
         groups = groups,
+        transfers = transferRecords,
     )
 
     /**
@@ -867,6 +955,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 13
+        const val SCHEMA_VERSION = 14
     }
 }

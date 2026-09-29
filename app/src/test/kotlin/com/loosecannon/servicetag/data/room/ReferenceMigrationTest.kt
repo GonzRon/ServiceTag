@@ -101,7 +101,8 @@ class ReferenceMigrationTest {
                     // A v7 table added later without a line in the loop below fails here first.
                     assertEquals(
                         "UNTOUCHED must name every table the migration found",
-                        m.tableNames() - REFERENCE - ROOM_INTERNAL - V8_TABLES - V9_TABLES - V11_TABLES - V12_TABLES - V13_TABLES,
+                        m.tableNames() - REFERENCE - ROOM_INTERNAL - V8_TABLES - V9_TABLES - V11_TABLES - V12_TABLES - V13_TABLES -
+                            V14_TABLES,
                         UNTOUCHED,
                     )
                     assertEquals("asset_reference columns", f.columnsOf(REFERENCE), m.columnsOf(REFERENCE))

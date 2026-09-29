@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.service
 
+import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -207,7 +208,7 @@ class ServiceCaseEditViewModel(
             } catch (failed: Exception) {
                 Log.w(TAG, "a case save failed", failed)
                 _state.update { it.copy(saving = false) }
-                _messages.tryEmit(COULD_NOT_SAVE_THIS_CASE)
+                _messages.tryEmit(failed.transferredOutOr(COULD_NOT_SAVE_THIS_CASE))
             }
         }
     }

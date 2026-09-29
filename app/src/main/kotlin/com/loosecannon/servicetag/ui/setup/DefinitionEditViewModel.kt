@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.setup
 
+import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.journal.DerivedProblem
@@ -296,7 +297,7 @@ class DefinitionEditViewModel(
                     "Offered as a field by ${failure.profileIds.named(form.profileNames)} — " +
                         "take it off that action first.",
                 )
-                else -> _messages.tryEmit("Could not save this reading.")
+                else -> _messages.tryEmit(failure.transferredOutOr("Could not save this reading."))
             }
             _state.update { it.copy(saving = false, problems = failure.asProblems()) }
         }
@@ -305,10 +306,11 @@ class DefinitionEditViewModel(
     fun archive(archived: Boolean) {
         viewModelScope.launch {
             val id = definitionId ?: return@launch
-            if (runCatching { archiveDefinition.run(id, archived) }.isSuccess) {
+            val archiving = runCatching { archiveDefinition.run(id, archived) }
+            if (archiving.isSuccess) {
                 _state.update { it.copy(archived = archived) }
             } else {
-                _messages.tryEmit("Could not change that reading.")
+                _messages.tryEmit(archiving.exceptionOrNull()!!.transferredOutOr("Could not change that reading."))
             }
         }
     }
@@ -321,7 +323,7 @@ class DefinitionEditViewModel(
             when (val failure = outcome.exceptionOrNull()) {
                 null -> _deleted.tryEmit(Unit)
                 is DefinitionReferenced -> _refusal.value = failure
-                else -> _messages.tryEmit("Could not delete this reading.")
+                else -> _messages.tryEmit(failure.transferredOutOr("Could not delete this reading."))
             }
         }
     }

@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.AssetId
@@ -18,7 +19,13 @@ import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.core.usecase.ArchiveGroup
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,13 +71,15 @@ data class GroupScheduleRow(
     val progress: String?,
     val checklist: List<GroupMemberRow>,
     val roundOpen: Boolean,
+    /** #77 (C19): false when the group has any row naming an asset transferred out — the round is read only. */
+    val editable: Boolean = true,
 ) {
     /**
      * Whether the round can still take a completion: it obliges somebody and somebody is still
      * outstanding. A round that obliges nobody is never offered for completion (invariant 74), and
      * emptiness is not the same question as completeness.
      */
-    val canComplete: Boolean get() = !requiredSetEmpty && roundOpen && checklist.any { !it.complete }
+    val canComplete: Boolean get() = editable && !requiredSetEmpty && roundOpen && checklist.any { !it.complete }
 }
 
 /**
@@ -87,6 +96,11 @@ data class GroupDetailState(
     val archived: Boolean,
     val members: List<GroupMemberRow>,
     val schedules: List<GroupScheduleRow>,
+    /**
+     * #77 (C19, R77-4): false when any row of the group, current or removed, names an asset transferred out from
+     * this phone — no edit, archive, new schedule or completion. Keyed on the held records, never on ARCHIVED.
+     */
+    val editable: Boolean = true,
 )
 
 /**
@@ -122,6 +136,8 @@ class GroupDetailViewModel(
     /** The one completion mechanism. Exposed because the screen draws its affordance. */
     val completion: CompletionFlow,
     private val id: GroupId,
+    /** #77 (C19): the held set. Null holds nothing — a test that is not about transfers. */
+    private val transfers: TransferRecordRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String) : this(
@@ -134,20 +150,27 @@ class GroupDetailViewModel(
         graph.today,
         graph.completionFlow,
         GroupId(id),
+        transfers = graph.transferRecords,
     )
 
     private val rows = groups.observeAll()
 
     private val _busy = MutableStateFlow(false)
 
+    /** #77 (C19): P77-35, once, when a write is refused because the group names a transferred-out asset. */
+    private val _messages = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
+    val messages: SharedFlow<String> = _messages.asSharedFlow()
+
     /** Whether a completion is in flight; the round's actions are disabled while it is. */
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
     val state: StateFlow<GroupDetailState?> =
-        combine(rows, schedules.observeAll(), states.observeAll()) { groupRows, _, _ ->
-            groupRows.firstOrNull { it.id == id }
+        combine(
+            rows, schedules.observeAll(), states.observeAll(), transfers?.observeHeldIds() ?: flowOf(emptySet()),
+        ) { groupRows, _, _, held ->
+            groupRows.firstOrNull { it.id == id }?.let { it to held }
         }
-            .map { group -> group?.let { detailOf(it) } }
+            .map { found -> found?.let { (group, held) -> detailOf(group, held) } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), null)
 
     /**
@@ -161,7 +184,14 @@ class GroupDetailViewModel(
 
     /** Archive is one column and no cascade: every window, completion and closure survives it. */
     fun setArchived(archived: Boolean) {
-        viewModelScope.launch { archiveGroup.run(id, archived) }
+        viewModelScope.launch {
+            // #77: a group that came to name a transferred-out asset while open is refused; the state redraws read only.
+            try {
+                archiveGroup.run(id, archived)
+            } catch (e: AssetTransferredOut) {
+                _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+            }
+        }
     }
 
     /**
@@ -170,11 +200,11 @@ class GroupDetailViewModel(
      * The member list is derived inside `CompleteGroupMembers`, not here, which is what stops a
      * surface completing somebody the round does not oblige (invariants 28, 29).
      */
-    fun completeAll(scheduleId: ScheduleId) = operate { completion.completeAll(scheduleId) }
+    fun completeAll(scheduleId: ScheduleId) = operate { sayIfHeld(completion.completeAll(scheduleId)) }
 
     /** **"Complete selected"**: exactly the members named, and no other (invariants 28, 29). */
     fun completeSelected(scheduleId: ScheduleId, assetIds: List<AssetId>) = operate {
-        if (assetIds.isNotEmpty()) completion.completeSelected(scheduleId, assetIds)
+        if (assetIds.isNotEmpty()) sayIfHeld(completion.completeSelected(scheduleId, assetIds))
     }
 
     /**
@@ -187,7 +217,12 @@ class GroupDetailViewModel(
      * that cannot be taken.
      */
     fun completeMember(scheduleId: ScheduleId, assetId: AssetId) = operate {
-        completion.complete(scheduleId, assetId)
+        sayIfHeld(completion.complete(scheduleId, assetId))
+    }
+
+    /** mn-1: a completion the guard refused (the group came to name a held asset) says P77-35. */
+    private fun sayIfHeld(outcome: CompletionOutcome) {
+        if ((outcome as? CompletionOutcome.Refused)?.cause is AssetTransferredOut) _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
     }
 
     /**
@@ -202,14 +237,19 @@ class GroupDetailViewModel(
             _busy.value = true
             try {
                 block()
+            } catch (e: AssetTransferredOut) {
+                // #77: refused by the guard; nothing written, the state redraws read only, and P77-35 says why.
+                _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
             } finally {
                 _busy.value = false
             }
         }
     }
 
-    private suspend fun detailOf(group: MaintenanceGroup): GroupDetailState {
+    private suspend fun detailOf(group: MaintenanceGroup, held: Set<AssetId>): GroupDetailState {
         val names = assets.all().associate { it.id to it.name }
+        // #77 (C19): any row, current or removed, naming a held asset makes the whole group read only.
+        val editable = group.members.none { it.assetId in held }
         return GroupDetailState(
             id = group.id,
             name = group.name,
@@ -221,7 +261,8 @@ class GroupDetailViewModel(
                 .map { GroupMemberRow(it.assetId, names[it.assetId].orEmpty()) },
             schedules = schedules.forGroup(group.id).listedForDue()
                 .sortedWith(compareBy({ it.title.lowercase() }, { it.id.value }))
-                .map { scheduleRow(it, names) },
+                .map { scheduleRow(it, names).copy(editable = editable) },
+            editable = editable,
         )
     }
 

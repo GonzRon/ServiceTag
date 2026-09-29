@@ -29,6 +29,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.loanOf
+import com.loosecannon.servicetag.core.testing.transferOf
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.testing.plainAssetOf
 import org.junit.jupiter.api.Test
 
@@ -248,6 +251,8 @@ class BackupCodecTest {
                 "serviceCases" to 0, "serviceCaseEntries" to 0,
                 // Format 13's key (#72), at zero here for the same reason.
                 "assetLoans" to 0,
+                // Format 14's key (#77), at zero here for the same reason.
+                "transferRecords" to 0,
             ),
             manifest.counts,
         )
@@ -475,6 +480,8 @@ class BackupCodecTest {
                 "serviceCases" to 0, "serviceCaseEntries" to 0,
                 // Format 13's key (#72), at zero here for the same reason.
                 "assetLoans" to 0,
+                // Format 14's key (#77), at zero here for the same reason.
+                "transferRecords" to 0,
             ),
             decoded.manifest.counts,
         )
@@ -1046,8 +1053,8 @@ class BackupCodecTest {
      * to 13 (#72), the legacy boundary did not.
      */
     @Test
-    fun theFormatIsThirteenAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(13, BackupCodec.FORMAT_VERSION)
+    fun theFormatIsFourteenAndTheLegacyBoundaryStaysSeven() {
+        assertEquals(14, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 
@@ -1236,6 +1243,46 @@ class BackupCodecTest {
     private fun <T> Random.pick(items: List<T>): T = items[nextInt(items.size)]
 
     // --- #72 (C2 iii, C6): the loans' graph -------------------------------------------------------
+
+    /**
+     * #77 (C7): an ordinary backup carries the records and **never** the graph of an asset they hold — so an
+     * archive whose own records hold one of its assets was not written by this build, and a replace of it
+     * would land an asset its own records say is gone. A record's asset is soft: a held asset absent from the
+     * file is the normal case, and a closed OUT (returned or withdrawn) holds nothing.
+     */
+    @Test
+    fun anAssetHeldByTheArchivesOwnRecordsIsCorrupt() {
+        val refusal = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(archiveOf(recorded(transferOf("r1", assetId = "a2", packId = "pack-q"))))
+        }
+        assertEquals("transferRecords: asset a2 is in the archive and held by its own records", refusal.message)
+
+        val softAndClosed = recorded(
+            transferOf("r1", assetId = "a9", packId = "pack-q"),
+            transferOf("r2", assetId = "a1", packId = "pack-s"),
+            transferOf("r3", assetId = "a1", kind = TransferKind.WITHDRAWN, packId = "pack-s"),
+            transferOf("r4", assetId = "a2", packId = "pack-t"),
+            transferOf("r5", assetId = "a2", kind = TransferKind.IN, packId = "pack-u", lineage = listOf("pack-t")),
+        )
+        assertEquals(softAndClosed, BackupCodec.decode(archiveOf(softAndClosed)).data)
+    }
+
+    @Test
+    fun aDuplicateRecordIdIsCorrupt() {
+        val refusal = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(
+                archiveOf(recorded(transferOf("r1", assetId = "a9"), transferOf("r1", assetId = "a8", packId = "pack-s"))),
+            )
+        }
+        assertEquals("transferRecords: duplicate id r1", refusal.message)
+    }
+
+    private fun recorded(vararg records: TransferRecord) = BackupData(
+        assets = listOf(plainAssetOf("a1", "Example Drill").toDto(), plainAssetOf("a2", "Example Ladder").toDto()),
+        nfcTags = emptyList(),
+        externalLinks = emptyList(),
+        transferRecords = records.map { it.toDto() },
+    )
 
     private fun lent(vararg loans: AssetLoan) = BackupData(
         assets = listOf(plainAssetOf("a1", "Example Drill").toDto(), plainAssetOf("a2", "Example Ladder").toDto()),

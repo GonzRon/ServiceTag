@@ -78,11 +78,13 @@ class DashboardViewModelMaintenanceTest {
         due = DueReadModel(
             graph.schedules, graph.assets, graph.groups,
             graph.definitions, graph.recomputeSchedules, graph.todayPort, graph.assetHealthReadModel, { null },
+            transfers = graph.transferRecords,
         ),
         attention = graph.attentionReadModel,
         assetHealth = graph.assetHealthReadModel,
         health = health,
         prefs = graph.prefs,
+        transfers = graph.transferRecords,
     )
 
     private suspend fun seed(schedule: MaintenanceSchedule) {

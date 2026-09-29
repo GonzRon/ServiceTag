@@ -22,6 +22,9 @@ import com.loosecannon.servicetag.core.usecase.ServiceCaseProblem
 import com.loosecannon.servicetag.core.usecase.ServiceCaseValidation
 import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import com.loosecannon.servicetag.ui.asset.LINKED_RECORD_REMOVED
 import com.loosecannon.servicetag.ui.condition.DATE_NOT_LATER_THAN_TODAY
 import com.loosecannon.servicetag.ui.condition.displayDate
@@ -109,9 +112,14 @@ data class ServiceCaseState(
     val repair: CaseLink?,
     val candidates: List<RepairCandidate>,
     val timeline: List<TimelineRow>,
+    /**
+     * #77 (C19, R77-4): false when the case's asset is transferred out from this phone — its timeline and links are
+     * read, and nothing is updated, linked, removed or edited. Keyed on the held records, never on ARCHIVED.
+     */
+    val editable: Boolean = true,
 ) {
     /** P79-59 while no repair record is linked and this asset has one to link. */
-    val offersLinkRepair: Boolean get() = repair == null && candidates.isNotEmpty()
+    val offersLinkRepair: Boolean get() = editable && repair == null && candidates.isNotEmpty()
 }
 
 /**
@@ -135,11 +143,14 @@ class ServiceCaseViewModel(
     private val id: ServiceCaseId,
     /** The zone an update is recorded in: the device's (B1's zone rule). */
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
+    /** #77 (C19): the held set. Null holds nothing — a test that is not about transfers. */
+    transfers: TransferRecordRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, caseId: String) : this(
         graph.serviceCases, graph.serviceCaseEntries, graph.events,
         graph.updateServiceCase, graph.addServiceCaseEntry, graph.today, ServiceCaseId(caseId),
+        transfers = graph.transferRecords,
     )
 
     /** The case as stored, followed through its asset's cases; null once it is gone. */
@@ -152,8 +163,10 @@ class ServiceCaseViewModel(
                     cases.observeForAsset(assetId),
                     entries.observeForCase(id),
                     events.observeForAsset(assetId),
-                ) { rows, timeline, journal ->
-                    rows.firstOrNull { it.id == id }?.let { serviceCaseStateOf(it, timeline, journal) }
+                    transfers?.observeHeldIds() ?: flowOf(emptySet()),
+                ) { rows, timeline, journal, held ->
+                    rows.firstOrNull { it.id == id }
+                        ?.let { serviceCaseStateOf(it, timeline, journal).copy(editable = assetId !in held) }
                 }
             }
         }
@@ -227,6 +240,10 @@ class ServiceCaseViewModel(
                 validation.problems
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (held: AssetTransferredOut) {
+                // #77 (B4 hand-off 1): the asset left while the sheet was open — P77-35, nothing written.
+                _sheet.update { it?.copy(saving = false, failure = TransferImportStrings.ASSET_TRANSFERRED_OUT) }
+                return@launch
             } catch (failed: Exception) {
                 Log.w(TAG, "an update failed", failed)
                 null
@@ -268,6 +285,8 @@ class ServiceCaseViewModel(
                 updateServiceCase.run(case.id, case.asCommand(resolution))
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (held: AssetTransferredOut) {
+                _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
             } catch (failed: Exception) {
                 Log.w(TAG, "a repair link failed", failed)
                 _messages.tryEmit(COULD_NOT_SAVE_THIS_CASE)

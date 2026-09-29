@@ -12,10 +12,12 @@ import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TimeBasis
+import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.Today
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
@@ -24,6 +26,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryGroupRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleRepository
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.InMemorySeasonActivationRepository
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.dayMillis
 import com.loosecannon.servicetag.core.testing.groupOf
@@ -67,7 +70,8 @@ class BuildReminderSubjectsTest {
         RecomputeSchedules(
             schedules, states, events, closures, groups, assets, InMemorySeasonActivationRepository(), todayPort, clock,
         ) { ZoneOffset.UTC }
-    private val build = BuildReminderSubjects(schedules, groups, recompute)
+    private val transfers = InMemoryTransferRecordRepository()
+    private val build = BuildReminderSubjects(schedules, groups, assets, transfers, recompute)
 
     private suspend fun seedAsset(
         id: String,
@@ -179,6 +183,74 @@ class BuildReminderSubjectsTest {
     }
 
     // ------------------------------------------------------------------------------------------
+    // #77 (B2b, R77-20): the corrected defect. A live schedule whose asset is archived or retired
+    // arrives **withdrawn**, so its standing post is taken down; unarchiving brings it back; a group
+    // schedule stays active while a member merely retires. The shipped archived-schedule and
+    // archived-group cases above are unchanged.
+    // ------------------------------------------------------------------------------------------
+
+    private suspend fun seedLiveScheduleOn(assetId: String, scheduleId: String) {
+        schedules.upsert(
+            scheduleOf(
+                id = scheduleId, assetId = assetId, timeInterval = 1, timeUnit = RecurrenceUnit.MONTH,
+                anchorOn = "2026-04-01",
+            ),
+        )
+    }
+
+    @Test
+    fun anArchivedOrRetiredAssetsLiveScheduleArrivesWithdrawn() = runTest {
+        seedAsset("a1")
+        seedAsset("a2", status = AssetStatus.ARCHIVED)
+        assets.upsert(assets.get(AssetId("a1"))!!.copy(id = AssetId("a3"), retiredOn = "2026-03-01"))
+        seedLiveScheduleOn("a1", "s-live")
+        seedLiveScheduleOn("a2", "s-archived-asset")
+        seedLiveScheduleOn("a3", "s-retired-asset")
+        rebuild()
+
+        val subjects = localSubjects()
+        assertEquals(SubjectState.Active, subjectFor(subjects, "s-live").state)
+        for (id in listOf("s-archived-asset", "s-retired-asset")) {
+            val subject = subjectFor(subjects, id)
+            assertEquals(SubjectState.Withdrawn, subject.state, "$id: an out-of-service asset's schedule is withdrawn")
+            assertEquals("", subject.body, "$id: nothing to show for a subject being let go of")
+            assertEquals(LocalDate.parse("2026-04-01"), subject.dueOn, "$id: it keeps its last effective date")
+        }
+    }
+
+    @Test
+    fun unarchivingTheAssetBringsItsScheduleBackActive() = runTest {
+        seedAsset("a1", status = AssetStatus.ARCHIVED)
+        seedLiveScheduleOn("a1", "s1")
+        rebuild()
+        assertEquals(SubjectState.Withdrawn, subjectFor(localSubjects(), "s1").state)
+
+        assets.upsert(assets.get(AssetId("a1"))!!.copy(status = AssetStatus.ACTIVE))
+        rebuild()
+
+        assertEquals(SubjectState.Active, subjectFor(localSubjects(), "s1").state)
+    }
+
+    @Test
+    fun aMembersRetirementLeavesTheGroupScheduleActive() = runTest {
+        seedAsset("a1")
+        seedAsset("a2")
+        assets.upsert(assets.get(AssetId("a2"))!!.copy(retiredOn = "2026-03-01"))
+        groups.upsert(
+            groupOf(id = "g1", members = listOf(Triple("a1", "2025-12-01", null), Triple("a2", "2025-12-01", null))),
+        )
+        schedules.upsert(
+            scheduleOf(
+                id = "s-group", assetId = null, groupId = "g1", timeInterval = 1, timeUnit = RecurrenceUnit.MONTH,
+                anchorOn = "2026-04-01",
+            ),
+        )
+        rebuild()
+
+        assertEquals(SubjectState.Active, subjectFor(localSubjects(), "s-group").state)
+    }
+
+    // ------------------------------------------------------------------------------------------
     // hazard: a parked schedule vanishing (invariant 47).
     // ------------------------------------------------------------------------------------------
 
@@ -232,7 +304,7 @@ class BuildReminderSubjectsTest {
     private val activations = InMemorySeasonActivationRepository()
     private val seasonalRecompute =
         RecomputeSchedules(schedules, states, events, closures, groups, assets, activations, todayPort, clock) { ZoneOffset.UTC }
-    private val seasonalBuild = BuildReminderSubjects(schedules, groups, seasonalRecompute)
+    private val seasonalBuild = BuildReminderSubjects(schedules, groups, assets, transfers, seasonalRecompute)
 
     private suspend fun seasonalSubjects(): List<ReminderSubject> {
         seasonalRecompute.all()
@@ -730,7 +802,7 @@ class BuildReminderSubjectsTest {
         rebuild()
         assertEquals(emptyList(), localSubjects(), "a providerless row reaches no provider")
 
-        val report = RepairScheduleProviders(schedules, FakeUnitOfWork(schedules), clock).apply()
+        val report = RepairScheduleProviders(schedules, assets, groups, transfers, FakeUnitOfWork(schedules), clock).apply()
         assertEquals(listOf(ScheduleId("s-providerless")), report.repaired)
 
         val subject = subjectFor(localSubjects(), "s-providerless")
@@ -747,6 +819,9 @@ class BuildReminderSubjectsTest {
             listOf(
                 ScheduleRepository::class.java,
                 GroupRepository::class.java,
+                // #77 (C11): the target's lifecycle and the held set — domain facts, never provider bookkeeping.
+                AssetRepository::class.java,
+                TransferRecordRepository::class.java,
                 RecomputeSchedules::class.java,
             ),
             BuildReminderSubjects::class.java.constructors.single().parameterTypes.toList(),

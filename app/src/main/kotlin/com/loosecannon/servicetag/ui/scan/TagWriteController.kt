@@ -23,6 +23,8 @@ import com.loosecannon.servicetag.core.usecase.OverwriteSubject
 import com.loosecannon.servicetag.core.usecase.OverwriteSubjects
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.Resolution
+import com.loosecannon.servicetag.ui.transfer.TransferStrings
+import java.time.ZoneId
 import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.di.AppGraph
 import java.util.concurrent.atomic.AtomicBoolean
@@ -81,6 +83,8 @@ class TagWriteController(
     /** Read-only here: only [ResolveTag.peek] is called, never the scan-recording `run`. */
     private val resolveTag: ResolveTag,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** #77 (C20): the zone P77-37's date is read in. */
+    private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) {
     constructor(graph: AppGraph, io: TagIo, target: TagTarget, label: String?, scope: CoroutineScope) :
         this(graph.provisionTag, graph.appScope, io, graph.ndefCodec, target, label, scope, graph.resolveTag)
@@ -198,6 +202,17 @@ class TagWriteController(
                 // question from showing it, or `keepIt()` / `confirmOverwrite()` could answer a
                 // question that is not on screen yet. `d` is final; the lookup only picks words.
                 val resolution = if (d.reason == OverwriteReason.OTHER_TAG_SAME_PRODUCT) lookUp(existing) else null
+                if (resolution is Resolution.TransferredOut) {
+                    // #77 (C20): the tag identifies an asset transferred out from this phone. It went with the asset,
+                    // so no overwrite is offered at all: P77-37 says why, and nothing is written.
+                    _state.value = WriteState.Error(
+                        TransferStrings.handedOver(
+                            resolution.asset.name,
+                            TransferStrings.day(resolution.record.at, zone()),
+                        ),
+                    )
+                    return false
+                }
                 awaitingAnswer = existing
                 _state.value = WriteState.Confirm(OverwriteSubjects.of(d, resolution))
                 true

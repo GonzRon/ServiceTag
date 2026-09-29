@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.setup
 
+import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.AssetId
@@ -149,7 +150,7 @@ class AssetSetupViewModel(
             when (val failure = outcome.exceptionOrNull()) {
                 null -> Unit
                 is DefinitionReferenced -> _refusal.value = failure
-                else -> _messages.tryEmit("Could not delete that reading.")
+                else -> _messages.tryEmit(failure.transferredOutOr("Could not delete that reading."))
             }
         }
     }
@@ -159,7 +160,7 @@ class AssetSetupViewModel(
     /** Every action but the delete refusal: do it, and say one line if it could not be done. */
     private fun attempt(onFailure: String, block: suspend () -> Unit) {
         viewModelScope.launch {
-            if (runCatching { block() }.isFailure) _messages.tryEmit(onFailure)
+            runCatching { block() }.exceptionOrNull()?.let { _messages.tryEmit(it.transferredOutOr(onFailure)) }
         }
     }
 }

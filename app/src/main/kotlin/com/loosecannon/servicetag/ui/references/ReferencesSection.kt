@@ -63,6 +63,8 @@ fun ReferencesSection(
     snackbars: SnackbarHostState,
     /** Hands the URI to `LinkLauncher`, the one place `ACTION_VIEW` runs; false is no handler. */
     onOpen: (String) -> Boolean,
+    /** #77 (C19, R77-4): a transferred-out asset's references open, and none is added, edited or removed. */
+    readOnly: Boolean = false,
 ) {
     val model: ReferencesSectionViewModel = viewModel(key = "references-${assetId.value}") {
         ReferencesSectionViewModel(graph, assetId)
@@ -83,6 +85,7 @@ fun ReferencesSection(
         onEdit = { row -> editing = row.id },
         onRemove = { row -> removing = row.id },
         onAddLink = { adding = true },
+        readOnly = readOnly,
     )
 
     // Read back out of the live state, so a rename or a removal redraws (or closes) the sheet.
@@ -128,6 +131,7 @@ internal fun ReferencesList(
     onEdit: (ReferenceRowState) -> Unit,
     onRemove: (ReferenceRowState) -> Unit,
     onAddLink: () -> Unit,
+    readOnly: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     SectionHeader(
@@ -152,11 +156,13 @@ internal fun ReferencesList(
                     },
                     onEdit = { onEdit(row) },
                     onRemove = { onRemove(row) },
+                    readOnly = readOnly,
                 )
             }
         }
     }
     Spacer(Modifier.height(4.dp))
+    if (readOnly) return
     TextButton(onClick = onAddLink) {
         Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(6.dp))
@@ -174,6 +180,7 @@ private fun ReferenceRow(
     onOpen: () -> Unit,
     onEdit: () -> Unit,
     onRemove: () -> Unit,
+    readOnly: Boolean = false,
 ) {
     var menu by remember { mutableStateOf(false) }
     Row(
@@ -202,8 +209,10 @@ private fun ReferenceRow(
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Open") }, onClick = { menu = false; onOpen() })
-                DropdownMenuItem(text = { Text("Edit") }, onClick = { menu = false; onEdit() })
-                DropdownMenuItem(text = { Text("Remove") }, onClick = { menu = false; onRemove() })
+                if (!readOnly) {
+                    DropdownMenuItem(text = { Text("Edit") }, onClick = { menu = false; onEdit() })
+                    DropdownMenuItem(text = { Text("Remove") }, onClick = { menu = false; onRemove() })
+                }
             }
         }
     }

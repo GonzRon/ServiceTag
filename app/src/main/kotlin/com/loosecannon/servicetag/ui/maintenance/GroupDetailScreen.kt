@@ -26,6 +26,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -33,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -99,7 +102,11 @@ fun GroupDetailScreen(
     LaunchedEffect(missing) { if (missing) onBack() }
 
     val current = state
+    // #77 (mn-1, C19): P77-35 when a write is refused because the group names a transferred-out asset.
+    val snackbars = remember { SnackbarHostState() }
+    LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(
                 title = {
@@ -115,7 +122,8 @@ fun GroupDetailScreen(
                     }
                 },
                 actions = {
-                    if (current != null) {
+                    // #77 (C19): a group naming a transferred-out asset is read, never changed.
+                    if (current != null && current.editable) {
                         IconButton(onClick = { onEdit(groupId) }) {
                             Icon(Icons.Outlined.Edit, contentDescription = "Edit")
                         }
@@ -184,7 +192,7 @@ fun GroupDetailScreen(
             // cannot provoke needs no sentence.
             MaintenanceSectionTitle(
                 title = SCHEDULES_SECTION,
-                trailing = if (current.members.isEmpty()) {
+                trailing = if (current.members.isEmpty() || !current.editable) {
                     null
                 } else {
                     {
@@ -351,6 +359,7 @@ private fun GroupScheduleBlock(
                 member = member,
                 checked = member.assetId.value in selected,
                 busy = busy,
+                editable = row.editable,
                 onCheck = { onSelect(member.assetId.value, it) },
                 onComplete = { onCompleteMember(member.assetId) },
             )
@@ -378,6 +387,7 @@ private fun MemberChecklistRow(
     member: GroupMemberRow,
     checked: Boolean,
     busy: Boolean,
+    editable: Boolean = true,
     onCheck: (Boolean) -> Unit,
     onComplete: () -> Unit,
 ) {
@@ -389,10 +399,10 @@ private fun MemberChecklistRow(
         Checkbox(
             checked = member.complete || checked,
             onCheckedChange = onCheck,
-            enabled = !member.complete && !busy,
+            enabled = editable && !member.complete && !busy,
         )
         QuietLine(member.name, modifier = Modifier.weight(1f))
-        if (!member.complete) {
+        if (!member.complete && editable) {
             // The RATIFIED label of the canonical flow's entry point, which is what this is: one
             // member, through `CompletionFlow`, writing nothing of its own.
             TextButton(onClick = onComplete, enabled = !busy) { Text(LOG_MAINTENANCE) }

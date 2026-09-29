@@ -11,6 +11,7 @@ from __future__ import annotations
 import inspect
 import json
 import zipfile
+from pathlib import Path
 
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
@@ -751,3 +752,54 @@ def test_max_import_bytes_is_four_mebibytes() -> None:
     without a real 4 MiB fixture file, which proves the comparison but leaves the real value
     unasserted anywhere. This pins it, against `ApiRouter.kt`'s own `MAX_IMPORT_BYTES`."""
     assert client_module.MAX_IMPORT_BYTES == 4 * 1024 * 1024
+
+
+# --- #77: format 14, nineteen tallies, the two transfer reasons -----------------------------------
+
+# The report's tallies, in the order `docs/api/v1.md` lists them: `transfers` (format 14) closes the list.
+NINETEEN_TALLIES = (
+    "assets", "groups", "definitions", "profiles", "schedules", "closures", "links", "tags", "events",
+    "attachments", "references", "seasonActivations", "conditions", "healthSubjects", "categories",
+    "serviceCases", "caseEntries", "loans", "transfers",
+)
+README = Path(__file__).resolve().parents[1] / "README.md"
+
+
+def test_import_merge_returns_the_nineteen_tallies_and_a_transfer_conflict_as_sent(paired, tmp_path) -> None:
+    """The tool never reshapes the report: every one of the nineteen tallies, `transfers` included, and a
+    `TRANSFERS` conflict with its reason reach the caller exactly as the phone sent them — and a plan with
+    that conflict is never applied."""
+    assert len(NINETEEN_TALLIES) == 19
+    tally = {"insert": 0, "identical": 1, "conflict": 0, "skipped": 0}
+    conflict = {"table": "TRANSFERS", "id": "rec-in", "verdict": "CONFLICT", "reason": "ASSET_TRANSFERRED_OUT",
+                "detail": "asset-1"}
+    report = {"formatVersion": 14, "backupSetId": "set-1", "applicable": False,
+              **{name: dict(tally) for name in NINETEEN_TALLIES},
+              "conflicts": [conflict], "duplicateCandidates": []}
+    paired.reply("POST", "/v1/import-merge/plan", 200, report)
+
+    result = server_module.import_merge(archive_path=str(an_archive(tmp_path)))
+
+    assert result == report
+    assert [r.path for r in paired.requests] == ["/v1/import-merge/plan"]
+
+
+def test_import_merge_docs_say_formats_1_to_14_nineteen_tables_and_the_two_reasons() -> None:
+    """#77 (C24): the tool's docstring and the README's `import_merge` section name the range 1–14, the
+    nineteen tables, the `transfers` tally and the two reasons a transfer record conflicts with; the README
+    lists the nineteen tallies in the report's order."""
+    doc = " ".join((server_module.import_merge.__doc__ or "").split())
+    assert "format 1–14" in doc
+    assert "nineteen tables" in doc and "eighteen" not in doc
+    for word in ("`transfers`", "`ASSET_TRANSFERRED_OUT`", "`TRANSFER_DIVERGED`"):
+        assert word in doc, word
+
+    readme = README.read_text(encoding="utf-8")
+    section = readme.split("### `import_merge`", 1)[1].split("\n## ", 1)[0]
+    flat = " ".join(section.split())
+    assert "format **1–14**" in flat
+    assert "each of **nineteen** tables" in flat and "eighteen" not in flat
+    for word in ("`ASSET_TRANSFERRED_OUT`", "`TRANSFER_DIVERGED`"):
+        assert word in flat, word
+    listed = flat.split("each of **nineteen** tables — ", 1)[1].split(".", 1)[0]
+    assert [name.strip(" `") for name in listed.split(",")] == list(NINETEEN_TALLIES)

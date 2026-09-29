@@ -93,7 +93,8 @@ fun ServiceCaseScreen(
                     }
                 },
                 actions = {
-                    if (current != null) {
+                    // #77 (C19): a transferred-out asset's case is read, never changed.
+                    if (current != null && current.editable) {
                         TextButton(onClick = { onEdit(current.case.assetId.value, current.case.id.value) }) {
                             Text("Edit")
                         }
@@ -118,19 +119,22 @@ fun ServiceCaseScreen(
             }
             current.incident?.let { link ->
                 LinkRow(link, onOpenEvent = onOpenEvent, onRemove = null, busy = linking)
-                if (link.exists) LinkedDocuments(graph, link.eventId, snackbars, onOpenSettings)
+                if (link.exists) LinkedDocuments(graph, link.eventId, snackbars, onOpenSettings, !current.editable)
             }
             val repair = current.repair
             if (repair != null) {
-                LinkRow(repair, onOpenEvent = onOpenEvent, onRemove = model::removeRepair, busy = linking)
-                if (repair.exists) LinkedDocuments(graph, repair.eventId, snackbars, onOpenSettings)
+                val remove: (() -> Unit)? = if (current.editable) model::removeRepair else null
+                LinkRow(repair, onOpenEvent = onOpenEvent, onRemove = remove, busy = linking)
+                if (repair.exists) LinkedDocuments(graph, repair.eventId, snackbars, onOpenSettings, !current.editable)
             } else if (current.offersLinkRepair) {
                 TextButton(onClick = model::openPicker, enabled = !linking) { Text(LINK_REPAIR_RECORD) }
             }
             SectionHeader(title = TIMELINE)
             current.timeline.forEach { row -> TimelineEntry(row) }
-            OutlinedButton(onClick = model::openUpdate, shape = ControlShape, modifier = Modifier.padding(top = 8.dp)) {
-                Text(ADD_UPDATE)
+            if (current.editable) {
+                OutlinedButton(onClick = model::openUpdate, shape = ControlShape, modifier = Modifier.padding(top = 8.dp)) {
+                    Text(ADD_UPDATE)
+                }
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -183,12 +187,19 @@ private fun LinkRow(link: CaseLink, onOpenEvent: (String) -> Unit, onRemove: (()
 
 /** The linked event's own documents, through its own section: the case owns none (R79-2). */
 @Composable
-private fun LinkedDocuments(graph: AppGraph, eventId: String, snackbars: SnackbarHostState, onOpenSettings: () -> Unit) {
+private fun LinkedDocuments(
+    graph: AppGraph,
+    eventId: String,
+    snackbars: SnackbarHostState,
+    onOpenSettings: () -> Unit,
+    readOnly: Boolean = false,
+) {
     AttachmentsSection(
         graph = graph,
         owner = AttachmentOwner.OfEvent(EventId(eventId)),
         snackbars = snackbars,
         onOpenSettings = onOpenSettings,
+        readOnly = readOnly,
     )
 }
 

@@ -7,6 +7,8 @@ import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.DeadlineLocalDelivery
 import com.loosecannon.servicetag.core.ports.DeadlineLocalDeliveryRepository
@@ -16,6 +18,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleLocalDeliveryRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.reminders.BuildDeadlineSubjects
 import com.loosecannon.servicetag.core.reminders.BuildLoanSubjects
+import com.loosecannon.servicetag.core.reminders.BuildReminderSubjects
 import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.reminders.ReconcileReport
 import com.loosecannon.servicetag.core.reminders.ReminderProvider
@@ -29,6 +32,10 @@ import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
+import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.FakeTransferRecords
+import com.loosecannon.servicetag.testing.assetRow
+import com.loosecannon.servicetag.testing.scheduleOf
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -210,8 +217,11 @@ class LocalReminderProviderTest {
     // 2026-06-09 10:13 UTC, past that day's 09:00, so a loan due on or before it is past its digest hour.
     private val loans = FakeAssetLoanRepository()
 
+    /** #77 (C11): the transfer records the two deadline builders read; empty unless a case appends. */
+    private val transfers = FakeTransferRecords()
+
     /** The loan subjects the sweep would hand this provider. */
-    private suspend fun lentOut() = BuildLoanSubjects(loans).forProvider(ProviderId.LOCAL, today)
+    private suspend fun lentOut() = BuildLoanSubjects(loans, transfers).forProvider(ProviderId.LOCAL, today)
 
     private suspend fun drill(
         dueOn: String? = "2026-06-05",
@@ -224,7 +234,7 @@ class LocalReminderProviderTest {
     }
 
     /** The warranty subjects the sweep would hand this provider today. */
-    private suspend fun warranties() = BuildDeadlineSubjects(assets).forProvider(ProviderId.LOCAL, today)
+    private suspend fun warranties() = BuildDeadlineSubjects(assets, transfers).forProvider(ProviderId.LOCAL, today)
 
     private suspend fun heater(
         expiresOn: String? = "2031-06-30",
@@ -887,6 +897,145 @@ class LocalReminderProviderTest {
         assertFalse("already used", nonces.consume(id, issued))
         assertFalse("missing row", nonces.consume(ScheduleId("nobody"), "nonce-1"))
         assertEquals(null, delivery.rows["nobody"])
+    }
+
+    // ---- #77 (B2b, R77-20): the corrected defect, through the real builder, the real facts and this provider ----
+
+    /**
+     * One overdue maintenance schedule on "Example Water Heater", over the real Room tables. The subjects come
+     * from `BuildReminderSubjects` built as `AppGraph`'s `subjectsFor` wires it — `FakeGraph` has no subject
+     * builder (rm-3) — and the facts from `ScheduleDeliveryFacts` over the same tables, as `AppGraph` builds them.
+     */
+    private inner class Estate {
+        val graph = FakeGraph().also { it.today = LocalDate.parse("2026-04-10") }
+        private val subjects = BuildReminderSubjects(
+            graph.schedules, graph.groups, graph.assets, graph.transferRecords, graph.recomputeSchedules,
+        )
+        private val provider = LocalReminderProvider(
+            facts = ScheduleDeliveryFacts(
+                graph.schedules, graph.scheduleStateReader, graph.assets, graph.groups, graph.definitions, graph.todayPort,
+            ),
+            delivery = delivery,
+            notifications = notifications,
+            permission = permission,
+            platform = platform,
+            alarm = alarm,
+            prefs = prefs,
+            clock = clock,
+            quickActions = QuickActions(
+                shapes = QuickActionShapeSource {
+                    QuickActionShape(groupTargeted = false, completionMode = CompletionMode.QUICK, meterRule = false)
+                },
+                nonces = NonceStore(delivery, IdGenerator { "quick-nonce" }, clock),
+            ),
+        )
+
+        suspend fun seed() {
+            graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+            graph.schedules.upsert(scheduleOf("s1", assetId = "h1", title = "Flush the tank"))
+            graph.recomputeSchedules.all()
+        }
+
+        /** One sweep: the subjects the builder answers today, reconciled. */
+        suspend fun sweep(): ReconcileReport = provider.reconcile(subjects.forProvider(ProviderId.LOCAL, graph.today))
+    }
+
+    private fun estate(block: suspend Estate.() -> Unit) = runTest {
+        val estate = Estate()
+        try {
+            estate.block()
+        } finally {
+            estate.graph.close()
+        }
+    }
+
+    /**
+     * R77-20: archiving an asset takes its standing maintenance post down — the schedule stays ACTIVE, and an
+     * archived asset's live schedule arrives `Withdrawn`, so the provider cancels its tag (the defect: it kept
+     * reminding, because only the schedule's own status was asked).
+     */
+    @Test
+    fun archivingAnAssetTakesItsStandingMaintenancePostDown() = estate {
+        seed()
+        assertEquals("the overdue schedule is posted", 1, sweep().posted)
+        val standing = notifications.standingItems()
+        assertEquals(1, standing.size)
+
+        graph.archiveAsset.run(AssetId("h1"))
+        sweep()
+
+        assertEquals("an archived asset's post is taken down", emptySet<String>(), notifications.standingItems())
+        assertTrue("its tag was cancelled", notifications.cancelled.containsAll(standing))
+    }
+
+    /** An OUT of "Example Water Heater" — what marking appends last (C8); the asset itself still reads ACTIVE. */
+    private fun outOfTheHeater(id: String = "out-1", asset: String = "h1") = TransferRecord(
+        id = id, assetId = AssetId(asset), kind = TransferKind.OUT, packId = "0f1e2d3c-pack", lineage = emptyList(),
+        at = 1_758_960_000_000L, packSha256 = "ab".repeat(32), nameSnapshot = "Example Water Heater", note = "",
+    )
+
+    /**
+     * R77-20 (row 16): the transfer takes the standing maintenance post down — its tag cancelled, its quick-action
+     * nonce cleared with it (D-21), and the next sweep posts nothing again. The asset still reads ACTIVE, so it is
+     * the record that quiesces it, not ARCHIVED.
+     */
+    @Test
+    fun transferringTakesTheStandingMaintenancePostDown() = estate {
+        seed()
+        assertEquals(1, sweep().posted)
+        val standing = notifications.standingItems()
+        NonceStore(delivery, IdGenerator { "nonce-1" }, clock).issue(ScheduleId("s1"))
+        assertEquals("nonce-1", delivery.get(ScheduleId("s1"))?.actionNonce)
+
+        graph.transferRecords.append(outOfTheHeater())
+        assertEquals(AssetStatus.ACTIVE, graph.assets.get(AssetId("h1"))?.status)
+        sweep()
+
+        assertEquals("the post is down", emptySet<String>(), notifications.standingItems())
+        assertTrue("its tag was cancelled", notifications.cancelled.containsAll(standing))
+        assertEquals("the nonce went with it", null, delivery.get(ScheduleId("s1"))?.actionNonce)
+        val posted = notifications.postedItems.size
+        assertEquals("no re-post", 0, sweep().posted)
+        assertEquals(posted, notifications.postedItems.size)
+    }
+
+    /**
+     * R72-10 beside #77 (row 16): a retired or an archived asset's open loan still reminds — custody is not
+     * service — while a transferred-out asset's open loan (merged history; a transfer refuses an open loan) does not.
+     */
+    @Test
+    fun anArchivedOrRetiredAssetsOpenLoanStillReminds() = runTest {
+        val provider = provider()
+        assets.upsert(Asset(id = AssetId("a1"), name = "Example Drill", createdAt = 1_000L, updatedAt = 1_000L, retiredOn = "2026-06-01"))
+        assets.upsert(
+            Asset(id = AssetId("a2"), name = "Example Ladder", status = AssetStatus.ARCHIVED, createdAt = 1_000L, updatedAt = 1_000L),
+        )
+        assets.upsert(Asset(id = AssetId("h1"), name = "Example Water Heater", createdAt = 1_000L, updatedAt = 1_000L))
+        loans.upsert(sampleLoan(id = "l1", assetId = "a1", dueOn = "2026-06-05"))
+        loans.upsert(sampleLoan(id = "l2", assetId = "a2", dueOn = "2026-06-05", reminderMode = LoanReminderMode.UNTIL_RETURNED))
+        loans.upsert(sampleLoan(id = "l3", assetId = "h1", dueOn = "2026-06-05"))
+        transfers.append(outOfTheHeater())
+
+        assertEquals(ReconcileReport(2, 0, 0, emptyList()), provider.reconcile(lentOut()))
+        assertEquals(
+            listOf("Example Drill — Due back", "Example Ladder — Due back"),
+            notifications.postedItems.map { it.title },
+        )
+    }
+
+    /** R77-20: retiring an asset does the same — a retired asset's live schedule reminds no more. */
+    @Test
+    fun retiringAnAssetTakesItsStandingMaintenancePostDown() = estate {
+        seed()
+        assertEquals("the overdue schedule is posted", 1, sweep().posted)
+        val standing = notifications.standingItems()
+        assertEquals(1, standing.size)
+
+        graph.retireAsset.retire(AssetId("h1"), "2026-04-05")
+        sweep()
+
+        assertEquals("a retired asset's post is taken down", emptySet<String>(), notifications.standingItems())
+        assertTrue("its tag was cancelled", notifications.cancelled.containsAll(standing))
     }
 }
 

@@ -172,11 +172,13 @@ class ReadPathsWriteNothingTest {
         val health = AssetHealthReadModel(
             assets, subjects, schedules, states, events, profiles, activations, conditions, recompute, graph.todayPort,
             zone = { ZoneOffset.UTC },
+            transfers = graph.transferRecords,
         )
-        val attention = AttentionReadModel(assets, health, graph.todayPort)
+        val attention = AttentionReadModel(assets, health, graph.todayPort, transfers = graph.transferRecords)
         val due = DueReadModel(
             schedules, assets, groups, definitions, recompute, graph.todayPort, health,
             snoozedUntilOf = { delivery.get(it)?.snoozedUntilAt },
+            transfers = graph.transferRecords,
         )
         val rounds = ScanRoundMembership { id -> schedules.get(id)?.let { recompute.occurrenceOf(it) } }
         val offer = ScanSheetOffer { scanSheetContentFor(it, due, rounds, health).opens }
@@ -218,6 +220,7 @@ class ReadPathsWriteNothingTest {
         val health = AssetHealthReadModel(
             assets, subjects, schedules, states, events, profiles, activations, conditions, recompute, graph.todayPort,
             zone = { ZoneOffset.UTC },
+            transfers = graph.transferRecords,
         )
         val refreshes = MutableStateFlow(0)
         val passes = MutableStateFlow(emptyList<Map<AssetId, AssetHealthView>>())
@@ -310,10 +313,12 @@ class ReadPathsWriteNothingTest {
             val health = AssetHealthReadModel(
                 assets, subjects, schedules, states, events, profiles, activations, conditions, recompute, graph.todayPort,
                 zone = { ZoneOffset.UTC },
+                transfers = graph.transferRecords,
             )
             val due = DueReadModel(
                 schedules, assets, groups, definitions, recompute, graph.todayPort, health,
                 snoozedUntilOf = { delivery.get(it)?.snoozedUntilAt },
+                transfers = graph.transferRecords,
             )
             var sweeps = 0
             val asked = mutableListOf<String>()
@@ -390,10 +395,12 @@ class ReadPathsWriteNothingTest {
             val health = AssetHealthReadModel(
                 assets, subjects, schedules, states, events, profiles, activations, conditions, recompute, graph.todayPort,
                 zone = { ZoneOffset.UTC },
+                transfers = graph.transferRecords,
             )
             val due = DueReadModel(
                 schedules, assets, groups, definitions, recompute, graph.todayPort, health,
                 snoozedUntilOf = { delivery.get(it)?.snoozedUntilAt },
+                transfers = graph.transferRecords,
             )
             val detail = held(AssetDetailViewModel(
                 assets, tags, definitions, profiles, events, schedules, states, groups, due, conditions, activations,
@@ -475,10 +482,12 @@ class ReadPathsWriteNothingTest {
             val health = AssetHealthReadModel(
                 assets, subjects, schedules, states, events, profiles, activations, conditions, recompute, graph.todayPort,
                 zone = { ZoneOffset.UTC },
+                transfers = graph.transferRecords,
             )
             val due = DueReadModel(
                 schedules, assets, groups, definitions, recompute, graph.todayPort, health,
                 snoozedUntilOf = { delivery.get(it)?.snoozedUntilAt },
+                transfers = graph.transferRecords,
             )
             var sweeps = 0
             val asked = mutableListOf<String>()
@@ -496,8 +505,8 @@ class ReadPathsWriteNothingTest {
             ))
             val list = held(AssetsViewModel(assets, categories, activations, tags, health, graph.todayPort, loans = loans))
             val dashboard = held(DashboardViewModel(
-                assets, schedules, states, due, AttentionReadModel(assets, health, graph.todayPort), health,
-                NoHealthFindings, graph.prefs, loans = loans, today = graph.todayPort,
+                assets, schedules, states, due, AttentionReadModel(assets, health, graph.todayPort, transfers = graph.transferRecords), health,
+                NoHealthFindings, graph.prefs, graph.transferRecords, loans = loans, today = graph.todayPort,
             ))
             fun editor(loanId: String?) = held(LoanEditViewModel(
                 assets, loans, graph.lendAsset, graph.updateLoan, fakeContactReader(), graph.todayPort,

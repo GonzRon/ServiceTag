@@ -22,6 +22,8 @@ import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.TerminationKind
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.usecase.AssetMembershipReferenced
 import com.loosecannon.servicetag.core.usecase.CreateAsset
@@ -85,7 +87,7 @@ class MaintenanceRoutesTest {
     private fun router(): ApiRouter = ApiRouter(
         ApiHandlers(
             graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles,
-            graph.events, graph.attachments, graph.categories,
+            graph.events, graph.attachments, graph.categories, graph.transferRecords,
             graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
             graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,
@@ -1132,7 +1134,7 @@ class MaintenanceRoutesTest {
     // --- the merge report's three new tables -----------------------------------------------------
 
     /**
-     * `import_merge` reads a **format-13** archive, and the report carries the `groups`, `schedules`
+     * `import_merge` reads a **format-14** archive, and the report carries the `groups`, `schedules`
      * and `closures` tallies beside the shipped ones, plus 1.3's `references`. `applicable` still
      * governs.
      *
@@ -1152,7 +1154,7 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(13, report.formatVersion)
+        assertEquals(14, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)
@@ -1201,6 +1203,8 @@ class MaintenanceRoutesTest {
                 "serviceCases", "caseEntries",
                 // #72 (format 13): table 18, the loans.
                 "loans",
+                // #77 (format 14): table 19, the transfer records.
+                "transfers",
                 "conflicts", "duplicateCandidates",
             ),
             MergeReportResponse.serializer().descriptor.elementNames.toList(),
@@ -1271,9 +1275,9 @@ class MaintenanceRoutesTest {
         assertEquals(2, inserts("serviceCases"))
         assertEquals(3, inserts("caseEntries"))
         assertEquals(
-            "after categories, in table order, before #72's loans",
+            "after categories, in table order, before #72's loans and #77's transfers",
             listOf("serviceCases", "caseEntries", "loans"),
-            wire.keys.toList().dropLast(2).takeLast(3),
+            wire.keys.toList().dropLast(3).takeLast(3),
         )
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
@@ -1323,7 +1327,7 @@ class MaintenanceRoutesTest {
         fun inserts(key: String) = wire.getValue(key).jsonObject.getValue("insert").jsonPrimitive.content.toInt()
         assertEquals(2, inserts("assets"))
         assertEquals(5, inserts("loans"))
-        assertEquals("the last tally, after the case entries", "loans", wire.keys.toList().dropLast(2).last())
+        assertEquals("after the case entries, before #77's transfers", "loans", wire.keys.toList().dropLast(3).last())
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
         runBlocking {
@@ -1471,9 +1475,11 @@ class MaintenanceRoutesTest {
      * device-local deadline table) and then the format to 11 (the archive that carries the lead); #79b
      * moves the schema to 12 (the service case tables) and then the format to 12 (the archive that
      * carries them); #72 moves the schema to 13 (the loan table) and then the format to 13 (the archive
-     * that carries the loans).
+     * that carries the loans); #77 moves both to 14 (the transfer record table and the archive that carries
+     * the records), and its B5 adds the `transferRecords` count (mn-14): every record, OUT, IN and WITHDRAWN,
+     * under the archive's own list name — none on a fresh phone, and each appended one counted.
      */
-    @Test fun statusReports13And13AndTheNewCounts() {
+    @Test fun statusReports14And14AndTheNewCounts() {
         val tub = createAsset("Hot tub")
         assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
         assertEquals(
@@ -1490,8 +1496,8 @@ class MaintenanceRoutesTest {
         )
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
-        assertEquals(13, status.schemaVersion)
-        assertEquals(13, status.backupFormatVersion)
+        assertEquals(14, status.schemaVersion)
+        assertEquals(14, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
         assertEquals(1, status.counts["healthSubjects"])
@@ -1500,14 +1506,31 @@ class MaintenanceRoutesTest {
         assertEquals(1, status.counts["assetCategories"])
         // #72: the loans' count, under the archive's own list name — none lent here.
         assertEquals(0, status.counts["assetLoans"])
+        // #77: the transfer records' count, under the archive's own list name — none made here yet.
+        assertEquals(0, status.counts["transferRecords"])
+
+        // An OUT and the WITHDRAWN of it: two records, and the asset live again — the count is of records,
+        // never of held assets.
+        runBlocking {
+            for ((id, kind) in listOf("rec-out" to TransferKind.OUT, "rec-withdrawn" to TransferKind.WITHDRAWN)) {
+                graph.transferRecords.append(
+                    TransferRecord(
+                        id = id, assetId = AssetId(tub), kind = kind, packId = "0f1e2d3c-pack", lineage = emptyList(),
+                        at = 1_758_960_000_000L, packSha256 = "ab".repeat(32), nameSnapshot = "Hot tub", note = "",
+                    ),
+                )
+            }
+        }
+        val after = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
+        assertEquals(2, after.counts["transferRecords"])
     }
 
     /**
-     * Import-merge reads a **format-13** archive (this build's export) and reports **eighteen** tables: the donor's
+     * Import-merge reads a **format-14** archive (this build's export) and reports **nineteen** tables: the donor's
      * activation, condition and health subject each tally one INSERT on the wire, its two categories
      * (#74) two, and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
-    @Test fun importMergeReadsFormat13AndReportsEighteenTables() {
+    @Test fun importMergeReadsFormat14AndReportsNineteenTables() {
         val archive = donorArchive()
         fun post(path: String) = router().handle(
             ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
@@ -1517,9 +1540,9 @@ class MaintenanceRoutesTest {
         assertEquals(planned.text(), 200, planned.status)
         val wire = ApiJson.parseToJsonElement(planned.text()).jsonObject
         val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
-        assertEquals(18, tallies.size)
+        assertEquals(19, tallies.size)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(13, report.formatVersion)
+        assertEquals(14, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         val one = MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0)
         assertEquals(one, report.seasonActivations)

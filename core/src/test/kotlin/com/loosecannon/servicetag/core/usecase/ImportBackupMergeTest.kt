@@ -1,5 +1,10 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.testing.transferOf
+import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
@@ -118,9 +123,10 @@ class ImportBackupMergeTest {
         val caseEntries = InMemoryServiceCaseEntryRepository()
         val serviceCases = InMemoryServiceCaseRepository(caseEntries)
         val loans = InMemoryAssetLoanRepository()
+        val transfers = InMemoryTransferRecordRepository()
         val uow = FakeUnitOfWork(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, references, categories, serviceCases, caseEntries, loans,
+            events, attachments, references, categories, serviceCases, caseEntries, loans, transfers,
         )
 
         /** How many times the apply asked for a total recompute, and what it had written by then. */
@@ -134,13 +140,13 @@ class ImportBackupMergeTest {
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, serviceCases, caseEntries, loans, storage, uow,
+            categories, serviceCases, caseEntries, loans, transfers, storage, uow,
         )
         val apply = ApplyBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, serviceCases, caseEntries, loans, storage, uow,
+            categories, serviceCases, caseEntries, loans, transfers, storage, uow,
             rebuildAll = {
                 rebuilds += 1
                 writesAtRebuild = runBlocking {
@@ -227,7 +233,7 @@ class ImportBackupMergeTest {
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
             f.closures, f.events, f.attachments, f.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            f.categories, f.serviceCases, f.caseEntries, f.loans, f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
+            f.categories, f.serviceCases, f.caseEntries, f.loans, f.transfers, f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
             appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
     }
@@ -728,7 +734,7 @@ class ImportBackupMergeTest {
             assets, target.groups, target.tags, target.links, target.definitions, target.profiles, target.schedules,
             target.closures, events, target.attachments, target.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            target.categories, cases, entries, target.loans, target.storage, target.uow, rebuildAll = { log += "rebuild" },
+            target.categories, cases, entries, target.loans, target.transfers, target.storage, target.uow, rebuildAll = { log += "rebuild" },
         )
 
         apply.run(target.build.run(archive))
@@ -761,7 +767,7 @@ class ImportBackupMergeTest {
             assets, target.groups, target.tags, target.links, target.definitions, target.profiles, target.schedules,
             target.closures, target.events, target.attachments, target.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            target.categories, target.serviceCases, target.caseEntries, loans, target.storage, target.uow,
+            target.categories, target.serviceCases, target.caseEntries, loans, target.transfers, target.storage, target.uow,
             rebuildAll = { log += "rebuild" },
         )
 
@@ -769,6 +775,47 @@ class ImportBackupMergeTest {
 
         assertEquals(listOf("asset:a1", "loan:l0", "loan:l1", "rebuild"), log)
         assertEquals(donor.loans.all(), target.loans.all())
+        assertTrue(target.build.run(archive).decisions.all { it.verdict == MergeVerdict.IDENTICAL })
+    }
+
+    /**
+     * #77 (C10): the transfer records are applied **last** — after the loans, before the one rebuild — so a
+     * record never lands ahead of the rows the same plan inserts (B2b's write guard reads it). A re-plan of the
+     * same archive is IDENTICAL.
+     */
+    @Test
+    fun recordsLandLast() = runBlocking<Unit> {
+        val donor = Fakes()
+        donor.assets.upsert(asset("a1", "Example Drill"))
+        donor.loans.upsert(loanOf("l1"))
+        donor.transfers.append(transferOf("r1", assetId = "a1", kind = TransferKind.IN, packId = "pack-o"))
+        donor.transfers.append(transferOf("r2", assetId = "a9", packId = "pack-q"))
+        val archive = exportOf(donor)
+
+        val target = Fakes()
+        val log = mutableListOf<String>()
+        val assets = object : AssetRepository by target.assets {
+            override suspend fun upsert(asset: Asset) = target.assets.upsert(asset).also { log += "asset:${asset.id.value}" }
+        }
+        val loans = object : AssetLoanRepository by target.loans {
+            override suspend fun upsert(loan: AssetLoan) = target.loans.upsert(loan).also { log += "loan:${loan.id.value}" }
+        }
+        val transfers = object : TransferRecordRepository by target.transfers {
+            override suspend fun append(record: TransferRecord) =
+                target.transfers.append(record).also { log += "transfer:${record.id}" }
+        }
+        val apply = ApplyBackupMergePlan(
+            assets, target.groups, target.tags, target.links, target.definitions, target.profiles, target.schedules,
+            target.closures, target.events, target.attachments, target.references,
+            InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
+            target.categories, target.serviceCases, target.caseEntries, loans, transfers, target.storage, target.uow,
+            rebuildAll = { log += "rebuild" },
+        )
+
+        apply.run(target.build.run(archive))
+
+        assertEquals(listOf("asset:a1", "loan:l1", "transfer:r1", "transfer:r2", "rebuild"), log)
+        assertEquals(donor.transfers.all(), target.transfers.all())
         assertTrue(target.build.run(archive).decisions.all { it.verdict == MergeVerdict.IDENTICAL })
     }
 }

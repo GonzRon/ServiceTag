@@ -65,6 +65,7 @@ internal fun openMigrated(file: File): AppDatabase = Room
     .addMigrations(
         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
         MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
+        MIGRATION_13_14,
     )
     .build()
 
@@ -225,6 +226,9 @@ internal val V12_TABLES = setOf("service_case", "service_case_entry")
 
 /** The one table schema v13 added (#72): the loan aggregate. */
 internal val V13_TABLES = setOf("asset_loan")
+
+/** The one table schema v14 added (#77): the transfer records. */
+internal val V14_TABLES = setOf("asset_transfer")
 
 /** The seven tables schema v2 added. */
 internal val JOURNAL_TABLES = setOf(

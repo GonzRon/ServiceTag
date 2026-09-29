@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.ui.condition
 
+import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -243,6 +245,9 @@ class ChangeConditionViewModel(
         } catch (gone: NoSuchAsset) {
             Log.w(TAG, "the asset left while its condition was being changed", gone)
             finish()
+        } catch (held: AssetTransferredOut) {
+            // #77 (B4 hand-off 1): the asset was transferred out while the sheet was open — P77-35, nothing written.
+            _state.update { it.copy(saving = false, held = null, refusal = TransferImportStrings.ASSET_TRANSFERRED_OUT) }
         }
     }
 

@@ -1,9 +1,10 @@
 package com.loosecannon.servicetag.core.reminders
 
 import com.loosecannon.servicetag.core.model.Asset
-import com.loosecannon.servicetag.core.model.AssetStatus
-import com.loosecannon.servicetag.core.model.isRetired
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.maintainedHere
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 
@@ -14,8 +15,9 @@ import java.time.format.DateTimeParseException
  * list and rebuilds itself from it.
  *
  * A warranty subject exists exactly while all four hold:
- * - the asset is **in service** — `status == ACTIVE` and not retired, the rule a schedule's target
- *   is judged by (`targetInService`);
+ * - the asset is **maintained here** — in service (`status == ACTIVE`, not retired) and not
+ *   transferred out from this phone, the rule a schedule's target is judged by (`maintainedHere`,
+ *   `targetInService`; #77 C11, R77-20: a held asset has no warranty warning here, whatever its status);
  * - its warranty date parses;
  * - a lead is set;
  * - `today` is not past the expiry (the expiry day is still in warranty).
@@ -31,6 +33,8 @@ import java.time.format.DateTimeParseException
  */
 class BuildDeadlineSubjects(
     private val assets: AssetRepository,
+    /** #77 (C11): the transfer records, read once per answer for the held set. */
+    private val transfers: TransferRecordRepository,
 ) {
 
     /**
@@ -39,13 +43,15 @@ class BuildDeadlineSubjects(
      * consecutive answers can be compared.
      */
     @Suppress("UNUSED_PARAMETER")
-    suspend fun forProvider(provider: ProviderId, today: LocalDate): List<ReminderSubject> =
-        assets.all()
+    suspend fun forProvider(provider: ProviderId, today: LocalDate): List<ReminderSubject> {
+        val held = transfers.heldIds()
+        return assets.all()
             .sortedBy { it.id.value }
-            .mapNotNull { warrantySubjectOf(it, today) }
+            .mapNotNull { warrantySubjectOf(it, today, held) }
+    }
 
-    private fun warrantySubjectOf(asset: Asset, today: LocalDate): ReminderSubject? {
-        if (asset.status != AssetStatus.ACTIVE || asset.isRetired) return null
+    private fun warrantySubjectOf(asset: Asset, today: LocalDate, held: Set<AssetId>): ReminderSubject? {
+        if (!asset.maintainedHere(held)) return null
         val lead = asset.warrantyReminderLeadDays ?: return null
         val expiry = asset.warrantyExpiresOn?.let(::parsedOrNull) ?: return null
         if (today.isAfter(expiry)) return null
