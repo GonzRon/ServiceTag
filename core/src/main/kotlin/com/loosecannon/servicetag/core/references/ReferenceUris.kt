@@ -5,7 +5,7 @@ package com.loosecannon.servicetag.core.references
  * checks for structural validity and the host the downloader's hop rule checks are read by the same
  * code.
  *
- * Deliberately not `java.net.URI`: that parser answers "no host" for an authority it cannot read as
+ * Deliberately not the JDK's `URI` parser: it answers "no host" for an authority it cannot read as
  * a server name — an underscore in a hostname is enough — which would refuse URIs the phone opens
  * perfectly well. The authority is read the way `AddReference` always read it: from `//` to the first
  * `/`, `?` or `#`. Nothing here decodes, IDN-maps or otherwise rewrites a host; whether a host is one
