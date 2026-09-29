@@ -41,6 +41,20 @@ class SaveGroup(
     private val clock: Clock,
 ) {
     suspend fun run(id: GroupId?, cmd: GroupCommand): MaintenanceGroup {
+        val saved = prepare(id, cmd)
+        uow.write { groups.upsert(saved) }
+        return saved
+    }
+
+    /**
+     * #86 (C15): the same reads, refusals and row as [run], written inside the caller's transaction, so
+     * `ReplaceAsset` adds its new window in its own one write.
+     */
+    internal suspend fun saveInTransaction(id: GroupId?, cmd: GroupCommand): MaintenanceGroup =
+        prepare(id, cmd).also { groups.upsert(it) }
+
+    /** [run]'s reads and refusals, and the row it writes. */
+    private suspend fun prepare(id: GroupId?, cmd: GroupCommand): MaintenanceGroup {
         val existing = id?.let { groups.get(it) ?: throw NoSuchGroup(it) }
         val problems = problemsOf(cmd, existing)
         if (problems.isNotEmpty()) throw GroupValidation(problems)
@@ -68,7 +82,7 @@ class SaveGroup(
             )
         }
 
-        val saved = MaintenanceGroup(
+        return MaintenanceGroup(
             id = existing?.id ?: GroupId(ids.newId()),
             name = cmd.name.trim(),
             description = cmd.description.trim(),
@@ -79,8 +93,6 @@ class SaveGroup(
             // normalise to; `sortOrder` is not promised unique, so the id breaks the tie.
             members = (carried + added).sortedWith(compareBy({ it.sortOrder }, { it.id })),
         )
-        uow.write { groups.upsert(saved) }
-        return saved
     }
 
     /**
