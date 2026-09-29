@@ -67,7 +67,7 @@ class BackupFormat9Test {
      */
     @Test
     fun theFormatMovedAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(14, BackupCodec.FORMAT_VERSION)
+        assertEquals(15, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 
@@ -98,8 +98,8 @@ class BackupFormat9Test {
             AssetCategoryDto.serializer().descriptor.elementNames.toList(),
         )
         assertEquals(
-            listOf("assetCategories", "serviceCases", "serviceCaseEntries", "assetLoans", "transferRecords"),
-            BackupData.serializer().descriptor.elementNames.toList().takeLast(5),
+            listOf("assetCategories", "serviceCases", "serviceCaseEntries", "assetLoans", "transferRecords", "assetSuccessions"),
+            BackupData.serializer().descriptor.elementNames.toList().takeLast(6),
         )
     }
 
@@ -117,7 +117,7 @@ class BackupFormat9Test {
             .toByteArray(Charsets.UTF_8)
         val manifest = prettyJson.decodeFromString(
             BackupManifest.serializer(), String(zipEntries(encoded).getValue(BackupCodec.MANIFEST_ENTRY), Charsets.UTF_8),
-        ).let { it.copy(counts = it.counts - "assetCategories" - "serviceCases" - "serviceCaseEntries" - "assetLoans" - "transferRecords", dataSha256 = sha256Hex(dataBytes)) }
+        ).let { it.copy(counts = it.counts - "assetCategories" - "serviceCases" - "serviceCaseEntries" - "assetLoans" - "transferRecords" - "assetSuccessions", dataSha256 = sha256Hex(dataBytes)) }
         val shipped = zipOf(
             BackupCodec.MANIFEST_ENTRY to prettyJson.encodeToString(BackupManifest.serializer(), manifest).toByteArray(Charsets.UTF_8),
             BackupCodec.DATA_ENTRY to dataBytes,

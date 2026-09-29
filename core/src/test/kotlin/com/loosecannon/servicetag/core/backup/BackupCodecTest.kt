@@ -255,6 +255,7 @@ class BackupCodecTest {
                 "assetLoans" to 0,
                 // Format 14's key (#77), at zero here for the same reason.
                 "transferRecords" to 0,
+                "assetSuccessions" to 0,
             ),
             manifest.counts,
         )
@@ -484,6 +485,7 @@ class BackupCodecTest {
                 "assetLoans" to 0,
                 // Format 14's key (#77), at zero here for the same reason.
                 "transferRecords" to 0,
+                "assetSuccessions" to 0,
             ),
             decoded.manifest.counts,
         )
@@ -1055,8 +1057,8 @@ class BackupCodecTest {
      * to 13 (#72), the legacy boundary did not.
      */
     @Test
-    fun theFormatIsFourteenAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(14, BackupCodec.FORMAT_VERSION)
+    fun theFormatIsFifteenAndTheLegacyBoundaryStaysSeven() {
+        assertEquals(15, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 

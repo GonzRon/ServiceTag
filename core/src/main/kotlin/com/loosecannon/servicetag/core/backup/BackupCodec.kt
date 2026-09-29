@@ -10,10 +10,12 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.Season
+import com.loosecannon.servicetag.core.model.SuccessionProblem
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.heldIds
 import com.loosecannon.servicetag.core.model.isCode
 import com.loosecannon.servicetag.core.model.shapeMatches
+import com.loosecannon.servicetag.core.model.successionProblems
 import com.loosecannon.servicetag.core.usecase.isIsoDate
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -26,7 +28,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
 /**
- * Backup format v14: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
+ * Backup format v15: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
  * backup set pairs it with an artifacts archive, and `backupSetId` is what ties the two together.
  *
  * ```
@@ -38,7 +40,7 @@ import kotlinx.serialization.json.JsonObject
  *                    occurrenceClosures: [...], assetReferences: [...],
  *                    seasonActivations: [...], assetConditions: [...], healthSubjects: [...],
  *                    assetCategories: [...], serviceCases: [...], serviceCaseEntries: [...],
- *                    assetLoans: [...], transferRecords: [...] }
+ *                    assetLoans: [...], transferRecords: [...], assetSuccessions: [...] }
  * ```
  *
  * IDs are written verbatim, lists are sorted by id (children by sortOrder within their parent, and
@@ -114,6 +116,15 @@ import kotlinx.serialization.json.JsonObject
  * ids; a replace would otherwise land an asset its own records say is gone. What a record says about itself
  * is the content check's.
  *
+ * **Format 15 (#86, C3) adds one list and no upgrade.** `assetSuccessions` — one immutable row per succession, an
+ * asset replaced by a distinct successor, sorted by id — defaults to empty, so a format ≤14 archive decodes through
+ * the same strict decode with none; `LAST_LEGACY_FORMAT` stays 7. One that carries a row was built by hand and is
+ * refused; an empty list is accepted. Both assets are real foreign keys and must be in the file, and the rows must
+ * stand together (`successionProblems`, the one home of I1–I4): no asset replaced twice or replacing twice, and no
+ * cycle — cross-row rules, the graph check's, beside the duplicate ids; the schema's unique indexes would otherwise
+ * abort a replace with the owner's data already wiped. What a row says about itself — a blank id, one asset at both
+ * ends, a date that is not ISO, a stamp not after the epoch — is the content check's.
+ *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
@@ -121,7 +132,7 @@ import kotlinx.serialization.json.JsonObject
  * at read time (inv. 111).
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 14
+    const val FORMAT_VERSION = 15
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -148,6 +159,9 @@ object BackupCodec {
 
     /** The first format that can carry a transfer record (#77). */
     private const val FIRST_TRANSFER_FORMAT = 14
+
+    /** The first format that can carry an asset succession (#86). */
+    private const val FIRST_SUCCESSION_FORMAT = 15
 
     /** Lowercase hex, 64 chars — the shape every attachment row promises for its bytes. */
     private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
@@ -219,6 +233,8 @@ object BackupCodec {
             assetLoans = data.assetLoans.sortedBy { it.id },
             // Format 14: OUT, IN and WITHDRAWN alike, each its own row.
             transferRecords = data.transferRecords.sortedBy { it.id },
+            // Format 15: one immutable row per succession.
+            assetSuccessions = data.assetSuccessions.sortedBy { it.id },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
         // The artifact tallies are derived here, in one place, from the rows themselves: a MANAGED
@@ -255,6 +271,7 @@ object BackupCodec {
                 "serviceCaseEntries" to sorted.serviceCaseEntries.size,
                 "assetLoans" to sorted.assetLoans.size,
                 "transferRecords" to sorted.transferRecords.size,
+                "assetSuccessions" to sorted.assetSuccessions.size,
             ),
             dataSha256 = sha256Hex(dataBytes),
             backupSetId = backupSetId,
@@ -366,6 +383,12 @@ object BackupCodec {
             throw BackupCorrupt("transferRecords: a format ${manifest.formatVersion} archive cannot carry transfer records")
         }
 
+        // #86, the same rule for the successions: the list did not exist before format 15, so a row in an older
+        // archive was put there by hand. An empty list is accepted.
+        if (manifest.formatVersion < FIRST_SUCCESSION_FORMAT && data.assetSuccessions.isNotEmpty()) {
+            throw BackupCorrupt("assetSuccessions: a format ${manifest.formatVersion} archive cannot carry asset successions")
+        }
+
         // Every row must be nameable in the domain, otherwise the caller would only find out
         // halfway through a destructive import. Result discarded; this is a validation pass.
         data.assets.forEach { it.toDomain() }
@@ -387,6 +410,7 @@ object BackupCodec {
         data.serviceCaseEntries.forEach { it.toDomain() }
         data.assetLoans.forEach { it.toDomain() }
         data.transferRecords.forEach { it.toDomain() }
+        data.assetSuccessions.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
         // replays the insert loops in one transaction: a duplicate id or a reference to a row
@@ -402,7 +426,7 @@ object BackupCodec {
     }
 
     /**
-     * The version dispatch: formats 8 to 14 decode strictly as they stand; formats 1–7 are rewritten as a
+     * The version dispatch: formats 8 to 15 decode strictly as they stand; formats 1–7 are rewritten as a
      * tree by [LegacyArchive] first and then go through the very same strict decode.
      * `SerializationException` is an `IllegalArgumentException`, and so is the malformed-number
      * failure a tree decode can raise, so one catch covers both.
@@ -751,6 +775,40 @@ object BackupCodec {
         val held = heldIds(data.transferRecords.map { it.toDomain() })
         data.assets.firstOrNull { AssetId(it.id) in held }?.let { asset ->
             throw BackupCorrupt("transferRecords: asset ${asset.id} is in the archive and held by its own records")
+        }
+
+        // --- successions (format 15) --------------------------------------------------------------
+        // Both ends are real foreign keys and must be in the file (I5). And the rows must stand together
+        // (#86, C1; R86-1): an asset replaced at most once and replacing at most one (I2) — the schema's two unique
+        // indexes would refuse a second row, and only after a replace had wiped the owner's data — and no cycle
+        // (I4). `successionProblems` is the one home of those rules; a self-link is about the row itself, so it is
+        // the content check's.
+
+        uniqueIds("assetSuccessions", data.assetSuccessions.map { it.id })
+        data.assetSuccessions.forEach { row ->
+            if (row.predecessorAssetId !in assetIds) {
+                throw BackupCorrupt(
+                    "assetSuccessions: succession ${row.id} names predecessor ${row.predecessorAssetId}, which is not in assets",
+                )
+            }
+            if (row.successorAssetId !in assetIds) {
+                throw BackupCorrupt(
+                    "assetSuccessions: succession ${row.id} names successor ${row.successorAssetId}, which is not in assets",
+                )
+            }
+        }
+        val successions = data.assetSuccessions.map { it.toDomain() }
+        successionProblems(successions).firstOrNull { it !is SuccessionProblem.SelfLink }?.let { problem ->
+            throw BackupCorrupt(
+                when (problem) {
+                    is SuccessionProblem.PredecessorTaken -> "assetSuccessions: succession ${problem.id} names predecessor " +
+                        "${successions.first { it.id == problem.id }.predecessorAssetId.value}, which succession ${problem.holder} already names"
+                    is SuccessionProblem.SuccessorTaken -> "assetSuccessions: succession ${problem.id} names successor " +
+                        "${successions.first { it.id == problem.id }.successorAssetId.value}, which succession ${problem.holder} already names"
+                    is SuccessionProblem.Cycle -> "assetSuccessions: successions ${problem.ids.joinToString()} form a cycle"
+                    is SuccessionProblem.SelfLink -> error("the content check's")
+                },
+            )
         }
 
         // --- events ------------------------------------------------------------------------------

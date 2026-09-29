@@ -436,6 +436,8 @@ class BackupUseCasesTest {
                 "assetLoans" to 0,
                 // Format 14's key (#77), at zero here for the same reason.
                 "transferRecords" to 0,
+                // Format 15's key (#86), at zero here for the same reason.
+                "assetSuccessions" to 0,
             ),
             decoded.manifest.counts,
         )
