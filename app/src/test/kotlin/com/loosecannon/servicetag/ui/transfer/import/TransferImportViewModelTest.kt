@@ -138,6 +138,18 @@ class TransferImportViewModelTest {
     }
 
     @Test
+    fun aCancelAtDoneBeforeTheHandOffHandsNothingOver() = runTest(scheduler) {
+        val model = model(copyOf(heaterPack().bytes))
+        advanceUntilIdle()
+        model.import()
+        advanceUntilIdle()
+        assertEquals(TransferImportPhase.DONE, model.state.value.phase)
+        model.cancel()
+        assertTrue("cancel's exit", model.state.value.finished)
+        assertNull("no second pop through the hand-off", model.handOff())
+    }
+
+    @Test
     fun theOutcomesSayTheirSentences() = runTest(scheduler) {
         val pack = heaterPack()
         // P77-43: already here.

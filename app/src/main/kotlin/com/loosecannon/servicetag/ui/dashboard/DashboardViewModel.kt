@@ -104,7 +104,7 @@ data class LoanAttentionRow(
     val category: String?,
     val dueOn: String,
     val line: String,
-    /** D-2: the parent's name for a component, null for a root (inv. 122); P72-44 draws it. */
+    /** D-2: the parent's name for a component, null for a root (inv. 122); drawn under P72-44 as `Part of <parent>` ([partOfLine]). */
     val parentName: String? = null,
 )
 

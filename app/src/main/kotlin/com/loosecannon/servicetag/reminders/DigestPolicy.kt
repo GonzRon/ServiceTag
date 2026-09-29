@@ -496,7 +496,7 @@ object DigestPolicy {
     /**
      * #72 (C11, R72-7): a loan's Until returned — announced again **once each period**, a period
      * running from one of the owner's digest hours to the next ([DeadlineFacts.cadenceSince] is the
-     * latest one at or before now). It opens as [loanOnce] does, has no end, and is quiet at every
+     * latest one at or before now). It first posts as [loanOnce] does, has no end, and is quiet at every
      * sweep before the day's digest hour (fix round 1): no first post, no re-alert after a missed
      * period and no restart re-post happens between local midnight and that hour, so the midnight
      * `DATE_CHANGED` sweep never alerts. Past that hold, the period began at the day's digest hour.

@@ -201,7 +201,7 @@ class TransferImportViewModel(
      */
     fun handOff(): String? {
         val done = _state.value.takeIf { it.phase == TransferImportPhase.DONE }?.done ?: return null
-        if (handedOff) return null
+        if (handedOff || _state.value.finished) return null
         handedOff = true
         return done
     }

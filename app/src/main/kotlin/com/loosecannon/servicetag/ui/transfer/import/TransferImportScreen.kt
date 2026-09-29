@@ -87,7 +87,7 @@ fun TransferImportScreen(graph: AppGraph, copy: String, onBack: () -> Unit, onIm
  * The import screen's body, a pure function of [TransferImportState], so every state is one `setContent` away in a
  * device test. **Every word is a ratified sentence** from [TransferImportStrings], or a reused one through its home
  * (`Cancel`, `Close`). The share host ([TransferDoor.SHARE]) draws P77-50 as a line with the intake's `Close`; the
- * Backup door's P77-50 is its screen's snackbar.
+ * Backup door's P77-50 is the Backup screen's snackbar (#84 C3).
  */
 @Composable
 fun TransferImportContent(
