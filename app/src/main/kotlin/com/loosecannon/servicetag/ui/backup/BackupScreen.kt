@@ -39,7 +39,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.backup.SafBackupIO
 import com.loosecannon.servicetag.backup.SafBackupSetWriter
+import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
+import java.io.IOException
+import kotlinx.coroutines.Dispatchers
 import com.loosecannon.servicetag.ui.components.LabelValue
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
@@ -49,6 +53,7 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** The word the user has to type before an import runs (R-9). Not localised: it is a password. */
 private const val REPLACE_WORD = "REPLACE"
@@ -74,6 +79,8 @@ private val IMPORT_TYPES = arrayOf("application/zip", "application/octet-stream"
 fun BackupScreen(
     graph: AppGraph,
     onBack: () -> Unit,
+    /** #77 (C16): opens the import screen over the picked pack's copy in `cache/transfer-in/`, by its bare name. */
+    onImportPack: (String) -> Unit = {},
 ) {
     val model: BackupViewModel = viewModel(key = "backup") { BackupViewModel(graph) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -139,6 +146,33 @@ fun BackupScreen(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let { model.restoreFilesFrom(SafBackupIO(resolver, it)) } }
 
+    // #77 (C16, R77-2): the picked Transfer Pack is copied into `cache/transfer-in/` before anything reads it, and
+    // the import screen reads only that copy. A copy that fails leaves no file and writes nothing.
+    val importPackFrom = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val copy = try {
+                    withContext(Dispatchers.IO) {
+                        graph.transferPackInbox.copyIn(
+                            ByteSource { resolver.openInputStream(uri) ?: throw IOException("the provider returned no stream") },
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+                if (copy == null) {
+                    snackbars.showSnackbar(TransferImportStrings.COULD_NOT_IMPORT)
+                } else {
+                    onImportPack(copy.name)
+                }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -196,6 +230,15 @@ fun BackupScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Restore files")
+            }
+
+            OutlinedButton(
+                onClick = { importPackFrom.launch(IMPORT_TYPES) },
+                enabled = !state.busy,
+                shape = ControlShape,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(TransferImportStrings.TITLE)
             }
         }
     }

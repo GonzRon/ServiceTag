@@ -88,6 +88,13 @@ sealed interface Route : NavKey {
     @Serializable data class TagResult(val format: String, val key: String) : Route
     @Serializable data class WriteTag(val targetKind: String, val targetId: String?, val label: String?) : Route
     @Serializable data object Backup : Route
+
+    /**
+     * #77 (C16, R77-2) — the Transfer Pack import, reached only from the Backup screen's P77-38 button. [copy] is the
+     * bare name of the picked pack's copy in `cache/transfer-in/`, never a path or a `Uri`; a restored stack whose copy
+     * is gone reads nothing and says P77-52.
+     */
+    @Serializable data class TransferImport(val copy: String) : Route
     @Serializable data object Settings : Route
 
     /**

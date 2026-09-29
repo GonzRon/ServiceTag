@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.ui.asset.AssetEditScreen
 import com.loosecannon.servicetag.ui.asset.AssetsScreen
 import com.loosecannon.servicetag.ui.asset.SECTION_SCHEDULES
 import com.loosecannon.servicetag.ui.backup.BackupScreen
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportScreen
 import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.dashboard.DashboardScreen
 import com.loosecannon.servicetag.ui.health.HealthSubjectEditScreen
@@ -413,7 +414,14 @@ fun ServiceTagRoot(
                     }
                 }
                 entry<Route.Backup> {
-                    BackupScreen(graph = graph, onBack = { backStack.removeLastOrNull() })
+                    BackupScreen(
+                        graph = graph,
+                        onBack = { backStack.removeLastOrNull() },
+                        onImportPack = { copy -> backStack.add(Route.TransferImport(copy)) },
+                    )
+                }
+                entry<Route.TransferImport> { key ->
+                    TransferImportScreen(graph = graph, copy = key.copy, onBack = { backStack.removeLastOrNull() })
                 }
                 entry<Route.Settings> {
                     SettingsScreen(

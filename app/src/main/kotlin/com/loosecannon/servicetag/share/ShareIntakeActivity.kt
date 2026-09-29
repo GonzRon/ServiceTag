@@ -13,6 +13,11 @@ import com.loosecannon.servicetag.ServiceTagApp
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppearanceMode
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferDoor
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportContent
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -64,24 +69,45 @@ class ShareIntakeActivity : ComponentActivity() {
                         logEvent = graph.logEvent,
                         today = { LocalDate.now().toString() },
                         zoneId = { ZoneId.systemDefault().id },
+                        heldIds = { graph.transferRecords.heldIds() },
+                        packInbox = graph.transferPackInbox,
                     )
                 }
                 val state by model.state.collectAsStateWithLifecycle()
 
                 LaunchedEffect(state.finished) { if (state.finished) finish() }
 
-                ShareIntakeScreen(
-                    state = state,
-                    onChoose = model::choose,
-                    onName = model::name,
-                    onDescribe = model::describe,
-                    onKind = model::kind,
-                    onRole = model::role,
-                    onSave = model::save,
-                    onConfirm = model::confirmUnknownScheme,
-                    onDismissConfirmation = model::dismissConfirmation,
-                    onCancel = model::cancel,
-                )
+                // #77 (C16, R77-2): a shared Transfer Pack hosts the import screen over the intake's copy; its Close,
+                // Cancel and every end finish, returning to the app that shared.
+                val pack = state.packCopy
+                if (state.path == IntakePath.TRANSFER_PACK && pack != null) {
+                    val importModel = viewModel(key = "share-transfer-import") {
+                        shareTransferImport(graph.importTransferPack, graph.transferPackInbox, pack)
+                    }
+                    val importState by importModel.state.collectAsStateWithLifecycle()
+                    LaunchedEffect(importState.finished) { if (importState.finished) finish() }
+                    TransferImportContent(
+                        state = importState,
+                        door = TransferDoor.SHARE,
+                        onImport = importModel::import,
+                        onCancel = importModel::cancel,
+                        onClose = importModel::close,
+                        modifier = Modifier.padding(top = 24.dp),
+                    )
+                } else {
+                    ShareIntakeScreen(
+                        state = state,
+                        onChoose = model::choose,
+                        onName = model::name,
+                        onDescribe = model::describe,
+                        onKind = model::kind,
+                        onRole = model::role,
+                        onSave = model::save,
+                        onConfirm = model::confirmUnknownScheme,
+                        onDismissConfirmation = model::dismissConfirmation,
+                        onCancel = model::cancel,
+                    )
+                }
             }
         }
     }
