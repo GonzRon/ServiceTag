@@ -2712,11 +2712,7 @@ private fun purchaseDocumentOf(files: List<Attachment>): String? = files
  */
 private fun attachedDocumentsOf(rows: List<Attachment>): List<AttachedDocument> = rows
     .filter { it.role != null }
-    .sortedWith(
-        compareByDescending<Attachment> { it.capturedOn != null }
-            .thenByDescending { it.capturedOn }
-            .thenByDescending { it.createdAt },
-    )
+    .sortedWith(newestFirst({ it.capturedOn }, { it.createdAt }))
     .map { AttachedDocument(role = it.role!!, displayName = it.displayName) }
 
 /**
