@@ -93,6 +93,8 @@ import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveHealthSubject
 import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
+import com.loosecannon.servicetag.core.usecase.ReplaceAsset
+import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.SetHealthPolicy
 import com.loosecannon.servicetag.core.usecase.SetMaintenanceBreak
@@ -500,6 +502,18 @@ class FakeGraph(
     val closeRound: CloseRound =
         CloseRound(schedules, closures, uow, ids, clock, todayPort, recomputeSchedules)
     val saveGroup: SaveGroup = SaveGroup(groups, assets, uow, ids, clock)
+
+    /** #86 (C18): the tag retarget `ReplaceAsset` calls in-transaction, from exactly the members `AppGraph` builds it from. */
+    val bindTag: BindTag = BindTag(tags, assets, uow, clock)
+
+    /**
+     * #86 (C18): Replace asset — one write over the guarded ports (the successions' included), calling the five
+     * in-transaction bodies of the graph's own use cases, never their `run`.
+     */
+    val replaceAsset: ReplaceAsset = ReplaceAsset(
+        assets, schedules, groups, tags, definitions, profiles, loans, transferRecords, assetSuccessions,
+        uow, ids, clock, todayPort, retireAsset, saveAssetSettings, saveSchedule, saveGroup, bindTag,
+    )
     val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock)
 
     /**

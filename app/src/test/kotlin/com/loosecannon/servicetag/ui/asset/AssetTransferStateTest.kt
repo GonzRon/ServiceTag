@@ -208,8 +208,8 @@ class AssetTransferStateTest {
         assertTrue(state.offersWrites)
         assertEquals(
             listOf(
-                DetailMenuItem.EDIT, DetailMenuItem.UNARCHIVE, DetailMenuItem.RETIRE, DetailMenuItem.TRANSFER,
-                DetailMenuItem.DELETE,
+                DetailMenuItem.EDIT, DetailMenuItem.UNARCHIVE, DetailMenuItem.RETIRE, DetailMenuItem.REPLACE,
+                DetailMenuItem.TRANSFER, DetailMenuItem.DELETE,
             ),
             state.menu,
         )

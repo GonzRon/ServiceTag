@@ -120,6 +120,7 @@ import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveAssetSettings
 import com.loosecannon.servicetag.core.usecase.SaveHealthSubject
 import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
+import com.loosecannon.servicetag.core.usecase.ReplaceAsset
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.SetHealthPolicy
 import com.loosecannon.servicetag.core.usecase.SetMaintenanceBreak
@@ -783,6 +784,15 @@ class AppGraph(private val context: Context) {
     // 1.2 — the group operations. `saveGroup` is the only writer of a membership window, and the
     // only place `removed_at` is ever stamped; nothing anywhere clears one.
     val saveGroup: SaveGroup = SaveGroup(groups, assets, uow, ids, clock)
+
+    /**
+     * #86 (C18): Replace asset — one write over the guarded ports (the successions' included), calling the five
+     * in-transaction bodies of the graph's own use cases, never their `run`.
+     */
+    val replaceAsset: ReplaceAsset = ReplaceAsset(
+        assets, schedules, groups, tags, definitions, profiles, loans, transferRecords, assetSuccessions,
+        uow, ids, clock, today, retireAsset, saveAssetSettings, saveSchedule, saveGroup, bindTag,
+    )
     val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock)
     val completeGroupMembers: CompleteGroupMembers = CompleteGroupMembers(
         schedules, groups, events, closures, definitions, profiles, uow, ids, clock, recomputeSchedules,
