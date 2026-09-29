@@ -87,7 +87,7 @@ class MaintenanceRoutesTest {
     private fun router(): ApiRouter = ApiRouter(
         ApiHandlers(
             graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles,
-            graph.events, graph.attachments, graph.categories, graph.transferRecords,
+            graph.events, graph.attachments, graph.categories, graph.transferRecords, graph.assetSuccessions,
             graph.createAsset, graph.updateAsset, graph.retireAsset, graph.archiveAsset,
             graph.saveDefinition, graph.archiveDefinition, graph.saveProfile, graph.archiveProfile,
             graph.logEvent, graph.updateEvent, graph.deleteEvent, graph.importBackupMerge,

@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.backup.AssetDto
 import com.loosecannon.servicetag.core.backup.AssetEventDto
+import com.loosecannon.servicetag.core.backup.AssetSuccessionDto
 import com.loosecannon.servicetag.core.backup.EventProfileDto
 import com.loosecannon.servicetag.core.backup.MeasurementDefinitionDto
 import com.loosecannon.servicetag.core.backup.NfcTagDto
@@ -51,7 +52,7 @@ internal data class StatusResponse(
      * One key per table — assets, **groups**, definitions, profiles, **schedules**, **closures**,
      * links, tags, events, attachments, **references**, **seasonActivations**, **assetConditions**,
      * **healthSubjects**, **assetCategories**, **serviceCases**, **serviceCaseEntries**, **assetLoans**,
-     * **transferRecords** — listed here in
+     * **transferRecords**, **assetSuccessions** — listed here in
      * `MergeTable`'s order for reading, which is **not** the JSON's key order and is not contract; a
      * client reads by key. (The sentence claimed
      * that order before 1.3 and the list was not in it: `tags` and `links` sat ahead of `definitions`
@@ -63,7 +64,8 @@ internal data class StatusResponse(
      * with #74 (format 9) — the owner's own categories, never the compiled built-ins; and
      * **serviceCases** and **serviceCaseEntries** with #79b (format 12), **assetLoans** with #72 (format
      * 13) and **transferRecords** with #77 (format 14) — every record, OUT, IN and WITHDRAWN, never a count
-     * of the assets held — each under the archive's own list names. `schedule_state` and `schedule_local_delivery` are **not** here, because derived and
+     * of the assets held — and **assetSuccessions** with #86 (format 15), every succession row, each under the
+     * archive's own list names. `schedule_state` and `schedule_local_delivery` are **not** here, because derived and
      * device-local rows are not tables a client counts, and no health value is here because none is
      * stored anywhere.
      */
@@ -104,6 +106,17 @@ internal data class EventResponse(val event: AssetEventDto)
 
 @Serializable
 internal data class TagListResponse(val tags: List<NfcTagDto>)
+
+/**
+ * #86 (C20; R86-18) — `GET /v1/assets/{id}/succession`: the row naming the asset as successor ([replaces]) and the
+ * row naming it as predecessor ([replacedBy]), each the archive's own [AssetSuccessionDto] or `null`. Both keys are
+ * always on the wire (`explicitNulls`); a chain's middle asset answers both. `AssetDto` gains nothing.
+ */
+@Serializable
+internal data class SuccessionResponse(
+    val replaces: AssetSuccessionDto?,
+    val replacedBy: AssetSuccessionDto?,
+)
 
 /*
  * The merge report, on the wire. It is a 1:1 mirror of Task 1's `MergeReport` rather than that
