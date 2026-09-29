@@ -1,10 +1,12 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.testing.transferOf
 import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
@@ -124,9 +126,10 @@ class ImportBackupMergeTest {
         val serviceCases = InMemoryServiceCaseRepository(caseEntries)
         val loans = InMemoryAssetLoanRepository()
         val transfers = InMemoryTransferRecordRepository()
+        val successions = InMemoryAssetSuccessionRepository()
         val uow = FakeUnitOfWork(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
-            events, attachments, references, categories, serviceCases, caseEntries, loans, transfers,
+            events, attachments, references, categories, serviceCases, caseEntries, loans, transfers, successions,
         )
 
         /** How many times the apply asked for a total recompute, and what it had written by then. */
@@ -140,13 +143,13 @@ class ImportBackupMergeTest {
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, serviceCases, caseEntries, loans, transfers, storage, uow,
+            categories, serviceCases, caseEntries, loans, transfers, successions, storage, uow,
         )
         val apply = ApplyBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, serviceCases, caseEntries, loans, transfers, storage, uow,
+            categories, serviceCases, caseEntries, loans, transfers, successions, storage, uow,
             rebuildAll = {
                 rebuilds += 1
                 writesAtRebuild = runBlocking {
@@ -233,7 +236,8 @@ class ImportBackupMergeTest {
             f.assets, f.groups, f.tags, f.links, f.definitions, f.profiles, f.schedules,
             f.closures, f.events, f.attachments, f.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            f.categories, f.serviceCases, f.caseEntries, f.loans, f.transfers, f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
+            f.categories, f.serviceCases, f.caseEntries, f.loans, f.transfers,
+            f.successions, f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
             appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
     }
@@ -734,7 +738,8 @@ class ImportBackupMergeTest {
             assets, target.groups, target.tags, target.links, target.definitions, target.profiles, target.schedules,
             target.closures, events, target.attachments, target.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            target.categories, cases, entries, target.loans, target.transfers, target.storage, target.uow, rebuildAll = { log += "rebuild" },
+            target.categories, cases, entries, target.loans, target.transfers,
+            target.successions, target.storage, target.uow, rebuildAll = { log += "rebuild" },
         )
 
         apply.run(target.build.run(archive))
@@ -767,7 +772,8 @@ class ImportBackupMergeTest {
             assets, target.groups, target.tags, target.links, target.definitions, target.profiles, target.schedules,
             target.closures, target.events, target.attachments, target.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            target.categories, target.serviceCases, target.caseEntries, loans, target.transfers, target.storage, target.uow,
+            target.categories, target.serviceCases, target.caseEntries, loans, target.transfers,
+            target.successions, target.storage, target.uow,
             rebuildAll = { log += "rebuild" },
         )
 
@@ -808,7 +814,8 @@ class ImportBackupMergeTest {
             assets, target.groups, target.tags, target.links, target.definitions, target.profiles, target.schedules,
             target.closures, target.events, target.attachments, target.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            target.categories, target.serviceCases, target.caseEntries, loans, transfers, target.storage, target.uow,
+            target.categories, target.serviceCases, target.caseEntries, loans, transfers,
+            target.successions, target.storage, target.uow,
             rebuildAll = { log += "rebuild" },
         )
 
@@ -817,5 +824,34 @@ class ImportBackupMergeTest {
         assertEquals(listOf("asset:a1", "loan:l1", "transfer:r1", "transfer:r2", "rebuild"), log)
         assertEquals(donor.transfers.all(), target.transfers.all())
         assertTrue(target.build.run(archive).decisions.all { it.verdict == MergeVerdict.IDENTICAL })
+    }
+
+    /**
+     * #86 (C4): the successions land after their assets and the loans, and before the transfer records — the
+     * apply's order — so both ends are in when a row is appended, as the schema's foreign keys need.
+     */
+    @Test
+    fun successionsLandAfterAssetsAndLoans() {
+        val source = Fakes()
+        runBlocking {
+            source.assets.upsert(asset("a1", "Example Water Heater"))
+            source.assets.upsert(asset("a2", "Example Water Heater, second"))
+            source.loans.upsert(loanOf("l1", assetId = "a1", lentOn = "2026-08-01", returnedOn = "2026-08-02"))
+            source.successions.append(successionOf("s1", predecessor = "a1", successor = "a2"))
+            source.transfers.append(transferOf("r1", assetId = "x9", packId = "pack-q"))
+        }
+        val archive = exportOf(source)
+
+        val target = Fakes()
+        val seen = mutableListOf<String>()
+        target.successions.onAppend = { row ->
+            seen += "${row.id}: assets=${target.assets.rows.keys.sorted()} loans=${target.loans.rows.keys.sorted()} records=${target.transfers.rows.keys}"
+        }
+        val report = runBlocking { target.merge.run(archive) }
+
+        assertTrue(report.applicable, "unexpected conflicts: ${report.conflicts}")
+        assertEquals(listOf("s1: assets=[a1, a2] loans=[l1] records=[]"), seen)
+        assertEquals(listOf("s1"), runBlocking { target.successions.all() }.map { it.id })
+        assertEquals(listOf("r1"), target.transfers.rows.keys.toList(), "the records still land, after it")
     }
 }

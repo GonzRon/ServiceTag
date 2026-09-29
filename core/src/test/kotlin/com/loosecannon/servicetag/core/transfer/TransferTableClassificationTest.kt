@@ -24,6 +24,8 @@ class TransferTableClassificationTest {
 
         assertEquals(lists, TransferTables.CLASSES.keys, "every BackupData list, and nothing else, is classified")
         assertEquals(TransferTableClass.SENDER_ONLY, TransferTables.CLASSES["assetLoans"])
+        // #86 (C6; R86-16): a succession is the sender's own lineage and never travels.
+        assertEquals(TransferTableClass.SENDER_ONLY, TransferTables.CLASSES["assetSuccessions"])
         assertEquals(TransferTableClass.TOMBSTONE, TransferTables.CLASSES["externalLinks"])
         assertEquals(TransferTableClass.CROSS_ASSET, TransferTables.CLASSES["maintenanceGroups"])
         assertEquals(TransferTableClass.GLOBAL_IN_USE, TransferTables.CLASSES["assetCategories"])

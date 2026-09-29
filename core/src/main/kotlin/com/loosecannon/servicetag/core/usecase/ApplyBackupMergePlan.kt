@@ -41,6 +41,7 @@ import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -121,6 +122,13 @@ class ApplyBackupMergePlan(
     private val loans: AssetLoanRepository,
     /** #77 — the transfer records (format 14). */
     private val transfers: TransferRecordRepository,
+    /**
+     * #86 — the successions (format 15): the **raw** port, never the write guard's (C6, MJ-2). A transfer back writes
+     * the kept rows through it — they existed before the transaction, so I8 (no **new** row names a held asset) does
+     * not apply, and the other end may still be held — and M2 already refuses a held end in the plan this apply
+     * rebuilds inside its own write.
+     */
+    private val successions: AssetSuccessionRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -155,7 +163,7 @@ class ApplyBackupMergePlan(
                 mergeSnapshotOf(
                     assets, groups, tags, links, definitions, profiles, schedules, closures,
                     events, attachments, references, seasonActivations, conditions, healthSubjects,
-                    categories, serviceCases, caseEntries, loans, transfers, stored, configured,
+                    categories, serviceCases, caseEntries, loans, transfers, successions, stored, configured,
                 ),
                 returning,
             )

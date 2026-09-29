@@ -74,6 +74,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.StoredBytes
@@ -1415,7 +1416,7 @@ internal suspend fun storedBytesOf(
 }
 
 /**
- * Nineteen reads. **The caller owns the transaction** — see each use case for which one.
+ * Twenty reads. **The caller owns the transaction** — see each use case for which one.
  *
  * Schema 8's other two tables are deliberately not among them, and are named nowhere in this
  * package: derived due state never appears in a plan, and device-local delivery state is never
@@ -1441,6 +1442,7 @@ internal suspend fun mergeSnapshotOf(
     caseEntries: ServiceCaseEntryRepository,
     loans: AssetLoanRepository,
     transfers: TransferRecordRepository,
+    successions: AssetSuccessionRepository,
     storedBytes: Map<String, StoredBytes>,
     attachmentStoreConfigured: Boolean,
 ): MergeSnapshot = MergeSnapshot(
@@ -1463,6 +1465,7 @@ internal suspend fun mergeSnapshotOf(
     caseEntries = caseEntries.all(),
     loans = loans.all(),
     transfers = transfers.all(),
+    successions = successions.all(),
     storedBytes = storedBytes,
     attachmentStoreConfigured = attachmentStoreConfigured,
 )

@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.transfer
 
+import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
@@ -275,4 +276,24 @@ class TransferGraphTest {
 
     private fun encode(data: BackupData): ByteArray =
         BackupCodec.encode(data, appVersion = "1.4.1", schemaVersion = 13, createdAt = 1_758_900_000_000L, backupSetId = "pack-test")
+
+    /**
+     * #86 (C6; R86-16, AC 13): SENDER_ONLY — a pack never carries a succession, not even one whose two ends both
+     * travel, and lineage never forces a selection: nothing is refused for it.
+     */
+    @Test
+    fun successionsNeverTravel() {
+        val lineage = estate.copy(
+            assetSuccessions = listOf(
+                successionOf("s1", predecessor = COMPRESSOR, successor = OPENER),
+                successionOf("s2", predecessor = OPENER, successor = HEATER),
+            ).map { it.toDto() },
+        )
+
+        val both = selected(lineage, HEATER, OPENER).data
+        assertEquals(listOf(OPENER, HEATER, ANODE), both.assets.map { it.id }, "s2's two ends, and the heater's anode")
+        assertEquals(emptyList(), both.assetSuccessions, "both ends selected; the pack carries none")
+        assertEquals(emptyList(), selected(lineage, OPENER).data.assetSuccessions, "one end of each selected; still none")
+        BackupCodec.decode(encode(both))
+    }
 }

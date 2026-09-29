@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.merge
 
 import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
@@ -511,11 +512,13 @@ class MergePlannerSeasonHealthTest {
         )
         val build = BuildBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-            references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(), storage, uow,
+            references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(),
+            InMemoryAssetSuccessionRepository(), storage, uow,
         )
         val apply = ApplyBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-            references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(), storage, uow,
+            references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(),
+            InMemoryAssetSuccessionRepository(), storage, uow,
             rebuildAll = { log += "rebuild" },
         )
         val bytes = archiveOf(

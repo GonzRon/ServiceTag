@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.transfer
 
+import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentKind
@@ -364,5 +365,54 @@ class TransferBackTest {
                 }
             }
         }
+    }
+
+    // --- #86 (C6, Hazard 2; R86-16): the local successions come back with the asset ------------------------
+
+    /**
+     * The return deletes the returning assets' rows and relies on the schema's cascades, which take every succession
+     * naming one — here a returning predecessor (heater → compressor) and a returning successor (opener → anode). The
+     * return writes them back unchanged after the pack's assets, as it keeps the returned loan; the pack never
+     * carried one (SENDER_ONLY), so there is no second copy to collide with.
+     */
+    @Test
+    fun aReturnKeepsTheLocalSuccessionRows() = runTest {
+        val s = TransferInstall("set-sender").also { TransferFixtures.seed(it.raw) }
+        val rows = listOf(
+            successionOf("s1", predecessor = HEATER, successor = TransferFixtures.COMPRESSOR),
+            successionOf("s2", predecessor = TransferFixtures.OPENER, successor = ANODE, replacedOn = "2025-04-01"),
+        )
+        rows.forEach { s.successions.append(it) }
+        val q1 = s.pack("pack-q1", HEATER)
+        s.mark(q1)
+        assertEquals(rows, s.raw.successions.all(), "marking touches no succession")
+        val q2 = recipientOf(q1).pack("pack-q2", HEATER)
+
+        assertIs<TransferImportResult.Imported>(s.import(q2.bytes))
+
+        assertEquals(emptySet(), heldIds(s.raw.transfers.all()), "the heater and its anode are back")
+        assertEquals(rows, s.raw.successions.all(), "both rows are back, unchanged")
+    }
+
+    /**
+     * MJ-2: A → B, where A returns and B left in another pack and is still held. The row existed before the
+     * transaction, so the return writes it back through the unguarded store — I8 governs new rows only — and the
+     * return applies. Through the guarded port it would be refused as `AssetTransferredOut` and roll back.
+     */
+    @Test
+    fun aReturnKeepsASuccessionWhoseOtherEndIsStillHeld() = runTest {
+        val s = TransferInstall("set-sender").also { TransferFixtures.seed(it.raw) }
+        val row = successionOf("s1", predecessor = HEATER, successor = TransferFixtures.OPENER)
+        s.successions.append(row)
+        val q1 = s.pack("pack-q1", HEATER)
+        s.mark(q1)
+        s.mark(s.pack("pack-o1", TransferFixtures.OPENER))
+        assertEquals(setOf(AssetId(HEATER), AssetId(ANODE), AssetId(TransferFixtures.OPENER)), heldIds(s.raw.transfers.all()))
+        val q2 = recipientOf(q1).pack("pack-q2", HEATER)
+
+        assertIs<TransferImportResult.Imported>(s.import(q2.bytes))
+
+        assertEquals(setOf(AssetId(TransferFixtures.OPENER)), heldIds(s.raw.transfers.all()), "the opener is still held")
+        assertEquals(listOf(row), s.raw.successions.all(), "the row is back")
     }
 }

@@ -32,6 +32,7 @@ import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 data class ImportReport(
@@ -101,6 +102,8 @@ class ImportBackupReplace(
     private val loans: AssetLoanRepository,
     /** #77 — the transfer records (format 14): wiped and reloaded; a held graph is refused first (R77-13). */
     private val transfers: TransferRecordRepository,
+    /** #86 — the successions (format 15): wiped by name, restored after their assets. */
+    private val successions: AssetSuccessionRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**

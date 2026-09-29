@@ -50,20 +50,24 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
     val export = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
+        successions,
         uow, IdGenerator { setId }, Clock { now }, appVersion = "1.4.1", schemaVersion = 9,
     )
     val replace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-        references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers, storage, uow,
+        references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
+        successions, storage, uow,
         rebuildAll = { rebuilds += 1 },
     )
     val build = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-        references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers, storage, uow,
+        references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
+        successions, storage, uow,
     )
     val apply = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
-        references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers, storage, uow,
+        references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
+        successions, storage, uow,
         rebuildAll = { rebuilds += 1 },
     )
 }

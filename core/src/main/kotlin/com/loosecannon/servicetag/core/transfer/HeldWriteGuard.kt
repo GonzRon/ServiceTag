@@ -48,6 +48,7 @@ import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 
 /**
  * #77 (C12, R77-4) — an ordinary write reached a row that an asset transferred out from this phone owns, or would
@@ -136,6 +137,7 @@ class HeldWriteGuard(
     fun cases(port: ServiceCaseRepository): ServiceCaseRepository = GuardedCases(port, this)
     fun entries(port: ServiceCaseEntryRepository): ServiceCaseEntryRepository = GuardedEntries(port, this)
     fun loans(port: AssetLoanRepository): AssetLoanRepository = GuardedLoans(port, this)
+    fun successions(port: AssetSuccessionRepository): AssetSuccessionRepository = port
 
     /**
      * The shared check: reads the held set once and, when it is not empty, runs [block], whose [Held.owned] and

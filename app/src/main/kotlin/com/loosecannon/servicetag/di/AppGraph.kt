@@ -21,6 +21,7 @@ import com.loosecannon.servicetag.core.condition.needsIncident
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
+import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.lineageFor
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
@@ -148,6 +149,7 @@ import com.loosecannon.servicetag.data.room.MIGRATION_13_14
 import com.loosecannon.servicetag.data.room.MIGRATION_14_15
 import com.loosecannon.servicetag.data.room.RoomTransferRecordRepository
 import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
+import com.loosecannon.servicetag.data.room.RoomAssetSuccessionRepository
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomCategoryRepository
@@ -318,6 +320,14 @@ class AppGraph(private val context: Context) {
      * exit, and a returned loan stays as history. Its rules live in the four loan use cases below.
      */
     val loans: AssetLoanRepository = heldWriteGuard.loans(RoomAssetLoanRepository(db.assetLoanDao()))
+
+    /**
+     * #86's one data port (C2, C6): the successions, appended and never updated or deleted one by one — a row leaves
+     * only by an endpoint's CASCADE. [assetSuccessions] is the write guard's port and every consumer's; the raw
+     * [roomAssetSuccessions] goes to [applyBackupMergePlan] alone (MJ-2), which re-inserts a transfer back's kept rows.
+     */
+    private val roomAssetSuccessions = RoomAssetSuccessionRepository(db.assetSuccessionDao())
+    val assetSuccessions: AssetSuccessionRepository = heldWriteGuard.successions(roomAssetSuccessions)
 
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
@@ -540,7 +550,8 @@ class AppGraph(private val context: Context) {
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, transferRecords, uow, ids, clock, BuildConfig.VERSION_NAME,
+        serviceCases, serviceCaseEntries, loans, transferRecords,
+        assetSuccessions, uow, ids, clock, BuildConfig.VERSION_NAME,
         SCHEMA_VERSION,
     )
 
@@ -548,7 +559,7 @@ class AppGraph(private val context: Context) {
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, transferRecords, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, assetSuccessions, attachmentStorage, uow,
         // Derived state is rebuilt after any import, and the wipe took it with the schedule rows.
         rebuildAll = { recomputeSchedules.all() },
     )
@@ -562,12 +573,12 @@ class AppGraph(private val context: Context) {
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, transferRecords, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, assetSuccessions, attachmentStorage, uow,
     )
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, transferRecords, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, roomAssetSuccessions, attachmentStorage, uow,
         // The total post-apply recompute, wired to the engine: an imported event, membership row,
         // closure or meter reading can each move a due date, and rebuilding every schedule inside
         // the apply's own transaction is cheaper than enumerating which.
@@ -594,7 +605,7 @@ class AppGraph(private val context: Context) {
     private val backupRepositories = BackupRepositories(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         seasonActivations, conditions, healthSubjects, categories, serviceCases, serviceCaseEntries, loans,
-        transferRecords,
+        transferRecords, assetSuccessions,
     )
     val createTransferPack: CreateTransferPack = CreateTransferPack(
         backupRepositories, uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,

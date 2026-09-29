@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.transfer
 
+import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
@@ -103,5 +104,27 @@ class TransferGraphRetainTest {
             listOf(EntangledRef("assetEvents", "e8", "maintenanceSchedules", "sg")),
             assertIs<TransferRetention.Entangled>(TransferGraph.retain(withStray, heaterAndAnode)).refs,
         )
+    }
+
+    /**
+     * #86 (C6, Hazard 1): a succession naming a held asset at either end drops, like a loan — and is never
+     * `Entangled`, so a mark, a withdrawal and an export are never refused for one. A row between two staying
+     * assets stays, and what stays decodes.
+     */
+    @Test
+    fun aSuccessionNamingAHeldAssetDropsAndIsNeverEntangled() {
+        val staying = successionOf("s3", predecessor = COMPRESSOR, successor = OPENER)
+        val lineage = estate.copy(
+            assetSuccessions = listOf(
+                successionOf("s1", predecessor = HEATER, successor = COMPRESSOR),
+                successionOf("s2", predecessor = OPENER, successor = ANODE),
+                staying,
+            ).map { it.toDto() },
+        )
+
+        val kept = assertIs<TransferRetention.Retained>(TransferGraph.retain(lineage, heaterAndAnode)).data
+
+        assertEquals(listOf(staying.toDto()), kept.assetSuccessions)
+        assertEquals(lineage.assetSuccessions, assertIs<TransferRetention.Retained>(TransferGraph.retain(lineage, emptySet())).data.assetSuccessions)
     }
 }

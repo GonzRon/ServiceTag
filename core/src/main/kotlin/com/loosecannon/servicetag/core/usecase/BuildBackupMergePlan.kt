@@ -28,6 +28,7 @@ import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -44,7 +45,7 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * the two halves of the same question, and a reader comparing them should have nothing to subtract.
  * #74's [categories] is read like the rest: the planner decides the archive's category rows against
  * it and plans the rows its accepted assets need; and so are #79's [serviceCases] and [caseEntries], and
- * #72's [loans], and #77's [transfers].
+ * #72's [loans], #77's [transfers] and #86's [successions].
  */
 class BuildBackupMergePlan(
     private val assets: AssetRepository,
@@ -71,6 +72,8 @@ class BuildBackupMergePlan(
     private val loans: AssetLoanRepository,
     /** #77 — the transfer records (format 14). */
     private val transfers: TransferRecordRepository,
+    /** #86 — the successions (format 15). */
+    private val successions: AssetSuccessionRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
 ) {
@@ -95,7 +98,7 @@ class BuildBackupMergePlan(
             mergeSnapshotOf(
                 assets, groups, tags, links, definitions, profiles, schedules, closures,
                 events, attachments, references, seasonActivations, conditions, healthSubjects,
-                categories, serviceCases, caseEntries, loans, transfers, stored + overlay, configured,
+                categories, serviceCases, caseEntries, loans, transfers, successions, stored + overlay, configured,
             )
         }
         return mergePlanOf(backup, ReturnScope.of(snapshot, returning).snapshot, returning)

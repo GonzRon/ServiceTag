@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.backup.TransferredGraphEntangled
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
@@ -252,5 +253,59 @@ class ExportBackupSetTest {
         val refusal = assertFailsWith<TransferredGraphEntangled> { install.export.run() }
 
         assertEquals(listOf(EntangledRef("assetEvents", "e9", "maintenanceSchedules", "s1")), refusal.refs)
+    }
+
+    // --- #86 (C5, C6): the successions --------------------------------------------------------------
+
+    /**
+     * Every row leaves, by id, and lands with its assets — by a replace and by a merge into an install that has
+     * none of them — and this install's own export re-plans IDENTICAL against it.
+     */
+    @Test
+    fun successionsAreExported() = runBlocking<Unit> {
+        val source = BackupInstall()
+        TransferFixtures.seed(source)
+        val rows = listOf(
+            successionOf("s2", predecessor = TransferFixtures.OPENER, successor = TransferFixtures.COMPRESSOR),
+            successionOf("s1", predecessor = TransferFixtures.ANODE, successor = TransferFixtures.OPENER, replacedOn = "2025-04-01"),
+        )
+        rows.forEach { source.successions.append(it) }
+        val bytes = source.export.run().data
+
+        val decoded = BackupCodec.decode(bytes)
+        assertEquals(rows.sortedBy { it.id }, decoded.data.assetSuccessions.map { it.toDomain() })
+        assertEquals(2, decoded.manifest.counts["assetSuccessions"])
+
+        val replaced = BackupInstall()
+        replaced.replace.run(bytes)
+        assertEquals(rows.sortedBy { it.id }, replaced.successions.all(), "by a replace")
+
+        val merged = BackupInstall()
+        merged.apply.run(merged.build.run(bytes))
+        assertEquals(rows.sortedBy { it.id }, merged.successions.all(), "by a merge into an install without them")
+
+        val again = source.build.run(bytes)
+        assertEquals(true, again.applicable)
+        assertEquals(emptyList(), again.writes.successions, "IDENTICAL against the phone it came from")
+    }
+
+    /**
+     * Hazard 1 (C6): a row naming a held asset at either end would name an asset the archive does not carry, and the
+     * next restore would refuse it — so it never leaves, and what does leave decodes. A row between two staying
+     * assets leaves as it always would. Never `Entangled`: the export goes ahead.
+     */
+    @Test
+    fun aSuccessionNamingAHeldAssetIsNotExportedAndTheArchiveDecodes() = runBlocking<Unit> {
+        val install = heldEstate()
+        install.successions.append(successionOf("s1", predecessor = TransferFixtures.HEATER, successor = TransferFixtures.COMPRESSOR))
+        install.successions.append(successionOf("s2", predecessor = TransferFixtures.OPENER, successor = TransferFixtures.ANODE))
+        val staying = successionOf("s3", predecessor = TransferFixtures.COMPRESSOR, successor = TransferFixtures.OPENER)
+        install.successions.append(staying)
+
+        val decoded = BackupCodec.decode(install.export.run().data)
+
+        assertEquals(listOf(staying), decoded.data.assetSuccessions.map { it.toDomain() })
+        assertEquals(1, decoded.manifest.counts["assetSuccessions"])
+        assertEquals(3, install.successions.all().size, "the rows stay here; only the export leaves them out")
     }
 }
