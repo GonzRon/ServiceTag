@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
@@ -1708,6 +1709,18 @@ data class StagedDocument(
     val problem: String? = null,
 )
 
+/**
+ * #84 (C14, R84-3): the kind a document newly added from this editor starts with, from its role —
+ * the receipt role a Receipt, either manual role a Manual. Null would leave the use case's file-type
+ * default, so a new role must choose here. Only the editor's add path asks: the use case, the share
+ * intake, the edit sheet and the API never derive a kind from a role, no existing row is touched,
+ * and a kind chosen later in the sheet always wins — the role never constrains it (R67-7).
+ */
+internal fun editorKindFor(role: DocumentRole): AttachmentKind? = when (role) {
+    DocumentRole.PURCHASE_INVOICE_OR_RECEIPT -> AttachmentKind.RECEIPT
+    DocumentRole.USER_MANUAL, DocumentRole.SERVICE_MANUAL -> AttachmentKind.MANUAL
+}
+
 /** #67, R67-6: one of the asset's own role-tagged attachments, as the editor lists it read-only. */
 data class AttachedDocument(val role: DocumentRole, val displayName: String)
 
@@ -2479,7 +2492,7 @@ class AssetEditViewModel(
                     displayName = doc.file.displayName,
                     mimeType = doc.file.mimeType,
                     sizeBytes = doc.file.sizeBytes,
-                    kind = null,
+                    kind = editorKindFor(doc.role),
                     capturedOn = capturedOn,
                     role = doc.role,
                 ),
@@ -2712,11 +2725,7 @@ private fun purchaseDocumentOf(files: List<Attachment>): String? = files
  */
 private fun attachedDocumentsOf(rows: List<Attachment>): List<AttachedDocument> = rows
     .filter { it.role != null }
-    .sortedWith(
-        compareByDescending<Attachment> { it.capturedOn != null }
-            .thenByDescending { it.capturedOn }
-            .thenByDescending { it.createdAt },
-    )
+    .sortedWith(newestFirst({ it.capturedOn }, { it.createdAt }))
     .map { AttachedDocument(role = it.role!!, displayName = it.displayName) }
 
 /**

@@ -430,9 +430,13 @@ object DigestPolicy {
      * `DATE_CHANGED` sweep, the backstop at night or a boot at 00:30 is quiet for a loan. It has no
      * end: a loan is a subject until it is returned, and a return makes it absent.
      *
-     * - No facts (the loan returned or gone, its asset gone), not Active, or before its due day:
-     *   nothing shows and the stamp is forgotten, so a re-dated loan announces again when its own day
-     *   comes.
+     * - No facts (the loan returned or gone, its asset gone) or not Active: nothing shows and the stamp
+     *   is forgotten. Before its due day (#84, R84-4) the stamp decides. None, or one of other content
+     *   (a re-date or a mode change): nothing shows and the stamp is forgotten, so the new occurrence
+     *   announces when its own day comes. One of this content: it was sent, and a clock, zone or date
+     *   line has moved back across its due day — once sent, it is neither announced again nor
+     *   forgotten: **held** if its post stands, else nothing, and nothing stamped or forgotten.
+     *   Whether it shows is the shade's state, not the stamp's.
      * - From the due day on, before the day's digest hour ([DeadlineFacts.dayOpensAt]): **held** — a
      *   standing post stays, anything else waits — and nothing is stamped or forgotten, so neither a
      *   midnight sweep nor a zone moved west on the due day can take a post down and announce it twice.
@@ -462,7 +466,13 @@ object DigestPolicy {
         val facts = input.facts ?: return DeadlineStep.Forget
         val dueOn = subject.dueOn ?: return DeadlineStep.Forget
         if (subject.state != SubjectState.Active) return DeadlineStep.Forget
-        if (facts.today.isBefore(dueOn)) return DeadlineStep.Forget
+        if (facts.today.isBefore(dueOn)) {
+            // #84 (C15, R84-4): a stamp of this very content means it was sent, and the clock, the
+            // zone or the date line has moved back across its due day — held, never forgotten.
+            if (input.row?.announcedHash != subject.contentHash) return DeadlineStep.Forget
+            val held = loanPost(input, facts, dueOn)
+            return if (held.tag in standingTags) DeadlineStep.Standing(held) else DeadlineStep.Quiet
+        }
         val dayOpensAt = facts.dayOpensAt ?: return DeadlineStep.Forget
 
         val post = loanPost(input, facts, dueOn)
@@ -486,7 +496,7 @@ object DigestPolicy {
     /**
      * #72 (C11, R72-7): a loan's Until returned — announced again **once each period**, a period
      * running from one of the owner's digest hours to the next ([DeadlineFacts.cadenceSince] is the
-     * latest one at or before now). It opens as [loanOnce] does, has no end, and is quiet at every
+     * latest one at or before now). It first posts as [loanOnce] does, has no end, and is quiet at every
      * sweep before the day's digest hour (fix round 1): no first post, no re-alert after a missed
      * period and no restart re-post happens between local midnight and that hour, so the midnight
      * `DATE_CHANGED` sweep never alerts. Past that hold, the period began at the day's digest hour.

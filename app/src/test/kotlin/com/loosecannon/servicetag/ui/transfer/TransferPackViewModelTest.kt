@@ -369,8 +369,22 @@ class TransferPackViewModelTest {
         assertEquals(AssetId(HEATER), records.single().assetId)
         assertEquals(AssetStatus.ARCHIVED, graph.assets.get(AssetId(HEATER))!!.status)
         assertEquals("exactly one sweep, after the write", 1, sweeps)
-        assertEquals(listOf<TransferPackEvent>(TransferPackEvent.Marked), events)
+        assertEquals("no event: the state ends the flow (#84 C4)", emptyList<TransferPackEvent>(), events)
         assertEquals(PackPhase.MARKED, vm.state.value.phase)
+    }
+
+    /** #84 C4 (77-2): a mark that nobody collects still ends the flow, because the screen reads `MARKED` from the state. */
+    @Test fun aMarkWithNoCollectorStillEndsTheFlow() = runTest(scheduler) {
+        val vm = readyModel()
+
+        vm.mark()
+        advanceUntilIdle()
+
+        val state = vm.state.value
+        assertEquals(PackPhase.MARKED, state.phase)
+        assertFalse(state.offersActions)
+        assertEquals(emptyList<String>(), state.errors)
+        assertEquals("exactly one sweep", 1, sweeps)
     }
 
     @Test fun notNowWritesNothing() = runTest(scheduler) {
@@ -486,5 +500,23 @@ class TransferPackViewModelTest {
         assertNull("nothing to share", restored.packFile())
         assertEquals(emptyList<TransferRecord>(), graph.transferRecords.all())
         assertEquals(0, sweeps)
+    }
+
+    /**
+     * #84 C6 (77-4a, D-1): Share that finds the verified pack's file gone says P77-60 and offers nothing more; a file
+     * still there answers itself and changes nothing.
+     */
+    @Test fun shareFindingNoFileSaysP77_60AndOffersNothing() = runTest(scheduler) {
+        val vm = readyModel()
+        val ready = vm.state.value
+
+        val file = vm.packFile()
+        assertEquals(ready.fileName, file?.name)
+        assertEquals("a present file changes nothing", ready, vm.state.value)
+
+        file!!.delete()
+        assertNull("nothing to share", vm.packFile())
+        assertEquals("This Transfer Pack is no longer on this phone. Create it again.", vm.state.value.goneLine)
+        assertFalse(vm.state.value.offersActions)
     }
 }

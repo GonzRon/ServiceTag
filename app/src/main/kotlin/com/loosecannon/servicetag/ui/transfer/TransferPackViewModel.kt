@@ -83,10 +83,11 @@ data class TransferPackState(
     val goneLine: String? get() = if (gone) TransferStrings.PACK_GONE else null
 }
 
+/**
+ * The ready screen's one-shot events. A finished mark is not one of them (#84 C4): it is [PackPhase.MARKED] in the
+ * state, which the screen reads whether or not anyone was collecting when the mark ended.
+ */
 sealed interface TransferPackEvent {
-    /** The mark was written and swept once: the flow ends on the Assets list. */
-    data object Marked : TransferPackEvent
-
     /** `Not now`: nothing written, the flow ends where it began. */
     data object Leave : TransferPackEvent
 
@@ -141,8 +142,16 @@ class TransferPackViewModel(
         }
     }
 
-    /** The sealed file, for the share; null before creation or once it is gone. */
-    fun packFile(): File? = ready?.takeIf { _state.value.offersActions }?.let { writer.find(it.fileName) }
+    /**
+     * The sealed file, for the share; null before creation or once it is gone. #84 C6 (D-1): an offered pack whose
+     * file is no longer found is gone — P77-60 shows and Share, Save a copy and Mark disable — rather than silent.
+     */
+    fun packFile(): File? {
+        val pack = ready?.takeIf { _state.value.offersActions } ?: return null
+        val file = writer.find(pack.fileName)
+        if (file == null) _state.update { it.copy(gone = true) }
+        return file
+    }
 
     /** Create (P77-14): select, encode and seal. Runs once; `CREATING` is set before the first suspension. */
     fun create(roots: List<AssetId>, note: String) {
@@ -243,8 +252,8 @@ class TransferPackViewModel(
             } catch (e: Exception) {
                 Log.w(TAG, "the sweep after marking failed", e)
             }
+            // #84 C4: the flow ends from this state, so a mark nobody was collecting for still ends it.
             _state.update { it.copy(phase = PackPhase.MARKED) }
-            _events.tryEmit(TransferPackEvent.Marked)
         }
     }
 

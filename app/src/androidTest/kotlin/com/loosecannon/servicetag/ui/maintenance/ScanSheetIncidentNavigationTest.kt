@@ -79,7 +79,7 @@ class ScanSheetIncidentNavigationTest {
         rule.onNodeWithText("Change condition").performScrollTo().performClick()
         rule.awaitText("Save condition")
         rule.onNodeWithText("Down").performClick()
-        rule.onNodeWithText("Save condition").performClick()
+        rule.onNodeWithText("Save condition").performScrollTo().performClick()
         rule.awaitText("Log incident details?")
         rule.onNodeWithText("Log incident details").performClick()
         rule.awaitText("Saving also records Battery pack as DOWN.")

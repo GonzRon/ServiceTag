@@ -395,6 +395,7 @@ internal fun LoanRow(row: LoanAttentionRow, onClick: () -> Unit) {
             LoanBadge(LoanStanding.OVERDUE)
         }
         QuietLine(row.line)
+        row.parentName?.let { QuietLine(partOfLine(it)) }
     }
 }
 

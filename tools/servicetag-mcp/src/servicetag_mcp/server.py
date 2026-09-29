@@ -2580,7 +2580,9 @@ def add_case_entry(
 # Five routes a phone below schema 13 does not have, so all five tools refuse such a phone by name before
 # anything is sent — the two reads as well. No tool takes, sends or answers a contact link: the phone makes
 # every link, and the API says only `contactLinked`. Nothing deletes or relinks a loan, and none of these
-# runs a reminder sweep: a loan written here settles at the phone's next sweep at or after its digest hour.
+# runs a reminder sweep. A loan written here posts only at the phone's next sweep at or after its digest hour;
+# a standing reminder the write takes down (a return; an update to NONE, to another mode or to a new due date)
+# comes down at the next sweep of any kind, the midnight sweep included.
 
 _LOAN_TEXT_CLEARABLE: frozenset[str] = frozenset({"notes"})
 """The loan's one optional text, cleared to `""`."""
@@ -2676,8 +2678,10 @@ def update_loan(
     `""`). `lent_on` and `reminder_mode` are never clearable — pass `reminder_mode="NONE"` to turn the
     reminder off. Clearing `due_on` on a loan with a reminder is refused unless `reminder_mode="NONE"` goes
     with it: the phone refuses a mode without a due date rather than resetting it. A returned loan is
-    frozen and refused as `loan_returned`. Nothing deletes a loan. The change settles at the phone's next
-    sweep at or after the digest hour. Answers `{loan}`. Needs a phone at schema 13 or later: an older one
+    frozen and refused as `loan_returned`. Nothing deletes a loan. A reminder posts only at the phone's next
+    sweep at or after the digest hour; a standing reminder the change takes down (to `NONE`, to another
+    mode or to a new due date) comes down at the next sweep of any kind, the midnight sweep included.
+    Answers `{loan}`. Needs a phone at schema 13 or later: an older one
     is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
     """
     arguments = _arguments(locals(), besides=("loan_id", "clear_fields"))

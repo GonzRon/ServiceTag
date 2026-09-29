@@ -112,7 +112,7 @@ class JournalSmokeTest {
             rule.awaitText("Save condition")
             rule.onNodeWithText("Down").performClick()
             rule.onNode(hasSetTextAction() and hasText("What is wrong? (optional)")).performTextInput("Will not start")
-            rule.onNodeWithText("Save condition").performClick()
+            rule.onNodeWithText("Save condition").performScrollTo().performClick()
             rule.awaitText("Log incident details?")
             rule.onNodeWithText("Pump is DOWN. Record what went wrong in the service record?").assertIsDisplayed()
             assertEquals(0, runBlocking { graph.conditions.all().size })

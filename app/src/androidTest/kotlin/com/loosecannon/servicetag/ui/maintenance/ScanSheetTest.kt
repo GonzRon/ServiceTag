@@ -16,6 +16,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.condition.ConditionHistory
@@ -669,7 +670,7 @@ class ScanSheetTest {
         rule.onNodeWithText("Change condition").performClick()
         rule.awaitText("Save condition")
         rule.onNodeWithText("Down").performClick()
-        rule.onNodeWithText("Save condition").performClick()
+        rule.onNodeWithText("Save condition").performScrollTo().performClick()
         rule.awaitText("Log incident details?")
         rule.onNodeWithText("Battery pack is DOWN. Record what went wrong in the service record?").assertIsDisplayed()
         rule.onNodeWithText("Log incident details").performClick()

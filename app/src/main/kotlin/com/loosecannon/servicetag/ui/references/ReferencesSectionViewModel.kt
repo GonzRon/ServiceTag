@@ -18,6 +18,7 @@ import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateReferenceCommand
 import com.loosecannon.servicetag.di.AppGraph
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -70,6 +71,11 @@ class ReferencesSectionViewModel(
     private val updateReference: UpdateReference,
     private val removeReference: RemoveReference,
     private val policy: LinkLaunchPolicy,
+    /**
+     * Where the three writes run: `Dispatchers.IO` in the app, and the test's own scheduler in a
+     * JVM test, so none of that work outlives the test that started it.
+     */
+    private val io: CoroutineContext = Dispatchers.IO,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, assetId: AssetId) : this(
@@ -134,7 +140,7 @@ class ReferencesSectionViewModel(
     }
 
     fun save(id: String, cmd: UpdateReferenceCommand) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(io) {
             val outcome = try {
                 updateReference.run(ReferenceId(id), cmd)
             } catch (e: CancellationException) {
@@ -164,7 +170,7 @@ class ReferencesSectionViewModel(
      * it does for a journal event, and deliberately.
      */
     fun remove(id: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(io) {
             val outcome = try {
                 removeReference.run(ReferenceId(id))
             } catch (e: CancellationException) {
@@ -182,7 +188,7 @@ class ReferencesSectionViewModel(
     }
 
     private fun submit(cmd: AddReferenceCommand) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(io) {
             val outcome = try {
                 addReference.run(assetId, cmd)
             } catch (e: CancellationException) {

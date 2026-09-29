@@ -44,6 +44,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.asset.FieldLabel
@@ -90,7 +91,7 @@ fun DocumentsSection(
         title = if (state.rows.isEmpty()) "Documents" else "Documents · ${state.rows.size}",
     )
     if (state.rows.isNotEmpty()) {
-        Column { state.rows.forEach { row -> DocumentRow(row, onOpen, edit) } }
+        Column { state.rows.forEach { row -> DocumentRow(row, onOpen, edit, keyRole = null) } }
     } else if (state.store is StoreState.Ready) {
         // Only a folder that is actually there can be empty; without one the status block below
         // is the whole story, and "No documents yet" over it would read as the wrong problem.
@@ -207,6 +208,7 @@ fun AttachmentsSection(
  * #67, C8: KEY DOCUMENTS — drawn only while at least one row carries a role, one group per role in
  * its fixed order, each under its role label and each row the section's own [DocumentRow] with the
  * same open and edit actions. No load of its own: the groups are the section's rows, regrouped.
+ * #84 (R84-1): only the overflow's label differs, naming the group's role ([overflowLabel]).
  */
 @Composable
 private fun KeyDocumentsBlock(
@@ -218,7 +220,7 @@ private fun KeyDocumentsBlock(
     SectionHeader(title = KEY_DOCUMENTS)
     groups.forEach { group ->
         FieldLabel(group.role.label())
-        Column { group.rows.forEach { row -> DocumentRow(row, onOpen, onEdit) } }
+        Column { group.rows.forEach { row -> DocumentRow(row, onOpen, onEdit, keyRole = group.role) } }
     }
 }
 
@@ -236,6 +238,8 @@ private fun DocumentRow(
     row: AttachmentRowState,
     onOpen: (AttachmentRowState) -> Unit,
     onEdit: ((AttachmentRowState) -> Unit)?,
+    /** #84 (R84-1): the Key documents group's role, named by the overflow; null in DOCUMENTS. */
+    keyRole: DocumentRole?,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -266,11 +270,21 @@ private fun DocumentRow(
             IconButton(onClick = { onEdit(row) }) {
                 Icon(
                     imageVector = Icons.Outlined.MoreVert,
-                    contentDescription = "More for ${row.displayName}",
+                    contentDescription = overflowLabel(row.displayName, keyRole),
                 )
             }
         }
     }
+}
+
+/**
+ * #84 (C13, R84-1, ratified): the one home of a row's overflow label. DOCUMENTS passes no role and
+ * keeps `More for <name>`; KEY DOCUMENTS passes its group's role, named through the role labels'
+ * home, so TalkBack can tell the two copies of one row apart: `More for Pump manual.pdf, User manual`.
+ */
+internal fun overflowLabel(displayName: String, keyRole: DocumentRole?): String {
+    val label = "More for $displayName"
+    return if (keyRole == null) label else "$label, ${keyRole.label()}"
 }
 
 /** The thumbnail when there is one, otherwise the kind glyph — dimmed when the bytes are gone. */

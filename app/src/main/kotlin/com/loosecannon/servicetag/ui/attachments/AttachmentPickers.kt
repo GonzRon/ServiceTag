@@ -141,23 +141,34 @@ private fun viewIntent(uri: Uri, mimeType: String): Intent =
         .setDataAndType(uri, mimeType)
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
+/**
+ * #84 (C12): the name a pick is called. The provider's own name when it reports one that is not
+ * blank (kept verbatim, spaces included); else the last `/`-part of the URI's last path segment when
+ * that is not blank; else "file". A provider may answer an empty name, and a blank one would leave
+ * the editor nothing to show or fix.
+ */
+internal fun pickedName(reported: String?, uriSegment: String?): String =
+    reported?.takeIf { it.isNotBlank() }
+        ?: uriSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+        ?: "file"
+
 /** Display name, size and mime as the provider reports them; the stream is opened on demand. */
 private fun ContentResolver.pickedFile(uri: Uri): PickedFile {
-    var name = uri.lastPathSegment?.substringAfterLast('/') ?: "file"
+    var reported: String? = null
     var size: Long? = null
     runCatching {
         query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)
             ?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val nameAt = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (nameAt >= 0 && !cursor.isNull(nameAt)) name = cursor.getString(nameAt)
+                    if (nameAt >= 0 && !cursor.isNull(nameAt)) reported = cursor.getString(nameAt)
                     val sizeAt = cursor.getColumnIndex(OpenableColumns.SIZE)
                     if (sizeAt >= 0 && !cursor.isNull(sizeAt)) size = cursor.getLong(sizeAt)
                 }
             }
     }
     return PickedFile(
-        displayName = name,
+        displayName = pickedName(reported, uri.lastPathSegment),
         mimeType = getType(uri) ?: "application/octet-stream",
         sizeBytes = size,
         open = { openInputStream(uri) ?: error("no bytes at $uri") },

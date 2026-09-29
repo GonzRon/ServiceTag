@@ -42,12 +42,15 @@ import com.loosecannon.servicetag.core.transfer.OwnerLookup
 import com.loosecannon.servicetag.core.transfer.TransferOwnership
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import java.time.LocalDate
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -291,12 +294,18 @@ class ScheduleDetailViewModel(
     )
     val needsForm: SharedFlow<CompletionOutcome.NeedsForm> = _needsForm.asSharedFlow()
 
-    /** #77 (C19): P77-35, once, when a write is refused because the owner was transferred out. */
-    private val _messages = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
-    val messages: SharedFlow<String> = _messages.asSharedFlow()
+    /**
+     * #77 (C19): P77-35, once, when a write is refused because the owner was transferred out. #84 C5: held until a
+     * collector reads it — the "Done" deep link runs `complete()` before the screen collects — and read once.
+     */
+    private val _messages = Channel<String>(Channel.BUFFERED)
+    val messages: Flow<String> = _messages.receiveAsFlow()
 
     init {
         refresh()
+        // #84 C7 (77-5): while the model lives, a change to the held set re-derives the screen, so `editable` follows
+        // an OUT or the WITHDRAWN that ends it with no refresh() or resume. `load()` still states the rule, once.
+        transfers?.let { records -> viewModelScope.launch { records.observeHeldIds().collect { load() } } }
     }
 
     /**
@@ -430,13 +439,13 @@ class ScheduleDetailViewModel(
         val schedule = schedules.get(scheduleId) ?: return false
         val group = (schedule.target as? ScheduleTarget.GroupTarget)?.let { groups.get(it.groupId) }
         if (!heldOwner(schedule, group, transfers?.heldIds().orEmpty())) return false
-        _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+        _messages.trySend(TransferImportStrings.ASSET_TRANSFERRED_OUT)
         return true
     }
 
     /** A completion the guard refused after all (a race with the hold) says P77-35 too. */
     private fun sayIfHeld(outcome: CompletionOutcome) {
-        if ((outcome as? CompletionOutcome.Refused)?.cause is AssetTransferredOut) _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+        if ((outcome as? CompletionOutcome.Refused)?.cause is AssetTransferredOut) _messages.trySend(TransferImportStrings.ASSET_TRANSFERRED_OUT)
     }
 
     /**
@@ -527,7 +536,7 @@ class ScheduleDetailViewModel(
         viewModelScope.launch {
             val result = runCatching { block() }
             // #77 (MJ-1): a write the guard refused from a stale screen is said, not folded (C19).
-            if (result.exceptionOrNull() is AssetTransferredOut) _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+            if (result.exceptionOrNull() is AssetTransferredOut) _messages.trySend(TransferImportStrings.ASSET_TRANSFERRED_OUT)
             val prompt = result.getOrNull()
             load()
             _state.update { it.copy(busy = false, linkGuard = prompt) }

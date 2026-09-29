@@ -191,9 +191,27 @@ class TransferImportViewModel(
         }
     }
 
-    /** Cancel writes nothing: the copy goes, and the screen leaves. Refused while an import is running. */
+    private var handedOff = false
+
+    /**
+     * #84 C3 (77-1, D-3): the Backup door's hand-off. At DONE it answers P77-50 — exactly [TransferImportState.done]
+     * — **once**, for the Backup screen to show as it returns; before DONE, after a refusal and on every later call
+     * it answers null, so a recomposition or a rotation never hands it over (or pops) twice. It writes nothing,
+     * deletes nothing (the import's end already deleted the copy) and is not [cancel]'s exit.
+     */
+    fun handOff(): String? {
+        val done = _state.value.takeIf { it.phase == TransferImportPhase.DONE }?.done ?: return null
+        if (handedOff || _state.value.finished) return null
+        handedOff = true
+        return done
+    }
+
+    /**
+     * Cancel writes nothing: the copy goes, and the screen leaves. Refused while an import is running, and after the
+     * hand-off (#84 m-1): the Backup door is already leaving, and a back tap during that pop must not pop again.
+     */
     fun cancel() {
-        if (_state.value.importing) return
+        if (_state.value.importing || handedOff) return
         deleteCopy()
         _state.update { it.copy(finished = true) }
     }

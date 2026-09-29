@@ -104,6 +104,8 @@ data class LoanAttentionRow(
     val category: String?,
     val dueOn: String,
     val line: String,
+    /** D-2: the parent's name for a component, null for a root (inv. 122); drawn under P72-44 as `Part of <parent>` ([partOfLine]). */
+    val parentName: String? = null,
 )
 
 /**
@@ -450,6 +452,7 @@ internal fun loanAttentionRowsOf(
                 category = asset.category.takeIf { it.isNotBlank() },
                 dueOn = due,
                 line = dashboardLoanLine(loan.borrowerName, displayDate(LocalDate.parse(due))),
+                parentName = asset.parentAssetId?.let { byId[it]?.name },
             )
         }
         .sortedWith(compareBy({ it.dueOn }, { it.assetName.lowercase() }, { it.loanId }))

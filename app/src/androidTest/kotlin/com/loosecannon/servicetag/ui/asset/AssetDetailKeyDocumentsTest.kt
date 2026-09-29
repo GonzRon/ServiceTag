@@ -18,6 +18,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -207,6 +208,8 @@ class AssetDetailKeyDocumentsTest {
         rule.onAllNodesWithText("Chemistry notes.pdf").assertCountEquals(1)
         val receipts = rule.onAllNodesWithText("Hot tub receipt.pdf")
         receipts.assertCountEquals(2)
+        rule.onAllNodesWithContentDescription("More for Hot tub receipt.pdf").assertCountEquals(1)
+        rule.onAllNodesWithContentDescription("More for Hot tub receipt.pdf, Purchase invoice or receipt").assertCountEquals(1)
 
         val keyed = receipts[0].getUnclippedBoundsInRoot().top
         val listed = receipts[1].getUnclippedBoundsInRoot().top

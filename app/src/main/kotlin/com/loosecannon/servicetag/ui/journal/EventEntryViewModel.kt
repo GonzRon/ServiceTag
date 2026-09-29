@@ -683,7 +683,7 @@ private fun List<FieldProblem>.firstProblemText(fields: List<FieldRow>): String 
 }
 
 /** The line for a refusal no row can explain. */
-private const val CANNOT_SAVE = "Could not save this entry."
+internal const val CANNOT_SAVE = "Could not save this entry."
 
 
 /**

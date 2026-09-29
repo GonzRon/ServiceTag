@@ -110,6 +110,45 @@ class TransferImportViewModelTest {
         assertTrue(MANUAL_AT in graph.attachmentStorage.store.files)
     }
 
+    /**
+     * #84 C3 (77-1, D-3): the Backup door hands P77-50 to the Backup screen exactly once — nothing before DONE, the
+     * line once at DONE, then nothing; nothing after a refusal. The hand-off is not Cancel's exit.
+     */
+    @Test
+    fun theDoneLineIsHandedOverOnce() = runTest(scheduler) {
+        val model = model(copyOf(heaterPack().bytes))
+        advanceUntilIdle()
+        assertEquals(TransferImportPhase.PREVIEW, model.state.value.phase)
+        assertNull("nothing before DONE", model.handOff())
+
+        model.import()
+        advanceUntilIdle()
+        assertEquals(TransferImportPhase.DONE, model.state.value.phase)
+        assertEquals("Transfer Pack imported: 1 asset, 1 NFC tag, 1 document or photo", model.state.value.done)
+        assertEquals(model.state.value.done, model.handOff())
+        assertNull("once", model.handOff())
+        assertFalse("not Cancel's exit", model.state.value.finished)
+        model.cancel()
+        assertFalse("a back after the hand-off does not pop again", model.state.value.finished)
+
+        val refused = model(copyOf(zipOf(listOf("readme.txt" to "Example".toByteArray()))))
+        advanceUntilIdle()
+        assertEquals(TransferImportPhase.REFUSED, refused.state.value.phase)
+        assertNull("nothing after a refusal", refused.handOff())
+    }
+
+    @Test
+    fun aCancelAtDoneBeforeTheHandOffHandsNothingOver() = runTest(scheduler) {
+        val model = model(copyOf(heaterPack().bytes))
+        advanceUntilIdle()
+        model.import()
+        advanceUntilIdle()
+        assertEquals(TransferImportPhase.DONE, model.state.value.phase)
+        model.cancel()
+        assertTrue("cancel's exit", model.state.value.finished)
+        assertNull("no second pop through the hand-off", model.handOff())
+    }
+
     @Test
     fun theOutcomesSayTheirSentences() = runTest(scheduler) {
         val pack = heaterPack()

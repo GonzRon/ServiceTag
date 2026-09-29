@@ -1,5 +1,9 @@
 package com.loosecannon.servicetag.ui.asset
 
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.CaseCoverage
@@ -563,6 +567,89 @@ class AssetTransferStateTest {
         assertEquals(listOf("This asset was transferred out.", "This asset was transferred out."), said)
         assertNull(graph.groups.get(GroupId("G1"))!!.archivedAt)
         assertEquals(emptyList<Any>(), graph.events.all())
+    }
+
+    /**
+     * #84 C5: what a late collector of [messages] reads — the first one that arrives, and then a second that replaces
+     * it (a rotation). A line is held until someone reads it, and read once.
+     */
+    private fun TestScope.firstThenSecondCollector(messages: kotlinx.coroutines.flow.Flow<String>): Pair<List<String>, List<String>> {
+        val first = mutableListOf<String>()
+        val firstJob = backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { messages.toList(first) }
+        advanceUntilIdle()
+        firstJob.cancel()
+        val second = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { messages.toList(second) }
+        advanceUntilIdle()
+        return first to second
+    }
+
+    /** #84 C5 (77-3): the "Done" deep link runs `complete()` before the screen collects; P77-35 waits for it. */
+    @Test fun aScheduleDetailKeepsP77_35ForALateCollector() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.schedules.upsert(scheduleOf("s1", assetId = "h1", title = "Flush the tank"))
+        graph.recomputeSchedules.all()
+        out("h1")
+        val vm = scheduleModel("s1")
+        advanceUntilIdle()
+
+        vm.complete() // nobody is collecting yet
+        advanceUntilIdle()
+        val (first, second) = firstThenSecondCollector(vm.messages)
+
+        assertEquals(listOf("This asset was transferred out."), first)
+        assertEquals("a delivered line is never delivered again", emptyList<String>(), second)
+        assertNull("no \"When was this done?\"", graph.completionFlow.prompt.value)
+        assertEquals("nothing written", emptyList<Any>(), graph.events.all())
+    }
+
+    /** #84 C5 (77-3): a refused archive's P77-35 on the group detail waits for its collector too. */
+    @Test fun aGroupDetailKeepsP77_35ForALateCollector() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.groups.upsert(groupOf("G1", members = listOf(Triple("h1", "2026-01-01", null))))
+        out("h1")
+        val group = groupModel("G1")
+        advanceUntilIdle()
+
+        group.setArchived(true) // nobody is collecting yet
+        advanceUntilIdle()
+        val (first, second) = firstThenSecondCollector(group.messages)
+
+        assertEquals(listOf("This asset was transferred out."), first)
+        assertEquals("a delivered line is never delivered again", emptyList<String>(), second)
+        assertNull("refused, nothing written", graph.groups.get(GroupId("G1"))!!.archivedAt)
+    }
+
+    /**
+     * #84 C7 (77-5): while the schedule detail is open, `editable` follows the held set — an OUT for its asset makes it
+     * read only and the WITHDRAWN that ends the hold makes it editable again, with no `refresh()` and no resume.
+     */
+    @Test fun aScheduleDetailFollowsTheHoldWhileOpen() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.schedules.upsert(scheduleOf("s1", assetId = "h1", title = "Flush the tank"))
+        graph.recomputeSchedules.all()
+        val store = ViewModelStore()
+        val vm = ViewModelProvider.create(store, viewModelFactory { initializer { scheduleModel("s1") } })["s1", ScheduleDetailViewModel::class]
+        advanceUntilIdle()
+        assertTrue(vm.state.value.editable)
+
+        out("h1")
+        advanceUntilIdle()
+        assertFalse("an OUT while open: read only", vm.state.value.editable)
+        assertFalse(vm.state.value.canComplete)
+
+        graph.transferRecords.append(
+            TransferRecord(
+                id = "withdrawn-h1", assetId = AssetId("h1"), kind = TransferKind.WITHDRAWN, packId = PACK,
+                lineage = emptyList(), at = AT + 1, packSha256 = "ab".repeat(32), nameSnapshot = "Example Water Heater", note = "",
+            ),
+        )
+        advanceUntilIdle()
+        assertTrue("the withdrawal ends the hold: editable again", vm.state.value.editable)
+        assertTrue(vm.state.value.canComplete)
+
+        store.clear()
+        advanceUntilIdle()
     }
 
     /** NOTE 2: a held asset's open loan (merged history) draws no reminder line — the reminder is quiesced (R77-20). */

@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.core.model.AssetId
@@ -91,7 +92,7 @@ class ChangeConditionSheetTest {
 
         rule.onNodeWithText("Down").performClick()
         field("What is wrong? (optional)").performTextInput("Will not start")
-        rule.onNodeWithText("Save condition").assertIsEnabled().performClick()
+        rule.onNodeWithText("Save condition").performScrollTo().assertIsEnabled().performClick()
 
         // #82 (row 11a): DOWN on an asset in service asks P82-1 first, and nothing is written yet.
         rule.awaitText("Log incident details?")
@@ -137,7 +138,7 @@ class ChangeConditionSheetTest {
         rule.awaitText("Save condition")
         rule.onNodeWithText("Degraded").performClick()
         field("What is wrong? (optional)").performTextInput("Runs rough")
-        rule.onNodeWithText("Save condition").performClick()
+        rule.onNodeWithText("Save condition").performScrollTo().performClick()
         rule.awaitText("Log incident details?")
         rule.onNodeWithText("Generator is DEGRADED. Record what went wrong in the service record?").assertIsDisplayed()
         assertEquals("nothing written while it asks", 0, runBlocking { graph.conditions.all().size })
@@ -162,7 +163,7 @@ class ChangeConditionSheetTest {
         rule.awaitText("Save condition")
         rule.onNodeWithText("Down").performClick()
         field("What is wrong? (optional)").performTextInput("Will not start")
-        rule.onNodeWithText("Save condition").performClick()
+        rule.onNodeWithText("Save condition").performScrollTo().performClick()
         rule.awaitText("Log incident details?")
         rule.onNodeWithText("Log incident details").performClick()
 
@@ -184,7 +185,7 @@ class ChangeConditionSheetTest {
 
         rule.awaitText("Save condition")
         rule.onNodeWithText("Operational").performClick()
-        rule.onNodeWithText("Save condition").performClick()
+        rule.onNodeWithText("Save condition").performScrollTo().performClick()
 
         rule.waitUntil(TIMEOUT_MS) { trail.isNotEmpty() }
         assertEquals(listOf("done"), trail)
