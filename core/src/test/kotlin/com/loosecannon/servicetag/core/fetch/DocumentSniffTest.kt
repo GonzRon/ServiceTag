@@ -17,7 +17,7 @@ class DocumentSniffTest {
     /** What the fetch will hand over: the first and last min(size, WINDOW) bytes. */
     private fun sniff(file: ByteArray): String? {
         val n = minOf(file.size, DocumentSniff.WINDOW)
-        return DocumentSniff.classify(file.copyOfRange(0, n), file.copyOfRange(file.size - n, file.size))
+        return DocumentSniff.classify(file.size.toLong(), file.copyOfRange(0, n), file.copyOfRange(file.size - n, file.size))
     }
 
     private val filler = ByteArray(300) { 'x'.code.toByte() }
@@ -109,7 +109,43 @@ class DocumentSniffTest {
 
     @Test
     fun emptyAndTinyInputsAreNotDocuments() {
-        assertNull(DocumentSniff.classify(ByteArray(0), ByteArray(0)))
+        assertNull(DocumentSniff.classify(0, ByteArray(0), ByteArray(0)))
         assertNull(sniff(bytes(0xFF, 0xD8)))
+    }
+
+    private val big = ByteArray(3_000) { 'x'.code.toByte() }
+
+    @Test
+    fun aLargePdfWithEofOnlyInTheTailIsAPdf() {
+        assertEquals("application/pdf", sniff(ascii("%PDF-1.4\n") + big + ascii("\n%%EOF\n")))
+    }
+
+    @Test
+    fun aLargePdfWithHeaderOnlyInTheHeadIsAPdf() {
+        val file = ascii("%PDF-1.5\n") + big + ascii("%%EOF")
+        assertEquals("application/pdf", sniff(file))
+        assertNull(sniff(big + ascii("%PDF-1.5\n%%EOF")))
+    }
+
+    @Test
+    fun aLargePngWithIendOnlyInTheTailIsAPng() {
+        assertEquals("image/png", sniff(pngHead + big + iend))
+    }
+
+    @Test
+    fun aJpegTrailerOf1022PassesAnd1023IsRefused() {
+        assertEquals("image/jpeg", sniff(jpegHead + big + eoi + ByteArray(1_022)))
+        assertNull(sniff(jpegHead + big + eoi + ByteArray(1_023)))
+    }
+
+    @Test
+    fun windowsThatAreNotTheExpectedLengthAreRefused() {
+        val file = pdf
+        val n = file.size
+        assertEquals("application/pdf", DocumentSniff.classify(n.toLong(), file, file))
+        assertNull(DocumentSniff.classify(n.toLong() + 1, file, file))
+        assertNull(DocumentSniff.classify(n.toLong(), file, file.copyOfRange(1, n)))
+        assertNull(DocumentSniff.classify(n.toLong(), file.copyOfRange(0, n - 1), file))
+        assertNull(DocumentSniff.classify(-1, file, file))
     }
 }

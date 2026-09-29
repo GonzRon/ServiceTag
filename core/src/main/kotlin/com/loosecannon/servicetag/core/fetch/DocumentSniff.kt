@@ -24,15 +24,21 @@ object DocumentSniff {
     private val jpegEoi = byteArrayOf(0xFF.toByte(), 0xD9.toByte())
 
     /**
-     * The MIME the bytes prove, or null. [head] is the first min(size, [WINDOW]) bytes and [tail] the last
-     * min(size, [WINDOW]); for a small file they overlap. A JPEG whose EOI lies more than [WINDOW] bytes from
-     * the end (a trailer over 1,024 bytes) is refused: a recorded safe-side limit.
+     * The MIME the bytes prove, or null. [size] is the file's length; [head] must be its first and [tail] its
+     * last min([size], [WINDOW]) bytes (for a small file they overlap). Windows of any other length are
+     * refused as not a document: a caller bug must never read as a document. A JPEG's EOI must lie within the
+     * last [WINDOW] bytes, so a trailer after EOI of up to 1,022 bytes passes and 1,023 or more is refused
+     * (a recorded safe-side limit).
      */
-    fun classify(head: ByteArray, tail: ByteArray): String? = when {
-        isPdf(head, tail) -> PDF
-        isPng(head, tail) -> PNG
-        isJpeg(head, tail) -> JPEG
-        else -> null
+    fun classify(size: Long, head: ByteArray, tail: ByteArray): String? {
+        val expected = minOf(size, WINDOW.toLong())
+        if (size < 0 || head.size.toLong() != expected || tail.size.toLong() != expected) return null
+        return when {
+            isPdf(head, tail) -> PDF
+            isPng(head, tail) -> PNG
+            isJpeg(head, tail) -> JPEG
+            else -> null
+        }
     }
 
     private fun isPdf(head: ByteArray, tail: ByteArray): Boolean {
