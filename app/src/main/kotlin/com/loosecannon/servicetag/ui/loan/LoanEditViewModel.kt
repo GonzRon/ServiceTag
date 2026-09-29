@@ -77,8 +77,8 @@ data class LoanForm(
  * #72 (C17; R72-3, R72-9, R72-11, R72-15, R72-17): one loan's terms, new or corrected.
  *
  * **New** — on an asset the section offered "Lend out" on: the borrower is a contact picked from
- * Android Contacts ([onPicked] reads it once, through [reader], in the pick's callback) and never a typed
- * name; "Lent on" opens on today. **Edit** — an open loan's lent date, due date, reminder and notes;
+ * Android Contacts ([onPicked] reads it once, through [reader], when the pick arrives — or, if it
+ * arrives before the form has loaded, when the form loads) and never a typed name; "Lent on" opens on today. **Edit** — an open loan's lent date, due date, reminder and notes;
  * its borrower is shown as text, and relinking lives on the section, not here.
  *
  * Clearing the due date resets the reminder to None: the use case refuses a reminder with no due date,

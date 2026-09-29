@@ -11,7 +11,9 @@ read. The global write minimum stays 8.
 
 **No tool takes or sends a contact lookup URI**: a link is made on the phone alone, the API answers only
 `contactLinked`, and no loan command carries one. No tool deletes or relinks a loan, and none runs a
-reminder sweep — a loan written here settles at the phone's next sweep at or after the digest hour.
+reminder sweep. A loan written here posts only at the phone's next sweep at or after the digest hour; a
+standing reminder the write takes down (a return; an update to `NONE`, to another mode or to a new due date)
+comes down at the next sweep of any kind, the midnight sweep included.
 """
 
 from __future__ import annotations
