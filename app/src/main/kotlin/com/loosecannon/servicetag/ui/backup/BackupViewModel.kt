@@ -330,16 +330,14 @@ class BackupViewModel(
     private suspend fun transferredOutLine(error: TransferredOutInArchive): String {
         val ids = error.assetIds.distinct()
         if (ids.size != 1) {
-            return "Restore failed: this backup still contains ${ids.size} assets that were transferred out " +
-                "from this phone. Nothing was replaced."
+            return "Restore failed: this backup still contains ${ids.size} assets that were transferred out from this phone. Nothing was replaced."
         }
         val name = transfers.forAsset(ids.single())
             .filter { it.kind == TransferKind.OUT }
             .maxWithOrNull(compareBy({ it.at }, { it.id }))
             ?.nameSnapshot
             ?: ids.single().value
-        return "Restore failed: this backup still contains $name, which was transferred out from this phone. " +
-            "Nothing was replaced."
+        return "Restore failed: this backup still contains $name, which was transferred out from this phone. Nothing was replaced."
     }
 
     /** The export side's lead-in, on the restore side: a bare exception message is not news. */
