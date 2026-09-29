@@ -1480,7 +1480,8 @@ class MaintenanceRoutesTest {
      * that carries the loans); #77 moves both to 14 (the transfer record table and the archive that carries
      * the records), and its B5 adds the `transferRecords` count (mn-14): every record, OUT, IN and WITHDRAWN,
      * under the archive's own list name — none on a fresh phone, and each appended one counted. #86 moves both to 15
-     * (the succession table and the archive that carries the successions).
+     * (the succession table and the archive that carries the successions), and its B4 adds the `assetSuccessions`
+     * count — none here; `SuccessionRoutesTest` counts appended ones.
      */
     @Test fun statusReports15And15AndTheNewCounts() {
         val tub = createAsset("Hot tub")
@@ -1511,6 +1512,8 @@ class MaintenanceRoutesTest {
         assertEquals(0, status.counts["assetLoans"])
         // #77: the transfer records' count, under the archive's own list name — none made here yet.
         assertEquals(0, status.counts["transferRecords"])
+        // #86: the successions' count, under the archive's own list name — none replaced here.
+        assertEquals(0, status.counts["assetSuccessions"])
 
         // An OUT and the WITHDRAWN of it: two records, and the asset live again — the count is of records,
         // never of held assets.

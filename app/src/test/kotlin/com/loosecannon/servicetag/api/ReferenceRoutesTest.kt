@@ -480,6 +480,8 @@ class ReferenceRoutesTest {
                 "assetLoans",
                 // #77's one, under the archive's own list name (format 14).
                 "transferRecords",
+                // #86's one, under the archive's own list name (format 15).
+                "assetSuccessions",
             ),
             counts.keys,
         )
@@ -537,35 +539,36 @@ class ReferenceRoutesTest {
         // range 1–10, #79's format 11 made it 1–11 and its two warranty routes the sub-resources
         // eighteen, #79b's format 12 made the report seventeen tables, the range 1–12 and its case
         // list the nineteenth sub-resource, #72's format 13 made the report eighteen tables, the range
-        // 1–13 and its loan list the twentieth, and #77's format 14 made the report nineteen tables and the
-        // range 1–14 — with no route, so the sub-resources stay twenty. These pins moved with the document.
+        // 1–13 and its loan list the twentieth, #77's format 14 made the report nineteen tables and the
+        // range 1–14 — with no route, so the sub-resources stayed twenty — and #86's format 15 made the report
+        // twenty tables, the range 1–15 and its succession read the twenty-first. These pins moved with the document.
         assertFalse(
-            "the merge report is nineteen tables now",
-            listOf("eleven", "fourteen", "fifteen", "seventeen", "eighteen").any { "$it tables" in text },
+            "the merge report is twenty tables now",
+            listOf("eleven", "fourteen", "fifteen", "seventeen", "eighteen", "nineteen").any { "$it tables" in text },
         )
-        assertTrue("the merge report must say nineteen tables", "nineteen tables" in text)
+        assertTrue("the merge report must say twenty tables", "twenty tables" in text)
         // The bare string, both sites: the document spells the emphasis two ways, and a pattern
         // pinned to one asterisk placement would leave the other stale and still report clean.
-        assertFalse("the import endpoints read format 1–14 now", "1–7" in text || "1–8" in text || "1–9" in text)
-        // "1–10" … "1–13" only in their two emphasis spellings, because a bare "1–10" is also the
+        assertFalse("the import endpoints read format 1–15 now", "1–7" in text || "1–8" in text || "1–9" in text)
+        // "1–10" … "1–14" only in their two emphasis spellings, because a bare "1–10" is also the
         // health weight's range.
         assertFalse(
-            "the import endpoints read format 1–14 now",
-            listOf("1–10", "1–11", "1–12", "1–13").any { "format **$it**" in text || "**format $it**" in text },
+            "the import endpoints read format 1–15 now",
+            listOf("1–10", "1–11", "1–12", "1–13", "1–14").any { "format **$it**" in text || "**format $it**" in text },
         )
         // Both emphasis spellings.
         assertTrue(
-            "the import endpoints must say 1–14",
-            "format **1–14**" in text && "**format 1–14**" in text,
+            "the import endpoints must say 1–15",
+            "format **1–15**" in text && "**format 1–15**" in text,
         )
 
         assertFalse(
-            "there are twenty asset sub-resources now",
-            listOf("nine", "sixteen", "eighteen", "nineteen").any { "$it `/v1/assets/{id}/…` sub-resources" in text },
+            "there are twenty-one asset sub-resources now",
+            listOf("nine", "sixteen", "eighteen", "nineteen", "twenty").any { "$it `/v1/assets/{id}/…` sub-resources" in text },
         )
         assertTrue(
-            "the 405 row must name twenty asset sub-resources",
-            "twenty `/v1/assets/{id}/…` sub-resources" in text,
+            "the 405 row must name twenty-one asset sub-resources",
+            "twenty-one `/v1/assets/{id}/…` sub-resources" in text,
         )
 
         // The one code the mapper can spell and no route can return. The 1.2 subsection documents

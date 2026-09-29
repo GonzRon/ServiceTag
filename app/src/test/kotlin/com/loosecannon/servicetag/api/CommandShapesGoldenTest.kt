@@ -23,11 +23,12 @@ private val SerialDescriptor.names: List<String>
  * asserted equal to its request DTO's serializer descriptor, in order.
  *
  * **`docs/api/v1.md`** is the contract: it must name the archive formats this build imports, the
- * nineteen merge tables (#74's format 9 added the categories, #79b's format 12 the service cases and
- * their entries, #72's format 13 the loans, #77's format 14 the transfer records) and every 1.4 code a
- * client can receive, #74's two category reasons, #79's two warranty routes and their refusal family,
- * #79b's five service-case routes and theirs, #72's five loan routes and theirs, and #77's one 409, its
- * status count, its report tally and its two merge reasons.
+ * twenty merge tables (#74's format 9 added the categories, #79b's format 12 the service cases and
+ * their entries, #72's format 13 the loans, #77's format 14 the transfer records, #86's format 15 the
+ * successions) and every 1.4 code a client can receive, #74's two category reasons, #79's two warranty
+ * routes and their refusal family, #79b's five service-case routes and theirs, #72's five loan routes and
+ * theirs, #77's one 409, its status count, its report tally and its two merge reasons, and #86's read-only
+ * succession route, its status count, its report tally and its two merge reasons.
  */
 class CommandShapesGoldenTest {
 
@@ -111,20 +112,20 @@ class CommandShapesGoldenTest {
         assertEquals((keys + legacy).toSet(), row.map { rename[it] ?: it }.filter { it in command }.toSet())
     }
 
-    @Test fun theContractDocumentNamesFormat14AndNineteenTables() {
+    @Test fun theContractDocumentNamesFormat15AndTwentyTables() {
         val doc = repoFile("docs/api/v1.md").readText()
         val lines = doc.lines()
         // Anchored to the two spellings: a bare "1–10" is also the health weight's range.
         assertEquals(
-            "the import range reads 1–14 at both sites",
+            "the import range reads 1–15 at both sites",
             2,
-            lines.count { "format **1–14**" in it || "**format 1–14**" in it },
+            lines.count { "format **1–15**" in it || "**format 1–15**" in it },
         )
         assertEquals(
             "a shipped spelling of an old import range survives",
             emptyList<String>(),
             lines.filter { line ->
-                listOf("1–7", "1–8", "1–9", "1–10", "1–11", "1–12", "1–13").any {
+                listOf("1–7", "1–8", "1–9", "1–10", "1–11", "1–12", "1–13", "1–14").any {
                     "format **$it**" in line || "**format $it**" in line
                 }
             },
@@ -139,6 +140,8 @@ class CommandShapesGoldenTest {
         assertTrue("the status line says 13 since #72", lines.count { "13 since #72 (loans)" in it } >= 1)
         // #77: and 14 since the transfer records.
         assertTrue("the status line says 14 since #77", lines.count { "14 since #77 (transfer records)" in it } >= 1)
+        // #86: and 15 since the asset successions.
+        assertTrue("the status line says 15 since #86", lines.count { "15 since #86 (asset successions)" in it } >= 1)
         val identical = lines.single { it.startsWith("| `IDENTICAL` |") }
         assertTrue("IDENTICAL must state the role rule: $identical", "document role" in identical && "format 10" in identical)
         assertTrue(
@@ -146,11 +149,12 @@ class CommandShapesGoldenTest {
             "`warrantyReminderLeadDays`" in identical && "format 11" in identical,
         )
         assertEquals(emptyList<String>(), lines.filter { "the eleven tables" in it.lowercase() })
-        assertTrue("the report's nineteen tables", "nineteen tables" in doc.lowercase())
+        assertTrue("the report's twenty tables", "twenty tables" in doc.lowercase())
         assertFalse("the report's old fourteen tables", "fourteen tables" in doc.lowercase())
         assertFalse("the report's old fifteen tables", "fifteen tables" in doc.lowercase())
         assertFalse("the report's old seventeen tables", "seventeen tables" in doc.lowercase())
         assertFalse("the report's old eighteen tables", "eighteen tables" in doc.lowercase())
+        assertFalse("the report's old nineteen tables", "nineteen tables" in doc.lowercase())
         // #74: the two reasons a category row can be declined with, and the new status key and tally.
         for (name in listOf("CATEGORY_KEY_HELD", "CATEGORY_IS_BUILT_IN", "assetCategories", "categories")) {
             assertTrue("docs/api/v1.md does not name $name", "`$name`" in doc)
@@ -176,6 +180,8 @@ class CommandShapesGoldenTest {
             "ASSET_ALREADY_LENT",
             // #77: the one 409, the status count, the report tally and the two merge reasons.
             "asset_transferred_out", "transferRecords", "transfers", "ASSET_TRANSFERRED_OUT", "TRANSFER_DIVERGED",
+            // #86: the status count, the report tally and the two merge reasons.
+            "assetSuccessions", "successions", "SUCCESSION_TAKEN", "SUCCESSION_CYCLE",
         )) {
             assertTrue("docs/api/v1.md does not name $code", "`$code`" in doc)
         }
@@ -192,6 +198,8 @@ class CommandShapesGoldenTest {
             "/v1/assets/{id}/service-cases", "/v1/service-cases", "/v1/service-cases/{id}", "/v1/service-cases/{id}/entries",
             // #72 (C21): the loan routes' four path shapes.
             "/v1/assets/{id}/loans", "/v1/loans", "/v1/loans/{id}", "/v1/loans/{id}/return",
+            // #86 (C20): the one read-only succession route.
+            "/v1/assets/{id}/succession",
         )) {
             assertTrue("docs/api/v1.md does not name $path", "`$path`" in doc || path in doc)
         }
