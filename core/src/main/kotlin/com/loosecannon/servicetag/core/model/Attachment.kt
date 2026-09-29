@@ -1,5 +1,8 @@
 package com.loosecannon.servicetag.core.model
 
+import com.loosecannon.servicetag.core.references.MAX_REFERENCE_NAME_CHARS
+import com.loosecannon.servicetag.core.references.MAX_REFERENCE_URI_CHARS
+
 /** Bigger than this is a mistaken pick, not a product limit (spec §11.11): 256 MiB. */
 const val MAX_ATTACHMENT_BYTES: Long = 268_435_456L
 
@@ -46,7 +49,45 @@ data class Attachment(
     val updatedAt: Long,
     /** Null is "no role" — every row written before #67. Metadata only: it never moves bytes. */
     val role: DocumentRole? = null,
+    /** Null for every row that was not saved from a reference (#85). Write-once: never edited afterwards. */
+    val source: AttachmentSource? = null,
 )
+
+/**
+ * Where a saved document came from (#85, R85-2, R85-3): a snapshot taken when the fetch finished, with no
+ * `reference_id` and no key — the reference may change or go, and this stays what it was.
+ */
+data class AttachmentSource(
+    val uri: String,            // the reference's URI, verbatim (R85-2)
+    val resolvedUri: String?,   // the redirect destination, scheme + authority + path; null when it did not move
+    val retrievedAt: Long,      // epoch millis the fetch finished
+    val name: String?,          // the reference's display name at that moment
+)
+
+/** The one home of the shape rule: null when the four fields are well formed (or all null), else the breach. */
+fun attachmentSourceProblem(uri: String?, resolvedUri: String?, retrievedAt: Long?, name: String?): String? {
+    if (uri == null) {
+        return if (resolvedUri != null || retrievedAt != null || name != null) "a source with no uri" else null
+    }
+    if (retrievedAt == null || retrievedAt <= 0L) return "a source needs a positive retrieval time"
+    if (!uri.startsWith(HTTPS, ignoreCase = true)) return "a source uri must be https"
+    if (uri.length > MAX_REFERENCE_URI_CHARS) return "a source uri is over $MAX_REFERENCE_URI_CHARS characters"
+    if (uri.any { it.isWhitespace() || it.isISOControl() }) return "a source uri has whitespace or a control character"
+    if (resolvedUri != null) {
+        if (!resolvedUri.startsWith(HTTPS, ignoreCase = true)) return "a resolved uri must be https"
+        if (resolvedUri.length > MAX_REFERENCE_URI_CHARS) return "a resolved uri is over $MAX_REFERENCE_URI_CHARS characters"
+        if (resolvedUri.any { it == '?' || it == '#' || it == ';' }) return "a resolved uri keeps no query, fragment or path parameter"
+        if ('@' in resolvedUri.substring(HTTPS.length).substringBefore('/')) return "a resolved uri keeps no userinfo"
+        if (resolvedUri == uri) return "a resolved uri is stored only when it differs"
+    }
+    if (name != null) {
+        if (name.isBlank()) return "a source name is not blank"
+        if (name.length > MAX_REFERENCE_NAME_CHARS) return "a source name is over $MAX_REFERENCE_NAME_CHARS characters"
+    }
+    return null
+}
+
+private const val HTTPS = "https://"
 
 /** The only question the thumbnail path asks. */
 val Attachment.isImage: Boolean get() = mimeType.startsWith("image/")
