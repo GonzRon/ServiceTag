@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.attachments
 
+import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -296,7 +297,7 @@ class AttachmentsSectionViewModel(
                 throw e
             } catch (e: Throwable) {
                 // A database that would not take the write. The sheet stays open with the values.
-                _messages.tryEmit("Could not save ${cmd.displayName}")
+                _messages.tryEmit(e.transferredOutOr("Could not save ${cmd.displayName}"))
                 refresh.value++
                 return@launch
             }
@@ -322,7 +323,7 @@ class AttachmentsSectionViewModel(
             } catch (e: Throwable) {
                 // The row write failed, or the store would not give the bytes up. Either way the
                 // person asked for one thing and it did not happen, so they hear about it.
-                _messages.tryEmit("Could not delete that file")
+                _messages.tryEmit(e.transferredOutOr("Could not delete that file"))
             }
             refresh.value++
         }
@@ -357,7 +358,9 @@ class AttachmentsSectionViewModel(
         } catch (e: Throwable) {
             // A broken provider or a folder that went away mid-copy. Name the file the person
             // picked — they chose eight, and "something failed" would not tell them which.
-            AttachmentFailure.CopyFailed(file.displayName).sentence()?.let { _messages.tryEmit(it) }
+            (AttachmentFailure.CopyFailed(file.displayName).sentence() ?: "").let { line ->
+                e.transferredOutOr(line).takeIf { it.isNotEmpty() }?.let { _messages.tryEmit(it) }
+            }
             return
         }
         if (outcome is AttachmentResult.Refused) say(outcome.problem)

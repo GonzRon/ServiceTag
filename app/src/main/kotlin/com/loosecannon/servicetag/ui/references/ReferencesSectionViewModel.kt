@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.references
 
+import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.AssetId
@@ -142,6 +143,8 @@ class ReferencesSectionViewModel(
                 // A database that would not take the write. §10 ratifies no sentence for it, and
                 // this brief may not invent one, so the sheet stays open holding what was typed
                 // and the list keeps saying what the store says (controller ruling, spec silence).
+                // #77: P77-35, a ratified sentence, when the asset was transferred out meanwhile.
+                t.transferredOutOr("").takeIf { it.isNotEmpty() }?.let { _messages.tryEmit(it) }
                 return@launch
             }
             when (outcome) {
@@ -170,6 +173,8 @@ class ReferencesSectionViewModel(
                 // The same ruling as the other two write paths: §10 ratifies no sentence for a
                 // delete the database refused, so nothing is drawn and the row stays listed
                 // because the store still holds it (controller ruling, spec silence).
+                // #77: P77-35, a ratified sentence, when the asset was transferred out meanwhile.
+                t.transferredOutOr("").takeIf { it.isNotEmpty() }?.let { _messages.tryEmit(it) }
                 return@launch
             }
             if (outcome is ReferenceResult.Refused) say(outcome.problem)
@@ -185,6 +190,8 @@ class ReferencesSectionViewModel(
             } catch (t: Throwable) {
                 // A database that would not take the write. §10 ratifies no sentence for it, and
                 // this brief may not invent one, so the sheet stays open holding what was typed.
+                // #77: P77-35, a ratified sentence, when the asset was transferred out meanwhile.
+                t.transferredOutOr("").takeIf { it.isNotEmpty() }?.let { _messages.tryEmit(it) }
                 return@launch
             }
             when (outcome) {

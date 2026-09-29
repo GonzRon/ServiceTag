@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.maintenance
 
+import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.AssetId
@@ -175,7 +176,14 @@ class GroupDetailViewModel(
 
     /** Archive is one column and no cascade: every window, completion and closure survives it. */
     fun setArchived(archived: Boolean) {
-        viewModelScope.launch { archiveGroup.run(id, archived) }
+        viewModelScope.launch {
+            // #77: a group that came to name a transferred-out asset while open is refused; the state redraws read only.
+            try {
+                archiveGroup.run(id, archived)
+            } catch (e: AssetTransferredOut) {
+                return@launch
+            }
+        }
     }
 
     /**
@@ -216,6 +224,8 @@ class GroupDetailViewModel(
             _busy.value = true
             try {
                 block()
+            } catch (e: AssetTransferredOut) {
+                // #77: refused by the guard; the state redraws read only, with nothing written.
             } finally {
                 _busy.value = false
             }

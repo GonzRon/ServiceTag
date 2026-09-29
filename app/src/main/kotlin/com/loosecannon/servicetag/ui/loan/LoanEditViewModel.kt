@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.loan
 
+import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -270,7 +271,7 @@ class LoanEditViewModel(
                 // LoanReturned, a vanished asset or loan, or a store failure: nothing the form can mark.
                 Log.w(TAG, "a loan save failed", failed)
                 _state.update { it.copy(saving = false) }
-                _messages.tryEmit(COULD_NOT_SAVE_THIS_LOAN)
+                _messages.tryEmit(failed.transferredOutOr(COULD_NOT_SAVE_THIS_LOAN))
                 return@launch
             }
             if (holdForRationale(written)) {

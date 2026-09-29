@@ -32,6 +32,8 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
+import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.loanRow
 import com.loosecannon.servicetag.ui.loan.LoanAction
@@ -404,6 +406,25 @@ class AssetTransferStateTest {
         advanceUntilIdle()
         assertFalse("read only for a group naming a held asset", after.state.value!!.editable)
         assertTrue(after.state.value!!.schedules.none { it.canComplete })
+    }
+
+    /** B4 hand-off 1: the one mapping onto P77-35, and a refused group write that no longer takes the screen down. */
+    @Test fun aStaleScreensRefusedWriteSaysP77_35AndNeverCrashes() = runTest(scheduler) {
+        assertEquals("This asset was transferred out.", AssetTransferredOut(AssetId("h1")).transferredOutOr("Could not save this asset."))
+        assertEquals("Could not save this asset.", IllegalStateException("other").transferredOutOr("Could not save this asset."))
+
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.groups.upsert(groupOf("G1", members = listOf(Triple("h1", "2026-01-01", null))))
+        val group = groupModel("G1")
+        backgroundScope.launch { group.state.collect() }
+        advanceUntilIdle()
+        out("h1") // the heater leaves while the group screen is open
+
+        group.setArchived(true)
+        advanceUntilIdle()
+
+        assertNull("refused, nothing written", graph.groups.get(GroupId("G1"))!!.archivedAt)
+        assertFalse(group.state.value!!.editable)
     }
 
     // ---------------------------------------------------------------- the pickers (C19, rm-5)

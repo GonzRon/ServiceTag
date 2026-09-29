@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.scan
 
+import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -295,7 +296,7 @@ class TagResultViewModel(
                         },
                     )
                 },
-                onFailure = { _events.tryEmit(TagResultEvent.Failed("Couldn't bind this tag: ${it.message}")) },
+                onFailure = { _events.tryEmit(TagResultEvent.Failed(it.transferredOutOr("Couldn't bind this tag: ${it.message}"))) },
             )
         }
     }

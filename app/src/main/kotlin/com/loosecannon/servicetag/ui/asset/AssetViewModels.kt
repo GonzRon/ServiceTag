@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.asset
 
+import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.condition.ConditionHistory
@@ -2363,7 +2364,7 @@ class AssetEditViewModel(
                 }
                 else -> {
                     _state.update { it.copy(saving = false) }
-                    _messages.tryEmit("Could not save this asset.")
+                    _messages.tryEmit(failure.transferredOutOr("Could not save this asset."))
                     return
                 }
             }

@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.setup
 
+import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.AssetId
@@ -292,7 +293,7 @@ class ProfileEditViewModel(
             when (failure) {
                 null -> _saved.tryEmit(outcome.getOrThrow().id)
                 is ProfileValidation -> Unit                     // named under their own controls
-                else -> _messages.tryEmit("Could not save this action.")
+                else -> _messages.tryEmit(failure.transferredOutOr("Could not save this action."))
             }
             _state.update { it.copy(saving = false, problems = failure.asProblems()) }
         }
@@ -301,10 +302,11 @@ class ProfileEditViewModel(
     fun archive(archived: Boolean) {
         viewModelScope.launch {
             val id = profileId ?: return@launch
-            if (runCatching { archiveProfile.run(id, archived) }.isSuccess) {
+            val archiving = runCatching { archiveProfile.run(id, archived) }
+            if (archiving.isSuccess) {
                 _state.update { it.copy(archived = archived) }
             } else {
-                _messages.tryEmit("Could not change that action.")
+                _messages.tryEmit(archiving.exceptionOrNull()!!.transferredOutOr("Could not change that action."))
             }
         }
     }
@@ -313,10 +315,11 @@ class ProfileEditViewModel(
     fun delete() {
         viewModelScope.launch {
             val id = profileId ?: return@launch
-            if (runCatching { deleteProfile.run(id) }.isSuccess) {
+            val deleting = runCatching { deleteProfile.run(id) }
+            if (deleting.isSuccess) {
                 _deleted.tryEmit(Unit)
             } else {
-                _messages.tryEmit("Could not delete this action.")
+                _messages.tryEmit(deleting.exceptionOrNull()!!.transferredOutOr("Could not delete this action."))
             }
         }
     }
