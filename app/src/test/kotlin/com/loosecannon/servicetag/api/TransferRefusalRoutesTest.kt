@@ -136,4 +136,24 @@ class TransferRefusalRoutesTest {
         assertEquals(response.bodyText(), 422, response.status)
         assertEquals("asset_validation", response.errorDetail().code)
     }
+
+    /**
+     * #77 B5 (C24, R77-17) — the contract states the 409 exactly as the wire sends it, on one anchored row of its
+     * error table: the code, the problem with its id elided, no `field`, and the sentence. The document also says a
+     * held asset stays readable, so a read of it still answers 200.
+     */
+    @Test fun theApiDocumentStatesThe409AsTheWireSendsIt() {
+        holdTheHeater()
+        val detail = api.call("PATCH", "/v1/assets/$heater", """{"name":"Example Water Heater 2"}""").errorDetail()
+        assertEquals(null, detail.field)
+        val problem = detail.problems.single().replace(Regex("""=[^)]*\)"""), "=…)")
+        val line = "| 409 | `${detail.code}` | `$problem` | | `${detail.message}` |"
+        val text = repoFile("docs/api/v1.md").readText()
+        assertEquals(
+            "docs/api/v1.md must carry the row once: $line",
+            1,
+            Regex("^" + Regex.escape(line) + "$", RegexOption.MULTILINE).findAll(text).count(),
+        )
+        assertEquals(200, api.call("GET", "/v1/assets/$heater").status)
+    }
 }
