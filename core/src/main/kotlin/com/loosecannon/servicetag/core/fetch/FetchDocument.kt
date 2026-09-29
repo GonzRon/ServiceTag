@@ -30,8 +30,8 @@ import kotlin.coroutines.cancellation.CancellationException
  * cancel is never a problem.
  *
  * It sends nothing but the URL (the transport owns its three request properties, R85-13), logs nothing,
- * and keeps the URL nowhere but the returned [FetchOutcome.Fetched.finalUrl]. [onProgress][run] runs on
- * [io], at most once per chunk.
+ * and keeps the URL nowhere but the returned [FetchOutcome.Fetched.finalUrl]. The progress callback runs
+ * on [io], at most once per chunk, with the running count and the declared length (null when undeclared).
  */
 class FetchDocument(
     private val transport: DocumentTransport,
