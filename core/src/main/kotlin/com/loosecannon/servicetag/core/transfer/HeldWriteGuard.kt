@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.DefinitionId
@@ -63,8 +64,9 @@ class AssetTransferredOut(val assetId: AssetId) :
 /**
  * #77 (C12, R77-4; the owner's direction) — **the one home of the write guard**: a held asset (an open OUT in the
  * transfer records, `heldIds`) is inspectable and ordinarily immutable everywhere — the phone's use cases, the API,
- * and everything the MCP tools reach through it. It wraps the sixteen asset-owned repository ports; `AppGraph` hands
- * every use case the wrapped ones, so no use case, screen or route needs a guard of its own.
+ * and everything the MCP tools reach through it. It wraps the sixteen asset-owned repository ports, and #86's
+ * successions; `AppGraph` hands every use case the wrapped ones, so no use case, screen or route needs a guard of its
+ * own.
  *
  * Each write reads `heldIds` **in the caller's transaction** and, when that set is empty — the ordinary case — writes
  * exactly as before. Otherwise it throws [AssetTransferredOut] **before** the port writes when:
@@ -137,7 +139,13 @@ class HeldWriteGuard(
     fun cases(port: ServiceCaseRepository): ServiceCaseRepository = GuardedCases(port, this)
     fun entries(port: ServiceCaseEntryRepository): ServiceCaseEntryRepository = GuardedEntries(port, this)
     fun loans(port: AssetLoanRepository): AssetLoanRepository = GuardedLoans(port, this)
-    fun successions(port: AssetSuccessionRepository): AssetSuccessionRepository = port
+
+    /**
+     * #86 (C6, I8; R86-16): no **new** succession may name a held asset at either end. The one writer that re-inserts
+     * rows naming one — a transfer back's kept successions, which existed before its transaction — takes the raw port
+     * instead (`ApplyBackupMergePlan`, MJ-2).
+     */
+    fun successions(port: AssetSuccessionRepository): AssetSuccessionRepository = GuardedSuccessions(port, this)
 
     /**
      * The shared check: reads the held set once and, when it is not empty, runs [block], whose [Held.owned] and
@@ -459,5 +467,13 @@ private class GuardedLoans(private val port: AssetLoanRepository, private val gu
     override suspend fun upsert(loan: AssetLoan) {
         guard.check { owned(TransferOwnership.of(loan) + port.get(loan.id)?.let(TransferOwnership::of).orEmpty()) }
         port.upsert(loan)
+    }
+}
+
+private class GuardedSuccessions(private val port: AssetSuccessionRepository, private val guard: HeldWriteGuard) :
+    AssetSuccessionRepository by port {
+    override suspend fun append(row: AssetSuccession) {
+        guard.check { owned(TransferOwnership.of(row)) }
+        port.append(row)
     }
 }
