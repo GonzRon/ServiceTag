@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -63,6 +64,8 @@ import com.loosecannon.servicetag.ui.health.needsAttention
 import com.loosecannon.servicetag.ui.loan.LoanBadge
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
+import com.loosecannon.servicetag.ui.transfer.TransferStrings
+import com.loosecannon.servicetag.ui.transfer.TransferredBadge
 
 /**
  * The asset list: one line per asset, active rows first and archived ones only when asked for
@@ -83,6 +86,8 @@ fun AssetsScreen(
     graph: AppGraph,
     onOpenAsset: (String) -> Unit,
     onNewAsset: () -> Unit,
+    /** #77 (C17): P77-1 in the overflow opens the transfer selection, nothing preselected. The tap writes nothing. */
+    onTransfer: () -> Unit = {},
 ) {
     val model: AssetsViewModel = viewModel { AssetsViewModel(graph) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -105,6 +110,7 @@ fun AssetsScreen(
                     IconButton(onClick = onNewAsset) {
                         Icon(Icons.Outlined.Add, contentDescription = "Add asset")
                     }
+                    AssetsOverflow(onTransfer = onTransfer)
                 },
             )
         },
@@ -145,6 +151,20 @@ fun AssetsScreen(
                     onShowArchived = model::toggleArchived,
                 )
             }
+        }
+    }
+}
+
+/** #77 (C17): the Assets overflow — P77-1, the one item. */
+@Composable
+private fun AssetsOverflow(onTransfer: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text(TransferStrings.TRANSFER_ASSETS) }, onClick = { open = false; onTransfer() })
         }
     }
 }
@@ -336,9 +356,10 @@ internal fun AssetListRow(row: AssetRow, onClick: () -> Unit, modifier: Modifier
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            val archived = statusLabel(asset.status)
+            // #77 (C19): a held row says P77-31 instead of "Archived", whatever its status.
+            val archived = if (row.transferred) null else statusLabel(asset.status)
             val loan = row.loan
-            if (asset.isRetired || row.outOfSeason || archived != null || loan != null || health != null) {
+            if (asset.isRetired || row.outOfSeason || archived != null || row.transferred || loan != null || health != null) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -361,6 +382,7 @@ internal fun AssetListRow(row: AssetRow, onClick: () -> Unit, modifier: Modifier
                     archived?.let { label ->
                         StatusBadge(label = label, colors = ServiceTagTheme.semanticColors.seasonInactive)
                     }
+                    if (row.transferred) TransferredBadge()
                     // #72 (C19): after the lifecycle badges, before condition and health — custody is
                     // no maintenance fact, so it never sits among them.
                     loan?.let { LoanBadge(it) }

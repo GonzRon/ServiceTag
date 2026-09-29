@@ -146,6 +146,8 @@ import com.loosecannon.servicetag.ui.scan.placementOrNull
 import com.loosecannon.servicetag.ui.service.ServiceCasesSection
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
+import com.loosecannon.servicetag.ui.transfer.TransferStrings
+import com.loosecannon.servicetag.ui.transfer.TransferredBadge
 import java.time.Instant
 import java.time.LocalDate
 import java.time.MonthDay
@@ -206,6 +208,8 @@ fun AssetDetailScreen(
     onLendOut: (assetId: String) -> Unit = {},
     /** #72 (C16): "Edit loan" — the host opens the lend form on the open loan. The tap writes nothing. */
     onEditLoan: (assetId: String, loanId: String) -> Unit = { _, _ -> },
+    /** #77 (C17): P77-1 in the overflow — the transfer selection, this asset preselected. The tap writes nothing. */
+    onTransfer: (assetId: String) -> Unit = {},
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -264,17 +268,18 @@ fun AssetDetailScreen(
                     }
                 },
                 actions = {
-                    if (asset != null) {
-                        DetailOverflow(
-                            archived = asset.status != AssetStatus.ACTIVE,
-                            retired = asset.isRetired,
-                            onEdit = { onEdit(assetId) },
-                            onArchive = model::archive,
-                            onUnarchive = model::unarchive,
-                            onRetire = model::askRetire,
-                            onUnretire = model::unretire,
-                            onDelete = model::askDelete,
-                        )
+                    state?.let { page ->
+                        DetailOverflow(page.menu) { item ->
+                            when (item) {
+                                DetailMenuItem.EDIT -> onEdit(assetId)
+                                DetailMenuItem.ARCHIVE -> model.archive()
+                                DetailMenuItem.UNARCHIVE -> model.unarchive()
+                                DetailMenuItem.RETIRE -> model.askRetire()
+                                DetailMenuItem.UNRETIRE -> model.unretire()
+                                DetailMenuItem.TRANSFER -> onTransfer(assetId)
+                                DetailMenuItem.DELETE -> model.askDelete()
+                            }
+                        }
                     }
                 },
             )
@@ -303,6 +308,7 @@ fun AssetDetailScreen(
             onLogOutcome = { kind -> model.dismissPrompt(); onLogOutcome(assetId, kind) },
             onSeasonDate = model::onSeasonDate,
             onConfirmSeason = model::confirmSeason,
+            onWithdraw = model::withdraw,
         )
         // The page redraws from the condition flow when either closes: nothing to refresh by hand.
         if (changingCondition) {
@@ -339,6 +345,8 @@ fun AssetDetailScreen(
                 current.parentName?.let { parent ->
                     PartOfLine(parent) { current.parentId?.let(onOpenAsset) }
                 }
+                // #77 (C19, C23): a held asset opens with its transfer record(s) and nothing it could write.
+                if (current.held) TransferredOutBlock(current.transferredOut, onWithdraw = model::askWithdraw)
                 ReadingsSection(current.readings)
                 Spacer(Modifier.height(14.dp))
                 ActionGrid(
@@ -346,6 +354,7 @@ fun AssetDetailScreen(
                         assetId = assetId,
                         profiles = current.profiles,
                         bare = current.bare,
+                        offersWrites = current.offersWrites,
                         onLogEvent = onLogEvent,
                         onEdit = onEdit,
                         onSetup = onSetup,
@@ -390,6 +399,7 @@ fun AssetDetailScreen(
                     season = current.season,
                     onStart = { model.askSeason(SeasonAction.START) },
                     onEnd = { model.askSeason(SeasonAction.END) },
+                    editable = current.offersWrites,
                 )
             }
             // 1.2 — what is scheduled on this asset, and who it shares work with (spec §2.6).
@@ -404,21 +414,22 @@ fun AssetDetailScreen(
                 groups = current.groups,
                 onOpenSchedule = onOpenSchedule,
                 onOpenGroup = onOpenGroup,
-                onAddSchedule = { onAddSchedule(assetId) },
+                onAddSchedule = if (current.offersWrites) ({ onAddSchedule(assetId) }) else null,
             )
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 ComponentsSection(
                     components = current.components,
                     onOpenAsset = onOpenAsset,
-                    onAddComponent = { onAddComponent(assetId) },
+                    onAddComponent = if (current.offersWrites) ({ onAddComponent(assetId) }) else null,
                 )
                 ServiceRecordSection(current.events, current.definitions, onOpenEvent)
-                TagsSection(current.tags, onEditLabel = model::editTagLabel)
+                TagsSection(current.tags, onEditLabel = model::editTagLabel, editable = current.offersWrites)
                 AttachmentsSection(
                     graph = graph,
                     owner = AttachmentOwner.OfAsset(current.asset.id),
                     snackbars = snackbars,
                     onOpenSettings = onOpenSettings,
+                    readOnly = !current.offersWrites,
                 )
                 // 1.3.0 — pointers, below the bytes they are not (D-10). `LinkLauncher` is the one
                 // place `ACTION_VIEW` is fired, so the section hands it a URI and reads the answer.
@@ -432,6 +443,7 @@ fun AssetDetailScreen(
                     onOpen = { uri ->
                         activity?.let { LinkLauncher.open(it, uri, notify = false) } == true
                     },
+                    readOnly = !current.offersWrites,
                 )
                 NotesSection(current.asset.notes)
                 Spacer(Modifier.height(24.dp))
@@ -451,6 +463,7 @@ private fun detailActions(
     assetId: String,
     profiles: List<EventProfile>,
     bare: Boolean,
+    offersWrites: Boolean,
     onLogEvent: (String, String) -> Unit,
     onEdit: (String) -> Unit,
     onSetup: (String) -> Unit,
@@ -462,6 +475,11 @@ private fun detailActions(
     val nfc = ServiceTagIcons.NfcTag
     val backup = ServiceTagIcons.Backup
     return buildList {
+        // #77 (R77-4): a held asset keeps Backup, which writes nothing to it, and nothing else.
+        if (!offersWrites) {
+            add(ActionSpec("Backup", backup, outlined = false, onClick = onBackup))
+            return@buildList
+        }
         profiles.forEach { profile ->
             add(
                 ActionSpec(quickActionLabel(profile), ledger, outlined = false) {
@@ -589,36 +607,47 @@ private fun outOfRange(
  * the destructive family, because it is the only item here that cannot be undone.
  */
 @Composable
-private fun DetailOverflow(
-    archived: Boolean,
-    retired: Boolean,
-    onEdit: () -> Unit,
-    onArchive: () -> Unit,
-    onUnarchive: () -> Unit,
-    onRetire: () -> Unit,
-    onUnretire: () -> Unit,
-    onDelete: () -> Unit,
-) {
+private fun DetailOverflow(items: List<DetailMenuItem>, onPick: (DetailMenuItem) -> Unit) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {
         Icon(Icons.Outlined.MoreVert, contentDescription = "More")
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-        DropdownMenuItem(text = { Text("Edit") }, onClick = { open = false; onEdit() })
-        DropdownMenuItem(
-            text = { Text(if (archived) "Unarchive" else "Archive") },
-            onClick = { open = false; if (archived) onUnarchive() else onArchive() },
-        )
-        DropdownMenuItem(
-            text = { Text(if (retired) "Unretire" else "Retire") },
-            onClick = { open = false; if (retired) onUnretire() else onRetire() },
-        )
-        DropdownMenuItem(
-            text = {
-                Text("Delete", color = ServiceTagTheme.semanticColors.destructiveAction.foreground)
-            },
-            onClick = { open = false; onDelete() },
-        )
+        // #77 (R77-4): the items are the state's decision — Delete alone for a transferred-out asset.
+        items.forEach { item ->
+            DropdownMenuItem(
+                text = {
+                    when (item) {
+                        DetailMenuItem.EDIT -> Text("Edit")
+                        DetailMenuItem.ARCHIVE -> Text("Archive")
+                        DetailMenuItem.UNARCHIVE -> Text("Unarchive")
+                        DetailMenuItem.RETIRE -> Text("Retire")
+                        DetailMenuItem.UNRETIRE -> Text("Unretire")
+                        DetailMenuItem.TRANSFER -> Text(TransferStrings.TRANSFER_ASSETS)
+                        DetailMenuItem.DELETE ->
+                            Text("Delete", color = ServiceTagTheme.semanticColors.destructiveAction.foreground)
+                    }
+                },
+                onClick = { open = false; onPick(item) },
+            )
+        }
+    }
+}
+
+/**
+ * #77 (C19, C23): the P77-32 block under the plate — per open OUT, P77-33, P77-34, the note, and P77-62, which asks
+ * before it writes. The asset's history stays below it, inspectable and unchanged.
+ */
+@Composable
+private fun TransferredOutBlock(rows: List<TransferOutRow>, onWithdraw: (String) -> Unit) {
+    SectionHeader(title = TransferStrings.TRANSFERRED_OUT)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        rows.forEach { row ->
+            Text(row.on, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            QuietLine(row.pack)
+            row.note?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface) }
+            TextButton(onClick = { onWithdraw(row.packId) }) { Text(TransferStrings.WITHDRAW_RECORD) }
+        }
     }
 }
 
@@ -637,6 +666,7 @@ private fun DetailPrompts(
     onLogOutcome: (String) -> Unit,
     onSeasonDate: (String) -> Unit,
     onConfirmSeason: () -> Unit,
+    onWithdraw: () -> Unit,
 ) {
     when (prompt) {
         null -> Unit
@@ -666,6 +696,14 @@ private fun DetailPrompts(
                 )
             },
             confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
+        )
+        // #77 (C23, R77-5): P77-63 / P77-64, P77-65 or the reused Cancel. Nothing is written before the confirm.
+        is DetailPrompt.Withdraw -> AlertDialog(
+            onDismissRequest = { if (!prompt.saving) onDismiss() },
+            title = { Text(prompt.title) },
+            text = { Text(TransferStrings.WITHDRAW_BODY) },
+            confirmButton = { TextButton(onClick = onWithdraw, enabled = !prompt.saving) { Text(TransferStrings.WITHDRAW) } },
+            dismissButton = { TextButton(onClick = onDismiss, enabled = !prompt.saving) { Text("Cancel") } },
         )
     }
 }
@@ -787,6 +825,8 @@ private fun plateBadges(facts: List<PlateFact>): (@Composable FlowRowScope.() ->
                 PlateFact.InSeason -> PhaseBadge(SeasonPhase.IN_SEASON)
                 // #72 (C16): the Lending section's own badge, so the plate and the block agree.
                 is PlateFact.Lent -> LoanBadge(if (fact.overdue) LoanStanding.OVERDUE else LoanStanding.LENT_OUT)
+                // #77 (C19): P77-31 where "Archived" would stand.
+                PlateFact.Transferred -> TransferredBadge()
             }
         }
     }
@@ -903,7 +943,7 @@ private fun priceLine(asset: Asset): String? {
 private fun ComponentsSection(
     components: List<ComponentRow>,
     onOpenAsset: (String) -> Unit,
-    onAddComponent: () -> Unit,
+    onAddComponent: (() -> Unit)?,
 ) {
     SectionHeader(title = "Components")
     Column {
@@ -926,7 +966,7 @@ private fun ComponentsSection(
                 ConditionBadge(child.condition, Modifier.padding(top = 4.dp))
             }
         }
-        TextButton(onClick = onAddComponent) { Text("+ Add component") }
+        onAddComponent?.let { add -> TextButton(onClick = add) { Text("+ Add component") } }
     }
 }
 
@@ -953,7 +993,8 @@ private fun ConditionSection(
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         ConditionBadge(current)
         current?.let { QuietLine(reasonLine(it.reason)) }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // #77 (R77-4): a transferred-out asset's condition is history to read, never to change.
+        if (state.offersWrites) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val condition = current?.condition
             if (state.leadsWithLogIncident) {
                 FilledTonalButton(onClick = onLogIncident, shape = ControlShape) { Text(LOG_INCIDENT) }
@@ -1083,7 +1124,7 @@ private fun GlyphLine(glyph: StateGlyph, tint: Color, text: String) {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SeasonSection(season: SeasonView, onStart: () -> Unit, onEnd: () -> Unit) {
+private fun SeasonSection(season: SeasonView, onStart: () -> Unit, onEnd: () -> Unit, editable: Boolean = true) {
     // S28 heads the section, in the sentence case S5 and S94 are drawn in (the ruling on I-4).
     SentenceSectionHeader(OPERATING_SEASON)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1107,7 +1148,7 @@ private fun SeasonSection(season: SeasonView, onStart: () -> Unit, onEnd: () -> 
                     itemVerticalAlignment = Alignment.CenterVertically,
                 ) {
                     PhaseBadge(season.phase)
-                    when (manualAction(season)) {
+                    when (manualAction(season)?.takeIf { editable }) {
                         SeasonAction.START -> Button(onClick = onStart, shape = ControlShape) { Text(START_SEASON) }
                         SeasonAction.END -> OutlinedButton(onClick = onEnd, shape = ControlShape) { Text(END_SEASON) }
                         null -> Unit
@@ -1248,7 +1289,7 @@ private fun componentLine(child: ComponentRow): String = listOfNotNull(
  * honest reading for an ordinary one-tag asset.
  */
 @Composable
-internal fun TagsSection(tags: List<TagBinding>, onEditLabel: (TagId, String?) -> Unit) {
+internal fun TagsSection(tags: List<TagBinding>, onEditLabel: (TagId, String?) -> Unit, editable: Boolean = true) {
     SectionHeader(title = "Tags")
     if (tags.isEmpty()) {
         QuietLine("No tag yet · Write tag to add one")
@@ -1264,7 +1305,7 @@ internal fun TagsSection(tags: List<TagBinding>, onEditLabel: (TagId, String?) -
         // new string.
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().clickable { editing = tag },
+            modifier = Modifier.fillMaxWidth().clickable(enabled = editable) { editing = tag },
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 LedgerEntry(
@@ -1288,12 +1329,14 @@ internal fun TagsSection(tags: List<TagBinding>, onEditLabel: (TagId, String?) -
                     TagPlacementCaption(placement, modifier = Modifier.padding(start = LedgerDateColumnWidth, bottom = 8.dp))
                 }
             }
-            Icon(
-                imageVector = Icons.Outlined.Edit,
-                contentDescription = "Edit",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp),
-            )
+            if (editable) {
+                Icon(
+                    imageVector = Icons.Outlined.Edit,
+                    contentDescription = "Edit",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
     editing?.let { tag ->

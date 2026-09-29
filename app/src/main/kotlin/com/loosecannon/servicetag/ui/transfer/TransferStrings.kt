@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.transfer
 
 import com.loosecannon.servicetag.core.model.shortPackId
+import com.loosecannon.servicetag.ui.condition.displayDate
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -150,11 +151,10 @@ internal object TransferStrings {
     /** P77-70 (PROPOSED, hand-off 3) — marking refused: the estate left behind would be entangled. */
     const val MARK_ENTANGLED = "Could not mark these assets: records on this phone still point to a transferred asset. Nothing was changed."
 
-    private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM uuuu", Locale.getDefault())
     private val FILE_DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd", Locale.ROOT)
 
-    /** P77-33's and P77-37's `<date>`: `d MMM uuuu` in [zone]. */
-    fun day(at: Long, zone: ZoneId): String = DAY.format(Instant.ofEpochMilli(at).atZone(zone).toLocalDate())
+    /** P77-33's and P77-37's `<date>`: `d MMM uuuu` in [zone], through the shipped [displayDate]. */
+    fun day(at: Long, zone: ZoneId): String = displayDate(Instant.ofEpochMilli(at).atZone(zone).toLocalDate())
 
     /** P77-54 for a pack created at [createdAt] in [zone], named by its id's first eight characters. */
     fun packFileName(createdAt: Long, zone: ZoneId, packId: String): String =

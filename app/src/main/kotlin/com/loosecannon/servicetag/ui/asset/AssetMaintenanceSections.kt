@@ -49,13 +49,16 @@ import com.loosecannon.servicetag.ui.maintenance.SCHEDULES_SECTION
 fun AssetSchedulesSection(
     schedules: List<DueItem>,
     onOpenSchedule: (String) -> Unit,
-    onAddSchedule: () -> Unit,
+    /** #77 (C19): null — a transferred-out asset — offers no create entry. */
+    onAddSchedule: (() -> Unit)?,
 ) {
     MaintenanceSectionTitle(
         title = SCHEDULES_SECTION,
-        trailing = {
-            IconButton(onClick = onAddSchedule) {
-                Icon(Icons.Outlined.Add, contentDescription = SCHEDULES_SECTION)
+        trailing = onAddSchedule?.let { add ->
+            @Composable {
+                IconButton(onClick = add) {
+                    Icon(Icons.Outlined.Add, contentDescription = SCHEDULES_SECTION)
+                }
             }
         },
     )
@@ -123,7 +126,7 @@ fun AssetMaintenanceSections(
     groups: List<AssetGroupRow>,
     onOpenSchedule: (String) -> Unit,
     onOpenGroup: (String) -> Unit,
-    onAddSchedule: () -> Unit,
+    onAddSchedule: (() -> Unit)?,
 ) {
     Column {
         AssetSchedulesSection(
