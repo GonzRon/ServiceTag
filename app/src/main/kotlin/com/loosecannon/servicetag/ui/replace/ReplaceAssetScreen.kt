@@ -12,9 +12,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -69,8 +73,9 @@ import com.loosecannon.servicetag.ui.transfer.TransferStrings
  * - **FORM:** the old asset, the new asset on the editor's own fields, then every offered item **unticked** and every
  *   tag on Leave (R86-9, R86-14); `Review` is enabled iff the plan answers no problem.
  * - **REVIEW:** the lines of what will happen; P86-1 commits once, `Cancel` returns to the form writing nothing.
- * - **Leaving:** Back from the review is its `Cancel`; Back from the form leaves, writing nothing; Back is held only
- *   while the one write runs. GONE leaves at once. A finished replace hands the new asset's id to [onDone] once (C18).
+ * - **Leaving:** the top bar's arrow and the system Back share one action: from the review it is its `Cancel`, from
+ *   the form it leaves, writing nothing; both are held only while the one write runs. GONE leaves at once. A finished
+ *   replace hands the new asset's id to [onDone] once (C18).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,10 +88,25 @@ fun ReplaceAssetScreen(graph: AppGraph, assetId: String, onBack: () -> Unit, onD
     LaunchedEffect(gone) { if (gone) onBack() }
     // The #84 one-shot lesson: the state carries the id, and takeDone() hands it over once.
     LaunchedEffect(state.done) { model.takeDone()?.let(onDone) }
+    // One Back for the arrow and the system (#77's precedent): the review steps back to the form, anything else leaves.
+    // Neither writes; both are held while the one write runs.
+    val back: () -> Unit = { if (state.phase == ReplacePhase.REVIEW) model.backToForm() else onBack() }
     BackHandler(enabled = state.saving) { }
-    BackHandler(enabled = state.phase == ReplacePhase.REVIEW && !state.saving, onBack = model::backToForm)
+    BackHandler(enabled = !state.saving, onBack = back)
 
-    Scaffold(topBar = { TopAppBar(title = { Text(ReplaceStrings.REPLACE_ASSET) }) }) { padding ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(ReplaceStrings.REPLACE_ASSET) },
+                navigationIcon = {
+                    // R86-B3-BACK: the shipped arrow and its shipped label, a reused convention rather than a P86 string.
+                    IconButton(onClick = back, enabled = !state.saving) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                    }
+                },
+            )
+        },
+    ) { padding ->
         val modifier = Modifier.padding(padding)
         val review = state.review
         when {
@@ -110,6 +130,8 @@ private fun ReplaceFormContent(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
     ) {
+        // MN-2: P86-25 first, so a stale confirm's line is seen when the form reopens at the top.
+        state.error?.let { RefusalLine(it) }
         SectionHeader(title = ReplaceStrings.OLD_ASSET)
         Text(text = state.oldAssetLine, style = MaterialTheme.typography.bodyMedium)
         if (state.asksRetiredOn) {
@@ -205,7 +227,6 @@ private fun ReplaceFormContent(
             QuietLine(ReplaceStrings.MOVED_TAG_NOT_REWRITTEN)
         }
 
-        state.error?.let { RefusalLine(it) }
         Row {
             Spacer(Modifier.weight(1f))
             Button(onClick = model::review, enabled = state.reviewEnabled, shape = ControlShape) {
