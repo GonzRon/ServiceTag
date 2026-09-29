@@ -115,7 +115,8 @@ fun GroupDetailScreen(
                     }
                 },
                 actions = {
-                    if (current != null) {
+                    // #77 (C19): a group naming a transferred-out asset is read, never changed.
+                    if (current != null && current.editable) {
                         IconButton(onClick = { onEdit(groupId) }) {
                             Icon(Icons.Outlined.Edit, contentDescription = "Edit")
                         }
@@ -184,7 +185,7 @@ fun GroupDetailScreen(
             // cannot provoke needs no sentence.
             MaintenanceSectionTitle(
                 title = SCHEDULES_SECTION,
-                trailing = if (current.members.isEmpty()) {
+                trailing = if (current.members.isEmpty() || !current.editable) {
                     null
                 } else {
                     {
@@ -351,6 +352,7 @@ private fun GroupScheduleBlock(
                 member = member,
                 checked = member.assetId.value in selected,
                 busy = busy,
+                editable = row.editable,
                 onCheck = { onSelect(member.assetId.value, it) },
                 onComplete = { onCompleteMember(member.assetId) },
             )
@@ -378,6 +380,7 @@ private fun MemberChecklistRow(
     member: GroupMemberRow,
     checked: Boolean,
     busy: Boolean,
+    editable: Boolean = true,
     onCheck: (Boolean) -> Unit,
     onComplete: () -> Unit,
 ) {
@@ -389,10 +392,10 @@ private fun MemberChecklistRow(
         Checkbox(
             checked = member.complete || checked,
             onCheckedChange = onCheck,
-            enabled = !member.complete && !busy,
+            enabled = editable && !member.complete && !busy,
         )
         QuietLine(member.name, modifier = Modifier.weight(1f))
-        if (!member.complete) {
+        if (!member.complete && editable) {
             // The RATIFIED label of the canonical flow's entry point, which is what this is: one
             // member, through `CompletionFlow`, writing nothing of its own.
             TextButton(onClick = onComplete, enabled = !busy) { Text(LOG_MAINTENANCE) }

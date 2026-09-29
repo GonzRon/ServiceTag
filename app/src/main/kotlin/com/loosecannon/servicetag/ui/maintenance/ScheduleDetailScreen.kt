@@ -132,15 +132,18 @@ fun ScheduleDetailScreen(
                     // withheld. `SaveSchedule` would accept the edit, which is exactly why the
                     // screen must not offer it: an archived schedule's rule, and its D-27 pin
                     // floor, would be movable from the one screen that withholds everything else.
-                    if (!state.archived) {
+                    // #77 (C19): a transferred-out owner's schedule offers no write at all.
+                    if (!state.archived && state.editable) {
                         TextButton(onClick = { onEditRecurrence(scheduleId) }) { Text("Edit") }
                     }
-                    DetailOverflow(
-                        paused = state.paused,
-                        archived = state.archived,
-                        onPause = { model.pause(!state.paused) },
-                        onArchive = { model.archive(!state.archived) },
-                    )
+                    if (state.editable) {
+                        DetailOverflow(
+                            paused = state.paused,
+                            archived = state.archived,
+                            onPause = { model.pause(!state.paused) },
+                            onArchive = { model.archive(!state.archived) },
+                        )
+                    }
                 },
             )
         },
@@ -291,6 +294,7 @@ fun ScheduleDetailScreen(
                         },
                         onComplete = { model.complete(AssetId(member.assetId.value)) },
                         busy = state.busy,
+                        editable = state.editable,
                     )
                 }
             }
@@ -334,19 +338,20 @@ private fun MemberRow(
     onCheck: (Boolean) -> Unit,
     onComplete: () -> Unit,
     busy: Boolean,
+    editable: Boolean = true,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
     ) {
-        Checkbox(checked = complete || checked, onCheckedChange = onCheck, enabled = !complete && !busy)
+        Checkbox(checked = complete || checked, onCheckedChange = onCheck, enabled = editable && !complete && !busy)
         Text(
             text = name,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
-        if (!complete) {
+        if (!complete && editable) {
             TextButton(onClick = onComplete, enabled = !busy) { Text(LOG_MAINTENANCE) }
         }
     }

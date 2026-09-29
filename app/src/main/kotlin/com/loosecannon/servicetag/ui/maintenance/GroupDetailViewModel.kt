@@ -18,6 +18,8 @@ import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.core.usecase.ArchiveGroup
 import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -64,13 +66,15 @@ data class GroupScheduleRow(
     val progress: String?,
     val checklist: List<GroupMemberRow>,
     val roundOpen: Boolean,
+    /** #77 (C19): false when the group has any row naming an asset transferred out — the round is read only. */
+    val editable: Boolean = true,
 ) {
     /**
      * Whether the round can still take a completion: it obliges somebody and somebody is still
      * outstanding. A round that obliges nobody is never offered for completion (invariant 74), and
      * emptiness is not the same question as completeness.
      */
-    val canComplete: Boolean get() = !requiredSetEmpty && roundOpen && checklist.any { !it.complete }
+    val canComplete: Boolean get() = editable && !requiredSetEmpty && roundOpen && checklist.any { !it.complete }
 }
 
 /**
@@ -87,6 +91,11 @@ data class GroupDetailState(
     val archived: Boolean,
     val members: List<GroupMemberRow>,
     val schedules: List<GroupScheduleRow>,
+    /**
+     * #77 (C19, R77-4): false when any row of the group, current or removed, names an asset transferred out from
+     * this phone — no edit, archive, new schedule or completion. Keyed on the held records, never on ARCHIVED.
+     */
+    val editable: Boolean = true,
 )
 
 /**
@@ -122,6 +131,8 @@ class GroupDetailViewModel(
     /** The one completion mechanism. Exposed because the screen draws its affordance. */
     val completion: CompletionFlow,
     private val id: GroupId,
+    /** #77 (C19): the held set. Null holds nothing — a test that is not about transfers. */
+    private val transfers: TransferRecordRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String) : this(
@@ -134,6 +145,7 @@ class GroupDetailViewModel(
         graph.today,
         graph.completionFlow,
         GroupId(id),
+        transfers = graph.transferRecords,
     )
 
     private val rows = groups.observeAll()
@@ -144,10 +156,12 @@ class GroupDetailViewModel(
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
     val state: StateFlow<GroupDetailState?> =
-        combine(rows, schedules.observeAll(), states.observeAll()) { groupRows, _, _ ->
-            groupRows.firstOrNull { it.id == id }
+        combine(
+            rows, schedules.observeAll(), states.observeAll(), transfers?.observeHeldIds() ?: flowOf(emptySet()),
+        ) { groupRows, _, _, held ->
+            groupRows.firstOrNull { it.id == id }?.let { it to held }
         }
-            .map { group -> group?.let { detailOf(it) } }
+            .map { found -> found?.let { (group, held) -> detailOf(group, held) } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), null)
 
     /**
@@ -208,8 +222,10 @@ class GroupDetailViewModel(
         }
     }
 
-    private suspend fun detailOf(group: MaintenanceGroup): GroupDetailState {
+    private suspend fun detailOf(group: MaintenanceGroup, held: Set<AssetId>): GroupDetailState {
         val names = assets.all().associate { it.id to it.name }
+        // #77 (C19): any row, current or removed, naming a held asset makes the whole group read only.
+        val editable = group.members.none { it.assetId in held }
         return GroupDetailState(
             id = group.id,
             name = group.name,
@@ -221,7 +237,8 @@ class GroupDetailViewModel(
                 .map { GroupMemberRow(it.assetId, names[it.assetId].orEmpty()) },
             schedules = schedules.forGroup(group.id).listedForDue()
                 .sortedWith(compareBy({ it.title.lowercase() }, { it.id.value }))
-                .map { scheduleRow(it, names) },
+                .map { scheduleRow(it, names).copy(editable = editable) },
+            editable = editable,
         )
     }
 

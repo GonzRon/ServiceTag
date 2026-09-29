@@ -25,6 +25,7 @@ import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
 import com.loosecannon.servicetag.core.usecase.occurrenceWindowOpensOn
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -151,6 +152,12 @@ data class ScheduleDetailState(
     val missing: Boolean = false,
     /** The archive action's link-guard dialog (S140–S141, or S137), when one is open. */
     val linkGuard: LinkGuardPrompt? = null,
+    /**
+     * #77 (C19, R77-4): false when the schedule's owner is transferred out from this phone — its asset, or, for a
+     * group target, any asset with a row (current or removed) in the group. The schedule is read: no completion,
+     * snooze, postponement, close, pause, archive or edit. Keyed on the held records, never on ARCHIVED.
+     */
+    val editable: Boolean = true,
 ) {
     /**
      * The RATIFIED status word, withheld for a round that obliges nobody — "NO BASELINE" belongs to
@@ -162,7 +169,7 @@ data class ScheduleDetailState(
      * **Complete** is offered while the schedule can still be acted on: not archived, and a group
      * round that obliges nobody is not offered for completion at all (invariant 74).
      */
-    val canComplete: Boolean get() = !archived && !requiredSetEmpty && (!isGroup || members.isNotEmpty())
+    val canComplete: Boolean get() = editable && !archived && !requiredSetEmpty && (!isGroup || members.isNotEmpty())
 
     /**
      * **Postpone** needs a current occurrence to move. A meter-only schedule has none —
@@ -170,7 +177,7 @@ data class ScheduleDetailState(
      * the action is **not offered** rather than offered and refused (carry-forward (a),
      * invariant 10).
      */
-    val canPostpone: Boolean get() = !archived && hasTimeRule && effectiveDueOn != null
+    val canPostpone: Boolean get() = editable && !archived && hasTimeRule && effectiveDueOn != null
 
     /**
      * **"Snooze"** is offered when a notification **could be suppressed**, which is the brief's own
@@ -183,10 +190,10 @@ data class ScheduleDetailState(
      * a thing that cannot happen.
      */
     val canSnooze: Boolean
-        get() = !archived && !requiredSetEmpty && remindersEnabled && status?.notifies == true
+        get() = editable && !archived && !requiredSetEmpty && remindersEnabled && status?.notifies == true
 
     /** A postponement that is set can always be put back, whatever the rule. */
-    val canClearPostponement: Boolean get() = !archived && postponedDueOn != null
+    val canClearPostponement: Boolean get() = editable && !archived && postponedDueOn != null
 
     /**
      * The 1.2.1 window question, on its own: has this round reached `effectiveDueOn - leadDays`?
@@ -211,7 +218,7 @@ data class ScheduleDetailState(
      *   `effectiveDueOn` already folds in the postponement; clearing it is the way to re-offer Close.
      */
     val canClose: Boolean
-        get() = isGroup && !archived && !requiredSetEmpty && members.any { !it.complete } &&
+        get() = editable && isGroup && !archived && !requiredSetEmpty && members.any { !it.complete } &&
             closures.none { it.occurrenceOn == currentOccurrenceOn } && windowOpen
 
     /** Whichever members of the current round are still outstanding. */
@@ -247,6 +254,8 @@ class ScheduleDetailViewModel(
     private val clock: Clock,
     val completion: CompletionFlow,
     private val scheduleId: ScheduleId,
+    /** #77 (C19): the held set. Null holds nothing — a test that is not about transfers. */
+    private val transfers: TransferRecordRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, scheduleId: String) : this(
@@ -254,6 +263,7 @@ class ScheduleDetailViewModel(
         graph.recomputeSchedules, graph.postponeSchedule, graph.pauseSchedule,
         graph.archiveSchedule, graph.closeRound, graph.scheduleSnooze, graph.today, graph.clock,
         graph.completionFlow, ScheduleId(scheduleId),
+        transfers = graph.transferRecords,
     )
 
     private val _state = MutableStateFlow(ScheduleDetailState())
@@ -292,6 +302,12 @@ class ScheduleDetailViewModel(
         val isGroup = schedule.target is ScheduleTarget.GroupTarget
         val group = (schedule.target as? ScheduleTarget.GroupTarget)?.let { groups.get(it.groupId) }
         val asset = (schedule.target as? ScheduleTarget.AssetTarget)?.let { assets.get(it.assetId) }
+        // #77 (C19): the owner is held when its asset is, or when any row of its group names a held asset.
+        val held = transfers?.heldIds().orEmpty()
+        val editable = when (val target = schedule.target) {
+            is ScheduleTarget.AssetTarget -> target.assetId !in held
+            is ScheduleTarget.GroupTarget -> group?.members.orEmpty().none { it.assetId in held }
+        }
 
         val names = mutableMapOf<String, String>()
         suspend fun nameOf(id: AssetId): String =
@@ -365,6 +381,7 @@ class ScheduleDetailViewModel(
             roundOpenOn = occurrence?.openOn,
             today = t,
             loaded = true,
+            editable = editable,
         )
     }
 

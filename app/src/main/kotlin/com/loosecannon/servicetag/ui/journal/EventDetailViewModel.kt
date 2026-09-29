@@ -18,6 +18,11 @@ import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.usecase.DeleteEvent
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.health.inService
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
+import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -52,6 +57,11 @@ data class EventDetailState(
      * service**, the one rule with the asset detail's P79-19.
      */
     val startsServiceCase: Boolean = false,
+    /**
+     * #77 (C19, R77-4): false when the entry's asset is transferred out from this phone — the entry is history to
+     * read: no Edit, Delete, P79-20 or document write. Keyed on the held records, never on ARCHIVED.
+     */
+    val editable: Boolean = true,
 )
 
 /** #79 (C23, R79-4): the delete confirm as asked — with P79-60 when a service case names the entry. */
@@ -87,24 +97,31 @@ class EventDetailViewModel(
     private val id: EventId,
     /** #79 (C23): whether a case links this entry. The default links none — a test that is not about cases. */
     private val caseLinks: CaseLinks = CaseLinks { false },
+    /** #77 (C19): the held set. Null holds nothing — a test that is not about transfers. */
+    transfers: TransferRecordRepository? = null,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph, eventId: String) :
-        this(graph.events, graph.definitions, graph.assets, graph.deleteEvent, EventId(eventId), graph.caseLinks)
+    constructor(graph: AppGraph, eventId: String) : this(
+        graph.events, graph.definitions, graph.assets, graph.deleteEvent, EventId(eventId), graph.caseLinks,
+        transfers = graph.transferRecords,
+    )
 
     private val row = events.observe(id)
 
     val state: StateFlow<EventDetailState?> = row
-        .map { event ->
+        .combine(transfers?.observeHeldIds() ?: flowOf(emptySet())) { event, held ->
             event?.let {
                 val byId = definitions.forAsset(it.assetId).associateBy(MeasurementDefinition::id)
                 val asset = assets.get(it.assetId)
+                val editable = it.assetId !in held
                 EventDetailState(
                     event = it,
                     definitions = byId,
                     assetName = asset?.name.orEmpty(),
                     derived = derivedFor(it, byId),
-                    startsServiceCase = it.kind == EventKind.INCIDENT && it.scheduleId == null && asset?.inService == true,
+                    startsServiceCase = editable && it.kind == EventKind.INCIDENT && it.scheduleId == null &&
+                        asset?.inService == true,
+                    editable = editable,
                 )
             }
         }
@@ -142,10 +159,20 @@ class EventDetailViewModel(
      */
     fun delete() {
         viewModelScope.launch {
-            deleteEvent.run(id)
+            try {
+                deleteEvent.run(id)
+            } catch (e: AssetTransferredOut) {
+                // #77 (B4 hand-off 1): the asset left while this screen was open.
+                _messages.tryEmit(TransferImportStrings.ASSET_TRANSFERRED_OUT)
+                return@launch
+            }
             _deleted.tryEmit(Unit)
         }
     }
+
+    /** #77: P77-35, once, when a write is refused because the asset was transferred out. */
+    private val _messages = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
+    val messages: SharedFlow<String> = _messages.asSharedFlow()
 }
 
 /**

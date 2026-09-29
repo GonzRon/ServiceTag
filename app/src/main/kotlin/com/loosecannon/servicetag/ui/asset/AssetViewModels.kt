@@ -1900,6 +1900,8 @@ class AssetEditViewModel(
     private val notifications: NotificationPermission? = null,
     /** #79 (C11): the shipped sweep, run once after a save that moved the warranty date or lead. Null runs none. */
     private val reconcile: ReminderReconcile? = null,
+    /** #77 (C19, rm-5): the held set, so the parent choices never offer a transferred-out asset. Null holds nothing. */
+    private val transfers: TransferRecordRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String?, parentId: String? = null) : this(
@@ -1908,6 +1910,7 @@ class AssetEditViewModel(
         id?.let(::AssetId), parentId,
         notifications = graph.notificationPermission,
         reconcile = graph.reminderReconcile,
+        transfers = graph.transferRecords,
     )
 
     private val _state = MutableStateFlow(
@@ -1993,7 +1996,7 @@ class AssetEditViewModel(
             }
             _state.update { form ->
                 val filled = if (row == null) form else form.filledFrom(row, subjects)
-                filled.copy(parentChoices = choicesIn(all), attached = attached)
+                filled.copy(parentChoices = choicesIn(all, transfers?.heldIds().orEmpty()), attached = attached)
             }
         }
         // The subject list follows the store, so one added or archived in the subject editor is
@@ -2593,10 +2596,11 @@ class AssetEditViewModel(
      * parent can never be the move that creates the cycle. Archived rows are offered and marked —
      * archive is not delete (R-9), and a component of an archived machine is still its component.
      */
-    private fun choicesIn(all: Collection<Asset>): List<ParentChoice> {
+    private fun choicesIn(all: Collection<Asset>, held: Set<AssetId>): List<ParentChoice> {
         val blocked = id?.let { self -> AssetTree.descendants(all, self) + self }.orEmpty()
         return listOf(ParentChoice(null, NO_PARENT)) + all
-            .filterNot { it.id in blocked }
+            // #77 (C19, rm-5): a transferred-out asset is never offered as a parent.
+            .filterNot { it.id in blocked || it.id in held }
             .sortedBy { it.name.lowercase() }
             .map { row ->
                 ParentChoice(

@@ -15,6 +15,9 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.core.usecase.ResolveTag
@@ -198,10 +201,12 @@ class TagResultViewModel(
     private val sheetOffer: ScanSheetOffer,
     private val format: String,
     private val key: String,
+    /** #77 (C19, rm-5): the held set, so the bind picker never offers a transferred-out asset. Null holds nothing. */
+    transfers: TransferRecordRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, format: String, key: String) :
-        this(graph.resolveTag, graph.bindTag, graph.assets, graph.scanSheetOffer, format, key)
+        this(graph.resolveTag, graph.bindTag, graph.assets, graph.scanSheetOffer, format, key, graph.transferRecords)
 
     private val _state = MutableStateFlow<TagResult>(TagResult.Loading)
     val state: StateFlow<TagResult> = _state.asStateFlow()
@@ -210,7 +215,9 @@ class TagResultViewModel(
     val events: SharedFlow<TagResultEvent> = _events.asSharedFlow()
 
     val targets: StateFlow<BindTargets> = assets.observeAll()
-        .map { BindTargets(assets = it) }
+        .combine(transfers?.observeHeldIds() ?: flowOf(emptySet())) { all, held ->
+            BindTargets(assets = all.filter { it.id !in held })
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), BindTargets())
 
     init {

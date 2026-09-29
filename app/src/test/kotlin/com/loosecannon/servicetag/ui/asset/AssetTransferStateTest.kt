@@ -1,6 +1,29 @@
 package com.loosecannon.servicetag.ui.asset
 
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetEvent
+import com.loosecannon.servicetag.core.model.CaseCoverage
+import com.loosecannon.servicetag.core.model.CaseType
+import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.EventSource
+import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.OperationalCondition
+import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.usecase.BindTag
+import com.loosecannon.servicetag.core.usecase.ResolveTag
+import com.loosecannon.servicetag.core.usecase.ServiceCaseCommand
+import com.loosecannon.servicetag.testing.conditionRow
+import com.loosecannon.servicetag.testing.groupOf
+import com.loosecannon.servicetag.testing.scheduleOf
+import com.loosecannon.servicetag.ui.journal.EventDetailViewModel
+import com.loosecannon.servicetag.ui.maintenance.GroupDetailViewModel
+import com.loosecannon.servicetag.ui.maintenance.GroupEditViewModel
+import com.loosecannon.servicetag.ui.maintenance.ScheduleClosures
+import com.loosecannon.servicetag.ui.maintenance.ScheduleCompletions
+import com.loosecannon.servicetag.ui.maintenance.ScheduleDetailViewModel
+import com.loosecannon.servicetag.ui.scan.TagResultViewModel
+import com.loosecannon.servicetag.ui.service.ServiceCaseViewModel
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagBinding
@@ -236,6 +259,200 @@ class AssetTransferStateTest {
         assertEquals(listOf("This asset was transferred out.", "This asset was transferred out."), said)
         assertNull(graph.tags.get(TagId("t1"))!!.label)
         assertEquals(0, sweeps)
+    }
+
+    // ---------------------------------------------------------------- the four sub-screens (C19, row 32)
+
+    private fun incidentOf(id: String, assetId: String) = AssetEvent(
+        id = EventId(id), assetId = AssetId(assetId), kind = EventKind.INCIDENT, title = "Will not heat",
+        profileId = null, occurredOn = "2026-09-20", occurredTime = null, tzId = "UTC", notes = "",
+        source = EventSource.MANUAL, sourceRef = null, createdAt = 100L, updatedAt = 100L,
+        measurements = emptyList(), consumables = emptyList(),
+    )
+
+    @Test fun eventDetailIsReadOnlyForAHeldOwner() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.events.upsert(incidentOf("e1", "h1"))
+        fun model() = EventDetailViewModel(
+            graph.events, graph.definitions, graph.assets, graph.deleteEvent, EventId("e1"),
+            transfers = graph.transferRecords,
+        ).also { vm -> backgroundScope.launch { vm.state.collect() } }
+
+        val before = model()
+        advanceUntilIdle()
+        assertTrue("an entry of an asset here is editable", before.state.value!!.editable)
+        assertTrue(before.state.value!!.startsServiceCase)
+
+        out("h1")
+        val after = model()
+        advanceUntilIdle()
+        assertFalse("read only for a held owner", after.state.value!!.editable)
+        assertFalse(after.state.value!!.startsServiceCase)
+    }
+
+    @Test fun serviceCaseIsReadOnlyForAHeldOwner() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.events.upsert(incidentOf("inc-1", "h1"))
+        graph.conditions.insert(conditionRow("cond-1", "h1", OperationalCondition.DOWN, "2026-09-20", eventId = "inc-1"))
+        graph.events.upsert(incidentOf("m1", "h1").copy(kind = EventKind.MAINTENANCE, title = "Replaced the element"))
+        val case = graph.openServiceCase.run(
+            AssetId("h1"),
+            ServiceCaseCommand(
+                title = "Heater claim", type = CaseType.WARRANTY_SERVICE, openedOn = "2026-09-21",
+                coverage = CaseCoverage.IN_WARRANTY, resolutionEventId = null, caseRef = "RMA-0001",
+            ),
+            EventId("inc-1"),
+        )
+        fun model() = ServiceCaseViewModel(
+            graph.serviceCases, graph.serviceCaseEntries, graph.events, graph.updateServiceCase,
+            graph.addServiceCaseEntry, graph.todayPort, case.id, transfers = graph.transferRecords,
+        ).also { vm -> backgroundScope.launch { vm.state.collect() } }
+
+        val before = model()
+        advanceUntilIdle()
+        assertTrue(before.state.value!!.editable)
+        assertTrue(before.state.value!!.offersLinkRepair)
+
+        out("h1")
+        val after = model()
+        advanceUntilIdle()
+        assertFalse("read only for a held owner", after.state.value!!.editable)
+        assertFalse(after.state.value!!.offersLinkRepair)
+    }
+
+    private fun scheduleModel(id: String) = ScheduleDetailViewModel(
+        schedules = graph.schedules,
+        assets = graph.assets,
+        groups = graph.groups,
+        completions = ScheduleCompletions { sid -> graph.events.all().filter { it.scheduleId == sid } },
+        closures = ScheduleClosures { sid -> graph.closures.forSchedule(sid) },
+        recompute = graph.recomputeSchedules,
+        postponeSchedule = graph.postponeSchedule,
+        pauseSchedule = graph.pauseSchedule,
+        archiveSchedule = graph.archiveSchedule,
+        closeRoundUseCase = graph.closeRound,
+        snoozer = graph.scheduleSnooze,
+        today = graph.todayPort,
+        clock = graph.clock,
+        completion = graph.completionFlow,
+        scheduleId = ScheduleId(id),
+        transfers = graph.transferRecords,
+    )
+
+    @Test fun scheduleDetailIsReadOnlyForAHeldOwner() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.schedules.upsert(scheduleOf("s1", assetId = "h1", title = "Flush the tank"))
+        graph.recomputeSchedules.all()
+
+        val before = scheduleModel("s1")
+        advanceUntilIdle()
+        assertTrue(before.state.value.editable)
+        assertTrue(before.state.value.canComplete)
+
+        out("h1")
+        val after = scheduleModel("s1")
+        advanceUntilIdle()
+        assertFalse("read only for a held owner", after.state.value.editable)
+        assertFalse(after.state.value.canComplete)
+        assertFalse(after.state.value.canPostpone)
+    }
+
+    private fun groupModel(id: String) = GroupDetailViewModel(
+        groups = graph.groups,
+        assets = graph.assets,
+        schedules = graph.schedules,
+        states = graph.scheduleStates,
+        recompute = graph.recomputeSchedules,
+        archiveGroup = graph.archiveGroup,
+        today = graph.todayPort,
+        completion = graph.completionFlow,
+        id = GroupId(id),
+        transfers = graph.transferRecords,
+    ).also { vm -> vm.state }
+
+    @Test fun groupDetailIsReadOnlyForAHeldOwner() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.assets.upsert(assetRow("g1", name = "Sample Garage Door Opener"))
+        // The heater's window is closed: a removed row still makes the group the heater's too.
+        graph.groups.upsert(groupOf("G1", members = listOf(Triple("h1", "2026-01-01", "2026-02-01"), Triple("g1", "2026-01-01", null))))
+        graph.schedules.upsert(scheduleOf("s1", groupId = "G1", title = "Lubricate"))
+        graph.recomputeSchedules.all()
+
+        val before = groupModel("G1")
+        backgroundScope.launch { before.state.collect() }
+        advanceUntilIdle()
+        assertTrue(before.state.value!!.editable)
+
+        out("h1")
+        val after = groupModel("G1")
+        backgroundScope.launch { after.state.collect() }
+        advanceUntilIdle()
+        assertFalse("read only for a group naming a held asset", after.state.value!!.editable)
+        assertTrue(after.state.value!!.schedules.none { it.canComplete })
+    }
+
+    // ---------------------------------------------------------------- the pickers (C19, rm-5)
+
+    /** A held-but-ACTIVE heater beside an ordinary opener: a picker keyed on status would offer both. */
+    private suspend fun heldActiveHeater() {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.assets.upsert(assetRow("g1", name = "Sample Garage Door Opener"))
+        out("h1")
+    }
+
+    @Test fun scanToBindNeverOffersAHeldAsset() = runTest(scheduler) {
+        heldActiveHeater()
+        val model = TagResultViewModel(
+            ResolveTag(graph.tags, graph.assets, graph.uow, graph.clock),
+            BindTag(graph.tags, graph.assets, graph.uow, graph.clock),
+            graph.assets,
+            { false },
+            PayloadFormat.V1.name,
+            "00000000-0000-4000-8000-00000000abcd",
+            graph.transferRecords,
+        )
+        backgroundScope.launch { model.targets.collect() }
+        advanceUntilIdle()
+
+        assertEquals(listOf("g1"), model.targets.value.assets.map { it.id.value })
+    }
+
+    @Test fun parentChoicesNeverOfferAHeldAsset() = runTest(scheduler) {
+        heldActiveHeater()
+        val model = AssetEditViewModel(
+            graph.assets, graph.healthSubjects, graph.saveAssetSettings, graph.schedules, graph.categories,
+            graph.attachments, graph.attachmentStorage, graph.addAttachment, graph.todayPort, null, null,
+            transfers = graph.transferRecords,
+        )
+        advanceUntilIdle()
+        val choices = model.state.first { it.parentChoices.isNotEmpty() }.parentChoices
+
+        assertEquals(listOf(null, "g1"), choices.map { it.id })
+    }
+
+    @Test fun groupMemberPickerNeverOffersAHeldAsset() = runTest(scheduler) {
+        heldActiveHeater()
+        val model = GroupEditViewModel(graph.groups, graph.assets, graph.saveGroup, null, transfers = graph.transferRecords)
+        advanceUntilIdle()
+
+        assertEquals(listOf("g1"), model.state.first { it.loaded }.candidates.map { it.assetId.value })
+    }
+
+    /**
+     * The schedule editor has no target picker: its target is fixed by the entry that opens it (`ServiceTagRoot`:
+     * "the editor carries no second picker"). A held target is never offered because both entries withhold their
+     * create action for a held owner — the asset detail's (no write offered) and the group detail's.
+     */
+    @Test fun scheduleTargetPickerNeverOffersAHeldAsset() = runTest(scheduler) {
+        graph.assets.upsert(assetRow("h1", name = "Example Water Heater"))
+        graph.groups.upsert(groupOf("G1", members = listOf(Triple("h1", "2026-01-01", null))))
+        out("h1")
+
+        assertFalse("the asset detail offers no Add schedule", loaded(detailModel("h1")).offersWrites)
+        val group = groupModel("G1")
+        backgroundScope.launch { group.state.collect() }
+        advanceUntilIdle()
+        assertFalse("the group detail offers no Add schedule", group.state.value!!.editable)
     }
 
     private companion object {
