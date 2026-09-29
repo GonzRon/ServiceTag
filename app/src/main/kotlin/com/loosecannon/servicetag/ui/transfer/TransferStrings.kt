@@ -15,8 +15,7 @@ import java.util.Locale
  * [com.loosecannon.servicetag.ui.transfer.import.TransferImportStrings] and are reused from there; the eight reused
  * strings stay in their shipped homes.
  *
- * P77-69 and P77-70 are the controller's PROPOSED strings (the B4 hand-offs, items 3 and 4), used as written until the
- * owner rules; the controller patches the literal if amended.
+ * P77-69 (amended) and P77-70 were ratified by the owner on 2026-09-29, after the B4 hand-offs proposed them.
  */
 internal object TransferStrings {
     /** P77-1 — the Assets overflow, the detail overflow, the selection's top bar. */
@@ -157,10 +156,10 @@ internal object TransferStrings {
     /** P77-72 — the withdrawal refused: the estate it would leave is entangled (R77-WITHDRAW). */
     const val WITHDRAW_ENTANGLED = "Could not withdraw this record: records on this phone would still point to a transferred asset. Nothing was changed."
 
-    /** P77-69 (PROPOSED, hand-off 4; R77-25) — the ready screen's QuietLine under P77-24. */
-    const val BEARER = "Anyone with this file can import these assets. Share it only with the phone that should have them."
+    /** P77-69 (R77-25; ratified as amended) — the ready screen's QuietLine under P77-24: the pack is a bearer file. */
+    const val BEARER = "Anyone with this file can import these assets. Share it only with the person or device that should receive them."
 
-    /** P77-70 (PROPOSED, hand-off 3) — marking refused: the estate left behind would be entangled. */
+    /** P77-70 (R77-B2a-MARK; ratified) — marking refused: the estate left behind would be entangled. */
     const val MARK_ENTANGLED = "Could not mark these assets: records on this phone still point to a transferred asset. Nothing was changed."
 
     private val FILE_DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd", Locale.ROOT)
