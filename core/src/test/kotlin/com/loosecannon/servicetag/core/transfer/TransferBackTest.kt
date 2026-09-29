@@ -415,4 +415,25 @@ class TransferBackTest {
         assertEquals(setOf(AssetId(TransferFixtures.OPENER)), heldIds(s.raw.transfers.all()), "the opener is still held")
         assertEquals(listOf(row), s.raw.successions.all(), "the row is back")
     }
+
+    /** MN-1 (FM3): A → B → C with B returning — B names both rows, one at each end; both come back byte-equal. */
+    @Test
+    fun aReturnInTheMiddleOfAChainKeepsBothSuccessions() = runTest {
+        val s = TransferInstall("set-sender").also { TransferFixtures.seed(it.raw) }
+        val chain = listOf(
+            successionOf("s1", predecessor = TransferFixtures.OPENER, successor = HEATER, replacedOn = "2025-04-01"),
+            successionOf("s2", predecessor = HEATER, successor = TransferFixtures.COMPRESSOR),
+        )
+        chain.forEach { s.successions.append(it) }
+        val q1 = s.pack("pack-q1", HEATER)
+        s.mark(q1)
+        val ends = listOf(TransferFixtures.OPENER, TransferFixtures.COMPRESSOR).map { s.raw.assets.get(AssetId(it)) }
+        val q2 = recipientOf(q1).pack("pack-q2", HEATER)
+
+        assertIs<TransferImportResult.Imported>(s.import(q2.bytes))
+
+        assertEquals(chain, s.raw.successions.all(), "A → B and B → C are both back, byte-equal, and nothing else")
+        assertTrue(s.raw.assets.get(AssetId(HEATER))!!.maintainedHere(heldIds(s.raw.transfers.all())), "B is live")
+        assertEquals(ends, listOf(TransferFixtures.OPENER, TransferFixtures.COMPRESSOR).map { s.raw.assets.get(AssetId(it)) }, "A and C untouched")
+    }
 }
