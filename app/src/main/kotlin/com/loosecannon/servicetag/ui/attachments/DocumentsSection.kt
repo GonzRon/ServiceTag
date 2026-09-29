@@ -44,6 +44,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.asset.FieldLabel
@@ -272,6 +273,8 @@ private fun DocumentRow(
         }
     }
 }
+
+internal fun overflowLabel(displayName: String, keyRole: DocumentRole?): String = "More for $displayName"
 
 /** The thumbnail when there is one, otherwise the kind glyph — dimmed when the bytes are gone. */
 @Composable

@@ -1227,6 +1227,86 @@ class DigestPolicyTest {
         assertEquals(ReconcileCounters(0, 0, 1), next.report.counters())
     }
 
+    // #84 (C15, R84-4): "once a Once reminder has been sent, a backward clock/date movement must
+    // neither re-announce it nor forget that it was sent; whether the notification is presently
+    // visible is separate state."
+
+    /**
+     * Posted at 09:00 on its due day, then the clock set back to noon the day before: its post stands
+     * — nothing cancelled, stamped or forgotten, counted unchanged — and the due day's digest hour
+     * again posts nothing. The same across the date line: posted at 09:00 in UTC+14 and swept an hour
+     * later in UTC−10, where it is 10:00 the day before.
+     */
+    @Test
+    fun aOnceIsNeverPostedTwiceThroughABackwardMove() {
+        listOf(
+            Triple(ZoneOffset.UTC, at(-1, 12, 0), ZoneOffset.UTC),
+            Triple(ZoneOffset.ofHours(14), at(-1, 10, 0), ZoneOffset.ofHours(-10)),
+        ).forEach { (sent, movedTo, back) ->
+            val run = LoanRun(Fixture.loan())
+            assertEquals("$sent", 1, run.sweep(at(0, 9, 0), zone = sent).posts.size)
+            val stamp = checkNotNull(run.row)
+
+            val moved = run.sweep(movedTo, zone = back)
+            assertEquals("$back", emptyList<ItemPost>(), moved.posts)
+            assertEquals("$back", emptyList<String>(), moved.cancelTags)
+            assertEquals("$back", emptyList<SubjectKey.Deadline>(), moved.deadlineForgotten)
+            assertEquals("$back", emptyList<DeadlineLocalDelivery>(), moved.deadlineRows)
+            assertEquals("$back", ReconcileCounters(0, 0, 1), moved.report.counters())
+            assertEquals("$back", stamp, run.row)
+
+            val dueAgain = run.sweep(at(0, 9, 0), zone = back)
+            assertEquals("never posted twice, $back", emptyList<ItemPost>(), dueAgain.posts)
+            assertEquals("$back", ReconcileCounters(0, 0, 1), dueAgain.report.counters())
+            assertEquals("$back", setOf(Fixture.tagOf(run.subject)), run.standing)
+        }
+    }
+
+    /**
+     * Swiped on its due day, then the clock set back a day: nothing posted, stamped or forgotten, so
+     * the due day again — and the day after — posts nothing.
+     */
+    @Test
+    fun aSwipedOnceStaysDownThroughABackwardMove() {
+        val run = LoanRun(Fixture.loan())
+        run.sweep(at(0, 9, 0))
+        run.swipe()
+        val stamp = checkNotNull(run.row)
+
+        val moved = run.sweep(at(-1, 12, 0))
+        assertEquals(emptyList<ItemPost>(), moved.posts)
+        assertEquals(emptyList<SubjectKey.Deadline>(), moved.deadlineForgotten)
+        assertEquals(emptyList<DeadlineLocalDelivery>(), moved.deadlineRows)
+        assertEquals(ReconcileCounters(0, 0, 0), moved.report.counters())
+        assertEquals(stamp, run.row)
+
+        assertEquals(listOf(0, 0, 0), listOf(at(0, 9, 0), at(0, 15, 0), at(1, 9, 0)).map { run.sweep(it).posts.size })
+        assertEquals(stamp, run.row)
+    }
+
+    /**
+     * A re-date is a new occurrence even with the clock back: held through the move, then re-dated —
+     * the stamp forgotten and the old post taken down — and the new due day's digest hour posts once.
+     */
+    @Test
+    fun aReDatedOnceStillReArmsWhileTheClockIsBack() {
+        val run = LoanRun(Fixture.loan())
+        run.sweep(at(0, 9, 0))
+        val oldTag = Fixture.tagOf(run.subject)
+        assertEquals("held through the move", emptyList<String>(), run.sweep(at(-1, 12, 0)).cancelTags)
+
+        run.subject = Fixture.loan(dueOn = "2031-07-05")
+        val reDated = run.sweep(at(-1, 12, 0))
+        assertEquals("the stamp forgotten", listOf(run.subject.key), reDated.deadlineForgotten)
+        assertEquals("the old post taken down", listOf(oldTag), reDated.cancelTags)
+        assertEquals(emptyList<ItemPost>(), reDated.posts)
+        assertNull(run.row)
+
+        val newDueDay = listOf(at(0, 9, 0), at(5, 8, 59), at(5, 9, 0), at(5, 15, 0)).map { run.sweep(it).posts.size }
+        assertEquals(listOf(0, 0, 1, 0), newDueDay)
+        assertEquals(setOf(Fixture.tagOf(run.subject)), run.standing)
+    }
+
     /**
      * The owner's boundary: nothing but that refresh is only-alert-once. Every warranty post across
      * its window, every schedule DUE and OVERDUE post, and every loan announcement and re-alert — Once

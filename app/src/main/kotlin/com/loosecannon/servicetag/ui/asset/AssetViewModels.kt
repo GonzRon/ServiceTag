@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
@@ -1707,6 +1708,8 @@ data class StagedDocument(
     /** Null until a copy of this file fails; the line then shows this instead of P67-10. */
     val problem: String? = null,
 )
+
+internal fun editorKindFor(role: DocumentRole): AttachmentKind? = null
 
 /** #67, R67-6: one of the asset's own role-tagged attachments, as the editor lists it read-only. */
 data class AttachedDocument(val role: DocumentRole, val displayName: String)

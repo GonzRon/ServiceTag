@@ -2787,7 +2787,10 @@ class AssetViewModelsTest {
         assertTrue(existing.saved.isEmpty())
     }
 
-    /** C6 step 2: the written asset gets every staged file — its role, its kind inferred, today's date — and then `saved`. */
+    /**
+     * C6 step 2: the written asset gets every staged file — its role, its kind from that role (#84,
+     * R84-3), today's date — and then `saved`.
+     */
     @Test fun savingANewAssetAttachesTheStagedFilesWithTheirRoles() = runTest {
         val storage = FakeAttachmentStorage()
         val editor = intake(storage = storage)
@@ -2803,15 +2806,30 @@ class AssetViewModelsTest {
         val rows = graph.attachments.forOwner(AttachmentOwner.OfAsset(asset.id)).associateBy { it.displayName }
         assertEquals(
             mapOf(
-                "receipt.pdf" to (DocumentRole.PURCHASE_INVOICE_OR_RECEIPT to AttachmentKind.DOCUMENT),
-                "manual.pdf" to (DocumentRole.USER_MANUAL to AttachmentKind.DOCUMENT),
-                "wiring.jpg" to (DocumentRole.SERVICE_MANUAL to AttachmentKind.PHOTO),
+                "receipt.pdf" to (DocumentRole.PURCHASE_INVOICE_OR_RECEIPT to AttachmentKind.RECEIPT),
+                "manual.pdf" to (DocumentRole.USER_MANUAL to AttachmentKind.MANUAL),
+                "wiring.jpg" to (DocumentRole.SERVICE_MANUAL to AttachmentKind.MANUAL),
             ),
             rows.mapValues { (_, row) -> row.role to row.kind },
         )
         assertEquals(setOf("2026-02-10"), rows.values.map { it.capturedOn }.toSet())
         assertEquals(3, storage.store.files.size)
         assertTrue(editor.model.state.value.staged.isEmpty())
+    }
+
+    /**
+     * #84 (C14, R84-3): the kind a document newly added from the editor starts with — the receipt role
+     * a Receipt, either manual role a Manual. Every role answers one; none leaves the file-type default.
+     */
+    @Test fun theEditorDefaultsAKindFromTheRole() {
+        assertEquals(
+            mapOf(
+                DocumentRole.PURCHASE_INVOICE_OR_RECEIPT to AttachmentKind.RECEIPT,
+                DocumentRole.USER_MANUAL to AttachmentKind.MANUAL,
+                DocumentRole.SERVICE_MANUAL to AttachmentKind.MANUAL,
+            ),
+            DocumentRole.entries.associateWith { editorKindFor(it) },
+        )
     }
 
     /** C5: Remove forgets a staged file, and Save copies only what is left. */

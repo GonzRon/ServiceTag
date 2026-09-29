@@ -39,4 +39,21 @@ class DocumentsSectionTest {
         )
         assertEquals("No role", (null as DocumentRole?).label())
     }
+
+    /**
+     * #84 (C13, R84-1, ratified): the overflow names the role only in KEY DOCUMENTS, through the role
+     * labels' home, so TalkBack can tell the two copies of one row apart. With no role, as every
+     * DOCUMENTS row passes, it stays "More for <name>".
+     */
+    @Test fun theOverflowNamesTheRoleOnlyInKeyDocuments() {
+        assertEquals("More for Pump manual.pdf", overflowLabel("Pump manual.pdf", keyRole = null))
+        assertEquals(
+            listOf(
+                "More for Pump manual.pdf, Purchase invoice or receipt",
+                "More for Pump manual.pdf, User manual",
+                "More for Pump manual.pdf, Service manual",
+            ),
+            DocumentRole.entries.map { overflowLabel("Pump manual.pdf", keyRole = it) },
+        )
+    }
 }
