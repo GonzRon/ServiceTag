@@ -741,3 +741,26 @@ where they differ.**
   The rm-8 shape is the case in point: a withdrawn OUT named by the lineage, plus an unrelated open OUT. Recovery is
   explicit: withdraw the remaining OUT (C23), then import again. A withdrawn OUT still establishes ancestry (rm-8);
   it never grants a pack permission to erase or ignore a different outstanding transfer. No new string.
+- **Whole-branch review rulings (owner, 2026-09-29; the branch review's MJ-1, MN-1, MN-3 and NOTE 4):**
+  - **R77-WITHDRAW — C23 and R77-5 amended.** A withdrawal is **atomic and pack-wide**. It works on the selected
+    open OUT's pack id: it appends a WITHDRAWN for every asset whose OUT of that pack is still open here, in one
+    transaction. Before committing, the complete estate that would remain must retain cleanly by marking's rule;
+    otherwise it refuses the whole withdrawal and writes nothing. A withdrawal now means "undo this Transfer Pack's
+    local OUT disposition". If reality was mixed, withdraw the pack and create a new Transfer Pack for the subset
+    that actually left. There are no partial-withdraw semantics.
+  - **R77-CREATE-SAFETY — C2/C18 amended.** `CreateTransferPack` evaluates the hypothetical post-mark estate,
+    `retain(snapshot, held ∪ selected)`, and refuses before a file exists if it is entangled; a selected held asset
+    is refused there too (P77-57). Marking re-checks inside its write. Create proves the transfer can safely be
+    committed now; Mark re-proves it is still safe.
+  - **R77-IMPORT-SWEEP — R77-23 widened.** Every successful Transfer Pack import, from either door, runs one reminder
+    reconciliation afterwards, as a post-write step. It is not a condition of the import's success.
+  - **Strings RATIFIED verbatim:**
+    - **P77-64 amended:** `Use this only if this Transfer Pack did not leave, or another phone's record should stand. Its assets stay archived.`
+    - **P77-71:** `Could not withdraw this record. Nothing was changed.`
+    - **P77-72:** `Could not withdraw this record: records on this phone would still point to a transferred asset. Nothing was changed.`
+    - **P77-20's reasons:**
+      - the entangled refusal: `Transfer Pack not created: records on this phone still point to a transferred asset. Nothing was changed.`
+      - the generic one: `Transfer Pack not created: the file could not be written. Nothing was changed.`
+    - **P77-10's singular:** `1 document or photo`.
+    
+    **P77-69 and P77-70 stay pending** until their exact text has been put to the owner.
