@@ -39,8 +39,9 @@ class MergePlannerSuccessionTest {
     private val pump = plainAssetOf("a4", "Sample Pool Pump")
     private val estate = listOf(heater, newHeater, thirdHeater, pump)
 
+    /** The three first lists by position — the assets, then no tags and no 2.6 tombstones. */
     private fun data(assets: List<Asset>, rows: List<AssetSuccession>, records: List<TransferRecord> = emptyList()) = BackupData(
-        assets = assets.map { it.toDto() }, nfcTags = emptyList(), externalLinks = emptyList(),
+        assets.map { it.toDto() }, emptyList(), emptyList(),
         assetSuccessions = rows.map { it.toDto() }, transferRecords = records.map { it.toDto() },
     )
 

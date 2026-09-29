@@ -1334,10 +1334,11 @@ class BackupCodecTest {
 
     // --- #86 (C3): the successions' graph -----------------------------------------------------------
 
+    /** The three first lists by position — the assets, then no tags and no 2.6 tombstones. */
     private fun succeeded(vararg rows: AssetSuccession) = BackupData(
-        assets = listOf(plainAssetOf("a1", "Example Water Heater"), plainAssetOf("a2", "Sample Pool Pump"), plainAssetOf("a3", "Example Garage Door Opener"))
+        listOf(plainAssetOf("a1", "Example Water Heater"), plainAssetOf("a2", "Sample Pool Pump"), plainAssetOf("a3", "Example Garage Door Opener"))
             .map { it.toDto() },
-        nfcTags = emptyList(), externalLinks = emptyList(),
+        emptyList(), emptyList(),
         assetSuccessions = rows.map { it.toDto() },
     )
 

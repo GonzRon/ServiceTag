@@ -29,8 +29,9 @@ class BackupFormat15Test {
     private val newHeater = plainAssetOf("x2", "Example Water Heater, second")
     private val thirdHeater = plainAssetOf("x3", "Example Water Heater, third")
 
+    /** The three first lists by position — the assets, then no tags and no 2.6 tombstones. */
     private fun data(successions: List<AssetSuccession> = emptyList()) = BackupData(
-        assets = listOf(heater, newHeater, thirdHeater).map { it.toDto() }, nfcTags = emptyList(), externalLinks = emptyList(),
+        listOf(heater, newHeater, thirdHeater).map { it.toDto() }, emptyList(), emptyList(),
         assetSuccessions = successions.map { it.toDto() },
     )
 
