@@ -31,6 +31,8 @@ import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.core.ports.UnitOfWork
+import com.loosecannon.servicetag.core.usecase.WithdrawTransferRecord
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.LoanReminderMode
@@ -92,7 +94,7 @@ class AssetTransferStateTest {
         Dispatchers.resetMain()
     }
 
-    private fun detailModel(id: String) = AssetDetailViewModel(
+    private fun detailModel(id: String, withdraw: WithdrawTransferRecord = graph.withdrawTransferRecord) = AssetDetailViewModel(
         graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
         graph.schedules, graph.scheduleStates, graph.groups, graph.dueReadModel,
@@ -103,7 +105,7 @@ class AssetTransferStateTest {
         serviceCases = graph.serviceCases,
         loans = graph.loans,
         transfers = graph.transferRecords,
-        withdrawTransfer = WithdrawTransferRecordFor(graph),
+        withdrawTransfer = withdraw,
         reconcile = ReminderReconcile { sweeps += 1 },
     )
 
@@ -232,6 +234,60 @@ class AssetTransferStateTest {
         assertNull(vm.prompt.value)
         assertEquals("it stays archived", AssetStatus.ARCHIVED, graph.assets.get(AssetId("h1"))!!.status)
         assertFalse("no longer held", vm.state.value!!.held)
+    }
+
+    /**
+     * R77-WITHDRAW (P77-72): a withdrawal whose remaining estate would stay entangled — merged history, a held pump whose
+     * motor, not held, still names it as its parent — is refused whole: nothing written, nothing swept, still held.
+     */
+    @Test fun aWithdrawalLeavingTheEstateEntangledSaysP77_72() = runTest(scheduler) {
+        heldHeater()
+        graph.assets.upsert(assetRow("p1", name = "Example Pump", status = AssetStatus.ARCHIVED))
+        graph.assets.upsert(assetRow("m1", name = "Example Pump Motor", parent = "p1"))
+        out("p1", pack = OTHER_PACK)
+        val vm = detailModel("h1")
+        loaded(vm)
+        val said = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { vm.messages.toList(said) }
+
+        vm.askWithdraw(PACK)
+        vm.withdraw()
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("Could not withdraw this record: records on this phone would still point to a transferred asset. Nothing was changed."),
+            said,
+        )
+        assertEquals(listOf(TransferKind.OUT, TransferKind.OUT), graph.transferRecords.all().map { it.kind })
+        assertEquals(0, sweeps)
+        assertNull(vm.prompt.value)
+        assertTrue("still held", vm.state.value!!.held)
+    }
+
+    /** R77-WITHDRAW (P77-71, MN-3): any other failure says P77-71, never "Could not update this asset."; nothing swept. */
+    @Test fun aWithdrawalThatFailsSaysP77_71() = runTest(scheduler) {
+        heldHeater()
+        val failing = WithdrawTransferRecord(
+            graph.backupRepositories,
+            object : UnitOfWork {
+                override suspend fun <T> write(block: suspend () -> T): T = throw IllegalStateException("the store would not take it")
+                override suspend fun <T> read(block: suspend () -> T): T = graph.uow.read(block)
+            },
+            graph.ids, graph.clock,
+        )
+        val vm = detailModel("h1", withdraw = failing)
+        loaded(vm)
+        val said = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(scheduler)) { vm.messages.toList(said) }
+
+        vm.askWithdraw(PACK)
+        vm.withdraw()
+        advanceUntilIdle()
+
+        assertEquals(listOf("Could not withdraw this record. Nothing was changed."), said)
+        assertEquals(listOf(TransferKind.OUT), graph.transferRecords.all().map { it.kind })
+        assertEquals(0, sweeps)
+        assertNull(vm.prompt.value)
     }
 
     @Test fun withdrawalIsOfferedOnlyForAnOpenOut() = runTest(scheduler) {
@@ -588,11 +644,7 @@ class AssetTransferStateTest {
 
     private companion object {
         const val PACK = "0f1e2d3c-4b5a-4968-8776-655443322110"
+        const val OTHER_PACK = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
         const val AT = 1_790_510_400_000L // 27 Sep 2026, 12:00 UTC
     }
 }
-
-/** The production withdrawal over [graph]'s own records, unit of work, ids and clock. */
-@Suppress("FunctionName")
-private fun WithdrawTransferRecordFor(graph: FakeGraph) =
-    com.loosecannon.servicetag.core.usecase.WithdrawTransferRecord(graph.transferRecords, graph.uow, graph.ids, graph.clock)

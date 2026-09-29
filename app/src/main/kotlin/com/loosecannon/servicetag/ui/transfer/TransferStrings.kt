@@ -58,8 +58,14 @@ internal object TransferStrings {
     /** P77-19 — creation's progress. */
     const val CREATING = "Creating Transfer Pack…"
 
-    /** P77-20 — creation failed; [reason] is the shipped wording for why. */
+    /** P77-20 — creation failed; [reason] is the shipped wording for why (a missing document's). */
     fun notCreated(reason: String): String = "Transfer Pack not created: $reason. Nothing was changed."
+
+    /** P77-20's entangled reason (R77-CREATE-SAFETY): the mark would leave records here pointing into a held graph. */
+    const val NOT_CREATED_ENTANGLED = "Transfer Pack not created: records on this phone still point to a transferred asset. Nothing was changed."
+
+    /** P77-20's generic reason: any other failure while the pack was being made. */
+    const val NOT_CREATED = "Transfer Pack not created: the file could not be written. Nothing was changed."
 
     /** P77-21 — the ready screen's heading. */
     const val READY = "Transfer Pack ready"
@@ -139,11 +145,17 @@ internal object TransferStrings {
     /** P77-63 — the withdrawal dialog's title (rm-8: the short id the file name shows). */
     fun withdrawTitle(short: String): String = "Withdraw the record for Transfer Pack $short?"
 
-    /** P77-64 — the withdrawal dialog's body. */
-    const val WITHDRAW_BODY = "Use this only if the asset did not leave, or another phone's record should stand. It stays archived."
+    /** P77-64 (amended, R77-WITHDRAW) — the withdrawal dialog's body: the withdrawal is the whole pack's. */
+    const val WITHDRAW_BODY = "Use this only if this Transfer Pack did not leave, or another phone's record should stand. Its assets stay archived."
 
     /** P77-65 — the withdrawal dialog's confirm. */
     const val WITHDRAW = "Withdraw"
+
+    /** P77-71 — the withdrawal failed. */
+    const val COULD_NOT_WITHDRAW = "Could not withdraw this record. Nothing was changed."
+
+    /** P77-72 — the withdrawal refused: the estate it would leave is entangled (R77-WITHDRAW). */
+    const val WITHDRAW_ENTANGLED = "Could not withdraw this record: records on this phone would still point to a transferred asset. Nothing was changed."
 
     /** P77-69 (PROPOSED, hand-off 4; R77-25) — the ready screen's QuietLine under P77-24. */
     const val BEARER = "Anyone with this file can import these assets. Share it only with the phone that should have them."

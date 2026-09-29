@@ -84,13 +84,13 @@ class TransferPackViewModelTest {
         saved: SavedStateHandle = SavedStateHandle(),
         storage: AttachmentStorage = graph.attachmentStorage,
         mark: MarkTransferredOut = graph.markTransferredOut,
+        root: File = cache,
     ): TransferPackViewModel {
         val factory = viewModelFactory {
             initializer {
                 TransferPackViewModel(
-                    graph.createTransferPack, TransferPackWriter(cache, storage), mark, reconcile,
+                    graph.createTransferPack, TransferPackWriter(root, storage), mark, reconcile,
                     graph.assets, graph.groups, saved, zone = ZoneOffset.UTC, io = StandardTestDispatcher(scheduler),
-                    transfers = graph.transferRecords,
                 )
             }
         }
@@ -158,6 +158,66 @@ class TransferPackViewModelTest {
         assertEquals(emptyList<String>(), packs())
     }
 
+    /**
+     * P77-20's generic reason, ratified: a pack that cannot be written — here its cache is a file, not a folder — says
+     * so, and leaves no pack behind.
+     */
+    @Test fun aPackThatCannotBeWrittenSaysP77_20sGenericReason() = runTest(scheduler) {
+        TransferPackAppFixtures.seedHeater(graph)
+        val blocked = File(cache, "blocked").apply { writeText("not a folder") }
+        val vm = model(root = blocked)
+
+        vm.create(listOf(AssetId(HEATER)), "")
+        advanceUntilIdle()
+
+        assertEquals(PackPhase.IDLE, vm.state.value.phase)
+        assertEquals(listOf("Transfer Pack not created: the file could not be written. Nothing was changed."), vm.state.value.errors)
+        assertEquals(emptyList<String>(), packs())
+    }
+
+    /**
+     * R77-CREATE-SAFETY (MN-1): a pack whose mark would leave the estate entangled — merged history, a held pump whose
+     * motor, not held, still names it as its parent — is refused at Create with P77-20's entangled reason, before any
+     * file exists, so it can never be shared and then fail to mark.
+     */
+    @Test fun anEntangledEstateRefusesCreateWithP77_20() = runTest(scheduler) {
+        pumpAndMotor()
+        heldPump()
+        val vm = model()
+
+        vm.create(listOf(AssetId("g1")), "")
+        advanceUntilIdle()
+
+        assertEquals(PackPhase.IDLE, vm.state.value.phase)
+        assertEquals(
+            listOf("Transfer Pack not created: records on this phone still point to a transferred asset. Nothing was changed."),
+            vm.state.value.errors,
+        )
+        assertEquals(emptyList<String>(), packs())
+        assertEquals(emptyList<String>(), workFiles())
+        assertEquals(listOf("out-p1"), graph.transferRecords.all().map { it.id })
+    }
+
+    /** A pump, its motor (a component) and an unrelated opener, all live. */
+    private suspend fun pumpAndMotor() {
+        graph.assets.upsert(com.loosecannon.servicetag.core.model.Asset(AssetId("p1"), "Example Pump", createdAt = 100L, updatedAt = 100L))
+        graph.assets.upsert(
+            com.loosecannon.servicetag.core.model.Asset(
+                AssetId("m1"), "Example Pump Motor", parentAssetId = AssetId("p1"), createdAt = 100L, updatedAt = 100L,
+            ),
+        )
+        graph.assets.upsert(com.loosecannon.servicetag.core.model.Asset(AssetId("g1"), "Sample Garage Door Opener", createdAt = 100L, updatedAt = 100L))
+    }
+
+    /** Merged history: the pump alone held here, so its motor, which stays, names a held parent. */
+    private suspend fun heldPump() = graph.transferRecords.append(
+        TransferRecord(
+            id = "out-p1", assetId = AssetId("p1"), kind = TransferKind.OUT, packId = "0f1e2d3c-p1",
+            lineage = emptyList(), at = 1_758_960_000_000L, packSha256 = "ab".repeat(32),
+            nameSnapshot = "Example Pump", note = "",
+        ),
+    )
+
     /** B4 hand-off 2: a component that left since the review is refused at Create, before any file exists. */
     @Test fun aHeldComponentForcedInIsRefusedBeforeAnyFile() = runTest(scheduler) {
         TransferPackAppFixtures.seedHeater(graph)
@@ -211,27 +271,16 @@ class TransferPackViewModelTest {
 
     /**
      * mn-4: marking refused because the estate left behind would be entangled says P77-70 and writes nothing. The
-     * entanglement is merged history's: a held pump whose motor, not held, still names it as its parent.
+     * entanglement is merged history's — a held pump whose motor, not held, still names it as its parent — and it
+     * lands after the pack was made (Create would refuse it, R77-CREATE-SAFETY), so this is marking's own re-check.
      */
     @Test fun anEntangledEstateIsP77_70() = runTest(scheduler) {
-        graph.assets.upsert(com.loosecannon.servicetag.core.model.Asset(AssetId("p1"), "Example Pump", createdAt = 100L, updatedAt = 100L))
-        graph.assets.upsert(
-            com.loosecannon.servicetag.core.model.Asset(
-                AssetId("m1"), "Example Pump Motor", parentAssetId = AssetId("p1"), createdAt = 100L, updatedAt = 100L,
-            ),
-        )
-        graph.assets.upsert(com.loosecannon.servicetag.core.model.Asset(AssetId("g1"), "Sample Garage Door Opener", createdAt = 100L, updatedAt = 100L))
-        graph.transferRecords.append(
-            TransferRecord(
-                id = "out-p1", assetId = AssetId("p1"), kind = TransferKind.OUT, packId = "0f1e2d3c-p1",
-                lineage = emptyList(), at = 1_758_960_000_000L, packSha256 = "ab".repeat(32),
-                nameSnapshot = "Example Pump", note = "",
-            ),
-        )
+        pumpAndMotor()
         val vm = model()
         vm.create(listOf(AssetId("g1")), "")
         advanceUntilIdle()
         assertEquals(PackPhase.READY, vm.state.value.phase)
+        heldPump()
 
         vm.mark()
         advanceUntilIdle()

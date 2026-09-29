@@ -77,8 +77,9 @@ data class TransferSelectionState(
 /**
  * #77 (C17; R77-8, R77-10) — what is leaving: every asset **not held** here (archived and retired included), as a
  * tree, the detail's asset preselected; then the review, which runs C2 through the creation use case — a read that
- * writes nothing — for its counts and refusals. A held component forced in by a parent that is not held is refused
- * here with P77-57, before any file exists (B4 hand-off 2).
+ * writes nothing — for its counts and refusals. Creation's own safety checks (R77-CREATE-SAFETY) answer here too,
+ * before any file exists: a held component forced in by a parent that is not held is P77-57 (B4 hand-off 2), and a
+ * selection whose mark would leave the estate entangled is P77-20's entangled reason.
  */
 class TransferSelectionViewModel(
     assets: AssetRepository,
@@ -96,12 +97,10 @@ class TransferSelectionViewModel(
     private val picked = MutableStateFlow(setOfNotNull(preselect))
     private val review = MutableStateFlow<TransferReview?>(null)
     private var everything: List<Asset> = emptyList()
-    private var held: Set<AssetId> = emptySet()
 
     val state: StateFlow<TransferSelectionState> =
         combine(assets.observeAll(), transfers.observeHeldIds(), picked, review) { all, heldNow, roots, reviewed ->
             everything = all
-            held = heldNow
             TransferSelectionState(loading = false, choices = transferChoicesOf(all, heldNow, roots), review = reviewed)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), TransferSelectionState())
 
@@ -144,15 +143,10 @@ class TransferSelectionViewModel(
     private suspend fun reviewOf(result: CreateTransferPackResult): TransferReview = when (result) {
         is CreateTransferPackResult.Refused -> TransferReview(refusals = result.refusals.map { refusalLine(it) })
         is CreateTransferPackResult.TooLarge -> TransferReview(refusals = listOf(TransferStrings.TOO_LARGE))
-        is CreateTransferPackResult.Created -> {
-            val draft = result.draft
-            // Hand-off 2: a held component forced in by a parent that is not held — refused before any file.
-            val alreadyHeld = draft.assetIds.any { AssetId(it) in held }
-            TransferReview(
-                counts = countLinesOf(draft.counts),
-                refusals = if (alreadyHeld) listOf(TransferStrings.ALREADY_TRANSFERRED) else emptyList(),
-            )
-        }
+        // Hand-off 2, now creation's own (R77-CREATE-SAFETY): a held component forced in by a parent that is not held.
+        is CreateTransferPackResult.AlreadyTransferred -> TransferReview(refusals = listOf(TransferStrings.ALREADY_TRANSFERRED))
+        is CreateTransferPackResult.Entangled -> TransferReview(refusals = listOf(TransferStrings.NOT_CREATED_ENTANGLED))
+        is CreateTransferPackResult.Created -> TransferReview(counts = countLinesOf(result.draft.counts))
     }
 
     private suspend fun refusalLine(refusal: TransferRefusal): String =

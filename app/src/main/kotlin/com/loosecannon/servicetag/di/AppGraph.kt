@@ -609,7 +609,7 @@ class AppGraph(private val context: Context) {
      * and of B3's `cache/transfer-in/`. [withdrawTransferRecord] is C23's phone-only withdrawal.
      */
     val transferPackWriter: TransferPackWriter = TransferPackWriter(context.applicationContext.cacheDir, attachmentStorage)
-    val withdrawTransferRecord: WithdrawTransferRecord = WithdrawTransferRecord(transferRecords, uow, ids, clock)
+    val withdrawTransferRecord: WithdrawTransferRecord = WithdrawTransferRecord(backupRepositories, uow, ids, clock)
 
     /**
      * #77 (C14, C15; R77-2) — the Transfer Pack import, additively through the merge core and the guarded ports: the

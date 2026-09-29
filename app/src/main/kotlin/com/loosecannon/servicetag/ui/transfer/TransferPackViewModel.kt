@@ -9,7 +9,6 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
-import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.transfer.TransferPack
 import com.loosecannon.servicetag.core.transfer.TransferRefusal
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
@@ -96,8 +95,9 @@ sealed interface TransferPackEvent {
 }
 
 /**
- * #77 (C17's Create, C18, C22; R77-16, R77-18, R77-23) — creation, the ready screen and the mark. Create writes the
- * pack into `cache/transfer/` (P77-19 while it runs; P77-20, P77-59 or the reused folder sentence when it cannot);
+ * #77 (C17's Create, C18, C22; R77-16, R77-18, R77-23, R77-CREATE-SAFETY) — creation, the ready screen and the mark.
+ * Create writes the pack into `cache/transfer/` (P77-19 while it runs; P77-20 — the missing-document, entangled or
+ * generic reason — P77-57, P77-59 or the reused folder sentence when it cannot);
  * the ready screen offers Share, Save a copy and the mark question, all only after creation and only on a verified
  * file; Mark runs [MarkTransferredOut] (which re-reads, re-selects and re-hashes inside its write, R77-16), then
  * exactly one [ReminderReconcile], and ends the flow; `Not now` writes nothing. **Leaving deletes the pack**
@@ -113,13 +113,11 @@ class TransferPackViewModel(
     private val saved: SavedStateHandle,
     private val zone: ZoneId = ZoneId.systemDefault(),
     private val io: CoroutineContext = Dispatchers.IO,
-    /** The held set, asked again at Create (B4 hand-off 2). Null holds nothing — a test that is not about it. */
-    private val transfers: TransferRecordRepository? = null,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, saved: SavedStateHandle) : this(
         graph.createTransferPack, graph.transferPackWriter, graph.markTransferredOut, graph.reminderReconcile,
-        graph.assets, graph.groups, saved, transfers = graph.transferRecords,
+        graph.assets, graph.groups, saved,
     )
 
     private var ready: ReadyPack? = saved.get<String>(KEY)?.let { stored ->
@@ -161,7 +159,7 @@ class TransferPackViewModel(
                 Made.Refused(listOf(TransferStrings.notCreated(e.wording())))
             } catch (e: Exception) {
                 Log.w(TAG, "the Transfer Pack could not be written", e)
-                Made.Refused(listOf(TransferStrings.notCreated(FILES_NOT_WRITTEN)))
+                Made.Refused(listOf(TransferStrings.NOT_CREATED))
             }
             when (made) {
                 is Made.Ready -> {
@@ -185,12 +183,12 @@ class TransferPackViewModel(
         when (val result = createPack.run(roots, note)) {
             is CreateTransferPackResult.Refused -> Made.Refused(result.refusals.map { refusalLineOf(it, ::nameOf, ::groupNameOf) })
             is CreateTransferPackResult.TooLarge -> Made.Refused(listOf(TransferStrings.TOO_LARGE))
+            // R77-CREATE-SAFETY: creation's own read refuses, before any file exists, a selected asset held here
+            // (B4 hand-off 2; an asset can leave between the review and Create) and a pack that could never be marked.
+            is CreateTransferPackResult.AlreadyTransferred -> Made.Refused(listOf(TransferStrings.ALREADY_TRANSFERRED))
+            is CreateTransferPackResult.Entangled -> Made.Refused(listOf(TransferStrings.NOT_CREATED_ENTANGLED))
             is CreateTransferPackResult.Created -> {
                 val draft = result.draft
-                // B4 hand-off 2: a held component forced in by a parent that is not held is refused before any
-                // file exists — again here, since an asset can leave between the review and Create.
-                val held = transfers?.heldIds().orEmpty()
-                if (draft.assetIds.any { AssetId(it) in held }) return Made.Refused(listOf(TransferStrings.ALREADY_TRANSFERRED))
                 val name = TransferStrings.packFileName(draft.createdAt, zone, draft.packId)
                 val written = writer.write(draft, name)
                 val pack = CreatedPack.of(draft, written.packSha256)
@@ -295,9 +293,6 @@ class TransferPackViewModel(
     private companion object {
         const val TAG = "TransferPack"
         const val KEY = "transfer.ready"
-
-        /** The shipped export's sentence for a files archive that could not be written (`ArtifactsWriteFailed`). */
-        const val FILES_NOT_WRITTEN = "the files archive could not be written"
 
         val JSON = Json { ignoreUnknownKeys = true }
 

@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
 import com.loosecannon.servicetag.core.usecase.BackupRepositories
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
 import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
+import com.loosecannon.servicetag.core.usecase.WithdrawTransferRecord
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
@@ -437,7 +438,7 @@ class FakeGraph(
         ImportBackupMerge(buildBackupMergePlan, applyBackupMergePlan)
 
     /** #77 (C5, C8) — creation and marking over the same stores, mirroring `AppGraph`'s fields by name. */
-    private val backupRepositories = BackupRepositories(
+    val backupRepositories = BackupRepositories(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         seasonActivations, conditions, healthSubjects, categories, serviceCases, serviceCaseEntries, loans,
         transferRecords,
@@ -449,6 +450,9 @@ class FakeGraph(
     val markTransferredOut: MarkTransferredOut = MarkTransferredOut(backupRepositories, uow, ids, clock) {
         recomputeSchedules.forAsset(it)
     }
+
+    /** #77 (C23, R77-WITHDRAW) — the phone-only, pack-wide withdrawal, mirroring `AppGraph`'s. */
+    val withdrawTransferRecord: WithdrawTransferRecord = WithdrawTransferRecord(backupRepositories, uow, ids, clock)
 
     /** #77 (C14, C15) — the Transfer Pack import over the same guarded stores, mirroring `AppGraph`'s fields by name. */
     val importTransferPack: ImportTransferPack = ImportTransferPack(

@@ -1144,7 +1144,11 @@ class AssetDetailViewModel(
         _prompt.update { DetailPrompt.Withdraw(packId, row.withdrawTitle) }
     }
 
-    /** #77 (C23): P77-65 — appends the WITHDRAWN, then one sweep (R77-23). The asset stays archived. */
+    /**
+     * #77 (C23, R77-WITHDRAW): P77-65 — withdraws the whole pack (a WITHDRAWN for each of its assets still held here),
+     * then one sweep (R77-23); its assets stay archived. A withdrawal that would leave the estate entangled says P77-72
+     * and any other failure P77-71; neither writes nor sweeps.
+     */
     fun withdraw() {
         val prompt = _prompt.value as? DetailPrompt.Withdraw ?: return
         if (prompt.saving) return
@@ -1156,10 +1160,17 @@ class AssetDetailViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                refuse(COULD_NOT_UPDATE_THIS_ASSET)
+                refuse(TransferStrings.COULD_NOT_WITHDRAW)
                 return@launch
             }
-            if (result is WithdrawTransferResult.Withdrawn) sweepOnce()
+            when (result) {
+                is WithdrawTransferResult.Withdrawn -> sweepOnce()
+                is WithdrawTransferResult.Entangled -> {
+                    refuse(TransferStrings.WITHDRAW_ENTANGLED)
+                    return@launch
+                }
+                WithdrawTransferResult.NoOpenOut -> Unit
+            }
             _prompt.update { null }
         }
     }

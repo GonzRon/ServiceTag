@@ -4,10 +4,14 @@ import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.testing.BackupInstall
+import com.loosecannon.servicetag.core.testing.completionOf
+import com.loosecannon.servicetag.core.testing.transferOf
+import com.loosecannon.servicetag.core.transfer.EntangledRef
 import com.loosecannon.servicetag.core.transfer.TransferFixtures
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.ANODE
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.COMPRESSOR
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.HEATER
+import com.loosecannon.servicetag.core.transfer.TransferFixtures.OPENER
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting.PACK_ID
 import com.loosecannon.servicetag.core.transfer.TransferRefusal
@@ -98,6 +102,50 @@ class CreateTransferPackTest {
         val tooLarge = assertIs<CreateTransferPackResult.TooLarge>(result)
         assertEquals(CreateTransferPackResult.TooLarge.Part.INFLATED_DATA to 2_000L, tooLarge.part to tooLarge.limit)
         assertEquals(true, tooLarge.bytes > 2_000L)
+    }
+
+    /**
+     * R77-CREATE-SAFETY (MN-1): creation proves the mark could be committed now — `retain(held ∪ selected)` — and refuses
+     * before any pack id, byte or file exists. A staying row naming a pack row (the compressor's event set onto the
+     * heater's schedule), or merged history naming a row of an asset held before (the opener's event on the held
+     * compressor's schedule), each refuse.
+     */
+    @Test
+    fun creationRefusesAPackWhoseMarkWouldEntangleTheEstate() = runBlocking<Unit> {
+        val cases: List<Pair<EntangledRef, suspend (BackupInstall) -> Unit>> = listOf(
+            EntangledRef("assetEvents", "e9", "maintenanceSchedules", "s1") to {
+                it.events.upsert(completionOf("e9", "2026-05-01", "2026-05-01", assetId = COMPRESSOR, scheduleId = "s1"))
+            },
+            EntangledRef("assetEvents", "e9", "maintenanceSchedules", "s2") to {
+                it.transfers.append(transferOf("r0", assetId = COMPRESSOR, packId = "pack-earlier"))
+                it.events.upsert(completionOf("e9", "2026-05-01", "2026-05-01", assetId = OPENER, scheduleId = "s2"))
+            },
+        )
+        for ((ref, entangle) in cases) {
+            val install = seeded()
+            entangle(install)
+            var minted = 0
+            val creation = TransferPackTesting.creationOf(install, ids = IdGenerator { minted += 1; "pack-x" })
+
+            val result = creation.run(listOf(AssetId(HEATER)))
+
+            assertEquals(CreateTransferPackResult.Entangled(listOf(ref)), result, ref.targetId)
+            assertEquals(0 to 0, minted to install.uow.commits, ref.targetId)
+        }
+    }
+
+    /** R77-CREATE-SAFETY: a selected asset already held here — the heater's forced anode — is P77-57, before any byte. */
+    @Test
+    fun creationRefusesAHeldSelectedAsset() = runBlocking<Unit> {
+        val install = seeded()
+        install.transfers.append(transferOf("r0", assetId = ANODE, packId = "pack-earlier", nameSnapshot = "Example Anode Rod"))
+        var minted = 0
+        val creation = TransferPackTesting.creationOf(install, ids = IdGenerator { minted += 1; "pack-x" })
+
+        val result = creation.run(listOf(AssetId(HEATER)))
+
+        assertEquals(CreateTransferPackResult.AlreadyTransferred(listOf(AssetId(ANODE))), result)
+        assertEquals(0 to 0, minted to install.uow.commits)
     }
 
     /** One read transaction, no write, every table read inside it, and the store exactly as it was. */

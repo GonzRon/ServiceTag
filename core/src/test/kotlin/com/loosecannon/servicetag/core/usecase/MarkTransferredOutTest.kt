@@ -204,12 +204,13 @@ class MarkTransferredOutTest {
     /**
      * The controller's ruling: a staying row naming a pack row — the compressor's event set onto the heater's
      * schedule, reachable through the API — is refused at marking (P77-58), not left to break the next export.
+     * Creation refuses it too (R77-CREATE-SAFETY), so here it arrives after the pack was made: marking re-checks.
      */
     @Test
     fun aStayingRowNamingAPackRowIsEntangled() = runBlocking<Unit> {
         val install = seeded()
-        install.events.upsert(completionOf("e9", "2026-05-01", "2026-05-01", assetId = COMPRESSOR, scheduleId = "s1"))
         val pack = created(install)
+        install.events.upsert(completionOf("e9", "2026-05-01", "2026-05-01", assetId = COMPRESSOR, scheduleId = "s1"))
 
         val refusal = assertIs<MarkTransferredOutResult.Entangled>(markerOf(install).run(pack))
 
@@ -221,14 +222,15 @@ class MarkTransferredOutTest {
      * R77-B2a-MARK: marking succeeds only if the **whole** estate it leaves retains cleanly — no exemption for a
      * reference an earlier transfer left. Here the compressor is already held, and a staying row (an event of the
      * archived opener, set by hand onto the compressor's schedule) names one of its rows: marking the unrelated
-     * heater pack is refused, nothing written.
+     * heater pack is refused, nothing written. The earlier transfer lands after this pack was made (creation would
+     * have refused it, R77-CREATE-SAFETY), so the refusal is marking's own in-write re-check.
      */
     @Test
     fun markingRefusesAnEstateAlreadyEntangledByAnEarlierTransfer() = runBlocking<Unit> {
         val install = seeded()
+        val pack = created(install)
         install.transfers.append(transferOf("r0", assetId = COMPRESSOR, packId = "pack-earlier"))
         install.events.upsert(completionOf("e9", "2026-05-01", "2026-05-01", assetId = OPENER, scheduleId = "s2"))
-        val pack = created(install)
 
         val refusal = assertIs<MarkTransferredOutResult.Entangled>(markerOf(install).run(pack))
 
