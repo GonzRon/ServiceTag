@@ -1320,7 +1320,7 @@ class AssetDetailViewModel(
                     sweepOnce()
                     _prompt.update { DetailPrompt.LogWhatHappened }
                 }
-                is AssetValidation -> refuse("Enter a date as YYYY-MM-DD")
+                is AssetValidation -> refuse(ENTER_A_DATE_AS_YYYY_MM_DD)
                 is AssetTransferredOut -> refuse(TransferImportStrings.ASSET_TRANSFERRED_OUT)
                 else -> refuse("Could not retire this asset.")
             }
