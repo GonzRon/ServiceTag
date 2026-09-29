@@ -212,4 +212,24 @@ class ResolveTagTest {
         assertEquals(9_000L, tags.rows.getValue(v1Id.value).lastScannedAt)
         assertEquals(1, uow.commits)
     }
+
+    /**
+     * #86 (C14; row 13): after a Replace, a moved tag opens the new asset and a tag left behind opens the old one —
+     * through the unchanged classification, with no new resolution.
+     */
+    @Test fun aMovedTagOpensTheSuccessorAndALeftTagThePredecessor() = runTest {
+        val h = ReplaceHarness()
+        h.put(h.assetRow(PRED, "Example Water Heater"))
+        h.put(h.tagRow("TEST-moved"))
+        h.put(h.tagRow("TEST-left"))
+        val successor = h.replaceWith(h.draft(movedTagIds = setOf("TEST-moved"))).successor
+        val resolveThere = ResolveTag(h.tags, h.assets, h.uow, clock, h.raw.transfers)
+
+        val moved = resolveThere.run(TagPayload.V1(TagId("TEST-moved")))
+        assertIs<Resolution.OpenAsset>(moved)
+        assertEquals(successor, moved.asset)
+        val left = resolveThere.run(TagPayload.V1(TagId("TEST-left")))
+        assertIs<Resolution.OpenAsset>(left)
+        assertEquals(h.raw.assets.rows.getValue(PRED), left.asset)
+    }
 }
