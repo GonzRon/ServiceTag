@@ -1129,10 +1129,11 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     returned, re-dated or relinked on one phone after the other received it conflicts on re-merge, and
     an open loan whose asset already holds a different open loan here conflicts as
     `ASSET_ALREADY_LENT`; format 14 adds the transfer records, OUT, IN and WITHDRAWN, which a merge only
-    ever inserts — an incoming IN or WITHDRAWN that would close an OUT open on the phone, a row an asset
-    transferred out from the phone would own, or a row that would name one of its rows conflicts as
+    ever inserts — an incoming IN or WITHDRAWN that would close an OUT open on the phone conflicts as
     `ASSET_TRANSFERRED_OUT`, and an OUT that would leave its asset with two open OUTs as
-    `TRANSFER_DIVERGED`, resolved only by withdrawing one on the phone).
+    `TRANSFER_DIVERGED`, resolved only by withdrawing one on the phone; and, whatever the format, a row an
+    asset transferred out from the phone would own, or a row that would name one of its rows, conflicts as
+    `ASSET_TRANSFERRED_OUT`).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are

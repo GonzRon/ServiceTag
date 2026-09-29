@@ -125,7 +125,8 @@ target is no longer maintained on the phone — an archived, retired or transfer
 that is archived or wholly transferred out. `docs/api/v1.md`'s **Repairs** section is the contract.
 
 **Transferred-out assets (#77)** — no tool. Transfer Packs are made, imported, marked and withdrawn on
-the phone only. A write tool that reaches a row of an asset transferred out from the phone — a
+the phone only. A write tool (but `import_merge`, whose plan reports `ASSET_TRANSFERRED_OUT`, and the
+provider repair, which skips them) that reaches a row of an asset transferred out from the phone — a
 category-only `update_asset` or a repeated `archive_asset` included — fails with the phone's **409
 `asset_transferred_out`**, whatever the asset's `status` reads, and writes nothing; reads keep working.
 `status` counts the transfer records as `transferRecords`. `docs/api/v1.md`'s **Transferred-out assets
