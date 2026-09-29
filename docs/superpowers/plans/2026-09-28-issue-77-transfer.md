@@ -764,3 +764,10 @@ where they differ.**
     - **P77-10's singular:** `1 document or photo`.
     
     **P77-69 and P77-70 stay pending** until their exact text has been put to the owner.
+- **P77-69 and P77-70 RATIFIED (owner, 2026-09-29).** P77-69 was ratified as amended.
+  - **P77-69:** `Anyone with this file can import these assets. Share it only with the person or device that should receive them.`
+    It is the ready screen's quiet line under P77-24 and is R77-25's plain statement; the app has no help screen.
+  - **P77-70:** `Could not mark these assets: records on this phone still point to a transferred asset. Nothing was changed.`
+    It is the Mark refusal under R77-B2a-MARK.
+  
+  Every #77 string is now ratified.
