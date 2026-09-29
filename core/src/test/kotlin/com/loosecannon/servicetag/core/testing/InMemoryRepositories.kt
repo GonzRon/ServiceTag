@@ -451,6 +451,18 @@ class InMemoryGroupRepository : GroupRepository, Rollbackable, Witnessed {
     override suspend fun allWindowsFor(assetId: AssetId): List<MaintenanceGroup> =
         rows.values.filter { g -> g.members.any { it.assetId == assetId } }
 
+    /** #77 (C15): the group row with its members; a test that needs the schema's CASCADE registers it. */
+    override suspend fun delete(id: GroupId) {
+        rows.remove(id.value)
+        version.value += 1
+        cascades.forEach { it(id) }
+    }
+
+    private val cascades = mutableListOf<(GroupId) -> Unit>()
+
+    /** #77 (C15): the schema's CASCADE from `maintenance_group`, for a test that reproduces it. */
+    fun cascadesTo(cascade: (GroupId) -> Unit) { cascades += cascade }
+
     override suspend fun deleteAll() { rows.clear(); version.value += 1 }
 
     override fun observeAll(): Flow<List<MaintenanceGroup>> = version.map {

@@ -345,6 +345,16 @@ private class GuardedGroups(private val port: GroupRepository, private val guard
         }
         port.upsert(group)
     }
+
+    /**
+     * #77 (C15): the return's group delete. A group with any row, current or removed, naming a held asset is a
+     * write on that asset — so the return appends its IN first, and a group still naming another held asset is
+     * refused.
+     */
+    override suspend fun delete(id: GroupId) {
+        guard.check { owned(port.get(id)?.let(TransferOwnership::of).orEmpty()) }
+        port.delete(id)
+    }
 }
 
 private class GuardedSchedules(private val port: ScheduleRepository, private val guard: HeldWriteGuard) :

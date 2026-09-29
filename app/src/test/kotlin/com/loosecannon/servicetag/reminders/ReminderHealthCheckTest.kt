@@ -108,6 +108,7 @@ internal class FakeGroupRepository : GroupRepository {
     override suspend fun all(): List<MaintenanceGroup> = rows.values.toList()
     override suspend fun forAsset(assetId: AssetId): List<MaintenanceGroup> = emptyList()
     override suspend fun allWindowsFor(assetId: AssetId): List<MaintenanceGroup> = emptyList()
+    override suspend fun delete(id: GroupId) { rows.remove(id.value) }
     override suspend fun deleteAll() = rows.clear()
     override fun observeAll(): Flow<List<MaintenanceGroup>> = flowOf(rows.values.toList())
     override fun observeForAsset(assetId: AssetId): Flow<List<MaintenanceGroup>> = flowOf(emptyList())

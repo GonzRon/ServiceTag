@@ -1,10 +1,26 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.backup.BackupData
+import com.loosecannon.servicetag.core.backup.toDto
+import com.loosecannon.servicetag.core.merge.MergeSnapshot
+import com.loosecannon.servicetag.core.model.AssetLoan
+import com.loosecannon.servicetag.core.model.AssetTree
+import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.ExternalLink
+import com.loosecannon.servicetag.core.model.GroupId
+import com.loosecannon.servicetag.core.model.ScheduleTarget
+import com.loosecannon.servicetag.core.model.TagBinding
+import com.loosecannon.servicetag.core.model.TagId
+import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.transfer.DroppedRows
+import com.loosecannon.servicetag.core.transfer.TransferGraph
 import com.loosecannon.servicetag.core.merge.MergePlan
 import com.loosecannon.servicetag.core.merge.MergeReport
 import com.loosecannon.servicetag.core.merge.mergePlanOf
 import com.loosecannon.servicetag.core.merge.mergeSnapshotOf
 import com.loosecannon.servicetag.core.merge.storedBytesOf
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
@@ -114,7 +130,15 @@ class ApplyBackupMergePlan(
      */
     private val rebuildAll: suspend () -> Unit,
 ) {
-    suspend fun run(plan: MergePlan): MergeReport {
+    /**
+     * [returning] (#77, C15; R77-25, R77-B3-RETURN) is a Transfer Pack's return, as [ImportTransferPack] decided it —
+     * empty for every other merge, which is unchanged. For a return the plan runs on the snapshot without those
+     * assets' stale local graph ([ReturnScope]); in the same write their IN records are appended **first**, closing
+     * this phone's OUT (the write guard refuses anything else), that graph is removed through the ports' deletes, the
+     * plan's rows are inserted, and the sender-local returned loans and 2.6 link rows with their tags are written back
+     * unchanged as history. After the commit, the bytes of every removed document the pack does not name are swept.
+     */
+    suspend fun run(plan: MergePlan, returning: Set<AssetId> = emptySet()): MergeReport {
         // The cheap refusal first, so a plan the caller already knows is conflicted never opens a
         // transaction at all.
         if (!plan.applicable) throw MergeRefused(plan.report())
@@ -122,22 +146,36 @@ class ApplyBackupMergePlan(
         val store = storage.store()
         val configured = store != null
         val stored = storedBytesOf(plan.backup, store)
-        return uow.write {
-            val fresh = mergePlanOf(
-                plan.backup,
+        var removed: ReturnScope? = null
+        val report = uow.write {
+            val scope = ReturnScope.of(
                 mergeSnapshotOf(
                     assets, groups, tags, links, definitions, profiles, schedules, closures,
                     events, attachments, references, seasonActivations, conditions, healthSubjects,
                     categories, serviceCases, caseEntries, loans, transfers, stored, configured,
                 ),
+                returning,
             )
+            val fresh = mergePlanOf(plan.backup, scope.snapshot, returning)
             // Order matters — see the class KDoc.
             if (!fresh.applicable) throw MergeRefused(fresh.report())
             if (fresh.fingerprint != plan.fingerprint) throw MergePlanStale(fresh.report())
 
+            // #77 (C15): a return's INs first, then its stale graph out — every other merge has neither.
+            val (returns, records) = fresh.writes.transfers
+                .partition { it.kind == TransferKind.IN && it.assetId in returning }
+            returns.forEach { transfers.append(it) }
+            scope.groups.forEach { groups.delete(it) }
+            scope.tags.forEach { tags.delete(it) }
+            scope.assets.forEach { assets.delete(it) }
+
             // Field order is write order, and every list is ordered within itself.
             fresh.writes.categories.forEach { categories.upsert(it) }
             fresh.writes.assets.forEach { assets.upsert(it) }
+            // #77 (C15, R77-25 (a)): the history a return keeps, back beside the asset the pack brought.
+            scope.keptLinks.forEach { links.upsert(it) }
+            scope.keptLinkTags.forEach { tags.upsert(it) }
+            scope.keptLoans.forEach { loans.upsert(it) }
             fresh.writes.groups.forEach { groups.upsert(it) }
             fresh.writes.definitions.forEach { definitions.upsert(it) }
             fresh.writes.profiles.forEach { profiles.upsert(it) }
@@ -157,12 +195,120 @@ class ApplyBackupMergePlan(
             // #72: the loans after their assets; the plan held each asset to one open loan.
             fresh.writes.loans.forEach { loans.upsert(it) }
             // #77: the transfer records last of all, after every row they describe (C10).
-            fresh.writes.transfers.forEach { transfers.append(it) }
+            records.forEach { transfers.append(it) }
 
             // After every write, inside the same transaction, once.
             rebuildAll()
 
+            removed = scope
             fresh.report()
+        }
+        // #77 (C15): bytes after the commit, best effort — a removed document the pack does not name.
+        removed?.let { scope ->
+            val named = plan.backup.data.attachments.map { it.storageLocator }.toSet()
+            storage.sweepBytes(scope.locators.filterNot { it in named })
+        }
+        return report
+    }
+}
+
+/**
+ * #77 (C15; R77-25 (a), the 2.6 tombstone rule) — what a Transfer Pack's return replaces here, read from one snapshot:
+ * every row of a returning asset's local graph (C3's drop set for them) and every local group with a row, current or
+ * removed, naming one — with their schedules and closures — are out of [snapshot], so the pack's rows plan as inserts.
+ *
+ * Removed through the ports: [groups], then the asset-targeted [tags], then the [assets] themselves, children first;
+ * the asset's other rows go by the schema's cascades. Kept as history and written back unchanged after the pack's
+ * asset: [keptLoans] (the sender-local returned loans, R77-25 (a)), [keptLinks] and [keptLinkTags] (the 2.6
+ * tombstones, never re-purposed or dropped). [locators] are the removed documents' bytes, for the sweep.
+ *
+ * A staying row that names a removed one would be changed by those cascades, so it refuses the return
+ * ([IllegalStateException]); the guard and M3 keep that from arising.
+ */
+internal class ReturnScope private constructor(
+    val snapshot: MergeSnapshot,
+    val groups: List<GroupId>,
+    val tags: List<TagId>,
+    val assets: List<AssetId>,
+    val keptLinks: List<ExternalLink>,
+    val keptLinkTags: List<TagBinding>,
+    val keptLoans: List<AssetLoan>,
+    val locators: List<String>,
+) {
+    companion object {
+        fun of(full: MergeSnapshot, returning: Set<AssetId>): ReturnScope {
+            if (returning.isEmpty()) {
+                return ReturnScope(full, emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+            }
+            val groups = full.groups.filter { g -> g.members.any { it.assetId in returning } }
+            val groupIds = groups.mapTo(HashSet()) { it.id }
+            val schedules = full.schedules.filter { s ->
+                when (val target = s.target) {
+                    is ScheduleTarget.AssetTarget -> target.assetId in returning
+                    is ScheduleTarget.GroupTarget -> target.groupId in groupIds
+                }
+            }.mapTo(HashSet()) { it.id }
+            val events = full.events.filter { it.assetId in returning }.mapTo(HashSet()) { it.id }
+            val cases = full.serviceCases.filter { it.assetId in returning }.mapTo(HashSet()) { it.id }
+            val attachments = full.attachments.filter { a ->
+                when (val owner = a.owner) {
+                    is AttachmentOwner.OfAsset -> owner.assetId in returning
+                    is AttachmentOwner.OfEvent -> owner.eventId in events
+                }
+            }
+            val keptLinks = full.links.filter { it.assetId in returning }
+            val linkIds = keptLinks.mapTo(HashSet()) { it.id }
+            val removedTags = full.tags.filter { (it.target as? TagTarget.AssetTarget)?.assetId in returning }
+            val keptLinkTags = full.tags.filter { (it.target as? TagTarget.LinkTarget)?.linkId in linkIds }
+            val reduced = full.copy(
+                assets = full.assets.filterNot { it.id in returning },
+                groups = full.groups.filterNot { it.id in groupIds },
+                tags = full.tags - removedTags.toSet(),
+                definitions = full.definitions.filterNot { it.assetId in returning },
+                profiles = full.profiles.filterNot { it.assetId in returning },
+                schedules = full.schedules.filterNot { it.id in schedules },
+                closures = full.closures.filterNot { it.scheduleId in schedules },
+                events = full.events.filterNot { it.id in events },
+                attachments = full.attachments - attachments.toSet(),
+                references = full.references.filterNot { it.assetId in returning },
+                seasonActivations = full.seasonActivations.filterNot { it.assetId in returning },
+                conditions = full.conditions.filterNot { it.assetId in returning },
+                healthSubjects = full.healthSubjects.filterNot { it.assetId in returning },
+                serviceCases = full.serviceCases.filterNot { it.id in cases },
+                caseEntries = full.caseEntries.filterNot { it.caseId in cases },
+            )
+            val dropped = DroppedRows(
+                assets = returning.mapTo(HashSet()) { it.value },
+                groups = groupIds.mapTo(HashSet()) { it.value },
+                schedules = schedules.mapTo(HashSet()) { it.value },
+                events = events.mapTo(HashSet()) { it.value },
+                links = emptySet(),
+                cases = cases.mapTo(HashSet()) { it.value },
+                definitions = full.definitions.filter { it.assetId in returning }.mapTo(HashSet()) { it.id.value },
+                profiles = full.profiles.filter { it.assetId in returning }.mapTo(HashSet()) { it.id.value },
+            )
+            val kept = BackupData(
+                assets = reduced.assets.map { it.toDto() },
+                nfcTags = emptyList(),
+                externalLinks = emptyList(),
+                maintenanceGroups = reduced.groups.map { it.toDto() },
+                maintenanceSchedules = reduced.schedules.map { it.toDto() },
+                eventProfiles = reduced.profiles.map { it.toDto() },
+                assetEvents = reduced.events.map { it.toDto() },
+                healthSubjects = reduced.healthSubjects.map { it.toDto() },
+            )
+            val entangled = TransferGraph.entangledRefs(kept, dropped)
+            check(entangled.isEmpty()) { "a staying row names a returning asset's graph: $entangled" }
+            return ReturnScope(
+                snapshot = reduced,
+                groups = groups.map { it.id },
+                tags = removedTags.map { it.id },
+                assets = AssetTree.parentsFirst(full.assets.filter { it.id in returning }).asReversed().map { it.id },
+                keptLinks = keptLinks,
+                keptLinkTags = keptLinkTags,
+                keptLoans = full.loans.filter { it.assetId in returning },
+                locators = attachments.map { it.storageLocator },
+            )
         }
     }
 }

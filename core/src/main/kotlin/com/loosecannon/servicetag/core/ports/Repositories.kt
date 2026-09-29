@@ -123,8 +123,8 @@ interface EventRepository {     // aggregate: upsert replaces measurements and c
  * occurrence rules need are declared by the brief that owns them; what is here is what an export,
  * an import and a merge plan cannot be written without.
  *
- * There is no `delete`: archiving is a column, and no 1.2 route, tool or action deletes a group.
- * `deleteAll` exists for the replace import's wipe, which is the only caller.
+ * Archiving is a column, and no 1.2 route, tool or action deletes a group. `deleteAll` exists for the
+ * replace import's wipe; [delete] exists for #77's transfer back (C15) alone.
  */
 interface GroupRepository {
     suspend fun upsert(group: MaintenanceGroup)
@@ -150,6 +150,13 @@ interface GroupRepository {
      * would silently stop rebuilding exactly the schedules a mid-round removal leaves behind.
      */
     suspend fun allWindowsFor(assetId: AssetId): List<MaintenanceGroup>
+
+    /**
+     * #77 (C15, R77-25) — removes one group with its membership rows, its schedules and theirs, by the schema's
+     * cascades. **Used only by a Transfer Pack's return**, which replaces every local group with a row naming a
+     * returning asset by the pack's own; no route, tool or screen deletes a group.
+     */
+    suspend fun delete(id: GroupId)
     suspend fun deleteAll()
     fun observeAll(): Flow<List<MaintenanceGroup>>
 

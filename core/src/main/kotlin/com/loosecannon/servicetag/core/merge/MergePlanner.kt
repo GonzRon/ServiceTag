@@ -194,7 +194,8 @@ import java.security.MessageDigest
  * after the plan: **M2** every row the rules would INSERT whose owning asset (`TransferOwnership`) is held →
  * `ASSET_TRANSFERRED_OUT`; **M3** `TransferGraph.retain` of the phone as the plan would leave it must be
  * `Retained` — an entangling inserted row, or the inserted OUT a local row entangles, → `ASSET_TRANSFERRED_OUT`.
- * The records are written last of all.
+ * The records are written last of all. The one exception to M1 is a Transfer Pack's explicit return (C15): an IN
+ * of an asset the import names `returning` closes this phone's OUT, and the import appends it first.
  *
  * ### Not total, and only for a hand-built [Backup]
  *
@@ -204,7 +205,16 @@ import java.security.MessageDigest
  * plan exists, so no caller of `BuildBackupMergePlan` can reach them — only a test constructing a
  * `Backup` directly can. See Task 1 decision 10 for what the API maps them to.
  */
-internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
+internal fun mergePlanOf(
+    backup: Backup,
+    snapshot: MergeSnapshot,
+    /**
+     * #77 (C15; R77-12, R77-25, R77-B3-RETURN) — the assets a Transfer Pack brings **back** here, as its import
+     * decided them: each one's incoming IN may close this phone's OUT, which M1 otherwise refuses. The caller
+     * hands a [snapshot] without their stale local graph. Empty for every other merge, which is unchanged.
+     */
+    returning: Set<AssetId> = emptySet(),
+): MergePlan {
     val data = backup.data
     val decisions = mutableListOf<MergeDecision>()
 
@@ -1044,7 +1054,7 @@ internal fun mergePlanOf(backup: Backup, snapshot: MergeSnapshot): MergePlan {
                 MergeDecision(MergeTable.TRANSFERS, id, MergeVerdict.IDENTICAL)
             local != null ->
                 MergeDecision(MergeTable.TRANSFERS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
-            openHere.any { closes(record, it) } ->
+            openHere.any { closes(record, it) } && !(record.kind == TransferKind.IN && record.assetId in returning) ->
                 MergeDecision(
                     MergeTable.TRANSFERS, id, MergeVerdict.CONFLICT, MergeReason.ASSET_TRANSFERRED_OUT, record.assetId.value,
                 )
