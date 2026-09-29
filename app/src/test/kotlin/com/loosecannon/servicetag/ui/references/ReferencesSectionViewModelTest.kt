@@ -22,7 +22,9 @@ import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateReferenceCommand
 import com.loosecannon.servicetag.reminders.sourceFile
 import com.loosecannon.servicetag.testing.FakeGraph
+import kotlin.coroutines.CoroutineContext
 import kotlin.properties.Delegates
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -33,6 +35,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -93,11 +96,35 @@ class ReferencesSectionViewModelTest {
         return asset
     }
 
-    private fun model(owner: AssetId = assetId): ReferencesSectionViewModel {
+    /**
+     * Cleared as the last line of every case that builds a model, inside `runTest`, so the work
+     * behind a signal a case waited for is drained on the test's own clock (the #65 shape).
+     */
+    private fun TestScope.clearModels() {
+        store.clear()
+        advanceUntilIdle()
+    }
+
+    /** A thin counter over the test's scheduler: what `io` is, so every dispatch is seen. */
+    private class CountingDispatcher(private val inner: CoroutineDispatcher) : CoroutineDispatcher() {
+        var count = 0
+            private set
+
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            count++
+            inner.dispatch(context, block)
+        }
+    }
+
+    private fun model(
+        owner: AssetId = assetId,
+        io: CoroutineContext = StandardTestDispatcher(scheduler),
+    ): ReferencesSectionViewModel {
         val factory = viewModelFactory {
             initializer {
                 ReferencesSectionViewModel(
                     owner, graph.references, addReference, updateReference, removeReference, policy,
+                    io = io,
                 )
             }
         }
@@ -159,6 +186,8 @@ class ReferencesSectionViewModelTest {
         val rows = vm.state.first { it.rows.size == 2 }.rows
         assertFalse(rows.single { it.id == "r1" }.launchable)
         assertTrue(rows.single { it.id == "r2" }.launchable)
+
+        clearModels()
     }
 
     /**
@@ -202,6 +231,8 @@ class ReferencesSectionViewModelTest {
             ),
             addedRow,
         )
+
+        clearModels()
     }
 
     /**
@@ -223,6 +254,8 @@ class ReferencesSectionViewModelTest {
         assertNull(vm.state.value.pendingConfirmation)
         assertEquals(ReferenceKind.OTHER, row.kind)
         assertEquals("zotero://select/items/0", row.uri)
+
+        clearModels()
     }
 
     /** A hard-blocked scheme is refused where it is saved, and the save-time line is the one said. */
@@ -237,6 +270,8 @@ class ReferencesSectionViewModelTest {
         assertEquals("ServiceTag will not save that kind of link.", said.await())
         assertTrue(graph.references.forAsset(assetId).isEmpty())
         assertNull(vm.state.value.pendingConfirmation)
+
+        clearModels()
     }
 
     /** `UNIQUE(asset_id, uri)` is a recoverable state, so it gets its own sentence (I-7). */
@@ -252,6 +287,8 @@ class ReferencesSectionViewModelTest {
 
         assertEquals("That link is already on this asset", said.await())
         assertEquals(1, graph.references.forAsset(assetId).size)
+
+        clearModels()
     }
 
     /** A row the list cannot label is not savable; the sheet stays open on the refusal. */
@@ -268,6 +305,8 @@ class ReferencesSectionViewModelTest {
         assertEquals("Give the reference a name", said.await())
         assertEquals("Deck manual", graph.references.get(ReferenceId("r1"))!!.displayName)
         assertEquals("", graph.references.get(ReferenceId("r1"))!!.description)
+
+        clearModels()
     }
 
     /** I-1: an edit moves the name, the description and `updated_at`, and nothing else at all. */
@@ -290,6 +329,8 @@ class ReferencesSectionViewModelTest {
         assertEquals(before.createdAt, after.createdAt)
         assertEquals("Section 4 covers the seal", after.description)
         assertEquals(5_000L, after.updatedAt)
+
+        clearModels()
     }
 
     /** A delete keyed on the wrong id would take a sibling, or the asset's bytes, with it. */
@@ -312,6 +353,8 @@ class ReferencesSectionViewModelTest {
         assertEquals("r2", left.id)
         assertNull(graph.references.get(ReferenceId("r1")))
         assertEquals(1, graph.attachments.forOwner(AttachmentOwner.OfAsset(assetId)).size)
+
+        clearModels()
     }
 
     /** A lifecycle filter on this section would hide rows the owner put on the asset themselves. */
@@ -325,6 +368,36 @@ class ReferencesSectionViewModelTest {
         val row = vm.state.first { it.rows.isNotEmpty() }.rows.single()
         assertEquals("Deck manual", row.displayName)
         assertTrue(row.launchable)
+
+        clearModels()
+    }
+
+    /** C1: the writes run on the injected context, so none of them outlives the test that began it. */
+    @Test fun everyWriteRunsOnTheInjectedContext() = runTest {
+        hotTub()
+        stored("r1", "https://example-mower.invalid/manual", ReferenceKind.WEB_URL, "Deck manual")
+        stored("r2", "https://example-mower.invalid/parts", ReferenceKind.WEB_URL, "Parts list")
+        val io = CountingDispatcher(StandardTestDispatcher(scheduler))
+        val vm = model(io = io)
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.rows.size == 2 }
+
+        val beforeAdd = io.count
+        vm.addLink("https://example-mower.invalid/new", "New link", "")
+        vm.state.first { it.rows.size == 3 }
+        assertTrue("an add dispatches on io", io.count > beforeAdd)
+
+        val beforeEdit = io.count
+        vm.save("r1", UpdateReferenceCommand("Deck manual (2026)", ""))
+        vm.state.first { s -> s.rows.any { it.displayName == "Deck manual (2026)" } }
+        assertTrue("an edit dispatches on io", io.count > beforeEdit)
+
+        val beforeRemove = io.count
+        vm.remove("r2")
+        vm.state.first { it.rows.size == 2 }
+        assertTrue("a remove dispatches on io", io.count > beforeRemove)
+
+        clearModels()
     }
 
     /**
