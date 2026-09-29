@@ -842,3 +842,55 @@ Every fix round has **45 minutes**.
   - Cap: 2 JVM mutation runs for any screen-state glue.
 
 Everything else in §10 applies to whichever half owns the file.
+
+## 13. Errata after the merge (2026-09-29)
+
+**Merge.** Merged as `f111ca4b` (`merge --no-ff issue-86`, 33 branch commits). `versionName` stays 1.4.1. Schema and
+format are now 15, unreleased. The gitlink is `7e0377a`.
+
+**The owner's time-box rule (§12) applied to the second half.** B3 was split into B3a and B3b. Actual durations:
+
+| brief | duration | counted mutations |
+|---|---|---|
+| B1 | ~1 h | 17 of 19 |
+| B2 | ~30 min | 18 of 19 |
+| B3a | 24 min | 8 of 9 |
+| B3b | 16 min | 0 of 2 |
+| B4 | 25 min | 3 of 4 |
+
+Every brief had one task review and one fix round of at most 45 minutes. Each fix closed by controller inspection:
+- **B1:** the A→B→C chain case.
+- **B2:** set-up offered when a schedule needs it; the plan carries its draft; every history kind is seeded.
+- **B3a:** after a confirm, the screen never exits silently; the start date follows the in-service date.
+- **B3b:** the back arrow (R86-B3-BACK); P86-25 moved above "Old asset".
+- **B4:** 13 doc sites no longer claim that no route writes a succession, because a merge import inserts them.
+
+The whole-branch review said READY TO MERGE. It found one stale KDoc count, which the controller fixed.
+
+**Rulings made during execution.**
+- **R86-B3-BACK (owner).** The Replace screen has the standard top-bar arrow. It uses the shipped "Back" label, shares
+  one action with system Back, is disabled while saving, and writes nothing.
+- **B3-handoff 9 reversed.** The `onReplace = {}` default stays. Every later detail callback carries the same default,
+  so shipped androidTest callers compile, and `ServiceTagRoot` wires it.
+- **The tombstone check** is now `git diff <base> -- . ':!app/schemas'`, because the generated `15.json` restates
+  `external_link`.
+- **Cloned archived set-up rows** are stamped `archivedAt = now`, as new rows.
+- **P86-5 "New asset"** has one home, which the editor's create title now reads.
+- **Bisect note.** Some intermediate commits in B1 and B2 are red by design: they are test-first commits with
+  compiling stubs, and the tip is green.
+
+**Recorded limits (slice 1).**
+- There is no succession unlink and no undo. Deleting an endpoint is a destructive delete that cascades the row.
+- If two installations each record a succession for the same asset, the second is refused by merge as
+  `SUCCESSION_TAKEN`. That is documented, not weakened.
+- A form edit whose asset is deleted mid-edit, before any confirm, leaves silently.
+
+**Gate.** The merged-tip gate ran once at `f111ca4b`, with no reruns, and was all green:
+- JVM: core 1398, app 1530.
+- 55 device classes: the 54 shipped plus `ReplaceAssetFlowTest` (4 cases, about 12 s of Gradle wall time).
+- MCP: 384 tests at 69 tools.
+
+Timing was **11.18 min** start to GATE DONE: JVM 49 s, device 10.19 min. That compares with #84's 11.30 / 10.33 on
+54 classes, so #86's one class did not add measurable device time.
+
+**Emulator.** The no-Vulkan launcher held for the whole issue, with no loss.
