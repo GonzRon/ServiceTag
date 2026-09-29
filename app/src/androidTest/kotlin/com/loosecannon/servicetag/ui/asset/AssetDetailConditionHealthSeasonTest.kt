@@ -454,7 +454,7 @@ class AssetDetailConditionHealthSeasonTest {
         rule.onNodeWithText(CHANGE_CONDITION).performScrollTo().performClick()
         rule.awaitText(SAVE_CONDITION)
         rule.onNodeWithText("Down").performClick()
-        rule.onNodeWithText(SAVE_CONDITION).performClick()
+        rule.onNodeWithText(SAVE_CONDITION).performScrollTo().performClick()
         rule.awaitText(LOG_INCIDENT_DETAILS_QUESTION)
         rule.onNodeWithText("Generator is DOWN. Record what went wrong in the service record?").assertIsDisplayed()
         rule.onNodeWithText(LOG_INCIDENT_DETAILS).performClick()
