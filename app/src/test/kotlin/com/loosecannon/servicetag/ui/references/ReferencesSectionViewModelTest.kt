@@ -382,16 +382,19 @@ class ReferencesSectionViewModelTest {
         backgroundScope.launch { vm.state.collect() }
         vm.state.first { it.rows.size == 2 }
 
+        advanceUntilIdle()
         val beforeAdd = io.count
         vm.addLink("https://example-mower.invalid/new", "New link", "")
         vm.state.first { it.rows.size == 3 }
         assertTrue("an add dispatches on io", io.count > beforeAdd)
 
+        advanceUntilIdle()
         val beforeEdit = io.count
         vm.save("r1", UpdateReferenceCommand("Deck manual (2026)", ""))
         vm.state.first { s -> s.rows.any { it.displayName == "Deck manual (2026)" } }
         assertTrue("an edit dispatches on io", io.count > beforeEdit)
 
+        advanceUntilIdle()
         val beforeRemove = io.count
         vm.remove("r2")
         vm.state.first { it.rows.size == 2 }
