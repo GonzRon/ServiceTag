@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetLoanId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentOwner
@@ -38,6 +39,7 @@ import com.loosecannon.servicetag.core.model.ServiceCaseId
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
@@ -1079,4 +1081,58 @@ class InMemoryTransferRecordRepository : TransferRecordRepository, Rollbackable,
     override fun observeHeldIds(): Flow<Set<AssetId>> = version.map { heldIdsOf(rows.values.toList()) }
 
     override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+}
+
+/**
+ * #86 (C2) — the successions: append and query only. An append aborts on an id, a predecessor or a successor
+ * another row already holds (the schema's primary key and its two unique indexes), and [cascadeFromAsset] is the
+ * schema's CASCADE from `asset` at **either** end — registered through `assets.cascadesTo`, as #72's loans are.
+ * [onAppend] lets a test see what the rest of the install held when a row landed.
+ */
+class InMemoryAssetSuccessionRepository : AssetSuccessionRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, AssetSuccession>()
+    override var witness: TransactionWitness? = null
+    private val version = MutableStateFlow(0)
+    var onAppend: ((AssetSuccession) -> Unit)? = null
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun append(row: AssetSuccession) {
+        if (row.id in rows) throw RiggedFailure("asset_succession already holds ${row.id}")
+        if (rows.values.any { it.predecessorAssetId == row.predecessorAssetId }) {
+            throw RiggedFailure("asset_succession already names predecessor ${row.predecessorAssetId.value}")
+        }
+        if (rows.values.any { it.successorAssetId == row.successorAssetId }) {
+            throw RiggedFailure("asset_succession already names successor ${row.successorAssetId.value}")
+        }
+        onAppend?.invoke(row)
+        rows[row.id] = row
+        version.value += 1
+    }
+
+    override suspend fun all(): List<AssetSuccession> {
+        witness?.observeAll()
+        return rows.values.sortedBy { it.id }
+    }
+
+    override suspend fun replacedBy(predecessor: AssetId): AssetSuccession? =
+        rows.values.firstOrNull { it.predecessorAssetId == predecessor }
+
+    override suspend fun replaces(successor: AssetId): AssetSuccession? =
+        rows.values.firstOrNull { it.successorAssetId == successor }
+
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<AssetSuccession>> = version.map {
+        rows.values.filter { it.predecessorAssetId == assetId || it.successorAssetId == assetId }.sortedBy { it.id }
+    }
+
+    /** The schema's CASCADE from `asset`, at either end: a row naming the deleted asset goes. */
+    fun cascadeFromAsset(assetId: AssetId) {
+        rows.values.removeAll { it.predecessorAssetId == assetId || it.successorAssetId == assetId }
+        version.value += 1
+    }
 }
