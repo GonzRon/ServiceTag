@@ -811,3 +811,34 @@ rewrite ratified spec text; add a device class. **Report:** `ReplaceAssetFlowTes
 gate's `EXTRA_CLASSES`. **Counted RED (2):** row 19 (2). **Caps:** 4 JVM mutation runs, 0 device; **3 hours**. **Stop
 also** if the gate paragraph needs a step the 1.4.1 API cannot drive. **Size:** about 150 production and 60 Python,
 220 test, 150 docs lines.
+
+## 12. Amendment — time boxes (owner, 2026-09-29)
+
+**A 6-hour box is not acceptable.** No brief or agent may run for more than **2 hours**. Anything expected to take
+longer than about **1 hour** is too big and must be split. This overrides every time box above:
+
+| brief | target | hard stop |
+|---|---|---|
+| B1, B2 (done) | — | — |
+| **B3a** | 1 h | 2 h |
+| **B3b** | 1 h | 2 h |
+| **B4** | 1 h | 2 h |
+
+Every fix round has **45 minutes**.
+
+**B3 is split in two**, with the caps and rows divided as follows:
+
+- **B3a — the Replace state (C16's state and menu, C17's view model, the homes).**
+  - Covers `ReplaceStrings.kt` with every P86 literal, the fifteen hoisted constants, `DetailMenuItem.REPLACE`, and the
+    detail lines' state (`Replaced by` / `Replaces`).
+  - Covers `ReplaceAssetViewModel`: offer, draft, plan and confirm, the sweep after the write, and no pre-tick.
+  - Rows 15–17, 7 counted JVM REDs, cap 9; 0 device runs.
+  - The fences are §10's view-model and state files.
+- **B3b — the rendered UI (C17's screen, C18, C19).**
+  - Covers `ReplaceAssetScreen`, the detail lines drawn in `AssetDetailScreen.kt` (≤ 80 changed lines), `Route` and the
+    wiring, and `CategoryField` / `ChoiceField` made `internal`.
+  - Row 18: the new `ReplaceAssetFlowTest` (≤ 6 cases, no device mutations) plus the `AssetTransferDetailTest` re-run,
+    one run each.
+  - Cap: 2 JVM mutation runs for any screen-state glue.
+
+Everything else in §10 applies to whichever half owns the file.
