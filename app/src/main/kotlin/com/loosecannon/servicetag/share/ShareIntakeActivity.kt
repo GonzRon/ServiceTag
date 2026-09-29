@@ -83,7 +83,7 @@ class ShareIntakeActivity : ComponentActivity() {
                 val pack = state.packCopy
                 if (state.path == IntakePath.TRANSFER_PACK && pack != null) {
                     val importModel = viewModel(key = "share-transfer-import") {
-                        shareTransferImport(graph.importTransferPack, graph.transferPackInbox, pack)
+                        shareTransferImport(graph.importTransferPack, graph.transferPackInbox, pack, graph.reminderReconcile)
                     }
                     val importState by importModel.state.collectAsStateWithLifecycle()
                     LaunchedEffect(importState.finished) { if (importState.finished) finish() }

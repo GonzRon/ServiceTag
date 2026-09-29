@@ -30,6 +30,7 @@ import com.loosecannon.servicetag.core.usecase.NoSuchAsset
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
 import com.loosecannon.servicetag.core.usecase.ReferenceResult
 import com.loosecannon.servicetag.ui.attachments.ROLE_HEADER
+import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportStrings
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportViewModel
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackInbox
@@ -510,8 +511,9 @@ internal fun shareTransferImport(
     importPack: ImportTransferPack,
     inbox: TransferPackInbox,
     copy: File?,
+    reconcile: ReminderReconcile,
     io: CoroutineContext = Dispatchers.IO,
-): TransferImportViewModel = TransferImportViewModel(importPack, inbox, copy, IntakeStrings.NO_FOLDER, io = io)
+): TransferImportViewModel = TransferImportViewModel(importPack, inbox, copy, IntakeStrings.NO_FOLDER, reconcile, io = io)
 
 /**
  * #77 (C16): whether a shared stream is a Transfer Pack — a ZIP whose **first local entry** is `transfer-manifest.json`.

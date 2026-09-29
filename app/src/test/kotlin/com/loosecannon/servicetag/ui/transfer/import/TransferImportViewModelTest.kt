@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.ui.backup.NoAttachmentFolder
+import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackAppFixtures.HEATER
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackAppFixtures.MANUAL_AT
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackAppFixtures.entriesOf
@@ -60,11 +61,18 @@ class TransferImportViewModelTest {
 
     private suspend fun copyOf(bytes: ByteArray): File = graph.transferPackInbox.copyIn(ByteSource { bytes.inputStream() })
 
-    private fun model(copy: File?, on: FakeGraph = graph, sentence: String = NoAttachmentFolder().message!!) =
-        TransferImportViewModel(
-            on.importTransferPack, on.transferPackInbox, copy, sentence, zone = ZoneOffset.UTC,
-            io = StandardTestDispatcher(scheduler),
-        )
+    private var sweeps = 0
+    private val sweep = ReminderReconcile { sweeps += 1 }
+
+    private fun model(
+        copy: File?,
+        on: FakeGraph = graph,
+        sentence: String = NoAttachmentFolder().message!!,
+        reconcile: ReminderReconcile = sweep,
+    ) = TransferImportViewModel(
+        on.importTransferPack, on.transferPackInbox, copy, sentence, reconcile, zone = ZoneOffset.UTC,
+        io = StandardTestDispatcher(scheduler),
+    )
 
     private suspend fun heaterPack(note: String = "Example handover note"): AppPack {
         seedHeater(sender)
@@ -248,6 +256,48 @@ class TransferImportViewModelTest {
         advanceUntilIdle()
         assertFalse("a preview with nothing to import deletes its copy", nothingToDo.exists())
         assertNull(graph.transferPackInbox.find(nothingToDo.name))
+    }
+
+    /**
+     * R77-IMPORT-SWEEP: a successful import runs exactly one reminder sweep, after the write; a preview, a pack with
+     * nothing to import and a reader refusal run none.
+     */
+    @Test
+    fun aSuccessfulImportRunsOneReminderSweep() = runTest(scheduler) {
+        val pack = heaterPack().bytes
+        val model = model(copyOf(pack))
+        advanceUntilIdle()
+        assertEquals("nothing before Import", 0, sweeps)
+
+        model.import()
+        advanceUntilIdle()
+
+        assertEquals(TransferImportPhase.DONE, model.state.value.phase)
+        assertEquals("one sweep, after the write", 1, sweeps)
+        model(copyOf(pack)) // already here: nothing to import
+        model(copyOf(zipOf(listOf("readme.txt" to "Example".toByteArray())))) // not a pack
+        advanceUntilIdle()
+        assertEquals(1, sweeps)
+    }
+
+    /** R77-IMPORT-SWEEP: the sweep is a post-write step, not a condition of success — one that fails leaves P77-50. */
+    @Test
+    fun aFailedSweepNeverFailsACommittedImport() = runTest(scheduler) {
+        val failing = ReminderReconcile {
+            sweeps += 1
+            throw IllegalStateException("the sweep failed")
+        }
+        val model = model(copyOf(heaterPack().bytes), reconcile = failing)
+        advanceUntilIdle()
+
+        model.import()
+        advanceUntilIdle()
+
+        assertEquals("the sweep ran", 1, sweeps)
+        assertEquals(TransferImportPhase.DONE, model.state.value.phase)
+        assertEquals("Transfer Pack imported: 1 asset, 1 NFC tag, 1 document or photo", model.state.value.done)
+        assertNull(model.state.value.refusal)
+        assertEquals(listOf(TransferKind.IN), graph.transferRecords.all().map { it.kind })
     }
 
     private fun outOf(asset: String, pack: String) = TransferRecord(

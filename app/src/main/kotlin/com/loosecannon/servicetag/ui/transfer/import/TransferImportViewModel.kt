@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.usecase.TransferImportOutcome
 import com.loosecannon.servicetag.core.usecase.TransferImportPreview
 import com.loosecannon.servicetag.core.usecase.TransferImportResult
 import com.loosecannon.servicetag.core.transfer.TransferPackManifest
+import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
 import java.io.File
 import java.io.FileInputStream
 import java.time.Instant
@@ -61,7 +62,8 @@ data class TransferImportState(
  * in `cache/transfer-in/` ([TransferPackInbox]) and never a `Uri`: reading → preview → Import → P77-50, or a refusal.
  * **Cancel writes nothing**, **Import runs once** — `importing` is set before the first suspension, so two taps in one
  * frame start one import — and **every end deletes the copy**: a refusal, an import that finished or failed, a
- * preview that offers nothing to import, Cancel, Close, and the screen going away.
+ * preview that offers nothing to import, Cancel, Close, and the screen going away. A successful import, from either
+ * door, runs one [ReminderReconcile] after its write (R77-IMPORT-SWEEP).
  *
  * The folder refusal is the door's own sentence: the Backup screen's shipped `NoAttachmentFolder` wording, or the
  * intake's `IntakeStrings.NO_FOLDER` (R77-2).
@@ -71,6 +73,8 @@ class TransferImportViewModel(
     private val inbox: TransferPackInbox,
     private val copy: File?,
     private val noFolderSentence: String,
+    /** R77-IMPORT-SWEEP: the one reminder sweep after a successful import, from either door. */
+    private val reconcile: ReminderReconcile,
     private val zone: ZoneId = ZoneId.systemDefault(),
     private val io: CoroutineContext = Dispatchers.IO,
 ) : ViewModel() {
@@ -152,11 +156,14 @@ class TransferImportViewModel(
             }
             deleteCopy()
             when (result) {
-                is TransferImportResult.Imported -> _state.update {
-                    it.copy(
-                        phase = TransferImportPhase.DONE,
-                        done = TransferImportStrings.imported(countsOf(result.manifest).joinToString(", ")),
-                    )
+                is TransferImportResult.Imported -> {
+                    sweepOnce()
+                    _state.update {
+                        it.copy(
+                            phase = TransferImportPhase.DONE,
+                            done = TransferImportStrings.imported(countsOf(result.manifest).joinToString(", ")),
+                        )
+                    }
                 }
                 is TransferImportResult.Conflicted -> _state.update {
                     it.copy(phase = TransferImportPhase.PREVIEW, outcome = listOf(TransferImportStrings.CONFLICTS))
@@ -167,6 +174,20 @@ class TransferImportViewModel(
                     refuse(TransferImportStrings.COULD_NOT_IMPORT)
                 }
             }
+        }
+    }
+
+    /**
+     * R77-IMPORT-SWEEP: one reminder sweep after a committed import, while the screen still holds Back. It is a
+     * post-write step, never a condition of success: a sweep that fails is logged and the backstop's to repeat.
+     */
+    private suspend fun sweepOnce() {
+        try {
+            reconcile.run()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "the sweep after a Transfer Pack import failed", e)
         }
     }
 

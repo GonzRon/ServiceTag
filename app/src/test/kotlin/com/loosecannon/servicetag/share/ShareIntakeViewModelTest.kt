@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.ui.maintenance.ReminderReconcile
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackAppFixtures
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.StoreState
@@ -842,21 +843,29 @@ class ShareIntakeViewModelTest {
         graph.attachmentStorage.state = StoreState.NotConfigured
         val vm = packModel(content, source)
 
-        val import = shareTransferImport(graph.importTransferPack, graph.transferPackInbox, vm.state.value.packCopy, StandardTestDispatcher(scheduler))
+        val import = shareTransferImport(
+            graph.importTransferPack, graph.transferPackInbox, vm.state.value.packCopy, ReminderReconcile {}, StandardTestDispatcher(scheduler),
+        )
         advanceUntilIdle()
 
         assertEquals(IntakeStrings.NO_FOLDER, import.state.value.refusal)
     }
 
+    /** R77-IMPORT-SWEEP: the share door's import sweeps once too, after the write. */
     @Test fun successShowsTheLineThenCloseFinishes() = runTest(scheduler) {
         val (content, source) = zipShare(heaterPack(), "Download.zip")
         val vm = packModel(content, source)
-        val import = shareTransferImport(graph.importTransferPack, graph.transferPackInbox, vm.state.value.packCopy, StandardTestDispatcher(scheduler))
+        var sweeps = 0
+        val import = shareTransferImport(
+            graph.importTransferPack, graph.transferPackInbox, vm.state.value.packCopy, ReminderReconcile { sweeps += 1 },
+            StandardTestDispatcher(scheduler),
+        )
         advanceUntilIdle()
 
         import.import()
         advanceUntilIdle()
         assertEquals("Transfer Pack imported: 1 asset, 1 NFC tag, 1 document or photo", import.state.value.done)
+        assertEquals(1, sweeps)
         assertFalse(import.state.value.finished)
         import.close()
 

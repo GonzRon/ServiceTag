@@ -51,7 +51,7 @@ fun TransferImportScreen(graph: AppGraph, copy: String, onBack: () -> Unit) {
     val model: TransferImportViewModel = viewModel(key = "transfer-import-$copy") {
         TransferImportViewModel(
             graph.importTransferPack, graph.transferPackInbox, graph.transferPackInbox.find(copy),
-            NoAttachmentFolder().message.orEmpty(),
+            NoAttachmentFolder().message.orEmpty(), graph.reminderReconcile,
         )
     }
     val state by model.state.collectAsStateWithLifecycle()
