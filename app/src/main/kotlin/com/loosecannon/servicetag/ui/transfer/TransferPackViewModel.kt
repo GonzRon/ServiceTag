@@ -151,43 +151,50 @@ class TransferPackViewModel(
         if (_state.value.phase != PackPhase.IDLE || roots.isEmpty() || !TransferPack.noteAccepted(note)) return
         _state.value = TransferPackState(PackPhase.CREATING)
         viewModelScope.launch {
-            val made: Any = try {
+            val made: Made = try {
                 withContext(io) { createAndSeal(roots, note) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: NoAttachmentFolder) {
-                listOf(e.message!!)
+                Made.Refused(listOf(e.message!!))
             } catch (e: BackupSetIncomplete) {
-                listOf(TransferStrings.notCreated(e.wording()))
+                Made.Refused(listOf(TransferStrings.notCreated(e.wording())))
             } catch (e: Exception) {
                 Log.w(TAG, "the Transfer Pack could not be written", e)
-                listOf(TransferStrings.notCreated(FILES_NOT_WRITTEN))
+                Made.Refused(listOf(TransferStrings.notCreated(FILES_NOT_WRITTEN)))
             }
             when (made) {
-                is ReadyPack -> {
-                    ready = made
-                    saved[KEY] = JSON.encodeToString(ReadyPack.serializer(), made)
-                    _state.value = TransferPackState(PackPhase.READY, made.fileName, made.bytes.asFileSize(), verified = true)
+                is Made.Ready -> {
+                    val pack = made.pack
+                    ready = pack
+                    saved[KEY] = JSON.encodeToString(ReadyPack.serializer(), pack)
+                    _state.value = TransferPackState(PackPhase.READY, pack.fileName, pack.bytes.asFileSize(), verified = true)
                 }
-                is List<*> -> _state.value = TransferPackState(errors = made.map { it.toString() })
+                is Made.Refused -> _state.value = TransferPackState(errors = made.lines)
             }
         }
     }
 
-    private suspend fun createAndSeal(roots: List<AssetId>, note: String): Any =
+    /** What Create came to: the sealed pack, or the ratified lines saying why there is none. */
+    private sealed interface Made {
+        data class Ready(val pack: ReadyPack) : Made
+        data class Refused(val lines: List<String>) : Made
+    }
+
+    private suspend fun createAndSeal(roots: List<AssetId>, note: String): Made =
         when (val result = createPack.run(roots, note)) {
-            is CreateTransferPackResult.Refused -> result.refusals.map { refusalLineOf(it, ::nameOf, ::groupNameOf) }
-            is CreateTransferPackResult.TooLarge -> listOf(TransferStrings.TOO_LARGE)
+            is CreateTransferPackResult.Refused -> Made.Refused(result.refusals.map { refusalLineOf(it, ::nameOf, ::groupNameOf) })
+            is CreateTransferPackResult.TooLarge -> Made.Refused(listOf(TransferStrings.TOO_LARGE))
             is CreateTransferPackResult.Created -> {
                 val draft = result.draft
                 // B4 hand-off 2: a held component forced in by a parent that is not held is refused before any
                 // file exists — again here, since an asset can leave between the review and Create.
                 val held = transfers?.heldIds().orEmpty()
-                if (draft.assetIds.any { AssetId(it) in held }) return listOf(TransferStrings.ALREADY_TRANSFERRED)
+                if (draft.assetIds.any { AssetId(it) in held }) return Made.Refused(listOf(TransferStrings.ALREADY_TRANSFERRED))
                 val name = TransferStrings.packFileName(draft.createdAt, zone, draft.packId)
                 val written = writer.write(draft, name)
                 val pack = CreatedPack.of(draft, written.packSha256)
-                ReadyPack(
+                Made.Ready(ReadyPack(
                     packId = pack.packId,
                     packSha256 = pack.packSha256,
                     rootIds = pack.rootIds.map { it.value },
@@ -197,7 +204,7 @@ class TransferPackViewModel(
                     note = pack.note,
                     fileName = name,
                     bytes = written.bytes,
-                )
+                ))
             }
         }
 
