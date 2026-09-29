@@ -790,12 +790,12 @@ def test_import_merge_returns_the_twenty_tallies_and_the_conflicts_as_sent(paire
     assert [r.path for r in paired.requests] == ["/v1/import-merge/plan"]
 
 
-def test_import_merge_docs_say_formats_1_to_15_twenty_tables_and_the_four_reasons() -> None:
+def test_import_merge_docs_say_formats_1_to_16_twenty_tables_and_the_four_reasons() -> None:
     """#77 (C24) and #86 (C21): the tool's docstring and the README's `import_merge` section name the range
-    1–15, the twenty tables, the `transfers` and `successions` tallies, the two reasons a transfer record
+    1–16, the twenty tables, the `transfers` and `successions` tallies, the two reasons a transfer record
     conflicts with and the two a succession does; the README lists the twenty tallies in the report's order."""
     doc = " ".join((server_module.import_merge.__doc__ or "").split())
-    assert "format 1–15" in doc
+    assert "format 1–16" in doc
     assert "twenty tables" in doc and "nineteen" not in doc
     for word in ("`transfers`", "`successions`", "`ASSET_TRANSFERRED_OUT`", "`TRANSFER_DIVERGED`",
                  "`SUCCESSION_TAKEN`", "`SUCCESSION_CYCLE`"):
@@ -804,7 +804,7 @@ def test_import_merge_docs_say_formats_1_to_15_twenty_tables_and_the_four_reason
     readme = README.read_text(encoding="utf-8")
     section = readme.split("### `import_merge`", 1)[1].split("\n## ", 1)[0]
     flat = " ".join(section.split())
-    assert "format **1–15**" in flat
+    assert "format **1–16**" in flat
     assert "each of **twenty** tables" in flat and "nineteen" not in flat
     for word in ("`ASSET_TRANSFERRED_OUT`", "`TRANSFER_DIVERGED`", "`SUCCESSION_TAKEN`", "`SUCCESSION_CYCLE`"):
         assert word in flat, word

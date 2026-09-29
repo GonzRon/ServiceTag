@@ -541,7 +541,8 @@ class ReferenceRoutesTest {
         // list the nineteenth sub-resource, #72's format 13 made the report eighteen tables, the range
         // 1–13 and its loan list the twentieth, #77's format 14 made the report nineteen tables and the
         // range 1–14 — with no route, so the sub-resources stayed twenty — and #86's format 15 made the report
-        // twenty tables, the range 1–15 and its succession read the twenty-first. These pins moved with the document.
+        // twenty tables, the range 1–15 and its succession read the twenty-first, and #85's format 16
+        // moved the range to 1–16 (no route, no table). These pins moved with the document.
         assertFalse(
             "the merge report is twenty tables now",
             listOf("eleven", "fourteen", "fifteen", "seventeen", "eighteen", "nineteen").any { "$it tables" in text },
@@ -549,17 +550,17 @@ class ReferenceRoutesTest {
         assertTrue("the merge report must say twenty tables", "twenty tables" in text)
         // The bare string, both sites: the document spells the emphasis two ways, and a pattern
         // pinned to one asterisk placement would leave the other stale and still report clean.
-        assertFalse("the import endpoints read format 1–15 now", "1–7" in text || "1–8" in text || "1–9" in text)
+        assertFalse("the import endpoints read format 1–16 now", "1–7" in text || "1–8" in text || "1–9" in text)
         // "1–10" … "1–14" only in their two emphasis spellings, because a bare "1–10" is also the
         // health weight's range.
         assertFalse(
-            "the import endpoints read format 1–15 now",
-            listOf("1–10", "1–11", "1–12", "1–13", "1–14").any { "format **$it**" in text || "**format $it**" in text },
+            "the import endpoints read format 1–16 now",
+            listOf("1–10", "1–11", "1–12", "1–13", "1–14", "1–15").any { "format **$it**" in text || "**format $it**" in text },
         )
         // Both emphasis spellings.
         assertTrue(
-            "the import endpoints must say 1–15",
-            "format **1–15**" in text && "**format 1–15**" in text,
+            "the import endpoints must say 1–16",
+            "format **1–16**" in text && "**format 1–16**" in text,
         )
 
         assertFalse(

@@ -1128,7 +1128,7 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a `ServiceTag-data-*.zip` of format 1–15 (format 8, from ServiceTag
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–16 (format 8, from ServiceTag
     1.4.0, adds season activations, conditions and health subjects; format 9 adds the owner's own
     asset categories; format 10 adds each attachment's document role; an older archive's
     attachments are compared without the role and, when the phone's row carries one, without the
@@ -1153,7 +1153,9 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     `SUCCESSION_TAKEN`, one that would close a loop with the phone's successions as `SUCCESSION_CYCLE`, and
     one naming an asset transferred out from the phone as `ASSET_TRANSFERRED_OUT`. A merge never retires
     anything: a replacement made on another phone retired its predecessor there, so merging it into a phone
-    that holds that asset unretired conflicts on the asset's row, and nothing lands).
+    that holds that asset unretired conflicts on the asset's row, and nothing lands);
+    format 16 adds each attachment's source provenance (#85), carried as it is on an inserted row; an
+    older archive whose attachments carry any is corrupt).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
