@@ -55,6 +55,7 @@ class UrlConnectionTransport(
                 }
                 suspendCancellableCoroutine { cont ->
                     cont.invokeOnCancellation { disconnectQuietly(connection) }
+                    if (!cont.isActive) return@suspendCancellableCoroutine // cancelled already: never connect
                     val response = try {
                         respond(connection)
                     } catch (e: Throwable) {
