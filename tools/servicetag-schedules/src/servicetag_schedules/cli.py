@@ -74,7 +74,7 @@ async def _run_plan(args: argparse.Namespace) -> int:
 
     try:
         async with _paired_client(args.code) as client:
-            inventory = await phone.snapshot(client)
+            inventory = await phone.snapshot(client, manifest.replacements)
     except _PHONE_SIDE_ERRORS as e:
         print(str(e), file=sys.stderr)
         return 2
@@ -93,7 +93,7 @@ async def _run_apply(args: argparse.Namespace) -> int:
 
     try:
         async with _paired_client(args.code) as client:
-            inventory = await phone.snapshot(client)
+            inventory = await phone.snapshot(client, manifest.replacements)
             result = planmod.plan(manifest, inventory)
             _print_plan(result)
             if not result.clean:
@@ -104,7 +104,11 @@ async def _run_apply(args: argparse.Namespace) -> int:
         print(str(e), file=sys.stderr)
         return 2
 
-    print(f"created: groups={outcome.groups_created} schedules={outcome.schedules_created}")
+    created = f"created: groups={outcome.groups_created} schedules={outcome.schedules_created}"
+    # #92: a manifest with no replacements prints exactly what it printed before.
+    print(created + (f" replacements={outcome.replacements_created}" if manifest.replacements else ""))
+    for note in outcome.notes:
+        print(note)
     _print_plan(outcome.reapply_plan)
     return 0 if outcome.reapply_plan.clean and outcome.reapply_plan.summary()["CREATE"] == 0 else 1
 

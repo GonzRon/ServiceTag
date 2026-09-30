@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import draft
 from . import legacy_mapping
 from . import manifest as manifestmod
 from . import phone
@@ -24,7 +25,7 @@ _DECISIONS: tuple[str, ...] = ("CREATE", "IDENTICAL", "CONFLICT", "ERROR")
 
 @dataclass(frozen=True)
 class PlanEntry:
-    kind: str  # "group" | "schedule"
+    kind: str  # "group" | "schedule" | "replacement"
     key: str
     decision: str
     reason: str
@@ -298,6 +299,79 @@ def _decide_schedule(schedule: manifestmod.Schedule, target: _ScheduleTarget) ->
     return PlanEntry("schedule", schedule.key, "CONFLICT", _rule_difference(schedule, mine, theirs))
 
 
+# ---- replacements (#92 C32) -------------------------------------------------------------------------
+#
+# Identity goes through the succession, never the name alone: after a replacement the successor usually keeps the
+# predecessor's name (R86-8), so the name finds both. A namesake that is itself a successor is never a candidate
+# (m8), and IDENTICAL is decided before CREATE. IDENTICAL is tighter than C32's name-only rule (the controller's
+# ruling): every successor field the manifest gives must equal the existing successor's, trimmed; any difference
+# is CONFLICT, since a replacement cannot be undone.
+
+def lone_candidate(read: phone.ReplacementRead | None) -> phone.Namesake | None:
+    """The one namesake that is not a successor, when there is exactly one — shared with `apply.py`."""
+    originals = [n for n in read.namesakes if not n.is_successor] if read is not None else []
+    return originals[0] if len(originals) == 1 else None
+
+
+def _differing(replacement: manifestmod.Replacement, successor: dict) -> list[str]:
+    def norm(value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+    return [key for key, value in replacement.successor if norm(successor.get(key)) != norm(value)]
+
+
+def _decide_replacement(replacement: manifestmod.Replacement, read: phone.ReplacementRead | None) -> PlanEntry:
+    def decided(decision: str, reason: str) -> PlanEntry:
+        return PlanEntry("replacement", replacement.key, decision, reason)
+
+    name = replacement.predecessor
+    if read is None:
+        return decided("ERROR", "the snapshot did not read this replacement")
+    originals = [n for n in read.namesakes if not n.is_successor]
+    if not read.namesakes:
+        return decided("ERROR", f"no asset named {name!r}")
+    if not originals:
+        return decided("ERROR", f"every asset named {name!r} is itself a successor, never a candidate")
+    if len(originals) > 1:
+        return decided("ERROR", f"{len(originals)} assets named {name!r} that are not successors (ambiguous)")
+    candidate = originals[0]
+    if candidate.successor is not None:
+        differing = _differing(replacement, candidate.successor)
+        if not differing:
+            return decided("IDENTICAL", "already replaced, by a successor matching every field the manifest gives")
+        return decided("CONFLICT", f"already replaced by something else ({', '.join(differing)} differ); "
+                                   "a replacement cannot be undone")
+    offer = candidate.offer or {}
+    if offer.get("held") is True:
+        return decided("CONFLICT", "the asset is held (transferred out)")
+    if offer.get("eligible") is not True:
+        return decided("ERROR", "the phone's replace offer is not eligible")
+    _, unresolved = draft.arguments(replacement, offer)
+    if unresolved is not None:
+        return decided("ERROR", unresolved)
+    if not draft.clean(candidate.phone_plan):
+        phone_plan = candidate.phone_plan if isinstance(candidate.phone_plan, dict) else {}
+        codes = [str(p.get("code")) for p in phone_plan.get("problems") or [] if isinstance(p, dict)]
+        blocked = phone_plan.get("blockedBy")
+        return decided("ERROR", "the phone's plan is not clean: " + ", ".join(
+            ([f"blockedBy {blocked}"] if blocked else []) + codes or ["no clean plan"]))
+    return decided("CREATE", "not replaced yet; the phone's plan is clean")
+
+
+def _plan_replacements(manifest: manifestmod.Manifest, inventory: phone.Inventory) -> list[PlanEntry]:
+    keys = [r.key for r in manifest.replacements]
+    predecessors = [r.predecessor for r in manifest.replacements]
+    reads = {read.key: read for read in inventory.replacements}
+    entries = []
+    for r in manifest.replacements:
+        if keys.count(r.key) > 1:
+            entries.append(PlanEntry("replacement", r.key, "ERROR", "duplicate manifest key"))
+        elif predecessors.count(r.predecessor) > 1:
+            entries.append(PlanEntry("replacement", r.key, "ERROR", "duplicate predecessor within this manifest"))
+        else:
+            entries.append(_decide_replacement(r, reads.get(r.key)))
+    return entries
+
+
 # ---- the plan -------------------------------------------------------------------------------------
 
 def plan(manifest: manifestmod.Manifest, inventory: phone.Inventory) -> Plan:
@@ -369,4 +443,5 @@ def plan(manifest: manifestmod.Manifest, inventory: phone.Inventory) -> Plan:
             continue
         schedule_entries.append(_decide_schedule(schedule, item))
 
-    return Plan(entries=tuple(group_entries) + tuple(schedule_entries))
+    replacement_entries = _plan_replacements(manifest, inventory)
+    return Plan(entries=tuple(group_entries) + tuple(schedule_entries) + tuple(replacement_entries))

@@ -72,6 +72,50 @@ is — instead of leaving `providers` to the app's default, which before Service
 The manifest has no provider key, and the re-plan never compares providers or `updatedAt`, so a row
 loaded before 1.4.1 and one since repaired by `repair_schedule_providers` both re-plan `IDENTICAL`.
 
+**#92: an optional `replacements` list.** `manifestVersion` stays 1, and a manifest without the key
+loads and plans exactly as before (no replace tool is called). Each entry replaces one asset through
+the MCP's `replace_asset`, the phone's own Replace:
+
+```json
+"replacements": [{"key": "pump-2026", "predecessor": "Example pump", "retiredOn": "2026-09-30",
+                  "successor": {"name": "Example pump", "model": "B-2", "purchaseOn": "2026-09-28"},
+                  "carry": {"season": false, "manualPhase": null, "setup": true, "notes": false},
+                  "schedules": ["Flush the pump"], "scheduleStartOn": "2026-10-01",
+                  "groups": ["Pool kit"], "moveTags": ["front plate"]}]
+```
+
+`key`, `predecessor` (an exact asset name) and `successor.name` are required; the other successor
+keys are the replace draft's (`category`, `manufacturer`, `model`, `serialNumber`, `purchaseOn`,
+`inServiceOn`, `purchasePriceMinor`, `currency`, `vendor`, `location`, `warrantyExpiresOn`,
+`warrantyNotes`, `parentAssetId`). Nothing is ticked or defaulted unless the manifest says so:
+`scheduleStartOn`, `retiredOn` and `manualPhase` are sent only when given. Each schedule title, group
+name and tag label must match exactly one row of the phone's replace offer, and only the ids are sent;
+each tag moves only when its own label is named, and a move re-targets the binding without any NFC
+write.
+
+`phone.snapshot` reads every asset carrying the predecessor's name, archived and retired included,
+and each one's succession and successor. Then, for the one candidate, it reads the offer and the
+phone's own plan (`plan_only`). `plan.plan` identifies the predecessor through the succession, never
+by the name alone, since a successor usually keeps the old name. It decides in this order:
+
+- A namesake that is itself a successor is never a candidate.
+- **IDENTICAL** comes first: the one remaining namesake is already replaced, and the successor
+  matches the name **and every successor field the manifest gives**, trimmed. This is stricter than
+  the MCP's name-only answer.
+- A replaced one whose successor differs in any field the manifest gives is **CONFLICT** ("replaced
+  by something else"), as is a held one. A replacement cannot be undone.
+- **CREATE** only when the one candidate is not replaced, its offer is eligible, every name resolves,
+  and the phone's plan is clean.
+- Everything else is **ERROR**: none, more than one, only successors, a name that does not resolve,
+  or a plan problem, whose code the reason carries.
+
+`apply` writes replacements last, one call per fresh `CREATE`. The MCP plans again and applies only
+its own clean plan with that plan's digest, so this tool never handles a digest. The phone may
+answer `REPLACE_STALE`, `ASSET_ALREADY_REPLACED`, `IDENTICAL` or `UNKNOWN`. Each of these is printed
+as a note naming the entry key, and none is retried. The closing re-plan re-reads the succession.
+The phone's replace routes need ServiceTag at schema 16. An older app is refused by the MCP, and the
+CLI prints that one line and exits 2.
+
 ## The CLI
 
 Installed as `servicetag-schedules` (`uv run servicetag-schedules ...` from this directory).
