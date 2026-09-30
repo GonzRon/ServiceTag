@@ -9,6 +9,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.TimeUnit
 import javax.net.ServerSocketFactory
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -167,6 +168,13 @@ internal class LoopbackApiServer(
     /** The connection currently being answered, so [stop] can close it rather than wait for it. */
     @Volatile private var inFlight: Socket? = null
 
+    /**
+     * #92 (B2-pre BC5): this generation's `Job`, made by [start] and cancelled by [stop]. A materialize download is its
+     * child, so a request this generation read before a `stop()` but that reaches its download after it starts
+     * cancelled and fetches nothing. It parents nothing else: every other route still runs to completion.
+     */
+    @Volatile private var generation: Job? = null
+
     private val _state = MutableStateFlow<ListenerState>(ListenerState.Stopped)
 
     /** What the screen shows: listening, stopped, could not start (and why), or died. */
@@ -198,10 +206,12 @@ internal class LoopbackApiServer(
             return couldNotStart(e)
         }
         socket = bound
+        val born = Job()
+        generation = born
         _state.value = ListenerState.Listening
         // N1: not held in a field. Nothing ever read it — it was assigned in `start()`, nulled in
         // `stop()`, and never consulted — so it was write-only dead state.
-        Thread({ acceptLoop(bound) }, "servicetag-developer-api").apply {
+        Thread({ acceptLoop(bound, born) }, "servicetag-developer-api").apply {
             isDaemon = true
             start()
         }
@@ -238,6 +248,11 @@ internal class LoopbackApiServer(
     @Synchronized
     fun stop() {
         _state.value = ListenerState.Stopped
+        // #92 (C16, BC5): leaving stops the download — the one registered now, and any this generation has yet to
+        // start. Cancel only, never join: a commit that began is `NonCancellable` and completes (R87-4).
+        generation?.cancel()
+        generation = null
+        router.cancelDownload()
         val bound = socket ?: return
         socket = null
         // Closing the server socket is what unblocks `accept()`; the loop then sees `isClosed`.
@@ -246,7 +261,7 @@ internal class LoopbackApiServer(
         inFlight = null
     }
 
-    private fun acceptLoop(bound: ServerSocket) {
+    private fun acceptLoop(bound: ServerSocket, generation: Job) {
         while (!bound.isClosed) {
             val client = try {
                 bound.accept()
@@ -256,7 +271,7 @@ internal class LoopbackApiServer(
             }
             inFlight = client
             try {
-                client.use { answer(it) }
+                client.use { answer(it, generation) }
             } catch (t: Throwable) {
                 // `Throwable`, not `IOException`, and per connection: a client that hung up, a
                 // `RuntimeException` from a handler, an `OutOfMemoryError` from a 4 MiB body that
@@ -301,7 +316,7 @@ internal class LoopbackApiServer(
         }
     }
 
-    private fun answer(client: Socket) {
+    private fun answer(client: Socket, generation: Job) {
         // The second check. The bind already refuses anything off this phone; this refuses anything
         // that reached us some other way, before a byte of it is parsed.
         if (!isAcceptablePeer(client.inetAddress)) return
@@ -309,7 +324,7 @@ internal class LoopbackApiServer(
         val response = try {
             val request = parseRequest(client.getInputStream(), router::bodyCapFor)
             _requests.update { it + 1 }
-            router.handle(request)
+            router.handle(request, generation)
         } catch (e: MalformedRequest) {
             _requests.update { it + 1 }
             e.response

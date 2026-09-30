@@ -10,22 +10,31 @@ import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentKinds
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.MimeTypes
+import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.accepts
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
+import com.loosecannon.servicetag.core.usecase.MaterializeReference
+import com.loosecannon.servicetag.core.usecase.MaterializeReview
 import com.loosecannon.servicetag.core.usecase.NoSuchAsset
+import com.loosecannon.servicetag.core.usecase.Prepared
+import com.loosecannon.servicetag.core.usecase.ReferenceProblem
+import com.loosecannon.servicetag.core.usecase.SourceSnapshot
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.isIsoDate
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.InstallationIdentity
+import com.loosecannon.servicetag.ui.references.reviewPrefill
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -35,8 +44,14 @@ import java.security.MessageDigest
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 
 /**
  * #92's attachment rows (C5–C8), reached from the router as `handlers.attachmentRoutes.*` — not `attachments`, which
@@ -55,6 +70,10 @@ import kotlinx.coroutines.sync.withLock
  * [apiLongWrites], the process-wide lock `AppGraph` owns (C33), so a retried upload on a new listener generation
  * waits for the first and then finds its row. The router has already checked the token on the headers; nothing here
  * runs for an unauthenticated caller (C10).
+ *
+ * **Save as document (B2, C14–C17)** is `MaterializeReference.prepare` then `commit`, for an existing web reference
+ * **by id** — the asset is the reference's, and `prepare` alone reads its URI — under the same [apiLongWrites]. The
+ * download runs inside a `Job` the listener's `stop()` cancels; the commit, once it began, runs to its end (R87-4).
  */
 internal class AttachmentHandlers(
     private val attachments: AttachmentRepository,
@@ -69,10 +88,17 @@ internal class AttachmentHandlers(
     /** C12's wall clock over every body read on the upload path; parameterised so a test need not wait ten minutes. */
     private val uploadDeadlineMillis: Long = UPLOAD_DEADLINE_MILLIS,
     private val nanoTime: () -> Long = System::nanoTime,
+    /** B2: the reference, read by id for its asset, and save as document; null only in a fixture that never saves. */
+    private val references: ReferenceRepository? = null,
+    private val materializeReference: MaterializeReference? = null,
+    /** C14 step 4: the phone's own starting designation; parameterised only so a test can reach commit's blank name. */
+    private val prefill: (SourceSnapshot, String) -> MaterializeReview =
+        { snapshot, type -> reviewPrefill(snapshot, type) },
 ) {
     constructor(graph: AppGraph) : this(
         graph.attachments, graph.assets, graph.attachmentStorage, graph.updateAttachment, graph.installationIdentity,
         graph.transferRecords, graph.addAttachment, graph.materializeStaging, graph.apiLongWrites,
+        references = graph.references, materializeReference = graph.materializeReference,
     )
 
     /** `/v1/status`' `installationId` (C5a): read from its file once per process, never minted twice. */
@@ -221,6 +247,92 @@ internal class AttachmentHandlers(
         return ok(AttachmentResponse.serializer(), AttachmentResponse(row.toDto()))
     }
 
+    /**
+     * `POST /v1/references/{id}/materialize` (C14–C17, R92-3): save as document, synchronously, for the reference
+     * `{id}` as it is stored. In C14's order:
+     * 1. the four review fields (BC1: any other key, `url` and `uri` included, is the strict decoder's 400); a
+     *    **given** name blank after trim is 422 — before any fetch;
+     * 2. the reference by id (404), its asset, and that asset transferred out (409) — before any fetch;
+     * 3. the download's `Job`, a child of the listener [generation] that read the request, registered in [downloads]
+     *    **before** it waits for [apiLongWrites]: a `stop()` while it waits, or one that landed before it registered
+     *    (BC5), cancels it and nothing is fetched. Under the lock, `prepare` inside that `Job`; a refusal is C17's;
+     * 4.–6. the review, the hand-off and the commit ([saveAsDocument]).
+     * The slot is cleared only if it still holds this `Job`, and the reference row is never written.
+     */
+    suspend fun materialize(
+        referenceId: String,
+        request: ApiRequest,
+        generation: Job?,
+        downloads: DownloadInFlight,
+    ): ApiResponse {
+        val references = checkNotNull(references) { "save as document is not wired" }
+        val materializeReference = checkNotNull(materializeReference) { "save as document is not wired" }
+        val given = request.decode(MaterializeRequest.serializer())
+        if (given.displayName?.isBlank() == true) throw nameRequired()
+        val reference = references.get(ReferenceId(referenceId))
+            ?: throw ReferenceRefused(ReferenceProblem.NoSuchReference)
+        val assetId = reference.assetId
+        if (assetId in transfers.heldIds()) throw AssetTransferredOut(assetId)
+
+        val download = Job(generation)
+        downloads.register(download)
+        try {
+            return withContext(download) {
+                apiLongWrites.withLock { saveAsDocument(materializeReference, assetId, reference.id, given) }
+            }
+        } finally {
+            downloads.clear(download)
+            download.complete()
+        }
+    }
+
+    /**
+     * C14 steps 3–6, under the lock and inside the registered download's `Job`:
+     * - `prepare` downloads (the address policy, the limits, the nineteen types and R85-6's same-bytes check are all
+     *   its own); a refusal answers C17's code, and a cancel propagates with its staging already discarded;
+     * - the review is [prefill]'s with each given key laid over it;
+     * - **the hand-off:** a `stop()` that landed after `prepare` returned and before the commit began wins — the
+     *   download's `Job` is cancelled, so nothing is written; otherwise the commit runs `NonCancellable` and wins —
+     *   neither `stop()` nor a client disconnect can cut it, and a cancellation that surfaces after it is not a
+     *   failure (BC6): the row is durable and no answer is sent;
+     * - `finally`, [MaterializeReference.discard] for any `Ready` the commit did not spend (a blank name keeps its
+     *   staging, a throw building the review never reaches the commit; plan review C-9). It touches staging only,
+     *   never the store or the row, and after a commit that spent it, it is the idempotent no-op.
+     * Every failure the commit raises maps through the shipped arms (BC8): nothing here builds a message from it.
+     */
+    private suspend fun saveAsDocument(
+        materializeReference: MaterializeReference,
+        assetId: AssetId,
+        referenceId: ReferenceId,
+        given: MaterializeRequest,
+    ): ApiResponse {
+        val ready = when (val prepared = materializeReference.prepare(assetId, referenceId)) {
+            is Prepared.Refused -> throw materializeRefusal(prepared.why)
+            is Prepared.Ready -> prepared
+        }
+        try {
+            val prefilled = prefill(ready.snapshot, ready.fetched.mimeType)
+            val review = MaterializeReview(
+                displayName = given.displayName ?: prefilled.displayName,
+                kind = given.kind ?: prefilled.kind,
+                role = given.role ?: prefilled.role,
+                notes = given.notes ?: prefilled.notes,
+            )
+            currentCoroutineContext().ensureActive()
+            val saved = withContext(NonCancellable) { materializeReference.commit(ready, review) }
+            return when (saved) {
+                is AttachmentResult.Ok ->
+                    createdResponse(AttachmentResponse.serializer(), AttachmentResponse(saved.value.toDto()))
+                is AttachmentResult.Refused -> throw addRefusal(assetId, saved.problem)
+            }
+        } finally {
+            materializeReference.discard(ready)
+        }
+    }
+
+    private fun nameRequired(): Exception =
+        attachmentRefusal(AttachmentProblem.BlankName) ?: IllegalStateException("a blank name is always refused")
+
     /** An add's `OwnerMissing` is the asset (a phone-side delete racing the upload), not an attachment row. */
     private fun addRefusal(assetId: AssetId, problem: AttachmentProblem): Exception =
         if (problem == AttachmentProblem.OwnerMissing) {
@@ -314,6 +426,19 @@ internal class AttachmentHandlers(
         }
     }
 }
+
+/**
+ * `POST /v1/references/{id}/materialize` (C14): the review's four fields, every one optional — absent or null takes
+ * the phone's prefill. **No key carries a URL, a host or a path** (R92-3, BC1): the strict decoder answers any other
+ * key with the shipped 400, and the URI fetched is the stored reference's, read by `prepare` alone.
+ */
+@Serializable
+internal data class MaterializeRequest(
+    val displayName: String? = null,
+    val kind: AttachmentKind? = null,
+    val role: DocumentRole? = null,
+    val notes: String? = null,
+)
 
 /** C12: ten minutes over every body read of one upload; past it the connection is closed and nothing is written. */
 internal const val UPLOAD_DEADLINE_MILLIS: Long = 10 * 60 * 1000L

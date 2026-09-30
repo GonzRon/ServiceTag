@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
+import com.loosecannon.servicetag.core.fetch.FetchProblem
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.ports.StoreIoException
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
@@ -32,6 +33,7 @@ import com.loosecannon.servicetag.core.usecase.HealthValidation
 import com.loosecannon.servicetag.core.usecase.LegacyWriteCannotRepresent
 import com.loosecannon.servicetag.core.usecase.LoanReturned
 import com.loosecannon.servicetag.core.usecase.LoanValidation
+import com.loosecannon.servicetag.core.usecase.MaterializeRefusal
 import com.loosecannon.servicetag.core.usecase.MemberCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.MergePlanStale
 import com.loosecannon.servicetag.core.usecase.MergeRefused
@@ -789,3 +791,65 @@ internal fun attachmentRefusal(problem: AttachmentProblem): ApiFailure? = when (
     )
     AttachmentProblem.Unchanged -> null
 }
+
+// --- #92 (B2), save as document's codes (C2, C17) --------------------------------------------------------------------
+//
+// Each code, status and sentence is C2's table, verbatim. **No refusal here carries a URI, a host, a remote header, a
+// remote byte or a free-text name** (B2-pre BC2): `problems` names each domain problem by its class, `ServerError`
+// carries the remote status alone, and `AlreadyHave` is written out by the earlier row's id, never by the data class's
+// `toString` (which carries that row's name).
+
+/**
+ * Every [MaterializeRefusal] as C17 maps it. Exhaustive, so a refusal added later is a compile error here. A fetch
+ * refusal is the remote's answer and no field of the request can fix it: **502**, one `FETCH_` code per problem
+ * ([fetchProblemCode]). The permission is a 409 in either spelling: `prepare` turns the transport's `NetworkDenied`
+ * into [MaterializeRefusal.NetworkDenied], and this arm keeps a `Fetch(NetworkDenied)` a 409 too.
+ */
+internal fun materializeRefusal(why: MaterializeRefusal): ApiFailure = when (why) {
+    // The shipped 404 of `/v1/references`, unchanged: the reference went between the handler's read and `prepare`'s.
+    MaterializeRefusal.NoSuchReference -> ApiFailure(404, "Not Found", "NO_SUCH_REFERENCE", "no such reference")
+    MaterializeRefusal.NotEligible -> ApiFailure(
+        409, "Conflict", "REFERENCE_NOT_MATERIALIZABLE", "that reference is not an https document link",
+        listOf("NotEligible"),
+    )
+    // `NoStore` and `StoreUnavailable`, the add's own codes; `prepare` raises no other store problem.
+    is MaterializeRefusal.Store -> attachmentRefusal(why.problem) ?: error("a store refusal is never Unchanged")
+    MaterializeRefusal.NetworkDenied -> networkDenied()
+    is MaterializeRefusal.Fetch -> if (why.problem == FetchProblem.NetworkDenied) {
+        networkDenied()
+    } else {
+        ApiFailure(
+            502, "Bad Gateway", fetchProblemCode(why.problem), "the download was refused",
+            listOf(why.problem.toString()),
+        )
+    }
+    is MaterializeRefusal.AlreadyHave -> ApiFailure(
+        409, "Conflict", "ATTACHMENT_ALREADY_HELD", "this asset already holds these bytes",
+        listOf("AlreadyHave(attachmentId=${why.attachmentId.value})"),
+    )
+}
+
+/**
+ * One wire code per [FetchProblem] (C2): the twelve `FETCH_` codes, and `NETWORK_DENIED` for the permission, which
+ * is no fetch refusal ([materializeRefusal] answers it as the 409). Exhaustive, so a problem added later is a
+ * compile error here. Every one is a redirect hop's or the remote's fact: a static first-hop problem is already
+ * `REFERENCE_NOT_MATERIALIZABLE`.
+ */
+internal fun fetchProblemCode(problem: FetchProblem): String = when (problem) {
+    FetchProblem.NotHttps -> "FETCH_NOT_HTTPS"
+    FetchProblem.HasCredentials -> "FETCH_HAS_CREDENTIALS"
+    FetchProblem.LocalAddress -> "FETCH_LOCAL_ADDRESS"
+    FetchProblem.Unreachable -> "FETCH_UNREACHABLE"
+    FetchProblem.Interrupted -> "FETCH_INTERRUPTED"
+    FetchProblem.TimedOut -> "FETCH_TIMED_OUT"
+    FetchProblem.TooLarge -> "FETCH_TOO_LARGE"
+    FetchProblem.Empty -> "FETCH_EMPTY"
+    FetchProblem.NotADocument -> "FETCH_NOT_A_DOCUMENT"
+    FetchProblem.NeedsSignIn -> "FETCH_NEEDS_SIGN_IN"
+    is FetchProblem.ServerError -> "FETCH_SERVER_ERROR"
+    FetchProblem.RedirectRefused -> "FETCH_REDIRECT_REFUSED"
+    FetchProblem.NetworkDenied -> "NETWORK_DENIED"
+}
+
+private fun networkDenied(): ApiFailure =
+    ApiFailure(409, "Conflict", "NETWORK_DENIED", "this app may not use the network", listOf("NetworkDenied"))

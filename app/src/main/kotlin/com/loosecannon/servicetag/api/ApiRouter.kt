@@ -1,10 +1,16 @@
 package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 
-/** Every request body's ceiling but two: 64 KiB, which is a large asset form and a huge event. */
+/**
+ * Every request body's ceiling but three (the import pair's and the upload's): 64 KiB, which is a large asset form
+ * and a huge event. #92's materialize takes this one too: its body is four review fields and never a file.
+ */
 internal const val MAX_BODY_BYTES: Int = 64 * 1024
 
 /** The two endpoints that take an archive instead of a form. */
@@ -41,6 +47,9 @@ internal class ApiRouter(
     private val handlers: ApiHandlers,
     private val token: String,
 ) {
+    /** #92 (C16, C33): the one download in flight, which the listener's `stop()` cancels through [cancelDownload]. */
+    private val download = DownloadInFlight()
+
     /**
      * Asked by the parser with the method and the path, before a body byte is read. The upload tier is `POST`'s
      * alone (C9): any other method on that shape keeps 64 KiB and is read like any other request.
@@ -51,20 +60,37 @@ internal class ApiRouter(
         else -> MAX_BODY_BYTES
     }
 
-    fun handle(request: ApiRequest): ApiResponse {
+    /**
+     * [generation] is the listener generation that read [request] (#92, B2-pre BC5): the materialize download is its
+     * child, so a request read before a `stop()` that reaches its download after it starts cancelled. It is only ever
+     * a download's parent — `runBlocking` itself stays uncancellable, so every other route runs to completion as it
+     * always has. Null for an in-process caller, which no listener stops.
+     */
+    fun handle(request: ApiRequest, generation: Job? = null): ApiResponse {
         if (!tokenMatches(token, request.bearerToken())) {
             return ApiResponse.empty(401, "Unauthorized")
         }
         return try {
-            runBlocking(Dispatchers.IO) { route(request) }
+            runBlocking(Dispatchers.IO) { route(request, generation) }
         } catch (e: RequestStreamFailed) {
             throw e // #92 C12: the peer's stream died; there is no one to answer
+        } catch (e: CancellationException) {
+            throw e // #92 C16: `stop()` cancelled a download; the connection is closed, so no answer is sent
         } catch (e: ApiFailure) {
             errorResponse(e.status, e.reason, e.code, e.message ?: e.code, e.problems, e.field)
         } catch (e: Exception) {
             mapDomainFailure(e)
         }
     }
+
+    /**
+     * #92 (C16): what the listener's `stop()` calls — cancels the registered download's `Job`, and nothing else. It
+     * never waits: a cancelled download unwinds on its own worker, and a commit that began is not reached (R87-4).
+     */
+    fun cancelDownload() = download.cancel()
+
+    /** Row 45's window onto the slot: the download registered now, or null. */
+    internal fun downloadInFlight(): Job? = download.current()
 
     /**
      * The whole surface. Sixty-two path shapes over seventy-six method-and-path rows; anything
@@ -125,8 +151,12 @@ internal class ApiRouter(
      * #92 (B1b) added one row on the twenty-second shape: `POST /v1/assets/{id}/attachments`, one file streamed into
      * staging and committed through `AddAttachment` alone, idempotent by the caller's operation key. No row reads
      * an attachment's bytes back out.
+     *
+     * #92 (B2) added one row over one shape: `POST /v1/references/{id}/materialize`, save as document for an existing
+     * web reference **by id** — never a URL from the wire (R92-3) — through `MaterializeReference.prepare` and
+     * `commit` alone; a 405 for any other verb. The reference itself is never written.
      */
-    private suspend fun route(request: ApiRequest): ApiResponse {
+    private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
         // once, in `parseRequest`, before `bodyCapFor` is ever consulted. Trimming a trailing slash
         // here too would let a non-canonical spelling reach a handler under the wrong cap — the
@@ -262,12 +292,20 @@ internal class ApiRouter(
                 if (method == "GET") handlers.listTagBindings() else notAllowed(request)
 
             // 1.3 — two path shapes, both 405 for a verb they do not take. There is no `DELETE`
-            // on either, and `/v1/references/{id}/anything` is not a shape at all.
+            // on either, and `/v1/references/{id}/anything` but #92's `materialize` is not a shape at all.
             rest == listOf("references") ->
                 if (method == "POST") handlers.references.create(request) else notAllowed(request)
 
             rest.size == 2 && rest[0] == "references" ->
                 if (method == "PATCH") handlers.references.update(rest[1], request) else notAllowed(request)
+
+            // #92 (B2) — save as document: the reference by id, the four review fields, one synchronous answer.
+            rest.size == 3 && rest[0] == "references" && rest[2] == "materialize" ->
+                if (method == "POST") {
+                    handlers.attachmentRoutes.materialize(rest[1], request, generation, download)
+                } else {
+                    notAllowed(request)
+                }
 
             // 1.4 — a health subject is created, read, replaced and archived, and never removed.
             rest == listOf("health-subjects") ->
@@ -344,4 +382,28 @@ internal class ApiRouter(
 
     private fun notAllowed(request: ApiRequest): Nothing =
         throw ApiFailure.methodNotAllowed(request.method, request.path)
+}
+
+/**
+ * #92 (C16, C33): the one materialize download in flight, across listener generations. The router owns it and lives
+ * for the Developer API visit; a handler [register]s its download's `Job` before it waits for `apiLongWrites`, and
+ * [clear]s it in `finally` **only if the slot still holds that `Job`** (compare-and-clear, S1's rule): a stale
+ * generation's handler finishing late can never unregister the new generation's download, so a later `stop()` still
+ * cancels it. A stale `Job` a register overwrites is already cancelled — its generation was stopped.
+ */
+internal class DownloadInFlight {
+    private val slot = AtomicReference<Job?>(null)
+
+    fun register(job: Job) = slot.set(job)
+
+    fun clear(job: Job) {
+        slot.compareAndSet(job, null)
+    }
+
+    /** Cancels only what the slot holds, and never waits. */
+    fun cancel() {
+        slot.get()?.cancel()
+    }
+
+    fun current(): Job? = slot.get()
 }
