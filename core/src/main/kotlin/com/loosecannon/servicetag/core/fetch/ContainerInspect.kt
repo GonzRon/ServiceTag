@@ -40,7 +40,11 @@ object ContainerInspect {
         return names.mapNotNull { mainParts[it] }.singleOrNull()
     }
 
-    /** Steps 1–4: every central-directory name (UTF-8), or null for anything but a plain, bounded ZIP. */
+    /**
+     * Steps 1–4: every central-directory name (UTF-8), or null for anything but a plain, bounded ZIP. The
+     * directory is the one every reader finds: it ends exactly at the end record, both entry counts agree,
+     * and its records fill its declared size exactly, so no record is hidden past the count (review MJ1, MJ2).
+     */
     private fun centralNames(size: Long, inspection: BoundedInspection): List<String>? {
         val reach = minOf(size, END_REACH.toLong()).toInt()
         val end = inspection.readAt(size - reach, reach)
@@ -50,8 +54,8 @@ object ContainerInspect {
         val entries = end.u16(at + 10)
         val length = end.u32(at + 12)
         val offset = end.u32(at + 16)
-        if (end.u16(at + 8) == 0xFFFF || entries == 0xFFFF || length == 0xFFFF_FFFFL || offset == 0xFFFF_FFFFL) return null // ZIP64
-        if (entries > MAX_ENTRIES || length > MAX_DIRECTORY_BYTES || offset + length > size - reach + at) return null
+        if (end.u16(at + 8) != entries || entries == 0xFFFF || length == 0xFFFF_FFFFL || offset == 0xFFFF_FFFFL) return null // ZIP64, or counts that disagree
+        if (entries > MAX_ENTRIES || length > MAX_DIRECTORY_BYTES || offset + length != size - reach + at) return null
         val directory = inspection.readAt(offset, length.toInt())
         if (directory.size.toLong() != length) return null
         val names = ArrayList<String>(entries)
@@ -64,6 +68,6 @@ object ContainerInspect {
             names += String(directory, p + 46, name, Charsets.UTF_8)
             p = next
         }
-        return names
+        return if (p == directory.size) names else null
     }
 }

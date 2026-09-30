@@ -83,16 +83,14 @@ object DocumentSniff {
     internal fun isZip(head: ByteArray): Boolean = startsWith(head, zipLocal)
 
     /**
-     * Where the ZIP end record starts in [window] (the file's last bytes), or -1: the last signature whose
-     * comment length equals the bytes after its 22-byte record, so the ZIP ends where the file does.
+     * Where the ZIP end record starts in [window] (the file's last bytes), or -1. It is the last end signature
+     * in the window at all, and its comment length must equal the bytes after its 22-byte record, so the ZIP
+     * ends where the file does. An end signature after it (inside the comment) refuses (review m3).
      */
     internal fun zipEndRecord(window: ByteArray): Int {
-        var at = window.size - 22
-        while (at >= 0) {
-            if (regionMatches(window, at, zipEnd) && at + 22 + window.u16(at + 20) == window.size) return at
-            at--
-        }
-        return -1
+        var at = window.size - zipEnd.size
+        while (at >= 0 && !regionMatches(window, at, zipEnd)) at--
+        return if (at in 0..window.size - 22 && at + 22 + window.u16(at + 20) == window.size) at else -1
     }
 
     internal fun regionMatches(a: ByteArray, at: Int, p: ByteArray): Boolean =

@@ -13,6 +13,7 @@ class FileStagedReader(private val file: File) : StagedReader {
         require(position >= 0 && length >= 0) { "a negative position or length" }
         RandomAccessFile(file, "r").use { f ->
             val bytes = ByteArray((f.length() - position).coerceIn(0L, length.toLong()).toInt())
+            if (bytes.isEmpty()) return bytes // at or past the end: no seek
             f.seek(position)
             f.readFully(bytes)
             return bytes

@@ -165,7 +165,10 @@ class FetchDocument(
         val proven = try {
             DocumentSniff.classify(done.size, done.head, done.tail) ?: inspected(staged, done)
         } catch (e: IOException) {
+            currentCoroutineContext().ensureActive()
             return refused(FetchProblem.Interrupted)
+        } catch (e: InspectionOverBudget) {
+            return refused(FetchProblem.NotADocument) // C31; ContainerInspect already answers null for it
         }
         val mimeType = proven ?: return refused(FetchProblem.NotADocument)
         return FetchOutcome.Fetched(staged, url, mimeType, done.size, done.sha256)
