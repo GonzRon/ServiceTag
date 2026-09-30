@@ -9,7 +9,7 @@
          each explain a denial and link to the app's settings page (#66). No component is added for
          it — a socket is not a component, so there is nothing here to export.
 
-         INTERNET gives the process network capability. Its one intentional outbound use is Save as document (#85): an https download of a reference's document, made only when the owner taps it on the phone. The Developer API still listens only on localhost; future cloud features may make intentional outbound use of the permission under their own designs. -->
+         INTERNET gives the process network capability. Its one intentional outbound use is Save as document (#85): an https download of a reference's document, made when the owner taps it on the phone, or when the owner's paired workstation asks through the Developer API while its screen is open (#92). The Developer API's listener still binds only to localhost; future cloud features may make intentional outbound use of the permission under their own designs. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- API 33+ runtime permission. Requested on first schedule creation with a rationale, never
          at launch (spec §5.1, #24 AC 1) — the request lives in the schedule editor (B14), plumbed

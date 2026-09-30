@@ -345,7 +345,7 @@ order. Resolving conflicts is a later release (issue #44's interactive slice); 1
 unambiguous and refuses the rest safely.
 
 There is deliberately **no** tool for a wipe, a replace-import, an export, an NFC write, an NFC
-bind or an attachment's bytes: the API has no route for any of them. Nor is there one that **deletes
+bind or reading an attachment's bytes back out: the API has no route for any of them. Nor is there one that **deletes
 a schedule, a group, a membership row or a closure**, or that **amends a closure** — a closure is
 immutable exported history, and one that could be rewritten could rewrite a schedule's past. There
 is no **snooze** tool either: the snooze is device-local delivery state, not canonical data, and it
@@ -357,8 +357,9 @@ archiving, and health is computed at read time. Since #79 there is no tool that 
 case** or **amends or deletes a timeline entry**, and none but `add_case_entry` moves a case's status.
 Since #77 there is no tool that **makes, imports or marks a Transfer Pack**, **withdraws a transfer
 record** or lists the records: each is the phone's alone. Since #86 there is no tool that **replaces an
-asset** or **records, edits or removes a succession**: only the phone's Replace asset records one,
-`import_merge` only inserts an archive's rows, and `get_asset_succession` only reads.
+asset** or **records, edits or removes a succession**: a succession is recorded only by a replacement
+(the phone's Replace asset or, since #92, the API's `POST /v1/assets/{id}/replace`), `import_merge` only
+inserts an archive's rows, and `get_asset_succession` only reads.
 
 ## Tests
 
