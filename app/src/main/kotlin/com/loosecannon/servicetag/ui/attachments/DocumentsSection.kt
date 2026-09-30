@@ -46,6 +46,7 @@ import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.references.LinkDecision
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.asset.FieldLabel
 import com.loosecannon.servicetag.ui.asset.KEY_DOCUMENTS
@@ -53,6 +54,7 @@ import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.StatusBlock
+import com.loosecannon.servicetag.ui.references.openRefusal
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.io.File
 import java.util.Locale
@@ -150,6 +152,8 @@ fun AttachmentsSection(
      * no folder card is drawn (nothing can be added anyway).
      */
     readOnly: Boolean = false,
+    /** #85 (C25): the launcher a reference's Open uses, for P85-9 on a saved file's sheet; null offers no button. */
+    onOpenLink: ((String) -> Boolean)? = null,
 ) {
     // Keyed by owner so an asset and one of its events never share a model within an entry.
     val model: AttachmentsSectionViewModel =
@@ -200,6 +204,13 @@ fun AttachmentsSection(
             onSave = { cmd -> model.save(row.id, cmd) },
             onDelete = { model.delete(row.id) },
             onDismiss = { editing = null },
+            // The same policy instance and decision as a reference's Open, and its lines as snackbars.
+            onOpenSource = onOpenLink?.let { launcher ->
+                { uri: String ->
+                    val launchable = graph.linkLaunchPolicy.classify(uri) != LinkDecision.Blocked
+                    openRefusal(launchable, uri, launcher)?.let { scope.launch { snackbars.showSnackbar(it) } }
+                }
+            },
         )
     }
 }

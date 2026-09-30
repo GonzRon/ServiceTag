@@ -296,12 +296,12 @@ the new target **and** clearing the old one in the same call.
 
 ### `import_merge`
 
-Takes a local path to a `ServiceTag-data-*.zip` of format **1–15** and merges it into the phone. A
+Takes a local path to a `ServiceTag-data-*.zip` of format **1–16** and merges it into the phone. A
 format-6 archive adds the maintenance groups, the schedules and the occurrence closures, format 7 the
 references, format 8 the season activations, the conditions and the health subjects, format 9 the
 owner's own categories, format 10 each attachment's document role, format 11 each asset's warranty
 reminder lead, format 12 the service cases and their timeline entries, format 13 the loans, format
-14 the transfer records and format 15 the asset successions; an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
+14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance; an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
 - a row whose id is not on the phone is **inserted**, with its UUID preserved exactly;

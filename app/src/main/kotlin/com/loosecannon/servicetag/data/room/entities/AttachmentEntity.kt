@@ -24,6 +24,9 @@ import androidx.room3.PrimaryKey
  * Schema v10 (#67, C3) appends `document_role`: nullable, no default, never backfilled — a row
  * written before it has no role. Asset-owned rows only, which the use cases and the backup reader
  * enforce; there is no `CHECK` here, for the reason above.
+ *
+ * Schema v16 (#85, C2) appends the four `source_*` columns: nullable, no default, no index, never
+ * backfilled — a row that was not saved from a reference has none. Write-once; there is no `reference_id`.
  */
 @Entity(
     tableName = "attachment",
@@ -64,4 +67,8 @@ data class AttachmentEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
     @ColumnInfo(name = "document_role") val documentRole: String?,
+    @ColumnInfo(name = "source_uri") val sourceUri: String?,
+    @ColumnInfo(name = "source_resolved_uri") val sourceResolvedUri: String?,
+    @ColumnInfo(name = "source_retrieved_at") val sourceRetrievedAt: Long?,
+    @ColumnInfo(name = "source_name") val sourceName: String?,
 )

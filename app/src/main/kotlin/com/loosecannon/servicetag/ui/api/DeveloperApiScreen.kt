@@ -38,6 +38,9 @@ import com.loosecannon.servicetag.ui.components.appDetails
 import com.loosecannon.servicetag.ui.components.open
 import com.loosecannon.servicetag.ui.theme.MeasurementHeroText
 
+/** P1A-2, ratified 2026-09-25; #85 §6 reuses it (hoisted byte-identical) beside P85-10. */
+internal const val OPEN_APP_SETTINGS = "Open app settings"
+
 /**
  * The one screen the automation API has, and the whole of its lifetime (1.1.0, issue #46).
  *
@@ -147,7 +150,7 @@ internal fun DeveloperApiScreen(
                         contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
                     ) {
                         // P1A-2, ratified 2026-09-25.
-                        Text("Open app settings")
+                        Text(OPEN_APP_SETTINGS)
                     }
                 }
             }

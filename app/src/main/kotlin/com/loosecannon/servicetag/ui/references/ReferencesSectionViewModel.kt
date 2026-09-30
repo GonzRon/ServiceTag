@@ -4,9 +4,12 @@ import com.loosecannon.servicetag.ui.transfer.transferredOutOr
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.fetch.HopPolicy
 import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.references.LinkDecision
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
@@ -47,6 +50,10 @@ data class ReferenceRowState(
     val kind: ReferenceKind,
     /** False when [LinkLaunchPolicy] now refuses this stored URI: shown, never launched. */
     val launchable: Boolean,
+    /** #85 (C20, R85-4, R85-15): an https web link the hop rule accepts, so Save as document is offered. */
+    val materializable: Boolean = false,
+    /** #85 (C20, R85-1, R85-3): derived, never stored — an attachment on this asset has this URI as its source. */
+    val savedAsDocument: Boolean = false,
 )
 
 data class ReferencesSectionState(
@@ -71,6 +78,8 @@ class ReferencesSectionViewModel(
     private val updateReference: UpdateReference,
     private val removeReference: RemoveReference,
     private val policy: LinkLaunchPolicy,
+    attachments: AttachmentRepository,
+    private val hops: HopPolicy,
     /**
      * Where the three writes run: `Dispatchers.IO` in the app, and the test's own scheduler in a
      * JVM test, so none of that work outlives the test that started it.
@@ -85,6 +94,8 @@ class ReferencesSectionViewModel(
         graph.updateReference,
         graph.removeReference,
         graph.linkLaunchPolicy,
+        graph.attachments,
+        graph.hops,
     )
 
     /** The command the person has been asked about but has not answered for yet. */
@@ -94,9 +105,15 @@ class ReferencesSectionViewModel(
 
     /** Already ordered by display name, then id, by the query itself. */
     val state: StateFlow<ReferencesSectionState> =
-        combine(references.observeForAsset(assetId), pending) { rows, awaiting ->
+        combine(
+            references.observeForAsset(assetId),
+            attachments.observeForOwner(AttachmentOwner.OfAsset(assetId)),
+            pending,
+        ) { rows, files, awaiting ->
+            // The (assetId, uri) second identity (R85-3): this asset's files, by their source's URI alone.
+            val sourced = files.mapNotNullTo(HashSet()) { it.source?.uri }
             ReferencesSectionState(
-                rows = rows.map(::row),
+                rows = rows.map { row(it, sourced) },
                 pendingConfirmation = awaiting?.scheme,
             )
         }.stateIn(
@@ -217,7 +234,7 @@ class ReferencesSectionViewModel(
         }
     }
 
-    private fun row(reference: AssetReference) = ReferenceRowState(
+    private fun row(reference: AssetReference, sourced: Set<String>) = ReferenceRowState(
         id = reference.id.value,
         displayName = reference.displayName,
         description = reference.description,
@@ -227,6 +244,10 @@ class ReferencesSectionViewModel(
         // legal when it was saved and is not now — a restored archive, a block list that grew —
         // is shown and refused, never launched (spec §4.2).
         launchable = policy.classify(reference.uri) != LinkDecision.Blocked,
+        materializable = reference.kind == ReferenceKind.WEB_URL &&
+            policy.classify(reference.uri) != LinkDecision.Blocked &&
+            hops.staticProblem(reference.uri) == null,
+        savedAsDocument = reference.uri in sourced,
     )
 
     /**

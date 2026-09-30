@@ -3,10 +3,12 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
+import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.EventKind
@@ -478,6 +480,94 @@ class AttachmentUseCasesTest {
 
         assertEquals(row, attachments.rows[row.id.value])
         assertEquals(1, uow.commits)   // only the add committed
+    }
+
+    // ---- #85 row 18 (C12): the command's one new field ----
+
+    private val manualSource = AttachmentSource(
+        uri = "https://manuals.example.invalid/pool-pump/manual.pdf?lang=en",
+        resolvedUri = "https://cdn.example.invalid/files/manual.pdf",
+        retrievedAt = 4_000L,
+        name = "Example Pool Pump manual",
+    )
+
+    /** Every shipped caller passes no source: its row is the shipped row, field for field, name-extension locator included. */
+    @Test fun withoutASourceTheRowIsTheShippedRow() = runTest {
+        val owner = AttachmentOwner.OfAsset(asset())
+
+        val row = (
+            add.run(owner, cmd(name = " Example scan.jpeg ", mime = "image/jpeg"), source()) as AttachmentResult.Ok
+            ).value
+
+        val shipped = Attachment(
+            id = AttachmentId("att-1"), owner = owner, kind = AttachmentKind.PHOTO, displayName = "Example scan.jpeg",
+            mimeType = "image/jpeg", sizeBytes = payload.size.toLong(),
+            sha256 = InMemoryAttachmentStore.sha256Hex(payload), storageLocator = "assets/a1/att-1.jpeg",
+            capturedOn = null, notes = "", createdAt = 5_000L, updatedAt = 5_000L, role = null,
+        )
+        assertEquals(shipped, row)
+        assertNull(row.source)
+        assertEquals(shipped, attachments.rows["att-1"])
+        assertEquals(1, uow.commits)
+    }
+
+    @Test fun aSourceIsCopiedOntoTheRow() = runTest {
+        val owner = AttachmentOwner.OfAsset(asset())
+
+        val row = (
+            add.run(owner, cmd().copy(source = manualSource), source()) as AttachmentResult.Ok
+            ).value
+
+        assertEquals(manualSource, row.source)
+        assertEquals(row, attachments.rows[row.id.value])
+        assertEquals(1, uow.commits)
+    }
+
+    /**
+     * Planner finding 5 (review m8): a reference's name is a title, not a filename, so a sourced add takes its
+     * extension from the type alone — "manuals.example.invalid" must never store a PDF as `<id>.invalid`.
+     */
+    @Test fun aSourcedAddTakesItsExtensionFromTheType() = runTest {
+        val owner = AttachmentOwner.OfAsset(asset())
+
+        val row = (
+            add.run(owner, cmd(name = "manuals.example.invalid").copy(source = manualSource), source())
+                as AttachmentResult.Ok
+            ).value
+
+        assertEquals("assets/a1/att-1.pdf", row.storageLocator)
+        assertEquals("manuals.example.invalid", row.displayName)   // the name itself is kept as given
+        assertTrue(store.exists("assets/a1/att-1.pdf"))
+        val unsourced = (add.run(owner, cmd(name = "manuals.example.invalid"), source()) as AttachmentResult.Ok).value
+        assertEquals("assets/a1/att-2.invalid", unsourced.storageLocator)   // the shipped rule, unchanged
+    }
+
+    /** C12: provenance can never enter malformed. A caller's mistake, refused before a byte is copied. */
+    @Test fun aMalformedSourceIsAProgrammingError() = runTest {
+        val owner = AttachmentOwner.OfAsset(asset())
+        val spy = RiggedStore()
+        val adder = AddAttachment(attachments, assets, events, OneStore(spy), uow, ids, Clock { now })
+        val malformed = listOf(
+            manualSource.copy(uri = "http://manuals.example.invalid/pool-pump/manual.pdf"),
+            manualSource.copy(resolvedUri = "https://cdn.example.invalid/files/manual.pdf?token=abc"),
+            manualSource.copy(resolvedUri = "https://cdn.example.invalid/files;sid=AB12/manual.pdf"),
+            manualSource.copy(   // query-free, so the "stored only when it differs" rule is the one that answers
+                uri = "https://manuals.example.invalid/pool-pump/manual.pdf",
+                resolvedUri = "https://manuals.example.invalid/pool-pump/manual.pdf",
+            ),
+            manualSource.copy(retrievedAt = 0L),
+            manualSource.copy(name = "  "),
+        )
+
+        malformed.forEach { bad ->
+            assertFailsWith<IllegalArgumentException>(bad.toString()) {
+                adder.run(owner, cmd().copy(source = bad), source())
+            }
+        }
+
+        assertEquals(0, spy.puts)
+        assertTrue(attachments.rows.isEmpty())
+        assertEquals(0, uow.commits)
     }
 }
 

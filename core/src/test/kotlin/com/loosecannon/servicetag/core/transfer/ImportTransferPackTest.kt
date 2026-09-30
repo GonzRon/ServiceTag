@@ -5,6 +5,8 @@ import com.loosecannon.servicetag.core.merge.MergeReason
 import com.loosecannon.servicetag.core.merge.MergeTable
 import com.loosecannon.servicetag.core.merge.MergeVerdict
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AttachmentId
+import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
@@ -130,6 +132,16 @@ class ImportTransferPackTest {
     @Test
     fun stagesThenMergesAndWritesInRecords() = runTest {
         val s = sender()
+        // #85 (C5): the heater's manual was saved from a reference, and its source travels in the pack's archive
+        val saved = s.raw.attachments.get(AttachmentId("at1"))!!.copy(
+            source = AttachmentSource(
+                uri = "https://manuals.example.invalid/heater/manual.pdf",
+                resolvedUri = "https://cdn.example.invalid/heater/manual.pdf",
+                retrievedAt = 1_758_900_000_000L,
+                name = "Example Water Heater manual",
+            ),
+        )
+        s.raw.attachments.upsert(saved)
         val pack = heaterPack(s)
         val r = recipient()
 
@@ -141,6 +153,7 @@ class ImportTransferPackTest {
         assertEquals(sent.assets.filter { it.id in setOf(HEATER, ANODE) }, here.assets.filter { it.id in setOf(HEATER, ANODE) })
         assertEquals(TransferFixtures.bytesByLocator.getValue("assets/h1/at1.pdf").toList(), r.raw.storage.store.files.getValue("assets/h1/at1.pdf").toList())
         assertEquals(TransferFixtures.bytesByLocator.getValue("events/e1/at2.jpg").toList(), r.raw.storage.store.files.getValue("events/e1/at2.jpg").toList())
+        assertEquals(saved, r.raw.attachments.get(AttachmentId("at1")), "the sourced document keeps its source")
         val ins = r.raw.transfers.all()
         assertEquals(listOf(HEATER, ANODE), ins.map { it.assetId.value }.sorted())
         assertTrue(ins.all { it.kind == TransferKind.IN && it.packId == "pack-0001" && it.lineage.isEmpty() }, "$ins")

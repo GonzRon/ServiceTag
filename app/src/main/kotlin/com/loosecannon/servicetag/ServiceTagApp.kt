@@ -58,6 +58,15 @@ class ServiceTagApp : Application() {
                 Log.w("ServiceTagApp", "the transfer cache sweep failed; the next start repeats it", e)
             }
         }
+        // #85 (R85-8): the Save-as-document downloads a previous process left in `cache/materialize/`. Guarded the
+        // same way; the line names the sweep and never a file, so the failure itself is not attached.
+        graph.appScope.launch(Dispatchers.IO) {
+            try {
+                graph.materializeStaging.sweepAtStart(startedAt)
+            } catch (_: Exception) {
+                Log.w("ServiceTagApp", "the download cache sweep failed; the next start repeats it")
+            }
+        }
         graph.appScope.launch {
             // Guarded, because `appScope` carries no exception handler: an unguarded throw from a
             // Room read or WorkManager's future would reach the thread's uncaught handler and take

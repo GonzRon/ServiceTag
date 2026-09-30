@@ -46,7 +46,18 @@ import kotlinx.coroutines.launch
  * The open-time refusal, ratified 2026-09-23 (§10, plan §18.14). **Not** the save-time sentence:
  * nothing is being saved here, the row is already stored, and the two moments got two lines.
  */
-private const val BLOCKED_AT_OPEN = "ServiceTag will not open that kind of link."
+internal const val BLOCKED_AT_OPEN = "ServiceTag will not open that kind of link."
+
+/**
+ * The open decision, shared by a reference's Open and a saved file's P85-9 button (#85 C25). The
+ * policy is asked again, and a URI it now refuses is never handed on: [open] is not called at all, so
+ * nothing reaches `ACTION_VIEW`. The answer is the line to show, or null when the URI went out.
+ */
+internal fun openRefusal(launchable: Boolean, uri: String, open: (String) -> Boolean): String? = when {
+    !launchable -> BLOCKED_AT_OPEN
+    open(uri) -> null
+    else -> NO_HANDLER_MESSAGE
+}
 
 /**
  * REFERENCES, the section below DOCUMENTS: what a share saved, and what "Add link" adds. It is a
@@ -73,6 +84,10 @@ fun ReferencesSection(
     var editing by remember { mutableStateOf<String?>(null) }
     var removing by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
+    // #85 C23: plain `remember`, never saveable. Building the sheet's model starts a download, so a
+    // process death closes the sheet and the owner taps again rather than downloading unasked.
+    var materializing by remember { mutableStateOf<ReferenceRowState?>(null) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
     LaunchedEffect(model) { model.saved.collect { id -> if (editing == id) editing = null } }
@@ -86,7 +101,21 @@ fun ReferencesSection(
         onRemove = { row -> removing = row.id },
         onAddLink = { adding = true },
         readOnly = readOnly,
+        onSaveAsDocument = { row -> materializing = row },
     )
+    materializing?.let { row ->
+        MaterializeSheet(
+            assetId = assetId,
+            row = row,
+            graph = graph,
+            // The snackbar runs in this section's scope: the sheet is already leaving composition.
+            onSaved = {
+                materializing = null
+                scope.launch { snackbars.showSnackbar(MaterializeStrings.SAVED_TO_DOCUMENTS) }
+            },
+            onClose = { materializing = null },
+        )
+    }
 
     // Read back out of the live state, so a rename or a removal redraws (or closes) the sheet.
     state.rows.firstOrNull { it.id == editing }?.let { row ->
@@ -132,6 +161,8 @@ internal fun ReferencesList(
     onRemove: (ReferenceRowState) -> Unit,
     onAddLink: () -> Unit,
     readOnly: Boolean = false,
+    /** #85 (C24): the ⋮ item P85-1, offered only on a materializable row of a writable detail. */
+    onSaveAsDocument: (ReferenceRowState) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     SectionHeader(
@@ -145,18 +176,13 @@ internal fun ReferencesList(
                 ReferenceRow(
                     row = row,
                     onOpen = {
-                        // The policy is asked again here, and a row it now refuses is never handed
-                        // on: `onOpen` is not called at all, so nothing reaches `ACTION_VIEW`.
-                        val line = when {
-                            !row.launchable -> BLOCKED_AT_OPEN
-                            onOpen(row.uri) -> null
-                            else -> NO_HANDLER_MESSAGE
-                        }
-                        line?.let { scope.launch { snackbars.showSnackbar(it) } }
+                        openRefusal(row.launchable, row.uri, onOpen)
+                            ?.let { scope.launch { snackbars.showSnackbar(it) } }
                     },
                     onEdit = { onEdit(row) },
                     onRemove = { onRemove(row) },
                     readOnly = readOnly,
+                    onSaveAsDocument = { onSaveAsDocument(row) },
                 )
             }
         }
@@ -181,6 +207,7 @@ private fun ReferenceRow(
     onEdit: () -> Unit,
     onRemove: () -> Unit,
     readOnly: Boolean = false,
+    onSaveAsDocument: () -> Unit = {},
 ) {
     var menu by remember { mutableStateOf(false) }
     Row(
@@ -199,6 +226,8 @@ private fun ReferenceRow(
                 overflow = TextOverflow.Ellipsis,
             )
             QuietLine(row.kind.label())
+            // #85 C24 (R85-1): derived from this asset's files, never stored; the reference stays.
+            if (row.savedAsDocument) QuietLine(MaterializeStrings.SAVED_AS_DOCUMENT)
             if (row.description.isNotEmpty()) {
                 QuietLine(row.description, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -210,6 +239,13 @@ private fun ReferenceRow(
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Open") }, onClick = { menu = false; onOpen() })
                 if (!readOnly) {
+                    // #85 C24 (R85-12, ratified order): Open, then P85-1, then Edit and Remove.
+                    if (row.materializable) {
+                        DropdownMenuItem(
+                            text = { Text(MaterializeStrings.SAVE_AS_DOCUMENT) },
+                            onClick = { menu = false; onSaveAsDocument() },
+                        )
+                    }
                     DropdownMenuItem(text = { Text("Edit") }, onClick = { menu = false; onEdit() })
                     DropdownMenuItem(text = { Text("Remove") }, onClick = { menu = false; onRemove() })
                 }

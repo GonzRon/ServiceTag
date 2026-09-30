@@ -22,6 +22,7 @@ import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.CompletionMode
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventKind
@@ -505,6 +506,35 @@ class ImportBackupMergeTest {
         runBlocking {
             assertEquals(DocumentRole.SERVICE_MANUAL, target.attachments.get(AttachmentId("att1"))?.role)
         }
+        assertEquals(MergeTally(0, 1, 0, 0), runBlocking { target.merge.plan(archive) }.attachments)
+    }
+
+    /**
+     * #85 C5: a document's source provenance travels by merge onto a **new** row, end to end — the production
+     * export, the real codec, the plan and the apply — and the same archive then re-plans IDENTICAL.
+     */
+    @Test
+    fun anInsertCarriesTheSource() {
+        val provenance = AttachmentSource(
+            uri = "https://manuals.example.invalid/pool-pump/manual.pdf",
+            resolvedUri = null,
+            retrievedAt = 1_758_900_000_000L,
+            name = "Example Pool Pump manual",
+        )
+        val donor = Fakes()
+        runBlocking {
+            donor.assets.upsert(asset("a1", "Example Pool Pump"))
+            donor.attachments.upsert(attachment("att1", "a1").copy(source = provenance))
+        }
+        val archive = exportOf(donor)
+        val target = Fakes(
+            FakeAttachmentStorage(InMemoryAttachmentStore().also { it.files["assets/a1/att1.pdf"] = bytes }),
+        )
+
+        val report = runBlocking { target.merge.run(archive) }
+
+        assertEquals(MergeTally(1, 0, 0, 0), report.attachments)
+        runBlocking { assertEquals(provenance, target.attachments.get(AttachmentId("att1"))?.source) }
         assertEquals(MergeTally(0, 1, 0, 0), runBlocking { target.merge.plan(archive) }.attachments)
     }
 

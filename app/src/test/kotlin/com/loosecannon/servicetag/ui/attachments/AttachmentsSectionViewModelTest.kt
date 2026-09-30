@@ -11,6 +11,7 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.ports.StoreIoException
 import com.loosecannon.servicetag.core.ports.AttachmentStore
@@ -30,6 +31,8 @@ import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateAttachmentCommand
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.IOException
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.properties.Delegates
 import kotlinx.coroutines.CompletableDeferred
@@ -134,6 +137,7 @@ class AttachmentsSectionViewModelTest {
         deleteAttachment: DeleteAttachment = graph.deleteAttachment,
         storage: AttachmentStorage = graph.attachmentStorage,
         addAttachment: AddAttachment = graph.addAttachment,
+        zone: ZoneId = ZoneOffset.UTC,
     ): AttachmentsSectionViewModel {
         val factory = viewModelFactory {
             initializer {
@@ -143,6 +147,7 @@ class AttachmentsSectionViewModelTest {
                     today = today,
                     // The scheduler Main and the database already share: no pool thread under test.
                     io = StandardTestDispatcher(scheduler),
+                    zone = zone,
                 )
             }
         }
@@ -180,6 +185,67 @@ class AttachmentsSectionViewModelTest {
     /** A pick whose bytes cannot be read: the store's `put` throws while copying it. */
     private fun broken(name: String) =
         PickedFile(name, "application/pdf", 1L) { throw IOException("the provider went away") }
+
+    /** #85 (C22): a document saved from a reference, as `MaterializeReference.commit` writes one. */
+    private suspend fun sourced(resolvedUri: String?) = graph.addAttachment.run(
+        AttachmentOwner.OfAsset(assetId),
+        AddAttachmentCommand(
+            displayName = "Example Pool Pump manual",
+            mimeType = "application/pdf",
+            sizeBytes = 3L,
+            source = AttachmentSource(
+                uri = "https://manuals.example.invalid/pool-pump/manual.pdf?session=example",
+                resolvedUri = resolvedUri,
+                retrievedAt = 1_790_683_200_000L, // 29 Sep 2026, 12:00 UTC
+                name = "Example Pool Pump manual",
+            ),
+        ),
+        ByteSource { "pdf".toByteArray().inputStream() },
+    )
+
+    @Test fun aSourcedRowCarriesItsLineAndTheOriginalUri() = runTest {
+        hotTub()
+        sourced(resolvedUri = null)
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+
+        val row = vm.state.first { it.rows.isNotEmpty() }.rows.single()
+
+        assertEquals("Downloaded from manuals.example.invalid on 29 Sep 2026", row.provenanceLine)
+        assertEquals("https://manuals.example.invalid/pool-pump/manual.pdf?session=example", row.sourceUri)
+        clearModels()
+    }
+
+    /** R85-2 amended: the line and "Open source link" use the reference's URI, never where the redirects ended. */
+    @Test fun theLineNamesTheSourceHostNotTheRedirectHost() = runTest {
+        hotTub()
+        sourced(resolvedUri = "https://cdn.example.invalid/files/pool-pump.pdf")
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+
+        val row = vm.state.first { it.rows.isNotEmpty() }.rows.single()
+
+        assertEquals("Downloaded from manuals.example.invalid on 29 Sep 2026", row.provenanceLine)
+        assertEquals("https://manuals.example.invalid/pool-pump/manual.pdf?session=example", row.sourceUri)
+        clearModels()
+    }
+
+    @Test fun anUnsourcedRowCarriesNeither() = runTest {
+        hotTub()
+        graph.addAttachment.run(
+            AttachmentOwner.OfAsset(assetId),
+            AddAttachmentCommand(displayName = "Guide.pdf", mimeType = "application/pdf", sizeBytes = 1L),
+            ByteSource { "x".toByteArray().inputStream() },
+        )
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+
+        val row = vm.state.first { it.rows.isNotEmpty() }.rows.single()
+
+        assertNull(row.provenanceLine)
+        assertNull(row.sourceUri)
+        clearModels()
+    }
 
     @Test fun aFreshInstallSaysTheStoreIsNotConfiguredAndListsNothing() = runTest {
         hotTub()

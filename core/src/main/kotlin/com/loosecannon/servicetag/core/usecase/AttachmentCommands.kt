@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentProblem
+import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
 
 /**
@@ -30,6 +31,12 @@ data class AddAttachmentCommand(
     val fromCamera: Boolean = false,
     /** #67: an asset-owned file only; a role on an event owner is a programming error. */
     val role: DocumentRole? = null,
+    /**
+     * #85 (C12, R85-2): where a document saved from a reference came from, copied onto the row once and never
+     * edited. Null for every other add. A malformed one is a programming error; a sourced add takes its locator's
+     * extension from [mimeType] alone, because a reference's name is a title, not a filename.
+     */
+    val source: AttachmentSource? = null,
 )
 
 /**

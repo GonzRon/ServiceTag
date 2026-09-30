@@ -22,11 +22,15 @@ import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.DeleteAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
+import com.loosecannon.servicetag.core.references.ReferenceUris
 import com.loosecannon.servicetag.core.usecase.UpdateAttachmentCommand
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.references.MaterializeStrings
 import java.io.File
 import java.io.InputStream
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +52,9 @@ import kotlinx.coroutines.withContext
 
 /** How long the repository flow stays hot after the last collector leaves (a rotation, typically). */
 private const val SUBSCRIPTION_GRACE_MS = 5_000L
+
+/** #85 §6 (reused, hoisted byte-identical): a save that did not land, naming the file the person typed. */
+internal fun couldNotSave(name: String): String = "Could not save $name"
 
 /** "Adding 3 of 8…" — the line the section shows while a multi-select lands (spec §8.1). */
 internal fun addingProgressLine(index: Int, total: Int): String = "Adding $index of $total…"
@@ -116,6 +123,10 @@ data class AttachmentRowState(
     val role: DocumentRole? = null,
     /** #67: when the row was written; the tie-break inside a role after `capturedOn` (R67-3). */
     val createdAt: Long = 0L,
+    /** #85 (C22): P85-8 for a document saved from a reference — the source's host and day; null for any other row. */
+    val provenanceLine: String? = null,
+    /** #85 (C22, R85-2 amended): what P85-9 opens — the reference's own URI, never the redirect's. */
+    val sourceUri: String? = null,
 )
 
 /** #67, C8: one role's documents, newest first, as the Key documents block draws them. */
@@ -155,6 +166,8 @@ class AttachmentsSectionViewModel(
      * test's own scheduler in a JVM test, so none of that work outlives the test that started it.
      */
     private val io: CoroutineContext = Dispatchers.IO,
+    /** #85 (C22): the zone P85-8's `{date}` is read in. */
+    private val zone: ZoneId = ZoneId.systemDefault(),
 ) : ViewModel() {
 
     constructor(graph: AppGraph, owner: AttachmentOwner) : this(
@@ -297,7 +310,7 @@ class AttachmentsSectionViewModel(
                 throw e
             } catch (e: Throwable) {
                 // A database that would not take the write. The sheet stays open with the values.
-                _messages.tryEmit(e.transferredOutOr("Could not save ${cmd.displayName}"))
+                _messages.tryEmit(e.transferredOutOr(couldNotSave(cmd.displayName)))
                 refresh.value++
                 return@launch
             }
@@ -418,6 +431,12 @@ class AttachmentsSectionViewModel(
         thumbnail = thumbnails[attachment.id.value],
         role = attachment.role,
         createdAt = attachment.createdAt,
+        provenanceLine = attachment.source?.let { source ->
+            ReferenceUris.hostOf(source.uri)?.let { host ->
+                MaterializeStrings.downloadedFrom(host, Instant.ofEpochMilli(source.retrievedAt).atZone(zone).toLocalDate())
+            }
+        },
+        sourceUri = attachment.source?.uri,
     )
 
     /** One line per refusal. `Unchanged` is silent: the sheet simply closes (spec §8.1). */

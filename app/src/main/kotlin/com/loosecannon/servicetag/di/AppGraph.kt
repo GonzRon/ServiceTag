@@ -1,9 +1,12 @@
 package com.loosecannon.servicetag.di
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
@@ -28,6 +31,12 @@ import com.loosecannon.servicetag.core.usecase.BackupRepositories
 import com.loosecannon.servicetag.core.usecase.CreateTransferPack
 import com.loosecannon.servicetag.core.usecase.MarkTransferredOut
 import com.loosecannon.servicetag.core.usecase.WithdrawTransferRecord
+import com.loosecannon.servicetag.core.fetch.FetchDocument
+import com.loosecannon.servicetag.core.fetch.HopPolicy
+import com.loosecannon.servicetag.core.usecase.MaterializeReference
+import com.loosecannon.servicetag.fetch.CacheStagingArea
+import com.loosecannon.servicetag.fetch.InetHostResolver
+import com.loosecannon.servicetag.fetch.UrlConnectionTransport
 import com.loosecannon.servicetag.transfer.TransferPackWriter
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
@@ -148,6 +157,7 @@ import com.loosecannon.servicetag.data.room.MIGRATION_11_12
 import com.loosecannon.servicetag.data.room.MIGRATION_12_13
 import com.loosecannon.servicetag.data.room.MIGRATION_13_14
 import com.loosecannon.servicetag.data.room.MIGRATION_14_15
+import com.loosecannon.servicetag.data.room.MIGRATION_15_16
 import com.loosecannon.servicetag.data.room.RoomTransferRecordRepository
 import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomAssetSuccessionRepository
@@ -241,7 +251,7 @@ class AppGraph(private val context: Context) {
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
-            MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15,
+            MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
         )
         .build()
 
@@ -532,6 +542,27 @@ class AppGraph(private val context: Context) {
         AddReference(references, assets, linkLaunchPolicy, uow, ids, clock)
     val updateReference: UpdateReference = UpdateReference(references, uow, clock)
     val removeReference: RemoveReference = RemoveReference(references, uow)
+
+    /**
+     * #85 (C19; R85-7, R85-8, R85-10, R85-11) — Save as document: the one network-reaching object in the graph,
+     * consumed only by the reference sheet under `ui/references/`; no API route or tool reaches it. The permission
+     * check is the one the Developer API screen builds, and the use case asks it before any socket. The fetch
+     * stages into `cache/materialize/` ([materializeStaging], swept at start by `ServiceTagApp`) and the save writes
+     * through the guarded attachment port.
+     */
+    private val networkPermissionGranted: () -> Boolean = {
+        ContextCompat.checkSelfPermission(context.applicationContext, Manifest.permission.INTERNET) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+    val materializeStaging: CacheStagingArea =
+        CacheStagingArea(File(context.applicationContext.cacheDir, CacheStagingArea.DIRECTORY), ids)
+    /** C9's hop rule: the use case asks it of every hop; the reference rows ask its static half (C20). */
+    val hops: HopPolicy = HopPolicy(InetHostResolver(networkPermissionGranted))
+    val materializeReference: MaterializeReference = MaterializeReference(
+        references, attachments, attachmentStorage, linkLaunchPolicy, hops,
+        FetchDocument(UrlConnectionTransport(networkPermissionGranted), hops, materializeStaging),
+        addAttachment, networkPermissionGranted, clock,
+    )
 
     /** A cache file the camera can write into through the FileProvider (spec §9.3). */
     fun cameraCaptureUri(): Uri {
@@ -977,6 +1008,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 15
+        const val SCHEMA_VERSION = 16
     }
 }

@@ -65,7 +65,7 @@ internal fun openMigrated(file: File): AppDatabase = Room
     .addMigrations(
         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
         MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
-        MIGRATION_13_14, MIGRATION_14_15,
+        MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
     )
     .build()
 
@@ -214,6 +214,9 @@ internal val V9_TABLES = setOf("asset_category")
 
 /** The one column schema v10 appends to `attachment` (#67): nullable, never backfilled. */
 internal val V10_ATTACHMENT_COLUMNS = setOf("document_role")
+
+/** The four columns schema v16 appends to `attachment` (#85): nullable, never backfilled. */
+internal val V16_ATTACHMENT_COLUMNS = setOf("source_uri", "source_resolved_uri", "source_retrieved_at", "source_name")
 
 /** The one column schema v11 appends to `asset` (#79): nullable, never backfilled. */
 internal val V11_ASSET_COLUMNS = setOf("warranty_reminder_lead_days")

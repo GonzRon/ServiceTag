@@ -112,20 +112,20 @@ class CommandShapesGoldenTest {
         assertEquals((keys + legacy).toSet(), row.map { rename[it] ?: it }.filter { it in command }.toSet())
     }
 
-    @Test fun theContractDocumentNamesFormat15AndTwentyTables() {
+    @Test fun theContractDocumentNamesFormat16AndTwentyTables() {
         val doc = repoFile("docs/api/v1.md").readText()
         val lines = doc.lines()
         // Anchored to the two spellings: a bare "1–10" is also the health weight's range.
         assertEquals(
-            "the import range reads 1–15 at both sites",
+            "the import range reads 1–16 at both sites",
             2,
-            lines.count { "format **1–15**" in it || "**format 1–15**" in it },
+            lines.count { "format **1–16**" in it || "**format 1–16**" in it },
         )
         assertEquals(
             "a shipped spelling of an old import range survives",
             emptyList<String>(),
             lines.filter { line ->
-                listOf("1–7", "1–8", "1–9", "1–10", "1–11", "1–12", "1–13", "1–14").any {
+                listOf("1–7", "1–8", "1–9", "1–10", "1–11", "1–12", "1–13", "1–14", "1–15").any {
                     "format **$it**" in line || "**format $it**" in line
                 }
             },
@@ -142,6 +142,11 @@ class CommandShapesGoldenTest {
         assertTrue("the status line says 14 since #77", lines.count { "14 since #77 (transfer records)" in it } >= 1)
         // #86: and 15 since the asset successions.
         assertTrue("the status line says 15 since #86", lines.count { "15 since #86 (asset successions)" in it } >= 1)
+        // #85: and 16 since the attachment provenance.
+        assertTrue(
+            "the status line says 16 since #85",
+            lines.count { "16 since #85 (attachment provenance)" in it } >= 1,
+        )
         val identical = lines.single { it.startsWith("| `IDENTICAL` |") }
         assertTrue("IDENTICAL must state the role rule: $identical", "document role" in identical && "format 10" in identical)
         assertTrue(
