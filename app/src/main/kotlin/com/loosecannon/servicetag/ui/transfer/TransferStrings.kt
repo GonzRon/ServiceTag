@@ -3,7 +3,6 @@ package com.loosecannon.servicetag.ui.transfer
 import com.loosecannon.servicetag.core.model.shortPackId
 import com.loosecannon.servicetag.ui.condition.displayDate
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -167,7 +166,10 @@ internal object TransferStrings {
     /** P77-33's and P77-37's `<date>`: `d MMM uuuu` in [zone], through the shipped [displayDate]. */
     fun day(at: Long, zone: ZoneId): String = displayDate(Instant.ofEpochMilli(at).atZone(zone).toLocalDate())
 
-    /** P77-54 for a pack created at [createdAt] in [zone], named by its id's first eight characters. */
+    /**
+     * P77-54 for a pack created at [createdAt] in [zone], named by its id's first eight characters.
+     * The day is taken the way [day] takes it: `LocalDate.ofInstant` is API 34, and minSdk is 26.
+     */
     fun packFileName(createdAt: Long, zone: ZoneId, packId: String): String =
-        fileName(FILE_DAY.format(LocalDate.ofInstant(Instant.ofEpochMilli(createdAt), zone)), shortPackId(packId))
+        fileName(FILE_DAY.format(Instant.ofEpochMilli(createdAt).atZone(zone).toLocalDate()), shortPackId(packId))
 }
