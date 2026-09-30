@@ -51,7 +51,9 @@ object ContainerInspect {
     /**
      * C29 (3)–(4): among the root storage's own children, exactly one family's content stream: `WordDocument`
      * (DOC), `Workbook` or `Book` (XLS), or `PowerPoint Document` (PPT), whole and NUL-terminated, never a
-     * prefix. None (a bare signature, an installer, a message) or two families is refused. The walk follows only
+     * prefix. None (a bare signature, an installer, a message) or two families is refused, and families are
+     * counted case-insensitively up to the first NUL, as MS-CFB §2.6.4 compares names, so `WORKBOOK` beside
+     * `WordDocument` is a second family (review m1); a case variant alone is no proof. The walk follows only
      * sibling ids from the root's child, never a storage's own child, so an embedded object (a document's
      * `ObjectPool/…/Workbook`, a message's attached `WordDocument`) never counts. No stream's contents are read.
      */
@@ -64,6 +66,7 @@ object ContainerInspect {
         }
         if (directory[66].toInt() != 5) return null // entry 0 must be the root storage
         val proofs = HashSet<String>()
+        val families = HashSet<String>()
         val seen = HashSet<Long>()
         val pending = ArrayDeque(listOf(directory.u32(76)))
         while (pending.isNotEmpty()) {
@@ -74,11 +77,15 @@ object ContainerInspect {
             val type = directory[at + 66].toInt()
             if (type != 1 && type != 2) return null // a sibling must be a storage or a stream
             val name = String(directory, at, directory.u16(at + 64), Charsets.UTF_16LE)
-            if (type == 2 && name.lastOrNull() == '\u0000') contentStreams[name.dropLast(1)]?.let { proofs += it }
+            if (type == 2) {
+                val base = name.substringBefore('\u0000')
+                contentStreams.entries.firstOrNull { it.key.equals(base, ignoreCase = true) }?.let { families += it.value }
+                if (name.lastOrNull() == '\u0000') contentStreams[name.dropLast(1)]?.let { proofs += it }
+            }
             pending += directory.u32(at + 68)
             pending += directory.u32(at + 72) // left and right siblings only: a storage's child (at + 76) is never followed
         }
-        return proofs.singleOrNull()
+        return families.singleOrNull()?.takeIf { it in proofs }
     }
 
     /**
