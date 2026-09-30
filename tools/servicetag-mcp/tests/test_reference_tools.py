@@ -25,8 +25,8 @@ REFERENCE_TOOLS = ("list_references", "add_reference", "update_reference")
 """Master plan §7's three, named exactly as it names them. The registered total was 38 + 3 = **41**
 at 1.3, **55** after 1.4's fourteen, **56** after 1.4.1's provider repair, **58** after #79's
 two warranty tools, **63** after #79's five service-case tools, **68** after #72's five loan tools, **69**
-after #86's succession read, and is **74** since #92's five attachment tools, which `test_argument_guard.py`
-pins."""
+after #86's succession read, **74** after #92's five attachment tools, and is **76** since #92's two replace
+tools, which `test_argument_guard.py` pins."""
 
 _DISTINCTIVE_VALUE = "XVALUE_MARKER_1c4e7b_must_never_appear_in_a_message"
 
@@ -51,12 +51,12 @@ def test_every_reference_tool_is_registered_and_guarded() -> None:
         assert tool.parameters.get("additionalProperties") is False, name
 
 
-def test_the_registered_tool_count_is_74() -> None:
+def test_the_registered_tool_count_is_76() -> None:
     """A tool added without updating `TOOL_NAMES` makes `_forbid_unknown_arguments` raise at
     *import* time, which is the intended loud failure — so this file importing at all is half the
     proof, and the counts below are the other half."""
-    assert len(server_module.TOOL_NAMES) == 74
-    assert len(server_module.mcp._tool_manager.list_tools()) == 74
+    assert len(server_module.TOOL_NAMES) == 76
+    assert len(server_module.mcp._tool_manager.list_tools()) == 76
 
 
 def test_nothing_deletes_a_reference_and_no_tool_takes_a_kind() -> None:
