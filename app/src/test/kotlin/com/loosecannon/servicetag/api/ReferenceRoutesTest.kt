@@ -544,7 +544,8 @@ class ReferenceRoutesTest {
         // 1–13 and its loan list the twentieth, #77's format 14 made the report nineteen tables and the
         // range 1–14 — with no route, so the sub-resources stayed twenty — and #86's format 15 made the report
         // twenty tables, the range 1–15 and its succession read the twenty-first, and #85's format 16
-        // moved the range to 1–16 (no route, no table). These pins moved with the document.
+        // moved the range to 1–16 (no route, no table); #92's attachment list and the replace offer, plan and apply
+        // made the sub-resources twenty-five (no table). These pins moved with the document.
         assertFalse(
             "the merge report is twenty tables now",
             listOf("eleven", "fourteen", "fifteen", "seventeen", "eighteen", "nineteen").any { "$it tables" in text },
@@ -566,12 +567,14 @@ class ReferenceRoutesTest {
         )
 
         assertFalse(
-            "there are twenty-one asset sub-resources now",
-            listOf("nine", "sixteen", "eighteen", "nineteen", "twenty").any { "$it `/v1/assets/{id}/…` sub-resources" in text },
+            "there are twenty-five asset sub-resources now",
+            listOf("nine", "sixteen", "eighteen", "nineteen", "twenty", "twenty-one").any {
+                "$it `/v1/assets/{id}/…` sub-resources" in text
+            },
         )
         assertTrue(
-            "the 405 row must name twenty-one asset sub-resources",
-            "twenty-one `/v1/assets/{id}/…` sub-resources" in text,
+            "the 405 row must name twenty-five asset sub-resources",
+            "twenty-five `/v1/assets/{id}/…` sub-resources" in text,
         )
 
         // The one code the mapper can spell and no route can return. The 1.2 subsection documents

@@ -28,7 +28,9 @@ private val SerialDescriptor.names: List<String>
  * successions) and every 1.4 code a client can receive, #74's two category reasons, #79's two warranty
  * routes and their refusal family, #79b's five service-case routes and theirs, #72's five loan routes and
  * theirs, #77's one 409, its status count, its report tally and its two merge reasons, and #86's read-only
- * succession route, its status count, its report tally and its two merge reasons.
+ * succession route, its status count, its report tally and its two merge reasons. #92 adds five request shapes
+ * (the attachment edit, the upload's header object, save as document's review fields, the replace draft and its
+ * successor) and every code C2 answers, and retires the sentences that said only a tap on the phone fetches.
  */
 class CommandShapesGoldenTest {
 
@@ -49,8 +51,23 @@ class CommandShapesGoldenTest {
                 "serviceCase", "caseEntry",
                 // #72 (C21): the lend and the return; the replace is the lend's keys less two.
                 "loan", "loanReturn",
+                // #92 (C26): the attachment edit, the upload's header object, save as document, the replace draft.
+                "attachmentUpdate", "attachmentUpload", "materialize", "replaceDraft", "replaceSuccessor",
             ),
             shapes.keys.toList(),
+        )
+        assertEquals(keysOf("attachmentUpdate"), UpdateAttachmentRequest.serializer().descriptor.names)
+        assertEquals(keysOf("attachmentUpload"), UploadMetadata.serializer().descriptor.names)
+        assertEquals("operationKey", keysOf("attachmentUpload").first())
+        assertTrue("an upload never sets provenance", keysOf("attachmentUpload").none { it.startsWith("source") })
+        assertEquals(keysOf("materialize"), MaterializeRequest.serializer().descriptor.names)
+        assertTrue("save as document takes no URL (R92-3)", keysOf("materialize").none { it in setOf("uri", "url") })
+        assertEquals(keysOf("replaceDraft"), ReplaceDraftRequest.serializer().descriptor.names)
+        assertFalse("the predecessor is the path's", "predecessorId" in keysOf("replaceDraft"))
+        assertEquals(keysOf("replaceSuccessor"), ReplaceSuccessorRequest.serializer().descriptor.names)
+        assertEquals(
+            keysOf("asset") - listOf("description", "notes", "templateKey", "seasonStartMmdd", "seasonEndMmdd").toSet(),
+            keysOf("replaceSuccessor"),
         )
         assertEquals(keysOf("asset"), AssetCommandRequest.serializer().descriptor.names)
         assertEquals(keysOf("seasonMode"), SeasonModeRequest.serializer().descriptor.names)
@@ -187,6 +204,17 @@ class CommandShapesGoldenTest {
             "asset_transferred_out", "transferRecords", "transfers", "ASSET_TRANSFERRED_OUT", "TRANSFER_DIVERGED",
             // #86: the status count, the report tally and the two merge reasons.
             "assetSuccessions", "successions", "SUCCESSION_TAKEN", "SUCCESSION_CYCLE",
+            // #92 (C2, C25): every code the attachment, save-as-document and replace routes answer, and the status key.
+            "NO_SUCH_ATTACHMENT", "ATTACHMENT_NAME_REQUIRED", "ATTACHMENT_BAD_DATE", "ATTACHMENT_ROLE_NOT_ALLOWED",
+            "ATTACHMENT_EMPTY", "ATTACHMENT_SHA256_INVALID", "ATTACHMENT_SHA256_MISMATCH", "ATTACHMENT_TOO_LARGE",
+            "ATTACHMENT_STORE_NOT_CONFIGURED", "store_unavailable", "ATTACHMENT_ALREADY_HELD", "OPERATION_KEY_INVALID",
+            "OPERATION_KEY_REUSED", "UPLOAD_NOT_STAGED", "REFERENCE_NOT_MATERIALIZABLE", "NETWORK_DENIED",
+            "FETCH_NOT_HTTPS", "FETCH_HAS_CREDENTIALS", "FETCH_LOCAL_ADDRESS", "FETCH_UNREACHABLE", "FETCH_INTERRUPTED",
+            "FETCH_TIMED_OUT", "FETCH_TOO_LARGE", "FETCH_EMPTY", "FETCH_NOT_A_DOCUMENT", "FETCH_NEEDS_SIGN_IN",
+            "FETCH_SERVER_ERROR", "FETCH_REDIRECT_REFUSED", "ASSET_ALREADY_REPLACED", "REPLACE_STALE",
+            "REPLACE_NAME_REQUIRED", "REPLACE_BAD_DATE", "REPLACE_NOT_OFFERED", "REPLACE_NEEDS_SETUP",
+            "REPLACE_NEEDS_SEASON", "REPLACE_PHASE_REQUIRED", "REPLACE_DATE_AFTER_TODAY", "asset_validation",
+            "installationId", "X-ServiceTag-Attachment", "sourcesDigest",
         )) {
             assertTrue("docs/api/v1.md does not name $code", "`$code`" in doc)
         }
@@ -205,8 +233,16 @@ class CommandShapesGoldenTest {
             "/v1/assets/{id}/loans", "/v1/loans", "/v1/loans/{id}", "/v1/loans/{id}/return",
             // #86 (C20): the one read-only succession route.
             "/v1/assets/{id}/succession",
+            // #92 (C3): the eight rows' five path shapes, and the upload's golden vector.
+            "/v1/assets/{id}/attachments", "/v1/attachments/{id}", "/v1/references/{id}/materialize",
+            "/v1/assets/{id}/replace-offer", "/v1/assets/{id}/replace-plan", "/v1/assets/{id}/replace",
+            "attachment-operation-ids.json",
         )) {
             assertTrue("docs/api/v1.md does not name $path", "`$path`" in doc || path in doc)
+        }
+        // #92 (C18, R92-1): a paired workstation can now fetch and replace, so these sentences are retired.
+        for (retired in listOf("never connects out", "no route here and no MCP tool reaches", "Recorded by the phone alone")) {
+            assertFalse("docs/api/v1.md still says \"$retired\"", retired in doc)
         }
     }
 }
