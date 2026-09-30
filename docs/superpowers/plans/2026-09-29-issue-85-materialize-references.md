@@ -5,9 +5,14 @@
 > B2b sniff and B2c fetch, m1–m11), NOTEs 1, 2, 4 and 7, and the owner's rulings R85-13…15 (User-Agent, path
 > parameters, ASCII hosts) as DECIDED (§7), with C9's exact address set stated once and matched by the tests.
 
+> **Amendment (§19, owner, 2026-09-29, after 413c8fed):** R85-5 widened to nineteen document types (PDF, PNG, JPEG,
+> GIF, WebP, RTF, DOC, XLS, PPT, DOCX, XLSX, PPTX, ODT, ODS, ODP, TXT, Markdown, CSV, TSV); P85-13 re-ratified; three new
+> briefs B2d, B2e, B2f after B3 and before B4 (§20–§22); one bounded read-only container inspection (C26).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development under the review budget.
 > **Ledger:** `.superpowers/sdd/2026-09-29-issue-85/progress.md`.
-> Ten briefs (§8–§17) on one branch `issue-85`, strictly sequential — B1a, B1b, B1c, B2a, B2b, B2c, B3, B4, B5a, B5b — each
+> Thirteen briefs (§8–§17, §20–§22) on one branch `issue-85`, strictly sequential — B1a, B1b, B1c, B2a, B2b, B2c, B3,
+> B2d, B2e, B2f, B4, B5a, B5b — each
 > `<base>` the previous accepted tip; one task review each, at most one bounded fix round each; one whole-branch review;
 > the merge; one merged-tip gate. Planned read-only from issue #85 (`.superpowers/sdd/2026-09-29-issue-85/issue-85.json`)
 > and the audit (`.superpowers/sdd/2026-09-29-issue-85/audit.md`, the inventory of record), every citation re-verified on
@@ -19,7 +24,8 @@
 > is split into B2a (URL and address policy), B2b (the pure sniff) and B2c (the fetch), sniff first (review M4).
 
 **Goal:** one explicit phone action, **Save as document**, on an `https` web reference. It downloads the linked file
-through a bounded, hardened fetch into app-private staging; proves from the bytes that it is a PDF, PNG or JPEG; lets
+through a bounded, hardened fetch into app-private staging; proves from the bytes that it is one of the nineteen
+document types of §19 (PDF, PNG and JPEG first; the widened set by the amendment); lets
 the owner review the name, kind, #67 role and notes; and stores it through the shipped `AddAttachment` as an ordinary
 **managed** attachment on the same asset, carrying a **write-once provenance snapshot** (the original URI verbatim, the
 redirect destination without its query or fragment, when it was retrieved, and the reference's title). The reference
@@ -68,7 +74,9 @@ or records provenance; an import-merge (`POST /v1/import-merge/apply`) carries a
   - The full URI is never rendered (R85-9); the host is shown at download and review, and in the provenance line.
   - The stored redirect destination carries no query or fragment (R85-2), and no `;…` path parameter in any
     segment (R85-14): presigned or session tokens never reach a backup or a Transfer Pack.
-  - The file is judged by its first **and last** bytes, never by its declared type (R85-5).
+  - The file is judged by its first **and last** bytes and, for a ZIP or OLE2 container, by one bounded read-only
+    inspection of its structure (§19, C26), never by its declared type; only the text formats also need a compatible
+    declared type or extension, and a declared HTML type is refused at once (R85-5 widened).
 - **Tests.**
   - JVM first, with the existing fakes (`FakeUnitOfWork.commits` / `rollbacks`; `FakeGraph` is Room-backed). **No new
     device class and no new device case** (§3 row 33). Two connected runs of shipped classes whose pins or composables
@@ -371,7 +379,9 @@ object DocumentSniff {
 ```
 
 - **C11, the sniff (R85-5 amended).** A pure function over two byte windows: no I/O, no declared type, no stub —
-  B2c calls the real one. Judged from the bytes only; the declared type is advisory (C10 step 5 is its only use). Head
+  B2c calls the real one. **Widened by §19:** GIF, WebP, RTF and ODF join these two windows (C27, C30); the containers
+  (C28, C29) and the text formats (C30) are decided after it (C31). Judged from the bytes only; the declared type is
+  advisory (C10 step 5 is its only use). Head
   = the first `min(size, 1,024)` bytes, tail = the last `min(size, 1,024)`:
   - **PDF** (`application/pdf`): the head contains `%PDF-` followed by a digit, `.`, a digit, **and** the tail contains
     `%%EOF`.
@@ -428,7 +438,9 @@ class FetchDocument(transport: DocumentTransport, hops: HopPolicy, staging: Stag
   4. 401, 403, 407 → `NeedsSignIn`; only 200 and 203 are a whole body (review NOTE 4); any other status, 204 and 206
      included, → `ServerError(status)`.
   5. A declared type that `MimeTypes.normalise`s to `text/html`, `application/xhtml+xml` or `text/plain` →
-     `NotADocument`, **before the body is read**. A declared `Content-Length` > `maxBytes` → `TooLarge`, before the body.
+     `NotADocument`, **before the body is read**. **Amended by §19 (C31, B2f's edit):** only `text/html` and
+     `application/xhtml+xml` fail fast; `text/plain` and the other text types proceed to `TextSniff`; and step 8's
+     sniff is followed, for a ZIP or OLE2 head, by one bounded inspection (C26, C28, C29). A declared `Content-Length` > `maxBytes` → `TooLarge`, before the body.
   6. Stream in `chunkBytes` chunks to one `StagingFile`: `ensureActive()` per chunk; a running count (the count, never
      the header, is authoritative); `sha256` (lowercase hex, 64 characters, the `Attachment.sha256` format); the first
      `windowBytes` kept as the head window and the last `windowBytes` as a rolling tail window (no second pass over
@@ -569,7 +581,8 @@ sealed interface MaterializeRefusal {
   an `UnknownHostException` or an empty answer → `TransportFailure(UNREACHABLE)`; a `SecurityException` → C17's
   permission rule. `A/fetch/CacheStagingArea.kt` over `File(cacheDir, "materialize")`: `create()` makes
   `<id>.part`; `output()` / `source()` over that file; `discard()` deletes it, idempotent; `sweepAtStart(startedAt)`
-  deletes every file whose `lastModified < startedAt` (the `TransferPackWriter.kt:81-86` shape). `ServiceTagApp`
+  deletes every file whose `lastModified < startedAt` (the `TransferPackWriter.kt:81-86` shape). **(§19, C26)** Its
+  staging file answers `reader()` with the core `FileStagedReader(partFile)`: B4 wires it and adds nothing else. `ServiceTagApp`
   launches it beside the transfer sweep (`:51-60`), off the main thread, guarded the same way (its one log line names
   the sweep, never a file).
 - **C19, wiring, permission and the claims (R85-10, R85-11).** `AppGraph` builds `networkPermissionGranted` (the
@@ -700,7 +713,8 @@ sealed interface MaterializeState {
 | 32 | C22: strings as data | app `T/ui/references/MaterializeStringsTest` · every P85 literal verbatim; the templates' placeholders | none: a pin |
 | **B5b** 33 | C23–C25: rendered | **no new device class or case.** `ReferencesSectionTest` (shipped, R2-only, planner finding 7) run once connected; the gate's `AssetDetailKeyDocumentsTest` covers the edit sheet's unchanged path | none: rows 29–31 carry the REDs |
 
-**Planned counted REDs: 46** — B1a 3, B1b 4, B1c 1, B2a 8, B2b 3, B2c 9, B3 8, B4 5, B5a 5, B5b 0 — including every
+**Planned counted REDs: 61** (46 before §19's amendment, which adds B2d 6, B2e 2 and B2f 7, rows 34–43) — B1a 3,
+B1b 4, B1c 1, B2a 8, B2b 3, B2c 9, B3 8, B2d 6, B2e 2, B2f 7, B4 5, B5a 5, B5b 0 — including every
 mutation the owner and the review asked for: the three end-marker checks (row 17, the fake-header case its own), the
 octet-stream PDF (row 17b (2)), the authority allowlist (row 9 (2)), the resolver rule (rows 10, 11, 13 (3), 26), the
 query stripping (rows 1, 12, 20 (1)) and the per-segment path parameters (row 12 (3)). **No device mutation.** **New JVM cases:**
@@ -708,7 +722,7 @@ about 125 in core, about 60 in app; pytest count unchanged (three assertions mov
 
 ## 4. Files, fences, order and the gate budget
 
-One branch `issue-85` from the plan's ratified commit: **B1a → B1b → B1c → B2a → B2b → B2c → B3 → B4 → B5a → B5b**, each
+One branch `issue-85` from the plan's ratified commit: **B1a → B1b → B1c → B2a → B2b → B2c → B3 → B2d → B2e → B2f → B4 → B5a → B5b**, each
 `<base>` the previous accepted tip.
 
 | brief | production | tests | cap (runs) | fix round | size (prod / test) |
@@ -720,6 +734,9 @@ One branch `issue-85` from the plan's ratified commit: **B1a → B1b → B1c →
 | B2b | new `C/fetch/DocumentSniff.kt` | new `DocumentSniffTest` | 4 | 2 runs, 45 min | ~70 / ~150 |
 | B2c | new `C/fetch/{FetchPorts,FetchDocument}.kt` | new `FetchDocumentTest`, `CT/testing/{FakeDocumentTransport,FakeStaging}.kt` | 10 | 3 runs, 45 min | ~170 / ~270 |
 | B3 | new `C/usecase/MaterializeReference.kt`; `C/usecase/{AddAttachment,AttachmentCommands}.kt` | new `MaterializeReferenceTest`; `AttachmentUseCasesTest` | 9 | 3 runs, 45 min | ~160 / ~320 |
+| B2d (§20) | `C/fetch/{FetchPorts,DocumentSniff,FetchDocument}.kt`; new `C/fetch/{ContainerInspect,FileStagedReader}.kt`; `C/model/Attachment.kt` (`EXTENSIONS` only) | new `BoundedInspectionTest`, `FileStagedReaderTest`, `ContainerInspectZipTest`; `DocumentSniffTest`, `FetchDocumentTest`, `CT/testing/FakeStaging.kt` | 7 | 3 runs, 45 min | ~150 / ~260 |
+| B2e (§21) | `C/fetch/{ContainerInspect,FetchDocument}.kt`; `C/model/Attachment.kt` (`EXTENSIONS` only) | new `ContainerInspectOleTest`, `CT/testing/CfbFixtures.kt`; `FetchDocumentTest` | 3 | 2 runs, 45 min | ~110 / ~200 |
+| B2f (§22) | `C/fetch/{DocumentSniff,FetchDocument}.kt`; new `C/fetch/TextSniff.kt`; `C/model/Attachment.kt` (`EXTENSIONS` only) | new `TextSniffTest`; `DocumentSniffTest`, `FetchDocumentTest`, `AttachmentRulesTest` | 8 | 3 runs, 45 min | ~120 / ~250 |
 | B4 | new `A/fetch/{UrlConnectionTransport,TransportFailures,InetHostResolver,CacheStagingArea}.kt`; `A/di/AppGraph.kt`; `A/ServiceTagApp.kt` (the sweep block); `app/src/main/AndroidManifest.xml` (the comment at `:4-12` only); `README.md` (the INTERNET bullet at `:74` only); `docs/api/v1.md` (`:31-41` only) | new rows 24–27 classes; `T/testing/{FakeGraph,FakeDocumentTransport}.kt` | 6 | 3 runs, 45 min | ~230 / ~320 |
 | B5a | new `A/ui/references/{MaterializeViewModel,MaterializeStrings}.kt`; `A/ui/references/ReferencesSectionViewModel.kt`; `A/ui/attachments/AttachmentsSectionViewModel.kt` (row state, the `couldNotSave` hoist) | new `MaterializeViewModelTest`, `MaterializeStringsTest`; `ReferencesSectionViewModelTest`; `AttachmentsSectionViewModelTest` | 6 | 3 runs, 45 min | ~220 / ~300 |
 | B5b | new `A/ui/references/MaterializeSheet.kt`; `A/ui/references/ReferencesSection.kt`; `A/ui/attachments/{AttachmentEditSheet,DocumentsSection}.kt`; `A/ui/api/DeveloperApiScreen.kt` (the hoist only); `A/ui/asset/AssetDetailScreen.kt` (≤ 20 lines near `:461`, only if the host must pass a callback) | none new; the connected run | 2 | 1 run, 45 min | ~230 / ~0 |
@@ -787,7 +804,7 @@ one template function, on a line of its own, in `A/ui/references/MaterializeStri
 | P85-2 | Downloading | `Downloading from {host}…` | headline | `MaterializeStrings` | — |
 | P85-3 | Downloading | `{done} of {total}` — or `{done}` when the size is unknown | progress line | `MaterializeStrings` | — |
 | P85-4 | Review | `From {host}` | line | `MaterializeStrings` | — |
-| P85-5 | Review | `{TYPE} · {size}` | line | `MaterializeStrings` | — |
+| P85-5 | Review | `{TYPE} · {size}` | line | `MaterializeStrings` | `{TYPE}` for the §19 types needs ratifying: GIF, WebP, RTF, DOC, XLS, PPT, DOCX, XLSX, PPTX, ODT, ODS, ODP, TXT, Markdown, CSV, TSV (PDF, PNG, JPEG ratified) |
 | P85-6 | reference row | `Saved as document` | `QuietLine` | `MaterializeStrings` | — |
 | P85-7 | after Save | `Saved to Documents` | snackbar | `MaterializeStrings` | — |
 | P85-8 | attachment edit sheet | `Downloaded from {host} on {date}` | read-only line under Notes | `MaterializeStrings` | — |
@@ -795,7 +812,7 @@ one template function, on a line of its own, in `A/ui/references/MaterializeStri
 | P85-10 | refusal: network denied | `ServiceTag is not allowed to use the network, so it cannot download this file. Allow network access in the app settings, then close ServiceTag and open it again.` | error line, plus "Open app settings" | `MaterializeStrings` | follows P1A-1 |
 | P85-11 | refusal: unreachable | `Could not reach {host}. Check the connection and try again.` | error line | `MaterializeStrings` | also answers a certificate failure ("Check the connection" misleads there) |
 | P85-12 | refusal: timeout | `The download took too long and was stopped.` | error line | `MaterializeStrings` | — |
-| P85-13 | refusal: not a document | `That link did not lead to a supported document (PDF, PNG or JPEG). It stays a link.` | error line | `MaterializeStrings` | also answers a truncated PDF, a ZIP or a DOCX, not only a web page; the review suggests e.g. `That link did not lead to a PDF, PNG or JPEG file.` |
+| P85-13 | refusal: not a document | `That link did not lead to a supported document type. It stays a link.` | error line | `MaterializeStrings` | re-ratified with R85-5's widening (§19), 2026-09-29 |
 | P85-14 | refusal: sign-in | `That file needs a sign-in, so ServiceTag cannot download it. It stays a link.` | error line | `MaterializeStrings` | — |
 | P85-15 | refusal: server | `The server did not send the file (error {code}).` | error line | `MaterializeStrings` | — |
 | P85-16 | refusal: redirect | `That link redirects somewhere ServiceTag will not follow. It stays a link.` | error line | `MaterializeStrings` | — |
@@ -846,7 +863,7 @@ DEFERs) are approved. Each ruling names the contracts and rows it governs.
 | R85-2 **(amended: privacy)** | Four nullable, write-once columns on `attachment`, schema/format 16. `source_uri` is the original reference URI, verbatim. **`source_resolved_uri` keeps no query, no fragment and (R85-14) no per-segment path parameter**: the final https URL stripped to scheme + authority + the ordinary path, stored only when it differs from the original destination (`destinationOf` both sides) and fits 2,048 characters; presigned or session tokens never travel into backups or Transfer Packs. **"Open source link" uses `source_uri`, never the resolved one.** The shape rule applies on any owner. | C1, C2, C4, C5, C8, C12, C14, C22, C25 · rows 1, 2, 4, 5, 6, 12, 18, 20, 31 |
 | R85-3 | A pure snapshot: no `reference_id`, no key; "Saved as document" is derived by `(assetId, uri)`. | C1, C14, C20 · rows 20, 29 |
 | R85-4 | https only, on every redirect hop; no cleartext exception. `http` references get no ⋮ item. | C9, C10, C20 · rows 9, 13, 29 |
-| R85-5 **(amended: validation)** | Only PDF, PNG and JPEG, judged from the bytes, never the claimed MIME. **A header alone is not enough**: PDF header plus `%%EOF` near the end; PNG signature plus a terminal IEND; JPEG SOI plus EOI. Sniffing, not parsing. A declared HTML or plain-text type fails at once. Required fixtures: HTML served as `application/pdf` fails; a genuine PDF served as `application/octet-stream` succeeds; HTML with a fake `%PDF-` near its beginning fails, proving the end check, with its own mutation. | C10, C11, C21 · rows 15, 17, 17b, 30 (B2b, B2c) |
+| R85-5 **(amended: validation; WIDENED by the owner, 2026-09-29, §19)** | **Save as document** accepts exactly PDF, PNG, JPEG, GIF, WebP, RTF, DOC, XLS, PPT, DOCX, XLSX, PPTX, ODT, ODS, ODP, TXT, Markdown, CSV and TSV; ordinary attachments (picker, share) stay unrestricted. Binary and container formats are judged from the bytes or the container, never a filename or MIME type alone; **a header alone is not enough** (PDF header plus `%%EOF`; PNG signature plus a terminal IEND; JPEG SOI plus EOI; GIF trailer; WebP RIFF size; RTF closing brace). OOXML needs its package structure (`[Content_Types].xml`, `_rels/.rels` and one main part) — an arbitrary ZIP renamed `.docx` is refused; legacy Office needs the CFB container **and** a Word, Excel or PowerPoint stream; ODF needs its stored `mimetype` identity. TXT, Markdown, CSV and TSV need text-like bytes, a compatible declared type or extension, and no web-page pattern (the residual risk accepted: explicit action, inert data). A declared HTML type fails at once. Required fixtures: HTML served as `application/pdf` fails; a genuine PDF served as `application/octet-stream` succeeds; HTML with a fake `%PDF-` fails through the end check; and §19's nine must-fail and sixteen must-pass fixtures. Sniffing and bounded inspection, never parsing or decompressing. | C10, C11, C21, C26–C31 · rows 15, 17, 17b, 30, 34–43 (B2b, B2c, B2d, B2e, B2f) |
 | R85-6 | Always fetch. The same bytes (digest and size) on the same asset are refused (P85-17); changed bytes become a new attachment; a hand-added row is never given provenance. | C13 · row 21 |
 | R85-7 **(amended: network)** | Connect 15 s, idle 30 s, overall 10 min; at most 5 redirects; 256 MiB; empty refused. **Every hop's host is resolved before its request and refused if ANY address is loopback, link-local, RFC 1918, 100.64.0.0/10, fc00::/7** (C9 states the exact set once; the documentation ranges stay allowed, owner 2026-09-29); the resolver is a `:core` port so JVM tests stay local. DNS rebinding between the check and the connect is a recorded limit, never a reason to fall back to literals. No cookie, credential, `Authorization` header or auth state is introduced or forwarded. | C9, C10, C16, C17, C18 · rows 9–11, 13, 16, 24–26; P85-19 on the first and every redirect hop |
 | R85-8 | Screen-bound: the sheet's view model owns the job; Cancel or leaving stops it; staging is swept at start; no WorkManager, no foreground service. | C10, C18, C21 · rows 16, 27, 30 |
@@ -866,7 +883,7 @@ R85-7; the stripped-shape split between codec and write (13) implements R85-2's 
 (14) is R85-15. The plan review (`brief-review.md`) approved all eleven departures and all five consequences; rev 1.1
 applies its conditions C-1…C-8.
 
-## Briefs — common to all ten
+## Briefs — common to all thirteen
 
 Read §1–§7, the audit, issue #85 and every earlier report on this branch.
 
@@ -1077,7 +1094,8 @@ grep); `'@InternalCoroutinesApi'` over `core/src/main` → 0; `'Log\.|println'` 
 
 **Untouched:** every existing file, `DocumentSniff.kt` included. **Must NOT:** read the body before the declared-type
 and length checks; trust `Content-Length` over the count; judge or record by the declared type; read the staged file a
-second time; buffer the body beyond the two 1,024-byte windows and one chunk; map a failure after cancellation to a
+second time (amended by §19 for the code after B2d: at most one bounded, read-only container inspection through
+`BoundedInspection`, only after the stream completes and only for a ZIP or OLE2 head); buffer the body beyond the two 1,024-byte windows and one chunk; map a failure after cancellation to a
 problem; follow a redirect without `hops.check`; lump `LocalAddress` into `RedirectRefused` or `Unreachable`; print a
 URL from a `toString`. **Counted RED (9):** rows 13 (3), 14 (1), 15 (1), 16 (2), 17b (2). **Caps:** 10 JVM mutation
 runs, 0 device; **1 h target, 2 h hard stop**; fix round 3 runs, 45 min. **Stop also** if a real-time case needs more
@@ -1115,7 +1133,8 @@ field. **Size:** about 160 production, 320 test lines.
 **Read:** audit §4.8, §6; `A/api/LoopbackApiServer.kt:60-95` (the classification precedent);
 `A/ui/api/DeveloperApiScreen.kt:78-90`; `A/transfer/TransferPackWriter.kt:70-90`; `A/ServiceTagApp.kt:40-70`;
 `A/di/AppGraph.kt` (`:500-530`, `:620-640`); `T/testing/FakeGraph.kt`; `AndroidManifest.xml:1-16`; `README.md:70-76`;
-`docs/api/v1.md:31-41`; the review's M1 (host agreement), M3, m3, m7 and m11. **`<base>`** = B3's tip. **Rows:**
+`docs/api/v1.md:31-41`; the review's M1 (host agreement), M3, m3, m7 and m11; §19's C26. **`<base>`** = B2f's tip
+(§19). **Rows:**
 24–28. **Rulings:** R85-7, R85-8, R85-10, R85-11, R85-13, R85-15.
 
 **Connected:** none (the transport test is a JVM test against a loopback JDK `HttpServer`; the https rule is B2's, so it
@@ -1199,6 +1218,9 @@ connected run (report with its log; never rerun). **Size:** about 230 production
 | B2b | 1 h | 2 h | 45 min, 2 runs | 3 / 4 | ~70 / ~150 |
 | B2c | 1 h | 2 h | 45 min, 3 runs | 9 / 10 | ~170 / ~270 |
 | B3 | 1 h | 2 h | 45 min, 3 runs | 8 / 9 | ~160 / ~320 |
+| B2d | 1 h | 2 h | 45 min, 3 runs | 6 / 7 | ~150 / ~260 |
+| B2e | 1 h | 2 h | 45 min, 2 runs | 2 / 3 | ~110 / ~200 |
+| B2f | 1 h | 2 h | 45 min, 3 runs | 7 / 8 | ~120 / ~250 |
 | B4 | 1 h | 2 h | 45 min, 3 runs | 5 / 6 | ~230 / ~320 |
 | B5a | 1 h | 2 h | 45 min, 3 runs | 5 / 6 | ~220 / ~300 |
 | B5b | 1 h | 2 h | 45 min, 1 run | 0 / 2 | ~230 / ~0 |
@@ -1207,3 +1229,227 @@ No brief or agent runs past 2 hours. A brief that passes its 1-hour target with 
 and reports; the controller splits the rest. B2 was split three ways in rev 1.1 (review M4), sniff first, so the fetch
 brief calls the real sniff and no brief carries a stand-in. B2a's cap is 9, not the review's 8: the review's M1 adds one
 RED (7 → cap 8), and R85-14, decided after the review, adds the per-segment path-parameter RED (8 → cap 9).
+
+## 19. Amendment — widened document types (owner, 2026-09-29)
+
+**The ruling (binding, recorded on #85; §7 R85-5 as widened).** Ordinary attachments (picker, share) stay
+unrestricted. **Save as document** accepts exactly: **PDF, PNG, JPEG, GIF, WebP, RTF, DOC, XLS, PPT, DOCX, XLSX, PPTX,
+ODT, ODS, ODP, TXT, Markdown, CSV, TSV.** A binary or container format is accepted only when its bytes or container
+match the family; a filename or MIME type alone is never enough. OOXML and ODF need a recognisable internal package
+structure (an arbitrary ZIP renamed `.docx` is not enough). TXT, Markdown, CSV and TSV use the weaker model the owner
+accepted: text-like content, a compatible declared type or extension, and explicit web-page rejection; the residual
+risk is accepted because the action is explicit and the result is stored as inert data. **HTML MIME is still refused
+at once.** P85-13 is re-ratified: `That link did not lead to a supported document type. It stays a link.`
+
+**Execution (owner).** B2b and B2c are complete and are not reopened as briefs. The widened validators are **three new
+bounded briefs**, run after B3 and before B4, each with a 1 h target, a 2 h hard stop and a 45-minute fix round. The
+owner's split was two (container, text); at about 620 lines the container half would not convincingly fit an hour
+(the OLE2 directory walk and its hand-built fixture are the plan's second-hardest code after C10's cancellation), so
+it is split now, not at its first hour (review M4's lesson). **The dependency points one way: B3 → B2d → B2e → B2f → B4
+→ B5a → B5b.** No new brief waits for B4; B4 only wires what B2d defines.
+
+| brief | owns | rows |
+|---|---|---|
+| **B2d** container: the inspection port, ODF, OOXML | C26, C27, C28, C31 (the ZIP wiring) | 34–37 |
+| **B2e** legacy Office (OLE2 / CFB) | C29, C31 (the OLE2 wiring) | 38–39 |
+| **B2f** text and the simple binaries (GIF, WebP, RTF, TXT, Markdown, CSV, TSV) | C30, C31 (the text wiring and the fail-fast change) | 40–43 |
+
+### Decision 1 — container structure beyond the two windows: **(a), one bounded read-only inspection**
+
+**Chosen: (a).** After the stream completes, a ZIP or OLE2 head triggers **at most one bounded, read-only, random-access
+inspection** of the staged file, through a platform-neutral port that B2d defines in `:core`. Not (b): a streaming
+scan would have to trust ZIP local headers (the central directory, not the local headers, is what every reader
+believes, and the two can disagree) and buffer an OLE2 file's FAT chain, whose directory sectors can sit anywhere; the
+central directory is authoritative and only reachable from the end record. `DocumentSniff`'s two-window contract is
+kept for every format that fits in it (PDF, PNG, JPEG, GIF, WebP, RTF, ODF); deeper checks live in one separate
+validator.
+
+```kotlin
+// C/fetch/FetchPorts.kt (B2d): platform-neutral, read-only, random access over the staged file.
+fun interface StagedReader {
+    /** Exactly min(length, size − position) bytes from [position] (empty at or past the end). Throws IOException. */
+    fun readAt(position: Long, length: Int): ByteArray
+}
+interface StagingFile { /* output(), source(), discard() as shipped */ fun reader(): StagedReader }
+/** The one budget for an inspection. A read past either cap throws InspectionOverBudget: the file is refused. */
+class BoundedInspection(private val reader: StagedReader, val maxReads: Int = 160, val maxBytes: Int = 524_288) {
+    fun readAt(position: Long, length: Int): ByteArray       // counts reads and bytes; refuses a negative position
+}
+// C/fetch/FileStagedReader.kt (B2d): java.io.RandomAccessFile, opened read-only per inspection, closed after it.
+class FileStagedReader(private val file: File) : StagedReader
+```
+
+- **C26, the inspection port (B2d).** `StagingFile` gains `reader()`. `StagedReader` is read-only by construction (no
+  write method); `FileStagedReader` opens its file `"r"` and never writes; `BoundedInspection` is the only way a
+  validator reads, and every validator takes a `BoundedInspection`, never a raw reader. **Caps:** at most 160 reads and
+  524,288 bytes per inspection; one inspection per fetch; a read past a cap → the file is refused (`NotADocument`),
+  never truncated into an answer. JVM tests use a byte-array `StagedReader` in `CT/testing/` and `FileStagedReader` over
+  a temp file; the shipped `CT/testing/FakeStaging.kt` (B2c's) gains `reader()` over its bytes. **B4's obligation, not
+  B2d's prerequisite:** B4's `CacheStagingArea` staging file answers `reader()` with `FileStagedReader(partFile)`.
+- **C27, ODF in the two windows (B2d, `DocumentSniff.kt`).** Head: a ZIP local file header at 0 (`50 4B 03 04`) whose
+  entry name (offset 30, length at 26) is exactly `mimetype`, compression method 0 (stored, offset 8), and whose data
+  (at 30 + name + extra, all inside the head window) is exactly `application/vnd.oasis.opendocument.text`,
+  `…spreadsheet` or `…presentation` → ODT, ODS or ODP. Tail: the end-of-central-directory signature `50 4B 05 06` lies in
+  the tail window with its comment-length field equal to the bytes after the record (the ZIP ends there). Anything
+  else — `mimetype` missing, not first, compressed, another value (templates, drawings) — is not ODF. **The declared
+  `mimetype` identity is proven; nothing else in the package is parsed.**
+- **C28, ZIP → OOXML (B2d, `ContainerInspect.kt`).** Only for a head starting `50 4B 03 04` that C27 did not accept.
+  (1) One read of the last min(size, 65,557) bytes; the **last** EOCD signature whose comment length equals the bytes
+  after its 22-byte record; none → refused. (2) ZIP64 markers (`0xFFFF` entry counts, `0xFFFFFFFF` size or offset) →
+  refused (recorded limit). (3) The central directory's offset + size must end at or before the EOCD, its size ≤
+  262,144 bytes, its entries ≤ 4,096; one read. (4) Each record must start `50 4B 01 02` and fit; names are read as
+  bytes (UTF-8), nothing is decompressed. (5) **The package proof:** the names include `[Content_Types].xml` and
+  `_rels/.rels`, and **exactly one** main part: `word/document.xml` → DOCX, `xl/workbook.xml` → XLSX,
+  `ppt/presentation.xml` → PPTX. (6) Any name ending `vbaProject.bin` → refused: a macro-enabled package (DOCM, XLSM,
+  PPTM) is not on the list. **An arbitrary ZIP, whatever its declared type or URL extension, is refused.**
+- **C29, OLE2 / CFB → DOC, XLS, PPT (B2e, `ContainerInspect.kt`).** Only for a head starting
+  `D0 CF 11 E0 A1 B1 1A E1`. **The compound-file signature alone is never enough.** (1) The header (the first 512 bytes,
+  in the head window): byte order `FE FF`; major version 3 with sector shift 9 (512-byte sectors) or 4 with shift 12
+  (4,096); mini-sector shift 6. (2) The directory chain from the header's first-directory-sector field, followed through
+  the FAT: FAT sector ids from the header's 109 DIFAT slots, then DIFAT sectors (at most 8); each sector position must
+  lie inside the file; a sector seen twice ends the walk as refused (a cycle); at most 64 directory sectors. (3) Each
+  128-byte entry: name length ≤ 64, UTF-16LE name, object type 2 (stream). (4) **The content proof, exactly one of:**
+  a stream `WordDocument` → DOC; `Workbook` or `Book` → XLS; `PowerPoint Document` → PPT. None (an MSI, an Outlook
+  message, a bare signature) or more than one → refused. Exact names, never prefixes.
+- **C30, the text formats and the simple binaries (B2f).** `DocumentSniff.kt` (two windows) gains: **GIF** — head
+  `GIF87a` or `GIF89a`, and the file's last byte is the trailer `3B`; **WebP** — head `RIFF`, a little-endian size, then
+  `WEBP` and a chunk `VP8 `, `VP8L` or `VP8X`, and RIFF size + 8 == the file size exactly; **RTF** — head starts
+  `{\rtf1`, and the last byte that is not a space, tab, CR, LF or NUL is `}`. New `C/fetch/TextSniff.kt`, asked **only
+  when no binary family matched**:
+  - **text-like:** after an optional UTF-8 BOM, both windows decode as UTF-8 (ASCII included) with no NUL byte; a
+    multi-byte sequence cut at a window's inner edge is tolerated (at most 3 bytes; none when the windows overlap);
+  - **compatible:** the declared type (normalised) is `text/plain`, `text/markdown`, `text/csv` or
+    `text/tab-separated-values`, **or** the extension of the final URL's last path segment (after C8's stripping,
+    lowercased) is `txt`, `md`, `csv` or `tsv`. Neither → refused: **arbitrary `text/plain`-looking bytes are never
+    classified on their own;**
+  - **web-page rejection:** the head window, case-insensitively, contains none of `<!doctype html`, `<html`, `<head`,
+    `<script`, `<body`, `<meta`, `<form`, `<iframe`, and not `<?xml` followed anywhere in the head window by
+    `http://www.w3.org/1999/xhtml`.
+- **C31, where each format is decided, and the fetch wiring.** The family is proven by the bytes; the flavour within a
+  family is fixed by package content (C27's `mimetype`, C28's main part, C29's stream name); **only the text formats
+  use the declared type or the extension.** The text flavour: a declared `text/markdown`, `text/csv` or
+  `text/tab-separated-values` wins; else the extension's (`md`, `csv`, `tsv`, `txt`); else `text/plain` (declared
+  `text/plain` with no text extension). `FetchDocument` after step 7, in order: `DocumentSniff.classify(size, head,
+  tail)`; else, for a ZIP or OLE2 head, `ContainerInspect.classify(size, head, tail, BoundedInspection(staged.reader()))`
+  (B2d wires the ZIP arm, B2e the OLE2 arm); else `TextSniff.classify(size, head, tail, declared, extension)` (B2f);
+  else `NotADocument`. An `IOException` from the inspection → `Interrupted` (P85-18), staging discarded;
+  `InspectionOverBudget` → `NotADocument`. **C10 step 5 changes (B2f owns the `FetchDocument.kt` edit):** only a
+  declared `text/html` or `application/xhtml+xml` fails fast; `text/plain` and the other text types proceed to the body
+  and `TextSniff`. **The stored MIME and extension follow the proven flavour:** `Fetched.mimeType` is the flavour's
+  MIME (never the declared one), and `MimeTypes.EXTENSIONS` (`C/model/Attachment.kt:47-55`, the one home) gains the
+  missing pairs so C12's `AttachmentLocator.forOwner(owner, id, "", mime)` names the file by its type.
+
+| format | proven by | stored MIME | ext. | `{TYPE}` (P85-5) | brief |
+|---|---|---|---|---|---|
+| PDF, PNG, JPEG | C11 (shipped) | as shipped | `pdf`, `png`, `jpg` | PDF, PNG, JPEG (ratified) | B2b |
+| GIF | C30 head + trailer | `image/gif` | `gif` | **GIF** | B2f |
+| WebP | C30 RIFF size | `image/webp` | `webp` | **WebP** | B2f |
+| RTF | C30 head + closing `}` | `application/rtf` | `rtf` | **RTF** | B2f |
+| DOC, XLS, PPT | C29 stream name | `application/msword`, `application/vnd.ms-excel`, `application/vnd.ms-powerpoint` | `doc`, `xls`, `ppt` | **DOC**, **XLS**, **PPT** | B2e |
+| DOCX, XLSX, PPTX | C28 main part | the three `…openxmlformats-officedocument…` types (DOCX and XLSX already in `MimeTypes`) | `docx`, `xlsx`, `pptx` | **DOCX**, **XLSX**, **PPTX** | B2d |
+| ODT, ODS, ODP | C27 `mimetype` | the three `…oasis.opendocument…` types | `odt`, `ods`, `odp` | **ODT**, **ODS**, **ODP** | B2d |
+| TXT, Markdown, CSV, TSV | C30 + C31 | `text/plain`, `text/markdown`, `text/csv`, `text/tab-separated-values` | `txt`, `md`, `csv`, `tsv` | **TXT**, **Markdown**, **CSV**, **TSV** | B2f |
+
+**Kind at review** stays the shipped `AttachmentKinds.inferFrom` (`Attachment.kt:155-161`): GIF and WebP default to
+Photo, PDF to Document, every other new type to Other; the owner changes it on the review. No kind rule changes.
+
+**Recorded limits (the widened slice).** A ZIP comment longer than about 1,000 bytes pushes an ODF's end record out of
+the tail window (refused); ZIP64 packages are refused; an OOXML package whose main part is not at its conventional name
+is refused; a legacy file needing more than 8 DIFAT sectors or 64 directory sectors is refused; a macro-enabled OOXML
+package is refused, but a legacy DOC/XLS/PPT with macros is stored as inert data like any other; UTF-16 text is
+refused (it contains NULs); a text file that mentions `<script` or `<html` in its first KiB (a Markdown code sample)
+is refused; a GIF or PNG with bytes after its trailer is refused; GIF and WebP reach the shipped bounds-first
+thumbnail path like a shared image.
+
+### Test rows 34–43 (appended to §3)
+
+| row | hazard | test (class · case) | RED mutation |
+|---|---|---|---|
+| **B2d** 34 | C26: the port | core `CT/fetch/BoundedInspectionTest` · `readsAreExactAndShortAtTheEnd`; `theReadCapRefuses` (the 161st read); `theByteCapRefuses`; `aNegativePositionIsRefused`; `FileStagedReaderTest.readsATempFileReadOnly` (the file's bytes and mtime unchanged) | count reads but not bytes (a 600 KiB central directory in two reads passes) |
+| 35 | C27: ODF | core `DocumentSniffTest` (+) · **pass:** a minimal ODT, ODS and ODP (built in code with `java.util.zip`, `mimetype` stored first); **fail:** `mimetype` missing, wrong (`application/zip`), compressed, not first, a template value; no end record in the tail | accept any `mimetype` value that starts `application/vnd.oasis.opendocument` |
+| 36 | C28: OOXML | core `CT/fetch/ContainerInspectZipTest` · **pass:** a minimal DOCX, XLSX and PPTX (`[Content_Types].xml`, `_rels/.rels`, the main part); **fail:** **an arbitrary ZIP** (a `readme.txt` inside); `[Content_Types].xml` missing; `_rels/.rels` missing; two main parts; a `word/vbaProject.bin`; ZIP64 markers; a central directory outside the file; one over 256 KiB; a comment length that does not end the file | (1) accept a `word/` entry without `[Content_Types].xml`; (2) take the flavour from the declared type; (3) drop the macro refusal |
+| 37 | C31: ZIP wiring | core `FetchDocumentTest` (+) · **an arbitrary ZIP served as DOCX** (`application/vnd…wordprocessingml.document`, a `.docx` URL) → `NotADocument`; a DOCX served as `application/octet-stream` → `Fetched` as DOCX; a PDF never opens the reader (reads == 0); an inspection `IOException` → `Interrupted`, staging discarded; `MimeTypes.extensionFor` of every new container type | accept a ZIP head as the declared OOXML type without inspecting |
+| **B2e** 38 | C29: OLE2 | core `CT/fetch/ContainerInspectOleTest` over a minimal CFB builder in `CT/testing/` (512-byte sectors; header, one FAT sector, one directory sector) · **pass:** a minimal DOC, XLS (`Workbook`, and `Book`) and PPT; a 4,096-byte-sector file; a directory chain across two sectors; **fail:** **no Word, Excel or PowerPoint stream** (only `\u0005SummaryInformation`); two content streams; `WordDocumentX` (a prefix); the signature and junk; a bad sector shift; a directory sector past the end; a FAT cycle | (1) accept the signature with a valid header alone; (2) match a stream name by prefix |
+| 39 | C31: OLE2 wiring | core `FetchDocumentTest` (+) · a DOC served as `application/octet-stream` → `Fetched` as `application/msword`; the no-content-stream file served as `application/msword` → `NotADocument` | none: rows 38 and 37 carry the REDs |
+| **B2f** 40 | C30: simple binaries | core `DocumentSniffTest` (+) · **pass:** minimal GIF87a, GIF89a, WebP (`VP8 `, `VP8L`, `VP8X`), RTF (with a trailing CRLF); **fail:** **a GIF cut before its trailer**; **a WebP whose RIFF size is not the file size**; **an RTF without its closing `}`**; `{\rtf` without `1` | (1) skip the GIF trailer; (2) skip the RIFF size check; (3) skip the RTF closing brace |
+| 41 | C30: text | core `CT/fetch/TextSniffTest` · **pass:** TXT, MD, CSV, TSV by declared type, and each by extension with `application/octet-stream`; a BOM; a multi-byte character cut at a window edge; **fail:** **HTML served as `text/plain`**; **HTML at a `.txt` URL**; **HTML served as `text/csv`**; each rejection pattern (case-varied) and the XHTML `<?xml`; **a text file with a NUL**; invalid UTF-8; plain text declared `application/octet-stream` at a URL with no extension (never auto-classified) | (1) skip the web-page patterns; (2) skip the NUL check; (3) classify text with no compatible declaration or extension |
+| 42 | C31: text wiring, fail-fast | core `FetchDocumentTest` (+) · a declared `text/plain` body now reaches `TextSniff` and is `Fetched` as `text/plain`; `text/html` and `application/xhtml+xml` still fail before the body (the fake body throws if read); a `.md` URL with `text/plain` is `text/markdown`; `text/csv` at a `.txt` URL is `text/csv` | keep `text/plain` in the fail-fast set (the TXT case turns `NotADocument`) |
+| 43 | C31: extensions | core `AttachmentRulesTest` (+) · `extensionFor` for GIF, WebP, RTF, DOC, XLS, PPT, PPTX, ODT, ODS, ODP, Markdown, CSV, TSV; the shipped pairs unchanged | none: a table pin |
+
+**Counted REDs added: 15** — B2d 6 (rows 34, 35, 37 one each; row 36 three), B2e 2 (row 38), B2f 7 (rows 40 and 41
+three each; row 42 one). Every accepted format has a positive fixture; every family has its adversarial cases; the owner's nine
+must-fail fixtures are bold above.
+
+### Fixtures (all built in code, minimal, fictional)
+
+OOXML and ODF packages are written in the test with `java.util.zip.ZipOutputStream` (ODF's `mimetype` entry `STORED`
+with its CRC, first); OLE2 files by a small CFB builder in `CT/testing/CfbFixtures.kt` (B2e); GIF, WebP and RTF as byte
+literals; text as strings. Part contents are one-line fictional XML or text (`Example Pool Pump manual`); no real
+document, name or host.
+
+## 20. B2d — container: the inspection port, ODF, OOXML (C26–C28, C31's ZIP arm; core, JVM only)
+
+**Read:** §19; C10, C11; `C/fetch/{FetchPorts,DocumentSniff,FetchDocument}.kt` and `CT/testing/FakeStaging.kt` on the
+branch; the ZIP format's end record and central directory (APPNOTE 4.3.12, 4.3.16); ECMA-376 Part 2 (OPC) §9 names;
+ODF 1.2 Part 3 §3.3 (`mimetype`). **`<base>`** = B3's tip. **Rows:** 34–37. **Rulings:** R85-5 (widened).
+
+**Connected:** none. **Greps:** `'fun interface StagedReader'` → 1; `'fun reader\(\): StagedReader'` in `FetchPorts.kt`
+→ 1; `'class BoundedInspection'` → 1; `'RandomAccessFile\(.*"r"\)'` in `FileStagedReader.kt` → 1 and
+`'"rw"|write\('` there → 0; `'Inflater|ZipFile|ZipInputStream|ZipEntry'` over `core/src/main` → 0 (names only, nothing
+decompressed; `java.util.zip` stays in tests); `'java\.net\.'` over `core/src/main` → 1 (unchanged); `'BoundedInspection\('`
+in `FetchDocument.kt` → 1; `git diff <base> -- C/model/Attachment.kt` touches only `EXTENSIONS`; `git diff <base> --
+app` → empty.
+
+**Untouched:** `app/**`; every `C/` file but `C/fetch/{FetchPorts,DocumentSniff,FetchDocument}.kt`, the new
+`C/fetch/{ContainerInspect,FileStagedReader}.kt` and `C/model/Attachment.kt` (`EXTENSIONS` only); the shipped
+PDF/PNG/JPEG rules; `docs`; `tools`. **Must NOT:** decompress anything; read the staged file outside one
+`BoundedInspection`; inspect a head that is not a ZIP; accept a ZIP on a declared type or URL extension; take a flavour
+from anything but part names; write to the staged file; wait on or touch any app code. **Counted RED (6):** rows 34
+(1), 35 (1), 36 (3), 37 (1). **Caps:** 7 JVM mutation runs, 0 device; **1 h target, 2 h hard stop**; fix round 3 runs,
+45 min. **Stop also** if a shipped `FetchDocumentTest` or `DocumentSniffTest` assertion must move. **Size:** about 150
+production, 260 test lines.
+
+## 21. B2e — legacy Office, OLE2 / CFB (C29, C31's OLE2 arm; core, JVM only)
+
+**Read:** §19; B2d's report; `C/fetch/ContainerInspect.kt`; MS-CFB §2.2 (header), §2.3 (FAT), §2.5 (DIFAT), §2.6
+(directory entries). **`<base>`** = B2d's tip. **Rows:** 38–39. **Rulings:** R85-5 (widened).
+
+**Connected:** none. **Greps:** `'"WordDocument"'`, `'"Workbook"'`, `'"Book"'`, `'"PowerPoint Document"'` in
+`ContainerInspect.kt` → 1 each; `'startsWith\('` applied to a stream name there → 0 (exact names); `'BoundedInspection'`
+is the only reader type in the OLE2 arm (by inspection); `git diff <base> -- app` → empty.
+
+**Untouched:** everything but `C/fetch/{ContainerInspect,FetchDocument}.kt` and `C/model/Attachment.kt`
+(`EXTENSIONS` only, the three legacy pairs). **Must NOT:** accept the compound-file signature on its own; read a
+stream's contents; follow more than 8 DIFAT or 64 directory sectors; loop on a cycle; read outside the budget.
+**Counted RED (2):** row 38 (2). **Caps:** 3 JVM mutation runs, 0 device; **1 h target, 2 h hard stop**; fix round 2
+runs, 45 min. **Stop also** if the minimal CFB builder passes about 80 lines (report; the controller decides).
+**Size:** about 110 production, 200 test lines.
+
+## 22. B2f — text and the simple binaries (C30, C31's text arm and the fail-fast change; core, JVM only)
+
+**Read:** §19; B2d's and B2e's reports; `C/fetch/{DocumentSniff,FetchDocument}.kt`; `C/references/ReferenceUris.kt`
+(`destinationOf`, for the extension). **`<base>`** = B2e's tip. **Rows:** 40–43. **Rulings:** R85-5 (widened).
+
+**Connected:** none. **Greps:** in `FetchDocument.kt` the fail-fast set is exactly `text/html` and
+`application/xhtml+xml` (`'"text/plain"'` → 0 there); `'object TextSniff'` → 1; each of the nine rejection patterns →
+1 in `TextSniff.kt`; `'TextSniff\.classify\('` in `FetchDocument.kt` → 1, after the container arm; `git diff <base> --
+app` → empty.
+
+**Untouched:** everything but `C/fetch/{DocumentSniff,FetchDocument}.kt`, the new `C/fetch/TextSniff.kt` and
+`C/model/Attachment.kt` (`EXTENSIONS` only). **Must NOT:** classify text without a compatible declared type or
+extension; accept a NUL; let `text/html` or `application/xhtml+xml` reach the body; take a text flavour from anything
+but C31's rule; change a binary rule. **Counted RED (7):** rows 40 (3), 41 (3), 42 (1). **Caps:** 8 JVM mutation runs, 0 device; **1 h target, 2 h hard stop**;
+fix round 3 runs, 45 min. **Stop also** if a shipped fetch test that pinned `text/plain` as fail-fast must move beyond
+that one expectation (report it as the pin). **Size:** about 120 production, 250 test lines.
+
+### The rest of the plan, as amended
+
+- **B2c** is not reopened. Its must-not "read the staged file a second time" now reads, for the code after B2d: "at most
+  one bounded, read-only container inspection through `BoundedInspection`, only after the stream completes and only
+  for a ZIP or OLE2 head". Its fail-fast set changes in B2f.
+- **B4** (§15) gains one obligation: the `CacheStagingArea` staging file implements `reader()` as
+  `FileStagedReader(partFile)`; row 27 gains `readerReadsThePartFile`. No other B4 change; B4's `Accept` header
+  already ends in `*/*;q=0.1`.
+- **B5a** (§16): C21's `typeLine` maps each proven MIME to its `{TYPE}` label from the table above, one home in
+  `MaterializeStrings.kt`; row 32 pins the labels once ratified.
+- **The brief count is thirteen:** B1a, B1b, B1c, B2a, B2b, B2c, B3, **B2d, B2e, B2f**, B4, B5a, B5b.
