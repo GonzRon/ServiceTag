@@ -1,4 +1,7 @@
-# #87 — maintenance notification body taps: plan and briefs (rev 1.1, 2026-09-30)
+# #87 — maintenance notification body taps: plan and briefs (rev 1.2, 2026-09-30)
+
+> **Rev 1.2** applies the owner's rulings: R87-1 and R87-3 decided as written; **R87-2 decided (b)** — a summary tap
+> never resets a stack holding one of the four write flows (C6, row 10, §6, §7; B1's counted REDs 8 → 9).
 
 > **Rev 1.1** applies the plan review (`.superpowers/sdd/2026-09-30-issue-87/brief-review.md`: APPROVE WITH CONDITIONS):
 > C-1 (R87-2, C6 and §7 state that the stack reset cancels a write already running on a popped screen, with the
@@ -11,11 +14,11 @@
 > `<base>` = B1's accepted tip; one task review each, at most one bounded fix round each; one whole-branch review; the
 > merge; one merged-tip gate. Planned read-only from issue #87 (`.superpowers/sdd/2026-09-30-issue-87/issue-87.md`),
 > the owner's scope ruling of 2026-09-30 (in the ledger) and the audit (`.superpowers/sdd/2026-09-30-issue-87/audit.md`,
-> the inventory of record; every citation re-verified on `a35cacb0`). **Three owner rulings are open (§6); B1 is
-> written to the recommended answers and does not start until they are given.**
+> the inventory of record; every citation re-verified on `a35cacb0`). **The owner ruled R87-1…3 on 2026-09-30 (§6);
+> nothing in this plan is conditional.**
 
 **Goal:** the body of a posted maintenance notification navigates. The **summary** body opens the Dashboard, whose
-first section is ATTENTION; an **item** body opens its exact schedule — the very `PendingIntent` its "Open" action
+first section is ATTENTION — unless one of the four write flows is on the stack (R87-2); an **item** body opens its exact schedule — the very `PendingIntent` its "Open" action
 fires. A body tap writes nothing, consumes no nonce and leaves the quick actions exactly as shipped. No schema, backup
 format, API or MCP change; no version bump; no notification refactoring; no #90 work.
 
@@ -150,27 +153,41 @@ fun postSummary(summary: SummaryPost, content: QuickActionTarget)
 called by the collector at `:76` in place of `backStack.add(it)`:
 
 ```kotlin
+/** R87-2: the write flows whose protections a notification tap must not circumvent, idle or not. */
+private fun NavKey.isWriteFlow(): Boolean =
+    this is Route.TransferImport || this is Route.AssetEdit ||
+        this is Route.ReplaceAsset || this is Route.TransferAssets
+
 /**
- * A top-level route replaces the stack, as its tab does; every other link is pushed, as shipped.
- * R87-2: the reset pops every entry above the root and clears its view-model store, so a write
- * already running on a popped screen (import, asset save, replace, transfer marking) is cancelled.
+ * A top-level route replaces the stack, as its tab does — unless a write flow is anywhere on the
+ * stack: then the link is ignored and the stack is untouched (the activity has simply come forward).
+ * Ignoring is the whole behaviour: no snackbar, no queue, no later replay. Every other link is
+ * pushed, as shipped.
  */
 internal fun MutableList<NavKey>.openDeepLink(route: Route) {
-    if (route in TopLevelRoutes) switchTopLevel(route) else add(route)
+    when {
+        route !in TopLevelRoutes -> add(route)
+        any { it.isWriteFlow() } -> Unit
+        else -> switchTopLevel(route)
+    }
 }
 ```
 
 - A cold start (`[Dashboard]`) stays `[Dashboard]` — never a second identical key (audit §6.5).
-- **The consequence (R87-2, option (a)).** `switchTopLevel` pops every entry above the root, and `ServiceTagRoot`
-  scopes each entry to its own `ViewModelStore`, cleared on pop — which cancels that entry's `viewModelScope`. Four
-  screens block back for exactly this reason while their write runs: `TransferImportScreen.kt:58` (`state.importing`;
-  MJ-1: "leaving would cancel it mid-write"), `AssetEditScreen.kt:312` (`state.saving`, #67 R67-8's copies),
-  `ReplaceAssetScreen.kt:94` (`state.saving`) and `TransferFlowScreen.kt:99` (`PackPhase.MARKING`). The bottom bar can
-  never reach them (it shows only at a root); a summary tap can, from any depth, even with the guarded screen below a
-  pushed detail. The tap itself writes nothing, but it can abandon the owner's own write in flight (and an idle unsaved
-  form). The plan is written to option (a), reset regardless; option (b) is in R87-2.
+- **The write-flow protection (R87-2 (b)).** The four routes are exactly `Route.TransferImport` (`Route.kt:97`),
+  `Route.AssetEdit` (`:27`, new or edit), `Route.ReplaceAsset` (`:110`) and `Route.TransferAssets` (`:104`, the
+  screen `TransferFlowScreen`). Their screens block back while a write runs — `TransferImportScreen.kt:58` (MJ-1:
+  "leaving would cancel it mid-write"), `AssetEditScreen.kt:312`, `ReplaceAssetScreen.kt:94`,
+  `TransferFlowScreen.kt:99` — because a pop clears the entry's `ViewModelStore` and cancels its `viewModelScope`. A
+  reset would pop them; so with any of the four **anywhere** on the stack, at the top or buried, idle or writing, the
+  summary's route is ignored: the `PendingIntent` has already brought ServiceTag to the foreground, and the stack is
+  left exactly as it was. No Dashboard is pushed.
+- **Ignoring is the whole behaviour.** No snackbar, no message, no pending flag, no retry. The decision is made once,
+  when the one collector receives the route; `deepLinks`' `replay = 1` cache is per activity instance and has no second
+  subscriber, so an ignored link is dropped, never deferred or replayed later. `deepLinks` itself is unchanged.
 - Behaviour-preserving for every shipped link: `AssetDetail`, `ScheduleDetail` (with or without `complete`) and
-  `TagResult` are pushed exactly as before; no shipped link produces a top-level route.
+  `TagResult` are pushed exactly as before, whether or not a write flow is on the stack; no shipped link produces a
+  top-level route.
 - No scroll-to-top, no filter reset, no anchor: the Dashboard is reached exactly as its tab reaches it, and ATTENTION
   is its first section (`DashboardScreen.kt:183-212`).
 
@@ -196,12 +213,12 @@ notification posted by 1.4.1 that is still standing after the upgrade keeps its 
 | 7 | C3: a builder sets no body (AC 8 at the builder) | same class · new `bothNotificationShapesSetABodyAndNeitherAutoCancels` — a source scan of `Notifications.kt` (`sourceFile`, `ManifestContractTest.kt:409`): `'\.setContentIntent\(intents\.pendingIntentFor\('` → 2; `'\.setAutoCancel\(false\)'` → 2; `'setGroup\('` → 0; `'PendingIntent\.get'` → 0 | the summary's `setContentIntent` line deleted |
 | 8 | C5: the host is not parsed | `CT/links/DeepLinkRouteTest` · new `dashboardRoute` — no segment → `DeepLink.Dashboard`; one uuid segment → `Malformed`; `otherSchemesAndHostsAreNotOurs` unchanged | `parse` answers null for `dashboard` (one run, rows 8 and 9 RED together) |
 | 9 | C5: the link lands elsewhere or opens a completion; the host leaks into the manifest | `T/links/ScheduleDeepLinkTest` · new `theDashboardLinkLandsOnTheDashboardAndOpensNoCompletion` (`routeForDeepLink(parse(…dashboard…)) == Route.Dashboard`; `routeForQuickCompletion(…) == null`) and `theDashboardHostIsNotInTheManifest` (0 lines carrying `android:host="dashboard"`); `:37`, `:46`, `:56`, `:69`, `:91` unchanged | as row 8 |
-| 10 | C6: a duplicate Dashboard, or a shipped link no longer pushed | `T/ui/nav/RouteTest` · new `aTopLevelLinkReplacesTheStackAndEveryOtherLinkIsPushed` — `[Dashboard]` + Dashboard → `[Dashboard]`; `[Assets, AssetDetail(a)]` + Dashboard → `[Dashboard]`; `[Maintenance, ScheduleDetail(s), ScheduleEdit(s)]` + Dashboard → `[Dashboard]`; `[Dashboard]` + `ScheduleDetail(s)` → `[Dashboard, ScheduleDetail(s)]`; `AssetDetail` and `TagResult` likewise pushed | `openDeepLink` always `add`s (the shipped collector) |
+| 10 | C6: a duplicate Dashboard, or a shipped link no longer pushed | `T/ui/nav/RouteTest` · new `aTopLevelLinkReplacesTheStackAndEveryOtherLinkIsPushed` — `[Dashboard]` + Dashboard → `[Dashboard]`; `[Assets, AssetDetail(a)]` + Dashboard → `[Dashboard]`; `[Maintenance, ScheduleDetail(s), ScheduleEdit(s)]` + Dashboard → `[Dashboard]`; `[Dashboard]` + `ScheduleDetail(s)` → `[Dashboard, ScheduleDetail(s)]`; `AssetDetail` and `TagResult` likewise pushed; and new `aSummaryLinkNeverResetsAStackHoldingAWriteFlow` (R87-2 (b)) — for each of `TransferImport(c)`, `AssetEdit(null)`, `AssetEdit(a)`, `ReplaceAsset(a)`, `TransferAssets()`: at the top (e.g. `[Dashboard, AssetDetail(a), ReplaceAsset(a)]`) and buried under another screen (e.g. `[Assets, TransferAssets(), AssetDetail(a)]`), + Dashboard → the stack **unchanged** (same entries, same order, no second `Dashboard`); with none of the four, `[Assets, AssetDetail(a)]` + Dashboard → `[Dashboard]`; with one present, the asset, tag and schedule links still push (`[Dashboard, AssetEdit(a)]` + `ScheduleDetail(s)` → `[Dashboard, AssetEdit(a), ScheduleDetail(s)]`) | (i) `openDeepLink` always `add`s (the shipped collector); (ii) the protection dropped — a top-level route always resets |
 | **B2** 11 | AC 2, 3, 4, 6, 7 on the platform — the item | `AT/reminders/QuickActionDeviceProofTest` · new `anItemBodyOpensItsScheduleExactlyAsOpenDoesAndWritesNothing` — seed one overdue `QUICK` schedule (`seedOverdue`), `reconcileAll()`, read the item back (`standingFor`): `notification.contentIntent` non-null, `isImmutable`, `isActivity`, `== open.actionIntent` (the Open action's own intent), `!= done.actionIntent`; note the persisted nonce; `send()` it with no activity running (the cold `onCreate` path) → the schedule detail is on screen: the **detail matcher** `hasText("SERVICE RECORD")` — exact, as `SectionHeader` upper-cases its title (`ui/components/SectionHeader.kt`; precedent `EditorsDeviceProofTest.kt:129`), unconditional on the screen (`ScheduleDetailScreen.kt:308`) and absent from the Dashboard — awaited present, plus the title; then `waitForIdle()`, and "When was this done?" is **absent**; the asset's events still 0; the persisted nonce unchanged; the item and the summary still standing; the activity finished | **device (1 run, shared with row 12):** both `setContentIntent` calls removed → each case fails on its non-null `contentIntent` assertion |
 | 12 | AC 1, 4, 6, 7 on the platform — the summary | same class · new `theSummaryBodyOpensTheDashboardAndWritesNothing` — the same seed and run; the standing summary (`SUMMARY_ID`): `contentIntent` non-null, `isImmutable`, `isActivity`, `== AndroidQuickActionIntents(context).pendingIntentFor(QuickActionTarget.OpenDashboardAttention)`, `!=` the item's Open; first `send()` the item's **Open action** (shipped path) and await the **same detail matcher as row 11**, `hasText("SERVICE RECORD")`, present, so the landing is discriminating; then `send()` the summary's `contentIntent` (the warm `onNewIntent` path) → the Dashboard: `hasText("ServiceTag") and hasNoClickAction()`, the `ATTENTION` header, the seeded row's title, and `hasText("SERVICE RECORD")` **gone**, by a bounded wait (`waitUntil { onAllNodes(hasText("SERVICE RECORD")).fetchSemanticsNodes().isEmpty() }`), because the pop animation composes the outgoing entry for a moment; events 0; nonce unchanged; both notifications standing; the activity finished | as row 11 |
 
-**Planned counted REDs: 9** — B1 8 JVM runs (rows 1, 3, 4, 5, 6, 7, 8+9 as one run, 10), B2 1 device run (rows 11 and
-12 together). **New cases:** 9 JVM in `app` (rows 1–5, 7, 9 ×2, 10), 1 in `core` (row 8), 2 device (rows 11, 12);
+**Planned counted REDs: 10** — B1 9 JVM runs (rows 1, 3, 4, 5, 6, 7, 8+9 as one run, 10 (i), 10 (ii)), B2 1 device run
+(rows 11 and 12 together). **New cases:** 10 JVM in `app` (rows 1–5, 7, 9 ×2, 10 ×2), 1 in `core` (row 8), 2 device (rows 11, 12);
 one renamed pin (row 6). The two device cases observe the destination the way the shipped device tests do — Compose
 semantics on the running activity through an empty compose rule — because the suite has no route probe and this plan
 adds none to production.
@@ -227,36 +244,29 @@ every other androidTest file but the two named; `tools/emulator/*`; the gate scr
 label, content description, title or empty state is added. `DeepLink.Malformed`'s reason is never shown. A string that
 appears anyway stops the brief.
 
-## 6. Owner rulings needed
+## 6. Owner rulings (2026-09-30, decided)
 
-- **R87-1 — the link.** `servicetag://dashboard`, no path, parsed in core and routed to the existing `Route.Dashboard`,
+- **R87-1 — the link. DECIDED: ratified as written.** `servicetag://dashboard`, no path, parsed in core and routed to the existing `Route.Dashboard`,
   **not declared in the manifest** (only this app's explicit `PendingIntent` uses it; the public BROWSABLE hosts stay
   `asset`, `tag`, `schedule`). `MainActivity` is exported, so any app can send `servicetag://dashboard` to it as an
   **explicit** intent — harmless, because it only navigates, and already true of the three shipped hosts; the new
   `DeepLink.Dashboard` kdoc says why it is not a D-17 permanent contract (no manifest host). Alternatives: declare it
-  (a permanent public host, D-17's bar), or spell it `servicetag://attention`. **Recommended: as proposed.**
-- **R87-2 — the landing. OPEN.** The summary lands exactly as the Dashboard tab does: the back stack becomes
-  `[Dashboard]`, the Dashboard's scroll position and filters are left as they are, and ATTENTION is its first section;
-  no anchor, no new route. **The consequence:** anything open above the root closes — an idle unsaved form, and also
-  **a write already running on a popped screen, which is cancelled** (its `ViewModelStore` is cleared on pop). Four
-  screens block back for that reason: `TransferImportScreen.kt:58` (MJ-1), `AssetEditScreen.kt:312`,
-  `ReplaceAssetScreen.kt:94`, `TransferFlowScreen.kt:99`; the tab can never reach them, a summary tap can. The tap
-  itself writes nothing.
-  - **(a) Reset regardless — recommended; the plan is written to it.** The tap is deliberate and the write window is
-    short. No code beyond C6; the consequence is recorded (C6 kdoc, §7).
-  - **(b) Do not reset while a write-flow route — `Route.TransferImport`, `Route.AssetEdit`, `Route.ReplaceAsset`,
-    `Route.TransferAssets` — is anywhere on the stack: ignore the tap's route**, so the app simply comes forward where
-    it was. Not "push instead": with the Dashboard as root, a push is the duplicate key C6 exists to avoid. Cost: AC 1
-    is narrowed on those four flows (the summary opens the app on the flow, not the Dashboard); one more pure rule in
-    `openDeepLink` and its cases in row 10 (about 5 production, 20 test lines, 1 more counted RED in B1); B1's fences
-    unchanged. It also protects an idle unsaved form on those four screens.
-  - A further alternative, not recommended: scroll to ATTENTION on arrival (a signal into `DashboardScreen`, i.e. a new
-    route parameter).
-- **R87-3 — the upgrade transition.** A notification posted by 1.4.1 that is still standing after the upgrade keeps its
-  inert body until its next re-post (a content change, the three-day OVERDUE re-announcement, a count change for the
-  summary). Forcing a re-post changes the tag and re-alerts every standing reminder. **Recommended: accept; one line in
-  the 1.5.0 release notes; and two taps added to the ratified 1.5.0 dev-phone smoke — one summary body, one item body —
-  on a post 1.5.0 made.**
+  (a permanent public host, D-17's bar), or spell it `servicetag://attention`. Ratified as proposed.
+- **R87-2 — the landing. DECIDED: option (b).** The owner, verbatim in intent: "A notification tap must not
+  circumvent protections deliberately built into write workflows. Normally a summary tap resets to the existing
+  Dashboard, without pushing a duplicate Dashboard. If TransferImport, AssetEdit, ReplaceAsset, or TransferAssets exists
+  anywhere on the stack — even idle — bring ServiceTag to the foreground but preserve its current navigation stack. Do
+  not push another Dashboard. Do not queue or replay the navigation later." So: with none of `Route.TransferImport`,
+  `Route.AssetEdit`, `Route.ReplaceAsset`, `Route.TransferAssets` on the stack, the stack becomes `[Dashboard]` as the
+  tab does it (scroll position and filters as they are; ATTENTION its first section; no anchor, no new route); with any
+  of them anywhere, the link is ignored and the stack is untouched (C6). Option (a), reset regardless, is declined:
+  a reset clears the popped entries' `ViewModelStore`s and would cancel a write those four screens deliberately protect
+  (`TransferImportScreen.kt:58` MJ-1, `AssetEditScreen.kt:312`, `ReplaceAssetScreen.kt:94`, `TransferFlowScreen.kt:99`).
+- **R87-3 — the upgrade transition. DECIDED: ratified as written.** A notification posted by 1.4.1 that is still
+  standing after the upgrade keeps its inert body until its next re-post (a content change, the three-day OVERDUE
+  re-announcement, a count change for the summary); nothing forces a re-post, which would change the tag and re-alert
+  every standing reminder. One line in the 1.5.0 release notes; two checks added to the ratified 1.5.0 dev-phone smoke
+  (§7).
 
 ## 7. What this plan does not do, and records
 
@@ -270,11 +280,15 @@ appears anyway stops the brief.
   pushes as they are (AC 5). Recorded for #90's look at navigation, not fixed here.
 - **Auto-cancel.** A body tap does not dismiss the notification, exactly as "Open" does not; the next reconcile owns
   the shade.
-- **A summary tap can cancel a running write (R87-2 (a)).** The reset clears each popped entry's `ViewModelStore`, so an
-  import, an asset save's copies, a replace or a transfer marking that is running on a screen above the root is
-  cancelled — the case the four back-blocking screens (`TransferImportScreen.kt:58`, `AssetEditScreen.kt:312`,
-  `ReplaceAssetScreen.kt:94`, `TransferFlowScreen.kt:99`) guard against for back. Recorded, not guarded, under (a); (b)
-  would guard it by ignoring the tap on those flows.
+- **The summary body does not navigate while a write flow is open (R87-2 (b)).** With `Route.TransferImport`,
+  `Route.AssetEdit`, `Route.ReplaceAsset` or `Route.TransferAssets` anywhere on the stack — even idle, even buried
+  under another screen — a summary tap only brings ServiceTag to the foreground on the stack it had; it does not reach
+  the Dashboard, says nothing, and is not replayed when the flow ends. AC 1 is deliberately narrowed there by the
+  owner's ruling. An item body tap still opens its schedule on top (a push pops nothing).
+- **R87-3's two records.** One line in the 1.5.0 release notes: a maintenance notification that was already showing
+  when 1.5.0 was installed opens nothing when its body is tapped until it is next re-posted. Two checks added to the
+  ratified 1.5.0 dev-phone smoke, each on a notification 1.5.0 posted: a newly posted **summary** body opens the
+  Dashboard; a newly posted **item** body opens its exact schedule.
 - **Harness sender opt-in.** On API 34+ a `PendingIntent.send()` from a process with no visible window may need the
   sender's background-activity-start opt-in; B2 may pass it in the case's own `send` call. It never goes into
   production: the real sender is the system shade.
@@ -286,13 +300,13 @@ the merge commit: `.superpowers/sdd/2026-09-29-issue-85/gate/run.sh` copied unch
 `.superpowers/sdd/2026-09-30-issue-87/gate/` (its 55 classes: #86's 54 plus `ReplaceAssetFlowTest`; no
 `EXTRA_CLASSES`). **#87 adds no device class:** its two device cases live inside `QuickActionDeviceProofTest`, already
 one of the 55, which goes from 2 to 4 cases (the device suite from 281 to 283 tests); `ReminderPlatformDeviceProofTest`
-keeps its 13. **Expected:** 55 device classes; JVM core 1654 + 1, app 1586 + 9; MCP 384 unchanged; the whole near
+keeps its 13. **Expected:** 55 device classes; JVM core 1654 + 1, app 1586 + 10; MCP 384 unchanged; the whole near
 11.3–11.5 minutes (two activity launches add seconds). **Record in the ledger and this plan's errata** (reporting
 only): the whole time with its JVM, device and MCP portions; the class and test counts; **#87's delta against 11.32
 minutes whole, 10.32 minutes device, 55 classes, 281 device tests**. **A failure is recorded, never rerun:** its class,
 case and log; a flake at an untouched site goes to #90 with the log; a fix is a new commit and a new gate, by the
 controller's decision. The 1.5.0 release gate (version bump, artifacts, upgrade proof, the ratified dev-phone smoke,
-plus R87-3's two taps if ruled) follows separately.
+plus R87-3's two checks, §7) follows separately.
 
 ## 9. Time boxes
 
@@ -342,7 +356,8 @@ add a manifest host; add a `Route`.
 `A/ui/nav/Route.kt:204-216`; `T/reminders/QuickActionsTest.kt` (`:31-60` fixtures, `:100`, `:138`, `:172`);
 `T/reminders/LocalReminderProviderTest.kt:50-89`; `T/reminders/QuickActionReceiverTest.kt:240-286`;
 `T/links/ScheduleDeepLinkTest.kt`; `CT/links/DeepLinkRouteTest.kt`; `T/ui/nav/RouteTest.kt:1-30`.
-**`<base>`** = `a35cacb0`. **Rows:** 1–10. **Rulings:** R87-1, R87-2 (as given).
+**`<base>`** = `a35cacb0`. **Rows:** 1–10. **Rulings:** R87-1, R87-2 (b), R87-3 (§6). Also read `A/ui/nav/Route.kt`
+`:27`, `:97`, `:104`, `:110` (the four write-flow routes).
 
 **Connected:** none (B2 runs `ReminderPlatformDeviceProofTest` for B1's four call-site edits).
 
@@ -368,13 +383,16 @@ branches of `pendingIntentFor`.
 **Must NOT:** make `contentFor` `suspend` or let it read a port; derive the item body from the action list or a label;
 give items a new request code or reuse 2303; add a second `getActivity` site; give the seam a default value; change
 the provider's write order; change `routeFrom`'s explicit-intent guard or `routeForQuickCompletion`; change how a
-non-top-level link is pushed.
+non-top-level link is pushed; reset or push a `Dashboard` over a stack holding `Route.TransferImport`,
+`Route.AssetEdit`, `Route.ReplaceAsset` or `Route.TransferAssets`; queue, defer, retry or replay an ignored link, or
+say anything about it; change `deepLinks` or its `replay`.
 
-**Counted RED (8 runs; rows 8 and 9 share one):** rows 1, 3, 4, 5, 6, 7, 8+9, 10. **Caps:** 9 JVM mutation runs, 0
+**Counted RED (9 runs; rows 8 and 9 share one, row 10 has two):** rows 1, 3, 4, 5, 6, 7, 8+9, 10 (i), 10 (ii).
+**Caps:** 9 JVM mutation runs, 0
 device; **1 h target, 2 h hard stop**. **Stop also** if the seam change forces an edit in a test file outside §4's B1
 list; if `openDeepLink` cannot be driven on a plain `mutableListOf<NavKey>()` in a JVM test; if any shipped
 `DigestPolicyTest`, `QuickActionsTest` or `LocalReminderProviderTest` assertion moves.
-**Size:** about 60 production and 220 test lines.
+**Size:** about 65 production and 245 test lines.
 
 ## 11. B2 — the two platform proofs (rows 11–12; device only)
 
