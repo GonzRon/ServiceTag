@@ -159,6 +159,10 @@ TOOL_NAMES: tuple[str, ...] = (
     "update_attachment",
     "add_attachment",
     "materialize_reference",
+    # #92 — the replace offer, and the plan and its apply in one tool, each at a schema-16 minimum. Two, taking the
+    # total to 76.
+    "get_replace_offer",
+    "replace_asset",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -196,8 +200,8 @@ app does not have, so it refuses a phone below it, with nothing sent: a per-tool
 pattern. The global write minimum stays 8."""
 
 _MIN_ATTACHMENT_SCHEMA_VERSION = 16
-"""The Room schema of the app that carries #92's attachment routes. The five attachment tools speak routes an
-older app does not have, so each refuses — the reads too — a phone below it, with nothing sent: a per-tool
+"""The Room schema of the app that carries #92's routes. The five attachment tools and the two replace tools speak
+routes an older app does not have, so each refuses — the reads too — a phone below it, with nothing sent: a per-tool
 minimum on the succession tool's pattern. The global write minimum stays 8. #92 moved no schema, so a phone at
 16 may still predate the routes; the router's unknown-route 404 is then `APP_ROUTE_MISSING` (`_attachment_call`)."""
 
@@ -286,9 +290,9 @@ def _require_succession_schema(tool: str) -> None:
     _require_tool_schema(tool, _MIN_SUCCESSION_SCHEMA_VERSION, "the asset successions")
 
 
-def _require_attachment_schema(tool: str) -> None:
-    """One of #92's five attachment tools, on a phone below schema 16."""
-    _require_tool_schema(tool, _MIN_ATTACHMENT_SCHEMA_VERSION, "the attachment routes")
+def _require_attachment_schema(tool: str, feature: str = "the attachment routes") -> None:
+    """One of #92's seven tools — the five attachment tools and the two replace tools — on a phone below schema 16."""
+    _require_tool_schema(tool, _MIN_ATTACHMENT_SCHEMA_VERSION, feature)
 
 
 def _read_for_write(path: str) -> dict[str, Any]:
@@ -2769,8 +2773,9 @@ def return_loan(loan_id: str, returned_on: str) -> dict[str, Any]:
 # --- #86, the asset successions (docs/api/v1.md, **Asset successions (#86)**) ------------------------------
 #
 # One read-only route a phone below schema 15 does not have, so the tool refuses such a phone by name before
-# anything is sent. Only the phone's "Replace asset" records a succession: no route or tool replaces an asset or
-# records, amends or removes one, and `import_merge` only inserts an archive's rows.
+# anything is sent. A succession is recorded only by a replacement — the phone's "Replace asset" or, since #92,
+# `replace_asset` over the same use case (below) — no route or tool amends or removes one, and `import_merge` only
+# inserts an archive's rows.
 
 
 @mcp.tool()
@@ -2779,7 +2784,8 @@ def get_asset_succession(asset_id: str) -> dict[str, Any]:
     `{id, predecessorAssetId, successorAssetId, replacedOn, createdAt}` or null — `replaces` is the row
     naming this asset as the successor, `replacedBy` the row naming it as the predecessor; both keys are
     always present. A chain answers both on its middle asset. `replacedOn` is ISO `YYYY-MM-DD`. Read only:
-    only the phone's "Replace asset" records a succession, and no tool records, edits or removes one;
+    a succession is recorded only by a replacement — the phone's "Replace asset" or `replace_asset` — and no tool
+    edits or removes one;
     `import_merge` only inserts an archive's rows (format 15).
     Needs a phone at schema 15 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is
     sent.
@@ -2846,7 +2852,7 @@ def _api_error(exc: ToolError) -> ApiError | None:
 
 
 def _attachment_call(tool: str, route: str, method: str, path: str, **kwargs: Any) -> Any:
-    """`_call` for the five attachment tools, with C28's one translation: the router's unknown-route 404 —
+    """`_call` for #92's seven tools, with C28's one translation: the router's unknown-route 404 —
     code `not_found` — is `APP_ROUTE_MISSING`, since a pre-#92 app at schema 16 cannot be told apart by its
     schema. Every other refusal — `no_such_asset`, `NO_SUCH_ATTACHMENT`, `NO_SUCH_REFERENCE` included — passes
     through as the phone said it."""
@@ -3268,6 +3274,198 @@ def materialize_reference(
         "mimeType": _field(row, "mimeType", of="the saved attachment"),
         "sizeBytes": _field(row, "sizeBytes", of="the saved attachment"),
         "attachment": row,
+    }
+
+
+# --- #92, replacing an asset (docs/api/v1.md, **Replacing an asset (#92)**; R92-1 supersedes R86-18) ------------
+#
+# Two tools over three routes, each at the schema-16 minimum and with `APP_ROUTE_MISSING`, as the attachment tools.
+# The plan and its apply share `replace_asset` (the `import_merge` precedent): the apply's precondition is the plan's
+# own `sourcesDigest`, so only the call that was just handed it sends it. Nothing here computes a digest, and every
+# write is the phone's own Replace use case.
+
+_TAG_ID = re.compile(r"[^\s*?%\[\]{}()|^$\\]+")
+"""A binding id as the offer's `tags` list it: no whitespace and no pattern character, so a label or a pattern is
+refused before any request, as `all` is (R92-2: each binding is selected on its own)."""
+
+
+def _binding_ids(moved_tag_ids: Any) -> list[str]:
+    if moved_tag_ids is None:
+        return []
+    if not isinstance(moved_tag_ids, list) or not all(
+        isinstance(i, str) and _TAG_ID.fullmatch(i) and i.lower() != "all" for i in moved_tag_ids
+    ):
+        raise ToolError(
+            "moved_tag_ids takes a list of binding ids from get_replace_offer's `tags`, each named on its own — "
+            'there is no "all", label or pattern form (R92-2), so nothing was sent'
+        )
+    return list(moved_tag_ids)
+
+
+def _clean_digest(plan: dict[str, Any]) -> str:
+    """The plan's own `sourcesDigest`, only when the plan is clean — eligible, not blocked, no problems — and
+    carries one; anything else is refused here and the apply is never sent."""
+    problems, digest = plan.get("problems"), plan.get("sourcesDigest")
+    if plan.get("eligible") is True and plan.get("blockedBy") is None and problems == [] and digest:
+        return str(digest)
+    listed = "; ".join(
+        f"{p.get('code')} [field={p.get('field')}] ({p.get('problem')})" if isinstance(p, dict) else str(p)
+        for p in (problems if isinstance(problems, list) else [])
+    )
+    raise ToolError(
+        f"the phone's replace plan is not clean (eligible={plan.get('eligible')}, blockedBy={plan.get('blockedBy')}"
+        f"{', problems: ' + listed if listed else ''}{'' if digest else ', no sourcesDigest'}), so nothing was "
+        "applied — fix the draft and plan again"
+    )
+
+
+def _replaced_as_asked(tool: str, asset_path: str, name: str) -> dict[str, Any]:
+    """C27's IDENTICAL: the asset is already replaced, and it is this call's replacement iff the recorded successor
+    carries the requested name. The succession is read, never parsed out of a problem string."""
+    route = "GET /v1/assets/{id}/succession"
+    answer = _attachment_call(tool, route, "GET", f"/v1/assets/{asset_path}/succession")
+    succession = _field(answer, "replacedBy", of="the asset's succession")
+    successor_id = str(_field(succession, "successorAssetId", of="the asset's succession"))
+    successor = _field(_call("GET", f"/v1/assets/{_path_id(successor_id, field='successorAssetId')}"), "asset",
+                       of="the successor lookup")
+    if str(_field(successor, "name", of="the successor")).strip() != name.strip():
+        raise ToolError(
+            f"409 ASSET_ALREADY_REPLACED: this asset was already replaced by {successor_id!r}, which carries another "
+            "name, so nothing was replaced — read get_asset_succession"
+        )
+    predecessor = _field(_call("GET", f"/v1/assets/{asset_path}"), "asset", of="the asset lookup")
+    return {"decision": "IDENTICAL", "predecessor": predecessor, "successor": successor, "succession": succession}
+
+
+@mcp.tool()
+def get_replace_offer(asset_id: str) -> dict[str, Any]:
+    """What an asset offers to carry forward to its replacement, as the phone sends it, and the ids `replace_asset`
+    takes. Writes nothing. `{eligible, held, replacedBy, predecessor, schedules, groups, setupOffered,
+    seasonOffered, notesOffered, tags, parentChoiceIds, prefill, childNames, openLoan}`: `eligible` is true iff
+    the asset is not transferred out (`held`) and has no successor (`replacedBy`, a succession row or null);
+    `schedules` are its unarchived schedules as `get_schedule`'s row — one **has a time rule iff its
+    `timeInterval` is not null**, and ticking one needs `schedule_start_on`; `groups` the groups it can carry;
+    `setupOffered`, `seasonOffered` (the season and the maintenance break) and `notesOffered` (the notes and the
+    description) say what `carry_setup`, `carry_season` and `carry_notes` can carry; `tags` its active bindings,
+    each with the `id` `moved_tag_ids` takes; `parentChoiceIds` the parents the new asset may take; `prefill` the
+    phone form's starting `{name, category, location, parentAssetId}`; `childNames` and `openLoan` are named,
+    never moved. Nothing is ticked or defaulted by the offer. Needs a phone at schema 16 or later: an older one is
+    refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/replace-offer"
+    _require_attachment_schema("get_replace_offer", "the replace routes")
+    return _attachment_call("get_replace_offer", "GET /v1/assets/{id}/replace-offer", "GET", path)
+
+
+@mcp.tool()
+def replace_asset(
+    asset_id: str,
+    name: str,
+    category: str | None = None,
+    manufacturer: str | None = None,
+    model: str | None = None,
+    serial_number: str | None = None,
+    purchase_on: str | None = None,
+    in_service_on: str | None = None,
+    purchase_price_minor: int | None = None,
+    currency: str | None = None,
+    vendor: str | None = None,
+    location: str | None = None,
+    warranty_expires_on: str | None = None,
+    warranty_notes: str | None = None,
+    parent_asset_id: str | None = None,
+    retired_on: str | None = None,
+    carry_season: bool = False,
+    manual_phase: str | None = None,
+    carry_setup: bool = False,
+    carry_notes: bool = False,
+    schedule_ids: list[str] | None = None,
+    schedule_start_on: str | None = None,
+    group_ids: list[str] | None = None,
+    moved_tag_ids: list[str] | None = None,
+    plan_only: bool = True,
+) -> dict[str, Any]:
+    """Replace an asset with a new one through the phone's own Replace. The old asset is retired unless it already
+    is, and the new one is created. Only the items you name are carried forward, each as a new row. Only the tag
+    bindings you name by id move to the new asset: a move re-targets the binding and never writes NFC. This is the
+    one tool that replaces an asset (R92-1 supersedes #86's "no tool replaces an asset"); read `get_replace_offer`
+    first for what can be carried and the ids.
+
+    **Plan first:** with `plan_only=True` (the default) it returns the phone's plan — `eligible`, `blockedBy`,
+    `replacedOn`, `problems` and `sourcesDigest` — and writes nothing. With `plan_only=False` it plans, then
+    applies **only a clean, eligible plan** (eligible, no `blockedBy`, no problems); any other plan is refused
+    here, naming its problems, and nothing is applied. It sends that plan's `sourcesDigest` with the identical
+    draft, and never applies without it. The phone answers `REPLACE_STALE` and replaces nothing if the draft, the
+    asset or any row reviewed with it changed since that plan ("changed while reviewing"): plan again, review it
+    and confirm again — never resend an old digest. Nothing is ticked or defaulted for you:
+    - `retired_on` is needed while the asset is not retired;
+    - `schedule_start_on` is needed when a ticked schedule has a time rule;
+    - `manual_phase` (`IN_SEASON` or `OUT_OF_SEASON`) is needed when carrying a MANUAL season.
+
+    A repeat after success answers `ASSET_ALREADY_REPLACED`; when that successor carries the requested name, the
+    call is IDENTICAL.
+
+    `name` to `parent_asset_id` are the new asset's fields — the asset command's without `description`, `notes`,
+    `template_key` and the season pair, which the replacement fills or ignores; an omitted one is the API's
+    default. `schedule_ids`, `group_ids` and `moved_tag_ids` are ids from the offer; `moved_tag_ids` is a list of
+    binding ids, each named on its own — an "all", a label or a pattern is refused here with nothing sent.
+    Applied, it answers `{decision: "CREATED", predecessor, successor, succession}`; a repeat answers the same
+    with `decision: "IDENTICAL"` and writes nothing. A timeout, or a connection closed with no answer, answers
+    `{decision: "UNKNOWN", next}`: read `get_asset_succession` for the asset — the apply is idempotent by its
+    digest, so the same call is safe to run again (it answers IDENTICAL, or plans afresh). Needs a phone at schema
+    16 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    given = {_wire(key): value for key, value in _arguments(locals(), besides=("asset_id", "plan_only")).items()}
+    asset_path = _path_id(asset_id, field="asset_id")
+    successor = {key: given[key] for key in command_shapes.REPLACE_SUCCESSOR_KEYS if given[key] is not None}
+    draft = {key: given.get(key) for key in command_shapes.REPLACE_DRAFT_KEYS if key != "sourcesDigest"}
+    draft.update(successor=successor, scheduleIds=schedule_ids or [], groupIds=group_ids or [],
+                 movedTagIds=_binding_ids(moved_tag_ids))
+    tool = "replace_asset"
+    _require_attachment_schema(tool, "the replace routes")
+    plan = _attachment_call(tool, "POST /v1/assets/{id}/replace-plan", "POST", f"/v1/assets/{asset_path}/replace-plan",
+                            json_body=draft, content_type="application/json")
+    if not isinstance(plan, dict):
+        raise ToolError("the phone's replace plan was not a JSON object — check SERVICETAG_API_BASE_URL")
+    # Only an explicit `False` applies: an omitted argument, `True` or a `null` all mean the plan.
+    if plan_only is not False:
+        return plan
+    if plan.get("blockedBy") == "ASSET_ALREADY_REPLACED":
+        return _replaced_as_asked(tool, asset_path, name)
+    digest = _clean_digest(plan)
+    try:
+        applied = _attachment_call(
+            tool, "POST /v1/assets/{id}/replace", "POST", f"/v1/assets/{asset_path}/replace",
+            json_body={**draft, "sourcesDigest": digest}, content_type="application/json",
+        )
+    except ToolError as exc:
+        refusal = _api_error(exc)
+        if refusal is not None and refusal.code == "ASSET_ALREADY_REPLACED":
+            return _replaced_as_asked(tool, asset_path, name)
+        if refusal is not None and refusal.code == "REPLACE_STALE":
+            raise ToolError(
+                f"{exc} — the draft, the asset or a row reviewed with it changed since the plan: plan again, review "
+                "it and confirm again; nothing was replaced"
+            ) from exc
+        cause = exc.__cause__
+        if isinstance(cause, NotAnswering) and cause.transport not in ("ConnectError", "ConnectTimeout"):
+            return {
+                "decision": "UNKNOWN",
+                "next": (
+                    f"the phone gave no answer ({cause.transport}), and it may still have replaced the asset: read "
+                    "get_asset_succession for it — a replacedBy row is the replacement; running this same call again "
+                    "is safe, and answers IDENTICAL once it is replaced"
+                ),
+            }
+        raise
+    try:
+        predecessor = _field(_call("GET", f"/v1/assets/{asset_path}"), "asset", of="the asset lookup")
+    except ToolError:
+        predecessor = None  # the replacement is made; only reading the old asset back failed
+    return {
+        "decision": "CREATED", "predecessor": predecessor,
+        "successor": _field(applied, "successor", of="the replacement's answer"),
+        "succession": _field(applied, "succession", of="the replacement's answer"),
     }
 
 

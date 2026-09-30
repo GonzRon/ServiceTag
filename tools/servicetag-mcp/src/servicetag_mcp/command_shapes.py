@@ -1,5 +1,5 @@
 """The command key lists the overlay tools build their bodies from — a **vendored copy** of five
-entries of the repository's golden `docs/api/command-shapes.json` (master plan dec. 48, ruled M15), and since #92 three
+entries of the repository's golden `docs/api/command-shapes.json` (master plan dec. 48, ruled M15), and since #92 five
 more.
 
 Nothing reads that file at runtime: this package is installed and run on its own, and a server that
@@ -83,9 +83,23 @@ names no other key (the phone refuses an unknown one)."""
 MATERIALIZE_KEYS: tuple[str, ...] = ("displayName", "kind", "role", "notes")
 """The save as document's body (#92, C14): every key optional, and none of them a URL."""
 
+REPLACE_DRAFT_KEYS: tuple[str, ...] = (
+    "retiredOn", "successor", "carrySeason", "carrySetup", "carryNotes", "manualPhase", "scheduleIds", "groupIds",
+    "scheduleStartOn", "movedTagIds", "sourcesDigest",
+)
+"""The replace draft (#92, C20): `replace_asset` sends every key but `sourcesDigest` to `replace-plan`, and the same
+body plus the plan's own `sourcesDigest` to `replace`. The predecessor is the path's."""
+
+REPLACE_SUCCESSOR_KEYS: tuple[str, ...] = (
+    "name", "category", "manufacturer", "model", "serialNumber", "purchaseOn", "inServiceOn", "purchasePriceMinor",
+    "currency", "vendor", "location", "warrantyExpiresOn", "warrantyNotes", "parentAssetId",
+)
+"""The draft's `successor` (#92, C20): the asset command without `description`, `notes`, `templateKey` and the
+season pair, which the replacement fills or ignores — each is a 400 there."""
+
 
 def vendored() -> dict[str, dict[str, Any]]:
-    """The eight entries in the golden file's own shape, for the equality test."""
+    """The ten entries in the golden file's own shape, for the equality test."""
     return {
         "asset": {"keys": list(ASSET_KEYS)},
         "schedule": {
@@ -100,4 +114,6 @@ def vendored() -> dict[str, dict[str, Any]]:
         "attachmentUpdate": {"keys": list(ATTACHMENT_UPDATE_KEYS)},
         "attachmentUpload": {"keys": list(ATTACHMENT_UPLOAD_KEYS)},
         "materialize": {"keys": list(MATERIALIZE_KEYS)},
+        "replaceDraft": {"keys": list(REPLACE_DRAFT_KEYS)},
+        "replaceSuccessor": {"keys": list(REPLACE_SUCCESSOR_KEYS)},
     }

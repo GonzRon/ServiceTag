@@ -2,7 +2,7 @@
 
 A workstation MCP server for ServiceTag's local automation API. It forwards a port to the phone,
 takes the pairing code the phone shows, and exposes one tool per `/v1` operation: a plan and its apply
-share one (`import_merge`, `repair_schedule_providers`), and #92's three replace routes have no tool yet.
+share one (`import_merge`, `repair_schedule_providers`, `replace_asset`).
 
 The contract it speaks is `docs/api/v1.md` in this repository. Read that for the shapes, the status
 codes and the limits; this file is about running the thing. A refusal reaches the caller as a
@@ -84,7 +84,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Seventy-four: `pair` plus one per API operation.
+Seventy-six: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -173,8 +173,9 @@ at the next sweep of any kind, the midnight sweep included. Nothing deletes or r
 from one asset to a different, new one and records the pair as a succession. The tool answers
 `{replaces, replacedBy}` for an asset — the succession naming it as the new asset and the one naming it as
 the old, each `{id, predecessorAssetId, successorAssetId, replacedOn, createdAt}` or null — and is read
-only: no tool replaces an asset or records, edits or removes a succession (`import_merge` only inserts an
-archive's rows, below), and an asset's own answer carries
+only: a succession is recorded only by a replacement (the phone's Replace asset or, since #92, `replace_asset`,
+below), no tool edits or removes one (`import_merge` only inserts an archive's rows, below), and an asset's own
+answer carries
 no succession field. `status` counts them as `assetSuccessions`. Deleting either asset, on the phone,
 deletes its succession; there is no unlink. `docs/api/v1.md`'s **Asset successions (#86)** section is the
 contract.
@@ -210,6 +211,20 @@ link", not "current" — and so is the phone's `ATTACHMENT_ALREADY_HELD`. Otherw
 answer is `UNKNOWN`: read `list_attachments` before running it again. The client keeps one call in flight: while
 a save as document runs, the phone's API answers nothing else. `docs/api/v1.md`'s **Attachments (#92)** and
 **Save as document (#92)** sections are the contract.
+
+**Replacing an asset (#92; needs schema 16)** — `get_replace_offer` and `replace_asset`, over the phone's own
+Replace (R92-1 supersedes #86's "no tool replaces an asset"). `get_replace_offer` reads `GET
+/v1/assets/{id}/replace-offer` as sent: what can be carried forward, each schedule's time rule (`timeInterval`),
+the groups, the tag bindings with their ids, the children and an open loan. `replace_asset` takes the new asset's
+fields and the ticks, and **plans first**: `plan_only=True`, the default, answers the phone's plan (`POST
+…/replace-plan`, which writes nothing). `plan_only=False` applies **only a clean, eligible plan** — no problems,
+not blocked — with that plan's own `sourcesDigest` and the identical draft (`POST …/replace`); any other plan is
+refused here and nothing is applied. `REPLACE_STALE` means something changed while reviewing: plan again and
+confirm again. A repeat after success is `ASSET_ALREADY_REPLACED`, and IDENTICAL when the successor carries the
+requested name; a lost answer is `UNKNOWN` — read `get_asset_succession`, and the same call is safe to run again.
+Nothing is defaulted: `retired_on`, `schedule_start_on` and `manual_phase` are sent only as given. **Tags move by
+binding id only** (`moved_tag_ids`; an "all", a label or a pattern is refused here), and a move re-targets the
+binding row and never writes NFC. `docs/api/v1.md`'s **Replacing an asset (#92)** section is the contract.
 
 ### The schedule's two forms, and the deprecated season arguments
 
@@ -389,10 +404,9 @@ no tool that **amends or deletes a condition or an activation**, **deletes a hea
 archiving, and health is computed at read time. Since #79 there is no tool that **deletes a service
 case** or **amends or deletes a timeline entry**, and none but `add_case_entry` moves a case's status.
 Since #77 there is no tool that **makes, imports or marks a Transfer Pack**, **withdraws a transfer
-record** or lists the records: each is the phone's alone. Since #86 there is no tool that **replaces an
-asset** or **records, edits or removes a succession**: a succession is recorded only by a replacement
-(the phone's Replace asset or, since #92, the API's `POST /v1/assets/{id}/replace`), `import_merge` only
-inserts an archive's rows, and `get_asset_succession` only reads.
+record** or lists the records: each is the phone's alone. Since #86 there is no tool that **edits or
+removes a succession**: one is recorded only by a replacement (the phone's Replace asset or, since #92,
+`replace_asset`), `import_merge` only inserts an archive's rows, and `get_asset_succession` only reads.
 
 ## Tests
 
