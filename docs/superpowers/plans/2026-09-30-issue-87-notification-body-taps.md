@@ -433,3 +433,31 @@ without a bounded wait; leave an activity running at the end of a case.
 **45 min target, 2 h hard stop**. **Stop also** if the `PendingIntent` launch is refused on `emulator-5554` even with
 the sender's opt-in, or the empty compose rule cannot see the launched activity — report with the log; the controller
 decides (no production workaround, no creator-side opt-in). **Size:** about 110 test lines.
+
+## 12. Errata after the merge (controller, 2026-09-30; merged 82cba7c5)
+
+- **R87-4 (owner, BR-M1 of the whole-branch review):** the four routes of R87-2 (b) are the `BackHandler`-protected write
+  flows; #85's `MaterializeSheet` protects its save with `confirmValueChange` instead, so a summary tap could pop the
+  asset screen under a Saving sheet, cancel the commit mid-write and orphan copied bytes. **Decided (b):** only the
+  irreversible commit phase is uncancellable — `materialize.commit(...)` runs under `withContext(io + NonCancellable)`
+  in `MaterializeViewModel.save()` (e130f528); downloading, staging, Review, `cancel()` and `onCleared()` are unchanged.
+  Success = exactly one durable attachment; failure = the use case's `finally` discards staging and the store's cleanup
+  runs, no row and no bytes, the reference untouched (the #85 commit never removes a reference — R85-1 copy-never-move).
+  Two JVM cases cancel the ViewModel's scope (`store.clear()` → `onCleared()`) while a gated store write is parked, and
+  prove the durable state and the absence of orphaned bytes; the counted mutation (the wrapper removed) reproduces both
+  the lost save and the orphan. **Recorded:** on an undispatched Main dispatcher the post-pop state can read `Saving`
+  rather than `Refused` (unseen after a pop; the durable outcome is identical); the tests pin a dispatched Main.
+- **§3 row 11:** `SERVICE RECORD` also appears on the asset detail (`AssetDetailScreen.kt:581`); row 11's exactness is the
+  `open == body` PendingIntent equality, not the matcher alone.
+- **B2's device delta for §8:** +2 tests, about +3.7 s (item body 1.93 s, summary body 1.76 s); 55 classes, 281 → 283.
+- **Post-release tidies (not #87):** the `DeepLink.Dashboard` kdoc wording (BR-N1), the stale `DeepLinkRouteTest` case
+  name (BR-N2), a `try/finally` around the new device cases' activity cleanup (#90).
+- **Docs:** nothing user-facing described the bodies as inert; no correction needed.
+- **Release-note lines (1.5.0):** "Tapping a maintenance notification now takes you somewhere: the summary opens the
+  Dashboard, where ATTENTION is the first section, and a single item's notification opens that schedule, the same as its
+  Open button. A tap only opens a screen — it never marks anything done, snoozes it or changes a date. While you are adding
+  or editing an asset, replacing one, or making or importing a Transfer Pack, tapping the summary just brings ServiceTag
+  back to where you were. A maintenance notification that was already showing when you installed 1.5.0 still does nothing
+  when tapped until ServiceTag next re-posts it."
+- **The 1.5.0 dev-phone smoke (additive, R87-3):** (5) tap a newly posted summary body → Dashboard; (6) tap a newly posted
+  individual maintenance body → its exact schedule.
