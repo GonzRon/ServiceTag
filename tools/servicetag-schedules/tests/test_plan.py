@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import pytest
+
 from servicetag_schedules import manifest as M
 from servicetag_schedules import phone as P
 from servicetag_schedules import plan as PL
@@ -15,8 +17,9 @@ from servicetag_schedules import plan as PL
 # ---- manifest builders ---------------------------------------------------------------------------
 
 
-def mk_manifest(groups=(), schedules=()) -> M.Manifest:
-    return M.Manifest(manifest_version=1, as_of="2026-09-23", groups=tuple(groups), schedules=tuple(schedules))
+def mk_manifest(groups=(), schedules=(), replacements=()) -> M.Manifest:
+    return M.Manifest(manifest_version=1, as_of="2026-09-23", groups=tuple(groups), schedules=tuple(schedules),
+                      replacements=tuple(replacements))
 
 
 def mk_group(key: str, name: str, members: tuple[str, ...], description: str | None = None) -> M.Group:
@@ -675,3 +678,108 @@ def test_a_rule_difference_still_reads_as_one_and_names_the_policy_only_when_it_
     row = mk_pschedule("ps1", "Blade service", target_asset_id="a1", lead_days=9)
     decision = entry(PL.plan(manifest, P.Inventory(assets=(a,), schedules=(row,))), "schedule", "s1")
     assert (decision.decision, decision.reason) == ("CONFLICT", "existing schedule's rule differs")
+
+
+# ---- #92 C32: replacements (row 41) ----------------------------------------------------------------
+#
+# Identity goes through the succession, never the name alone: after a replacement the successor usually keeps the
+# predecessor's name (R86-8), so a name finds both, and only the succession row tells them apart.
+
+CLEAN_PHONE_PLAN = {"eligible": True, "blockedBy": None, "replacedOn": "2026-09-30", "problems": [],
+                    "sourcesDigest": "d" * 64}
+
+
+def mk_replacement(key: str = "r1", predecessor: str = "Example pump", **fields) -> M.Replacement:
+    successor = fields.pop("successor", (("name", predecessor),))
+    return M.Replacement(key=key, predecessor=predecessor, successor=successor, **fields)
+
+
+def mk_offer(*, held: bool = False, schedules=(), groups=(), tags=()) -> dict:
+    return {
+        "eligible": not held, "held": held, "replacedBy": None,
+        "schedules": [{"id": f"sch-{t}", "title": t} for t in schedules],
+        "groups": [{"id": f"grp-{n}", "name": n} for n in groups],
+        "tags": [{"id": f"tag-{i}", "label": label} for i, label in enumerate(tags)],
+    }
+
+
+def open_asset(asset_id: str = "a1", *, offer: dict | None = None, phone_plan: dict | None = None) -> P.Namesake:
+    """A named asset that is not a successor and was never replaced: the lone CREATE candidate."""
+    return P.Namesake(asset_id, is_successor=False, successor=None,
+                      offer=mk_offer() if offer is None else offer,
+                      phone_plan=CLEAN_PHONE_PLAN if phone_plan is None else phone_plan)
+
+
+def replaced_asset(asset_id: str = "a1", **successor_row) -> P.Namesake:
+    row = {"id": "a2", "name": "Example pump", "model": "", **successor_row}
+    return P.Namesake(asset_id, is_successor=False, successor=row)
+
+
+def successor_asset(asset_id: str = "a2") -> P.Namesake:
+    return P.Namesake(asset_id, is_successor=True, successor=None)
+
+
+def plan_replacement(replacement: M.Replacement, *namesakes: P.Namesake) -> PL.PlanEntry:
+    inventory = P.Inventory(replacements=(P.ReplacementRead(replacement.key, tuple(namesakes)),))
+    return entry(PL.plan(mk_manifest(replacements=[replacement]), inventory), "replacement", replacement.key)
+
+
+def test_replacement_create_when_the_lone_candidate_resolves_and_the_phone_plan_is_clean() -> None:
+    r = mk_replacement(schedules=("Flush",), groups=("Pool kit",), move_tags=("front",))
+    offer = mk_offer(schedules=("Flush",), groups=("Pool kit",), tags=("front", "back"))
+    assert plan_replacement(r, open_asset(offer=offer)).decision == "CREATE"
+
+
+def test_identical_through_the_succession_when_both_assets_share_the_name() -> None:
+    """m8: after the apply both assets carry the name; the successor is never a CREATE candidate, and the retired
+    predecessor's succession row answers IDENTICAL — evaluated before CREATE."""
+    r = mk_replacement(successor=(("name", "Example pump"), ("model", "B-2")))
+    decided = plan_replacement(r, replaced_asset(model=" B-2 "), successor_asset())
+    assert decided.decision == "IDENTICAL"
+
+
+def test_a_successor_differing_in_a_manifest_given_field_is_a_conflict_never_identical() -> None:
+    """Tighter than C32's name-only rule (the controller's ruling): the phone's own Replace kept the prefilled name
+    but took another model, so the manifest's replacement was not the one made."""
+    r = mk_replacement(successor=(("name", "Example pump"), ("model", "B-2")))
+    decided = plan_replacement(r, replaced_asset(model="A-1"), successor_asset())
+    assert decided.decision == "CONFLICT"
+    assert "model" in decided.reason and "A-1" not in decided.reason
+
+
+def test_replaced_by_a_differently_named_successor_is_a_conflict() -> None:
+    decided = plan_replacement(mk_replacement(), replaced_asset(name="Some other pump"))
+    assert decided.decision == "CONFLICT"
+
+
+def test_a_held_candidate_is_a_conflict() -> None:
+    assert plan_replacement(mk_replacement(), open_asset(offer=mk_offer(held=True))).decision == "CONFLICT"
+
+
+@pytest.mark.parametrize(
+    "case, reason_part",
+    [
+        (lambda: (mk_replacement(), ()), "no asset named"),
+        (lambda: (mk_replacement(), (open_asset("a1"), open_asset("a3"))), "ambiguous"),
+        (lambda: (mk_replacement(), (successor_asset(),)), "successor"),
+        (lambda: (mk_replacement(schedules=("Nope",)), (open_asset(),)), "schedule 'Nope'"),
+        (lambda: (mk_replacement(move_tags=("front",)), (open_asset(offer=mk_offer(tags=("front", "front"))),)),
+         "tag 'front'"),
+        (lambda: (mk_replacement(), (open_asset(phone_plan={**CLEAN_PHONE_PLAN, "problems": [
+            {"code": "REPLACE_BAD_DATE", "field": "retiredOn", "problem": "missing"}]}),)), "REPLACE_BAD_DATE"),
+    ],
+    ids=["missing", "ambiguous", "only-a-successor", "unresolved-title", "ambiguous-label", "plan-problem"],
+)
+def test_replacement_error_rows(case, reason_part: str) -> None:
+    replacement, namesakes = case()
+    decided = plan_replacement(replacement, *namesakes)
+    assert decided.decision == "ERROR"
+    assert reason_part in decided.reason
+
+
+def test_duplicate_replacement_keys_are_both_error() -> None:
+    a, b = mk_replacement("r1"), mk_replacement("r1", predecessor="Example fan")
+    inventory = P.Inventory(replacements=(P.ReplacementRead("r1", (open_asset(),)),))
+    result = PL.plan(mk_manifest(replacements=[a, b]), inventory)
+    assert [e.decision for e in result.entries] == ["ERROR", "ERROR"]
+    assert not result.clean

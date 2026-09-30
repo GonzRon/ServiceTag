@@ -204,3 +204,83 @@ def test_load_reads_the_committed_fixture() -> None:
     assert m.manifest_version == 1
     assert {g.key for g in m.groups} == {"greenhouse-misters"}
     assert {s.key for s in m.schedules} == {"shed-roof-inspection", "misters-rinse"}
+
+
+# ---- #92 C31: the optional `replacements` list (row 40) --------------------------------------------
+
+
+def _replacement_obj() -> dict:
+    return {
+        "key": "r1",
+        "predecessor": "Example pump",
+        "retiredOn": "2026-09-30",
+        "successor": {"name": "Example pump", "model": "B-2", "purchasePriceMinor": 12500, "purchaseOn": None},
+        "carry": {"season": True, "manualPhase": "IN_SEASON", "setup": False, "notes": True},
+        "schedules": ["Flush the pump"],
+        "scheduleStartOn": "2026-10-01",
+        "groups": ["Pool kit"],
+        "moveTags": ["front plate"],
+    }
+
+
+def test_replacements_shape_loads() -> None:
+    obj = _valid_obj()
+    obj["replacements"] = [_replacement_obj(), {"key": "r2", "predecessor": "Example fan", "successor": {"name": "Fan"}}]
+    m = manifest.parse(obj)
+    r1, r2 = m.replacements
+    assert (r1.key, r1.predecessor, r1.retired_on) == ("r1", "Example pump", "2026-09-30")
+    # A given value is kept in the successor keys' own order; a null is "not given".
+    assert r1.successor == (("name", "Example pump"), ("model", "B-2"), ("purchasePriceMinor", 12500))
+    assert (r1.carry_season, r1.manual_phase, r1.carry_setup, r1.carry_notes) == (True, "IN_SEASON", False, True)
+    assert (r1.schedules, r1.schedule_start_on, r1.groups, r1.move_tags) == (
+        ("Flush the pump",), "2026-10-01", ("Pool kit",), ("front plate",),
+    )
+    # Every item unticked, nothing defaulted, unless the manifest names it (R86-9, R86-10).
+    assert (r2.retired_on, r2.carry_season, r2.manual_phase, r2.carry_setup, r2.carry_notes) == (None, False, None, False, False)
+    assert (r2.schedules, r2.schedule_start_on, r2.groups, r2.move_tags) == ((), None, (), ())
+    assert m.manifest_version == 1
+
+
+def test_a_manifest_without_replacements_loads_unchanged() -> None:
+    m = manifest.parse(_valid_obj())
+    assert m.replacements == ()
+    assert m == manifest.Manifest(m.manifest_version, m.as_of, m.groups, m.schedules)
+
+
+@pytest.mark.parametrize(
+    "where, path",
+    [
+        ("entry", "replacements[0].nickname"),
+        ("successor", "replacements[0].successor.nickname"),
+        ("carry", "replacements[0].carry.nickname"),
+    ],
+)
+def test_a_replacement_unknown_key_is_an_error(where: str, path: str) -> None:
+    obj = _valid_obj()
+    replacement = _replacement_obj()
+    {"entry": replacement, "successor": replacement["successor"], "carry": replacement["carry"]}[where]["nickname"] = "x"
+    obj["replacements"] = [replacement]
+    with pytest.raises(manifest.ManifestError) as exc:
+        manifest.parse(obj)
+    assert exc.value.path == path
+
+
+@pytest.mark.parametrize(
+    "edit, path",
+    [
+        (lambda r: r["successor"].pop("name"), "replacements[0].successor.name"),
+        (lambda r: r.pop("predecessor"), "replacements[0].predecessor"),
+        (lambda r: r["carry"].update(manualPhase="SOMETIMES"), "replacements[0].carry.manualPhase"),
+        (lambda r: r.update(scheduleStartOn="2026-02-30"), "replacements[0].scheduleStartOn"),
+        (lambda r: r["successor"].update(purchasePriceMinor=-1), "replacements[0].successor.purchasePriceMinor"),
+        (lambda r: r.update(moveTags="front plate"), "replacements[0].moveTags"),
+    ],
+)
+def test_a_replacement_shape_problem_names_its_path(edit, path: str) -> None:
+    obj = _valid_obj()
+    replacement = _replacement_obj()
+    edit(replacement)
+    obj["replacements"] = [replacement]
+    with pytest.raises(manifest.ManifestError) as exc:
+        manifest.parse(obj)
+    assert exc.value.path == path

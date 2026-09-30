@@ -52,6 +52,16 @@ _PHONE_LEGACY_FORM: dict[str, tuple[str, int | None]] = {
 re-entry and no offset, on a schedule with a time rule (spec §4.1)."""
 
 
+_SUCCESSOR_WIRE: dict[str, str] = {
+    "category": "category", "manufacturer": "manufacturer", "model": "model", "serial_number": "serialNumber",
+    "purchase_on": "purchaseOn", "in_service_on": "inServiceOn", "purchase_price_minor": "purchasePriceMinor",
+    "currency": "currency", "vendor": "vendor", "location": "location", "warranty_expires_on": "warrantyExpiresOn",
+    "warranty_notes": "warrantyNotes", "parent_asset_id": "parentAssetId",
+}
+"""`replace_asset`'s successor arguments as the new asset's row names them — this fixture's own table, never the
+loader's."""
+
+
 def _derived_triple(policy: str, offset: int | None) -> dict[str, Any]:
     """Spec §9.1's reverse projection, as a 1.4 row reports it (all null for `PRE_SERVICE`)."""
     behavior, reentry, reentry_offset = {
@@ -86,6 +96,14 @@ class FakeClient:
         }
         self._ids = itertools.count(1)
         self._fail_next: dict[str, str] = {}
+        # #92: the replace tools (`get_asset_succession`, `get_asset`, `get_replace_offer`, `replace_asset`).
+        self.successions: list[dict[str, Any]] = []
+        self.tags: dict[str, list[dict[str, Any]]] = {}
+        self.held: set[str] = set()
+        self.replace_problems: dict[str, list[dict[str, Any]]] = {}
+        self.replace_apply_error: str | None = None  # answered to the next apply, after its plan
+        self.replace_apply_unknown = False  # the next apply replaces, then answers UNKNOWN
+        self.before_replace_apply: Any = None  # a callable run once as the next apply arrives (a race)
 
     def _new_id(self, prefix: str) -> str:
         return f"{prefix}-{next(self._ids)}"
@@ -187,6 +205,87 @@ class FakeClient:
         }
         self.schedules.append(row)
         return _ok({"schedule": row})
+
+    # ---- #92: the replace tools, shaped like servicetag-mcp's ------------------------------------
+
+    def _asset_row(self, asset_id: str) -> dict[str, Any] | None:
+        rows = self.top_level + [row for rows in self.components.values() for row in rows]
+        return next((row for row in rows if row["id"] == asset_id), None)
+
+    def _succession(self, side: str, asset_id: str) -> dict[str, Any] | None:
+        return next((row for row in self.successions if row[side] == asset_id), None)
+
+    def _tool_get_asset_succession(self, asset_id: str) -> _Result:
+        return _ok({"replaces": self._succession("successorAssetId", asset_id),
+                    "replacedBy": self._succession("predecessorAssetId", asset_id)})
+
+    def _tool_get_asset(self, asset_id: str) -> _Result:
+        row = self._asset_row(asset_id)
+        return _ok({"asset": dict(row)}) if row is not None else _err("404 no_such_asset")
+
+    def _offer(self, asset_id: str) -> dict[str, Any]:
+        replaced_by, held = self._succession("predecessorAssetId", asset_id), asset_id in self.held
+        return {
+            "eligible": not held and replaced_by is None, "held": held, "replacedBy": replaced_by,
+            "predecessor": self._asset_row(asset_id),
+            "schedules": [row for row in self.schedules if row["assetId"] == asset_id and row["status"] != "ARCHIVED"],
+            "groups": [g for g in self.groups if g["archivedAt"] is None
+                       and any(m["assetId"] == asset_id and m["removedAt"] is None for m in g["members"])],
+            "tags": list(self.tags.get(asset_id, [])),
+        }
+
+    def _tool_get_replace_offer(self, asset_id: str) -> _Result:
+        return _ok(self._offer(asset_id))
+
+    def _tool_replace_asset(self, asset_id: str, name: str, plan_only: bool = True, **draft: Any) -> _Result:
+        if plan_only is False and self.before_replace_apply is not None:
+            race, self.before_replace_apply = self.before_replace_apply, None
+            race()
+        offer = self._offer(asset_id)
+        problems = list(self.replace_problems.get(asset_id, []))
+        offered = {tag["id"] for tag in offer["tags"]}
+        problems += [{"code": "REPLACE_NOT_OFFERED", "field": "movedTagIds", "problem": "not offered"}
+                     for tag_id in draft.get("moved_tag_ids") or [] if tag_id not in offered]
+        blocked = "ASSET_ALREADY_REPLACED" if offer["replacedBy"] else "asset_transferred_out" if offer["held"] else None
+        plan = {"eligible": offer["eligible"], "blockedBy": blocked, "replacedOn": "2026-09-30",
+                "problems": problems, "sourcesDigest": "d" * 64}
+        if plan_only is not False:
+            return _ok(plan)
+        if offer["replacedBy"] is not None:  # the tool's own (name-only) IDENTICAL rule
+            successor = self._asset_row(offer["replacedBy"]["successorAssetId"]) or {}
+            if str(successor.get("name", "")).strip() == name.strip():
+                return _ok({"decision": "IDENTICAL", "successor": successor})
+            return _err("409 ASSET_ALREADY_REPLACED: this asset was already replaced by "
+                        f"{successor.get('id')!r}, which carries another name, so nothing was replaced")
+        if blocked is not None or problems:
+            return _err("the phone's replace plan is not clean, so nothing was applied")
+        if self.replace_apply_error is not None:
+            message, self.replace_apply_error = self.replace_apply_error, None
+            return _err(message)
+        successor_id = self.add_asset(name=name)
+        successor = self._asset_row(successor_id)
+        assert successor is not None
+        successor.update({_SUCCESSOR_WIRE[k]: v for k, v in draft.items() if k in _SUCCESSOR_WIRE})
+        predecessor = self._asset_row(asset_id)
+        assert predecessor is not None
+        predecessor["retiredOn"] = predecessor["retiredOn"] or draft.get("retired_on")
+        succession = {"id": self._new_id("succession"), "predecessorAssetId": asset_id,
+                      "successorAssetId": successor_id, "replacedOn": "2026-09-30", "createdAt": 1}
+        self.successions.append(succession)
+        moved = set(draft.get("moved_tag_ids") or [])
+        kept = [tag for tag in self.tags.get(asset_id, []) if tag["id"] not in moved]
+        self.tags[successor_id] = [tag for tag in self.tags.get(asset_id, []) if tag["id"] in moved]
+        self.tags[asset_id] = kept
+        if self.replace_apply_unknown:
+            self.replace_apply_unknown = False
+            return _ok({"decision": "UNKNOWN", "next": "read get_asset_succession"})
+        return _ok({"decision": "CREATED", "predecessor": predecessor, "successor": successor,
+                    "succession": succession})
+
+    def add_tag(self, *, asset_id: str, label: str) -> str:
+        tag_id = self._new_id("tag")
+        self.tags.setdefault(asset_id, []).append({"id": tag_id, "label": label, "assetId": asset_id})
+        return tag_id
 
     # ---- test-side seeding --------------------------------------------------------------------
 
