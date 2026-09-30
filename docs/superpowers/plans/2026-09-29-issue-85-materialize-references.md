@@ -1444,6 +1444,17 @@ closed at `efe905c9` and pinned by fixtures; the text below supersedes the corre
   refuses; legacy templates, slideshows and add-ins (DOT, XLT, POT, PPS, XLA) are stored as DOC, XLS or PPT; the
   4,096-byte-sector worst case (64 directory + 8 DIFAT sectors) uses exactly the 524,288-byte cap, with no headroom.
 
+### Owner ruling — the end of file-type hardening (2026-09-29)
+
+B2f finishes under its existing cap; then B4 → B5a → B5b. **No more fuzzing campaigns; no mutation campaigns for file
+parsers beyond a brief's own counted REDs; no full ZIP/CFB/PDF/ODF parsing; no decompression, macro scanning, malware
+detection or recursive embedded-object inspection.** Residual edge cases are recorded as known limitations, not
+eliminated. The acceptance bar: recognise the claimed family with a cheap, bounded structural sanity check; reject obvious
+wrong-family or truncated content where that falls naturally out of the check; make sure an obvious HTML, login or error
+page cannot masquerade as a document. *Downloaded attachments are untrusted inert bytes. ServiceTag is trying to avoid
+accidentally saving an obvious login/error/web page as a manual — it is not certifying that the file is standards-perfect
+or malware-free.* What is built stays; B2e is not tightened further.
+
 ## 20. B2d — container: the inspection port, ODF, OOXML (C26–C28, C31's ZIP arm; core, JVM only)
 
 **Read:** §19; C10, C11; `C/fetch/{FetchPorts,DocumentSniff,FetchDocument}.kt` and `CT/testing/FakeStaging.kt` on the
