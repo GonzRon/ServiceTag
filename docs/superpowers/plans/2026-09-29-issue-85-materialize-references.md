@@ -1455,6 +1455,19 @@ page cannot masquerade as a document. *Downloaded attachments are untrusted iner
 accidentally saving an obvious login/error/web page as a manual — it is not certifying that the file is standards-perfect
 or malware-free.* What is built stays; B2e is not tightened further.
 
+### §19 errata after B2f's review (controller, 2026-09-29)
+
+- **C30, the doctype pattern:** `<!doctype`, then one or more of space/tab/CR/LF/FF, then `html` (case-insensitive); the §22
+  grep for it is `'<!doctype'` → 1.
+- **Recorded limits (B2f):** web-page patterns are searched only in the head window (a page with more than about 1 KiB of
+  leading whitespace or comments, or a bare fragment such as a lone `<title>` with none of the eight patterns, is stored as
+  text under a text label); `<!DOCTYPEhtml>` with no whitespace passes the doctype pattern; the patterns match word
+  prefixes, so text containing `<header>` or `<metadata>` is refused; an XML or JSON error body served 200 under a text
+  label is stored as text; text is judged by the two windows only (a lead byte cut at the head's inner edge is tolerated as
+  ruled); legacy aliases such as `text/x-markdown` need a text extension; RTF's closing `}` must lie in the tail window;
+  GIF, RTF and WebP are checked structurally only (the WebP chunk's own size is never read); the six new `EXTENSIONS`
+  pairs also give ordinary `.gif/.webp/.rtf/.md/.csv/.tsv` attachments their true type app-wide (intended).
+
 ## 20. B2d — container: the inspection port, ODF, OOXML (C26–C28, C31's ZIP arm; core, JVM only)
 
 **Read:** §19; C10, C11; `C/fetch/{FetchPorts,DocumentSniff,FetchDocument}.kt` and `CT/testing/FakeStaging.kt` on the
