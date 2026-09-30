@@ -422,6 +422,7 @@ class AttachmentUploadRoutesTest {
     // --- row 14b: R92-7, strict replay after an edit ----------------------------------------------------------------
 
     private fun renameAndSetRole(id: String) {
+        graph.now += 60_000L // an edit made later than the upload, as on the phone
         val patched = client.call(
             "PATCH", "/v1/attachments/$id",
             """{"displayName":"Renamed manual","kind":"DOCUMENT","capturedOn":null,"notes":"","role":"USER_MANUAL"}""",
