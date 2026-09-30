@@ -53,6 +53,14 @@ sealed interface QuickActionTarget {
      * `servicetag://asset/<uuid>` (invariant 57). It writes nothing, so it carries no nonce.
      */
     data class OpenAsset(val assetId: AssetId) : QuickActionTarget
+
+    /**
+     * #87 (C2): the maintenance summary's **body** — navigation and nothing else, on
+     * `servicetag://dashboard` (invariant 57), whose first section is ATTENTION. It names no
+     * schedule, because a summary of several items must not pick one, and it writes nothing, so it
+     * carries no nonce.
+     */
+    data object OpenDashboardAttention : QuickActionTarget
 }
 
 /** The four shipped targets, each aimed at one schedule (#79, C8). */
@@ -146,6 +154,20 @@ class QuickActions(
             LoanSubjectId.assetOf(key.subjectId)?.let { QuickAction(DigestPolicy.ACTION_OPEN, QuickActionTarget.OpenAsset(it)) },
         )
     }
+
+    /**
+     * #87 (C1): what the body of this subject's notification opens: navigation only, no nonce, no read.
+     *
+     * A maintenance item's body is its "Open" action's own target, so both become the one pending
+     * intent. It is read off the **key alone**, never off the action list, so it is there even when
+     * [forSchedule] offers nothing for a schedule that has just gone — whether the id still exists
+     * is the schedule screen's question, as for the shipped link. Not `suspend`: it cannot reach a
+     * port, which is what keeps a body tap from writing anything.
+     */
+    fun contentFor(key: SubjectKey): QuickActionTarget? = when (key) {
+        is SubjectKey.Schedule -> QuickActionTarget.OpenSchedule(key.scheduleId)
+        is SubjectKey.Deadline -> null // #87 scope: maintenance only; warranty and loan bodies stay as shipped
+    }
 }
 
 /** The one Android-shaped step: a target becomes something the notification shade can fire. */
@@ -154,7 +176,8 @@ fun interface QuickActionIntents {
 }
 
 /**
- * The four `PendingIntent`s — five since #79's asset "Open" — and the two rules that make them safe.
+ * The four `PendingIntent`s — five since #79's asset "Open", six since #87's summary body — and the
+ * two rules that make them safe.
  *
  * **Every one is `FLAG_IMMUTABLE`, with the flag on the same physical line as the call** (invariant
  * 54, master plan §16's line-based release grep, `DigestAlarmTest`'s own scan). A mutable one would
@@ -202,6 +225,8 @@ class AndroidQuickActionIntents(private val context: Context) : QuickActionInten
             is QuickActionTarget.OpenSchedule -> activity(app, REQUEST_OPEN, scheduleUri(target.scheduleId))
             // #79 (C8): the asset's own link, which `MainActivity` already routes to its detail.
             is QuickActionTarget.OpenAsset -> activity(app, REQUEST_OPEN_ASSET, assetUri(target.assetId))
+            // #87 (C4): the summary's body, through the same activity site with its own kind code.
+            QuickActionTarget.OpenDashboardAttention -> activity(app, REQUEST_OPEN_ATTENTION, dashboardUri())
         }
     }
 
@@ -262,6 +287,12 @@ class AndroidQuickActionIntents(private val context: Context) : QuickActionInten
         .appendPath(id.value)
         .build()
 
+    /** #87 (C4): the Dashboard's link, built the same way; it carries no path and no id. */
+    private fun dashboardUri(): Uri = Uri.Builder()
+        .scheme(DeepLinkRoute.SCHEME)
+        .authority(DASHBOARD_HOST)
+        .build()
+
     internal companion object {
         /**
          * The deep-link host, named once. It is the parser's own word and the manifest's; spelling
@@ -271,6 +302,12 @@ class AndroidQuickActionIntents(private val context: Context) : QuickActionInten
 
         /** The asset host, the parser's own word and the manifest's (#79, C8). */
         const val ASSET_HOST = "asset"
+
+        /**
+         * #87 (C5): the Dashboard host, the parser's own word. **Not** the manifest's: only this
+         * app's explicit `PendingIntent` sends it, so no BROWSABLE filter declares it.
+         */
+        const val DASHBOARD_HOST = "dashboard"
 
         /**
          * One request code per action **kind**, not per schedule: the id is in the intent's data, so
@@ -284,5 +321,8 @@ class AndroidQuickActionIntents(private val context: Context) : QuickActionInten
 
         /** #79 (C8): a warranty warning's "Open", its own kind of action. */
         const val REQUEST_OPEN_ASSET = 2305
+
+        /** #87 (C4): the summary's body, the sixth kind. An item's body reuses [REQUEST_OPEN]. */
+        const val REQUEST_OPEN_ATTENTION = 2306
     }
 }

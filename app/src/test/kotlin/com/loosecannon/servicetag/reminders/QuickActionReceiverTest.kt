@@ -255,10 +255,11 @@ class QuickActionReceiverTest {
      * distinct pending intents is four distinct request codes, which is the assertion below rather
      * than a count of lines. `getService` appears nowhere: this brief starts no service. #79 (C8)
      * adds a fifth, a warranty warning's "Open", through the same `getActivity` site with its own
-     * request code.
+     * request code. #87 (C4) adds a sixth kind, the summary's body, the same way; an item's body is
+     * the "Open" action's own pending intent and adds no kind.
      */
     @Test
-    fun everyPendingIntentTheBuilderMakesIsImmutableAndTheFiveActionsStayFive() {
+    fun everyPendingIntentTheBuilderMakesIsImmutableAndTheSixKindsStaySix() {
         val lines = sourceFile("kotlin/com/loosecannon/servicetag/reminders/QuickActions.kt").readText().lines()
         val calls = lines.filter { "PendingIntent.get" in it }
 
@@ -276,11 +277,29 @@ class QuickActionReceiverTest {
             AndroidQuickActionIntents.REQUEST_OPEN,
             // #79 (C8): a warranty warning's "Open", the fifth kind.
             AndroidQuickActionIntents.REQUEST_OPEN_ASSET,
+            // #87 (C4): the summary's body, the sixth kind.
+            AndroidQuickActionIntents.REQUEST_OPEN_ATTENTION,
         )
-        assertEquals("five actions, five request codes: a shared code would be one pending intent", 5, codes.distinct().size)
+        assertEquals("six kinds, six request codes: a shared code would be one pending intent", 6, codes.distinct().size)
         assertTrue(
             "the broadcasts name their own component, so the non-exported receiver is reachable at all",
             lines.any { "QuickActionReceiver::class.java" in it },
         )
+    }
+
+    /**
+     * #87 (C3; AC 8 at the builder): both notification shapes set a body, each through the seam's
+     * own intents — so an item's is its "Open" action's `PendingIntent` — and neither auto-cancels
+     * or groups. The notification file builds no `PendingIntent` of its own.
+     */
+    @Test
+    fun bothNotificationShapesSetABodyAndNeitherAutoCancels() {
+        val lines = sourceFile("kotlin/com/loosecannon/servicetag/reminders/Notifications.kt").readText().lines()
+        fun count(pattern: String) = lines.count { Regex(pattern).containsMatchIn(it) }
+
+        assertEquals("an item and the summary each set a body", 2, count("""\.setContentIntent\(intents\.pendingIntentFor\("""))
+        assertEquals("neither auto-cancels", 2, count("""\.setAutoCancel\(false\)"""))
+        assertEquals("nothing groups", 0, count("""setGroup\("""))
+        assertEquals("no PendingIntent is built here", 0, count("""PendingIntent\.get"""))
     }
 }

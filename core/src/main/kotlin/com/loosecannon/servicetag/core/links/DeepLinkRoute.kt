@@ -20,6 +20,17 @@ sealed interface DeepLink {
      */
     data class Schedule(val id: ScheduleId) : DeepLink
 
+    /**
+     * #87 (R87-1): `servicetag://dashboard`, with no path — the Dashboard, whose first section is
+     * ATTENTION. It is what the maintenance summary's body opens, and it only navigates.
+     *
+     * **Not a D-17 permanent contract:** no manifest filter declares the host, because only this
+     * app's own explicit `PendingIntent` sends it. The launcher activity is exported, so another app
+     * can still reach it by an explicit intent — harmless, as it names a screen and writes nothing,
+     * exactly like the three declared hosts.
+     */
+    data object Dashboard : DeepLink
+
     data class Malformed(val reason: String) : DeepLink
 }
 
@@ -37,6 +48,8 @@ object DeepLinkRoute {
             // The same `single` as the host above it, deliberately: one shape rule for every host
             // is what stops a second, looser check letting a malformed id reach a repository.
             "schedule" -> single(pathSegments)?.let { DeepLink.Schedule(ScheduleId(it)) } ?: DeepLink.Malformed("servicetag://schedule needs one schedule id segment")
+            // #87 (R87-1): no path at all. A segment makes it a link this app answers but cannot follow.
+            "dashboard" -> if (pathSegments.isEmpty()) DeepLink.Dashboard else DeepLink.Malformed("servicetag://dashboard takes no path")
             else -> null
         }
     }

@@ -143,6 +143,61 @@ class QuickActionsTest {
     }
 
     /**
+     * #87 (C1; AC 2, 3): a maintenance item's **body** opens exactly what its "Open" action opens —
+     * the same target, so the same `PendingIntent` — for every shape a schedule can have. It is read
+     * off the key alone, so a schedule that has gone still names its own detail, whose missing-id
+     * handling then applies exactly as for the shipped `servicetag://schedule/<uuid>` link.
+     */
+    @Test
+    fun aScheduleBodyOpensWhatItsOpenActionOpens() = runTest {
+        val key = SubjectKey.Schedule(id)
+        listOf(
+            QuickActionShape(groupTargeted = false, completionMode = CompletionMode.QUICK, meterRule = false),
+            QuickActionShape(groupTargeted = false, completionMode = CompletionMode.FORM, meterRule = false),
+            QuickActionShape(groupTargeted = false, completionMode = CompletionMode.QUICK, meterRule = true),
+            QuickActionShape(groupTargeted = true, completionMode = CompletionMode.QUICK, meterRule = false),
+        ).forEach { each ->
+            shape = each
+            val open = actions.forSchedule(id).single { it.label == DigestPolicy.ACTION_OPEN }.target
+
+            assertEquals("$each", QuickActionTarget.OpenSchedule(id), actions.contentFor(key))
+            assertEquals("$each: the body is the Open action's own target", open, actions.contentFor(key))
+        }
+
+        shape = null
+        assertEquals("a schedule that has gone still names its detail", QuickActionTarget.OpenSchedule(id), actions.contentFor(key))
+    }
+
+    /**
+     * #87 (C1, C7; AC 4): deciding a body reads nothing and issues nothing. `contentFor` is not
+     * `suspend`, so it cannot reach either port; this is the pin that keeps it so — no shape read,
+     * no nonce, no delivery row.
+     */
+    @Test
+    fun aBodyTargetReadsAndIssuesNothing() = runTest {
+        var reads = 0
+        val counted = QuickActions(QuickActionShapeSource { reads++; shape }, nonces)
+
+        counted.contentFor(SubjectKey.Schedule(id))
+        counted.contentFor(SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, "a1"))
+        counted.contentFor(SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "shed/a1/l1"))
+
+        assertEquals("no shape was read", 0, reads)
+        assertEquals("no nonce was issued", 0, issued)
+        assertNull("no delivery row was written", delivery.get(id))
+    }
+
+    /**
+     * #87 scope: a warranty or loan warning's body stays inert, exactly as shipped. #87 is
+     * maintenance only, and this is the pin that stops the scope widening silently.
+     */
+    @Test
+    fun aDeadlineBodyStaysInert() {
+        assertNull(actions.contentFor(SubjectKey.Deadline(DeadlineKind.WARRANTY_EXPIRY, "a1")))
+        assertNull(actions.contentFor(SubjectKey.Deadline(DeadlineKind.LOAN_DUE_BACK, "shed/a1/l1")))
+    }
+
+    /**
      * The labels are the **ratified three** and they agree, word for word and in order, with the
      * list B06's notification build put in `ItemPost.actions` for the same schedule shape.
      *

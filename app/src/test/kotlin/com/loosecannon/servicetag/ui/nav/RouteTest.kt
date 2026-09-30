@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.nav
 
+import androidx.navigation3.runtime.NavKey
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.ui.condition.PendingCondition
 import kotlinx.serialization.json.Json
@@ -18,6 +19,62 @@ class RouteTest {
 
     @Test fun topLevelRoutesIsDashboardThenAssetsThenMaintenance() {
         assertEquals(listOf(Route.Dashboard, Route.Assets, Route.Maintenance), TopLevelRoutes)
+    }
+
+    /** The stack a deep link leaves behind: a plain list, exactly as the shell's collector hands it. */
+    private fun afterLink(link: Route, vararg stack: NavKey): List<NavKey> =
+        mutableListOf<NavKey>(*stack).apply { openDeepLink(link) }
+
+    /**
+     * #87 (C6): a top-level link — the summary body's Dashboard — replaces the stack as its tab
+     * does, so a cold start's `[Dashboard]` never gains a second, identical key. Every other link is
+     * pushed exactly as shipped.
+     */
+    @Test fun aTopLevelLinkReplacesTheStackAndEveryOtherLinkIsPushed() {
+        assertEquals(listOf(Route.Dashboard), afterLink(Route.Dashboard, Route.Dashboard))
+        assertEquals(listOf(Route.Dashboard), afterLink(Route.Dashboard, Route.Assets, Route.AssetDetail("a1")))
+        assertEquals(
+            listOf(Route.Dashboard),
+            afterLink(Route.Dashboard, Route.Maintenance, Route.ScheduleDetail("s1"), Route.ScheduleEdit("s1")),
+        )
+
+        listOf(
+            Route.ScheduleDetail("s1"),
+            Route.ScheduleDetail("s1", complete = true),
+            Route.AssetDetail("a1"),
+            Route.TagResult("V1", "k1"),
+        ).forEach { link ->
+            assertEquals("$link is pushed", listOf(Route.Dashboard, link), afterLink(link, Route.Dashboard))
+        }
+    }
+
+    /**
+     * #87 (C6, R87-2 (b)): a summary tap must not circumvent the protections the four write flows
+     * build in. With any of them anywhere on the stack — on top or buried, idle or writing — the
+     * Dashboard link is ignored and the stack is left exactly as it was: no reset, no second
+     * Dashboard. Without one, it resets as its tab does; and with one, the asset, tag and schedule
+     * links still push, because a push pops nothing.
+     */
+    @Test fun aSummaryLinkNeverResetsAStackHoldingAWriteFlow() {
+        listOf(
+            Route.TransferImport("c1"),
+            Route.AssetEdit(null),
+            Route.AssetEdit("a1"),
+            Route.ReplaceAsset("a1"),
+            Route.TransferAssets(),
+        ).forEach { flow ->
+            val onTop = arrayOf(Route.Dashboard, Route.AssetDetail("a1"), flow)
+            assertEquals("$flow on top", onTop.toList(), afterLink(Route.Dashboard, *onTop))
+            val buried = arrayOf(Route.Assets, flow, Route.AssetDetail("a1"))
+            assertEquals("$flow buried", buried.toList(), afterLink(Route.Dashboard, *buried))
+        }
+
+        assertEquals(listOf(Route.Dashboard), afterLink(Route.Dashboard, Route.Assets, Route.AssetDetail("a1")))
+
+        val editing = arrayOf<NavKey>(Route.Dashboard, Route.AssetEdit("a1"))
+        listOf(Route.ScheduleDetail("s1"), Route.AssetDetail("a2"), Route.TagResult("V1", "k1")).forEach { link ->
+            assertEquals("$link still pushes", editing.toList() + link, afterLink(link, *editing))
+        }
     }
 
     /**

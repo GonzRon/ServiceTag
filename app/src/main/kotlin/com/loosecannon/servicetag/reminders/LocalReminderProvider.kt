@@ -215,8 +215,8 @@ class LocalReminderProvider(
         decision.deadlineRows.forEach { deadlineDelivery.upsert(it) }
         decision.deadlineForgotten.forEach { deadlineDelivery.delete(it.kind.name, it.subjectId) }
         forgetAbsentDeadlines(subjects)
-        decision.posts.forEach { post -> notifications.postItem(post, actionsFor(post.key)) }
-        decision.summary?.let(notifications::postSummary)
+        decision.posts.forEach { post -> notifications.postItem(post, actionsFor(post.key), quickActions.contentFor(post.key)) }
+        decision.summary?.let { notifications.postSummary(it, QuickActionTarget.OpenDashboardAttention) }
 
         return decision.report
     }

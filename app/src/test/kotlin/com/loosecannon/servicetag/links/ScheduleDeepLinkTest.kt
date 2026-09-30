@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.reminders.sourceFile
 import com.loosecannon.servicetag.routeForDeepLink
+import com.loosecannon.servicetag.routeForQuickCompletion
 import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.scan.TagResultWire
 import org.junit.Assert.assertEquals
@@ -58,6 +59,30 @@ class ScheduleDeepLinkTest {
         assertNull(routeForDeepLink(DeepLinkRoute.parse("servicetag", "schedule", emptyList())))
         assertNull(routeForDeepLink(DeepLinkRoute.parse("servicetag", "group", listOf(id))))
         assertNull(routeForDeepLink(null))
+    }
+
+    /**
+     * #87 (C5): `servicetag://dashboard` — the maintenance summary's body — lands on the existing
+     * Dashboard and names no completion, even on an intent addressed to this activity: only a
+     * schedule link can ever open one.
+     */
+    @Test
+    fun theDashboardLinkLandsOnTheDashboardAndOpensNoCompletion() {
+        val link = DeepLinkRoute.parse("servicetag", "dashboard", emptyList())
+
+        assertEquals(Route.Dashboard, routeForDeepLink(link))
+        assertNull(routeForQuickCompletion(link))
+    }
+
+    /**
+     * #87 (R87-1): the Dashboard host is this app's own explicit link, never a manifest host — the
+     * public BROWSABLE contract stays `asset`, `tag` and `schedule`.
+     */
+    @Test
+    fun theDashboardHostIsNotInTheManifest() {
+        val manifest = sourceFile("AndroidManifest.xml").readText()
+
+        assertEquals(0, manifest.lowercase().lines().count { """android:host="dashboard"""" in it })
     }
 
     /**
