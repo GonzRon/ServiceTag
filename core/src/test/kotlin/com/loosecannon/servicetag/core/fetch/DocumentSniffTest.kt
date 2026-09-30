@@ -204,4 +204,22 @@ class DocumentSniffTest {
         // a comment of about 1,000 bytes pushes the end record out of the tail window (a recorded limit)
         assertNull(sniff(ZipFixtures.odf(DocumentSniff.ODT, comment = "x".repeat(1_100))))
     }
+
+    // ---- fix round 1 (review m3, m5, m6) ----
+
+    @Test
+    fun anEndSignatureInsideTheCommentIsNotOdf() {
+        // the end record must be the last end signature in the tail at all (a recorded safe-side limit)
+        assertNull(sniff(ZipFixtures.odf(DocumentSniff.ODT, comment = "PK\u0005\u0006 Example Pool Pump manual")))
+    }
+
+    @Test
+    fun aLocalHeaderAndABareEndRecordIn26BytesIsNotOdf() {
+        assertNull(sniff(bytes(0x50, 0x4B, 0x03, 0x04) + bytes(0x50, 0x4B, 0x05, 0x06) + ByteArray(18)))
+    }
+
+    @Test
+    fun aMimetypeClaimingDeflateIsNotOdfEvenWithItsSizesRight() {
+        assertNull(sniff(ZipFixtures.withByte(ZipFixtures.odf(DocumentSniff.ODT), 8, 8)))
+    }
 }
