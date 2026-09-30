@@ -24,7 +24,10 @@ object TextSniff {
     private val BY_EXTENSION = mapOf("txt" to PLAIN, "md" to MARKDOWN, "csv" to CSV, "tsv" to TSV)
 
     /** Any one of these in the head window, ignoring ASCII case, is a web page. */
-    private val WEB_PAGE = listOf("<!doctype html", "<html", "<head", "<script", "<body", "<meta", "<form", "<iframe")
+    private val WEB_PAGE = listOf("<html", "<head", "<script", "<body", "<meta", "<form", "<iframe")
+
+    /** So is an HTML doctype: its keyword, one or more spaces, tabs, CRs, LFs or FFs, then `html`. */
+    private val HTML_DOCTYPE = Regex("""<!doctype[ \t\r\n\f]+html""")
 
     /** An XML declaration followed, later in the head window, by the XHTML namespace is a web page too. */
     private const val XML_DECLARATION = "<?xml"
@@ -86,7 +89,7 @@ object TextSniff {
     /** The head byte for byte (ISO-8859-1, so no decoder hides a pattern), ASCII-lowercased. */
     private fun isWebPage(head: ByteArray): Boolean {
         val text = ReferenceUris.asciiLowercase(String(head, Charsets.ISO_8859_1))
-        if (WEB_PAGE.any { it in text }) return true
+        if (WEB_PAGE.any { it in text } || HTML_DOCTYPE.containsMatchIn(text)) return true
         val declaration = text.indexOf(XML_DECLARATION)
         return declaration >= 0 && text.indexOf(XHTML_NAMESPACE, declaration + XML_DECLARATION.length) >= 0
     }
