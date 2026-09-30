@@ -1427,6 +1427,23 @@ closed at `efe905c9` and pinned by fixtures; the text below supersedes the corre
   spanned archive fails the signature rule instead); an OOXML positive proof is case-sensitive while the macro refusal is
   not.
 
+### §19 errata after B2e's review (controller + owner, 2026-09-29)
+
+- **C29 (2)–(4), corrected (owner-pinned):** *Legacy Office family detection examines only streams directly owned by the
+  compound file's root storage. Nested storages/embedded objects do not participate in outer-file classification.* Entry 0
+  must be the root entry (type 5); the walk follows the root's child id and then left/right siblings only, never a
+  storage's own child pointer; a seen-set bounds it and a cycle refuses. A DOC with an embedded sheet
+  (`ObjectPool/…/Workbook`) is DOC; a message with an embedded Word object is refused.
+- **C29 (4), "exactly one of" means exactly one FAMILY:** `Workbook` and `Book` together (the Excel 97/95 dual workbook) is
+  XLS. Families are counted case-insensitively up to the first NUL, as MS-CFB compares names, so `WordDocument` beside
+  `WORKBOOK` is two families (refused); the proof itself stays exact-case and NUL-terminated, so `WORKBOOK` alone is no
+  proof (refused; safe-side limit).
+- **Recorded limits (B2e):** the proof is structural — a truncated or internally inconsistent compound file whose root
+  names the stream is still stored as its family; an odd name length, a missing NUL terminator, a sector read twice (a
+  FAT sector that is also a directory sector), a non-storage/stream tree node, a second root, or a root with no children
+  refuses; legacy templates, slideshows and add-ins (DOT, XLT, POT, PPS, XLA) are stored as DOC, XLS or PPT; the
+  4,096-byte-sector worst case (64 directory + 8 DIFAT sectors) uses exactly the 524,288-byte cap, with no headroom.
+
 ## 20. B2d — container: the inspection port, ODF, OOXML (C26–C28, C31's ZIP arm; core, JVM only)
 
 **Read:** §19; C10, C11; `C/fetch/{FetchPorts,DocumentSniff,FetchDocument}.kt` and `CT/testing/FakeStaging.kt` on the
