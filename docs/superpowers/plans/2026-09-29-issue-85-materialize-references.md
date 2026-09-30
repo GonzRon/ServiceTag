@@ -1468,6 +1468,55 @@ or malware-free.* What is built stays; B2e is not tightened further.
   GIF, RTF and WebP are checked structurally only (the WebP chunk's own size is never read); the six new `EXTENSIONS`
   pairs also give ordinary `.gif/.webp/.rtf/.md/.csv/.tsv` attachments their true type app-wide (intended).
 
+### §19 errata after B4, B5a, B5b and the whole-branch review (controller, 2026-09-30; merged 2a28d2d9)
+
+The whole-branch review's verdict was MERGE (0 BLOCKER, 0 MAJOR, 2 MINOR). Where the plan below still carries older
+text, these entries supersede it.
+
+- **C11's signature** is `DocumentSniff.classify(size, head, tail)` (B2b's fix round): the caller passes exactly the
+  first and last `min(size, WINDOW)` bytes; a window-length mismatch answers null; `WINDOW` is the one home. §1's JPEG
+  wording is corrected: EOI must lie within the last 1,024 bytes, so a trailer of ≤ 1,022 bytes passes and ≥ 1,023 is
+  refused.
+- **C13 step 2** gains the source-shape clause (B3 m2: a name or URI that fails the source rule is refused before the
+  fetch), and a `Prepared.Ready` is **spent once** (B3 m1: an atomic flag; a second commit, or a commit after discard,
+  is refused and the staging is discarded).
+- **C21:** a non-cancellation exception out of `prepare` shows P85-18 (a ruled reuse, not a new string). `start()` acts
+  only from `Closed`; state changes on the main thread; the progress clamp drops the total rather than lowering `done`;
+  `cancel()` is a no-op in `Saving` and `Done`. **C20:** the shipped pin
+  `theRowStateCarriesNothingThatBelongsToBytes` gains exactly `materializable` and `savedAsDocument` (both derived).
+- **C24/C25 (B5b):** the model is built inside the open sheet (building it starts the download); the open flag is plain
+  `remember`; every dismissal and the sheet leaving composition (`DisposableEffect`) call `cancel()`; Saving is held by
+  `confirmValueChange` refusing `Hidden` (material3 1.4.0's `hide()` consults it on back too) — no back-press property
+  is relied on. The shipped reference Open path goes through a shared `openRefusal` helper with identical behaviour.
+- **Grep readings as ruled:** `java\.net\.` counts code uses (1; a base-line comment is the second raw hit); the
+  `Inflater|ZipFile|ZipInputStream|ZipEntry` grep is scoped to `C/fetch` (shipped backup and Transfer Pack code uses the
+  names); `'"Could not save $'` → 1 (eleven unrelated shipped strings begin "Could not save "); row 16's unkillable
+  mutation was replaced by its killable form.
+- **The README's INTERNET bullet** says "one outbound use" (67b9aa61), matching the manifest and `docs/api/v1.md`.
+
+**Recorded limits (branch-wide), added to §1's list:**
+
+1. `source_uri` is verbatim (R85-2): a token in the reference's own query is kept, outlives deleting the reference, and
+   travels in backups and Transfer Packs; only the redirect destination is stripped.
+2. The overall deadline can overrun by up to one connect (15 s), one idle head read (30 s) and one DNS lookup: neither a
+   blocking connect nor `getAllByName` can be interrupted.
+3. A response framed only by connection close (no `Content-Length`, no chunking) and cut short is indistinguishable from
+   a complete one; the binary end markers refuse most such truncations, a truncated text file is stored.
+4. P85-11 always names the reference's own host, never the redirect's, even when the redirect target was the unreachable
+   one.
+5. An unhandled configuration change (dark mode, locale, font scale; rotation is handled) or a route push closes the
+   sheet: during Downloading or Review the job is cancelled; during Saving the save completes and its outcome shows at the
+   next tap on that row.
+6. The Saving lock relies on material3 1.4.0's `hide()` consulting `confirmValueChange`; recheck on a Compose BOM bump.
+7. Provenance is visible only on a writable asset's edit sheet; event and case attachments show the line without "Open
+   source link"; a transferred-out asset shows neither.
+8. Platform facts proven only by reading or on a device: `close()` unblocking a blocked body read; `errnoDeniedIn`; a late
+   response on a real socket being closed; the SAF provider creating each newly mapped type under its own extension. The
+   Materialize sheet itself has never been tapped on a device (row 33: no new device case): **the 1.5.0 dev-phone
+   person-tapped smoke is mandatory** — one PDF, one widened type (DOCX or Markdown), one refusal, one Cancel at Review.
+9. The staging file is deleted on the main thread on Cancel, Close and leaving the screen: one unlink of up to 256 MB.
+10. The system HTTP proxy, beside DNS rebinding: the proxy resolves and connects; C9 governs only what the phone resolves.
+
 ## 20. B2d — container: the inspection port, ODF, OOXML (C26–C28, C31's ZIP arm; core, JVM only)
 
 **Read:** §19; C10, C11; `C/fetch/{FetchPorts,DocumentSniff,FetchDocument}.kt` and `CT/testing/FakeStaging.kt` on the
