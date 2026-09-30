@@ -54,7 +54,10 @@ def test_the_vendored_key_lists_equal_the_golden_file() -> None:
     """Keys, legacy keys, action flags and `rowToCommand`, in the golden file's own order."""
     shapes = golden()
     vendored = command_shapes.vendored()
-    assert set(vendored) == {"asset", "schedule", "healthSubject", "serviceCase", "loan"}
+    assert set(vendored) == {
+        "asset", "schedule", "healthSubject", "serviceCase", "loan", "attachmentUpdate", "attachmentUpload",
+        "materialize",
+    }
     for name, entry in vendored.items():
         assert entry == shapes[name], name
 
@@ -214,3 +217,15 @@ def test_the_command_tools_send_exactly_the_golden_keys(paired, entry, call) -> 
     golden file through the JVM test, and then fails here until the tool moves with it."""
     call()
     assert sorted(body_of(paired.last())) == sorted(golden()[entry]["keys"])
+
+
+def test_update_attachment_submits_exactly_the_golden_attachment_update_keys(paired) -> None:
+    """#92 (row 38): the attachment command is a full replace, so the overlay sends every golden key, in the
+    golden order, read off the row — a key the app's command gains or loses fails here until the vendored
+    copy moves with it."""
+    paired.reply("GET", "/v1/status", 200, {"schemaVersion": 16, "installationId": "fixture"})
+    paired.reply("GET", "/v1/attachments/att-1", 200, {"attachment": {
+        "id": "att-1", "displayName": "Manual", "kind": "MANUAL", "capturedOn": None, "notes": "", "role": None,
+    }})
+    server_module.update_attachment(attachment_id="att-1", notes="n")
+    assert list(body_of(paired.last())) == golden()["attachmentUpdate"]["keys"]
