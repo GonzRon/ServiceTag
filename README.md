@@ -33,19 +33,23 @@ That separation matters. A snowblower may need service before winter, a hot tub 
 
 - **NFC identity and binding** — create Assets, write and verify ServiceTag tags, safely rebind or replace tags, and scan directly into the correct Asset.
 - **Asset records and hierarchy** — identity, category, make/model/serial, location, purchase/warranty information, parent systems and components, archive/retirement state, operating season, condition, and health.
+- **Lending** — lend an Asset to a person or organisation picked from Android Contacts, with an optional due-back reminder; the Asset shows who has it and when it is due back, an overdue loan reaches the Dashboard, and "Mark returned" keeps the loan as history.
+- **Replace asset** — replace an Asset with a distinct successor: the old Asset is retired with its history intact, you review what carries forward, the NFC tags you choose move, and each Asset links to the other ("Replaced by …" / "Replaces …").
 - **Service history and measurements** — maintenance journal, repairs, replacements, notes, typed readings, meters, derived readings, consumables recorded on events, and configurable quick-action profiles.
 - **Maintenance scheduling and local reminders** — time and meter rules, maintenance groups, due/overdue state, snooze/postpone, seasonal service policy, maintenance breaks, completion flows, and reminder-health diagnostics.
 - **Documents and references** — attach photos, manuals, receipts and other files; save web/reference links; share a document, image, URL, or note into an Asset from Android's share sheet.
+- **Save as document** — turn an Asset's https web link into a real attachment: ServiceTag downloads it only when you tap, checks that its contents match a supported format (PDF; PNG, JPEG, GIF, WebP; RTF; DOC, XLS, PPT; DOCX, XLSX, PPTX; ODT, ODS, ODP; TXT, Markdown, CSV, TSV), and keeps where it came from; a web or login page is never saved.
 - **Backup, restore, and merge foundations** — export logical backups with stable IDs and attachment artifacts, restore onto a replacement installation, and use conflict-safe additive merge machinery without silently overwriting existing rows.
+- **Transfer Packs** — when equipment changes hands, select the Assets that are leaving, export their history, documents and NFC identities as a Transfer Pack, share it to another ServiceTag that imports it, and mark them transferred out here; a later pack can bring an Asset back.
 - **Local automation** — a loopback-only Developer API while its screen is open, plus the workstation-side MCP tooling under [`tools/servicetag-mcp/`](tools/servicetag-mcp/README.md).
 
 ## Where it is going
 
 The roadmap of record is [issue #76](https://github.com/GonzRon/ServiceTag/issues/76).
 
-The immediate post-1.4 work is deliberately practical: reminder and developer-surface reliability, better handling when an existing Asset becomes seasonal, UI/NFC polish, persistent Asset categories and filters, clearer health/NFC status in the Assets list, better key-document handling, temporary lending, and finally a **Transfer Pack** workflow for equipment that permanently changes hands.
+ServiceTag 1.5.0 completed the post-1.4 work: reminder and developer-surface reliability, better handling when an existing Asset becomes seasonal, UI/NFC polish, persistent Asset categories and filters, clearer health/NFC status in the Assets list, better key-document handling, and the **Lending**, **Transfer Packs**, **Replace asset** and **Save as document** capabilities listed above ([release notes](docs/releases/1.5.0.md)).
 
-Transfer Packs are intended for cases such as selling a house where some equipment stays behind. The owner will be able to select only the Assets that are leaving, export their relevant ServiceTag history and NFC identities into a shareable package, hand that package to another ServiceTag installation through normal Android sharing, and then mark those Assets as transferred out locally. The goal is to reuse the existing backup, artifact, merge, and NFC identity machinery rather than build a second synchronization system.
+Transfer Packs, shipped in 1.5.0, cover cases such as selling a house where some equipment stays behind (see **Transfer Packs** above). They reuse the existing backup, artifact, merge, and NFC identity machinery rather than a second synchronization system.
 
 The next product phase is **supplies and consumables**: a canonical catalog for filters, batteries, belts, cartridges, chemicals, fluids and other service materials, with optional stock/reorder information and replacement-on-cadence workflows. After that, ServiceTag can attach manuals, receipts, photos, links and share-intake resources directly to those supply identities.
 

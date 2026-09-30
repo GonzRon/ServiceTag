@@ -1326,3 +1326,23 @@ No `servicetag-v2.8` tag or release existed (cancelled unpublished on 2026-09-18
 **Known limits, recorded.** #83 (above). The five archived providerless rows on the development phone stay providerless by design (R3). A `/v1` apply does not sweep delivery; the in-app tap does, and an API-repaired phone delivers from its next digest or backstop. The Stage-B manifest is stale against the production phone's renamed assets (three entries); the loader is a load tool, not a reconciliation tool, and nothing in 1.4.1 depends on it.
 
 **Issues.** *(controller: #80 and #81 closed with what shipped, the briefs, the proofs and both phones; #83 filed.)*
+
+## ServiceTag 1.5.0 — lending, Transfer Packs, Replace asset, Save as document, notification body taps (issues #72 #77 #84 #86 #85 #87; versionCode 18; 2026-09-30)
+
+**What shipped.** A MINOR on 1.4.1: versionName 1.5.0, versionCode 18, Room schema 16 / backup format 16, forward-only (the new app reads every older archive; 1.4.x refuses a format-16 one with `BackupNewerFormat` rather than dropping rows); `/v1` extended compatibly, with no API or MCP contract break. **#72** lending: an asset lent to a person or organisation picked from Android Contacts (no contacts permission), an optional Once or Until-returned due-back reminder, and "Mark returned" keeping the loan as history (schema 13). **#77** Transfer Packs: one immutable pack of the selected assets' records, documents and NFC identities, shared or saved, the assets marked transferred out here, imported additively on another installation, and brought back only by a later explicit pack (schema 14). **#84** the Phase 1 residue: Transfer Pack flow polish and small fixes, with no schema or format change. **#86** Replace asset: a distinct successor in one atomic write, a succession record shown both ways, a reviewed carry-forward and tag moves (schema 15). **#85** Save as document: an https web link becomes an ordinary attachment once its contents match one of nineteen supported document types, with write-once provenance, and the app's one outbound network use (schema 16). **#87** a maintenance notification's body opens the Dashboard (the summary) or the exact schedule (an item), navigation only. The release also carries the work merged after 1.4.1 without a release of its own (#74 #73 #71 #67 #82 #79 #78 #70 #68 #83 #51 #52 #54 #65 #66), whose schema steps 9 to 12 schema 16 includes. Versioning row: `docs/versioning.md`; release notes: `docs/releases/1.5.0.md`.
+
+### Proofs
+
+(to be filled by the controller)
+
+### Emulator upgrade proof 1.4.1 → 1.5.0
+
+(to be filled by the controller)
+
+### Release
+
+(to be filled by the controller)
+
+### Development phone (R7 and the six smoke checks)
+
+(to be filled by the controller)

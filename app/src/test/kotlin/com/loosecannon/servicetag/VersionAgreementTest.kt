@@ -52,10 +52,10 @@ class VersionAgreementTest {
      * `BuildConfig`, and the tag the release workflow checks the APK against is built from the
      * first of them.
      */
-    @Test fun theReleaseIdentityIs141AndCode17() {
-        assertEquals("1.4.1", BuildConfig.VERSION_NAME)
-        assertEquals(17, BuildConfig.VERSION_CODE)
-        assertEquals("servicetag-v1.4.1", "servicetag-v${BuildConfig.VERSION_NAME}")
+    @Test fun theReleaseIdentityIs150AndCode18() {
+        assertEquals("1.5.0", BuildConfig.VERSION_NAME)
+        assertEquals(18, BuildConfig.VERSION_CODE)
+        assertEquals("servicetag-v1.5.0", "servicetag-v${BuildConfig.VERSION_NAME}")
     }
 
     /**
@@ -145,7 +145,7 @@ class VersionAgreementTest {
         val status = ApiJson.decodeFromString(
             StatusResponse.serializer(), response.body.decodeToString(),
         )
-        assertEquals("1.4.1", status.appVersion)
+        assertEquals("1.5.0", status.appVersion)
         assertEquals(16, status.schemaVersion)
         assertEquals(16, status.backupFormatVersion)
     }
@@ -279,6 +279,48 @@ class VersionAgreementTest {
             "no other row, and no reservation, may claim versionCode 17",
             1,
             Regex("""^\|[^\n]*\|\s*17\s*\|""", RegexOption.MULTILINE).findAll(text).count(),
+        )
+    }
+
+    /**
+     * The 1.5.0 / 18 row: a MINOR, so it names its six issues, the schema and the format it ships,
+     * and the forward-only reason it is a MINOR, as the 1.4.0 row does. Anchored at the start of
+     * the row; `versionCode` 18 is claimed by this row and by nothing else, and the 1.4.1 row it
+     * follows is still there, once (`versioningRecords141` holds what that row says).
+     */
+    @Test fun versioningRecords150() {
+        val text = repoFile("docs/versioning.md").readText()
+        val rows = Regex("""^\|\s*1\.5\.0\s*\|\s*18\s*\|.*$""", RegexOption.MULTILINE).findAll(text)
+            .map { it.value }.toList()
+        assertEquals("the supported release history must carry exactly one 1.5.0 / 18 row", 1, rows.size)
+        val row = rows.single()
+        for (issue in listOf("#72", "#77", "#84", "#86", "#85", "#87")) {
+            assertTrue("the row must name $issue", Regex("""$issue\b""").containsMatchIn(row))
+        }
+        assertTrue(
+            "the row must name the schema and the format it ships",
+            Regex("""schema \*\*16\*\*.*format \*\*16\*\*""").containsMatchIn(row),
+        )
+        assertTrue("the row must say the format bump is forward-only", row.contains("forward-only"))
+        assertTrue(
+            "the row must give the forward-only reason it is a MINOR",
+            row.contains("`BackupNewerFormat`") && row.contains("MINOR by the rule above"),
+        )
+        assertTrue(
+            "the row must say Save as document is the one outbound use of INTERNET",
+            row.contains("INTERNET") && row.contains("Save as document"),
+        )
+        assertFalse("the row's gate counts are measured, so no placeholder ships", row.contains("PLACEHOLDER"))
+        assertEquals(
+            "no other row, and no reservation, may claim versionCode 18",
+            1,
+            Regex("""^\|[^\n]*\|\s*18\s*\|""", RegexOption.MULTILINE).findAll(text).count(),
+        )
+        val previous = Regex("""^\|\s*1\.4\.1\s*\|\s*17\s*\|""", RegexOption.MULTILINE).findAll(text).toList()
+        assertEquals("the 1.4.1 / 17 row must still be there, once", 1, previous.size)
+        assertTrue(
+            "the 1.5.0 row must follow the 1.4.1 row",
+            previous.single().range.first < text.indexOf(rows.single()),
         )
     }
 
@@ -449,6 +491,38 @@ class VersionAgreementTest {
                 "](docs/superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md)",
             ),
         )
+    }
+
+    /**
+     * The README's capability lines for 1.5.0: lending (custody), Transfer Packs, Replace asset and
+     * Save as document. Each is anchored at its own bullet, so a mention anywhere else in the file —
+     * the permissions section names Save as document, for instance — can never satisfy it. The two
+     * sentences that promised lending and Transfer Packs as future work must be gone, and the README
+     * links the release notes, which must exist.
+     */
+    @Test fun theReadmeNamesCustodyTransfersReplaceAndSaveAsDocument() {
+        val readme = repoFile("README.md").readText()
+        for ((lead, words) in listOf(
+            "Lending" to "due-back reminder",
+            "Transfer Packs" to "transferred out",
+            "Replace asset" to "successor",
+            "Save as document" to "https",
+        )) {
+            assertTrue(
+                "the README must carry the 1.5.0 capability bullet \"$lead\", naming \"$words\"",
+                Regex("""^- \*\*$lead\*\* — .*$words""", RegexOption.MULTILINE).containsMatchIn(readme),
+            )
+        }
+        assertFalse(
+            "the README must no longer promise Transfer Packs as future work",
+            readme.contains("Transfer Packs are intended for"),
+        )
+        assertFalse(
+            "the README must no longer promise lending and a Transfer Pack workflow as post-1.4 work",
+            readme.contains("finally a **Transfer Pack** workflow"),
+        )
+        assertTrue("the README must link the 1.5.0 release notes", readme.contains("](docs/releases/1.5.0.md)"))
+        assertTrue("the 1.5.0 release notes must exist", repoFile("docs/releases/1.5.0.md").isFile)
     }
 
     /**
