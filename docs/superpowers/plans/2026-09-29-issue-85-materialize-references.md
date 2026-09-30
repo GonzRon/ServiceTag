@@ -1350,6 +1350,10 @@ class FileStagedReader(private val file: File) : StagedReader
 | ODT, ODS, ODP | C27 `mimetype` | the three `…oasis.opendocument…` types | `odt`, `ods`, `odp` | **ODT**, **ODS**, **ODP** | B2d |
 | TXT, Markdown, CSV, TSV | C30 + C31 | `text/plain`, `text/markdown`, `text/csv`, `text/tab-separated-values` | `txt`, `md`, `csv`, `tsv` | **TXT**, **Markdown**, **CSV**, **TSV** | B2f |
 
+**P85-5 `{TYPE}` labels RATIFIED by the owner (2026-09-29), exactly as above:** GIF · WebP · RTF · DOC · XLS · PPT ·
+DOCX · XLSX · PPTX · ODT · ODS · ODP · TXT · Markdown · CSV · TSV (the detected file format's familiar name, not a
+content category). B5a's row 32 pins them.
+
 **Kind at review** stays the shipped `AttachmentKinds.inferFrom` (`Attachment.kt:155-161`): GIF and WebP default to
 Photo, PDF to Document, every other new type to Other; the owner changes it on the review. No kind rule changes.
 
@@ -1360,6 +1364,10 @@ package is refused, but a legacy DOC/XLS/PPT with macros is stored as inert data
 refused (it contains NULs); a text file that mentions `<script` or `<html` in its first KiB (a Markdown code sample)
 is refused; a GIF or PNG with bytes after its trailer is refused; GIF and WebP reach the shipped bounds-first
 thumbnail path like a shared image.
+
+**Locked rule (owner, 2026-09-29):** macro-enabled OOXML formats (DOCM, XLSM, PPTM) are outside the 1.5 materialization
+allowlist; legacy Office files are validated as genuine Office documents but are not inspected for embedded macros.
+ServiceTag never executes downloaded attachment content. Ordinary attachment intake still accepts all of them.
 
 ### Test rows 34–43 (appended to §3)
 
