@@ -153,6 +153,9 @@ object MimeTypes {
         "application/vnd.oasis.opendocument.text" to "odt",
         "application/vnd.oasis.opendocument.spreadsheet" to "ods",
         "application/vnd.oasis.opendocument.presentation" to "odp",
+        "application/msword" to "doc",
+        "application/vnd.ms-excel" to "xls",
+        "application/vnd.ms-powerpoint" to "ppt",
     )
 
     /** Already-compressed payloads, which the artifacts archive STOREs rather than deflating. */
