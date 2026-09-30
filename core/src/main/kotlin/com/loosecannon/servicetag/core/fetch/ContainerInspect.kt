@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.core.fetch
 
+import com.loosecannon.servicetag.core.model.MimeTypes
+
 /**
  * C28 (#85, R85-5 widened): the one bounded, read-only look inside a staged container whose head the two
  * windows left undecided. Every byte comes through one [BoundedInspection], and nothing is decompressed.
@@ -32,10 +34,10 @@ object ContainerInspect {
         null
     }
 
-    /** Steps 5 and 6: both package parts, exactly one main part, and no macro project anywhere. */
+    /** Steps 5–7: both package parts, exactly one main part, and no macro part name (`vbaProject.bin`, `vbaData.xml`). */
     private fun ooxml(size: Long, inspection: BoundedInspection): String? {
         val names = centralNames(size, inspection) ?: return null
-        if (names.any { it.endsWith("vbaProject.bin", ignoreCase = true) }) return null
+        if (names.any { it.endsWith("vbaProject.bin", ignoreCase = true) || it.endsWith("vbaData.xml", ignoreCase = true) }) return null
         if ("[Content_Types].xml" !in names || "_rels/.rels" !in names) return null
         return names.mapNotNull { mainParts[it] }.singleOrNull()
     }
@@ -72,7 +74,12 @@ object ContainerInspect {
     }
 }
 
-/** C28 (7): the OOXML types outside the list a fetch can identify by its label. */
+/**
+ * C28 (7) (owner): the macro-enabled, template, slideshow, add-in and slide OOXML types, as a ZIP-headed
+ * file's served label names them. A label only ever refuses; it never proves a package. #85 validates
+ * document families and is not an active-content sanitizer, so an accepted package is not thereby
+ * macro-free: it is only not one of the forms the fetch can identify.
+ */
 object OoxmlExclusions {
     val EXTENSIONS: Set<String> = setOf(
         "docm", "dotx", "dotm", "xlsm", "xltx", "xltm", "xlam", "pptm", "potx", "potm", "ppsx", "ppsm", "ppam", "sldx", "sldm",
@@ -97,5 +104,8 @@ object OoxmlExclusions {
         "application/vnd.openxmlformats-officedocument.presentationml.slide",
     ).map { it.lowercase() }.toSet()
 
-    fun refuses(declared: String?, extension: String?): Boolean = false
+    /** Whether the declared type (normalised) or the final URL's extension (lowercased) names an excluded type. */
+    fun refuses(declared: String?, extension: String?): Boolean =
+        (declared != null && MimeTypes.normalise(declared) in MIME_TYPES) ||
+            (extension != null && extension.lowercase() in EXTENSIONS)
 }

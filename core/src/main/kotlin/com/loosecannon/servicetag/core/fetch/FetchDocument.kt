@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.fetch
 
 import com.loosecannon.servicetag.core.model.MimeTypes
+import com.loosecannon.servicetag.core.references.ReferenceUris
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -122,7 +123,7 @@ class FetchDocument(
             }
             val outcome = when (streamed) {
                 is Streamed.Failed -> refused(streamed.problem)
-                is Streamed.Done -> judged(url, staged, streamed)
+                is Streamed.Done -> judged(url, declared, staged, streamed)
             }
             if (outcome is FetchOutcome.Fetched) handOver.kept = outcome
             keep = outcome is FetchOutcome.Fetched
@@ -160,8 +161,12 @@ class FetchDocument(
         return Streamed.Done(count, sha256, windows.head(), windows.tail())
     }
 
-    private suspend fun judged(url: String, staged: StagingFile, done: Streamed.Done): FetchOutcome {
+    /** [declared] is the normalised declared type: for a ZIP head it can only refuse (C28 (7)), never accept. */
+    private suspend fun judged(url: String, declared: String?, staged: StagingFile, done: Streamed.Done): FetchOutcome {
         if (done.size == 0L) return refused(FetchProblem.Empty)
+        if (DocumentSniff.isZip(done.head) && OoxmlExclusions.refuses(declared, extensionOf(url))) {
+            return refused(FetchProblem.NotADocument)
+        }
         val proven = try {
             DocumentSniff.classify(done.size, done.head, done.tail) ?: inspected(staged, done)
         } catch (e: IOException) {
@@ -225,6 +230,10 @@ class FetchDocument(
         val NOT_DOCUMENTS = setOf("text/html", "application/xhtml+xml", "text/plain")
 
         fun refused(problem: FetchProblem) = FetchOutcome.Refused(problem)
+
+        /** The final URL's last path segment's extension, lowercased, after C8's stripping; null when it has none. */
+        fun extensionOf(url: String): String? =
+            ReferenceUris.destinationOf(url)?.substringAfterLast('/')?.takeIf { '.' in it }?.substringAfterLast('.')?.lowercase()
 
         /** C10 step 3: a redirect hop keeps these three meanings; any other problem is a refused redirect. */
         fun onRedirectHop(problem: FetchProblem): FetchProblem = when (problem) {
