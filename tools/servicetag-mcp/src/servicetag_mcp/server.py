@@ -3343,7 +3343,7 @@ def get_replace_offer(asset_id: str) -> dict[str, Any]:
     takes. Writes nothing. `{eligible, held, replacedBy, predecessor, schedules, groups, setupOffered,
     seasonOffered, notesOffered, tags, parentChoiceIds, prefill, childNames, openLoan}`: `eligible` is true iff
     the asset is not transferred out (`held`) and has no successor (`replacedBy`, a succession row or null);
-    `schedules` are its unarchived schedules as `get_schedule`'s row — one **has a time rule iff its
+    `schedules` are its unarchived schedules as the `/v1` schedule row — one **has a time rule iff its
     `timeInterval` is not null**, and ticking one needs `schedule_start_on`; `groups` the groups it can carry;
     `setupOffered`, `seasonOffered` (the season and the maintenance break) and `notesOffered` (the notes and the
     description) say what `carry_setup`, `carry_season` and `carry_notes` can carry; `tags` its active bindings,
