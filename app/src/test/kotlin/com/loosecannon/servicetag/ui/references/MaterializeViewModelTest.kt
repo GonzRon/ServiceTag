@@ -19,6 +19,7 @@ import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.MaterializeReference
@@ -87,6 +88,9 @@ class MaterializeViewModelTest {
     private var parked = false
     private var parkedGets = 0
 
+    /** True: the reference read throws, as a database that will not answer does. */
+    private var brokenRead = false
+
     @Before fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
         graph = FakeGraph(queryContext = StandardTestDispatcher(scheduler))
@@ -112,8 +116,12 @@ class MaterializeViewModelTest {
             override suspend fun get(url: String): TransportResponse =
                 if (parked) { parkedGets++; awaitCancellation() } else graph.documentTransport.get(url)
         }
+        val references = object : ReferenceRepository by graph.references {
+            override suspend fun get(id: ReferenceId): AssetReference? =
+                if (brokenRead) throw IllegalStateException("the read failed") else graph.references.get(id)
+        }
         return MaterializeReference(
-            graph.references, graph.attachments, graph.attachmentStorage, LinkLaunchPolicy(), hops,
+            references, graph.attachments, graph.attachmentStorage, LinkLaunchPolicy(), hops,
             FetchDocument(transport, hops, CacheStagingArea(staging, graph.ids), io = StandardTestDispatcher(scheduler)),
             graph.addAttachment, { graph.networkGranted }, graph.clock,
         )
@@ -247,6 +255,22 @@ class MaterializeViewModelTest {
         assertEquals(Refused(NETWORK_DENIED, true), vm.state.first { it !is Downloading })
         assertTrue(graph.documentTransport.requests.isEmpty())
         assertTrue(rows().isEmpty())
+        clearModels()
+    }
+
+    /** Controller ruling: an unexpected throw out of `prepare` says P85-18, never a silent close. */
+    @Test fun anUnexpectedFailureSaysTheInterruptedLine() = runTest {
+        poolPump()
+        brokenRead = true
+        val vm = model()
+
+        assertEquals(
+            Refused("The download could not be completed. Try again.", false),
+            vm.state.first { it !is Downloading },
+        )
+        assertTrue(graph.documentTransport.requests.isEmpty())
+        assertTrue(rows().isEmpty())
+        assertTrue(staged().isEmpty())
         clearModels()
     }
 
