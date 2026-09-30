@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.core.fetch
 
+import com.loosecannon.servicetag.core.testing.ZipFixtures
+import com.loosecannon.servicetag.core.testing.ZipFixtures.entry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -147,5 +149,59 @@ class DocumentSniffTest {
         assertNull(DocumentSniff.classify(n.toLong(), file, file.copyOfRange(1, n)))
         assertNull(DocumentSniff.classify(n.toLong(), file.copyOfRange(0, n - 1), file))
         assertNull(DocumentSniff.classify(-1, file, file))
+    }
+
+    // ---- row 35 (C27): ODF in the two windows — `mimetype` stored first, and the end record ends the tail ----
+
+    @Test
+    fun aMinimalOdtOdsAndOdpAreProvenByTheirMimetype() {
+        for (mime in listOf(DocumentSniff.ODT, DocumentSniff.ODS, DocumentSniff.ODP)) {
+            val file = ZipFixtures.odf(mime)
+            assertEquals(mime, sniff(file), mime)
+        }
+    }
+
+    @Test
+    fun anOdtLongerThanTheWindowsWithAShortCommentIsAnOdt() {
+        val media = ZipFixtures.stored("Pictures/pump.png", ByteArray(3_000) { (it * 31).toByte() })
+        val file = ZipFixtures.odf(DocumentSniff.ODT, media, comment = "Example Pool Pump manual")
+        assertEquals(true, file.size > 2 * DocumentSniff.WINDOW)
+        assertEquals(DocumentSniff.ODT, sniff(file))
+    }
+
+    @Test
+    fun aZipWithoutAMimetypeIsNotOdf() {
+        assertNull(sniff(ZipFixtures.zip(entry("META-INF/manifest.xml"), entry("content.xml"))))
+    }
+
+    @Test
+    fun aWrongMimetypeIsNotOdf() {
+        assertNull(sniff(ZipFixtures.odf("application/zip")))
+    }
+
+    @Test
+    fun aCompressedMimetypeIsNotOdf() {
+        val file = ZipFixtures.zip(entry("mimetype", DocumentSniff.ODT), entry("content.xml"))
+        assertNull(sniff(file))
+    }
+
+    @Test
+    fun aMimetypeThatIsNotFirstIsNotOdf() {
+        val file = ZipFixtures.zip(entry("content.xml"), entry("mimetype", DocumentSniff.ODT, stored = true))
+        assertNull(sniff(file))
+    }
+
+    @Test
+    fun aTemplateOrADrawingIsNotOdf() {
+        assertNull(sniff(ZipFixtures.odf("application/vnd.oasis.opendocument.text-template")))
+        assertNull(sniff(ZipFixtures.odf("application/vnd.oasis.opendocument.graphics")))
+    }
+
+    @Test
+    fun anOdfWithoutItsEndRecordInTheTailIsNotOdf() {
+        // bytes after the end record: its comment length no longer ends the file
+        assertNull(sniff(ZipFixtures.odf(DocumentSniff.ODT) + bytes(0)))
+        // a comment of about 1,000 bytes pushes the end record out of the tail window (a recorded limit)
+        assertNull(sniff(ZipFixtures.odf(DocumentSniff.ODT, comment = "x".repeat(1_100))))
     }
 }

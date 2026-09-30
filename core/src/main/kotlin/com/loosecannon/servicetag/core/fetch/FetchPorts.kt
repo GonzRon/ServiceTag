@@ -60,7 +60,41 @@ interface StagingArea {
 interface StagingFile {
     fun output(): OutputStream
     fun source(): ByteSource
+
+    /** Read-only random access for the one container inspection (C26), once the stream is done. */
+    fun reader(): StagedReader
     fun discard()
+}
+
+/** C26: random, read-only access to a staged file. There is no write method. */
+fun interface StagedReader {
+    /** Exactly min([length], size − [position]) bytes from [position] (empty at or past the end). Throws IOException. */
+    fun readAt(position: Long, length: Int): ByteArray
+}
+
+/**
+ * A read past an inspection's budget, or at a negative position or length: the file is refused. Not an
+ * IOException on purpose: a refused file is `NotADocument`, a failed read is `Interrupted`.
+ */
+class InspectionOverBudget : RuntimeException("past the inspection budget")
+
+/**
+ * C26: the one budget of one container inspection; every validator reads through it, never through a raw
+ * [StagedReader]. A read that would pass [maxReads] reads or [maxBytes] requested bytes throws
+ * [InspectionOverBudget] before the file is touched: a file that needs more is refused, never half-read
+ * into an answer.
+ */
+class BoundedInspection(private val reader: StagedReader, val maxReads: Int = 160, val maxBytes: Int = 524_288) {
+    var reads = 0
+        private set
+    var bytes = 0
+        private set
+
+    fun readAt(position: Long, length: Int): ByteArray {
+        reads++
+        bytes += length
+        return reader.readAt(position, length)
+    }
 }
 
 /**

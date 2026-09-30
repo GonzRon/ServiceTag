@@ -11,6 +11,9 @@ object DocumentSniff {
     const val PDF = "application/pdf"
     const val PNG = "image/png"
     const val JPEG = "image/jpeg"
+    const val ODT = "application/vnd.oasis.opendocument.text"
+    const val ODS = "application/vnd.oasis.opendocument.spreadsheet"
+    const val ODP = "application/vnd.oasis.opendocument.presentation"
 
     private val pdfHeader = "%PDF-".toByteArray(Charsets.ISO_8859_1)
     private val pdfEof = "%%EOF".toByteArray(Charsets.ISO_8859_1)

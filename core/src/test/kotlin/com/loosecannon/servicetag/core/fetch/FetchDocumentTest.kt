@@ -16,11 +16,13 @@ import com.loosecannon.servicetag.core.fetch.FetchProblem.TimedOut
 import com.loosecannon.servicetag.core.fetch.FetchProblem.TooLarge
 import com.loosecannon.servicetag.core.fetch.FetchProblem.Unreachable
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
+import com.loosecannon.servicetag.core.model.MimeTypes
 import com.loosecannon.servicetag.core.testing.FakeBody
 import com.loosecannon.servicetag.core.testing.FakeDocumentTransport
 import com.loosecannon.servicetag.core.testing.FakeDocumentTransport.Served
 import com.loosecannon.servicetag.core.testing.FakeHostResolver
 import com.loosecannon.servicetag.core.testing.FakeStaging
+import com.loosecannon.servicetag.core.testing.ZipFixtures
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -568,5 +570,90 @@ class FetchDocumentTest {
         assertEquals(Refused(NotADocument), fetcher(t, staging = staging).run(doc))
         assertTrue(staging.files.single().discarded)
         assertNull(DocumentSniff.classify(fakeHeaderHtml.size.toLong(), fakeHeaderHtml, fakeHeaderHtml))
+    }
+
+    // ---- row 37 (C31): the ZIP arm — a container is proven by one bounded inspection, never by its label ----
+
+    private val docxUrl = "https://manuals.example.invalid/pool-pump/manual.docx"
+
+    private val docx = ZipFixtures.ooxml("word/document.xml")
+
+    @Test
+    fun anArbitraryZipServedAsDocxIsNotADocument() = runTest {
+        val staging = FakeStaging()
+        val arbitrary = ZipFixtures.zip(ZipFixtures.entry("readme.txt", "Example Pool Pump manual"))
+        val t = transport { serve(docxUrl, arbitrary, ContainerInspect.DOCX) }
+        assertEquals(Refused(NotADocument), fetcher(t, staging = staging).run(docxUrl))
+        assertTrue(staging.files.single().discarded)
+        assertTrue(t.served.single().closed)
+    }
+
+    @Test
+    fun eachContainerServedAsOctetStreamIsFetchedAsItsFlavour() = runTest {
+        val packages = listOf(
+            docx to ContainerInspect.DOCX,
+            ZipFixtures.ooxml("xl/workbook.xml") to ContainerInspect.XLSX,
+            ZipFixtures.ooxml("ppt/presentation.xml") to ContainerInspect.PPTX,
+            ZipFixtures.odf(DocumentSniff.ODT) to DocumentSniff.ODT,
+            ZipFixtures.odf(DocumentSniff.ODS) to DocumentSniff.ODS,
+            ZipFixtures.odf(DocumentSniff.ODP) to DocumentSniff.ODP,
+        )
+        for ((file, mime) in packages) {
+            val staging = FakeStaging()
+            val t = transport { serve(docxUrl, file, "application/octet-stream") }
+            val fetched = assertIs<Fetched>(fetcher(t, staging = staging).run(docxUrl), mime)
+            assertEquals(mime, fetched.mimeType)
+            assertEquals(sha256(file), fetched.sha256)
+            assertFalse(staging.files.single().discarded)
+        }
+    }
+
+    @Test
+    fun theFlavourComesFromThePackageNeverTheDeclaredType() = runTest {
+        for (declared in listOf(ContainerInspect.XLSX, ContainerInspect.PPTX, DocumentSniff.ODT)) {
+            val t = transport { serve(docxUrl, docx, declared) }
+            assertEquals(ContainerInspect.DOCX, assertIs<Fetched>(fetcher(t).run(docxUrl)).mimeType, declared)
+        }
+    }
+
+    @Test
+    fun onlyAZipHeadTheWindowsLeftUndecidedOpensTheReader() = runTest {
+        val decidedByTheWindows = listOf(pdf, pngHead + iend, jpegHead + bytes(0xFF, 0xD9), ZipFixtures.odf(DocumentSniff.ODT))
+        for (file in decidedByTheWindows) {
+            val staging = FakeStaging()
+            val t = transport { serve(doc, file, "application/octet-stream") }
+            assertIs<Fetched>(fetcher(t, staging = staging).run(doc))
+            assertEquals(0, staging.files.single().readerOpens)
+            assertEquals(0, staging.files.single().reads)
+        }
+        val page = FakeStaging()
+        assertEquals(Refused(NotADocument), fetcher(transport { serve(doc, loginPage, "application/octet-stream") }, staging = page).run(doc))
+        assertEquals(0, page.files.single().readerOpens, "a head that is not a ZIP is never inspected")
+
+        val once = FakeStaging()
+        assertIs<Fetched>(fetcher(transport { serve(docxUrl, docx) }, staging = once).run(docxUrl))
+        assertEquals(1, once.files.single().readerOpens, "one inspection")
+        assertEquals(2, once.files.single().reads, "the end, then the directory")
+    }
+
+    @Test
+    fun anInspectionReadFailureIsInterruptedAndDiscards() = runTest {
+        val staging = FakeStaging(failReads = true)
+        val t = transport { serve(docxUrl, docx, "application/octet-stream") }
+        assertEquals(Refused(Interrupted), fetcher(t, staging = staging).run(docxUrl))
+        assertTrue(staging.files.single().discarded)
+        assertTrue(t.served.single().closed)
+    }
+
+    @Test
+    fun everyContainerTypeHasItsExtension() {
+        val expected = mapOf(
+            ContainerInspect.DOCX to "docx", ContainerInspect.XLSX to "xlsx", ContainerInspect.PPTX to "pptx",
+            DocumentSniff.ODT to "odt", DocumentSniff.ODS to "ods", DocumentSniff.ODP to "odp",
+        )
+        for ((mime, extension) in expected) {
+            assertEquals(extension, MimeTypes.extensionFor(mime), mime)
+            assertEquals(mime, MimeTypes.mimeForExtension(extension), extension)
+        }
     }
 }
