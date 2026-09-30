@@ -1,5 +1,6 @@
 """The command key lists the overlay tools build their bodies from — a **vendored copy** of five
-entries of the repository's golden `docs/api/command-shapes.json` (master plan dec. 48, ruled M15).
+entries of the repository's golden `docs/api/command-shapes.json` (master plan dec. 48, ruled M15), and since #92 three
+more.
 
 Nothing reads that file at runtime: this package is installed and run on its own, and a server that
 opened a repository path would stop working the moment it ran anywhere but a checkout. So the five
@@ -69,9 +70,22 @@ LOAN_KEYS: tuple[str, ...] = ("assetId", "borrowerName", "lentOn", "dueOn", "rem
 a loan never changes asset or borrower. The return date is in neither — it is the return's own command,
 sent as given (`loanReturn`, not vendored) — and no loan command carries a contact link."""
 
+ATTACHMENT_UPDATE_KEYS: tuple[str, ...] = ("displayName", "kind", "capturedOn", "notes", "role")
+"""The attachment command (#92): `PATCH /v1/attachments/{id}` is a full replace of exactly these five, and
+`update_attachment` overlays onto every one of them."""
+
+ATTACHMENT_UPLOAD_KEYS: tuple[str, ...] = (
+    "operationKey", "displayName", "sha256", "kind", "role", "capturedOn", "notes",
+)
+"""The upload's `X-ServiceTag-Attachment` JSON (#92, C11): `add_attachment` writes its header in this order and
+names no other key (the phone refuses an unknown one)."""
+
+MATERIALIZE_KEYS: tuple[str, ...] = ("displayName", "kind", "role", "notes")
+"""The save as document's body (#92, C14): every key optional, and none of them a URL."""
+
 
 def vendored() -> dict[str, dict[str, Any]]:
-    """The five entries in the golden file's own shape, for the equality test."""
+    """The eight entries in the golden file's own shape, for the equality test."""
     return {
         "asset": {"keys": list(ASSET_KEYS)},
         "schedule": {
@@ -83,4 +97,7 @@ def vendored() -> dict[str, dict[str, Any]]:
         "healthSubject": {"keys": list(HEALTH_SUBJECT_KEYS)},
         "serviceCase": {"keys": list(SERVICE_CASE_KEYS)},
         "loan": {"keys": list(LOAN_KEYS)},
+        "attachmentUpdate": {"keys": list(ATTACHMENT_UPDATE_KEYS)},
+        "attachmentUpload": {"keys": list(ATTACHMENT_UPLOAD_KEYS)},
+        "materialize": {"keys": list(MATERIALIZE_KEYS)},
     }

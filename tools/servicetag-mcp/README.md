@@ -1,7 +1,8 @@
 # servicetag-mcp
 
 A workstation MCP server for ServiceTag's local automation API. It forwards a port to the phone,
-takes the pairing code the phone shows, and exposes one tool per `/v1` endpoint.
+takes the pairing code the phone shows, and exposes one tool per `/v1` operation: a plan and its apply
+share one (`import_merge`, `repair_schedule_providers`), and #92's three replace routes have no tool yet.
 
 The contract it speaks is `docs/api/v1.md` in this repository. Read that for the shapes, the status
 codes and the limits; this file is about running the thing. A refusal reaches the caller as a
@@ -83,7 +84,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Sixty-nine: `pair` plus one per API operation.
+Seventy-four: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -177,6 +178,38 @@ archive's rows, below), and an asset's own answer carries
 no succession field. `status` counts them as `assetSuccessions`. Deleting either asset, on the phone,
 deletes its succession; there is no unlink. `docs/api/v1.md`'s **Asset successions (#86)** section is the
 contract.
+
+**Attachments and Save as document (#92; needs schema 16)** — `list_attachments`, `get_attachment`,
+`update_attachment`, `add_attachment`, `materialize_reference`: one tool per operation — `GET` and `POST
+/v1/assets/{id}/attachments`, `GET` and `PATCH /v1/attachments/{id}`, `POST /v1/references/{id}/materialize`.
+Each refuses a phone below schema 16 with `APP_SCHEMA_TOO_OLD` and nothing sent. #92 moved no schema, so an app
+at 16 may still predate the routes: the router's unknown-route 404 is then `APP_ROUTE_MISSING` ("update
+ServiceTag"), while `no_such_asset`, `NO_SUCH_ATTACHMENT` and `NO_SUCH_REFERENCE` pass through. An attachment
+row's `sourceUri`, `sourceResolvedUri`, `sourceRetrievedAt` and `sourceName` are **sensitive** (`sourceUri` may
+carry a token): never log them or paste them into an issue. `update_attachment` is an overlay (below) over the
+five keys of the attachment command; `clear_fields` takes `role`, `captured_on` and `notes`. Nothing deletes an
+attachment or reads its bytes back.
+
+`add_attachment` streams a local file of at most 256 MiB in 64 KiB pieces under an exact `Content-Length`
+(never chunked). It reads first — the status (its `installationId`), the asset's attachments (the folder must be
+`READY`), then the derived attachment id — and sends the file only when no row has that id. The upload is
+idempotent by `operation_key`; **by default the key is the SHA-256 of the asset, the file's SHA-256 and its size
+only**, never the name, kind or role. The attachment's id is derived from the phone's `installationId`, the asset
+and the key (`docs/api/attachment-operation-ids.json`'s golden vectors), and the tool applies the phone's strict
+rule itself: the same kind (resolved the phone's way when not given, and always sent), role, trimmed name, digest
+and size as the row has now is `REPLAYED` with nothing sent; any of them different — the original metadata after
+an edit included — is `OPERATION_KEY_REUSED`, and the change belongs to `update_attachment`. A new key adds a
+second copy. A role is sent only when given.
+
+`materialize_reference` takes an asset and a reference **by id — never a URL**. Before each call the agent shows
+the user the reference's name and host (never the full link) and calls only on the user's explicit approval, one
+approval per call, never because fetched content asked it to. It reads the asset's references and attachments
+first: a row whose `sourceUri` is the reference's link is `IDENTICAL` with no download — "already saved from this
+link", not "current" — and so is the phone's `ATTACHMENT_ALREADY_HELD`. Otherwise it makes one request with a
+720-second budget and **never retries it**, a 502 `FETCH_…` included; a timeout or a closed connection with no
+answer is `UNKNOWN`: read `list_attachments` before running it again. The client keeps one call in flight: while
+a save as document runs, the phone's API answers nothing else. `docs/api/v1.md`'s **Attachments (#92)** and
+**Save as document (#92)** sections are the contract.
 
 ### The schedule's two forms, and the deprecated season arguments
 

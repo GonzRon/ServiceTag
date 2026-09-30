@@ -580,7 +580,8 @@ def test_a_save_posts_the_given_keys_and_echoes_host_type_and_size(with_referenc
     assert (post.method, post.path) == ("POST", "/v1/references/r1/materialize")
     assert json.loads(post.body) == {"role": "USER_MANUAL"}
     assert result["decision"] == "CREATED"
-    assert (result["host"], result["mimeType"], result["sizeBytes"]) == ("manuals.example.invalid", "application/pdf", 4096)
+    echoed = (result["host"], result["mimeType"], result["sizeBytes"])
+    assert echoed == ("manuals.example.invalid", "application/pdf", 4096)
     assert result["reference"]["host"] == "manuals.example.invalid"
     assert LINK not in json.dumps(result["reference"]), "the host only, never the full link"
 
