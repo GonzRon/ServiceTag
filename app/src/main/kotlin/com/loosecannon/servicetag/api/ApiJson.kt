@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
 import com.loosecannon.servicetag.core.fetch.FetchProblem
+import com.loosecannon.servicetag.core.model.AssetSuccession
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.ports.StoreIoException
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
@@ -57,6 +58,8 @@ import com.loosecannon.servicetag.core.usecase.OccurrenceNotYetOpen
 import com.loosecannon.servicetag.core.usecase.PreServiceNeedsDates
 import com.loosecannon.servicetag.core.usecase.ProfileValidation
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
+import com.loosecannon.servicetag.core.usecase.ReplaceProblem
+import com.loosecannon.servicetag.core.usecase.ReplaceStale
 import com.loosecannon.servicetag.core.usecase.ScheduleArchived
 import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
@@ -551,6 +554,11 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     is LoanReturned -> errorResponse(
         409, "Conflict", "loan_returned", "this loan has been returned, and a returned loan never changes",
     )
+    // #92 (C24): defence — the replace route's own digest check raises it too, so one arm answers both.
+    is ReplaceStale -> errorResponse(
+        409, "Conflict", "REPLACE_STALE", "the asset or a row reviewed with it changed; nothing was replaced",
+        listOf("ReplaceStale(assetId=${e.assetId.value})"), "sourcesDigest",
+    )
     else -> errorResponse(
         500, "Internal Server Error", "internal", e.javaClass.simpleName,
     )
@@ -853,3 +861,58 @@ internal fun fetchProblemCode(problem: FetchProblem): String = when (problem) {
 
 private fun networkDenied(): ApiFailure =
     ApiFailure(409, "Conflict", "NETWORK_DENIED", "this app may not use the network", listOf("NetworkDenied"))
+
+// --- #92 (B3), the replace codes (C2, C24) ----------------------------------------------------------------------------
+//
+// Each code, status, `field` and sentence is C2's table, verbatim. `problems` names each domain problem by its own
+// name ([replaceProblemName]), an id by its raw value.
+
+/** 409: the predecessor already has a successor; `problems` names it, so a replay can read that asset. */
+internal fun assetAlreadyReplaced(row: AssetSuccession): ApiFailure = ApiFailure(
+    409, "Conflict", "ASSET_ALREADY_REPLACED", "this asset has already been replaced",
+    listOf("ReplacedBy(successorAssetId=${row.successorAssetId.value})"),
+)
+
+/**
+ * Every [ReplaceProblem] as C2 codes it. Exhaustive, so a problem added later is a compile error here. `Successor`
+ * is the shipped asset family ([assetRefusal]) with its field under `successor.`; a date is the draft's own key.
+ */
+internal fun replaceProblemRefusal(problem: ReplaceProblem): Refusal = when (problem) {
+    ReplaceProblem.NameRequired -> Refusal("REPLACE_NAME_REQUIRED", "the new asset needs a name", "successor.name")
+    is ReplaceProblem.BadDate -> Refusal(
+        "REPLACE_BAD_DATE", "that date is missing or not a YYYY-MM-DD day",
+        when (problem.field) {
+            "retiredOn", "scheduleStartOn" -> problem.field
+            else -> "successor.${problem.field}"
+        },
+    )
+    is ReplaceProblem.Successor -> assetRefusal(problem.problem).let { it.copy(field = it.field?.let { f -> "successor.$f" }) }
+    is ReplaceProblem.NotOffered -> Refusal("REPLACE_NOT_OFFERED", "that schedule, group, tag or parent is not offered")
+    is ReplaceProblem.NeedsSetup ->
+        Refusal("REPLACE_NEEDS_SETUP", "a ticked schedule needs its readings and actions", "carrySetup")
+    is ReplaceProblem.NeedsSeason ->
+        Refusal("REPLACE_NEEDS_SEASON", "a ticked pre-service schedule needs the season", "carrySeason")
+    ReplaceProblem.PhaseRequired -> Refusal("REPLACE_PHASE_REQUIRED", "say whether the new asset is in season", "manualPhase")
+    ReplaceProblem.ReplacedOnAfterToday ->
+        Refusal("REPLACE_DATE_AFTER_TODAY", "the replacement date is later than today", "retiredOn")
+}
+
+/** A [ReplaceProblem] by its own name, each id by its raw value. */
+internal fun replaceProblemName(problem: ReplaceProblem): String = when (problem) {
+    ReplaceProblem.NameRequired -> "NameRequired"
+    is ReplaceProblem.BadDate -> "BadDate(field=${problem.field})"
+    is ReplaceProblem.Successor -> "Successor(problem=${problem.problem})"
+    is ReplaceProblem.NotOffered -> "NotOffered(id=${problem.id})"
+    is ReplaceProblem.NeedsSetup -> "NeedsSetup(scheduleId=${problem.scheduleId.value})"
+    is ReplaceProblem.NeedsSeason -> "NeedsSeason(scheduleId=${problem.scheduleId.value})"
+    ReplaceProblem.PhaseRequired -> "PhaseRequired"
+    ReplaceProblem.ReplacedOnAfterToday -> "ReplacedOnAfterToday"
+}
+
+/** 422: the first problem's code, sentence and field; every problem in `problems`, first first. */
+internal fun replaceProblems(problems: List<ReplaceProblem>): ApiFailure {
+    val first = replaceProblemRefusal(problems.first())
+    return ApiFailure(
+        422, "Unprocessable Content", first.code, first.message, problems.map(::replaceProblemName), first.field,
+    )
+}

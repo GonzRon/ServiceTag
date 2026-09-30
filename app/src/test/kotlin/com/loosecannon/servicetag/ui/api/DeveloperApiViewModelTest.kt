@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.api.PAIRING_ALPHABET
 import com.loosecannon.servicetag.api.PAIRING_CODE_LENGTH
 import com.loosecannon.servicetag.api.StartOutcome
 import com.loosecannon.servicetag.api.attachmentHandlersFor
+import com.loosecannon.servicetag.api.replaceHandlersFor
 import com.loosecannon.servicetag.api.loanHandlersFor
 import com.loosecannon.servicetag.api.maintenanceHandlersFor
 import com.loosecannon.servicetag.api.referenceHandlersFor
@@ -56,6 +57,7 @@ class DeveloperApiViewModelTest {
         serviceCaseHandlersFor(graph),
         loanHandlersFor(graph),
         attachmentHandlersFor(graph),
+        replaceHandlersFor(graph),
         appVersion = "1.1.0",
         schemaVersion = 5,
     )

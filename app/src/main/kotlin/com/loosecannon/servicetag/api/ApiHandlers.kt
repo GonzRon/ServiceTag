@@ -162,6 +162,11 @@ internal class ApiHandlers(
      * `installationId` `/v1/status` gained (C5a). No count comes with it: `attachments` is already counted.
      */
     internal val attachmentRoutes: AttachmentHandlers,
+    /**
+     * #92's replace triad (R92-1 supersedes R86-18), on the same terms: one collaborator, reached from the router as
+     * `handlers.replace.*`, over #86's `ReplaceAsset` alone. No count comes with it: `assetSuccessions` is counted.
+     */
+    internal val replace: ReplaceHandlers,
     private val appVersion: String,
     private val schemaVersion: Int,
 ) {
@@ -178,6 +183,7 @@ internal class ApiHandlers(
         ServiceCaseHandlers(graph),
         LoanHandlers(graph),
         AttachmentHandlers(graph),
+        ReplaceHandlers(graph),
         BuildConfig.VERSION_NAME, AppGraph.SCHEMA_VERSION,
     )
 

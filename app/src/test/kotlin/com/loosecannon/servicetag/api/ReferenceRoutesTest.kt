@@ -52,6 +52,7 @@ class ReferenceRoutesTest {
             serviceCaseHandlersFor(graph),
             loanHandlersFor(graph),
             attachmentHandlersFor(graph),
+            replaceHandlersFor(graph),
             appVersion = "1.3.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),

@@ -223,6 +223,11 @@ internal class ApiRouter(
                 "attachments" to "GET" -> handlers.attachmentRoutes.listForAsset(rest[1])
                 // #92 (B1b) — the one row that accepts a file: streamed, authenticated before a byte is read.
                 "attachments" to "POST" -> handlers.attachmentRoutes.upload(rest[1], request)
+                // #92 (B3) — the twenty-third to twenty-fifth, the replace triad (R92-1 supersedes R86-18): the offer
+                // and the plan write nothing; the apply is #86's one atomic write, behind the plan's digest.
+                "replace-offer" to "GET" -> handlers.replace.offer(rest[1])
+                "replace-plan" to "POST" -> handlers.replace.plan(rest[1], request)
+                "replace" to "POST" -> handlers.replace.replace(rest[1], request)
                 else -> throw ApiFailure.notFound(request.path)
             }
 

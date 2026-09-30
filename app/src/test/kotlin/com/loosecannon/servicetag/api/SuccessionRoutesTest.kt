@@ -133,7 +133,6 @@ class SuccessionRoutesTest {
             "POST" to "/v1/assets/$new/succession",
             "PATCH" to "/v1/assets/$old/succession",
             "DELETE" to "/v1/assets/$old/succession",
-            "POST" to "/v1/assets/$new/replace",
             "POST" to "/v1/successions",
             "GET" to "/v1/successions",
             "DELETE" to "/v1/successions/s1",
