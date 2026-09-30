@@ -222,4 +222,102 @@ class DocumentSniffTest {
     fun aMimetypeClaimingDeflateIsNotOdfEvenWithItsSizesRight() {
         assertNull(sniff(ZipFixtures.withByte(ZipFixtures.odf(DocumentSniff.ODT), 8, 8)))
     }
+
+    // ---- row 40 (C30): GIF, WebP and RTF in the two windows — the header, and the end or the size, right ----
+
+    /** A fictional 1×1 GIF: header, screen descriptor, a two-colour table, one image, then the trailer `3B`. */
+    private fun gif(version: String) = ascii(version) +
+        bytes(1, 0, 1, 0, 0x80, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0xFF) +
+        bytes(0x2C, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 0x44, 1, 0) + bytes(0x3B)
+
+    private fun le32(n: Long) = ByteArray(4) { ((n ushr (8 * it)) and 0xFF).toByte() }
+
+    /** A fictional WebP: `RIFF`, the size of what follows (or [riffSize]), `WEBP`, then one [chunk] of [payload]. */
+    private fun webp(chunk: String, payload: ByteArray = bytes(0x2F, 0, 0, 0, 0x10, 7, 0x10, 0x11, 0x11, 0x88), riffSize: Long? = null): ByteArray {
+        val form = ascii("WEBP") + ascii(chunk) + le32(payload.size.toLong()) + payload
+        return ascii("RIFF") + le32(riffSize ?: form.size.toLong()) + form
+    }
+
+    private val rtf = ascii("{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Example Sans;}}\\f0 Example Pool Pump manual\\par}")
+
+    @Test
+    fun aMinimalGif87aAndGif89aAreGifs() {
+        assertEquals("image/gif", sniff(gif("GIF87a")))
+        assertEquals("image/gif", sniff(gif("GIF89a")))
+    }
+
+    @Test
+    fun aLargeGifWithItsTrailerOnlyInTheTailIsAGif() {
+        val small = gif("GIF89a")
+        assertEquals("image/gif", sniff(small.copyOf(small.size - 1) + big + bytes(0x3B)))
+    }
+
+    @Test
+    fun aGifCutBeforeItsTrailerIsNotADocument() {
+        val small = gif("GIF89a")
+        assertNull(sniff(small.copyOf(small.size - 1)))
+        assertNull(sniff(small.copyOf(small.size - 1) + big))
+        assertNull(sniff(small + bytes(0)), "a byte after the trailer (a recorded limit)")
+    }
+
+    @Test
+    fun aGifHeaderOfAnotherVersionIsNotAGif() {
+        assertNull(sniff(gif("GIF88a")))
+        assertNull(sniff(gif("gif89a")))
+    }
+
+    @Test
+    fun aWebpOfEachChunkKindIsAWebp() {
+        for (chunk in listOf("VP8 ", "VP8L", "VP8X")) assertEquals("image/webp", sniff(webp(chunk)), chunk)
+    }
+
+    @Test
+    fun aLargeWebpIsJudgedByItsRiffSizeAgainstTheFileSize() {
+        assertEquals("image/webp", sniff(webp("VP8 ", big)))
+    }
+
+    @Test
+    fun aWebpWhoseRiffSizeIsNotTheFileSizeIsNotADocument() {
+        val file = webp("VP8L")
+        val riffSize = file.size - 8L
+        assertNull(sniff(webp("VP8L", riffSize = riffSize + 1)), "a byte promised that never came")
+        assertNull(sniff(webp("VP8L", riffSize = riffSize - 1)), "a byte after the RIFF")
+        assertNull(sniff(file + bytes(0)))
+        assertNull(sniff(webp("VP8 ", big, riffSize = 0xFFFF_FFF8L)), "the size is unsigned")
+    }
+
+    @Test
+    fun aRiffThatIsNotAWebpOrAnUnknownChunkIsNotAWebp() {
+        assertNull(sniff(webp("VP8A")))
+        assertNull(sniff(webp("VP8\u0000")), "VP8 needs its space")
+        assertNull(sniff(webp("VP8 ").also { ascii("WAVE").copyInto(it, 8) }))
+    }
+
+    @Test
+    fun anRtfIsAnRtfWithOrWithoutTrailingPadding() {
+        assertEquals("application/rtf", sniff(rtf))
+        assertEquals("application/rtf", sniff(rtf + ascii("\r\n")))
+        assertEquals("application/rtf", sniff(rtf + ascii(" \t\r\n") + bytes(0, 0)))
+    }
+
+    @Test
+    fun aLargeRtfWithItsBraceOnlyInTheTailIsAnRtf() {
+        assertEquals("application/rtf", sniff(ascii("{\\rtf1\\ansi ") + big + ascii("}\r\n")))
+        val padded = ascii("{\\rtf1\\ansi ") + big + ascii("}") + ByteArray(1_100) { ' '.code.toByte() }
+        assertNull(sniff(padded), "a brace behind more than a window of padding (a recorded limit)")
+    }
+
+    @Test
+    fun anRtfWithoutItsClosingBraceIsNotADocument() {
+        assertNull(sniff(rtf.copyOf(rtf.size - 1) + ascii("\r\n")))
+        assertNull(sniff(ascii("{\\rtf1\\ansi ") + big + ascii("\r\n")))
+        assertNull(sniff(rtf + ascii("x\r\n")))
+    }
+
+    @Test
+    fun rtfWithoutItsVersionOneIsNotAnRtf() {
+        assertNull(sniff(ascii("{\\rtf\\ansi Example Pool Pump manual\\par}")))
+        assertNull(sniff(ascii("{\\rtf0\\ansi Example Pool Pump manual\\par}")))
+        assertNull(sniff(ascii(" {\\rtf1\\ansi Example Pool Pump manual\\par}")), "the head must start with it")
+    }
 }

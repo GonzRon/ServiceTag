@@ -71,6 +71,9 @@ class FetchDocumentTest {
             "Example Manuals: sign in to download this file</form></body></html>\n",
     )
 
+    /** Fictional plain text (row 42). */
+    private val notes = ascii("Example Pool Pump manual\nClean the strainer basket every week.\n")
+
     /** HTML that begins with a PDF header and never ends like one (R85-5's required fixture). */
     private val fakeHeaderHtml = ascii("%PDF-1.7\n<!doctype html><html><body>Please sign in to continue</body></html>\n")
 
@@ -321,10 +324,8 @@ class FetchDocumentTest {
     // ---- row 15: headers judged before the body ----
 
     @Test
-    fun declaredHtmlXhtmlAndPlainTextFailBeforeTheBody() = runTest {
-        val declared = listOf(
-            "text/html", "text/html; charset=utf-8", "Application/XHTML+XML", "text/plain;charset=us-ascii", " TEXT/PLAIN ",
-        )
+    fun declaredHtmlAndXhtmlFailBeforeTheBody() = runTest {
+        val declared = listOf("text/html", "text/html; charset=utf-8", "Application/XHTML+XML")
         for (type in declared) {
             val staging = FakeStaging()
             val body = FakeBody(pdf, forbidden = true)
@@ -332,6 +333,20 @@ class FetchDocumentTest {
             assertEquals(Refused(NotADocument), fetcher(t, staging = staging).run(doc), type)
             assertEquals(0, body.reads)
             assertTrue(staging.files.isEmpty())
+            assertTrue(t.served.single().closed)
+        }
+    }
+
+    /** Moved from the case above by B2f (C10 step 5 amended, C31): a declared plain text now reaches the body. */
+    @Test
+    fun declaredPlainTextReachesTheBodyAndTheTextSniff() = runTest {
+        for (type in listOf("text/plain;charset=us-ascii", " TEXT/PLAIN ")) {
+            val staging = FakeStaging()
+            val body = FakeBody(notes)
+            val t = transport { route(doc) { Served(200, contentType = type, contentLength = notes.size.toLong(), body = body) } }
+            assertEquals("text/plain", assertIs<Fetched>(fetcher(t, staging = staging).run(doc), type).mimeType, type)
+            assertTrue(body.reads > 0)
+            assertEquals(0, staging.files.single().readerOpens, "text is never inspected")
             assertTrue(t.served.single().closed)
         }
     }
@@ -761,6 +776,65 @@ class FetchDocumentTest {
         for ((mime, extension) in expected) {
             assertEquals(extension, MimeTypes.extensionFor(mime), mime)
             assertEquals(mime, MimeTypes.mimeForExtension(extension), extension)
+        }
+    }
+
+    // ---- row 42 (C31): the text arm — only a declared page fails fast; text needs a text label and no page ----
+
+    private val txtUrl = "https://manuals.example.invalid/pool-pump/notes.txt"
+
+    @Test
+    fun aDeclaredPlainTextBodyAtATxtUrlIsFetchedAsPlainText() = runTest {
+        val staging = FakeStaging()
+        val t = transport { serve(txtUrl, notes, "text/plain") }
+        val fetched = assertIs<Fetched>(fetcher(t, staging = staging).run(txtUrl))
+        assertEquals("text/plain", fetched.mimeType)
+        assertEquals(sha256(notes), fetched.sha256)
+        assertFalse(staging.files.single().discarded)
+    }
+
+    @Test
+    fun theTextFlavourIsTheDeclaredOneThenTheExtensionsNeverTheRawDeclaredString() = runTest {
+        val cases = listOf(
+            Triple("https://manuals.example.invalid/pool-pump/notes.md", "text/plain", "text/markdown"),
+            Triple(txtUrl, "text/csv", "text/csv"),
+            Triple(txtUrl, "Text/Markdown; charset=utf-8", "text/markdown"),
+            Triple(txtUrl, "application/octet-stream", "text/plain"),
+            Triple("https://manuals.example.invalid/pool-pump/parts.TSV?lang=en", null, "text/tab-separated-values"),
+        )
+        for ((url, declared, flavour) in cases) {
+            val t = transport { serve(url, notes, declared) }
+            assertEquals(flavour, assertIs<Fetched>(fetcher(t).run(url), "$url $declared").mimeType, "$url $declared")
+        }
+    }
+
+    @Test
+    fun aPageServedAsTextOrAtATextUrlIsNotADocument() = runTest {
+        for ((url, declared) in listOf(txtUrl to "text/plain", txtUrl to "application/octet-stream", doc to "text/csv")) {
+            val staging = FakeStaging()
+            val t = transport { serve(url, loginPage, declared) }
+            assertEquals(Refused(NotADocument), fetcher(t, staging = staging).run(url), "$url $declared")
+            assertTrue(staging.files.single().discarded)
+        }
+    }
+
+    @Test
+    fun textWithNoTextLabelIsNotADocument() = runTest {
+        val url = "https://manuals.example.invalid/pool-pump/notes"
+        val t = transport { serve(url, notes, "application/octet-stream") }
+        assertEquals(Refused(NotADocument), fetcher(t).run(url))
+    }
+
+    @Test
+    fun aRefusedZipOrCompoundFileNeverPassesAsText() = runTest {
+        val arbitrary = ZipFixtures.zip(ZipFixtures.entry("readme.txt", "Example Pool Pump manual"))
+        val summaryOnly = CfbFixtures.cfb(CfbFixtures.stream("\u0005SummaryInformation"))
+        for (file in listOf(arbitrary, summaryOnly)) {
+            val staging = FakeStaging()
+            val t = transport { serve(txtUrl, file, "text/plain") }
+            assertEquals(Refused(NotADocument), fetcher(t, staging = staging).run(txtUrl))
+            assertEquals(1, staging.files.single().readerOpens, "inspected and refused, then asked as text")
+            assertTrue(staging.files.single().discarded)
         }
     }
 }

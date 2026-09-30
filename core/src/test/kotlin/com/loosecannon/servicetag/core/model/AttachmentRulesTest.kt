@@ -109,4 +109,32 @@ class AttachmentRulesTest {
         assertNull(MimeTypes.extensionFor("image/tiff"))
         assertNull(MimeTypes.extensionFor("text/html"))
     }
+
+    /** Row 43 (#85 C31): every widened "Save as document" type is named by its one extension, both ways. */
+    @Test fun everyWidenedDocumentTypeHasItsOneExtension() {
+        val widened = mapOf(
+            "image/gif" to "gif", "image/webp" to "webp", "application/rtf" to "rtf",
+            "application/msword" to "doc", "application/vnd.ms-excel" to "xls", "application/vnd.ms-powerpoint" to "ppt",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation" to "pptx",
+            "application/vnd.oasis.opendocument.text" to "odt",
+            "application/vnd.oasis.opendocument.spreadsheet" to "ods",
+            "application/vnd.oasis.opendocument.presentation" to "odp",
+            "text/markdown" to "md", "text/csv" to "csv", "text/tab-separated-values" to "tsv",
+        )
+        for ((mime, ext) in widened) {
+            assertEquals(ext, MimeTypes.extensionFor(mime), mime)
+            assertEquals(mime, MimeTypes.mimeForExtension(ext), ext)
+        }
+        // the shipped pairs are unchanged
+        val shipped = mapOf(
+            "image/jpeg" to "jpg", "image/png" to "png", "application/pdf" to "pdf", "application/zip" to "zip",
+            "text/plain" to "txt",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" to "docx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" to "xlsx",
+        )
+        shipped.forEach { (mime, ext) -> assertEquals(ext, MimeTypes.extensionFor(mime), mime) }
+        // the kind at review is the shipped default: GIF and WebP a photo, the text types other (§19)
+        assertEquals(AttachmentKind.PHOTO, AttachmentKinds.inferFrom("image/webp", fromCamera = false))
+        assertEquals(AttachmentKind.OTHER, AttachmentKinds.inferFrom("text/markdown", fromCamera = false))
+    }
 }
