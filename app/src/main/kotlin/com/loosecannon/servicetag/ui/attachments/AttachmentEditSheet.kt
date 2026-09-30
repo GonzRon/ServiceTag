@@ -30,8 +30,17 @@ import androidx.compose.ui.unit.dp
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.usecase.UpdateAttachmentCommand
 import com.loosecannon.servicetag.ui.asset.DateField
+import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
+import com.loosecannon.servicetag.ui.references.MaterializeStrings
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
+
+/** #85 §6 (reused, hoisted byte-identical): this sheet's words, which the Save-as-document review reuses. */
+internal const val NAME_LABEL = "Name"
+internal const val KIND_HEADER = "Kind"
+internal const val NOTES_LABEL = "Notes"
+internal const val CANCEL_LABEL = "Cancel"
+internal const val SAVE_LABEL = "Save"
 
 /**
  * Rename, re-kind, re-role (#67, an asset's files only), captured-on, notes, and Delete, in a
@@ -47,6 +56,8 @@ fun AttachmentEditSheet(
     onSave: (UpdateAttachmentCommand) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
+    /** #85 (C25): hands [AttachmentRowState.sourceUri] to the section's open decision; null draws no button. */
+    onOpenSource: ((String) -> Unit)? = null,
 ) {
     // Keyed by the row's id, not the row: a save that comes back through the state flow must not
     // reset the fields the person is still editing.
@@ -73,11 +84,11 @@ fun AttachmentEditSheet(
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Name") },
+                label = { Text(NAME_LABEL) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            SectionHeader(title = "Kind")
+            SectionHeader(title = KIND_HEADER)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -115,10 +126,21 @@ fun AttachmentEditSheet(
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
-                label = { Text("Notes") },
+                label = { Text(NOTES_LABEL) },
                 minLines = 3,
                 modifier = Modifier.fillMaxWidth(),
             )
+            // #85 C25 (R85-9): read-only, and only for a file saved from a reference. The button hands
+            // on the reference's own URI, never the redirect's, and no URI is ever drawn here.
+            row.provenanceLine?.let { line ->
+                Column {
+                    QuietLine(line)
+                    val source = row.sourceUri
+                    if (source != null && onOpenSource != null) {
+                        TextButton(onClick = { onOpenSource(source) }) { Text(MaterializeStrings.OPEN_SOURCE_LINK) }
+                    }
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { confirming = true }) {
                     Text(
@@ -127,7 +149,7 @@ fun AttachmentEditSheet(
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDismiss) { Text(CANCEL_LABEL) }
                 TextButton(
                     onClick = {
                         onSave(
@@ -142,7 +164,7 @@ fun AttachmentEditSheet(
                             ),
                         )
                     },
-                ) { Text("Save") }
+                ) { Text(SAVE_LABEL) }
             }
             Spacer(Modifier.height(4.dp))
         }
@@ -166,7 +188,7 @@ fun AttachmentEditSheet(
                     )
                 }
             },
-            dismissButton = { TextButton(onClick = { confirming = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirming = false }) { Text(CANCEL_LABEL) } },
         )
     }
 }

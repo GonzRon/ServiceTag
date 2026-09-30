@@ -446,25 +446,28 @@ fun AssetDetailScreen(
                 )
                 ServiceRecordSection(current.events, current.definitions, onOpenEvent)
                 TagsSection(current.tags, onEditLabel = model::editTagLabel, editable = current.offersWrites)
+                // #85 C25: one launcher for both sections, so a saved file's source opens as a reference does.
+                val activity = LocalActivity.current
+                val openLink: (String) -> Boolean = { uri ->
+                    activity?.let { LinkLauncher.open(it, uri, notify = false) } == true
+                }
                 AttachmentsSection(
                     graph = graph,
                     owner = AttachmentOwner.OfAsset(current.asset.id),
                     snackbars = snackbars,
                     onOpenSettings = onOpenSettings,
                     readOnly = !current.offersWrites,
+                    onOpenLink = openLink,
                 )
                 // 1.3.0 — pointers, below the bytes they are not (D-10). `LinkLauncher` is the one
                 // place `ACTION_VIEW` is fired, so the section hands it a URI and reads the answer.
                 // `notify = false`: this surface has a snackbar host and draws the missing-handler
                 // line itself, so the launcher must not toast the same sentence over the top of it.
-                val activity = LocalActivity.current
                 ReferencesSection(
                     assetId = current.asset.id,
                     graph = graph,
                     snackbars = snackbars,
-                    onOpen = { uri ->
-                        activity?.let { LinkLauncher.open(it, uri, notify = false) } == true
-                    },
+                    onOpen = openLink,
                     readOnly = !current.offersWrites,
                 )
                 NotesSection(current.asset.notes)
