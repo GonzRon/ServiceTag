@@ -62,15 +62,23 @@ internal class FakeReminderNotifications : ReminderNotifications {
     override fun standingItems(): Set<String> = items.keys.toSet()
     override fun standingSummary(): String? = summary?.tag
 
-    override fun postItem(post: ItemPost, actions: List<QuickAction>) {
+    /** #87 (C3): what each item post's body opens, one entry per post, in post order. */
+    val postedContent = mutableListOf<QuickActionTarget?>()
+
+    /** #87 (C3): what each summary post's body opens, one entry per summary post. */
+    val summaryContent = mutableListOf<QuickActionTarget>()
+
+    override fun postItem(post: ItemPost, actions: List<QuickAction>, content: QuickActionTarget?) {
         items[post.tag] = post
         postedItems += post
         postedActions += actions
+        postedContent += content
         log += "post ${post.tag}"
     }
 
-    override fun postSummary(summary: SummaryPost) {
+    override fun postSummary(summary: SummaryPost, content: QuickActionTarget) {
         this.summary = summary
+        summaryContent += content
     }
 
     override fun cancelItem(tag: String) {
@@ -561,6 +569,69 @@ class LocalReminderProviderTest {
         assertEquals(QuickActionTarget.OpenAsset(AssetId("a1")), notifications.postedActions[1].single().target)
 
         assertEquals(ReconcileReport(0, 0, 2, emptyList()), provider.reconcile(subjects))
+    }
+
+    /**
+     * #87 (C3; AC 2, 3 and 8 at the seam): every maintenance item — OVERDUE or DUE — is posted with
+     * a body, and it is its "Open" action's own target, `OpenSchedule(its id)`. A warranty warning's
+     * body opens nothing, as shipped, and every post's actions ride beside the body unchanged.
+     */
+    @Test
+    fun everyScheduleItemIsPostedWithItsOpenTargetAsItsBody() = runTest {
+        val provider = provider()
+        heater()
+        val late = subject("s1", "2026-06-01").also { overdue += it.key }
+        val due = subject("s2", "2026-06-15")
+        val warranty = warranties().single()
+
+        provider.reconcile(listOf(late, due, warranty))
+
+        assertEquals(setOf(late.key, due.key, warranty.key), notifications.postedItems.map { it.key }.toSet())
+        assertEquals(3, notifications.postedContent.size)
+        notifications.postedItems.forEachIndexed { i, post ->
+            val body = notifications.postedContent[i]
+            val actions = notifications.postedActions[i]
+            when (val key = post.key) {
+                is SubjectKey.Schedule -> {
+                    assertEquals("${key.scheduleId}", QuickActionTarget.OpenSchedule(key.scheduleId), body)
+                    assertEquals(
+                        "the body is the Open action's own target",
+                        actions.single { it.label == DigestPolicy.ACTION_OPEN }.target,
+                        body,
+                    )
+                    assertEquals(listOf("Done", "Snooze 1 day", "Open"), actions.map { it.label })
+                }
+                is SubjectKey.Deadline -> {
+                    assertEquals("a warranty's body stays inert", null, body)
+                    assertEquals(listOf(QuickAction("Open", QuickActionTarget.OpenAsset(AssetId("a1")))), actions)
+                }
+            }
+        }
+    }
+
+    /**
+     * #87 (C2; AC 1): the summary is posted with the Dashboard's attention surface as its body —
+     * never one of the schedules it counts — and an identical second run posts nothing at all, the
+     * summary included (invariant 45, as shipped).
+     */
+    @Test
+    fun theSummaryIsPostedWithTheDashboardAttentionBody() = runTest {
+        val provider = provider()
+        val subjects = listOf(subject("s1", "2026-06-01").also { overdue += it.key }, subject("s2", "2026-06-15"))
+
+        provider.reconcile(subjects)
+
+        assertEquals(2, notifications.postedItems.size)
+        assertEquals(listOf<QuickActionTarget>(QuickActionTarget.OpenDashboardAttention), notifications.summaryContent)
+
+        provider.reconcile(subjects)
+
+        assertEquals("no item was posted again", 2, notifications.postedItems.size)
+        assertEquals(
+            "and no summary either",
+            listOf<QuickActionTarget>(QuickActionTarget.OpenDashboardAttention),
+            notifications.summaryContent,
+        )
     }
 
     /**

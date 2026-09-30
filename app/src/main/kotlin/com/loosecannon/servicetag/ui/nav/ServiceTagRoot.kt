@@ -73,7 +73,7 @@ fun ServiceTagRoot(
     val backStack = rememberNavBackStack(Route.Dashboard)
     val snackbarHost = remember { SnackbarHostState() }
 
-    LaunchedEffect(Unit) { deepLinks.collect { backStack.add(it) } }
+    LaunchedEffect(Unit) { deepLinks.collect { backStack.openDeepLink(it) } }
     LaunchedEffect(Unit) { snackbars.collect { snackbarHost.showSnackbar(it) } }
 
     val current = backStack.lastOrNull()
@@ -620,5 +620,9 @@ private fun combinedIncidentEntry(assetId: String, held: PendingCondition): Rout
  */
 private fun MutableList<NavKey>.switchTopLevel(route: Route) {
     clear()
+    add(route)
+}
+
+internal fun MutableList<NavKey>.openDeepLink(route: Route) {
     add(route)
 }

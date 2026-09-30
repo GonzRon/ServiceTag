@@ -41,6 +41,15 @@ class DeepLinkRouteTest {
     }
 
     /**
+     * #87 (R87-1): `servicetag://dashboard` takes no path. Any segment makes it malformed — never a
+     * route, and never an exception.
+     */
+    @Test fun dashboardRoute() {
+        assertEquals(DeepLink.Dashboard, DeepLinkRoute.parse("servicetag", "dashboard", emptyList()))
+        assertIs<DeepLink.Malformed>(DeepLinkRoute.parse("servicetag", "dashboard", listOf(id)))
+    }
+
+    /**
      * The new host is shape-checked by the **same** `single()` the two shipped hosts use, so a
      * non-canonical uuid, an extra segment, a missing segment and a foreign scheme each land where
      * they land for `asset` — a second, looser check is how a malformed id reaches a repository.

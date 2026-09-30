@@ -124,10 +124,12 @@ class MainActivity : ComponentActivity() {
  * are routed and with **no** mutation on the way: it is what a notification's "Open" action opens,
  * and what an external link can ever reach. "Done" on a schedule whose completion needs the owner
  * goes through [routeForQuickCompletion] instead.
+ * #87 (C5): `servicetag://dashboard`, the maintenance summary's body, names the existing [Route.Dashboard].
  */
 internal fun routeForDeepLink(link: DeepLink?): Route? = when (link) {
     is DeepLink.Asset -> Route.AssetDetail(link.id.value)
     is DeepLink.Schedule -> Route.ScheduleDetail(link.id.value)
+    is DeepLink.Dashboard -> Route.Dashboard
     is DeepLink.Tag -> (link.payload as? TagPayload.V1)?.let { payload ->
         Route.TagResult(TagResultWire.formatOf(payload), payload.tagId.value)
     }

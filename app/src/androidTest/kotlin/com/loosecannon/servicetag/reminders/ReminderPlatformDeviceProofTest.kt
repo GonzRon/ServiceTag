@@ -215,7 +215,7 @@ class ReminderPlatformDeviceProofTest {
         notifications.cancelItem(tag)
         assertTrue("nothing of ours is standing to begin with", awaitStanding(notifications, tag, false))
 
-        notifications.postItem(post, emptyList())
+        notifications.postItem(post, emptyList(), null)
         assertTrue("the shade is this provider's projection", awaitStanding(notifications, tag, true))
 
         notifications.cancelItem(tag)
@@ -278,7 +278,7 @@ class ReminderPlatformDeviceProofTest {
         )
 
         notifications.cancelItem(tag)
-        notifications.postItem(post, app.graph.quickActions.forDeadline(key))
+        notifications.postItem(post, app.graph.quickActions.forDeadline(key), null)
         assertTrue("the shade holds it under its own tag", awaitStanding(notifications, tag, true))
 
         val standing = NotificationManagerCompat.from(context).activeNotifications
@@ -431,7 +431,7 @@ class ReminderPlatformDeviceProofTest {
         notifications.cancelItem(tag)
         assertTrue(awaitStanding(notifications, tag, false))
 
-        notifications.postItem(announcement, app.graph.quickActions.forDeadline(key))
+        notifications.postItem(announcement, app.graph.quickActions.forDeadline(key), null)
         assertTrue(awaitStanding(notifications, tag, true))
         assertEquals("an announcement alerts", 0, itemFor(tag)!!.notification.flags and Notification.FLAG_ONLY_ALERT_ONCE)
 
@@ -440,7 +440,7 @@ class ReminderPlatformDeviceProofTest {
             statusWord = DigestPolicy.WORD_NOT_RETURNED,
             onlyAlertOnce = true,
         )
-        notifications.postItem(refresh, app.graph.quickActions.forDeadline(key))
+        notifications.postItem(refresh, app.graph.quickActions.forDeadline(key), null)
         assertTrue(
             "the refresh replaced it in place",
             awaitTrue { itemFor(tag)?.notification?.extras?.getCharSequence(NotificationCompat.EXTRA_TEXT)?.toString() == refresh.body },

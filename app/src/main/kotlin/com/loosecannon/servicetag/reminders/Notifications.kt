@@ -29,9 +29,15 @@ interface ReminderNotifications {
      * A parameter and not a field of [ItemPost], because the digest policy that builds an
      * `ItemPost` is pure and the nonce each action carries is issued **per post** (D-21): the
      * labels are already `ItemPost.actions`, and what arrives here is what each one is aimed at.
+     *
+     * #87 (C3): [content] is what the notification's **body** opens — navigation only, decided by
+     * `QuickActions.contentFor` from the subject's key — or null for a body that opens nothing.
+     * No default, so every caller says which.
      */
-    fun postItem(post: ItemPost, actions: List<QuickAction>)
-    fun postSummary(summary: SummaryPost)
+    fun postItem(post: ItemPost, actions: List<QuickAction>, content: QuickActionTarget?)
+
+    /** #87 (C2): [content] is what the summary's body opens; every summary has one. */
+    fun postSummary(summary: SummaryPost, content: QuickActionTarget)
     fun cancelItem(tag: String)
     fun cancelSummary()
 }
@@ -50,11 +56,14 @@ interface ReminderNotifications {
  * the system shade's own background, which no app controls and which is not this app's light or
  * dark surface; picking per-theme accents here would be guessing at a surface we cannot see.
  *
- * It carries **no content intent**: tapping the notification body itself opens nothing, and the
- * "Open" action is what navigates. The actions themselves are attached here from the targets the
- * provider hands over, each one turned into a `FLAG_IMMUTABLE` `PendingIntent` by
+ * #87: the **body** navigates and does nothing else. A maintenance item's body opens its schedule
+ * — the very `PendingIntent` its "Open" action fires, because both are built from the same target —
+ * and the summary's body opens the Dashboard, whose first section is ATTENTION. A warranty or loan
+ * warning's body opens nothing, as shipped. The body and the actions are attached here from the
+ * targets the provider hands over, each one turned into a `FLAG_IMMUTABLE` `PendingIntent` by
  * [QuickActionIntents] — the one Android-shaped step, kept behind a seam so a fake can assert the
- * labels and the targets without a `Context`.
+ * labels and the targets without a `Context`. Neither notification auto-cancels on a body tap: the
+ * shade is the provider's projection (invariant 44), and the next reconcile owns it.
  *
  * **No `setGroup`.** Whether the per-item notifications bundle under their summary is a visual
  * decision and no ratified string or design row settles it, so nothing here groups anything: the
@@ -71,7 +80,7 @@ class AndroidReminderNotifications(
 
     override fun standingSummary(): String? = standing(SUMMARY_ID).firstOrNull()
 
-    override fun postItem(post: ItemPost, actions: List<QuickAction>) {
+    override fun postItem(post: ItemPost, actions: List<QuickAction>, content: QuickActionTarget?) {
         val builder = NotificationCompat.Builder(context, post.channelId)
             .setSmallIcon(iconFor(post))
             .setColor(accentFor(post).toArgb())
@@ -96,7 +105,7 @@ class AndroidReminderNotifications(
         notify(post.tag, ITEM_ID, builder)
     }
 
-    override fun postSummary(summary: SummaryPost) {
+    override fun postSummary(summary: SummaryPost, content: QuickActionTarget) {
         val builder = NotificationCompat.Builder(context, NotificationChannels.DUE)
             .setSmallIcon(R.drawable.ic_notifications_active)
             .setColor(ServiceTagLightSemanticColors.due.foreground.toArgb())
