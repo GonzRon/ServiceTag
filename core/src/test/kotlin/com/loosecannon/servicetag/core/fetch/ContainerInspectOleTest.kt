@@ -157,10 +157,25 @@ class ContainerInspectOleTest {
     @Test
     fun aFatCycleIsRefusedWithoutLooping() {
         assertNull(inspect(patched(doc, fatEntry(1), 1)), "a directory sector chained to itself")
-        val reader = BytesStagedReader.of(patched(twoSectors, fatEntry(2), 1))
-        assertNull(inspect(patched(twoSectors, fatEntry(2), 1), BoundedInspection(reader)))
+        val looped = patched(twoSectors, fatEntry(2), 1)
+        val reader = BytesStagedReader.of(looped)
+        assertNull(inspect(looped, BoundedInspection(reader)), "the second directory sector chained back to the first")
         assertEquals(3, reader.reads, "each sector once, then refused")
         assertNull(inspect(patched(doc, DIFAT_SLOTS, 1)), "the directory sector read again as the FAT")
+    }
+
+    @Test
+    fun sixtyFourDirectorySectorsAreFollowedAndASixtyFifthIsNeverRead() {
+        // the root, filler streams and the content stream last: four entries to a 512-byte sector
+        fun withEntries(n: Int) = cfb(*Array(n - 2) { stream("Data$it") }, stream("WordDocument"))
+        val sixtyFour = withEntries(64 * 4)
+        val all = BytesStagedReader.of(sixtyFour)
+        assertEquals(DOC, inspect(sixtyFour, BoundedInspection(all)), "the content stream in the 64th sector")
+        assertEquals(65, all.reads, "64 directory sectors and the FAT sector once")
+        val sixtyFive = withEntries(64 * 4 + 1)
+        val capped = BytesStagedReader.of(sixtyFive)
+        assertNull(inspect(sixtyFive, BoundedInspection(capped)))
+        assertEquals(65, capped.reads, "the 65th directory sector is never read")
     }
 
     @Test
