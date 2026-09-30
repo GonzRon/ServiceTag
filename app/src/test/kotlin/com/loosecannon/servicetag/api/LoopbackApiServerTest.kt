@@ -1,14 +1,29 @@
 package com.loosecannon.servicetag.api
 
+import com.loosecannon.servicetag.core.fetch.FetchDocument
+import com.loosecannon.servicetag.core.fetch.HopPolicy
+import com.loosecannon.servicetag.core.fetch.HostResolver
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.ReferenceRepository
+import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.AttachmentStore
+import com.loosecannon.servicetag.core.ports.ByteSource
+import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.ports.StoredBytes
+import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.usecase.AddAttachment
+import com.loosecannon.servicetag.core.usecase.MaterializeReference
+import com.loosecannon.servicetag.testing.InMemoryAttachmentStore
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
+import java.util.Base64
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -46,7 +61,7 @@ class LoopbackApiServerTest {
     private val graph = FakeGraph()
     private lateinit var server: LoopbackApiServer
 
-    private fun router(): ApiRouter = ApiRouter(
+    private fun router(attachmentRoutes: AttachmentHandlers = attachmentHandlersFor(graph)): ApiRouter = ApiRouter(
         ApiHandlers(
             graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles,
             graph.events, graph.attachments, graph.categories, graph.transferRecords, graph.assetSuccessions,
@@ -60,6 +75,8 @@ class LoopbackApiServerTest {
             warrantyHandlersFor(graph),
             serviceCaseHandlersFor(graph),
             loanHandlersFor(graph),
+            attachmentRoutes,
+            replaceHandlersFor(graph),
             appVersion = "1.1.0",
             schemaVersion = 5,
         ),
@@ -316,6 +333,8 @@ class LoopbackApiServerTest {
                 warrantyHandlersFor(graph),
                 serviceCaseHandlersFor(graph),
                 loanHandlersFor(graph),
+                attachmentHandlersFor(graph),
+                replaceHandlersFor(graph),
                 appVersion = "1.1.0",
                 schemaVersion = 5,
             ),
@@ -584,5 +603,431 @@ class LoopbackApiServerTest {
             release.countDown()
             restarted.stop()
         }
+    }
+
+    // ---- #92 (B1b): the upload over a real socket, and C33's lock across generations -------------------------------
+
+    private fun metadataFor(key: String, bytes: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(
+        """{"operationKey":"$key","displayName":"Example Water Heater manual","sha256":"${InMemoryAttachmentStore.sha256Hex(bytes)}"}"""
+            .toByteArray(),
+    )
+
+    private fun uploadHead(assetId: String, length: Long, metadata: String, token: String = TOKEN): ByteArray =
+        ("POST /v1/assets/$assetId/attachments HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer $token\r\n" +
+            "Content-Type: application/pdf\r\n$UPLOAD_METADATA_HEADER: $metadata\r\nContent-Length: $length\r\n\r\n")
+            .toByteArray()
+
+    /** One whole upload over a fresh connection, and the whole answer back. */
+    private fun sendUpload(port: Int, assetId: String, bytes: ByteArray, metadata: String): String =
+        Socket("127.0.0.1", port).use { socket ->
+            socket.soTimeout = 30_000
+            socket.getOutputStream().apply {
+                write(uploadHead(assetId, bytes.size.toLong(), metadata))
+                write(bytes)
+                flush()
+            }
+            socket.getInputStream().readBytes().decodeToString()
+        }
+
+    private fun stagingIsEmpty(): Boolean = graph.materializeStagingDir.listFiles().orEmpty().isEmpty()
+
+    /** Row 11: past the 4 MiB import ceiling, over a real socket, into one row with every byte. */
+    @Test fun aFiveMiBUploadCrossesARealSocket() {
+        val heater = V1Client(graph, TOKEN).asset("Example Water Heater")
+        val bytes = ByteArray(5 * 1024 * 1024) { (it % 253).toByte() }
+        val answer = sendUpload(server.boundPort, heater, bytes, metadataFor("op-5mib", bytes))
+        assertTrue(answer.take(300), answer.startsWith("HTTP/1.1 201 Created\r\n"))
+        val row = runBlocking { graph.attachments.forAsset(AssetId(heater)) }.single()
+        assertEquals(bytes.size.toLong(), row.sizeBytes)
+        assertTrue(graph.attachmentStorage.store.files.getValue(row.storageLocator).contentEquals(bytes))
+        assertTrue(stagingIsEmpty())
+    }
+
+    /**
+     * Row 9b (C10), observed client-side: a peer without the token declares 200 MiB. It reads its 401, then **cannot
+     * deliver the body** — the server drains at most 4 MiB within 5 s and closes, so the peer's writes fail after
+     * that plus the socket buffers — and the next request is answered.
+     */
+    @Test fun anUnauthenticatedUploadIsClosedWithinTheDrainBound() {
+        val declared = 200L * 1024 * 1024
+        var delivered = 0L
+        var failure: IOException? = null
+        val head = Socket("127.0.0.1", server.boundPort).use { socket ->
+            socket.soTimeout = 10_000
+            val out = socket.getOutputStream()
+            out.write(uploadHead("a1", declared, metadataFor("op-1", ByteArray(1)), token = "NOPENOPE"))
+            out.flush()
+            val answer = socket.getInputStream().readBytes().decodeToString()
+            val chunk = ByteArray(64 * 1024)
+            try {
+                while (delivered < declared) {
+                    out.write(chunk)
+                    delivered += chunk.size
+                }
+                out.flush()
+            } catch (e: IOException) {
+                failure = e
+            }
+            answer
+        }
+        assertTrue(head, head.startsWith("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n"))
+        assertTrue("the whole unauthenticated body was delivered ($delivered bytes)", failure != null)
+        assertTrue(delivered < declared)
+        val next = speak("GET /v1/status HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer $TOKEN\r\n\r\n")
+        assertTrue(next, next.startsWith("HTTP/1.1 200 OK\r\n"))
+    }
+
+    /** A store whose `put` writes its bytes and then parks until the test releases it; it counts every `put`. */
+    private class GatedStore(private val inner: InMemoryAttachmentStore) : AttachmentStore {
+        val puts = AtomicInteger()
+        val parked = CountDownLatch(1)
+        val release = CountDownLatch(1)
+
+        override suspend fun put(locator: String, source: ByteSource): StoredBytes {
+            puts.incrementAndGet()
+            val stored = inner.put(locator, source)
+            parked.countDown()
+            release.await(30, TimeUnit.SECONDS)
+            return stored
+        }
+
+        override suspend fun open(locator: String) = inner.open(locator)
+        override suspend fun exists(locator: String) = inner.exists(locator)
+        override suspend fun delete(locator: String) = inner.delete(locator)
+    }
+
+    /**
+     * Row 43 (C33): an upload parked in `put`, the listener stopped and started, and the MCP's retry of its key on the
+     * new generation. The retry waits for the process-wide lock and then answers 200 with the first's row: one row,
+     * the first request's bytes intact, and the store's `put` called exactly once. On the graph's real dispatcher.
+     */
+    @Test fun aRetriedUploadAcrossAStopAndStartLandsOnceWithTheFirstBytesIntact() {
+        val heater = V1Client(graph, TOKEN).asset("Example Water Heater")
+        val inner = InMemoryAttachmentStore()
+        val gated = GatedStore(inner)
+        val folder = object : AttachmentStorage {
+            override fun state(): StoreState = StoreState.Ready("Attachments", "com.example.provider")
+            override fun store(): AttachmentStore = gated
+        }
+        val add = AddAttachment(graph.attachments, graph.assets, graph.events, folder, graph.uow, graph.ids, graph.clock)
+        val routes = AttachmentHandlers(
+            attachments = graph.attachments, assets = graph.assets, storage = folder,
+            updateAttachment = graph.updateAttachment, installation = graph.installationIdentity,
+            transfers = graph.transferRecords, addAttachment = add, staging = graph.materializeStaging,
+            apiLongWrites = graph.apiLongWrites,
+        )
+        server.stop()
+        server = LoopbackApiServer(router(routes), networkPermissionGranted = { true }, port = 0)
+        assertEquals(StartOutcome.Bound, server.start())
+
+        val bytes = "Example Water Heater, the first request's bytes".toByteArray()
+        val metadata = metadataFor("op-retry", bytes)
+        val firstPort = server.boundPort
+        val first = Thread { runCatching { sendUpload(firstPort, heater, bytes, metadata) } }.apply {
+            isDaemon = true
+            start()
+        }
+        assertTrue("the first upload never reached put", gated.parked.await(10, TimeUnit.SECONDS))
+
+        server.stop()
+        assertEquals(StartOutcome.Bound, server.start())
+        val secondPort = server.boundPort
+        var replay = ""
+        val second = Thread { replay = sendUpload(secondPort, heater, bytes, metadata) }.apply {
+            isDaemon = true
+            start()
+        }
+        val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (server.requests.value < 2 && System.nanoTime() < until) Thread.sleep(10)
+        assertEquals("the retry was never read", 2, server.requests.value)
+        Thread.sleep(300) // time for the retry to reach the lock — or, without one, the store
+        gated.release.countDown()
+        second.join(15_000)
+        first.join(15_000)
+
+        assertTrue(replay.take(300), replay.startsWith("HTTP/1.1 200 OK\r\n"))
+        val rows = runBlocking { graph.attachments.forAsset(AssetId(heater)) }
+        assertEquals(1, rows.size)
+        assertTrue(replay, replay.contains(rows.single().id.value))
+        assertTrue(inner.files.getValue(rows.single().storageLocator).contentEquals(bytes))
+        assertEquals("the store's put ran more than once", 1, gated.puts.get())
+        assertTrue(stagingIsEmpty())
+    }
+
+    // ---- #92 (B2): save as document across generations — C33's materialize half and B2-pre's BC5 --------------------
+
+    /**
+     * One asset, a gated folder, a scripted transport and the production attachment routes with save as document wired
+     * over them, on the graph's real dispatcher. [references] is what the handler reads the reference through.
+     */
+    private inner class MaterializeRig(references: ReferenceRepository? = null) {
+        val transport = ScriptedTransport()
+        val store = InMemoryAttachmentStore()
+        val gated = GatedStore(store)
+        private val folder = object : AttachmentStorage {
+            override fun state(): StoreState = StoreState.Ready("Attachments", "com.example.provider")
+            override fun store(): AttachmentStore = gated
+        }
+        private val add = AddAttachment(graph.attachments, graph.assets, graph.events, folder, graph.uow, graph.ids, graph.clock)
+        private val hops = HopPolicy(HostResolver { listOf(byteArrayOf(203.toByte(), 0, 113, 10)) })
+        val routes = AttachmentHandlers(
+            attachments = graph.attachments, assets = graph.assets, storage = folder,
+            updateAttachment = graph.updateAttachment, installation = graph.installationIdentity,
+            transfers = graph.transferRecords, addAttachment = add, staging = graph.materializeStaging,
+            apiLongWrites = graph.apiLongWrites, references = references ?: graph.references,
+            materializeReference = MaterializeReference(
+                graph.references, graph.attachments, folder, LinkLaunchPolicy(), hops,
+                FetchDocument(transport, hops, graph.materializeStaging), add, { true }, graph.clock,
+            ),
+        )
+        val asset: String = V1Client(graph, TOKEN).asset("Example Water Heater")
+
+        fun reference(uri: String): String = V1Client(graph, TOKEN).ok(
+            ReferenceResponse.serializer(), "POST", "/v1/references",
+            """{"assetId":"$asset","uri":"$uri","displayName":"Example Water Heater manual","description":""}""",
+            status = 201,
+        ).reference.id
+    }
+
+    private val manualUri = "https://manuals.example.invalid/water-heater/manual.pdf"
+    private val manual = "%PDF-1.7 Example Water Heater manual %%EOF".toByteArray()
+
+    /** One materialize over a fresh connection and the whole answer back, or "" for a connection closed without one. */
+    private fun sendMaterialize(port: Int, referenceId: String): String = Socket("127.0.0.1", port).use { socket ->
+        socket.soTimeout = 30_000
+        socket.getOutputStream().apply {
+            write(
+                ("POST /v1/references/$referenceId/materialize HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
+                    "Authorization: Bearer $TOKEN\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}")
+                    .toByteArray(),
+            )
+            flush()
+        }
+        try {
+            socket.getInputStream().readBytes().decodeToString()
+        } catch (e: IOException) {
+            ""
+        }
+    }
+
+    private fun inBackground(block: () -> Unit): Thread = Thread { runCatching(block) }.apply {
+        isDaemon = true
+        start()
+    }
+
+    private fun awaitRequests(count: Int) {
+        val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (server.requests.value < count && System.nanoTime() < until) Thread.sleep(10)
+        assertEquals("request $count was never read", count, server.requests.value)
+    }
+
+    private fun awaitLockFree() {
+        val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (graph.apiLongWrites.isLocked && System.nanoTime() < until) Thread.sleep(10)
+        assertFalse("the long-write lock was never released", graph.apiLongWrites.isLocked)
+    }
+
+    private fun restartOver(router: ApiRouter) {
+        server.stop()
+        server = LoopbackApiServer(router, networkPermissionGranted = { true }, port = 0)
+        assertEquals(StartOutcome.Bound, server.start())
+    }
+
+    /**
+     * Row 44 (C33): a materialize parked in its commit, the listener stopped and started, and the same reference
+     * materialized on the new generation. The second waits for the process-wide lock, then R85-6 answers 409
+     * `ATTACHMENT_ALREADY_HELD` naming the first row: one row, and the store's `put` called once.
+     */
+    @Test fun aSecondMaterializeOfOneReferenceAcrossGenerationsWritesOnce() {
+        val rig = MaterializeRig()
+        val reference = rig.reference(manualUri)
+        rig.transport.serve(manualUri, manual)
+        restartOver(router(rig.routes))
+        val firstPort = server.boundPort
+        val first = inBackground { sendMaterialize(firstPort, reference) }
+        assertTrue("the first commit never reached put", rig.gated.parked.await(10, TimeUnit.SECONDS))
+
+        server.stop()
+        assertEquals(StartOutcome.Bound, server.start())
+        val secondPort = server.boundPort
+        var second = ""
+        val retry = inBackground { second = sendMaterialize(secondPort, reference) }
+        awaitRequests(2)
+        Thread.sleep(300) // time for the retry to reach the lock — or, without one, the store
+        rig.gated.release.countDown()
+        retry.join(15_000)
+        first.join(15_000)
+
+        val rows = runBlocking { graph.attachments.forAsset(AssetId(rig.asset)) }
+        assertEquals("two writes landed", 1, rows.size)
+        assertTrue(second.take(400), second.startsWith("HTTP/1.1 409 Conflict\r\n"))
+        assertTrue(second, second.contains("ATTACHMENT_ALREADY_HELD"))
+        assertTrue(second, second.contains("AlreadyHave(attachmentId=${rows.single().id.value})"))
+        assertEquals("the store's put ran more than once", 1, rig.gated.puts.get())
+        assertTrue(manual.contentEquals(rig.store.files.getValue(rows.single().storageLocator)))
+        assertTrue(stagingIsEmpty())
+    }
+
+    /**
+     * Row 44 (C33): an upload on the next generation, arriving while a materialize parked in its commit holds the lock,
+     * waits for it (one generation serves one connection at a time, so only a stop and start lets the two overlap).
+     * The materialize's commit is not cut by the stop; both rows land, each with its own bytes.
+     */
+    @Test fun anUploadWaitsForAMaterializeHoldingTheLock() {
+        val rig = MaterializeRig()
+        val reference = rig.reference(manualUri)
+        rig.transport.serve(manualUri, manual)
+        restartOver(router(rig.routes))
+        val firstPort = server.boundPort
+        val first = inBackground { sendMaterialize(firstPort, reference) }
+        assertTrue("the materialize never reached put", rig.gated.parked.await(10, TimeUnit.SECONDS))
+
+        server.stop()
+        assertEquals(StartOutcome.Bound, server.start())
+        val port = server.boundPort
+        val scan = "Example Water Heater, a scanned label".toByteArray()
+        var uploaded = ""
+        val upload = inBackground { uploaded = sendUpload(port, rig.asset, scan, metadataFor("op-after", scan)) }
+        awaitRequests(2)
+        Thread.sleep(300) // time for the upload to reach the lock — or, without one, the store
+        assertEquals("the upload did not wait for the materialize's lock", 1, rig.gated.puts.get())
+        rig.gated.release.countDown()
+        first.join(15_000)
+        upload.join(15_000)
+
+        assertTrue(uploaded.take(400), uploaded.startsWith("HTTP/1.1 201 Created\r\n"))
+        val rows = runBlocking { graph.attachments.forAsset(AssetId(rig.asset)) }.sortedBy { it.createdAt }
+        assertEquals(2, rows.size)
+        assertEquals(manualUri, rows.first { it.source != null }.source?.uri)
+        assertTrue(manual.contentEquals(rig.store.files.getValue(rows.first { it.source != null }.storageLocator)))
+        assertTrue(scan.contentEquals(rig.store.files.getValue(rows.first { it.source == null }.storageLocator)))
+        assertTrue(stagingIsEmpty())
+    }
+
+    /**
+     * Row 45 (C33): a stale generation's materialize finishing after `start()` leaves the new generation's download
+     * registered — the slot is compare-and-clear — and a later `stop()` still cancels it: staging empty, no row.
+     */
+    @Test fun aStaleGenerationsFinallyLeavesTheNewDownloadRegistered() {
+        val rig = MaterializeRig()
+        val stale = rig.reference(manualUri)
+        rig.transport.serve(manualUri, manual)
+        val slowUri = "https://slow.example.invalid/water-heater/wiring.pdf"
+        val fresh = rig.reference(slowUri)
+        val body = rig.transport.hang(slowUri)
+        val shared = router(rig.routes)
+        restartOver(shared)
+        val firstPort = server.boundPort
+        val first = inBackground { sendMaterialize(firstPort, stale) }
+        assertTrue("the stale commit never reached put", rig.gated.parked.await(10, TimeUnit.SECONDS))
+
+        server.stop()
+        assertEquals(StartOutcome.Bound, server.start())
+        val secondPort = server.boundPort
+        val second = inBackground { sendMaterialize(secondPort, fresh) }
+        awaitRequests(2)
+        Thread.sleep(200) // the new download registers, then waits for the lock
+        rig.gated.release.countDown()
+        first.join(15_000)
+        assertTrue("the new download never started", body.blocked.await(10, TimeUnit.SECONDS))
+        Thread.sleep(300) // the stale generation's `finally` has run by now
+
+        val registered = shared.downloadInFlight()
+        assertTrue("the stale generation unregistered the new download", registered != null && registered.isActive)
+        server.stop()
+        awaitLockFree()
+        second.join(15_000)
+
+        assertTrue("the new download was not cancelled", body.closed)
+        assertTrue(stagingIsEmpty())
+        val rows = runBlocking { graph.attachments.forAsset(AssetId(rig.asset)) }
+        assertEquals("only the stale generation's row", listOf(manualUri), rows.map { it.source?.uri })
+    }
+
+    /**
+     * A reference read whose **first** call parks until the test releases it: the gap between a request's decode and
+     * its register. Every later read passes straight through.
+     */
+    private class GatedReferences(private val inner: ReferenceRepository) : ReferenceRepository by inner {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        private val first = java.util.concurrent.atomic.AtomicBoolean(true)
+
+        override suspend fun get(id: ReferenceId) = inner.get(id).also {
+            if (first.getAndSet(false)) {
+                entered.countDown()
+                release.await(30, TimeUnit.SECONDS)
+            }
+        }
+    }
+
+    /**
+     * B2-pre BC5: a materialize read before `stop()` that registers its download after it starts cancelled — its
+     * `Job` is a child of the stopped generation's — so the transport is never called, nothing is staged or written,
+     * and the connection closes with no answer (no code: `stop()` closed it, and the router sends nothing).
+     */
+    @Test fun aMaterializeThatRegistersAfterStopFetchesNothing() {
+        val gatedReferences = GatedReferences(graph.references)
+        val rig = MaterializeRig(references = gatedReferences)
+        rig.gated.release.countDown()
+        val reference = rig.reference(manualUri)
+        rig.transport.serve(manualUri, manual)
+        restartOver(router(rig.routes))
+        val port = server.boundPort
+        var answer: String? = null
+        val flight = inBackground { answer = sendMaterialize(port, reference) }
+        assertTrue("the request never reached its reference read", gatedReferences.entered.await(10, TimeUnit.SECONDS))
+
+        server.stop()
+        gatedReferences.release.countDown()
+        flight.join(15_000)
+        Thread.sleep(500) // time for the handler to register and, were it live, to fetch
+        awaitLockFree()
+
+        assertEquals("a download that registered after stop() reached the transport", emptyList<String>(), rig.transport.requests)
+        assertTrue(stagingIsEmpty())
+        assertTrue(runBlocking { graph.attachments.forAsset(AssetId(rig.asset)) }.isEmpty())
+        assertEquals("", answer)
+    }
+
+    /**
+     * Fix round 1 (review m1): a stale generation's request that reaches its register after `stop()` — while the next
+     * generation's download is live — registers nothing, so it neither overwrites the live download in the slot nor
+     * clears it on the way out. The live one is still what the slot tracks, and `stop()` still ends it.
+     */
+    @Test fun aStaleRegistrantAfterStopLeavesTheLiveDownloadRegistered() {
+        val gatedReferences = GatedReferences(graph.references)
+        val rig = MaterializeRig(references = gatedReferences)
+        val stale = rig.reference(manualUri)
+        rig.transport.serve(manualUri, manual)
+        val slowUri = "https://slow.example.invalid/water-heater/wiring.pdf"
+        val live = rig.reference(slowUri)
+        val body = rig.transport.hang(slowUri)
+        val shared = router(rig.routes)
+        restartOver(shared)
+        val firstPort = server.boundPort
+        val first = inBackground { sendMaterialize(firstPort, stale) }
+        assertTrue("the stale request never reached its reference read", gatedReferences.entered.await(10, TimeUnit.SECONDS))
+
+        server.stop()
+        assertEquals(StartOutcome.Bound, server.start())
+        val secondPort = server.boundPort
+        val second = inBackground { sendMaterialize(secondPort, live) }
+        assertTrue("the live download never started", body.blocked.await(10, TimeUnit.SECONDS))
+        val registered = shared.downloadInFlight()
+        assertTrue("the live download was not registered", registered != null && registered.isActive)
+
+        gatedReferences.release.countDown()
+        first.join(15_000)
+        Thread.sleep(300) // the stale request registers (or not) and unwinds
+
+        assertTrue("the stale registrant displaced the live download", shared.downloadInFlight() === registered)
+        assertEquals("the stale request fetched", listOf(slowUri), rig.transport.requests)
+        server.stop()
+        awaitLockFree()
+        second.join(15_000)
+        assertTrue("the live download was not cancelled", body.closed)
+        assertTrue(stagingIsEmpty())
+        assertTrue(runBlocking { graph.attachments.forAsset(AssetId(rig.asset)) }.isEmpty())
     }
 }

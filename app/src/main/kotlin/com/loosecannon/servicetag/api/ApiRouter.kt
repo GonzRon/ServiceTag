@@ -1,9 +1,16 @@
 package com.loosecannon.servicetag.api
 
+import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 
-/** Every request body's ceiling but two: 64 KiB, which is a large asset form and a huge event. */
+/**
+ * Every request body's ceiling but three (the import pair's and the upload's): 64 KiB, which is a large asset form
+ * and a huge event. #92's materialize takes this one too: its body is four review fields and never a file.
+ */
 internal const val MAX_BODY_BYTES: Int = 64 * 1024
 
 /** The two endpoints that take an archive instead of a form. */
@@ -14,13 +21,21 @@ internal const val IMPORT_MERGE_APPLY_PATH: String = "/v1/import-merge/apply"
 internal const val MAX_IMPORT_BYTES: Int = 4 * 1024 * 1024
 
 /**
+ * #92 (C9): the attachment upload's ceiling, the attachment cap itself (256 MiB, which fits the parser's `Int`), for
+ * `POST /v1/assets/{id}/attachments` alone. That body is never held in memory: it streams into staging.
+ */
+internal const val MAX_UPLOAD_BYTES: Int = MAX_ATTACHMENT_BYTES.toInt()
+
+/**
  * Authenticates, matches, and turns whatever comes back — an answer or a refusal — into bytes.
  *
  * **The token is checked first, before anything else at all.** A caller without it cannot learn
  * whether a path exists, whether its body parsed, or how long the answer would have been: the reply
- * is 401 with a zero-byte body, every time, for every path. The body has already been read off the
- * socket by then, which is why the ceilings live in [parseRequest] below this class and apply to an
- * unauthenticated caller too.
+ * is 401 with a zero-byte body, every time, for every path. Every body but one has already been read
+ * off the socket by then, which is why the ceilings live in [parseRequest] below this class and apply
+ * to an unauthenticated caller too. The one is #92's attachment upload: its body is still on the
+ * socket ([ApiRequest.stream]), so a 401 never reads, stages, hashes or decodes a byte of it (C10),
+ * and the server's bounded drain is all an unauthenticated body ever gets.
  *
  * **[handle] is blocking, and that is its contract.** Its caller is [LoopbackApiServer]'s one worker
  * thread, which has nothing else to do until there are bytes to write; everything below it is
@@ -32,20 +47,35 @@ internal class ApiRouter(
     private val handlers: ApiHandlers,
     private val token: String,
 ) {
-    /** Asked by the parser with the path, before a body byte is read. */
-    fun bodyCapFor(path: String): Int =
-        if (path == IMPORT_MERGE_PLAN_PATH || path == IMPORT_MERGE_APPLY_PATH) {
-            MAX_IMPORT_BYTES
-        } else {
-            MAX_BODY_BYTES
-        }
+    /** #92 (C16, C33): the one download in flight, tracked for observability; see [DownloadInFlight]. */
+    private val download = DownloadInFlight()
 
-    fun handle(request: ApiRequest): ApiResponse {
+    /**
+     * Asked by the parser with the method and the path, before a body byte is read. The upload tier is `POST`'s
+     * alone (C9): any other method on that shape keeps 64 KiB and is read like any other request.
+     */
+    fun bodyCapFor(method: String, path: String): Int = when {
+        isAttachmentUpload(method, path) -> MAX_UPLOAD_BYTES
+        path == IMPORT_MERGE_PLAN_PATH || path == IMPORT_MERGE_APPLY_PATH -> MAX_IMPORT_BYTES
+        else -> MAX_BODY_BYTES
+    }
+
+    /**
+     * [generation] is the listener generation that read [request] (#92, B2-pre BC5): the materialize download is its
+     * child, so a request read before a `stop()` that reaches its download after it starts cancelled. It is only ever
+     * a download's parent — `runBlocking` itself stays uncancellable, so every other route runs to completion as it
+     * always has. Null for an in-process caller, which no listener stops.
+     */
+    fun handle(request: ApiRequest, generation: Job? = null): ApiResponse {
         if (!tokenMatches(token, request.bearerToken())) {
             return ApiResponse.empty(401, "Unauthorized")
         }
         return try {
-            runBlocking(Dispatchers.IO) { route(request) }
+            runBlocking(Dispatchers.IO) { route(request, generation) }
+        } catch (e: RequestStreamFailed) {
+            throw e // #92 C12: the peer's stream died; there is no one to answer
+        } catch (e: CancellationException) {
+            throw e // #92 C16: `stop()` cancelled a download; the connection is closed, so no answer is sent
         } catch (e: ApiFailure) {
             errorResponse(e.status, e.reason, e.code, e.message ?: e.code, e.problems, e.field)
         } catch (e: Exception) {
@@ -54,7 +84,18 @@ internal class ApiRouter(
     }
 
     /**
-     * The whole surface. Sixty path shapes over seventy-two method-and-path rows; anything
+     * #92 (C16): what the listener's `stop()` calls — cancels the registered download's `Job`, and nothing else. A
+     * second path only: `stop()` cancelling the generation's `Job` is what stops every download of that generation
+     * (BC5). It never waits: a cancelled download unwinds on its own worker, and a commit that began is not reached
+     * (R87-4).
+     */
+    fun cancelDownload() = download.cancel()
+
+    /** Row 45's window onto the slot: the download registered now, or null. */
+    internal fun downloadInFlight(): Job? = download.current()
+
+    /**
+     * The whole surface. Sixty-six path shapes over eighty method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -69,8 +110,9 @@ internal class ApiRouter(
      * because nothing below routes to it (invariants 43, 76).
      *
      * 1.3 added three, and the same holds: a reference is listed, created and amended, and
-     * **nothing deletes one** — the API adds and amends, the phone removes (spec §6). No row here
-     * accepts or returns a file either, at any version, so there is no share-by-API (I-3).
+     * **nothing deletes one** — the API adds and amends, the phone removes (spec §6). A reference has
+     * no bytes (I-3): none of those rows accepts or returns a file. Since #92 one row accepts a file —
+     * an asset attachment's upload, below — and still no row returns one.
      *
      * 1.4 added fourteen rows over eleven new shapes (spec §9.1): seven `/v1/assets/{id}/…`
      * sub-resources (the season and its activations, the season mode, the maintenance break, the
@@ -102,9 +144,26 @@ internal class ApiRouter(
      * #86 added one row over one shape: the twenty-first `/v1/assets/{id}/…` sub-resource, an asset's succession,
      * read only. **No route records a succession** (R86-18): only the phone's Replace asset records one, and the
      * import-merge apply only inserts an archive's rows, so no verb here makes, amends or removes one, and
-     * `AssetDto` carries no succession field.
+     * `AssetDto` carries no succession field — until #92: `POST /v1/assets/{id}/replace` records one over the same
+     * use case (R92-1 supersedes R86-18); still no verb amends or removes one.
+     *
+     * #92 (B1a) added three rows over two shapes: the twenty-second `/v1/assets/{id}/…` sub-resource (an asset's own
+     * attachments and the folder's state, read only), and `/v1/attachments/{id}`, read and amended through
+     * `UpdateAttachment` alone. **Nothing deletes an attachment here** and no row reads or writes its bytes.
+     *
+     * #92 (B1b) added one row on the twenty-second shape: `POST /v1/assets/{id}/attachments`, one file streamed into
+     * staging and committed through `AddAttachment` alone, idempotent by the caller's operation key. No row reads
+     * an attachment's bytes back out.
+     *
+     * #92 (B2) added one row over one shape: `POST /v1/references/{id}/materialize`, save as document for an existing
+     * web reference **by id** — never a URL from the wire (R92-3) — through `MaterializeReference.prepare` and
+     * `commit` alone; a 405 for any other verb. The reference itself is never written.
+     *
+     * #92 (B3) added three rows over three shapes: the twenty-third to twenty-fifth `/v1/assets/{id}/…`
+     * sub-resources, `replace-offer` (read), `replace-plan` (writes nothing) and `replace`, #86's one atomic write
+     * behind the plan's digest (R92-1 supersedes R86-18).
      */
-    private suspend fun route(request: ApiRequest): ApiResponse {
+    private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
         // once, in `parseRequest`, before `bodyCapFor` is ever consulted. Trimming a trailing slash
         // here too would let a non-canonical spelling reach a handler under the wrong cap — the
@@ -165,6 +224,15 @@ internal class ApiRouter(
                 "loans" to "GET" -> handlers.loans.listForAsset(rest[1])
                 // #86 — the twenty-first: which asset this one replaces and which replaced it, read only.
                 "succession" to "GET" -> handlers.getSuccession(rest[1])
+                // #92 — the twenty-second: the asset's own attachments and the folder's state, read only.
+                "attachments" to "GET" -> handlers.attachmentRoutes.listForAsset(rest[1])
+                // #92 (B1b) — the one row that accepts a file: streamed, authenticated before a byte is read.
+                "attachments" to "POST" -> handlers.attachmentRoutes.upload(rest[1], request)
+                // #92 (B3) — the twenty-third to twenty-fifth, the replace triad (R92-1 supersedes R86-18): the offer
+                // and the plan write nothing; the apply is #86's one atomic write, behind the plan's digest.
+                "replace-offer" to "GET" -> handlers.replace.offer(rest[1])
+                "replace-plan" to "POST" -> handlers.replace.plan(rest[1], request)
+                "replace" to "POST" -> handlers.replace.replace(rest[1], request)
                 else -> throw ApiFailure.notFound(request.path)
             }
 
@@ -236,12 +304,20 @@ internal class ApiRouter(
                 if (method == "GET") handlers.listTagBindings() else notAllowed(request)
 
             // 1.3 — two path shapes, both 405 for a verb they do not take. There is no `DELETE`
-            // on either, and `/v1/references/{id}/anything` is not a shape at all.
+            // on either, and `/v1/references/{id}/anything` but #92's `materialize` is not a shape at all.
             rest == listOf("references") ->
                 if (method == "POST") handlers.references.create(request) else notAllowed(request)
 
             rest.size == 2 && rest[0] == "references" ->
                 if (method == "PATCH") handlers.references.update(rest[1], request) else notAllowed(request)
+
+            // #92 (B2) — save as document: the reference by id, the four review fields, one synchronous answer.
+            rest.size == 3 && rest[0] == "references" && rest[2] == "materialize" ->
+                if (method == "POST") {
+                    handlers.attachmentRoutes.materialize(rest[1], request, generation, download)
+                } else {
+                    notAllowed(request)
+                }
 
             // 1.4 — a health subject is created, read, replaced and archived, and never removed.
             rest == listOf("health-subjects") ->
@@ -286,6 +362,14 @@ internal class ApiRouter(
             rest.size == 3 && rest[0] == "loans" && rest[2] == "return" ->
                 if (method == "POST") handlers.loans.markReturned(rest[1], request) else notAllowed(request)
 
+            // #92 — one attachment, read and amended; a 405 for any other verb. Nothing deletes one here, and
+            // `/v1/attachments` and `/v1/attachments/{id}/…` are not shapes at all.
+            rest.size == 2 && rest[0] == "attachments" -> when (method) {
+                "GET" -> handlers.attachmentRoutes.get(rest[1])
+                "PATCH" -> handlers.attachmentRoutes.update(rest[1], request)
+                else -> notAllowed(request)
+            }
+
             rest == listOf("attention") ->
                 if (method == "GET") handlers.seasonHealth.listAttention() else notAllowed(request)
 
@@ -310,4 +394,35 @@ internal class ApiRouter(
 
     private fun notAllowed(request: ApiRequest): Nothing =
         throw ApiFailure.methodNotAllowed(request.method, request.path)
+}
+
+/**
+ * #92 (C16, C33): the one materialize download in flight, across listener generations. The router owns it and lives
+ * for the Developer API visit; a handler [register]s its download's `Job` before it waits for `apiLongWrites`, and
+ * [clear]s it in `finally` **only if the slot still holds that `Job`** (compare-and-clear, S1's rule).
+ *
+ * **Cancellation is carried by the per-generation `Job`, not by this slot** (B2-pre BC5): every download is a child of
+ * the listener generation that read its request, and `stop()` cancels that generation, so a download is stopped
+ * whether or not it is here. The slot only tracks the current download, for observability and tests, and `stop()`'s
+ * [cancel] of it is a redundant second path. So that it tracks the live download, a `Job` already cancelled — a
+ * stale generation's request that reaches its register after `stop()` — registers nothing: it never overwrites the
+ * live one, and its compare-and-clear then finds nothing of its own to clear (review m1).
+ */
+internal class DownloadInFlight {
+    private val slot = AtomicReference<Job?>(null)
+
+    fun register(job: Job) {
+        if (!job.isCancelled) slot.set(job)
+    }
+
+    fun clear(job: Job) {
+        slot.compareAndSet(job, null)
+    }
+
+    /** Cancels only what the slot holds, and never waits. */
+    fun cancel() {
+        slot.get()?.cancel()
+    }
+
+    fun current(): Job? = slot.get()
 }

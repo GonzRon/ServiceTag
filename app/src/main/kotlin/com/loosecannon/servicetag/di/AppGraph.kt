@@ -183,6 +183,7 @@ import com.loosecannon.servicetag.data.room.RoomServiceCaseRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.prefs.AppPrefs
+import com.loosecannon.servicetag.prefs.InstallationIdentity
 import com.loosecannon.servicetag.prefs.SharedPrefsStore
 import com.loosecannon.servicetag.reminders.AndroidDigestAlarm
 import com.loosecannon.servicetag.reminders.AndroidNotificationPermission
@@ -238,6 +239,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.sync.Mutex
 
 /** Hand-rolled composition root. No DI framework in Phase 1 (D3 §5). */
 class AppGraph(private val context: Context) {
@@ -374,6 +376,13 @@ class AppGraph(private val context: Context) {
     /** #72 (C9): the open loans' due-back dates every provider is asked to hold (#77: none of a held asset). */
     val buildLoanSubjects: BuildLoanSubjects = BuildLoanSubjects(loans, transferRecords)
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
+
+    /**
+     * #92 (C5a, R92-8) — this installation's opaque id, in one file under the app's no-backup directory: created once
+     * per installation, then loaded and cached once per process on its first read (the listener's, never here). Not
+     * in the preferences above, which Auto Backup copies, and never in a backup, an export, a merge or a pack.
+     */
+    val installationIdentity: InstallationIdentity = InstallationIdentity(context.applicationContext.noBackupFilesDir)
 
     // #24 — the platform-ownership seams B06, B07, B10 and B14 compile against (master plan §12).
     val platformState: PlatformState = AndroidPlatformState(context)
@@ -556,6 +565,13 @@ class AppGraph(private val context: Context) {
     }
     val materializeStaging: CacheStagingArea =
         CacheStagingArea(File(context.applicationContext.cacheDir, CacheStagingArea.DIRECTORY), ids)
+
+    /**
+     * #92 (C33) — the one process-wide lock for the Developer API's long writes (an upload's steps 2–5). Here, not in
+     * the per-visit router or server: `stop()` never joins a listener worker and `start()` runs a new generation beside
+     * the old one, so only a lock both generations share keeps a retried write from racing the first.
+     */
+    val apiLongWrites: Mutex = Mutex()
     /** C9's hop rule: the use case asks it of every hop; the reference rows ask its static half (C20). */
     val hops: HopPolicy = HopPolicy(InetHostResolver(networkPermissionGranted))
     val materializeReference: MaterializeReference = MaterializeReference(

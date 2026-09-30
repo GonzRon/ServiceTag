@@ -49,6 +49,13 @@ internal data class StatusResponse(
     val schemaVersion: Int,
     val backupFormatVersion: Int,
     /**
+     * #92 (C5a, R92-8), additive: this installation's opaque random id — created once per installation, then loaded
+     * and cached once per process; stable across restarts and upgrades, new only after a data reset or a reinstall.
+     * Non-secret and non-canonical: not a credential, not a hardware or Android identifier, and never in a backup,
+     * an export, a merge or a Transfer Pack. The upload's id derivation (C13) reads it.
+     */
+    val installationId: String,
+    /**
      * One key per table — assets, **groups**, definitions, profiles, **schedules**, **closures**,
      * links, tags, events, attachments, **references**, **seasonActivations**, **assetConditions**,
      * **healthSubjects**, **assetCategories**, **serviceCases**, **serviceCaseEntries**, **assetLoans**,

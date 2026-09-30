@@ -6,8 +6,9 @@ replacedOn, createdAt}` or null. The route is not on a phone below schema 15, so
 by name, with nothing sent beyond the pairing's one `/v1/status` read; the global write minimum stays 8 and
 every other per-tool minimum is untouched.
 
-**It is the whole succession surface**: only the phone's Replace asset records a succession (`import_merge`
-only inserts an archive's rows), so no tool replaces an asset or makes, edits or removes one (R86-18).
+**It is the whole succession read**: a succession is recorded only by a replacement — the phone's Replace asset
+or, since #92, `replace_asset` over the same use case (R92-1 supersedes R86-18) — and `import_merge` only inserts
+an archive's rows, so no tool edits or removes one, and none but `replace_asset` records one.
 """
 
 from __future__ import annotations
@@ -81,7 +82,11 @@ def test_a_status_without_a_schema_version_refuses_the_succession_tool_too(paire
 
 
 def test_the_succession_surface_is_one_read() -> None:
-    """R86-18: one tool, taking only the asset — no replace, no write, no second tool."""
-    named = {name for name in server_module.TOOL_NAMES if "succession" in name or "replace" in name}
+    """The succession read is still one tool, taking only the asset, and no tool edits or removes a succession.
+    Since #92 (R92-1 supersedes R86-18) the replace write is a separate tool, `replace_asset`, beside its offer
+    read — the phone's own Replace use case, which records the succession in its one write."""
+    named = {name for name in server_module.TOOL_NAMES if "succession" in name}
     assert named == {"get_asset_succession"}
     assert list(inspect.signature(server_module.get_asset_succession).parameters) == ["asset_id"]
+    replacing = {name for name in server_module.TOOL_NAMES if "replace" in name}
+    assert replacing == {"get_replace_offer", "replace_asset"}

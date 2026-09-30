@@ -569,6 +569,48 @@ class AttachmentUseCasesTest {
         assertTrue(attachments.rows.isEmpty())
         assertEquals(0, uow.commits)
     }
+
+    // --- #92 (C13, row 17): the preset id, the API upload's derived one ---------------------------------------------
+
+    private val preset = AttachmentId("d1c2b3a4-5e6f-8a7b-9c8d-0e1f2a3b4c5d")
+
+    @Test fun aPresetIdIsTheRowsAndItsLocators() = runTest {
+        val owner = AttachmentOwner.OfAsset(asset())
+        val row = (add.run(owner, cmd(), source(), presetId = preset) as AttachmentResult.Ok).value
+        assertEquals(preset, row.id)
+        assertEquals("assets/a1/${preset.value}.pdf", row.storageLocator)
+        assertEquals(row, attachments.rows[preset.value])
+        assertTrue(store.exists(row.storageLocator))
+        assertEquals(0, seq)   // nothing minted
+        assertEquals(1, uow.commits)
+    }
+
+    @Test fun noPresetIdMintsAsShipped() = runTest {
+        val owner = AttachmentOwner.OfAsset(asset())
+        val row = (add.run(owner, cmd(), source()) as AttachmentResult.Ok).value
+        assertEquals(AttachmentId("att-1"), row.id)
+        assertEquals("assets/a1/att-1.pdf", row.storageLocator)
+        assertEquals(1, seq)
+    }
+
+    @Test fun aPresetIdOfAnExistingRowThrowsBeforePutAndTouchesNothing() = runTest {
+        val owner = AttachmentOwner.OfAsset(asset())
+        val spy = RiggedStore()
+        val adder = AddAttachment(attachments, assets, events, OneStore(spy), uow, ids, Clock { now })
+        val existing = (adder.run(owner, cmd(), source(), presetId = preset) as AttachmentResult.Ok).value
+        val bytes = spy.inner.files.getValue(existing.storageLocator).copyOf()
+        val commits = uow.commits
+        val other = "a different file".toByteArray()
+
+        assertFailsWith<IllegalArgumentException> {
+            adder.run(owner, cmd(name = "Other.pdf"), ByteSource { other.inputStream() }, presetId = preset)
+        }
+
+        assertEquals(1, spy.puts)   // the first add's, and no other
+        assertEquals(existing, attachments.rows[preset.value])
+        assertTrue(bytes.contentEquals(spy.inner.files.getValue(existing.storageLocator)))
+        assertEquals(commits, uow.commits)
+    }
 }
 
 /**

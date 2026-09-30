@@ -89,6 +89,13 @@ EXPECTED_TOOLS = (
     "update_loan",
     "return_loan",
     "get_asset_succession",
+    "list_attachments",
+    "get_attachment",
+    "update_attachment",
+    "add_attachment",
+    "materialize_reference",
+    "get_replace_offer",
+    "replace_asset",
 )
 
 
@@ -102,16 +109,17 @@ def test_every_tool_the_design_names_is_registered() -> None:
         assert callable(getattr(server_module, name)), f"{name} is missing"
 
 
-def test_tool_names_are_sixty_nine() -> None:
+def test_tool_names_are_seventy_six() -> None:
     """Spec §9.4: fourteen new tools took the 1.3 server's forty-one to fifty-five, 1.4.1's provider
     repair (#80) took it to fifty-six, #79's two warranty tools to fifty-eight, its five service-case
-    tools to sixty-three, #72's five loan tools to sixty-eight, and #86's succession read takes it to
-    sixty-nine; `TOOL_NAMES`, the registered tools and the guard's `expected_count` all agree."""
-    assert len(EXPECTED_TOOLS) == 69
-    assert len(server_module.TOOL_NAMES) == 69
+    tools to sixty-three, #72's five loan tools to sixty-eight, #86's succession read to sixty-nine, and
+    #92's five attachment tools to seventy-four, and its two replace tools take it to seventy-six; `TOOL_NAMES`,
+    the registered tools and the guard's `expected_count` all agree."""
+    assert len(EXPECTED_TOOLS) == 76
+    assert len(server_module.TOOL_NAMES) == 76
     registered = {tool.name for tool in server_module.mcp._tool_manager.list_tools()}
     assert registered == set(server_module.TOOL_NAMES)
-    assert len(registered) == 69
+    assert len(registered) == 76
 
 
 def test_pair_stores_the_code_upper_cased(api) -> None:

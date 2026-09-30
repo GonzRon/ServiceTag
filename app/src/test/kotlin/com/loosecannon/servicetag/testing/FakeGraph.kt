@@ -133,6 +133,7 @@ import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
+import com.loosecannon.servicetag.prefs.InstallationIdentity
 import com.loosecannon.servicetag.ui.condition.EventOffers
 import com.loosecannon.servicetag.ui.condition.ImpairmentOffers
 import com.loosecannon.servicetag.ui.condition.OperationalOffers
@@ -164,6 +165,7 @@ import java.time.ZoneOffset
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
 
 /**
  * `AppGraph` without a `Context`: the same members, built on `inMemoryDb()` and the real Room
@@ -192,7 +194,16 @@ class FakeGraph(
     private var seq = 0
     val ids: IdGenerator = IdGenerator { "00000000-0000-4000-8000-%012d".format(++seq) }
 
-    val uow: UnitOfWork = RoomUnitOfWork(db)
+    private val countingUow = CountingUnitOfWork(RoomUnitOfWork(db))
+    val uow: UnitOfWork = countingUow
+
+    /** #92: the write transactions committed through [uow], so a route test can say "wrote nothing" as a number. */
+    val commits: Int get() = countingUow.commits
+
+    /** #92 (C5a): mirroring `AppGraph`'s field by name, over a fresh temporary directory in place of the no-backup one. */
+    val installationIdentity: InstallationIdentity =
+        InstallationIdentity(kotlin.io.path.createTempDirectory("installation").toFile())
+
     val links: LinkRepository = RoomLinkRepository(db.externalLinkDao())
     /** #77's transfer records, mirroring `AppGraph`'s field by name; before the ports, which its guard reads. */
     val transferRecords: TransferRecordRepository = RoomTransferRecordRepository(db.transferRecordDao())
@@ -423,8 +434,12 @@ class FakeGraph(
      */
     val documentTransport: FakeDocumentTransport = FakeDocumentTransport()
     var networkGranted: Boolean = true
-    val materializeStaging: CacheStagingArea =
-        CacheStagingArea(kotlin.io.path.createTempDirectory("materialize").toFile(), ids)
+    /** #92: the staging directory itself, so a route test can say "staging is empty" as a listing. */
+    val materializeStagingDir: File = kotlin.io.path.createTempDirectory("materialize").toFile()
+    val materializeStaging: CacheStagingArea = CacheStagingArea(materializeStagingDir, ids)
+
+    /** #92 (C33): mirroring `AppGraph`'s process-wide lock for the API's long writes, one per graph. */
+    val apiLongWrites: Mutex = Mutex()
     val materializeReference: MaterializeReference =
         HopPolicy(HostResolver { listOf(byteArrayOf(203.toByte(), 0, 113, 10)) }).let { hops ->
             MaterializeReference(
@@ -599,4 +614,13 @@ private class InMemoryKeyValueStore : KeyValueStore {
     override fun putLong(key: String, value: Long) { longs[key] = value }
     override fun getString(key: String): String? = strings[key]
     override fun putString(key: String, value: String) { strings[key] = value }
+}
+
+/** #92: [delegate], counting each write transaction that committed. Reads are not counted. */
+private class CountingUnitOfWork(private val delegate: UnitOfWork) : UnitOfWork {
+    private val committed = java.util.concurrent.atomic.AtomicInteger()
+    val commits: Int get() = committed.get()
+
+    override suspend fun <T> write(block: suspend () -> T): T = delegate.write(block).also { committed.incrementAndGet() }
+    override suspend fun <T> read(block: suspend () -> T): T = delegate.read(block)
 }

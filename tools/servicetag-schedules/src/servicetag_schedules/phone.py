@@ -14,8 +14,11 @@ entry key".
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
+
+from . import draft
+from . import manifest as manifestmod
 
 
 class ToolClient(Protocol):
@@ -29,7 +32,11 @@ class PhoneError(RuntimeError):
     """An MCP tool call answered `is_error` — the phone's own message, prefixed with the tool
     name and, when the call was made on a manifest entry's behalf, that entry's kind and key
     (`call_tool`'s `entry` argument), so a caller never has to guess which call, or which entry,
-    failed."""
+    failed. `tool_text` is the tool's own message alone, for a caller that tells refusals apart."""
+
+    def __init__(self, message: str, tool_text: str = "") -> None:
+        super().__init__(message)
+        self.tool_text = tool_text
 
 
 def _is_error(result: Any) -> bool:
@@ -60,7 +67,7 @@ async def call_tool(
     result = await client.call_tool(name, arguments)
     if _is_error(result):
         message = f"{name}: {_text(result)}"
-        raise PhoneError(f"{entry}: {message}" if entry else message)
+        raise PhoneError(f"{entry}: {message}" if entry else message, _text(result))
     return _payload(result)
 
 
@@ -120,6 +127,27 @@ class Schedule:
 
 
 @dataclass(frozen=True)
+class Namesake:
+    """#92 C32: one asset carrying a replacement's predecessor name, read through its succession.
+    `is_successor` — its succession has `replaces`, whose predecessor is `predecessor_id`; `successor` — the
+    asset row that replaced it, or None. The offer and the phone's plan (`plan_only`) are read only for the lone
+    candidate: the one namesake that is not a successor, when it has no successor itself."""
+
+    asset_id: str
+    is_successor: bool
+    successor: dict[str, Any] | None
+    offer: dict[str, Any] | None = None
+    phone_plan: dict[str, Any] | None = None
+    predecessor_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ReplacementRead:
+    key: str
+    namesakes: tuple[Namesake, ...]
+
+
+@dataclass(frozen=True)
 class Inventory:
     """A plain snapshot: assets (id, name, archived/retired, parent), profiles by asset id, groups
     (id, name, archived, open member asset ids), schedules (id, title, target, rule fields, service
@@ -129,6 +157,7 @@ class Inventory:
     profiles: tuple[Profile, ...] = ()
     groups: tuple[Group, ...] = ()
     schedules: tuple[Schedule, ...] = ()
+    replacements: tuple[ReplacementRead, ...] = ()
 
 
 def _asset_from(row: dict[str, Any], parent_id: str | None) -> Asset:
@@ -197,10 +226,44 @@ async def _require_schema_8(client: ToolClient) -> None:
         )
 
 
-async def snapshot(client: ToolClient) -> Inventory:
+async def _read_replacement(
+    client: ToolClient, replacement: manifestmod.Replacement, assets: list[Asset],
+) -> ReplacementRead:
+    """Every asset carrying the predecessor's name, archived and retired included (a replaced predecessor is
+    retired); each one's succession, and the asset that replaced it; then, for the lone candidate, its offer and
+    the phone's plan for the manifest's draft — which writes nothing."""
+    namesakes: list[Namesake] = []
+    for asset in (a for a in assets if a.name == replacement.predecessor):
+        succession = await call_tool(client, "get_asset_succession", {"asset_id": asset.id})
+        replaced_by = succession.get("replacedBy")
+        successor = None
+        if replaced_by is not None:
+            answer = await call_tool(client, "get_asset", {"asset_id": replaced_by["successorAssetId"]})
+            successor = answer["asset"]
+        replaces = succession.get("replaces")
+        namesakes.append(Namesake(asset.id, replaces is not None, successor,
+                                  predecessor_id=replaces["predecessorAssetId"] if replaces else None))
+    originals = [n for n in namesakes if not n.is_successor]
+    if len(originals) == 1 and originals[0].successor is None:
+        lone = originals[0]
+        offer = await call_tool(client, "get_replace_offer", {"asset_id": lone.asset_id})
+        arguments, _ = draft.arguments(replacement, offer)
+        phone_plan = None
+        if arguments is not None:
+            phone_plan = await call_tool(
+                client, "replace_asset", {"asset_id": lone.asset_id, **arguments, "plan_only": True},
+            )
+        namesakes[namesakes.index(lone)] = replace(lone, offer=offer, phone_plan=phone_plan)
+    return ReplacementRead(replacement.key, tuple(namesakes))
+
+
+async def snapshot(
+    client: ToolClient, replacements: tuple[manifestmod.Replacement, ...] = (),
+) -> Inventory:
     """Fill an `Inventory` from the phone through `client`'s MCP tools: `status` first, then
     `list_assets`, `list_profiles` (one call per asset), `list_groups`, `list_schedules`. Never
-    `pair` — a caller pairs once, before taking any snapshot.
+    `pair` — a caller pairs once, before taking any snapshot. #92: for each of `replacements` (none by default,
+    and then no replace tool is called), `_read_replacement`'s reads.
 
     A phone whose `schemaVersion` is missing, not an integer, or below `REQUIRED_SCHEMA_VERSION` is a
     `PhoneError` before anything else is read. `apply` snapshots too, so both `plan` and `apply`
@@ -222,4 +285,5 @@ async def snapshot(client: ToolClient) -> Inventory:
     schedules_payload = await call_tool(client, "list_schedules", {})
     schedules = tuple(_schedule_from(row) for row in schedules_payload.get("schedules", []))
 
-    return Inventory(tuple(assets), tuple(profiles), groups, schedules)
+    reads = tuple([await _read_replacement(client, r, assets) for r in replacements])
+    return Inventory(tuple(assets), tuple(profiles), groups, schedules, reads)

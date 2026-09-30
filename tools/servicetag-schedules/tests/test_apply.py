@@ -22,8 +22,9 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def mk_manifest(groups=(), schedules=()) -> M.Manifest:
-    return M.Manifest(manifest_version=1, as_of="2026-09-23", groups=tuple(groups), schedules=tuple(schedules))
+def mk_manifest(groups=(), schedules=(), replacements=()) -> M.Manifest:
+    return M.Manifest(manifest_version=1, as_of="2026-09-23", groups=tuple(groups), schedules=tuple(schedules),
+                      replacements=tuple(replacements))
 
 
 def mk_group(key: str, name: str, members: tuple[str, ...], description: str | None = None) -> M.Group:
@@ -348,3 +349,142 @@ def test_the_estate_fixture_plans_applies_and_reapplies_clean(fake_client) -> No
     tool_names = {name for name, _ in fake_client.calls}
     assert tool_names <= allowed_tools
     assert not any(name.startswith(("update_", "archive_", "delete_")) for name in tool_names)
+
+
+# ---- #92 C32: replacements through the fake's replace tools (row 42) -------------------------------
+
+
+async def _replan(manifest: M.Manifest, client) -> PL.Plan:
+    return PL.plan(manifest, await P.snapshot(client, manifest.replacements))
+
+
+def _pump_manifest(**fields) -> M.Manifest:
+    successor = fields.pop("successor", (("name", "Example pump"), ("model", "B-2")))
+    return mk_manifest(replacements=[M.Replacement(
+        key="r1", predecessor="Example pump", successor=successor, retired_on="2026-09-30", **fields,
+    )])
+
+
+def _applies(client) -> list[dict]:
+    return [args for name, args in client.calls if name == "replace_asset" and args.get("plan_only") is False]
+
+
+def _seed_pump(client) -> tuple[str, str, str]:
+    pump = client.add_asset(name="Example pump")
+    flush = client.add_schedule(title="Flush", target_asset_id=pump)
+    front = client.add_tag(asset_id=pump, label="front plate")
+    client.add_tag(asset_id=pump, label="back plate")
+    return pump, flush, front
+
+
+def test_apply_refuses_an_unclean_replacement_plan_and_writes_nothing(fake_client) -> None:
+    pump, _, _ = _seed_pump(fake_client)
+    fake_client.replace_problems[pump] = [{"code": "REPLACE_BAD_DATE", "field": "scheduleStartOn", "problem": "x"}]
+    manifest = _pump_manifest(schedules=("Flush",))
+    result = _run(_replan(manifest, fake_client))
+    assert [e.decision for e in result.entries] == ["ERROR"]
+    with pytest.raises(A.ApplyRefused):
+        _run(A.apply(manifest, result, fake_client))
+    assert _applies(fake_client) == []
+
+
+def test_apply_replaces_with_ids_then_replans_identical_and_a_rerun_writes_nothing(fake_client) -> None:
+    pump, flush, front = _seed_pump(fake_client)
+    manifest = _pump_manifest(schedules=("Flush",), schedule_start_on="2026-10-01", move_tags=("front plate",))
+    result = _run(_replan(manifest, fake_client))
+    assert [e.decision for e in result.entries] == ["CREATE"]
+
+    outcome = _run(A.apply(manifest, result, fake_client))
+
+    [sent] = _applies(fake_client)
+    assert (sent["asset_id"], sent["schedule_ids"], sent["moved_tag_ids"]) == (pump, [flush], [front])
+    assert (sent["name"], sent["model"], sent["schedule_start_on"], sent["retired_on"]) == (
+        "Example pump", "B-2", "2026-10-01", "2026-09-30")
+    assert outcome.replacements_created == 1 and outcome.notes == ()
+    assert [(e.kind, e.decision) for e in outcome.reapply_plan.entries] == [("replacement", "IDENTICAL")]
+
+    again = _run(A.apply(manifest, _run(_replan(manifest, fake_client)), fake_client))
+    assert again.replacements_created == 0 and len(_applies(fake_client)) == 1
+
+
+def test_schedule_start_on_is_never_defaulted(fake_client) -> None:
+    _seed_pump(fake_client)
+    manifest = _pump_manifest()
+    _run(A.apply(manifest, _run(_replan(manifest, fake_client)), fake_client))
+    [sent] = _applies(fake_client)
+    assert "schedule_start_on" not in sent and "manual_phase" not in sent
+
+
+def test_apply_re_snapshots_and_refuses_when_the_candidate_became_held(fake_client) -> None:
+    """Row 42's wrong: an apply that trusts the plan it was handed writes over a phone that changed."""
+    pump, _, _ = _seed_pump(fake_client)
+    manifest = _pump_manifest()
+    result = _run(_replan(manifest, fake_client))
+    assert result.clean
+    fake_client.held.add(pump)
+    with pytest.raises(A.ApplyRefused):
+        _run(A.apply(manifest, result, fake_client))
+    assert _applies(fake_client) == []
+
+
+def test_replace_stale_is_reported_not_retried(fake_client) -> None:
+    _seed_pump(fake_client)
+    manifest = _pump_manifest()
+    fake_client.replace_apply_error = "409 REPLACE_STALE: changed — plan again"
+    outcome = _run(A.apply(manifest, _run(_replan(manifest, fake_client)), fake_client))
+    assert len(_applies(fake_client)) == 1
+    assert outcome.replacements_created == 0
+    [note] = outcome.notes
+    assert "REPLACE_STALE" in note and "'r1'" in note
+    assert [e.decision for e in outcome.reapply_plan.entries] == ["CREATE"]
+
+
+@pytest.mark.parametrize("race_name", ["Example pump", "Another pump"])
+def test_already_replaced_in_a_race_is_re_read_as_conflict_by_the_tight_rule(fake_client, race_name: str) -> None:
+    """The tool's own IDENTICAL is name-only; the loader re-reads the succession and compares every given field."""
+    pump, _, _ = _seed_pump(fake_client)
+    manifest = _pump_manifest()
+
+    def race() -> None:
+        other = fake_client.add_asset(name=race_name)
+        fake_client._asset_row(other)["model"] = "A-1"
+        fake_client.successions.append({"id": "succ-race", "predecessorAssetId": pump, "successorAssetId": other,
+                                        "replacedOn": "2026-09-29", "createdAt": 1})
+
+    fake_client.before_replace_apply = race
+    outcome = _run(A.apply(manifest, _run(_replan(manifest, fake_client)), fake_client))
+    assert outcome.replacements_created == 0
+    [note] = outcome.notes
+    assert "asset-" not in note and "succ-" not in note  # no id is ever printed
+    assert [e.decision for e in outcome.reapply_plan.entries] == ["CONFLICT"]
+
+
+def test_unknown_is_re_read_through_the_succession(fake_client) -> None:
+    _seed_pump(fake_client)
+    manifest = _pump_manifest()
+    fake_client.replace_apply_unknown = True
+    outcome = _run(A.apply(manifest, _run(_replan(manifest, fake_client)), fake_client))
+    assert outcome.replacements_created == 0
+    [note] = outcome.notes
+    assert "UNKNOWN" in note
+    assert [e.decision for e in outcome.reapply_plan.entries] == ["IDENTICAL"]
+
+
+def test_a_manifest_without_replacements_calls_no_replace_tool(fake_client) -> None:
+    fake_client.add_asset(name="Garden shed")
+    manifest = mk_manifest(schedules=[mk_schedule("s1", "Inspect roof", target_asset="Garden shed")])
+    _run(A.apply(manifest, _run(_plan_against(manifest, fake_client)), fake_client))
+    replace_tools = {"get_asset_succession", "get_asset", "get_replace_offer", "replace_asset"}
+    assert not replace_tools & {name for name, _ in fake_client.calls}
+
+
+def test_the_loaders_own_apply_replans_identical_when_the_phone_canonicalises(fake_client) -> None:
+    """MAJOR-1: the phone stores the built-in category label, a trimmed model and a null for a blank currency."""
+    pump, _, _ = _seed_pump(fake_client)
+    manifest = _pump_manifest(successor=(("name", "Example pump"), ("category", "pump"), ("currency", ""),
+                                         ("model", " B-2 ")))
+    outcome = _run(A.apply(manifest, _run(_replan(manifest, fake_client)), fake_client))
+    assert outcome.replacements_created == 1
+    assert [(e.decision, e.reason) for e in outcome.reapply_plan.entries][0][0] == "IDENTICAL", outcome.reapply_plan
+    [successor] = [row for row in fake_client.top_level if row["id"] != pump and row["name"] == "Example pump"]
+    assert (successor["category"], successor["currency"], successor["model"]) == ("Pump", None, "B-2")

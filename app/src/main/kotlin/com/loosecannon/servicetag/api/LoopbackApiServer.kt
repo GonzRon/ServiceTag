@@ -9,6 +9,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.TimeUnit
 import javax.net.ServerSocketFactory
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -113,9 +114,11 @@ internal fun bindErrnoOf(failure: Throwable): BindErrno {
 private const val MAX_CAUSE_DEPTH = 16
 
 /**
- * Review S2's drain ceiling: never more than the largest body any route accepts, so a peer that
- * declared a legitimate (if over-cap) length is fully drained, and a peer sending something far
- * larger than any real route allows is simply not waited on past this budget.
+ * Review S2's drain ceiling: the import ceiling, so a peer that declared a legitimate (if over-cap)
+ * form or archive length is fully drained, and a peer sending anything larger is simply not waited on
+ * past this budget. #92's upload accepts more (256 MiB) and is **deliberately not** drained to it: an
+ * authenticated upload's body is read to its end by its handler before the answer (C12), and an
+ * unauthenticated one gets this budget within the 5 s wall clock and no more (C10).
  */
 private const val DRAIN_BUDGET_BYTES = MAX_IMPORT_BYTES
 
@@ -123,10 +126,13 @@ private const val DRAIN_BUDGET_BYTES = MAX_IMPORT_BYTES
  * A loopback HTTP/1.1 listener, one connection at a time, on one daemon thread.
  *
  * **Deliberately narrow, deliberately hand-rolled** — the plan's dependency decision argues it in
- * full. What matters here: there is no chunked decoding, no multipart, no body spooled to disk, no
- * session, no thread pool and no keep-alive. One client (the workstation's MCP server) makes one
- * call at a time, so serialising connections means no shared mutable state between requests and no
- * concurrency to reason about; a second caller waits in the backlog or is refused.
+ * full. What matters here: there is no chunked decoding, no multipart and no form upload — one
+ * route, #92's attachment upload, streams its `Content-Length` body into the app's cache staging
+ * (never into memory) after the token is checked — no session, no thread pool and no keep-alive. One
+ * client (the workstation's MCP server) makes one call at a time, so serialising connections means
+ * no shared mutable state between requests on one generation; a second caller waits in the backlog
+ * or is refused. Across generations (a `stop()` then a `start()`, which never joins) #92's long
+ * writes serialise on `AppGraph.apiLongWrites` instead, held by their handler, never here.
  *
  * **Two independent checks on who is talking.** The socket is bound to [LOOPBACK_ADDRESS], so the
  * kernel refuses anything from off this phone; and every accepted connection's peer is checked
@@ -162,6 +168,13 @@ internal class LoopbackApiServer(
     /** The connection currently being answered, so [stop] can close it rather than wait for it. */
     @Volatile private var inFlight: Socket? = null
 
+    /**
+     * #92 (B2-pre BC5): this generation's `Job`, made by [start] and cancelled by [stop]. A materialize download is its
+     * child, so a request this generation read before a `stop()` but that reaches its download after it starts
+     * cancelled and fetches nothing. It parents nothing else: every other route still runs to completion.
+     */
+    @Volatile private var generation: Job? = null
+
     private val _state = MutableStateFlow<ListenerState>(ListenerState.Stopped)
 
     /** What the screen shows: listening, stopped, could not start (and why), or died. */
@@ -193,10 +206,12 @@ internal class LoopbackApiServer(
             return couldNotStart(e)
         }
         socket = bound
+        val born = Job()
+        generation = born
         _state.value = ListenerState.Listening
         // N1: not held in a field. Nothing ever read it — it was assigned in `start()`, nulled in
         // `stop()`, and never consulted — so it was write-only dead state.
-        Thread({ acceptLoop(bound) }, "servicetag-developer-api").apply {
+        Thread({ acceptLoop(bound, born) }, "servicetag-developer-api").apply {
             isDaemon = true
             start()
         }
@@ -233,6 +248,11 @@ internal class LoopbackApiServer(
     @Synchronized
     fun stop() {
         _state.value = ListenerState.Stopped
+        // #92 (C16, BC5): leaving stops the download — the one registered now, and any this generation has yet to
+        // start. Cancel only, never join: a commit that began is `NonCancellable` and completes (R87-4).
+        generation?.cancel()
+        generation = null
+        router.cancelDownload()
         val bound = socket ?: return
         socket = null
         // Closing the server socket is what unblocks `accept()`; the loop then sees `isClosed`.
@@ -241,7 +261,7 @@ internal class LoopbackApiServer(
         inFlight = null
     }
 
-    private fun acceptLoop(bound: ServerSocket) {
+    private fun acceptLoop(bound: ServerSocket, generation: Job) {
         while (!bound.isClosed) {
             val client = try {
                 bound.accept()
@@ -251,7 +271,7 @@ internal class LoopbackApiServer(
             }
             inFlight = client
             try {
-                client.use { answer(it) }
+                client.use { answer(it, generation) }
             } catch (t: Throwable) {
                 // `Throwable`, not `IOException`, and per connection: a client that hung up, a
                 // `RuntimeException` from a handler, an `OutOfMemoryError` from a 4 MiB body that
@@ -296,7 +316,7 @@ internal class LoopbackApiServer(
         }
     }
 
-    private fun answer(client: Socket) {
+    private fun answer(client: Socket, generation: Job) {
         // The second check. The bind already refuses anything off this phone; this refuses anything
         // that reached us some other way, before a byte of it is parsed.
         if (!isAcceptablePeer(client.inetAddress)) return
@@ -304,7 +324,7 @@ internal class LoopbackApiServer(
         val response = try {
             val request = parseRequest(client.getInputStream(), router::bodyCapFor)
             _requests.update { it + 1 }
-            router.handle(request)
+            router.handle(request, generation)
         } catch (e: MalformedRequest) {
             _requests.update { it + 1 }
             e.response

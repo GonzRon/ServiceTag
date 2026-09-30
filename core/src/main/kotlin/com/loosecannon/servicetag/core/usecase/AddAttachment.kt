@@ -42,6 +42,12 @@ class AddAttachment(
         owner: AttachmentOwner,
         cmd: AddAttachmentCommand,
         source: ByteSource,
+        /**
+         * #92 (C13): the row's id when the caller derived it (the API upload's operation key); null mints one, as
+         * shipped. A preset id must be free — a `put` at an occupied locator would delete that row's bytes — so it is
+         * checked before any byte moves; the caller's lock keeps it free until the row lands.
+         */
+        presetId: AttachmentId? = null,
     ): AttachmentResult<Attachment> {
         // #67, C1: first, so a role on an event can never reach `put`. Not a refusal the section
         // draws — no screen offers a role on an event's file — but a caller's mistake.
@@ -63,7 +69,8 @@ class AddAttachment(
                 ?: return AttachmentResult.Refused(AttachmentProblem.StoreUnavailable)
         }
 
-        val id = AttachmentId(ids.newId())
+        val id = presetId ?: AttachmentId(ids.newId())
+        if (presetId != null) require(attachments.get(presetId) == null) { "a preset attachment id is already a row's" }
         val mimeType = MimeTypes.normalise(cmd.mimeType)
         // #85, planner finding 5: a sourced add's name is a reference's title, not a filename, so the type alone
         // picks its extension (an empty name has none). Every other add is the shipped call, untouched.

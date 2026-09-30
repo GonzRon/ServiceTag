@@ -2,6 +2,9 @@ package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
+import com.loosecannon.servicetag.core.fetch.FetchProblem
+import com.loosecannon.servicetag.core.model.AssetSuccession
+import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.ports.StoreIoException
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.core.usecase.AssetAlreadyLent
@@ -31,6 +34,7 @@ import com.loosecannon.servicetag.core.usecase.HealthValidation
 import com.loosecannon.servicetag.core.usecase.LegacyWriteCannotRepresent
 import com.loosecannon.servicetag.core.usecase.LoanReturned
 import com.loosecannon.servicetag.core.usecase.LoanValidation
+import com.loosecannon.servicetag.core.usecase.MaterializeRefusal
 import com.loosecannon.servicetag.core.usecase.MemberCompletionNotSupported
 import com.loosecannon.servicetag.core.usecase.MergePlanStale
 import com.loosecannon.servicetag.core.usecase.MergeRefused
@@ -54,6 +58,8 @@ import com.loosecannon.servicetag.core.usecase.OccurrenceNotYetOpen
 import com.loosecannon.servicetag.core.usecase.PreServiceNeedsDates
 import com.loosecannon.servicetag.core.usecase.ProfileValidation
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
+import com.loosecannon.servicetag.core.usecase.ReplaceProblem
+import com.loosecannon.servicetag.core.usecase.ReplaceStale
 import com.loosecannon.servicetag.core.usecase.ScheduleArchived
 import com.loosecannon.servicetag.core.usecase.ScheduleDrivesHealthSubject
 import com.loosecannon.servicetag.core.usecase.ScheduleProblem
@@ -548,6 +554,11 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     is LoanReturned -> errorResponse(
         409, "Conflict", "loan_returned", "this loan has been returned, and a returned loan never changes",
     )
+    // #92 (C24): defence — the replace route's own digest check raises it too, so one arm answers both.
+    is ReplaceStale -> errorResponse(
+        409, "Conflict", "REPLACE_STALE", "the asset or a row reviewed with it changed; nothing was replaced",
+        listOf("ReplaceStale(assetId=${e.assetId.value})"), "sourcesDigest",
+    )
     else -> errorResponse(
         500, "Internal Server Error", "internal", e.javaClass.simpleName,
     )
@@ -743,4 +754,165 @@ private fun groupProblemCode(problem: GroupProblem): String = when (problem) {
     is GroupProblem.MemberAssetMissing -> "MEMBER_ASSET_MISSING"
     is GroupProblem.ForeignMember -> "FOREIGN_MEMBER"
     is GroupProblem.MemberAlreadyOpen -> "MEMBER_ALREADY_OPEN"
+}
+
+// --- #92, the attachment codes (C2) -------------------------------------------------------------
+//
+// Each code, status, `field` and sentence is C2's table, verbatim. `problems` names a domain problem by its own name
+// where one exists; a refusal decided in the API layer (a date, a role on an event's row) has none.
+
+/** 404: no attachment row has that id. */
+internal fun noSuchAttachment(): ApiFailure =
+    ApiFailure(404, "Not Found", "NO_SUCH_ATTACHMENT", "no such attachment")
+
+/** 422: `capturedOn` is not an ISO day, checked with core's own rule before the use case runs. */
+internal fun attachmentBadDate(): ApiFailure = ApiFailure(
+    422, "Unprocessable Content", "ATTACHMENT_BAD_DATE", "capturedOn is not a YYYY-MM-DD day", field = "capturedOn",
+)
+
+/** 422: a role on an event's attachment (R67-11), refused before `UpdateAttachment` could treat it as a bug. */
+internal fun attachmentRoleNotAllowed(): ApiFailure = ApiFailure(
+    422, "Unprocessable Content", "ATTACHMENT_ROLE_NOT_ALLOWED", "a document role belongs on an asset's attachment",
+    field = "role",
+)
+
+/**
+ * Every [AttachmentProblem] as C2 codes it, or null for `Unchanged`, which is no refusal: a no-op edit answers 200
+ * with the stored row (C7). Exhaustive, so a problem added later is a compile error here. `OwnerMissing` is the
+ * edited row itself; `NoStore`, `StoreUnavailable` and `TooLarge` come only from an add, never from an edit.
+ */
+internal fun attachmentRefusal(problem: AttachmentProblem): ApiFailure? = when (problem) {
+    AttachmentProblem.BlankName -> ApiFailure(
+        422, "Unprocessable Content", "ATTACHMENT_NAME_REQUIRED", "an attachment needs a name",
+        listOf(problem.toString()), "displayName",
+    )
+    AttachmentProblem.OwnerMissing -> noSuchAttachment()
+    AttachmentProblem.NoStore -> ApiFailure(
+        409, "Conflict", "ATTACHMENT_STORE_NOT_CONFIGURED", "no attachment folder is picked on this phone",
+        listOf(problem.toString()),
+    )
+    AttachmentProblem.StoreUnavailable -> ApiFailure(
+        409, "Conflict", "store_unavailable", "the attachment folder is not available", listOf(problem.toString()),
+    )
+    is AttachmentProblem.TooLarge -> ApiFailure(
+        422, "Unprocessable Content", "ATTACHMENT_TOO_LARGE", "the file is over 256 MiB", listOf(problem.toString()),
+    )
+    AttachmentProblem.Unchanged -> null
+}
+
+// --- #92 (B2), save as document's codes (C2, C17) --------------------------------------------------------------------
+//
+// Each code, status and sentence is C2's table, verbatim. **No refusal here carries a URI, a host, a remote header, a
+// remote byte or a free-text name** (B2-pre BC2): `problems` names each domain problem by its class, `ServerError`
+// carries the remote status alone, and `AlreadyHave` is written out by the earlier row's id, never by the data class's
+// `toString` (which carries that row's name).
+
+/**
+ * Every [MaterializeRefusal] as C17 maps it. Exhaustive, so a refusal added later is a compile error here. A fetch
+ * refusal is the remote's answer and no field of the request can fix it: **502**, one `FETCH_` code per problem
+ * ([fetchProblemCode]). The permission is a 409 in either spelling: `prepare` turns the transport's `NetworkDenied`
+ * into [MaterializeRefusal.NetworkDenied], and this arm keeps a `Fetch(NetworkDenied)` a 409 too.
+ */
+internal fun materializeRefusal(why: MaterializeRefusal): ApiFailure = when (why) {
+    // The shipped 404 of `/v1/references`, unchanged: the reference went between the handler's read and `prepare`'s.
+    MaterializeRefusal.NoSuchReference -> ApiFailure(404, "Not Found", "NO_SUCH_REFERENCE", "no such reference")
+    MaterializeRefusal.NotEligible -> ApiFailure(
+        409, "Conflict", "REFERENCE_NOT_MATERIALIZABLE", "that reference is not an https document link",
+        listOf("NotEligible"),
+    )
+    // `NoStore` and `StoreUnavailable`, the add's own codes; `prepare` raises no other store problem.
+    is MaterializeRefusal.Store -> attachmentRefusal(why.problem) ?: error("a store refusal is never Unchanged")
+    MaterializeRefusal.NetworkDenied -> networkDenied()
+    is MaterializeRefusal.Fetch -> if (why.problem == FetchProblem.NetworkDenied) {
+        networkDenied()
+    } else {
+        ApiFailure(
+            502, "Bad Gateway", fetchProblemCode(why.problem), "the download was refused",
+            listOf(why.problem.toString()),
+        )
+    }
+    is MaterializeRefusal.AlreadyHave -> ApiFailure(
+        409, "Conflict", "ATTACHMENT_ALREADY_HELD", "this asset already holds these bytes",
+        listOf("AlreadyHave(attachmentId=${why.attachmentId.value})"),
+    )
+}
+
+/**
+ * One wire code per [FetchProblem] (C2): the twelve `FETCH_` codes, and `NETWORK_DENIED` for the permission, which
+ * is no fetch refusal ([materializeRefusal] answers it as the 409). Exhaustive, so a problem added later is a
+ * compile error here. Every one is a redirect hop's or the remote's fact: a static first-hop problem is already
+ * `REFERENCE_NOT_MATERIALIZABLE`.
+ */
+internal fun fetchProblemCode(problem: FetchProblem): String = when (problem) {
+    FetchProblem.NotHttps -> "FETCH_NOT_HTTPS"
+    FetchProblem.HasCredentials -> "FETCH_HAS_CREDENTIALS"
+    FetchProblem.LocalAddress -> "FETCH_LOCAL_ADDRESS"
+    FetchProblem.Unreachable -> "FETCH_UNREACHABLE"
+    FetchProblem.Interrupted -> "FETCH_INTERRUPTED"
+    FetchProblem.TimedOut -> "FETCH_TIMED_OUT"
+    FetchProblem.TooLarge -> "FETCH_TOO_LARGE"
+    FetchProblem.Empty -> "FETCH_EMPTY"
+    FetchProblem.NotADocument -> "FETCH_NOT_A_DOCUMENT"
+    FetchProblem.NeedsSignIn -> "FETCH_NEEDS_SIGN_IN"
+    is FetchProblem.ServerError -> "FETCH_SERVER_ERROR"
+    FetchProblem.RedirectRefused -> "FETCH_REDIRECT_REFUSED"
+    FetchProblem.NetworkDenied -> "NETWORK_DENIED"
+}
+
+private fun networkDenied(): ApiFailure =
+    ApiFailure(409, "Conflict", "NETWORK_DENIED", "this app may not use the network", listOf("NetworkDenied"))
+
+// --- #92 (B3), the replace codes (C2, C24) ----------------------------------------------------------------------------
+//
+// Each code, status, `field` and sentence is C2's table, verbatim. `problems` names each domain problem by its own
+// name ([replaceProblemName]), an id by its raw value.
+
+/** 409: the predecessor already has a successor; `problems` names it, so a replay can read that asset. */
+internal fun assetAlreadyReplaced(row: AssetSuccession): ApiFailure = ApiFailure(
+    409, "Conflict", "ASSET_ALREADY_REPLACED", "this asset has already been replaced",
+    listOf("ReplacedBy(successorAssetId=${row.successorAssetId.value})"),
+)
+
+/**
+ * Every [ReplaceProblem] as C2 codes it. Exhaustive, so a problem added later is a compile error here. `Successor`
+ * is the shipped asset family ([assetRefusal]) with its field under `successor.`; a date is the draft's own key.
+ */
+internal fun replaceProblemRefusal(problem: ReplaceProblem): Refusal = when (problem) {
+    ReplaceProblem.NameRequired -> Refusal("REPLACE_NAME_REQUIRED", "the new asset needs a name", "successor.name")
+    is ReplaceProblem.BadDate -> Refusal(
+        "REPLACE_BAD_DATE", "that date is missing or not a YYYY-MM-DD day",
+        when (problem.field) {
+            "retiredOn", "scheduleStartOn" -> problem.field
+            else -> "successor.${problem.field}"
+        },
+    )
+    is ReplaceProblem.Successor -> assetRefusal(problem.problem).let { it.copy(field = it.field?.let { f -> "successor.$f" }) }
+    is ReplaceProblem.NotOffered -> Refusal("REPLACE_NOT_OFFERED", "that schedule, group, tag or parent is not offered")
+    is ReplaceProblem.NeedsSetup ->
+        Refusal("REPLACE_NEEDS_SETUP", "a ticked schedule needs its readings and actions", "carrySetup")
+    is ReplaceProblem.NeedsSeason ->
+        Refusal("REPLACE_NEEDS_SEASON", "a ticked pre-service schedule needs the season", "carrySeason")
+    ReplaceProblem.PhaseRequired -> Refusal("REPLACE_PHASE_REQUIRED", "say whether the new asset is in season", "manualPhase")
+    ReplaceProblem.ReplacedOnAfterToday ->
+        Refusal("REPLACE_DATE_AFTER_TODAY", "the replacement date is later than today", "retiredOn")
+}
+
+/** A [ReplaceProblem] by its own name, each id by its raw value. */
+internal fun replaceProblemName(problem: ReplaceProblem): String = when (problem) {
+    ReplaceProblem.NameRequired -> "NameRequired"
+    is ReplaceProblem.BadDate -> "BadDate(field=${problem.field})"
+    is ReplaceProblem.Successor -> "Successor(problem=${problem.problem})"
+    is ReplaceProblem.NotOffered -> "NotOffered(id=${problem.id})"
+    is ReplaceProblem.NeedsSetup -> "NeedsSetup(scheduleId=${problem.scheduleId.value})"
+    is ReplaceProblem.NeedsSeason -> "NeedsSeason(scheduleId=${problem.scheduleId.value})"
+    ReplaceProblem.PhaseRequired -> "PhaseRequired"
+    ReplaceProblem.ReplacedOnAfterToday -> "ReplacedOnAfterToday"
+}
+
+/** 422: the first problem's code, sentence and field; every problem in `problems`, first first. */
+internal fun replaceProblems(problems: List<ReplaceProblem>): ApiFailure {
+    val first = replaceProblemRefusal(problems.first())
+    return ApiFailure(
+        422, "Unprocessable Content", first.code, first.message, problems.map(::replaceProblemName), first.field,
+    )
 }

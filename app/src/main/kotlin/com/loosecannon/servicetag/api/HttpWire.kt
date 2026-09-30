@@ -20,13 +20,38 @@ private const val BEARER_PREFIX = "Bearer "
  * One parsed request. [headers] keys are lower-cased, so a client's capitalisation cannot matter;
  * [body] is empty when there was none. Not a `data class` deliberately — a `ByteArray` member makes
  * the generated `equals` identity-based and misleading, and nothing here needs `copy`.
+ *
+ * [stream] is set on one shape only, the attachment upload ([isAttachmentUpload], #92 C9): exactly
+ * `Content-Length` bytes of the socket, **not yet read**, so the router can check the token before
+ * a byte of it moves (C10). [body] is then empty. Every other request's body is read here, as ever.
  */
 internal class ApiRequest(
     val method: String,
     val path: String,
     val headers: Map<String, String>,
     val body: ByteArray,
+    val stream: InputStream? = null,
 )
+
+/**
+ * #92 (C9): `POST /v1/assets/<one segment>/attachments` on the canonical path — the one request whose
+ * body is left on the socket, with its own ceiling. Every other method on that shape is framed and
+ * read like any other request.
+ */
+internal fun isAttachmentUpload(method: String, path: String): Boolean {
+    if (method != "POST") return false
+    val segments = path.split('/')
+    return segments.size == 5 && segments[0].isEmpty() && segments[1] == "v1" && segments[2] == "assets" &&
+        segments[3].isNotEmpty() && segments[4] == "attachments"
+}
+
+/**
+ * The request's own stream failed under a handler that was reading it (#92 C12): a read timed out,
+ * the peer reset, `stop()` closed the socket, or the upload's deadline passed. Not an answer: the
+ * router rethrows it and the server closes the connection with nothing written, because a peer that
+ * is gone cannot be told anything and a failure of *its* stream is never this phone's 409 or 500.
+ */
+internal class RequestStreamFailed(why: String, cause: Throwable? = null) : Exception(why, cause)
 
 /** The bearer token this request offered, or null if it offered none in that shape. */
 internal fun ApiRequest.bearerToken(): String? {
@@ -71,10 +96,12 @@ internal class MalformedRequest(val response: ApiResponse, val why: String) : Ex
  * outright rather than implemented. A query string is dropped — no endpoint reads one, so nothing
  * may come to depend on one.
  *
- * [bodyCapFor] is consulted with the path *before* a single body byte is read, which is what makes
- * the 4 MiB import ceiling reachable at one path and nowhere else.
+ * [bodyCapFor] is consulted with the method and the path *before* a single body byte is read, which
+ * is what makes the 4 MiB import ceiling reachable at two paths and the 256 MiB upload ceiling at one
+ * method on one shape, and nowhere else. On that shape ([isAttachmentUpload]) the body is **left on
+ * the socket** behind [ApiRequest.stream], bounded to exactly `Content-Length` bytes.
  */
-internal fun parseRequest(input: InputStream, bodyCapFor: (String) -> Int): ApiRequest {
+internal fun parseRequest(input: InputStream, bodyCapFor: (String, String) -> Int): ApiRequest {
     val requestLine = readLine(input, MAX_REQUEST_LINE)
         ?: throw malformed(400, "Bad Request", "the connection said nothing")
     val parts = requestLine.split(' ')
@@ -111,9 +138,35 @@ internal fun parseRequest(input: InputStream, bodyCapFor: (String) -> Int): ApiR
     }
     // The cap is chosen from the canonical path, before a body byte is read; the refusal names
     // neither the path nor the number, because this is still a pre-authentication answer.
-    if (length > bodyCapFor(path)) throw malformed(413, "Payload Too Large")
+    if (length > bodyCapFor(method, path)) throw malformed(413, "Payload Too Large")
+    if (isAttachmentUpload(method, path)) {
+        return ApiRequest(method, path, headers, ByteArray(0), BoundedBody(input, length.toLong()))
+    }
     return ApiRequest(method, path, headers, readExactly(input, length))
 }
+
+/**
+ * Exactly [length] bytes of [input] and then an end of stream, whatever follows on the socket. An
+ * end of stream before [length] is [EarlyEndOfBody]: the peer sent less than it declared.
+ */
+private class BoundedBody(private val input: InputStream, private var remaining: Long) : InputStream() {
+    override fun read(): Int {
+        val one = ByteArray(1)
+        return if (read(one, 0, 1) < 0) -1 else one[0].toInt() and 0xff
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        if (len == 0) return 0
+        if (remaining == 0L) return -1
+        val n = input.read(b, off, minOf(len.toLong(), remaining).toInt())
+        if (n < 0) throw EarlyEndOfBody()
+        remaining -= n
+        return n
+    }
+}
+
+/** The peer ended the connection before the `Content-Length` it declared (#92 C12, the shipped 400). */
+internal class EarlyEndOfBody : java.io.IOException("the body was shorter than Content-Length")
 
 /** Writes [response] with its own length and closes: one request per connection, always. */
 internal fun writeResponse(output: OutputStream, response: ApiResponse) {

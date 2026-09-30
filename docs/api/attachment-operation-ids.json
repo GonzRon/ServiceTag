@@ -1,0 +1,68 @@
+{
+  "comment": "#92 C13: the upload's derived attachment id. id = uuid8(SHA-256(UTF-8(prefix + \"\\n\" + installationId + \"\\n\" + assetId + \"\\n\" + operationKey))): the first 16 bytes, version 8 (byte 6 = (b & 0x0f) | 0x80), variant 10 (byte 8 = (b & 0x3f) | 0x80), lowercase 8-4-4-4-12. kinds: the server's kind when none is sent, AttachmentKinds.inferFrom(MimeTypes.normalise(contentType), fromCamera = false); an absent Content-Type is application/octet-stream. Fixtures are fictional.",
+  "prefix": "servicetag:attachment-upload:v2",
+  "vectors": [
+    {
+      "installationId": "5f0c2a9e-81d4-4b7a-9c3e-2d6f1a8b0e47",
+      "assetId": "7d3e9a10-4c2b-4f8e-a1d5-6b0c9e2f3a84",
+      "operationKey": "sha256:0b9f6a6c2d1e3f4a:17",
+      "attachmentId": "dd2cddf4-7a25-8a73-aa6b-5df448dce07d"
+    },
+    {
+      "installationId": "5f0c2a9e-81d4-4b7a-9c3e-2d6f1a8b0e47",
+      "assetId": "7d3e9a10-4c2b-4f8e-a1d5-6b0c9e2f3a84",
+      "operationKey": "op-1",
+      "attachmentId": "2e2c9bdc-859d-802d-80cb-2320950a2420"
+    },
+    {
+      "installationId": "c41b7e02-9d3a-4e6f-8b15-0a2c7d9e4f61",
+      "assetId": "7d3e9a10-4c2b-4f8e-a1d5-6b0c9e2f3a84",
+      "operationKey": "op-1",
+      "attachmentId": "3a4b6a0f-e0d3-827b-91ed-5d0ef739fb7e"
+    },
+    {
+      "installationId": "5f0c2a9e-81d4-4b7a-9c3e-2d6f1a8b0e47",
+      "assetId": "2a8e4c61-0b9d-4f3a-8e7c-5d1b6a0f9c23",
+      "operationKey": "op-1",
+      "attachmentId": "dc34deba-488e-8628-97d6-730a6de4dc19"
+    }
+  ],
+  "kinds": [
+    {
+      "contentType": "application/pdf",
+      "kind": "DOCUMENT"
+    },
+    {
+      "contentType": "Application/PDF; charset=binary",
+      "kind": "DOCUMENT"
+    },
+    {
+      "contentType": "image/jpeg",
+      "kind": "PHOTO"
+    },
+    {
+      "contentType": " IMAGE/PNG ",
+      "kind": "PHOTO"
+    },
+    {
+      "contentType": "image/webp",
+      "kind": "PHOTO"
+    },
+    {
+      "contentType": "text/plain",
+      "kind": "OTHER"
+    },
+    {
+      "contentType": "application/zip",
+      "kind": "OTHER"
+    },
+    {
+      "contentType": "application/octet-stream",
+      "kind": "OTHER"
+    },
+    {
+      "contentType": "",
+      "kind": "OTHER"
+    }
+  ]
+}

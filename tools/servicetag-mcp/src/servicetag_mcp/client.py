@@ -9,7 +9,9 @@ from __future__ import annotations
 import http
 import json
 import subprocess
-from dataclasses import dataclass
+import threading
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -30,6 +32,10 @@ MAX_IMPORT_BYTES = 4 * 1024 * 1024
 """The same ceiling `ApiRouter.kt`'s `MAX_IMPORT_BYTES` enforces on `/v1/import-merge/*`. Checked
 here too so an over-cap archive is refused before it is read into memory and sent, rather than
 arriving at the phone as a 413 with a body-less, near-unreadable `ApiError`."""
+
+MAX_ATTACHMENT_BYTES = 268_435_456
+"""256 MiB: the upload's ceiling, `ApiRouter.kt`'s `MAX_UPLOAD_BYTES` (#92, C9). `add_attachment` refuses a
+larger file before it opens it, rather than meeting the phone's body-less 413."""
 
 _TIMEOUT = 30.0
 """Every call's budget but the two import ones, which pass their own (finding 12: a full-phone
@@ -57,6 +63,17 @@ def _not_answering(exception_class_name: str) -> str:
     `subprocess` failure elsewhere in this module, the serial. A class name is always safe and
     always bounded."""
     return f"{_DEVELOPER_API_NOT_ANSWERING} ({exception_class_name})"
+
+
+class NotAnswering(RuntimeError):
+    """The phone's listener did not answer: [_DEVELOPER_API_NOT_ANSWERING], with `transport` the `httpx`
+    failure's class name. A `RuntimeError` like every other transport failure here, so every caller reads it
+    as before; a caller that must tell "nothing was sent" (`ConnectError`, `ConnectTimeout`) from "sent, and
+    no answer came" — an unknown outcome for a write — reads `transport`."""
+
+    def __init__(self, transport: str) -> None:
+        super().__init__(_not_answering(transport))
+        self.transport = transport
 
 
 class ApiError(RuntimeError):
@@ -97,6 +114,12 @@ class Device:
     """True when this `Device` is the one that runs `adb forward` — i.e. no `SERVICETAG_API_BASE_URL`
     override. Only then does a dropped forward get re-established (fix 5): someone else's forward, or
     the test fixture's fake server, is not this client's to repair."""
+    installation_id: tuple[str, str] | None = None
+    """`/v1/status.installationId` (#92) as last read, beside the pairing code it was read under — read once
+    per pairing like [schema_version]. `add_attachment` derives an upload's attachment id from it."""
+    in_flight: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+    """Held for the whole of every call (#92): the app serves one connection at a time, and while a save as
+    document runs it answers nothing else, so this client never has two calls open at once."""
     schema_version: tuple[str, int] | None = None
     """`/v1/status.schemaVersion` as last read, beside the pairing code it was read under.
     `server.py`'s write check reads it once per pairing and keeps it here, on the connection it
@@ -174,6 +197,11 @@ class Device:
         content_type: str | None = None,
         report_statuses: tuple[int, ...] = (),
         timeout: httpx.Timeout | float | None = None,
+        body: Callable[[], Iterator[bytes]] | None = None,
+        content_length: int | None = None,
+        extra_headers: dict[str, str] | None = None,
+        retry_on_connect: bool = True,
+        with_status: bool = False,
     ) -> Any:
         """One call. [report_statuses] names the statuses whose body **may be data, not an error**.
 
@@ -186,7 +214,39 @@ class Device:
         a report — so a status in [report_statuses] is only trusted as data when its body actually
         looks like one (a JSON object with no `"error"` key); otherwise it falls through to the
         ordinary error mapping below (fix 3).
+
+        #92: `body` is a **factory** of a streamed request body and `content_length` its exact size. The
+        body is sent under that explicit `Content-Length` — which is what keeps `httpx` from framing an
+        iterator as a chunked transfer, a framing the app refuses — and the factory is called once per
+        attempt, so the one `ConnectError` retry below re-opens the source instead of resending an
+        iterator the first attempt already spent. `retry_on_connect=False` turns that retry off for a
+        call that must never be re-sent on its own (the save as document). `with_status=True` answers
+        `(status, payload)`, for a route whose 200 and 201 mean different things.
         """
+        with self.in_flight:
+            return self._request(
+                method, path, json_body=json_body, content=content, content_type=content_type,
+                report_statuses=report_statuses, timeout=timeout, body=body,
+                content_length=content_length, extra_headers=extra_headers,
+                retry_on_connect=retry_on_connect, with_status=with_status,
+            )
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_body: Any | None,
+        content: bytes | None,
+        content_type: str | None,
+        report_statuses: tuple[int, ...],
+        timeout: httpx.Timeout | float | None,
+        body: Callable[[], Iterator[bytes]] | None,
+        content_length: int | None,
+        extra_headers: dict[str, str] | None,
+        retry_on_connect: bool,
+        with_status: bool,
+    ) -> Any:
         if self.token is None:
             raise NotPaired(
                 "call the pair tool with the code on the phone's Developer API screen first"
@@ -195,6 +255,10 @@ class Device:
         headers = {"Authorization": f"Bearer {self.token}"}
         if content_type:
             headers["Content-Type"] = content_type
+        if extra_headers:
+            headers.update(extra_headers)
+        if body is not None:
+            headers["Content-Length"] = str(content_length)
         effective_timeout = _TIMEOUT if timeout is None else timeout
 
         def send() -> httpx.Response:
@@ -203,7 +267,7 @@ class Device:
                 f"{self.base_url}{path}",
                 headers=headers,
                 json=json_body,
-                content=content,
+                content=body() if body is not None else content,
                 timeout=effective_timeout,
             )
 
@@ -216,22 +280,22 @@ class Device:
             # connect failure means nothing was ever sent (fix 5). This is the one transport failure
             # worth a retry: every other one (below) means the port answered, so re-forwarding it
             # again would not help.
-            if self.owns_forward and self.serial:
+            if retry_on_connect and self.owns_forward and self.serial:
                 self.forwarded = False
                 self.ensure_forward()
                 try:
                     response = send()
                 except httpx.TransportError as exc:
-                    raise RuntimeError(_not_answering(exc.__class__.__name__)) from None
+                    raise NotAnswering(exc.__class__.__name__) from None
             else:
-                raise RuntimeError(_not_answering("ConnectError")) from None
+                raise NotAnswering("ConnectError") from None
         except httpx.TransportError as exc:
             # F1: `adb forward` stays installed after the Developer API screen closes, so the port
             # itself still accepts a connection — the phone's own listener is what stopped. That
             # reaches `httpx` as `RemoteProtocolError` (accepted, then closed) at least as often as
             # `ConnectError` in practice, and a `ReadTimeout`/`ReadError`/`WriteError` mid-request
             # means the same thing happening a moment later. One message for all of them.
-            raise RuntimeError(_not_answering(exc.__class__.__name__)) from None
+            raise NotAnswering(exc.__class__.__name__) from None
 
         if response.status_code == 401:
             # The app answers 401 with an empty body on purpose, so this is all it can mean.
@@ -247,9 +311,8 @@ class Device:
         if response.status_code >= 400:
             code, message, problems, field = _detail(response)
             raise ApiError(response.status_code, code, message, problems, field)
-        if response.status_code == 204 or not response.content:
-            return {}
-        return response.json()
+        payload = {} if response.status_code == 204 or not response.content else response.json()
+        return (response.status_code, payload) if with_status else payload
 
 
 def _safe_json(response: httpx.Response) -> Any | None:

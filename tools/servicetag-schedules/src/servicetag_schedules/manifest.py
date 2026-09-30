@@ -26,6 +26,7 @@ TIME_UNITS = ("DAY", "WEEK", "MONTH", "YEAR")
 TIME_BASES = ("FIXED", "COMPLETION")
 COMPLETION_MODES = ("QUICK", "FORM")
 SEASON_BEHAVIORS = ("IGNORE", "FOLLOW_ASSET")
+MANUAL_PHASES = ("IN_SEASON", "OUT_OF_SEASON")
 
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -39,6 +40,16 @@ _SCHEDULE_KEYS = {
 _TARGET_KEYS = {"asset", "group"}
 _TIME_KEYS = {"interval", "unit", "basis", "anchorOn"}
 _SOURCE_KEYS = {"todoistId", "cadence"}
+_REPLACEMENT_KEYS = {
+    "key", "predecessor", "retiredOn", "successor", "carry", "schedules", "scheduleStartOn", "groups", "moveTags",
+}
+_CARRY_KEYS = {"season", "manualPhase", "setup", "notes"}
+SUCCESSOR_KEYS: tuple[str, ...] = (
+    "name", "category", "manufacturer", "model", "serialNumber", "purchaseOn", "inServiceOn", "purchasePriceMinor",
+    "currency", "vendor", "location", "warrantyExpiresOn", "warrantyNotes", "parentAssetId",
+)
+"""#92 C31: the replace draft's `successor` keys (C20), in the MCP's `REPLACE_SUCCESSOR_KEYS` order."""
+_SUCCESSOR_DATES = {"purchaseOn", "inServiceOn", "warrantyExpiresOn"}
 
 
 class ManifestError(ValueError):
@@ -105,11 +116,33 @@ class Schedule:
 
 
 @dataclass(frozen=True)
+class Replacement:
+    """#92 C31: one replacement. `predecessor` is an exact asset name, which `plan.plan` resolves through the
+    succession, never by the name alone; `successor` holds each successor key the manifest gives a non-null value,
+    as `(key, value)` in `SUCCESSOR_KEYS` order, `name` always first. Every carry item is unticked and nothing is
+    defaulted unless the manifest names it (R86-9, R86-10); `move_tags` names each binding by its label (R92-2)."""
+
+    key: str
+    predecessor: str
+    successor: tuple[tuple[str, object], ...]
+    retired_on: str | None = None
+    carry_season: bool = False
+    manual_phase: str | None = None
+    carry_setup: bool = False
+    carry_notes: bool = False
+    schedules: tuple[str, ...] = ()
+    schedule_start_on: str | None = None
+    groups: tuple[str, ...] = ()
+    move_tags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Manifest:
     manifest_version: int
     as_of: str
     groups: tuple[Group, ...] = ()
     schedules: tuple[Schedule, ...] = ()
+    replacements: tuple[Replacement, ...] = ()
 
 
 # ---- small parsing helpers -------------------------------------------------------------------
@@ -184,6 +217,14 @@ def _require_date(obj: dict, key: str, path: str) -> str:
     except ValueError:
         raise ManifestError(p, "must be a real calendar date") from None
     return value
+
+
+def _optional_date(obj: dict, key: str, path: str) -> str | None:
+    return None if obj.get(key) is None else _require_date(obj, key, path)
+
+
+def _optional_bool(obj: dict, key: str, path: str) -> bool:
+    return False if key not in obj else _require_bool(obj, key, path)
 
 
 def _string_list(obj: dict, key: str, path: str) -> tuple[str, ...]:
@@ -282,11 +323,50 @@ def _parse_schedule(obj: Any, path: str) -> Schedule:
     )
 
 
+def _parse_successor(obj: Any, path: str) -> tuple[tuple[str, object], ...]:
+    _check_keys(obj, set(SUCCESSOR_KEYS), {"name"}, path)
+    given: list[tuple[str, object]] = [("name", _require_str(obj, "name", path))]
+    for key in SUCCESSOR_KEYS[1:]:
+        if obj.get(key) is None:
+            continue
+        if key in _SUCCESSOR_DATES:
+            given.append((key, _require_date(obj, key, path)))
+        elif key == "purchasePriceMinor":
+            given.append((key, _require_int(obj, key, path, minimum=0)))
+        else:
+            given.append((key, _optional_str(obj, key, path)))
+    return tuple(given)
+
+
+def _parse_replacement(obj: Any, path: str) -> Replacement:
+    _check_keys(obj, _REPLACEMENT_KEYS, {"key", "predecessor", "successor"}, path)
+    carry = {} if obj.get("carry") is None else obj["carry"]
+    carry_path = _join(path, "carry")
+    _check_keys(carry, _CARRY_KEYS, set(), carry_path)
+    manual_phase = None
+    if carry.get("manualPhase") is not None:
+        manual_phase = _require_enum(carry, "manualPhase", carry_path, MANUAL_PHASES)
+    return Replacement(
+        key=_require_str(obj, "key", path),
+        predecessor=_require_str(obj, "predecessor", path),
+        successor=_parse_successor(obj["successor"], _join(path, "successor")),
+        retired_on=_optional_date(obj, "retiredOn", path),
+        carry_season=_optional_bool(carry, "season", carry_path),
+        manual_phase=manual_phase,
+        carry_setup=_optional_bool(carry, "setup", carry_path),
+        carry_notes=_optional_bool(carry, "notes", carry_path),
+        schedules=_string_list(obj, "schedules", path),
+        schedule_start_on=_optional_date(obj, "scheduleStartOn", path),
+        groups=_string_list(obj, "groups", path),
+        move_tags=_string_list(obj, "moveTags", path),
+    )
+
+
 # ---- public entry points -----------------------------------------------------------------------
 
 def parse(obj: Any) -> Manifest:
     """Validate a decoded JSON document and return its `Manifest` tree, or raise `ManifestError`."""
-    _check_keys(obj, _TOP_KEYS, _TOP_KEYS, "")
+    _check_keys(obj, _TOP_KEYS | {"replacements"}, _TOP_KEYS, "")
 
     version = obj["manifestVersion"]
     if version != 1:
@@ -304,7 +384,15 @@ def parse(obj: Any) -> Manifest:
         raise ManifestError("schedules", "must be a list")
     schedules = tuple(_parse_schedule(s, f"schedules[{i}]") for i, s in enumerate(schedules_raw))
 
-    return Manifest(manifest_version=version, as_of=as_of, groups=groups, schedules=schedules)
+    # #92 C31: optional, and absent means none — `manifestVersion` stays 1.
+    replacements_raw = obj.get("replacements", [])
+    if not isinstance(replacements_raw, list):
+        raise ManifestError("replacements", "must be a list")
+    replacements = tuple(_parse_replacement(r, f"replacements[{i}]") for i, r in enumerate(replacements_raw))
+
+    return Manifest(
+        manifest_version=version, as_of=as_of, groups=groups, schedules=schedules, replacements=replacements,
+    )
 
 
 def load(path: Path | str) -> Manifest:

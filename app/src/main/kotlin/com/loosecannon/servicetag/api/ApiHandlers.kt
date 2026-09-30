@@ -57,7 +57,8 @@ import com.loosecannon.servicetag.di.AppGraph
  * (R77-17) — no pack, mark, import or withdrawal — so no collaborator exists to ask. #86's `assetSuccessions`
  * count and its one read-only route, [getSuccession], read [successions] here on the same terms (R86-18): only the
  * phone's Replace asset records a succession, and the merge apply only inserts an archive's rows, so there is no
- * write route and no collaborator for one.
+ * write route and no collaborator for one — until #92: `POST /v1/assets/{id}/replace` records one over the same use
+ * case (R92-1 supersedes R86-18); still no verb amends or removes one.
  *
  * The asset `PATCH` keeps 1.3's exact command (spec §9.3): its `MM-DD` pair is the one
  * compatibility input, and `UpdateAsset` refuses what the pair cannot represent — a different pair
@@ -65,7 +66,7 @@ import com.loosecannon.servicetag.di.AppGraph
  * schedule 409 `SEASON_MODE_STRANDS_POLICY` — which [mapDomainFailure] names. Condition is never in
  * it (#61 AC 9).
  *
- * **Twenty-eight collaborators plus two values, named one by one, with a `constructor(graph)` beside
+ * **Twenty-nine collaborators plus two values, named one by one, with a `constructor(graph)` beside
  * them.** That is this app's pattern, stated at `AssetViewModels.kt:59`–`61`: *"Each takes the `AppGraph` members it
  * actually uses — the secondary constructor is what the Compose entry calls, the primary one is
  * what a test builds on a Room-backed fake graph."* It is the reason `ApiRouterTest` can drive the
@@ -156,6 +157,17 @@ internal class ApiHandlers(
      * `handlers.loans.*`, and asked for the one count `/v1/status` gained.
      */
     internal val loans: LoanHandlers,
+    /**
+     * #92's attachment rows, on the same terms: one collaborator, reached from the router as
+     * `handlers.attachmentRoutes.*` (the name `attachments` is the repository above), and asked for the
+     * `installationId` `/v1/status` gained (C5a). No count comes with it: `attachments` is already counted.
+     */
+    internal val attachmentRoutes: AttachmentHandlers,
+    /**
+     * #92's replace triad (R92-1 supersedes R86-18), on the same terms: one collaborator, reached from the router as
+     * `handlers.replace.*`, over #86's `ReplaceAsset` alone. No count comes with it: `assetSuccessions` is counted.
+     */
+    internal val replace: ReplaceHandlers,
     private val appVersion: String,
     private val schemaVersion: Int,
 ) {
@@ -171,6 +183,8 @@ internal class ApiHandlers(
         WarrantyHandlers(graph),
         ServiceCaseHandlers(graph),
         LoanHandlers(graph),
+        AttachmentHandlers(graph),
+        ReplaceHandlers(graph),
         BuildConfig.VERSION_NAME, AppGraph.SCHEMA_VERSION,
     )
 
@@ -183,6 +197,7 @@ internal class ApiHandlers(
             apiVersion = API_VERSION,
             schemaVersion = schemaVersion,
             backupFormatVersion = BackupCodec.FORMAT_VERSION,
+            installationId = attachmentRoutes.installationId(),
             counts = mapOf(
                 "assets" to assets.all().size,
                 "tags" to tags.all().size,

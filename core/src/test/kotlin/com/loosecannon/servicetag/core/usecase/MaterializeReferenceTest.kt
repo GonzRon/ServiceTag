@@ -551,7 +551,7 @@ class MaterializeReferenceTest {
 
         // The earliest by createdAt, then id, in any mode; a digest match of another size is not the same bytes.
         assertEquals(
-            Prepared.Refused(MaterializeRefusal.AlreadyHave("Linked copy.pdf")),
+            Prepared.Refused(MaterializeRefusal.AlreadyHave("Linked copy.pdf", AttachmentId("att-h1"))),
             materialize.prepare(pump, ReferenceId("ref-1")),
         )
         assertTrue(staging.files.single().discarded)
@@ -559,6 +559,27 @@ class MaterializeReferenceTest {
         assertEquals(existing.associateBy { it.id.value }, rows.rows.toMap())   // never retrofitted with a source
         assertEquals(0, uow.commits)
         assertEquals(seeded.associateBy { it.id.value }, references.rows.toMap())
+    }
+
+    /**
+     * #92 row 22 (C17): the refusal names the earliest same-bytes row by its id — the one R85-6 already picks by
+     * createdAt, then id — so a retried call over the API is recognisably already done.
+     */
+    @Test
+    fun alreadyHaveNamesTheEarliestRowsId() = runTest {
+        seed()
+        listOf(
+            handAdded("att-late", pump, "Later copy.pdf", createdAt = 9_000L),
+            handAdded("att-early", pump, "Earlier copy.pdf", createdAt = 1_500L),
+            handAdded("att-middle", pump, "Middle copy.pdf", createdAt = 4_000L),
+        ).forEach { rows.upsert(it) }
+        transport.serve(manualUri, pdf, "application/pdf")
+
+        val refused = assertIs<Prepared.Refused>(materialize.prepare(pump, ReferenceId("ref-1")))
+        val why = assertIs<MaterializeRefusal.AlreadyHave>(refused.why)
+        assertEquals(AttachmentId("att-early"), why.attachmentId)
+        assertEquals("Earlier copy.pdf", why.name)
+        assertTrue(staging.files.single().discarded)
     }
 
     /** Always fetch: changed bytes are a second attachment; the same bytes again are refused. */
@@ -575,7 +596,7 @@ class MaterializeReferenceTest {
         assertEquals(listOf(first, second).sortedBy { it.id.value }, rows.forAsset(pump).sortedBy { it.id.value })
         assertEquals(2, uow.commits)
         assertEquals(
-            Prepared.Refused(MaterializeRefusal.AlreadyHave("Revised manual")),
+            Prepared.Refused(MaterializeRefusal.AlreadyHave("Revised manual", second.id)),
             materialize.prepare(pump, ReferenceId("ref-1")),
         )
         assertTrue(staging.files.all { it.discarded })

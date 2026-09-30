@@ -120,7 +120,7 @@ fun validateAsset(cmd: AssetCommand, existing: Collection<Asset>, id: AssetId?):
 }
 
 /** True when [value] is an ISO calendar date — `LocalDate.parse` is the whole rule. */
-internal fun isIsoDate(value: String): Boolean = try {
+fun isIsoDate(value: String): Boolean = try {
     LocalDate.parse(value)
     true
 } catch (e: DateTimeParseException) {

@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.fetch.HostResolver
 import com.loosecannon.servicetag.core.fetch.TransportResponse
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.model.DocumentRole
@@ -296,7 +297,7 @@ class MaterializeViewModelTest {
             MaterializeRefusal.Fetch(FetchProblem.Empty) to Refused("That file is empty", false),
             MaterializeRefusal.Fetch(FetchProblem.NotHttps) to Closed,
             MaterializeRefusal.Fetch(FetchProblem.HasCredentials) to Closed,
-            MaterializeRefusal.AlreadyHave(NAME) to
+            MaterializeRefusal.AlreadyHave(NAME, AttachmentId("att-1")) to
                 Refused("This asset already has this file: Example Pool Pump manual.", false),
         )
         val answered = table.associate { (why, _) -> why to refusalState(why, HOST) }

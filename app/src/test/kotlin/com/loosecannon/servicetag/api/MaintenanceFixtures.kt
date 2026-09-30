@@ -126,6 +126,25 @@ internal fun loanHandlersFor(graph: FakeGraph): LoanHandlers = LoanHandlers(
 )
 
 /**
+ * #92's attachment routes over a [FakeGraph], on the same terms: one more collaborator, one more line at every call
+ * site. The use case, the folder and the installation id are the fake graph's own, mirroring `AppGraph`'s by name.
+ */
+internal fun attachmentHandlersFor(graph: FakeGraph): AttachmentHandlers = AttachmentHandlers(
+    attachments = graph.attachments,
+    assets = graph.assets,
+    storage = graph.attachmentStorage,
+    updateAttachment = graph.updateAttachment,
+    installation = graph.installationIdentity,
+    transfers = graph.transferRecords,
+    addAttachment = graph.addAttachment,
+    staging = graph.materializeStaging,
+    apiLongWrites = graph.apiLongWrites,
+)
+
+/** #92's replace triad over a [FakeGraph]: the fake graph's own `ReplaceAsset`, as `AppGraph`'s. */
+internal fun replaceHandlersFor(graph: FakeGraph): ReplaceHandlers = ReplaceHandlers(replaceAsset = graph.replaceAsset)
+
+/**
  * 1.4 (B09): one `/v1` client over a [FakeGraph] for the new suites — the production router, the
  * production handlers (every collaborator above) and the production serializers, exactly as
  * `ApiRouterTest` builds them, written once rather than six times.
@@ -145,6 +164,8 @@ internal class V1Client(val graph: FakeGraph, private val token: String = "ABCD2
             warrantyHandlersFor(graph),
             serviceCaseHandlersFor(graph),
             loanHandlersFor(graph),
+            attachmentHandlersFor(graph),
+            replaceHandlersFor(graph),
             appVersion = "1.4.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),

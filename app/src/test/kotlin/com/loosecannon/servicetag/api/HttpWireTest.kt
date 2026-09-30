@@ -16,8 +16,10 @@ import org.junit.Test
 class HttpWireTest {
 
     /** The production caps, as the router publishes them. */
-    private val caps: (String) -> Int = { path ->
-        if (path == IMPORT_MERGE_PLAN_PATH || path == IMPORT_MERGE_APPLY_PATH) {
+    private val caps: (String, String) -> Int = { method, path ->
+        if (isAttachmentUpload(method, path)) {
+            MAX_UPLOAD_BYTES
+        } else if (path == IMPORT_MERGE_PLAN_PATH || path == IMPORT_MERGE_APPLY_PATH) {
             MAX_IMPORT_BYTES
         } else {
             MAX_BODY_BYTES
@@ -48,6 +50,45 @@ class HttpWireTest {
         assertEquals("POST", request.method)
         assertEquals("{\"name\":\"Hot tu", request.body.decodeToString().take(15))
         assertEquals(16, request.body.size)
+    }
+
+    /**
+     * #92 (C9, row 7): the 256 MiB tier is `POST`'s alone, on the canonical `/v1/assets/<one segment>/attachments`;
+     * a `PATCH` there keeps 64 KiB, and every other path keeps its own cap.
+     */
+    @Test fun theUploadShapeTakes256MiBOnlyForPost() {
+        val shape = "/v1/assets/a1/attachments"
+        assertEquals(413, refusal("POST $shape HTTP/1.1\r\nContent-Length: ${MAX_UPLOAD_BYTES + 1}\r\n\r\n").status)
+        assertTrue(parse("POST $shape HTTP/1.1\r\nContent-Length: $MAX_UPLOAD_BYTES\r\n\r\n").stream != null)
+        assertTrue(parse("POST $shape/ HTTP/1.1\r\nContent-Length: ${MAX_BODY_BYTES + 1}\r\n\r\n").stream != null)
+        assertEquals(413, refusal("PATCH $shape HTTP/1.1\r\nContent-Length: ${MAX_BODY_BYTES + 1}\r\n\r\n").status)
+        assertEquals(413, refusal("POST /v1/assets HTTP/1.1\r\nContent-Length: ${MAX_IMPORT_BYTES + 1}\r\n\r\n").status)
+        for (other in listOf("$shape/x", "/v1/assets/a1/attachmentsx", "/v1/assets/a1/b/attachments", "/v2/assets/a1/attachments")) {
+            assertEquals(other, 413, refusal("POST $other HTTP/1.1\r\nContent-Length: ${MAX_BODY_BYTES + 1}\r\n\r\n").status)
+        }
+    }
+
+    /**
+     * #92 (C9, row 8): on the upload shape the body is left on the socket — nothing of it is read by the parser, and
+     * the stream is exactly `Content-Length` bytes. Every other request is read as ever.
+     */
+    @Test fun theUploadShapeIsLeftOnTheSocket() {
+        val payload = "0123456789".repeat(10)
+        val input = ByteArrayInputStream(
+            "POST /v1/assets/a1/attachments HTTP/1.1\r\nContent-Length: 100\r\n\r\n$payload-and-what-follows".toByteArray(),
+        )
+        val request = parseRequest(input, caps)
+        assertEquals(0, request.body.size)
+        assertEquals("the parser read a body byte", payload.length + "-and-what-follows".length, input.available())
+        assertEquals(payload, request.stream!!.readBytes().decodeToString())
+        assertEquals("-and-what-follows".length, input.available())
+
+        val patch = parse("PATCH /v1/assets/a1/attachments HTTP/1.1\r\nContent-Length: 2\r\n\r\n{}")
+        assertTrue(patch.stream == null)
+        assertEquals("{}", patch.body.decodeToString())
+        assertTrue(parse("GET /v1/assets/a1/attachments HTTP/1.1\r\n\r\n").stream == null)
+        assertEquals(400, refusal("GET /v1/assets/a1/attachments HTTP/1.1\r\nContent-Length: 2\r\n\r\n{}").status)
+        assertTrue(parse("POST /v1/assets HTTP/1.1\r\nContent-Length: 2\r\n\r\n{}").stream == null)
     }
 
     @Test fun anUnknownMethodIs405() {

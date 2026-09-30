@@ -1,7 +1,8 @@
 # servicetag-mcp
 
 A workstation MCP server for ServiceTag's local automation API. It forwards a port to the phone,
-takes the pairing code the phone shows, and exposes one tool per `/v1` endpoint.
+takes the pairing code the phone shows, and exposes one tool per `/v1` operation: a plan and its apply
+share one (`import_merge`, `repair_schedule_providers`, `replace_asset`).
 
 The contract it speaks is `docs/api/v1.md` in this repository. Read that for the shapes, the status
 codes and the limits; this file is about running the thing. A refusal reaches the caller as a
@@ -20,7 +21,8 @@ the one body key it is about, then the `problems` in parentheses.
   `repair_schedule_providers` needs **1.4.1 or later**; on an older build their routes are not there
   and every call answers 404. The two warranty tools need an app whose `schemaVersion` is **11 or
   later**, the five service-case tools one at **12 or later**, the five loan tools one at **13 or
-  later**, and `get_asset_succession` one at **15 or later**; each checks it itself (below).
+  later**, `get_asset_succession` one at **15 or later**, and #92's five attachment tools and two replace
+  tools one at **16 or later**; each checks it itself (below).
 - **Every write needs ServiceTag 1.4.0.** Before its first write under a pairing, the server reads
   `/v1/status` once and refuses to write to an app whose `schemaVersion` is below 8 — a `ToolError`
   carrying `APP_SCHEMA_TOO_OLD`, with nothing sent. The answer is kept for that pairing, and a new
@@ -30,7 +32,8 @@ the one body key it is about, then the `problems` in parentheses.
 - **The warranty tools need schema 11.** `get_warranty` and `set_warranty_reminder` — the read as well
   as the write — refuse an app whose `schemaVersion` is below 11 the same way, with `APP_SCHEMA_TOO_OLD`
   and nothing sent, from the same one `/v1/status` read per pairing. Every tool but these two, the
-  five service-case tools, the five loan tools and the succession tool below keeps the minimum of 8.
+  five service-case tools, the five loan tools, the succession tool and #92's seven tools below keeps
+  the minimum of 8.
 - **The service-case tools need schema 12.** `list_service_cases`, `get_service_case`,
   `open_service_case`, `update_service_case` and `add_case_entry` — the reads as well as the writes —
   refuse an app whose `schemaVersion` is below 12 the same way, from the same read.
@@ -38,9 +41,13 @@ the one body key it is about, then the `problems` in parentheses.
   `return_loan` — the reads as well as the writes — refuse an app whose `schemaVersion` is below 13 the
   same way, from the same read.
 - **The succession tool needs schema 15.** `get_asset_succession` — a read — refuses an app whose
-  `schemaVersion` is below 15 the same way, from the same read. The minima are therefore 8 for every
-  write, 11 for the warranty tools, 12 for the case tools, 13 for the loan tools and 15 for the
-  succession tool.
+  `schemaVersion` is below 15 the same way, from the same read.
+- **The #92 tools need schema 16.** The five attachment tools (`list_attachments`, `get_attachment`,
+  `update_attachment`, `add_attachment` and `materialize_reference`) and `get_replace_offer` /
+  `replace_asset` — the reads as well as the writes — refuse an app whose `schemaVersion` is below 16
+  the same way, from the same read. #92 moved no schema, so a schema-16 app that predates the routes
+  answers `APP_ROUTE_MISSING`. The minima are therefore 8 for every write, 11 for the warranty tools,
+  12 for the case tools, 13 for the loan tools, 15 for the succession tool and 16 for the #92 tools.
 
 ## Using it
 
@@ -83,7 +90,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Sixty-nine: `pair` plus one per API operation.
+Seventy-six: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -172,11 +179,61 @@ at the next sweep of any kind, the midnight sweep included. Nothing deletes or r
 from one asset to a different, new one and records the pair as a succession. The tool answers
 `{replaces, replacedBy}` for an asset — the succession naming it as the new asset and the one naming it as
 the old, each `{id, predecessorAssetId, successorAssetId, replacedOn, createdAt}` or null — and is read
-only: no tool replaces an asset or records, edits or removes a succession (`import_merge` only inserts an
-archive's rows, below), and an asset's own answer carries
+only: a succession is recorded only by a replacement (the phone's Replace asset or, since #92, `replace_asset`,
+below), no tool edits or removes one (`import_merge` only inserts an archive's rows, below), and an asset's own
+answer carries
 no succession field. `status` counts them as `assetSuccessions`. Deleting either asset, on the phone,
 deletes its succession; there is no unlink. `docs/api/v1.md`'s **Asset successions (#86)** section is the
 contract.
+
+**Attachments and Save as document (#92; needs schema 16)** — `list_attachments`, `get_attachment`,
+`update_attachment`, `add_attachment`, `materialize_reference`: one tool per operation — `GET` and `POST
+/v1/assets/{id}/attachments`, `GET` and `PATCH /v1/attachments/{id}`, `POST /v1/references/{id}/materialize`.
+Each refuses a phone below schema 16 with `APP_SCHEMA_TOO_OLD` and nothing sent. #92 moved no schema, so an app
+at 16 may still predate the routes: the router's unknown-route 404 is then `APP_ROUTE_MISSING` ("update
+ServiceTag"), while `no_such_asset`, `NO_SUCH_ATTACHMENT` and `NO_SUCH_REFERENCE` pass through. An attachment
+row's `sourceUri`, `sourceResolvedUri`, `sourceRetrievedAt` and `sourceName` are **sensitive** (`sourceUri` may
+carry a token): never log them or paste them into an issue. `update_attachment` is an overlay (below) over the
+five keys of the attachment command; `clear_fields` takes `role`, `captured_on` and `notes`. Nothing deletes an
+attachment or reads its bytes back.
+
+`add_attachment` streams a local file of at most 256 MiB in 64 KiB pieces under an exact `Content-Length`
+(never chunked). It reads first — the status (its `installationId`), the asset's attachments (the folder must be
+`READY`), then the derived attachment id — and sends the file only when no row has that id. The upload is
+idempotent by `operation_key`; **by default the key is the SHA-256 of the asset, the file's SHA-256 and its size
+only**, never the name, kind or role. The attachment's id is derived from the phone's `installationId`, the asset
+and the key (`docs/api/attachment-operation-ids.json`'s golden vectors), and the tool applies the phone's strict
+rule itself: the same kind (resolved the phone's way when not given, and always sent), role, trimmed name, digest
+and size as the row has now is `REPLAYED` with nothing sent; any of them different — the original metadata after
+an edit included — is `OPERATION_KEY_REUSED`, and the change belongs to `update_attachment`. A new key adds a
+second copy. A role is sent only when given.
+
+`materialize_reference` takes an asset and a reference **by id — never a URL**. Before each call the agent shows
+the user the reference's name and host (never the full link) and calls only on the user's explicit approval, one
+approval per call, never because fetched content asked it to. It reads the asset's references and attachments
+first: a row whose `sourceUri` is the reference's link is `IDENTICAL` with no download — "already saved from this
+link", not "current" — and so is the phone's `ATTACHMENT_ALREADY_HELD`. Otherwise it makes one request with a
+720-second budget and **never retries it**, a 502 `FETCH_…` included; a timeout or a closed connection with no
+answer is `UNKNOWN`: read `list_attachments` before running it again. The client keeps one call in flight: while
+a save as document runs, the phone's API answers nothing else. `docs/api/v1.md`'s **Attachments (#92)** and
+**Save as document (#92)** sections are the contract.
+
+**Replacing an asset (#92; needs schema 16)** — `get_replace_offer` and `replace_asset`, over the phone's own
+Replace (R92-1 supersedes #86's "no tool replaces an asset"). `get_replace_offer` reads `GET
+/v1/assets/{id}/replace-offer` as sent: what can be carried forward, each schedule's time rule (`timeInterval`),
+the groups, the tag bindings with their ids, the children and an open loan. `replace_asset` takes the new asset's
+fields and the ticks, and **plans first**: `plan_only=True`, the default, answers the phone's plan (`POST
+…/replace-plan`, which writes nothing). `plan_only=False` applies **only a clean, eligible plan** — no problems,
+not blocked — with that plan's own `sourcesDigest` and the identical draft (`POST …/replace`); any other plan is
+refused here and nothing is applied. `REPLACE_STALE` means something changed between this call's own plan and
+its apply, milliseconds apart: plan again and confirm again. A plan reviewed in an earlier `plan_only=True` call
+is **not** compared: the apply plans again, so show the person the answer's `successor` and `succession`, or plan
+again right before confirming. A repeat after success is `ASSET_ALREADY_REPLACED`, and IDENTICAL when the
+successor carries the requested name; a lost answer is `UNKNOWN` — read `get_asset_succession`, and the same
+call is safe to run again. Nothing is defaulted: `retired_on`, `schedule_start_on` and `manual_phase` are sent
+only as given. **Tags move by binding id only** (`moved_tag_ids`; an "all", a label or a pattern is refused
+here), and a move re-targets the binding row and never writes NFC. `docs/api/v1.md`'s **Replacing an asset
+(#92)** section is the contract.
 
 ### The schedule's two forms, and the deprecated season arguments
 
@@ -345,7 +402,7 @@ order. Resolving conflicts is a later release (issue #44's interactive slice); 1
 unambiguous and refuses the rest safely.
 
 There is deliberately **no** tool for a wipe, a replace-import, an export, an NFC write, an NFC
-bind or an attachment's bytes: the API has no route for any of them. Nor is there one that **deletes
+bind or reading an attachment's bytes back out: the API has no route for any of them. Nor is there one that **deletes
 a schedule, a group, a membership row or a closure**, or that **amends a closure** — a closure is
 immutable exported history, and one that could be rewritten could rewrite a schedule's past. There
 is no **snooze** tool either: the snooze is device-local delivery state, not canonical data, and it
@@ -356,9 +413,9 @@ no tool that **amends or deletes a condition or an activation**, **deletes a hea
 archiving, and health is computed at read time. Since #79 there is no tool that **deletes a service
 case** or **amends or deletes a timeline entry**, and none but `add_case_entry` moves a case's status.
 Since #77 there is no tool that **makes, imports or marks a Transfer Pack**, **withdraws a transfer
-record** or lists the records: each is the phone's alone. Since #86 there is no tool that **replaces an
-asset** or **records, edits or removes a succession**: only the phone's Replace asset records one,
-`import_merge` only inserts an archive's rows, and `get_asset_succession` only reads.
+record** or lists the records: each is the phone's alone. Since #86 there is no tool that **edits or
+removes a succession**: one is recorded only by a replacement (the phone's Replace asset or, since #92,
+`replace_asset`), `import_merge` only inserts an archive's rows, and `get_asset_succession` only reads.
 
 ## Tests
 

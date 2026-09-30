@@ -40,5 +40,20 @@
   },
   "loanReturn": {
     "keys": ["returnedOn"]
+  },
+  "attachmentUpdate": {
+    "keys": ["displayName", "kind", "capturedOn", "notes", "role"]
+  },
+  "attachmentUpload": {
+    "keys": ["operationKey", "displayName", "sha256", "kind", "role", "capturedOn", "notes"]
+  },
+  "materialize": {
+    "keys": ["displayName", "kind", "role", "notes"]
+  },
+  "replaceDraft": {
+    "keys": ["retiredOn", "successor", "carrySeason", "carrySetup", "carryNotes", "manualPhase", "scheduleIds", "groupIds", "scheduleStartOn", "movedTagIds", "sourcesDigest"]
+  },
+  "replaceSuccessor": {
+    "keys": ["name", "category", "manufacturer", "model", "serialNumber", "purchaseOn", "inServiceOn", "purchasePriceMinor", "currency", "vendor", "location", "warrantyExpiresOn", "warrantyNotes", "parentAssetId"]
   }
 }

@@ -21,12 +21,19 @@ group that already existed is re-resolved by name, the identical rule `plan.py` 
 ever being read as a date — invariant 8. Every write call passes `entry=` through to
 `phone.call_tool`, so an `is_error` from the phone surfaces naming the manifest entry it was for,
 not just the tool.
+
+#92 C32: replacements come last, one call per fresh `CREATE`, with the arguments `draft.arguments` builds from
+the fresh offer; the tool plans again and applies only its own clean plan with that plan's digest, so this module
+never sees a digest. `REPLACE_STALE` is reported and never retried; `ASSET_ALREADY_REPLACED`, an `IDENTICAL` or an
+`UNKNOWN` answer is reported, and the closing re-plan re-reads the succession to decide. A note names the entry
+key and the phone's answer, never an id.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import draft
 from . import manifest as manifestmod
 from . import phone
 from . import plan as planmod
@@ -51,6 +58,8 @@ class ApplyResult:
     groups_created: int
     schedules_created: int
     reapply_plan: planmod.Plan
+    replacements_created: int = 0
+    notes: tuple[str, ...] = ()
 
 
 async def apply(
@@ -59,7 +68,7 @@ async def apply(
     if not plan_result.clean:
         raise ApplyRefused("the given plan has CONFLICT/ERROR entries; nothing was written")
 
-    inventory = await phone.snapshot(client)
+    inventory = await phone.snapshot(client, manifest.replacements)
     fresh_plan = planmod.plan(manifest, inventory)
     if not fresh_plan.clean:
         raise ApplyRefused(
@@ -139,6 +148,41 @@ async def apply(
         await phone.call_tool(client, "create_schedule", args, entry=f"schedule {schedule.key!r}")
         schedules_created += 1
 
-    reapply_inventory = await phone.snapshot(client)
+    replacements_created, notes = await _replace(manifest, decisions, inventory, client)
+
+    reapply_inventory = await phone.snapshot(client, manifest.replacements)
     reapply_plan = planmod.plan(manifest, reapply_inventory)
-    return ApplyResult(groups_created, schedules_created, reapply_plan)
+    return ApplyResult(groups_created, schedules_created, reapply_plan, replacements_created, tuple(notes))
+
+
+async def _replace(
+    manifest: manifestmod.Manifest, decisions: dict, inventory: phone.Inventory, client: phone.ToolClient,
+) -> tuple[int, list[str]]:
+    reads = {read.key: read for read in inventory.replacements}
+    created, notes = 0, []
+    for r in manifest.replacements:
+        if decisions.get(("replacement", r.key)) != "CREATE":
+            continue
+        entry = f"replacement {r.key!r}"
+        lone = planmod.lone_candidate(reads.get(r.key))
+        arguments, err = draft.arguments(r, lone.offer or {}) if lone is not None else (None, "no lone candidate")
+        if lone is None or arguments is None:
+            raise ApplyError(f"{entry}: {err}")
+        try:
+            answer = await phone.call_tool(
+                client, "replace_asset", {"asset_id": lone.asset_id, **arguments, "plan_only": False}, entry=entry,
+            )
+        except phone.PhoneError as e:
+            refusal = next((c for c in ("REPLACE_STALE", "ASSET_ALREADY_REPLACED") if c in e.tool_text), None)
+            if refusal is None:
+                raise
+            notes.append(f"{entry}: the phone answered {refusal}; nothing was replaced by this run"
+                         + ("; plan again" if refusal == "REPLACE_STALE" else "; the re-plan reads the succession"))
+            continue
+        decision = answer.get("decision") if isinstance(answer, dict) else None
+        if decision == "CREATED":
+            created += 1
+        else:
+            answered = decision if decision in ("IDENTICAL", "UNKNOWN") else "an unexpected answer"
+            notes.append(f"{entry}: the phone answered {answered}; the re-plan reads the succession")
+    return created, notes
