@@ -19,7 +19,10 @@ import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
+import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
+import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.MaterializeReference
@@ -91,6 +94,9 @@ class MaterializeViewModelTest {
     /** True: the reference read throws, as a database that will not answer does. */
     private var brokenRead = false
 
+    /** Run once, right after `prepare`'s duplicate check — its last suspension before it answers `Ready`. */
+    private var afterDuplicateCheck: (() -> Unit)? = null
+
     @Before fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
         graph = FakeGraph(queryContext = StandardTestDispatcher(scheduler))
@@ -120,8 +126,12 @@ class MaterializeViewModelTest {
             override suspend fun get(id: ReferenceId): AssetReference? =
                 if (brokenRead) throw IllegalStateException("the read failed") else graph.references.get(id)
         }
+        val attachments = object : AttachmentRepository by graph.attachments {
+            override suspend fun forAsset(assetId: AssetId): List<Attachment> =
+                graph.attachments.forAsset(assetId).also { afterDuplicateCheck?.invoke() }
+        }
         return MaterializeReference(
-            references, graph.attachments, graph.attachmentStorage, LinkLaunchPolicy(), hops,
+            references, attachments, graph.attachmentStorage, LinkLaunchPolicy(), hops,
             FetchDocument(transport, hops, CacheStagingArea(staging, graph.ids), io = StandardTestDispatcher(scheduler)),
             graph.addAttachment, { graph.networkGranted }, graph.clock,
         )
@@ -363,6 +373,56 @@ class MaterializeViewModelTest {
         assertEquals(Closed, vm.state.value)
         assertEquals(emptyList<String>(), staged())
         assertTrue(rows().isEmpty())
+        clearModels()
+    }
+
+    /**
+     * Review MINOR 1: a Cancel that lands after the download is in hand but before `prepare` answers. `prepare`
+     * returns `Ready` into a cancelled job, and the sheet must discard it, not leave it in staging.
+     */
+    @Test fun aDownloadThatLandsAfterCancelIsDiscarded() = runTest {
+        poolPump()
+        lateinit var vm: MaterializeViewModel
+        afterDuplicateCheck = { afterDuplicateCheck = null; vm.cancel() }
+        vm = model()
+
+        vm.state.first { it == Closed }
+        advanceUntilIdle()
+
+        assertEquals(listOf(URI), graph.documentTransport.requests)
+        assertEquals(Closed, vm.state.value)
+        assertEquals("the late Ready is discarded", emptyList<String>(), staged())
+        assertTrue(rows().isEmpty())
+        clearModels()
+    }
+
+    /** Review MINOR 2: the folder's access lost between Review and Save says the reused store line. */
+    @Test fun aStoreLostBeforeSaveSaysTheShippedLine() = runTest {
+        poolPump()
+        val vm = model()
+        vm.state.first { it is Review }
+        graph.attachmentStorage.state = StoreState.AccessLost("Attachments")
+
+        vm.save()
+
+        assertEquals(Refused("The attachment folder is not available", false), vm.state.first { it !is Saving })
+        assertTrue(rows().isEmpty())
+        assertTrue(staged().isEmpty())
+        clearModels()
+    }
+
+    /** Review MINOR 2: the asset gone between Review and Save (`OwnerMissing`) says the reused "Could not save". */
+    @Test fun anAssetGoneBeforeSaveSaysCouldNotSave() = runTest {
+        poolPump()
+        val vm = model()
+        vm.state.first { it is Review }
+        graph.uow.write { graph.assets.delete(assetId) }
+
+        vm.save()
+
+        assertEquals(Refused("Could not save Example Pool Pump manual", false), vm.state.first { it !is Saving })
+        assertTrue(rows().isEmpty())
+        assertTrue(staged().isEmpty())
         clearModels()
     }
 

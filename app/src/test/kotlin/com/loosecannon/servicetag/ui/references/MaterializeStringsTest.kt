@@ -1,5 +1,9 @@
 package com.loosecannon.servicetag.ui.references
 
+import com.loosecannon.servicetag.core.fetch.ContainerInspect
+import com.loosecannon.servicetag.core.fetch.DocumentSniff
+import com.loosecannon.servicetag.core.fetch.TextSniff
+import java.lang.reflect.Modifier
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -66,30 +70,41 @@ class MaterializeStringsTest {
         )
     }
 
-    /** P85-5's `{TYPE}`: the nineteen ratified labels (§19's table), each for the MIME type the sniff proves. */
+    /**
+     * P85-5's `{TYPE}`: the nineteen ratified labels (§19's table), keyed by the core's own constants for the MIME
+     * types the sniff and the inspections prove (review MINOR 3), so a renamed or added proven type fails here and
+     * never reaches the sheet as P85-18.
+     */
     @Test fun everyProvenTypeHasItsRatifiedLabel() {
         val labels = mapOf(
-            "application/pdf" to "PDF",
-            "image/png" to "PNG",
-            "image/jpeg" to "JPEG",
-            "image/gif" to "GIF",
-            "image/webp" to "WebP",
-            "application/rtf" to "RTF",
-            "application/msword" to "DOC",
-            "application/vnd.ms-excel" to "XLS",
-            "application/vnd.ms-powerpoint" to "PPT",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" to "DOCX",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" to "XLSX",
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation" to "PPTX",
-            "application/vnd.oasis.opendocument.text" to "ODT",
-            "application/vnd.oasis.opendocument.spreadsheet" to "ODS",
-            "application/vnd.oasis.opendocument.presentation" to "ODP",
-            "text/plain" to "TXT",
-            "text/markdown" to "Markdown",
-            "text/csv" to "CSV",
-            "text/tab-separated-values" to "TSV",
+            DocumentSniff.PDF to "PDF",
+            DocumentSniff.PNG to "PNG",
+            DocumentSniff.JPEG to "JPEG",
+            DocumentSniff.GIF to "GIF",
+            DocumentSniff.WEBP to "WebP",
+            DocumentSniff.RTF to "RTF",
+            ContainerInspect.DOC to "DOC",
+            ContainerInspect.XLS to "XLS",
+            ContainerInspect.PPT to "PPT",
+            ContainerInspect.DOCX to "DOCX",
+            ContainerInspect.XLSX to "XLSX",
+            ContainerInspect.PPTX to "PPTX",
+            DocumentSniff.ODT to "ODT",
+            DocumentSniff.ODS to "ODS",
+            DocumentSniff.ODP to "ODP",
+            TextSniff.PLAIN to "TXT",
+            TextSniff.MARKDOWN to "Markdown",
+            TextSniff.CSV to "CSV",
+            TextSniff.TSV to "TSV",
         )
         assertEquals(19, labels.size)
+        // Every MIME constant the three proving objects declare is keyed above: a twentieth fails here.
+        val declared = listOf(DocumentSniff::class.java, ContainerInspect::class.java, TextSniff::class.java)
+            .flatMap { type -> type.fields.filter { Modifier.isStatic(it.modifiers) && it.type == String::class.java } }
+            .map { it.get(null) as String }
+            .filter { Regex("^[a-z]+/[a-z0-9.+-]+$").matches(it) }
+            .toSet()
+        assertEquals(labels.keys, declared)
         labels.forEach { (mime, label) ->
             assertEquals(mime, "$label · 2.0 MB", MaterializeStrings.typeLine(mime, 2_097_152L))
         }
