@@ -62,6 +62,20 @@ _SUCCESSOR_WIRE: dict[str, str] = {
 loader's."""
 
 
+def _as_stored(argument: str, value: Any, labels: list[str]) -> Any:
+    """What the phone stores for a successor argument, by this fixture's own rule (never the loader's): text is
+    trimmed with whitespace runs collapsed; a blank `currency` is null (`blankToNull`); a category whose
+    case-insensitive spelling matches a built-in takes the built-in's label (`PromoteCategory`)."""
+    if not isinstance(value, str):
+        return value
+    text = " ".join(value.split())
+    if argument == "currency":
+        return text or None
+    if argument == "category":
+        return next((label for label in labels if label.lower() == text.lower()), text)
+    return text
+
+
 def _derived_triple(policy: str, offset: int | None) -> dict[str, Any]:
     """Spec §9.1's reverse projection, as a 1.4 row reports it (all null for `PRE_SERVICE`)."""
     behavior, reentry, reentry_offset = {
@@ -104,6 +118,7 @@ class FakeClient:
         self.replace_apply_error: str | None = None  # answered to the next apply, after its plan
         self.replace_apply_unknown = False  # the next apply replaces, then answers UNKNOWN
         self.before_replace_apply: Any = None  # a callable run once as the next apply arrives (a race)
+        self.category_labels: list[str] = ["Pump", "Hot tub", "HVAC"]  # built-ins the phone promotes to
 
     def _new_id(self, prefix: str) -> str:
         return f"{prefix}-{next(self._ids)}"
@@ -265,7 +280,8 @@ class FakeClient:
         successor_id = self.add_asset(name=name)
         successor = self._asset_row(successor_id)
         assert successor is not None
-        successor.update({_SUCCESSOR_WIRE[k]: v for k, v in draft.items() if k in _SUCCESSOR_WIRE})
+        successor.update({_SUCCESSOR_WIRE[k]: _as_stored(k, v, self.category_labels)
+                          for k, v in draft.items() if k in _SUCCESSOR_WIRE})
         predecessor = self._asset_row(asset_id)
         assert predecessor is not None
         predecessor["retiredOn"] = predecessor["retiredOn"] or draft.get("retired_on")

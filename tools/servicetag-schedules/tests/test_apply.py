@@ -476,3 +476,15 @@ def test_a_manifest_without_replacements_calls_no_replace_tool(fake_client) -> N
     _run(A.apply(manifest, _run(_plan_against(manifest, fake_client)), fake_client))
     replace_tools = {"get_asset_succession", "get_asset", "get_replace_offer", "replace_asset"}
     assert not replace_tools & {name for name, _ in fake_client.calls}
+
+
+def test_the_loaders_own_apply_replans_identical_when_the_phone_canonicalises(fake_client) -> None:
+    """MAJOR-1: the phone stores the built-in category label, a trimmed model and a null for a blank currency."""
+    pump, _, _ = _seed_pump(fake_client)
+    manifest = _pump_manifest(successor=(("name", "Example pump"), ("category", "pump"), ("currency", ""),
+                                         ("model", " B-2 ")))
+    outcome = _run(A.apply(manifest, _run(_replan(manifest, fake_client)), fake_client))
+    assert outcome.replacements_created == 1
+    assert [(e.decision, e.reason) for e in outcome.reapply_plan.entries][0][0] == "IDENTICAL", outcome.reapply_plan
+    [successor] = [row for row in fake_client.top_level if row["id"] != pump and row["name"] == "Example pump"]
+    assert (successor["category"], successor["currency"], successor["model"]) == ("Pump", None, "B-2")

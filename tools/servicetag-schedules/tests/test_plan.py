@@ -715,8 +715,8 @@ def replaced_asset(asset_id: str = "a1", **successor_row) -> P.Namesake:
     return P.Namesake(asset_id, is_successor=False, successor=row)
 
 
-def successor_asset(asset_id: str = "a2") -> P.Namesake:
-    return P.Namesake(asset_id, is_successor=True, successor=None)
+def successor_asset(asset_id: str = "a2", predecessor_id: str = "a1") -> P.Namesake:
+    return P.Namesake(asset_id, is_successor=True, successor=None, predecessor_id=predecessor_id)
 
 
 def plan_replacement(replacement: M.Replacement, *namesakes: P.Namesake) -> PL.PlanEntry:
@@ -783,3 +783,57 @@ def test_duplicate_replacement_keys_are_both_error() -> None:
     result = PL.plan(mk_manifest(replacements=[a, b]), inventory)
     assert [e.decision for e in result.entries] == ["ERROR", "ERROR"]
     assert not result.clean
+
+
+# ---- #92 B6 fix round 1 ------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "typed, stored",
+    [("pump", "Pump"), ("Hot  tub", "Hot tub"), (" HVAC ", "hvac"), ("Hot\u200b tub", "Hot tub"),
+     ("Cafe\u0301", "Caf\u00e9")],
+)
+def test_category_key_matches_the_phones_rule_on_golden_cases(typed: str, stored: str) -> None:
+    """A copy of `CategoryKey.of`: NFC, the removed code points dropped, whitespace collapsed, lower-cased."""
+    assert PL.category_key(typed) == PL.category_key(stored)
+
+
+def test_category_key_keeps_distinct_categories_apart() -> None:
+    assert PL.category_key("Pump") != PL.category_key("Pumps")
+    assert PL.category_key("  ") is None
+
+
+def test_identical_when_the_phone_canonicalised_category_and_nulled_a_blank_currency() -> None:
+    """MAJOR-1: the phone stores the built-in label and turns a blank currency into null."""
+    r = mk_replacement(successor=(("name", "Example pump"), ("category", "pump"), ("currency", "")))
+    decided = plan_replacement(r, replaced_asset(category="Pump", currency=None), successor_asset())
+    assert decided.decision == "IDENTICAL"
+
+
+@pytest.mark.parametrize("where", ["group", "schedule"])
+def test_a_create_replacement_whose_predecessor_this_manifest_also_names_is_error(where: str) -> None:
+    """MAJOR-2: after the replacement the name finds the successor, so the manifest could never re-plan
+    IDENTICAL; the plan is refused before any write."""
+    groups = [mk_group("g1", "Pool kit", ("Example pump",))] if where == "group" else []
+    schedules = [mk_schedule("s1", "Flush", target_asset="Example pump")] if where == "schedule" else []
+    inventory = P.Inventory(assets=(mk_asset("a1", "Example pump"),),
+                            replacements=(P.ReplacementRead("r1", (open_asset(),)),))
+    result = PL.plan(mk_manifest(groups=groups, schedules=schedules, replacements=[mk_replacement()]), inventory)
+    decided = entry(result, "replacement", "r1")
+    assert decided.decision == "ERROR"
+    assert "'Example pump'" in decided.reason and "schedules or groups" in decided.reason
+    assert not result.clean
+
+
+def test_a_done_replacement_is_not_guarded_since_the_entries_then_describe_the_successor() -> None:
+    schedules = [mk_schedule("s1", "Flush", target_asset="Example pump")]
+    inventory = P.Inventory(replacements=(P.ReplacementRead("r1", (replaced_asset(), successor_asset())),))
+    result = PL.plan(mk_manifest(schedules=schedules, replacements=[mk_replacement()]), inventory)
+    assert entry(result, "replacement", "r1").decision == "IDENTICAL"
+
+
+def test_a_same_named_successor_of_an_unrelated_succession_makes_the_name_ambiguous() -> None:
+    """MINOR-1: its own predecessor is not among the namesakes (renamed), so two live assets carry the name."""
+    decided = plan_replacement(mk_replacement(), open_asset("a1"), successor_asset("a3", predecessor_id="a0"))
+    assert decided.decision == "ERROR"
+    assert "ambiguous" in decided.reason
