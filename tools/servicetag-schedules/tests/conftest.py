@@ -64,14 +64,16 @@ loader's."""
 
 def _as_stored(argument: str, value: Any, labels: list[str]) -> Any:
     """What the phone stores for a successor argument, by this fixture's own rule (never the loader's): text is
-    trimmed with whitespace runs collapsed; a blank `currency` is null (`blankToNull`); a category whose
-    case-insensitive spelling matches a built-in takes the built-in's label (`PromoteCategory`)."""
+    trimmed (`AssetCommands.trimmed`); a blank `currency` is null (`blankToNull`); a category has its whitespace
+    runs collapsed and, when its case-insensitive spelling matches a built-in, takes the built-in's label
+    (`PromoteCategory`)."""
     if not isinstance(value, str):
         return value
-    text = " ".join(value.split())
+    text = value.strip()
     if argument == "currency":
         return text or None
     if argument == "category":
+        text = " ".join(text.split())
         return next((label for label in labels if label.lower() == text.lower()), text)
     return text
 

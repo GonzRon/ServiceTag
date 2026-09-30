@@ -129,15 +129,16 @@ class Schedule:
 @dataclass(frozen=True)
 class Namesake:
     """#92 C32: one asset carrying a replacement's predecessor name, read through its succession.
-    `is_successor` — its succession has `replaces`; `successor` — the asset row that replaced it, or None. The
-    offer and the phone's plan (`plan_only`) are read only for the lone candidate: the one namesake that is not a
-    successor, when it has no successor itself."""
+    `is_successor` — its succession has `replaces`, whose predecessor is `predecessor_id`; `successor` — the
+    asset row that replaced it, or None. The offer and the phone's plan (`plan_only`) are read only for the lone
+    candidate: the one namesake that is not a successor, when it has no successor itself."""
 
     asset_id: str
     is_successor: bool
     successor: dict[str, Any] | None
     offer: dict[str, Any] | None = None
     phone_plan: dict[str, Any] | None = None
+    predecessor_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -239,7 +240,9 @@ async def _read_replacement(
         if replaced_by is not None:
             answer = await call_tool(client, "get_asset", {"asset_id": replaced_by["successorAssetId"]})
             successor = answer["asset"]
-        namesakes.append(Namesake(asset.id, succession.get("replaces") is not None, successor))
+        replaces = succession.get("replaces")
+        namesakes.append(Namesake(asset.id, replaces is not None, successor,
+                                  predecessor_id=replaces["predecessorAssetId"] if replaces else None))
     originals = [n for n in namesakes if not n.is_successor]
     if len(originals) == 1 and originals[0].successor is None:
         lone = originals[0]

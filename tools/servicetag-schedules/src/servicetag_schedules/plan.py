@@ -13,6 +13,7 @@ writing — the identical rule, applied twice, on purpose (see `apply.py`'s modu
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass
 
 from . import draft
@@ -313,10 +314,31 @@ def lone_candidate(read: phone.ReplacementRead | None) -> phone.Namesake | None:
     return originals[0] if len(originals) == 1 else None
 
 
+_REMOVED = ((0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x17B4, 0x17B5), (0x180E, 0x180E),
+            (0x200B, 0x200B), (0x200E, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0xFEFF, 0xFEFF),
+            (0xFFF0, 0xFFF8), (0x1D173, 0x1D17A), (0xE0000, 0xE001F), (0xE0080, 0xE00FF), (0xE01F0, 0xE0FFF))
+_SPACE_LIKE = {0x115F, 0x1160, 0x2800, 0x3164, 0xFFA0}
+
+
+def category_key(text: str) -> str | None:
+    """The phone's category identity (`core/.../journal/CategoryKey.kt`, `of`): NFC, the removed code points
+    dropped and the space-like blanks made spaces, NFC again, trimmed, whitespace runs collapsed, lower-cased;
+    None when blank. The phone stores a category in its canonical spelling, so a successor's category is compared
+    by this key. One exception is not copied: every tag character is kept here, where the phone drops those
+    outside three subdivision flags, so a divergence can only read CONFLICT, never a false IDENTICAL."""
+    kept = "".join(" " if ord(c) in _SPACE_LIKE else c for c in unicodedata.normalize("NFC", text)
+                   if not any(lo <= ord(c) <= hi for lo, hi in _REMOVED))
+    return " ".join(unicodedata.normalize("NFC", kept).split()).lower() or None
+
+
 def _differing(replacement: manifestmod.Replacement, successor: dict) -> list[str]:
-    def norm(value: object) -> object:
-        return value.strip() if isinstance(value, str) else value
-    return [key for key, value in replacement.successor if norm(successor.get(key)) != norm(value)]
+    """The manifest's successor keys whose value the existing successor does not hold, as the phone stores it:
+    trimmed, a blank as absent (`blankToNull`, and the non-null `""` defaults), a category by its key."""
+    def norm(key: str, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return category_key(value) if key == "category" else (value.strip() or None)
+    return [key for key, value in replacement.successor if norm(key, successor.get(key)) != norm(key, value)]
 
 
 def _decide_replacement(replacement: manifestmod.Replacement, read: phone.ReplacementRead | None) -> PlanEntry:
@@ -333,6 +355,11 @@ def _decide_replacement(replacement: manifestmod.Replacement, read: phone.Replac
         return decided("ERROR", f"every asset named {name!r} is itself a successor, never a candidate")
     if len(originals) > 1:
         return decided("ERROR", f"{len(originals)} assets named {name!r} that are not successors (ambiguous)")
+    namesake_ids = {n.asset_id for n in read.namesakes}
+    if any(n.is_successor and n.predecessor_id not in namesake_ids for n in read.namesakes):
+        # A successor whose own predecessor does not carry the name (renamed) is another live asset: ambiguous.
+        return decided("ERROR", f"another asset named {name!r} is the successor of a differently named one "
+                                "(ambiguous)")
     candidate = originals[0]
     if candidate.successor is not None:
         differing = _differing(replacement, candidate.successor)
@@ -361,6 +388,10 @@ def _plan_replacements(manifest: manifestmod.Manifest, inventory: phone.Inventor
     keys = [r.key for r in manifest.replacements]
     predecessors = [r.predecessor for r in manifest.replacements]
     reads = {read.key: read for read in inventory.replacements}
+    # Names this manifest's groups and schedules resolve: after a replacement such a name finds the successor
+    # (a retired predecessor is never resolved), so the manifest could never re-plan IDENTICAL.
+    named = {m.asset for g in manifest.groups for m in g.members}
+    named |= {s.target_asset for s in manifest.schedules if s.target_asset is not None}
     entries = []
     for r in manifest.replacements:
         if keys.count(r.key) > 1:
@@ -368,7 +399,13 @@ def _plan_replacements(manifest: manifestmod.Manifest, inventory: phone.Inventor
         elif predecessors.count(r.predecessor) > 1:
             entries.append(PlanEntry("replacement", r.key, "ERROR", "duplicate predecessor within this manifest"))
         else:
-            entries.append(_decide_replacement(r, reads.get(r.key)))
+            entry = _decide_replacement(r, reads.get(r.key))
+            if entry.decision == "CREATE" and r.predecessor in named:
+                entry = PlanEntry("replacement", r.key, "ERROR", (
+                    f"this manifest also names {r.predecessor!r} in its schedules or groups; after the replacement "
+                    "that name finds the successor, so it could never re-plan IDENTICAL: replace it from a manifest "
+                    "of its own, then load the successor's schedules in another"))
+            entries.append(entry)
     return entries
 
 
