@@ -8,6 +8,9 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.AttachmentSource
+import com.loosecannon.servicetag.core.fetch.HopPolicy
+import com.loosecannon.servicetag.core.fetch.HostResolver
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.ports.ByteSource
@@ -16,6 +19,7 @@ import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.AddReferenceCommand
 import com.loosecannon.servicetag.core.usecase.AssetCommand
+import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.ReferenceResult
 import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.UpdateReference
@@ -61,6 +65,10 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReferencesSectionViewModelTest {
 
+    private companion object {
+        const val MANUAL = "https://manuals.example.invalid/pool-pump/manual.pdf"
+    }
+
     private val scheduler = TestCoroutineScheduler()
     private lateinit var graph: FakeGraph
 
@@ -69,6 +77,7 @@ class ReferencesSectionViewModelTest {
 
     private val store = ViewModelStore()
     private val policy = LinkLaunchPolicy()
+    private val hops = HopPolicy(HostResolver { listOf(byteArrayOf(203.toByte(), 0, 113, 10)) })
 
     private lateinit var addReference: AddReference
     private lateinit var updateReference: UpdateReference
@@ -124,6 +133,7 @@ class ReferencesSectionViewModelTest {
             initializer {
                 ReferencesSectionViewModel(
                     owner, graph.references, addReference, updateReference, removeReference, policy,
+                    graph.attachments, hops,
                     io = io,
                 )
             }
@@ -153,6 +163,98 @@ class ReferencesSectionViewModelTest {
         }
     }
 
+    /** #85 (C20): a document saved from [uri] onto [owner], as `MaterializeReference.commit` writes one. */
+    private suspend fun sourced(owner: AssetId, uri: String) = (
+        graph.addAttachment.run(
+            AttachmentOwner.OfAsset(owner),
+            AddAttachmentCommand(
+                displayName = "Example Pool Pump manual", mimeType = "application/pdf", sizeBytes = 3L,
+                source = AttachmentSource(uri, null, 5_000L, "Example Pool Pump manual"),
+            ),
+            ByteSource { "pdf".toByteArray().inputStream() },
+        ) as AttachmentResult.Ok
+        ).value
+
+    @Test fun materializableForAnHttpsWebLink() = runTest {
+        hotTub()
+        stored("r1", MANUAL, ReferenceKind.WEB_URL, "Example Pool Pump manual")
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+
+        val row = vm.state.first { it.rows.isNotEmpty() }.rows.single()
+
+        assertTrue(row.materializable)
+        assertFalse(row.savedAsDocument)
+        clearModels()
+    }
+
+    /** R85-4, R85-15: no item for these, and each reference is listed exactly as it was stored. */
+    @Test fun notForHttpNoteBlockedUserinfoOrANonAsciiHost() = runTest {
+        hotTub()
+        val stored = mapOf(
+            "http" to ("http://manuals.example.invalid/manual.pdf" to ReferenceKind.WEB_URL),
+            "note" to ("joplin://x-callback-url/openNote?id=0123" to ReferenceKind.NOTE_LINK),
+            "blocked" to ("javascript:alert(1)" to ReferenceKind.OTHER),
+            "userinfo" to ("https://owner@manuals.example.invalid/manual.pdf" to ReferenceKind.WEB_URL),
+            "idn" to ("https://handb\u00fccher.example.invalid/manual.pdf" to ReferenceKind.WEB_URL),
+            "local" to ("https://localhost/manual.pdf" to ReferenceKind.WEB_URL),
+        )
+        stored.forEach { (id, link) -> stored(id, link.first, link.second, "Example $id link") }
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+
+        val rows = vm.state.first { it.rows.size == stored.size }.rows
+
+        assertEquals(emptyList<String>(), rows.filter { it.materializable }.map { it.id })
+        assertEquals(stored.mapValues { it.value.first }, rows.associate { it.id to it.uri })
+        clearModels()
+    }
+
+    /** R85-3: the second identity is `(assetId, uri)` — another reference with the same name is not marked. */
+    @Test fun savedAsDocumentWhenASourcedAttachmentNamesTheUri() = runTest {
+        hotTub()
+        stored("r1", MANUAL, ReferenceKind.WEB_URL, "Example Pool Pump manual")
+        stored("r2", "https://manuals.example.invalid/pool-pump/parts.pdf", ReferenceKind.WEB_URL, "Example Pool Pump manual")
+        sourced(assetId, MANUAL)
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+
+        val rows = vm.state.first { s -> s.rows.size == 2 && s.rows.any { it.savedAsDocument } }.rows
+
+        assertEquals(mapOf("r1" to true, "r2" to false), rows.associate { it.id to it.savedAsDocument })
+        clearModels()
+    }
+
+    @Test fun clearedWhenThatAttachmentIsDeleted() = runTest {
+        hotTub()
+        stored("r1", MANUAL, ReferenceKind.WEB_URL, "Example Pool Pump manual")
+        val saved = sourced(assetId, MANUAL)
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { s -> s.rows.singleOrNull()?.savedAsDocument == true }
+
+        graph.deleteAttachment.run(saved.id)
+
+        val row = vm.state.first { s -> s.rows.singleOrNull()?.savedAsDocument == false }.rows.single()
+        assertEquals("the reference stays (R85-1)", MANUAL, row.uri)
+        clearModels()
+    }
+
+    @Test fun anotherAssetsSourceDoesNotCount() = runTest {
+        hotTub()
+        stored("r1", MANUAL, ReferenceKind.WEB_URL, "Example Pool Pump manual")
+        val heater = graph.createAsset.run(AssetCommand(name = "Sample Water Heater"))
+        sourced(heater.id, MANUAL)
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+
+        val row = vm.state.first { it.rows.isNotEmpty() }.rows.single()
+
+        assertFalse(row.savedAsDocument)
+        assertTrue(row.materializable)
+        clearModels()
+    }
+
     /**
      * I-3, asserted on the shape rather than on a drawing of it: a reference has no bytes, so the
      * row state may not grow a locator, a size, a sha256, a presence flag or a thumbnail. Copying
@@ -165,7 +267,7 @@ class ReferencesSectionViewModelTest {
             .toSet()
 
         assertEquals(
-            setOf("id", "displayName", "description", "uri", "kind", "launchable"),
+            setOf("id", "displayName", "description", "uri", "kind", "launchable", "materializable", "savedAsDocument"),
             fields,
         )
     }
