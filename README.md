@@ -71,7 +71,7 @@ ServiceTag is also distinct from [NoteTag](https://github.com/GonzRon/NoteTag). 
 
 - **Notifications** (`POST_NOTIFICATIONS`) — asked at the point of need since 1.2, never at launch.
 - **NFC** and **RECEIVE_BOOT_COMPLETED** — declared, with no runtime request: NFC reads and writes tags, and the boot broadcast re-arms the daily reminder check.
-- **INTERNET** — used by the Developer API, because Android gates creating even a loopback socket on it, and by **Save as document**, ServiceTag's one outbound connection: an https download of a reference's document, made only when you tap it. On stock Android it is install-time and cannot be denied; some hardened Android builds let the user revoke it. There is no runtime request: the Developer API screen and Save as document each explain a denial and link to the app's settings page.
+- **INTERNET** — used by the Developer API, because Android gates creating even a loopback socket on it, and by **Save as document**, ServiceTag's one outbound use: an https download of a reference's document, made only when you tap it. On stock Android it is install-time and cannot be denied; some hardened Android builds let the user revoke it. There is no runtime request: the Developer API screen and Save as document each explain a denial and link to the app's settings page.
 - **The attachments folder** — not a permission but a folder-picker grant, for the folder you choose and nothing else.
 - **A shared file** — not a permission but a temporary read grant that comes with the share.
 - **Merged from libraries** — `FOREGROUND_SERVICE`, `WAKE_LOCK` and `ACCESS_NETWORK_STATE` (WorkManager's backstop for reminders), and AndroidX's signature-level `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`. None is requested at runtime.
