@@ -165,6 +165,7 @@ import java.time.ZoneOffset
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
 
 /**
  * `AppGraph` without a `Context`: the same members, built on `inMemoryDb()` and the real Room
@@ -433,8 +434,12 @@ class FakeGraph(
      */
     val documentTransport: FakeDocumentTransport = FakeDocumentTransport()
     var networkGranted: Boolean = true
-    val materializeStaging: CacheStagingArea =
-        CacheStagingArea(kotlin.io.path.createTempDirectory("materialize").toFile(), ids)
+    /** #92: the staging directory itself, so a route test can say "staging is empty" as a listing. */
+    val materializeStagingDir: File = kotlin.io.path.createTempDirectory("materialize").toFile()
+    val materializeStaging: CacheStagingArea = CacheStagingArea(materializeStagingDir, ids)
+
+    /** #92 (C33): mirroring `AppGraph`'s process-wide lock for the API's long writes, one per graph. */
+    val apiLongWrites: Mutex = Mutex()
     val materializeReference: MaterializeReference =
         HopPolicy(HostResolver { listOf(byteArrayOf(203.toByte(), 0, 113, 10)) }).let { hops ->
             MaterializeReference(

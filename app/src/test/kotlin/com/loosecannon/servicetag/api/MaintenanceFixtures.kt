@@ -135,6 +135,10 @@ internal fun attachmentHandlersFor(graph: FakeGraph): AttachmentHandlers = Attac
     storage = graph.attachmentStorage,
     updateAttachment = graph.updateAttachment,
     installation = graph.installationIdentity,
+    transfers = graph.transferRecords,
+    addAttachment = graph.addAttachment,
+    staging = graph.materializeStaging,
+    apiLongWrites = graph.apiLongWrites,
 )
 
 /**

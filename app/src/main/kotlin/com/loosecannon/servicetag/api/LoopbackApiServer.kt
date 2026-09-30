@@ -113,9 +113,11 @@ internal fun bindErrnoOf(failure: Throwable): BindErrno {
 private const val MAX_CAUSE_DEPTH = 16
 
 /**
- * Review S2's drain ceiling: never more than the largest body any route accepts, so a peer that
- * declared a legitimate (if over-cap) length is fully drained, and a peer sending something far
- * larger than any real route allows is simply not waited on past this budget.
+ * Review S2's drain ceiling: the import ceiling, so a peer that declared a legitimate (if over-cap)
+ * form or archive length is fully drained, and a peer sending anything larger is simply not waited on
+ * past this budget. #92's upload accepts more (256 MiB) and is **deliberately not** drained to it: an
+ * authenticated upload's body is read to its end by its handler before the answer (C12), and an
+ * unauthenticated one gets this budget within the 5 s wall clock and no more (C10).
  */
 private const val DRAIN_BUDGET_BYTES = MAX_IMPORT_BYTES
 
@@ -123,10 +125,13 @@ private const val DRAIN_BUDGET_BYTES = MAX_IMPORT_BYTES
  * A loopback HTTP/1.1 listener, one connection at a time, on one daemon thread.
  *
  * **Deliberately narrow, deliberately hand-rolled** — the plan's dependency decision argues it in
- * full. What matters here: there is no chunked decoding, no multipart, no body spooled to disk, no
- * session, no thread pool and no keep-alive. One client (the workstation's MCP server) makes one
- * call at a time, so serialising connections means no shared mutable state between requests and no
- * concurrency to reason about; a second caller waits in the backlog or is refused.
+ * full. What matters here: there is no chunked decoding, no multipart and no form upload — one
+ * route, #92's attachment upload, streams its `Content-Length` body into the app's cache staging
+ * (never into memory) after the token is checked — no session, no thread pool and no keep-alive. One
+ * client (the workstation's MCP server) makes one call at a time, so serialising connections means
+ * no shared mutable state between requests on one generation; a second caller waits in the backlog
+ * or is refused. Across generations (a `stop()` then a `start()`, which never joins) #92's long
+ * writes serialise on `AppGraph.apiLongWrites` instead, held by their handler, never here.
  *
  * **Two independent checks on who is talking.** The socket is bound to [LOOPBACK_ADDRESS], so the
  * kernel refuses anything from off this phone; and every accepted connection's peer is checked

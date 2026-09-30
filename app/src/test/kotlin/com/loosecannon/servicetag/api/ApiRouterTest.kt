@@ -772,12 +772,12 @@ class ApiRouterTest {
 
     /** The one cap the router publishes, and exactly which paths get it. */
     @Test fun onlyTheTwoImportPathsHaveTheBiggerCap() {
-        assertEquals(MAX_IMPORT_BYTES, router().bodyCapFor(IMPORT_MERGE_PLAN_PATH))
-        assertEquals(MAX_IMPORT_BYTES, router().bodyCapFor(IMPORT_MERGE_APPLY_PATH))
-        assertEquals(MAX_BODY_BYTES, router().bodyCapFor("/v1/assets"))
-        assertEquals(MAX_BODY_BYTES, router().bodyCapFor("/v1/status"))
-        assertEquals(MAX_BODY_BYTES, router().bodyCapFor("/v1/import-merge"))
-        assertEquals(MAX_BODY_BYTES, router().bodyCapFor("/v1/import-merge/plan/"))
+        assertEquals(MAX_IMPORT_BYTES, router().bodyCapFor("POST", IMPORT_MERGE_PLAN_PATH))
+        assertEquals(MAX_IMPORT_BYTES, router().bodyCapFor("POST", IMPORT_MERGE_APPLY_PATH))
+        assertEquals(MAX_BODY_BYTES, router().bodyCapFor("POST", "/v1/assets"))
+        assertEquals(MAX_BODY_BYTES, router().bodyCapFor("POST", "/v1/status"))
+        assertEquals(MAX_BODY_BYTES, router().bodyCapFor("POST", "/v1/import-merge"))
+        assertEquals(MAX_BODY_BYTES, router().bodyCapFor("POST", "/v1/import-merge/plan/"))
         // Review S6: agreement, not divergence. `bodyCapFor` does not recognise the trailing-slash
         // spelling as the plan path (above), so `route` must not recognise it as the plan route
         // either — otherwise a second producer of `ApiRequest` (this suite's own `call()`, which
@@ -785,5 +785,16 @@ class ApiRouterTest {
         // cap `bodyCapFor` just answered for this exact spelling. It is a 404, the same "not this
         // path" answer `bodyCapFor` gave.
         assertEquals(404, call("POST", "/v1/import-merge/plan/", "{}").status)
+    }
+
+    /** #92 (C9, row 7): the upload tier is `POST`'s alone, on `/v1/assets/<one segment>/attachments` alone. */
+    @Test fun theUploadTierIsPostOnTheOneShapeAlone() {
+        assertEquals(MAX_UPLOAD_BYTES, router().bodyCapFor("POST", "/v1/assets/a1/attachments"))
+        for (method in listOf("GET", "PATCH", "DELETE")) {
+            assertEquals(method, MAX_BODY_BYTES, router().bodyCapFor(method, "/v1/assets/a1/attachments"))
+        }
+        for (path in listOf("/v1/assets/a1/attachments/x", "/v1/assets//attachments", "/v1/attachments/x", "/v1/assets")) {
+            assertEquals(path, MAX_BODY_BYTES, router().bodyCapFor("POST", path))
+        }
     }
 }

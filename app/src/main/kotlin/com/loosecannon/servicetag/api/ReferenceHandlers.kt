@@ -38,8 +38,9 @@ import com.loosecannon.servicetag.di.AppGraph
  *   answers `Unchanged` and deliberately writes nothing, so `updated_at` does not move — which is
  *   what keeps a re-imported archive `IDENTICAL` on the next merge rather than `CONTENT_DIFFERS`.
  *
- * **There is no delete and no byte path here, and there is none anywhere** (spec §6, I-3): the API
- * adds and amends, the phone removes, and no endpoint on this listener accepts or returns a file.
+ * **There is no delete and no byte path here** (spec §6, I-3): a reference has no bytes, the API
+ * adds and amends, and the phone removes. The listener's one byte path is #92's attachment upload,
+ * which is not a reference's.
  *
  * Built as `ApiHandlers`' second collaborator, in [MaintenanceHandlers]' shape, so the Developer
  * API screen's wiring is untouched: it hands over an `ApiHandlers` and knows nothing about what

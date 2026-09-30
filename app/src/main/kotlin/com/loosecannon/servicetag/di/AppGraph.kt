@@ -239,6 +239,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.sync.Mutex
 
 /** Hand-rolled composition root. No DI framework in Phase 1 (D3 §5). */
 class AppGraph(private val context: Context) {
@@ -564,6 +565,13 @@ class AppGraph(private val context: Context) {
     }
     val materializeStaging: CacheStagingArea =
         CacheStagingArea(File(context.applicationContext.cacheDir, CacheStagingArea.DIRECTORY), ids)
+
+    /**
+     * #92 (C33) — the one process-wide lock for the Developer API's long writes (an upload's steps 2–5). Here, not in
+     * the per-visit router or server: `stop()` never joins a listener worker and `start()` runs a new generation beside
+     * the old one, so only a lock both generations share keeps a retried write from racing the first.
+     */
+    val apiLongWrites: Mutex = Mutex()
     /** C9's hop rule: the use case asks it of every hop; the reference rows ask its static half (C20). */
     val hops: HopPolicy = HopPolicy(InetHostResolver(networkPermissionGranted))
     val materializeReference: MaterializeReference = MaterializeReference(

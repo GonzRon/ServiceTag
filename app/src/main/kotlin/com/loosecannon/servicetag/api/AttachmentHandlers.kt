@@ -1,19 +1,42 @@
 package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.backup.toDto
+import com.loosecannon.servicetag.core.fetch.StagingArea
+import com.loosecannon.servicetag.core.fetch.StagingFile
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
+import com.loosecannon.servicetag.core.model.AttachmentKind
+import com.loosecannon.servicetag.core.model.AttachmentKinds
+import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.AttachmentProblem
+import com.loosecannon.servicetag.core.model.MimeTypes
 import com.loosecannon.servicetag.core.model.accepts
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.ports.TransferRecordRepository
+import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
+import com.loosecannon.servicetag.core.usecase.AddAttachment
+import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
 import com.loosecannon.servicetag.core.usecase.NoSuchAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.isIsoDate
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.InstallationIdentity
+import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
+import java.nio.charset.CharacterCodingException
+import java.security.MessageDigest
+import java.util.Base64
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * #92's attachment rows (C5–C8), reached from the router as `handlers.attachmentRoutes.*` — not `attachments`, which
@@ -26,6 +49,12 @@ import com.loosecannon.servicetag.prefs.InstallationIdentity
  *
  * It also holds this installation's [InstallationIdentity] (C5a), which `/v1/status` reports and the upload's id
  * derivation (C13) reads.
+ *
+ * **The upload (B1b, C9–C13)** is one `AddAttachment` call over a file streamed into [staging] — the app's cache
+ * staging area, `cache/materialize/`, the one #85 sweeps at start — never into memory. Its steps 2–5 hold
+ * [apiLongWrites], the process-wide lock `AppGraph` owns (C33), so a retried upload on a new listener generation
+ * waits for the first and then finds its row. The router has already checked the token on the headers; nothing here
+ * runs for an unauthenticated caller (C10).
  */
 internal class AttachmentHandlers(
     private val attachments: AttachmentRepository,
@@ -33,9 +62,17 @@ internal class AttachmentHandlers(
     private val storage: AttachmentStorage,
     private val updateAttachment: UpdateAttachment,
     private val installation: InstallationIdentity,
+    private val transfers: TransferRecordRepository,
+    private val addAttachment: AddAttachment,
+    private val staging: StagingArea,
+    private val apiLongWrites: Mutex,
+    /** C12's wall clock over every body read on the upload path; parameterised so a test need not wait ten minutes. */
+    private val uploadDeadlineMillis: Long = UPLOAD_DEADLINE_MILLIS,
+    private val nanoTime: () -> Long = System::nanoTime,
 ) {
     constructor(graph: AppGraph) : this(
         graph.attachments, graph.assets, graph.attachmentStorage, graph.updateAttachment, graph.installationIdentity,
+        graph.transferRecords, graph.addAttachment, graph.materializeStaging, graph.apiLongWrites,
     )
 
     /** `/v1/status`' `installationId` (C5a): read from its file once per process, never minted twice. */
@@ -78,5 +115,257 @@ internal class AttachmentHandlers(
         return ok(AttachmentResponse.serializer(), AttachmentResponse(saved.toDto()))
     }
 
+    /**
+     * `POST /v1/assets/{id}/attachments` (C12). **An answer is written only after the declared body has been read to
+     * its end** — into staging on the way to `AddAttachment`, into a hashing sink on a replay, into a counting sink
+     * when a refusal was decided first — so a refusal is never a reset. A failure of the request's own stream (a read
+     * timeout, a reset, `stop()`, the deadline) is [RequestStreamFailed]: nothing written, staging discarded, no
+     * answer. A failure writing staging is 409 `UPLOAD_NOT_STAGED`. The two are told apart by which stream failed.
+     */
+    suspend fun upload(assetId: String, request: ApiRequest): ApiResponse {
+        val body = UploadBody(request.stream ?: ByteArrayInputStream(request.body))
+        return try {
+            val upload = admit(AssetId(assetId), request)
+            apiLongWrites.withLock { write(upload, body) }
+        } catch (gone: RequestStreamFailed) {
+            throw gone
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (refused: Exception) {
+            body.finish()
+            throw refused
+        }
+    }
+
+    /**
+     * Step 1: the cheap checks, in C12's order, before a body byte is read — each refusal spares a 256 MiB stage. The
+     * row id is derived here too (the installation id is a file read on a process's first call, and its failure is
+     * no staging failure); it is looked up under the lock, in [write].
+     */
+    private suspend fun admit(assetId: AssetId, request: ApiRequest): Upload {
+        val meta = decodeMetadata(request.headers[UPLOAD_METADATA_HEADER])
+        assets.get(assetId) ?: throw NoSuchAsset(assetId)
+        if (assetId in transfers.heldIds()) throw AssetTransferredOut(assetId)
+        val folderProblem = when (storage.state()) {
+            StoreState.NotConfigured -> AttachmentProblem.NoStore
+            is StoreState.AccessLost -> AttachmentProblem.StoreUnavailable
+            is StoreState.Ready -> if (storage.store() == null) AttachmentProblem.StoreUnavailable else null
+        }
+        folderProblem?.let { throw addRefusal(assetId, it) }
+        if (!isOperationKey(meta.operationKey)) throw operationKeyInvalid()
+        val name = meta.displayName.trim()
+        if (name.isEmpty()) throw addRefusal(assetId, AttachmentProblem.BlankName)
+        val capturedOn = meta.capturedOn?.trim()?.takeIf { it.isNotEmpty() }
+        if (capturedOn?.let(::isIsoDate) == false) throw attachmentBadDate()
+        if (!SHA256_HEX.matches(meta.sha256)) throw sha256Invalid()
+        val mimeType = MimeTypes.normalise(request.headers["content-type"] ?: OCTET_STREAM)
+        return Upload(
+            assetId = assetId,
+            id = attachmentOperationId(installation.id(), assetId, meta.operationKey),
+            meta = meta.copy(displayName = name, capturedOn = capturedOn),
+            mimeType = mimeType,
+            kind = meta.kind ?: AttachmentKinds.inferFrom(mimeType, fromCamera = false),
+        )
+    }
+
+    /** Steps 2–5, under the lock: the derived id re-checked, then a replay or one new row. */
+    private suspend fun write(upload: Upload, body: UploadBody): ApiResponse {
+        attachments.get(upload.id)?.let { return replay(it, upload, body) }
+        val staged = try {
+            staging.create()
+        } catch (write: IOException) {
+            throw uploadNotStaged()
+        }
+        try {
+            val arrived = body.stageInto(staged)
+            if (arrived.size == 0L) throw attachmentEmpty()
+            if (arrived.sha256 != upload.meta.sha256) throw sha256Mismatch()
+            val command = AddAttachmentCommand(
+                displayName = upload.meta.displayName,
+                mimeType = upload.mimeType,
+                sizeBytes = arrived.size,
+                kind = upload.kind,
+                capturedOn = upload.meta.capturedOn,
+                notes = upload.meta.notes,
+                fromCamera = false,
+                role = upload.meta.role,
+                source = null,
+            )
+            val owner = AttachmentOwner.OfAsset(upload.assetId)
+            return when (val result = addAttachment.run(owner, command, staged.source(), presetId = upload.id)) {
+                is AttachmentResult.Ok ->
+                    createdResponse(AttachmentResponse.serializer(), AttachmentResponse(result.value.toDto()))
+                is AttachmentResult.Refused -> throw addRefusal(upload.assetId, result.problem)
+            }
+        } finally {
+            staged.discard()
+        }
+    }
+
+    /**
+     * Step 2's replay (C13, R92-7 strict): the body hashed to its end and never staged, then the request's
+     * fingerprint — owner, kind as resolved, role, trimmed name, sha256, size — against **the row as it stands**.
+     * Equal is 200 with the row; anything else is 409 naming it. Nothing is written either way: a metadata change
+     * belongs to `PATCH`.
+     */
+    private fun replay(row: Attachment, upload: Upload, body: UploadBody): ApiResponse {
+        val arrived = body.pump { _, _ -> }
+        if (arrived.sha256 != upload.meta.sha256) throw sha256Mismatch()
+        val same = row.owner == AttachmentOwner.OfAsset(upload.assetId) &&
+            row.kind == upload.kind &&
+            row.role == upload.meta.role &&
+            row.displayName == upload.meta.displayName &&
+            row.sha256 == arrived.sha256 &&
+            row.sizeBytes == arrived.size
+        if (!same) throw operationKeyReused(row.id)
+        return ok(AttachmentResponse.serializer(), AttachmentResponse(row.toDto()))
+    }
+
+    /** An add's `OwnerMissing` is the asset (a phone-side delete racing the upload), not an attachment row. */
+    private fun addRefusal(assetId: AssetId, problem: AttachmentProblem): Exception =
+        if (problem == AttachmentProblem.OwnerMissing) {
+            NoSuchAsset(assetId)
+        } else {
+            attachmentRefusal(problem) ?: IllegalStateException("an add is never Unchanged")
+        }
+
     private suspend fun row(id: String): Attachment = attachments.get(AttachmentId(id)) ?: throw noSuchAttachment()
+
+    /** One upload's checked request: the derived id, the normalised metadata, the type and the kind as resolved. */
+    private class Upload(
+        val assetId: AssetId,
+        val id: AttachmentId,
+        val meta: UploadMetadata,
+        val mimeType: String,
+        val kind: AttachmentKind,
+    )
+
+    private class Arrived(val size: Long, val sha256: String)
+
+    /**
+     * The request body, read once, in 64 KiB chunks, counted and hashed, under the deadline. A read that throws is the
+     * **request stream's** failure ([RequestStreamFailed]; an early end is the shipped 400); a write that throws is
+     * **staging's** (`UPLOAD_NOT_STAGED`). Each `catch` wraps exactly one stream.
+     */
+    private inner class UploadBody(private val input: InputStream) {
+        private var finished = false
+        private var startedAt: Long? = null
+
+        fun pump(sink: (ByteArray, Int) -> Unit): Arrived {
+            val digest = MessageDigest.getInstance("SHA-256")
+            val chunk = ByteArray(CHUNK_BYTES)
+            var size = 0L
+            val started = startedAt ?: nanoTime().also { startedAt = it }
+            val deadline = TimeUnit.MILLISECONDS.toNanos(uploadDeadlineMillis)
+            while (true) {
+                if (nanoTime() - started > deadline) throw RequestStreamFailed("the upload's deadline passed")
+                val n = readOnce(chunk)
+                if (n < 0) break
+                digest.update(chunk, 0, n)
+                size += n
+                sink(chunk, n)
+            }
+            finished = true
+            return Arrived(size, digest.digest().joinToString("") { "%02x".format(it) })
+        }
+
+        fun stageInto(file: StagingFile): Arrived {
+            val out: OutputStream = try {
+                file.output()
+            } catch (write: IOException) {
+                throw uploadNotStaged()
+            }
+            val arrived = try {
+                pump { chunk, n ->
+                    try {
+                        out.write(chunk, 0, n)
+                    } catch (write: IOException) {
+                        throw uploadNotStaged()
+                    }
+                }
+            } catch (t: Throwable) {
+                try {
+                    out.close()
+                } catch (write: IOException) {
+                    t.addSuppressed(write)
+                }
+                throw t
+            }
+            try {
+                out.close()
+            } catch (write: IOException) {
+                throw uploadNotStaged()
+            }
+            return arrived
+        }
+
+        /** What is left of the body, into a counting sink, so the answer that follows is never a reset. */
+        fun finish() {
+            if (!finished) pump { _, _ -> }
+        }
+
+        private fun readOnce(chunk: ByteArray): Int = try {
+            input.read(chunk)
+        } catch (early: EarlyEndOfBody) {
+            finished = true
+            throw ApiFailure.badRequest("the body was shorter than Content-Length")
+        } catch (read: IOException) {
+            throw RequestStreamFailed("the request stream failed", read)
+        }
+    }
 }
+
+/** C12: ten minutes over every body read of one upload; past it the connection is closed and nothing is written. */
+internal const val UPLOAD_DEADLINE_MILLIS: Long = 10 * 60 * 1000L
+
+/** C11: the upload's metadata header, lower-cased as the parser keeps every header name. */
+internal const val UPLOAD_METADATA_HEADER: String = "x-servicetag-attachment"
+
+private const val OCTET_STREAM = "application/octet-stream"
+private const val CHUNK_BYTES = 64 * 1024
+private val SHA256_HEX = Regex("[0-9a-f]{64}")
+
+/** C11: unpadded base64url of UTF-8 JSON, decoded strictly; anything else is the shipped 400. */
+private fun decodeMetadata(header: String?): UploadMetadata {
+    if (header == null) throw ApiFailure.badRequest("an upload needs its X-ServiceTag-Attachment header")
+    if ('=' in header) throw ApiFailure.badRequest("X-ServiceTag-Attachment is not unpadded base64url")
+    val bytes = try {
+        Base64.getUrlDecoder().decode(header)
+    } catch (notBase64: IllegalArgumentException) {
+        throw ApiFailure.badRequest("X-ServiceTag-Attachment is not unpadded base64url")
+    }
+    val text = try {
+        bytes.decodeToString(throwOnInvalidSequence = true)
+    } catch (notUtf8: CharacterCodingException) {
+        throw ApiFailure.badRequest("X-ServiceTag-Attachment is not UTF-8")
+    }
+    return decodeOr400(UploadMetadata.serializer(), text)
+}
+
+// --- #92 (B1b), the upload's codes (C2), each code, status, `field` and sentence verbatim ---------------------------
+
+private fun attachmentEmpty(): ApiFailure =
+    ApiFailure(422, "Unprocessable Content", "ATTACHMENT_EMPTY", "the file is empty")
+
+private fun sha256Invalid(): ApiFailure = ApiFailure(
+    422, "Unprocessable Content", "ATTACHMENT_SHA256_INVALID", "sha256 is not 64 lowercase hex characters",
+    field = "sha256",
+)
+
+private fun sha256Mismatch(): ApiFailure = ApiFailure(
+    422, "Unprocessable Content", "ATTACHMENT_SHA256_MISMATCH", "the bytes that arrived do not match sha256",
+    field = "sha256",
+)
+
+private fun operationKeyInvalid(): ApiFailure = ApiFailure(
+    422, "Unprocessable Content", "OPERATION_KEY_INVALID", "operationKey is not a valid key", field = "operationKey",
+)
+
+private fun operationKeyReused(id: AttachmentId): ApiFailure = ApiFailure(
+    409, "Conflict", "OPERATION_KEY_REUSED",
+    "this operation key was used for a different upload; read or update that attachment",
+    listOf("OperationKeyReused(attachmentId=${id.value})"), "operationKey",
+)
+
+private fun uploadNotStaged(): ApiFailure =
+    ApiFailure(409, "Conflict", "UPLOAD_NOT_STAGED", "the upload could not be staged on this phone")

@@ -3,12 +3,20 @@ package com.loosecannon.servicetag.api
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.AttachmentStore
+import com.loosecannon.servicetag.core.ports.ByteSource
+import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.ports.StoredBytes
+import com.loosecannon.servicetag.core.usecase.AddAttachment
+import com.loosecannon.servicetag.testing.InMemoryAttachmentStore
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
+import java.util.Base64
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -46,7 +54,7 @@ class LoopbackApiServerTest {
     private val graph = FakeGraph()
     private lateinit var server: LoopbackApiServer
 
-    private fun router(): ApiRouter = ApiRouter(
+    private fun router(attachmentRoutes: AttachmentHandlers = attachmentHandlersFor(graph)): ApiRouter = ApiRouter(
         ApiHandlers(
             graph.assets, graph.tags, graph.links, graph.definitions, graph.profiles,
             graph.events, graph.attachments, graph.categories, graph.transferRecords, graph.assetSuccessions,
@@ -60,7 +68,7 @@ class LoopbackApiServerTest {
             warrantyHandlersFor(graph),
             serviceCaseHandlersFor(graph),
             loanHandlersFor(graph),
-            attachmentHandlersFor(graph),
+            attachmentRoutes,
             appVersion = "1.1.0",
             schemaVersion = 5,
         ),
@@ -586,5 +594,154 @@ class LoopbackApiServerTest {
             release.countDown()
             restarted.stop()
         }
+    }
+
+    // ---- #92 (B1b): the upload over a real socket, and C33's lock across generations -------------------------------
+
+    private fun metadataFor(key: String, bytes: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(
+        """{"operationKey":"$key","displayName":"Example Water Heater manual","sha256":"${InMemoryAttachmentStore.sha256Hex(bytes)}"}"""
+            .toByteArray(),
+    )
+
+    private fun uploadHead(assetId: String, length: Long, metadata: String, token: String = TOKEN): ByteArray =
+        ("POST /v1/assets/$assetId/attachments HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer $token\r\n" +
+            "Content-Type: application/pdf\r\n$UPLOAD_METADATA_HEADER: $metadata\r\nContent-Length: $length\r\n\r\n")
+            .toByteArray()
+
+    /** One whole upload over a fresh connection, and the whole answer back. */
+    private fun sendUpload(port: Int, assetId: String, bytes: ByteArray, metadata: String): String =
+        Socket("127.0.0.1", port).use { socket ->
+            socket.soTimeout = 30_000
+            socket.getOutputStream().apply {
+                write(uploadHead(assetId, bytes.size.toLong(), metadata))
+                write(bytes)
+                flush()
+            }
+            socket.getInputStream().readBytes().decodeToString()
+        }
+
+    private fun stagingIsEmpty(): Boolean = graph.materializeStagingDir.listFiles().orEmpty().isEmpty()
+
+    /** Row 11: past the 4 MiB import ceiling, over a real socket, into one row with every byte. */
+    @Test fun aFiveMiBUploadCrossesARealSocket() {
+        val heater = V1Client(graph, TOKEN).asset("Example Water Heater")
+        val bytes = ByteArray(5 * 1024 * 1024) { (it % 253).toByte() }
+        val answer = sendUpload(server.boundPort, heater, bytes, metadataFor("op-5mib", bytes))
+        assertTrue(answer.take(300), answer.startsWith("HTTP/1.1 201 Created\r\n"))
+        val row = runBlocking { graph.attachments.forAsset(AssetId(heater)) }.single()
+        assertEquals(bytes.size.toLong(), row.sizeBytes)
+        assertTrue(graph.attachmentStorage.store.files.getValue(row.storageLocator).contentEquals(bytes))
+        assertTrue(stagingIsEmpty())
+    }
+
+    /**
+     * Row 9b (C10), observed client-side: a peer without the token declares 200 MiB. It reads its 401, then **cannot
+     * deliver the body** — the server drains at most 4 MiB within 5 s and closes, so the peer's writes fail after
+     * that plus the socket buffers — and the next request is answered.
+     */
+    @Test fun anUnauthenticatedUploadIsClosedWithinTheDrainBound() {
+        val declared = 200L * 1024 * 1024
+        var delivered = 0L
+        var failure: IOException? = null
+        val head = Socket("127.0.0.1", server.boundPort).use { socket ->
+            socket.soTimeout = 10_000
+            val out = socket.getOutputStream()
+            out.write(uploadHead("a1", declared, metadataFor("op-1", ByteArray(1)), token = "NOPENOPE"))
+            out.flush()
+            val answer = socket.getInputStream().readBytes().decodeToString()
+            val chunk = ByteArray(64 * 1024)
+            try {
+                while (delivered < declared) {
+                    out.write(chunk)
+                    delivered += chunk.size
+                }
+                out.flush()
+            } catch (e: IOException) {
+                failure = e
+            }
+            answer
+        }
+        assertTrue(head, head.startsWith("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n"))
+        assertTrue("the whole unauthenticated body was delivered ($delivered bytes)", failure != null)
+        assertTrue(delivered < declared)
+        val next = speak("GET /v1/status HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer $TOKEN\r\n\r\n")
+        assertTrue(next, next.startsWith("HTTP/1.1 200 OK\r\n"))
+    }
+
+    /** A store whose `put` writes its bytes and then parks until the test releases it; it counts every `put`. */
+    private class GatedStore(private val inner: InMemoryAttachmentStore) : AttachmentStore {
+        val puts = AtomicInteger()
+        val parked = CountDownLatch(1)
+        val release = CountDownLatch(1)
+
+        override suspend fun put(locator: String, source: ByteSource): StoredBytes {
+            puts.incrementAndGet()
+            val stored = inner.put(locator, source)
+            parked.countDown()
+            release.await(30, TimeUnit.SECONDS)
+            return stored
+        }
+
+        override suspend fun open(locator: String) = inner.open(locator)
+        override suspend fun exists(locator: String) = inner.exists(locator)
+        override suspend fun delete(locator: String) = inner.delete(locator)
+    }
+
+    /**
+     * Row 43 (C33): an upload parked in `put`, the listener stopped and started, and the MCP's retry of its key on the
+     * new generation. The retry waits for the process-wide lock and then answers 200 with the first's row: one row,
+     * the first request's bytes intact, and the store's `put` called exactly once. On the graph's real dispatcher.
+     */
+    @Test fun aRetriedUploadAcrossAStopAndStartLandsOnceWithTheFirstBytesIntact() {
+        val heater = V1Client(graph, TOKEN).asset("Example Water Heater")
+        val inner = InMemoryAttachmentStore()
+        val gated = GatedStore(inner)
+        val folder = object : AttachmentStorage {
+            override fun state(): StoreState = StoreState.Ready("Attachments", "com.example.provider")
+            override fun store(): AttachmentStore = gated
+        }
+        val add = AddAttachment(graph.attachments, graph.assets, graph.events, folder, graph.uow, graph.ids, graph.clock)
+        val routes = AttachmentHandlers(
+            attachments = graph.attachments, assets = graph.assets, storage = folder,
+            updateAttachment = graph.updateAttachment, installation = graph.installationIdentity,
+            transfers = graph.transferRecords, addAttachment = add, staging = graph.materializeStaging,
+            apiLongWrites = graph.apiLongWrites,
+        )
+        server.stop()
+        server = LoopbackApiServer(router(routes), networkPermissionGranted = { true }, port = 0)
+        assertEquals(StartOutcome.Bound, server.start())
+
+        val bytes = "Example Water Heater, the first request's bytes".toByteArray()
+        val metadata = metadataFor("op-retry", bytes)
+        val firstPort = server.boundPort
+        val first = Thread { runCatching { sendUpload(firstPort, heater, bytes, metadata) } }.apply {
+            isDaemon = true
+            start()
+        }
+        assertTrue("the first upload never reached put", gated.parked.await(10, TimeUnit.SECONDS))
+
+        server.stop()
+        assertEquals(StartOutcome.Bound, server.start())
+        val secondPort = server.boundPort
+        var replay = ""
+        val second = Thread { replay = sendUpload(secondPort, heater, bytes, metadata) }.apply {
+            isDaemon = true
+            start()
+        }
+        val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (server.requests.value < 2 && System.nanoTime() < until) Thread.sleep(10)
+        assertEquals("the retry was never read", 2, server.requests.value)
+        Thread.sleep(300) // time for the retry to reach the lock — or, without one, the store
+        gated.release.countDown()
+        second.join(15_000)
+        first.join(15_000)
+
+        assertTrue(replay.take(300), replay.startsWith("HTTP/1.1 200 OK\r\n"))
+        val rows = runBlocking { graph.attachments.forAsset(AssetId(heater)) }
+        assertEquals(1, rows.size)
+        assertTrue(replay, replay.contains(rows.single().id.value))
+        assertTrue(inner.files.getValue(rows.single().storageLocator).contentEquals(bytes))
+        assertEquals("the store's put ran more than once", 1, gated.puts.get())
+        assertTrue(stagingIsEmpty())
     }
 }

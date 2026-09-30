@@ -58,3 +58,25 @@ internal data class UpdateAttachmentRequest(
         role = role?.let { enumOr400<DocumentRole>(it, "role") },
     )
 }
+
+/**
+ * #92 (C11): the upload's metadata, carried in the `X-ServiceTag-Attachment` header as unpadded base64url of this
+ * object's UTF-8 JSON, decoded by the strict `ApiJson` (an unknown key or a bad enum is a 400). The bytes are the
+ * body; their type is the request's `Content-Type`. Keys pinned in `docs/api/command-shapes.json` (B4).
+ *
+ * [kind] null is the server's inference from the normalised type ([com.loosecannon.servicetag.core.model.
+ * AttachmentKinds.inferFrom], never from a camera). [role] is a canonical name or absent, and **never inferred**
+ * (R92-5): not from the name, the type or [kind]. There is no provenance key: an upload never sets a `source`.
+ */
+@Serializable
+internal data class UploadMetadata(
+    /** C13: required, 1–128 of `[A-Za-z0-9._~:-]`; the row's id derives from it. */
+    val operationKey: String,
+    val displayName: String,
+    /** 64 lowercase hex of the body; checked while the body is read. */
+    val sha256: String,
+    val kind: AttachmentKind? = null,
+    val role: DocumentRole? = null,
+    val capturedOn: String? = null,
+    val notes: String = "",
+)

@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.api
 
+import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 
@@ -14,13 +15,21 @@ internal const val IMPORT_MERGE_APPLY_PATH: String = "/v1/import-merge/apply"
 internal const val MAX_IMPORT_BYTES: Int = 4 * 1024 * 1024
 
 /**
+ * #92 (C9): the attachment upload's ceiling, the attachment cap itself (256 MiB, which fits the parser's `Int`), for
+ * `POST /v1/assets/{id}/attachments` alone. That body is never held in memory: it streams into staging.
+ */
+internal const val MAX_UPLOAD_BYTES: Int = MAX_ATTACHMENT_BYTES.toInt()
+
+/**
  * Authenticates, matches, and turns whatever comes back — an answer or a refusal — into bytes.
  *
  * **The token is checked first, before anything else at all.** A caller without it cannot learn
  * whether a path exists, whether its body parsed, or how long the answer would have been: the reply
- * is 401 with a zero-byte body, every time, for every path. The body has already been read off the
- * socket by then, which is why the ceilings live in [parseRequest] below this class and apply to an
- * unauthenticated caller too.
+ * is 401 with a zero-byte body, every time, for every path. Every body but one has already been read
+ * off the socket by then, which is why the ceilings live in [parseRequest] below this class and apply
+ * to an unauthenticated caller too. The one is #92's attachment upload: its body is still on the
+ * socket ([ApiRequest.stream]), so a 401 never reads, stages, hashes or decodes a byte of it (C10),
+ * and the server's bounded drain is all an unauthenticated body ever gets.
  *
  * **[handle] is blocking, and that is its contract.** Its caller is [LoopbackApiServer]'s one worker
  * thread, which has nothing else to do until there are bytes to write; everything below it is
@@ -32,13 +41,15 @@ internal class ApiRouter(
     private val handlers: ApiHandlers,
     private val token: String,
 ) {
-    /** Asked by the parser with the path, before a body byte is read. */
-    fun bodyCapFor(path: String): Int =
-        if (path == IMPORT_MERGE_PLAN_PATH || path == IMPORT_MERGE_APPLY_PATH) {
-            MAX_IMPORT_BYTES
-        } else {
-            MAX_BODY_BYTES
-        }
+    /**
+     * Asked by the parser with the method and the path, before a body byte is read. The upload tier is `POST`'s
+     * alone (C9): any other method on that shape keeps 64 KiB and is read like any other request.
+     */
+    fun bodyCapFor(method: String, path: String): Int = when {
+        isAttachmentUpload(method, path) -> MAX_UPLOAD_BYTES
+        path == IMPORT_MERGE_PLAN_PATH || path == IMPORT_MERGE_APPLY_PATH -> MAX_IMPORT_BYTES
+        else -> MAX_BODY_BYTES
+    }
 
     fun handle(request: ApiRequest): ApiResponse {
         if (!tokenMatches(token, request.bearerToken())) {
@@ -46,6 +57,8 @@ internal class ApiRouter(
         }
         return try {
             runBlocking(Dispatchers.IO) { route(request) }
+        } catch (e: RequestStreamFailed) {
+            throw e // #92 C12: the peer's stream died; there is no one to answer
         } catch (e: ApiFailure) {
             errorResponse(e.status, e.reason, e.code, e.message ?: e.code, e.problems, e.field)
         } catch (e: Exception) {
@@ -54,7 +67,7 @@ internal class ApiRouter(
     }
 
     /**
-     * The whole surface. Sixty-two path shapes over seventy-five method-and-path rows; anything
+     * The whole surface. Sixty-two path shapes over seventy-six method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -69,8 +82,9 @@ internal class ApiRouter(
      * because nothing below routes to it (invariants 43, 76).
      *
      * 1.3 added three, and the same holds: a reference is listed, created and amended, and
-     * **nothing deletes one** — the API adds and amends, the phone removes (spec §6). No row here
-     * accepts or returns a file either, at any version, so there is no share-by-API (I-3).
+     * **nothing deletes one** — the API adds and amends, the phone removes (spec §6). A reference has
+     * no bytes (I-3): none of those rows accepts or returns a file. Since #92 one row accepts a file —
+     * an asset attachment's upload, below — and still no row returns one.
      *
      * 1.4 added fourteen rows over eleven new shapes (spec §9.1): seven `/v1/assets/{id}/…`
      * sub-resources (the season and its activations, the season mode, the maintenance break, the
@@ -107,6 +121,10 @@ internal class ApiRouter(
      * #92 (B1a) added three rows over two shapes: the twenty-second `/v1/assets/{id}/…` sub-resource (an asset's own
      * attachments and the folder's state, read only), and `/v1/attachments/{id}`, read and amended through
      * `UpdateAttachment` alone. **Nothing deletes an attachment here** and no row reads or writes its bytes.
+     *
+     * #92 (B1b) added one row on the twenty-second shape: `POST /v1/assets/{id}/attachments`, one file streamed into
+     * staging and committed through `AddAttachment` alone, idempotent by the caller's operation key. No row reads
+     * an attachment's bytes back out.
      */
     private suspend fun route(request: ApiRequest): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -171,6 +189,8 @@ internal class ApiRouter(
                 "succession" to "GET" -> handlers.getSuccession(rest[1])
                 // #92 — the twenty-second: the asset's own attachments and the folder's state, read only.
                 "attachments" to "GET" -> handlers.attachmentRoutes.listForAsset(rest[1])
+                // #92 (B1b) — the one row that accepts a file: streamed, authenticated before a byte is read.
+                "attachments" to "POST" -> handlers.attachmentRoutes.upload(rest[1], request)
                 else -> throw ApiFailure.notFound(request.path)
             }
 
