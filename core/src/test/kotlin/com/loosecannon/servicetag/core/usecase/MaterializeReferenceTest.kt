@@ -215,6 +215,31 @@ class MaterializeReferenceTest {
         assertNothingWritten(seeded)
     }
 
+    /**
+     * Review m2: a restored or merged reference can carry what `AddReference` would have refused. Its name or URI
+     * must fail the source shape rule here, before a byte is fetched, never at Save. Seeded straight into the
+     * repository; each is served, so a missed refusal downloads and answers `Ready`.
+     */
+    @Test
+    fun aNameOrUriTheSourceRuleRefusesIsNotEligible() = runTest {
+        val longUri = "https://manuals.example.invalid/" + "p".repeat(2_049 - 36) + ".pdf"
+        assertEquals(2_049, longUri.length)
+        val seeded = seed(
+            reference("ref-blank", uri = "https://manuals.example.invalid/pool-pump/blank.pdf", name = "   "),
+            reference("ref-long-name", uri = "https://manuals.example.invalid/pool-pump/long.pdf", name = "n".repeat(201)),
+            reference("ref-long-uri", uri = longUri),
+        )
+        seeded.forEach { transport.serve(it.uri, pdf, "application/pdf") }
+        val cases = listOf("ref-blank", "ref-long-name", "ref-long-uri")
+
+        // All three answered before any is judged, so a failure names every case that slipped through.
+        val answers = cases.associateWith { materialize.prepare(pump, ReferenceId(it)) }
+
+        assertEquals(cases.associateWith { Prepared.Refused(MaterializeRefusal.NotEligible) }, answers)
+        assertNoNetwork()
+        assertNothingWritten(seeded)
+    }
+
     @Test
     fun noStoreAndALostStoreAreStoreRefusals() = runTest {
         val seeded = seed()
@@ -469,6 +494,30 @@ class MaterializeReferenceTest {
 
         assertTrue(staging.files.single().discarded)
         assertNothingWritten(seeded)
+    }
+
+    /**
+     * Review m1: a `Ready` is spent by its first commit or discard. A second commit, or one after discard, is a
+     * caller's mistake: it throws, never reads a discarded file, and never adds a second row.
+     */
+    @Test
+    fun aReadyIsSpentByItsCommitOrDiscard() = runTest {
+        seed(reference(), reference("ref-h", assetId = heater))
+        transport.serve(manualUri, pdf, "application/pdf")
+
+        val committed = ready()
+        val row = assertIs<AttachmentResult.Ok<Attachment>>(materialize.commit(committed, review())).value
+        assertFailsWith<IllegalStateException> { materialize.commit(committed, review(name = "Second copy")) }
+        assertEquals(mapOf(row.id.value to row), rows.rows.toMap())
+        assertEquals(1, uow.commits)
+
+        val dropped = ready(heater, "ref-h")
+        materialize.discard(dropped)
+        assertFailsWith<IllegalStateException> { materialize.commit(dropped, review()) }
+        assertEquals(mapOf(row.id.value to row), rows.rows.toMap(), "nothing was added to the heater")
+        assertEquals(setOf(row.storageLocator), store.files.keys)
+        assertEquals(1, uow.commits)
+        assertTrue(staging.files.all { it.discarded })
     }
 
     /** Review NOTE 1: a stray log or assertion message never carries the URI, its query or the redirect destination. */

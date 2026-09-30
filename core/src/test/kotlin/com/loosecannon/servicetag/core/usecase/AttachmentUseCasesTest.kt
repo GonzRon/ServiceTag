@@ -551,7 +551,10 @@ class AttachmentUseCasesTest {
             manualSource.copy(uri = "http://manuals.example.invalid/pool-pump/manual.pdf"),
             manualSource.copy(resolvedUri = "https://cdn.example.invalid/files/manual.pdf?token=abc"),
             manualSource.copy(resolvedUri = "https://cdn.example.invalid/files;sid=AB12/manual.pdf"),
-            manualSource.copy(resolvedUri = manualSource.uri),
+            manualSource.copy(   // query-free, so the "stored only when it differs" rule is the one that answers
+                uri = "https://manuals.example.invalid/pool-pump/manual.pdf",
+                resolvedUri = "https://manuals.example.invalid/pool-pump/manual.pdf",
+            ),
             manualSource.copy(retrievedAt = 0L),
             manualSource.copy(name = "  "),
         )

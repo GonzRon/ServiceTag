@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.model.attachmentSourceProblem
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.Clock
@@ -22,6 +23,7 @@ import com.loosecannon.servicetag.core.references.LinkDecision
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_URI_CHARS
 import com.loosecannon.servicetag.core.references.ReferenceUris
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * #85 (C12–C15; R85-1, R85-2, R85-3, R85-6, R85-8, R85-14): **Save as document** — a web reference's file
@@ -70,9 +72,13 @@ class MaterializeReference(
             ?.takeIf { it.assetId == assetId }
             ?: return refused(MaterializeRefusal.NoSuchReference)
         val uri = reference.uri
+        // The last clause asks the source shape rule now, before any byte is fetched: a restored or merged
+        // reference can carry a name or URI the rule refuses, and it must never reach `commit` (1L stands in for
+        // the retrieval time, read after the fetch).
         val eligible = reference.kind == ReferenceKind.WEB_URL &&
             policy.classify(uri) == LinkDecision.Allowed &&
-            hops.staticProblem(uri) == null
+            hops.staticProblem(uri) == null &&
+            attachmentSourceProblem(uri, null, 1L, reference.displayName) == null
         if (!eligible) return refused(MaterializeRefusal.NotEligible)
         val host = ReferenceUris.hostOf(uri) ?: return refused(MaterializeRefusal.NotEligible)
         when (storage.state()) {
@@ -118,6 +124,9 @@ class MaterializeReference(
     suspend fun commit(ready: Prepared.Ready, review: MaterializeReview): AttachmentResult<Attachment> {
         val name = review.displayName.trim()
         if (name.isEmpty()) return AttachmentResult.Refused(AttachmentProblem.BlankName)
+        // A caller's mistake, like AddAttachment's requires: a second commit, two at once, or one after discard
+        // would read a discarded file or add the same bytes twice. The blank name above does not spend it.
+        check(ready.spend()) { "a prepared download is committed or discarded once" }
         try {
             val source = AttachmentSource(
                 uri = ready.snapshot.uri,
@@ -140,8 +149,11 @@ class MaterializeReference(
         }
     }
 
-    /** Drops the staging and nothing else. Idempotent, as the staging's own discard is. */
-    fun discard(ready: Prepared.Ready) = ready.fetched.staged.discard()
+    /** Drops the staging and nothing else, and spends [ready]. Idempotent, as the staging's own discard is. */
+    fun discard(ready: Prepared.Ready) {
+        ready.spend()
+        ready.fetched.staged.discard()
+    }
 
     private fun refused(why: MaterializeRefusal) = Prepared.Refused(why)
 
@@ -162,6 +174,9 @@ sealed interface Prepared {
     /**
      * The download is in staging, proven a document, and not already on the asset. [retrievedAt] is when the
      * fetch finished. [toString] names no URI, host or title (review NOTE 1): a stray log line carries none.
+     *
+     * Single use: the first `commit` that gets past a blank name, or the first `discard`, spends it, and any
+     * later `commit` throws `IllegalStateException`. The flag is atomic, so two commits at once cannot both pass.
      */
     data class Ready(
         val assetId: AssetId,
@@ -169,6 +184,12 @@ sealed interface Prepared {
         val fetched: FetchOutcome.Fetched,
         val retrievedAt: Long,
     ) : Prepared {
+        // Not a constructor property, so equals, hashCode and copy are untouched.
+        private val spent = AtomicBoolean(false)
+
+        /** True for the one caller that spends it; false for every later one. */
+        internal fun spend(): Boolean = spent.compareAndSet(false, true)
+
         override fun toString() = "Ready(assetId=${assetId.value}, fetched=$fetched, retrievedAt=$retrievedAt)"
     }
 
@@ -196,7 +217,10 @@ sealed interface MaterializeRefusal {
     /** No such reference, or it belongs to another asset. */
     data object NoSuchReference : MaterializeRefusal
 
-    /** Not an https web link the hop rule accepts (a note link, `http`, userinfo, a local name, an odd host). */
+    /**
+     * Not an https web link the hop rule accepts (a note link, `http`, userinfo, a local name, an odd host), or a
+     * name or URI the source shape rule would refuse at Save (a blank or over-long name, an over-long URI).
+     */
     data object NotEligible : MaterializeRefusal
 
     /** [AttachmentProblem.NoStore] or [AttachmentProblem.StoreUnavailable], checked before any download. */
