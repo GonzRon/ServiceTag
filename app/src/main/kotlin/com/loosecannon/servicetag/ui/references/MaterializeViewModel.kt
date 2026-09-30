@@ -60,7 +60,7 @@ sealed interface MaterializeState {
     /** Saved: the host takes it once through [MaterializeViewModel.handOffDone] and says P85-7 (#84). */
     data object Done : MaterializeState
 
-    /** Nothing to show: cancelled, handed off, or a refusal with no ratified line (a vanished or ineligible row). */
+    /** Nothing to show: cancelled, handed off, or a vanished or ineligible row (no ratified line for either). */
     data object Closed : MaterializeState
 }
 
@@ -116,9 +116,9 @@ class MaterializeViewModel(
                 if (ready !== landed) landed?.let(materialize::discard)
                 throw e
             } catch (e: Throwable) {
-                // A read that failed: no ratified line says so, so the sheet closes holding nothing.
+                // Anything else that went wrong (a read that failed): P85-18, reused within its meaning (ruling).
                 if (ready !== landed) landed?.let(materialize::discard)
-                _state.value = MaterializeState.Closed
+                _state.value = refused(MaterializeStrings.INTERRUPTED)
             }
         }
     }
