@@ -556,13 +556,13 @@ class AppGraph(private val context: Context) {
     }
     val materializeStaging: CacheStagingArea =
         CacheStagingArea(File(context.applicationContext.cacheDir, CacheStagingArea.DIRECTORY), ids)
-    val materializeReference: MaterializeReference = HopPolicy(InetHostResolver(networkPermissionGranted)).let { hops ->
-        MaterializeReference(
-            references, attachments, attachmentStorage, linkLaunchPolicy, hops,
-            FetchDocument(UrlConnectionTransport(networkPermissionGranted), hops, materializeStaging),
-            addAttachment, networkPermissionGranted, clock,
-        )
-    }
+    /** C9's hop rule: the use case asks it of every hop; the reference rows ask its static half (C20). */
+    val hops: HopPolicy = HopPolicy(InetHostResolver(networkPermissionGranted))
+    val materializeReference: MaterializeReference = MaterializeReference(
+        references, attachments, attachmentStorage, linkLaunchPolicy, hops,
+        FetchDocument(UrlConnectionTransport(networkPermissionGranted), hops, materializeStaging),
+        addAttachment, networkPermissionGranted, clock,
+    )
 
     /** A cache file the camera can write into through the FileProvider (spec §9.3). */
     fun cameraCaptureUri(): Uri {
