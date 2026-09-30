@@ -1007,3 +1007,70 @@ plan review's m8; B5b's report. **`<base>`** = B5b's tip. **Rows:** 40–42. **R
 tools. **Must NOT:** resolve identity by name alone; evaluate CREATE before IDENTICAL, or treat a successor as a
 CREATE candidate; write when the plan is unclean; bump `manifestVersion`. **Counted RED (3):** rows 40, 41, 42.
 **Caps:** 4 pytest mutation runs; **1 h target, 2 h hard stop**. **Size:** about 170 production, 280 test lines.
+
+## 17. Errata after the merge (controller, 2026-09-30; merged f55ffb5b)
+
+Rev 1.3 is the ratified spec; the code is documented as built (`docs/api/v1.md`, the MCP README, the loader README).
+Where they differ, this section records the difference and who ruled it. Nothing above is rewritten.
+
+- **E1 (C20).** The successor accepts the purchase and warranty fields: the asset command minus `description`,
+  `notes`, `templateKey` and the season pair, exactly as C20 says. The controller's narrower dispatch note to B3 was
+  void (B3 ruling; C20 stands).
+- **E2 (C32).** The loader's IDENTICAL is **tighter** than C32: the successor's name **and every manifest-given
+  successor field**, compared as the phone stores them (trimmed, blank = absent, category by its key); otherwise
+  CONFLICT, since a replacement cannot be undone (controller ruling on B5b NOTE-1 and B6).
+- **E3 (C32, B6).** B6's deviations and guards: two same-named non-successor assets → ERROR; the predecessor is
+  found by exact name plus the succession record (no manifest id); a successor namesake whose own predecessor is not
+  a namesake → ERROR (ambiguous); a CREATE replacement whose predecessor the same manifest also names in its groups
+  or schedules → ERROR, with a README limit (B6 MAJOR-2); successor fields are compared phone-canonically, with
+  `category_key` a Python copy of `CategoryKey.of` over Kotlin's `Char.isWhitespace()` set (B6 MAJOR-1; the U+0085
+  case closed in the whole-branch fix round, 9e954d7b). A Kotlin change to the rule reads CONFLICT, never a false
+  IDENTICAL.
+- **E4 (C33).** "A stale one there is already cancelled" is false. The slot is redundant for cancellation and kept
+  for observability; the per-generation `Job` (BC5) carries cancellation; `register` ignores an already-cancelled
+  `Job` (B2 m1, 531260f1).
+- **E5 (C16, new BC5).** A per-listener-generation `Job`, cancelled by `stop()`; `ApiRouter.handle(request,
+  generation)`; a `CancellationException` (and `RequestStreamFailed`) is rethrown, so the connection closes with no
+  answer.
+- **E6 (B4's twelve code-vs-plan differences, each documented as the code):** (1) `capturedOn` is trimmed and
+  blank is null, on the PATCH and the upload header (B1a fix 6431c41f); (2) `sourcesDigest: null` is accepted on
+  `replace-plan` (a string is 400); (3) a malformed `sourcesDigest` on `replace` is 409 `REPLACE_STALE` (missing is
+  400); (4) the digest sorts and de-duplicates the three id lists and hashes every other value as sent (a value core
+  ignores still counts); (5) `replacedOn` = the predecessor's `retiredOn`, else the draft's trimmed `retiredOn`, else
+  `""`; (6) a racing apply's loser gets `REPLACE_STALE` (the in-write re-read); (7) `store_unavailable`'s `problems`
+  is `["StoreUnavailable"]` from state, `[]` from a mid-write `StoreIoException`; (8) the upload answers 500
+  `internal` on an unreadable installation id, after the drain (as `/v1/status` does); (9) the upload deadline
+  starts at the body's first read (the lock wait is not counted); (10) B1b's six C2 codes are private in
+  `AttachmentHandlers.kt`; (11) the MCP README's tool content moved from B4 to B5a/B5b; (12) the offer is 200 for a
+  held asset, and the plan is 200 when blocked or with problems (`blockedBy`); the apply checks held before the
+  digest.
+- **E7 (C27).** Tool names as the plan's (`get_replace_offer`, `retired_on`). Additions the plan did not name: the
+  per-`Device` in-flight lock; `NotAnswering` with its `transport`; `retry_on_connect=False` for materialize; the
+  default key encoding, lowercase-hex `sha256("asset\nsha256\nsize")`; the local refusals, including
+  `ATTACHMENT_NOTES_TOO_LONG` (a 6,144-byte header budget; MCP-local, no phone code); UNKNOWN **raised** by
+  `add_attachment` but **returned** by `materialize_reference` and `replace_asset`; `replace_asset`'s clean-plan
+  test: `problems` present and `[]`, and a non-empty digest (B5b fix 81b35d72).
+- **E8 (C27 and C23).** `replace_asset`'s digest guards the tool's own plan→apply only. A person's earlier
+  `plan_only=True` review is not compared against the apply (the docstring and README say so since 9e954d7b). An
+  optional `sources_digest` pass-through is a possible C27 amendment — the owner's option, not taken here.
+- **E9 (C27 and C32).** Two IDENTICAL layers: the MCP's ad-hoc `replace_asset` is name-only; the loader, for
+  manifests, is strict (E2); the loader decides for manifests.
+- **E10 (C25).** `docs/release-proofs.md:107` stays 1.5.0's gate text and B4's dated note beside it is its erratum;
+  `docs/releases/1.5.0.md` stays 1.5.0's record; `v1.md`'s "derived under the lock" is looser than the code (the
+  digest is computed inside the write, after the in-write re-read).
+- **E11 (§4 fences, ruled moves).** B1b's two fixtures (`MaintenanceFixtures.attachmentHandlersFor` arguments,
+  `FakeGraph.materializeStagingDir`); rows 44–45 in `LoopbackApiServerTest` for B2; `test_reference_tools.py`'s
+  count and forbidden-name list (B5a) and `test_succession_tools.py` (B5b — the R86-18 pin superseded by R92-1).
+- **E12 (§4 gate budget, actuals at the merge).** core 1659 (plan ≈ 1654 + 4); app 1702 (plan ≈ 1586 + ~115; B1a's
+  base was 1600); MCP 460 (plan 384 + ~55); loader 154 (plan + ~12; 109 + 45). Device classes 55, unchanged — #92
+  adds none.
+- **E13 (C9 KDoc list).** The `MAX_BODY_BYTES` comment reads "but three"; the route-count KDoc (66 shapes / 80
+  rows, the B3 paragraph) and the two "no route records a succession" KDocs were corrected in the whole-branch fix
+  round (9e954d7b).
+- **E14 (recorded limits).** An authenticated upload holds the long-write lock for up to its 10-minute deadline,
+  and a refusal's drain runs outside the lock under the same deadline. The MCP's metadata header is bounded locally
+  (E7) — the phone's 8 KiB header block is the phone's own limit.
+- **Reviews and rounds.** Eight briefs, one task review each; fix rounds on B1a, B2, B3, B5b and B6 (each one
+  round); the B2-pre threat review acknowledged by the owner; one whole-branch review (MERGE WITH FIXES: 0 BLOCKER,
+  0 MAJOR, 5 MINOR, 13 NOTE) and one fix round (9e954d7b), accepted on controller inspection. The gate is
+  `.superpowers/sdd/2026-09-30-issue-92/gate/` (55 device classes, the MCP and loader pytests), run once on f55ffb5b.
