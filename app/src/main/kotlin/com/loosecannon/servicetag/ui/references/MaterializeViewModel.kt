@@ -28,6 +28,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -136,7 +137,9 @@ class MaterializeViewModel(
         ready = null
         job = viewModelScope.launch {
             val next = try {
-                val outcome = withContext(io) {
+                // R87-4: the commit alone is uncancellable (the download and the review stay cancellable), so a
+                // popped screen cannot interrupt the durable write or its failure cleanup.
+                val outcome = withContext(io + NonCancellable) {
                     materialize.commit(prepared, MaterializeReview(review.name, review.kind, review.role, review.notes))
                 }
                 afterCommit(outcome, review, prepared)

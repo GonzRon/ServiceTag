@@ -20,10 +20,17 @@ import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
+import com.loosecannon.servicetag.core.ports.AttachmentStorage
+import com.loosecannon.servicetag.core.ports.AttachmentStore
+import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
+import com.loosecannon.servicetag.core.ports.StoreIoException
 import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.MaterializeReference
 import com.loosecannon.servicetag.core.usecase.MaterializeRefusal
@@ -31,6 +38,7 @@ import com.loosecannon.servicetag.core.usecase.MaterializeReview
 import com.loosecannon.servicetag.core.usecase.SourceSnapshot
 import com.loosecannon.servicetag.fetch.CacheStagingArea
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.testing.InMemoryAttachmentStore
 import com.loosecannon.servicetag.ui.references.MaterializeState.Closed
 import com.loosecannon.servicetag.ui.references.MaterializeState.Done
 import com.loosecannon.servicetag.ui.references.MaterializeState.Downloading
@@ -40,6 +48,7 @@ import com.loosecannon.servicetag.ui.references.MaterializeState.Saving
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.properties.Delegates
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -97,6 +106,37 @@ class MaterializeViewModelTest {
     /** Run once, right after `prepare`'s duplicate check — its last suspension before it answers `Ready`. */
     private var afterDuplicateCheck: (() -> Unit)? = null
 
+    /** R87-4: when set, the use case writes through this store instead of `graph.attachmentStorage`. */
+    private var gated: GatedStorage? = null
+
+    /**
+     * R87-4: the in-memory store with its `put` held open. The bytes land first, then the write parks on [gate] —
+     * begun and not finished, as a real copy is when the screen goes — and [reached] says so. With [failAfterGate]
+     * the write then fails as `SafTreeAttachmentStore`'s does: its partial document goes and the error is thrown,
+     * recorded in [failures] so the test can see it happened.
+     */
+    private class GatedStorage(val inner: InMemoryAttachmentStore, private val failAfterGate: Boolean) :
+        AttachmentStorage {
+        val reached = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<Unit>()
+        val failures = mutableListOf<String>()
+
+        override fun state(): StoreState = StoreState.Ready("Attachments", "com.example.provider")
+        override fun store(): AttachmentStore = object : AttachmentStore by inner {
+            override suspend fun put(locator: String, source: ByteSource): StoredBytes {
+                val stored = inner.put(locator, source)
+                reached.complete(Unit)
+                gate.await()
+                if (failAfterGate) {
+                    inner.files.remove(locator)
+                    failures += locator
+                    throw StoreIoException("rigged failure writing $locator")
+                }
+                return stored
+            }
+        }
+    }
+
     @Before fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
         graph = FakeGraph(queryContext = StandardTestDispatcher(scheduler))
@@ -130,10 +170,14 @@ class MaterializeViewModelTest {
             override suspend fun forAsset(assetId: AssetId): List<Attachment> =
                 graph.attachments.forAsset(assetId).also { afterDuplicateCheck?.invoke() }
         }
+        val storage: AttachmentStorage = gated ?: graph.attachmentStorage
+        val add = gated?.let {
+            AddAttachment(graph.attachments, graph.assets, graph.events, it, graph.uow, graph.ids, graph.clock)
+        } ?: graph.addAttachment
         return MaterializeReference(
-            references, attachments, graph.attachmentStorage, LinkLaunchPolicy(), hops,
+            references, attachments, storage, LinkLaunchPolicy(), hops,
             FetchDocument(transport, hops, CacheStagingArea(staging, graph.ids), io = StandardTestDispatcher(scheduler)),
-            graph.addAttachment, { graph.networkGranted }, graph.clock,
+            add, { graph.networkGranted }, graph.clock,
         )
     }
 
@@ -456,5 +500,72 @@ class MaterializeViewModelTest {
         assertTrue(rows().isEmpty())
         assertTrue(staged().isEmpty())
         clearModels()
+    }
+
+    /**
+     * R87-4 (#87 BR-M1): the screen is popped mid-Save, once the copy has begun — the notification's stack reset
+     * clears the asset screen's ViewModelStore, which [clearModels]' `store.clear()` is. The commit finishes anyway:
+     * one attachment with the reference's source, its bytes and nothing else in the store, the staging gone, the
+     * reference untouched. Main dispatches in both R87-4 cases, as `Main.immediate` does when the commit resumes
+     * from an IO thread on the phone.
+     */
+    @Test fun aScreenPoppedMidSaveStillSavesOnce() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(scheduler))
+        poolPump()
+        val reference = graph.references.get(ReferenceId("ref-1"))
+        val held = GatedStorage(InMemoryAttachmentStore(), failAfterGate = false)
+        gated = held
+        val vm = model()
+        vm.state.first { it is Review }
+
+        vm.save()
+        held.reached.await()
+        store.clear()
+        held.gate.complete(Unit)
+        advanceUntilIdle()
+
+        val rows = rows()
+        val orphans = held.inner.files.keys - rows.map { it.storageLocator }.toSet()
+        assertEquals("one durable attachment and no orphaned bytes", 1 to emptySet<String>(), rows.size to orphans)
+        val row = rows.single()
+        assertEquals(AttachmentOwner.OfAsset(assetId), row.owner)
+        assertEquals(URI, row.source?.uri)
+        assertEquals(NAME, row.source?.name)
+        assertEquals(InMemoryAttachmentStore.sha256Hex(PDF), row.sha256)
+        assertEquals("the store holds exactly its bytes", listOf(row.storageLocator), held.inner.files.keys.toList())
+        assertTrue(PDF.contentEquals(held.inner.files.getValue(row.storageLocator)))
+        assertEquals("the staging is discarded", emptyList<String>(), staged())
+        assertEquals("the reference is untouched", reference, graph.references.get(ReferenceId("ref-1")))
+    }
+
+    /**
+     * R87-4: the same pop, and then the store's write fails. Its partial bytes go, no row is written, the staging is
+     * discarded, the reference is untouched — and the failure is the refusal it is today, not hidden by the cancel.
+     */
+    @Test fun aStoreFailureAfterThePopIsCleanedUpAndStillRefused() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(scheduler))
+        poolPump()
+        val reference = graph.references.get(ReferenceId("ref-1"))
+        val held = GatedStorage(InMemoryAttachmentStore(), failAfterGate = true)
+        gated = held
+        val vm = model()
+        vm.state.first { it is Review }
+
+        vm.save()
+        held.reached.await()
+        store.clear()
+        held.gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals("the store's write failed", 1, held.failures.size)
+        assertEquals(
+            "the failure is still the refusal, not a silent close",
+            Refused("Could not save Example Pool Pump manual", false),
+            vm.state.value,
+        )
+        assertTrue("no attachment row", rows().isEmpty())
+        assertEquals("no orphaned bytes", emptySet<String>(), held.inner.files.keys)
+        assertEquals("the staging is discarded", emptyList<String>(), staged())
+        assertEquals("the reference is untouched", reference, graph.references.get(ReferenceId("ref-1")))
     }
 }
