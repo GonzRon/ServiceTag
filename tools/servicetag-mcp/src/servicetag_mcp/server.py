@@ -3175,9 +3175,10 @@ def materialize_reference(
     only when given; absent, the phone uses the reference's name, the kind of the proven type, no role and the
     reference's description. It reads the asset's references (the reference must be one of them, else
     `NO_SUCH_REFERENCE` with nothing sent) and its attachments first, then makes one request with a 720-second
-    budget and never sends it twice. Answers `{decision, reference, host, mimeType, sizeBytes, attachment}` —
-    `decision` `CREATED` or `IDENTICAL` (`attachmentId` naming the row the phone already had) — or
-    `{decision: UNKNOWN, next}`. Needs a phone at schema 16 or later: an older one is refused with
+    budget and never sends it twice. Every answer carries `decision` and `reference` (`{id, displayName, host}`):
+    `CREATED` adds `host`, `mimeType`, `sizeBytes` and the new `attachment`; `IDENTICAL` adds `attachmentId`, the
+    row the asset already had (and that row itself when it was found by its link); `UNKNOWN` adds `next`, what to
+    read before running it again. Needs a phone at schema 16 or later: an older one is refused with
     `APP_SCHEMA_TOO_OLD` and nothing is sent.
     """
     asset_path = _path_id(asset_id, field="asset_id")
