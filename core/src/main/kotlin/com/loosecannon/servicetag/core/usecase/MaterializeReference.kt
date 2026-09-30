@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.fetch.FetchProblem
 import com.loosecannon.servicetag.core.fetch.HopPolicy
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.Attachment
+import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentProblem
@@ -107,7 +108,7 @@ class MaterializeReference(
             val same = attachments.forAsset(assetId)
                 .filter { it.sha256 == fetched.sha256 && it.sizeBytes == fetched.sizeBytes }
                 .minWithOrNull(compareBy<Attachment>({ it.createdAt }, { it.id.value }))
-            if (same != null) return refused(MaterializeRefusal.AlreadyHave(same.displayName))
+            if (same != null) return refused(MaterializeRefusal.AlreadyHave(same.displayName, same.id))
             val snapshot = SourceSnapshot(uri, reference.displayName, reference.description, host)
             return Prepared.Ready(assetId, snapshot, fetched, retrievedAt).also { handedOver = true }
         } finally {
@@ -232,6 +233,9 @@ sealed interface MaterializeRefusal {
     /** The fetch refused; the staging is already gone. */
     data class Fetch(val problem: FetchProblem) : MaterializeRefusal
 
-    /** R85-6: the same bytes (digest and size) are already on this asset, as the earliest such row [name]s. */
-    data class AlreadyHave(val name: String) : MaterializeRefusal
+    /**
+     * R85-6: the same bytes (digest and size) are already on this asset, as the earliest such row [name]s. #92 (C17):
+     * [attachmentId] is that row's id, so the API can name the row without its name.
+     */
+    data class AlreadyHave(val name: String, val attachmentId: AttachmentId) : MaterializeRefusal
 }
