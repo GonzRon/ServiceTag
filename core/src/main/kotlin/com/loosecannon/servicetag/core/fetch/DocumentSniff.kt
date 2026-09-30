@@ -1,10 +1,10 @@
 package com.loosecannon.servicetag.core.fetch
 
 /**
- * C11 (#85, R85-5), widened by C27: the byte sniff. A pure function over the two windows of a staged file,
- * deciding PDF, PNG, JPEG, ODT, ODS, ODP or nothing. It takes no declared type and reads nothing but the
- * windows; it checks signatures and end markers and parses nothing between them. A header alone is never
- * enough: each kind must also end right. A ZIP it does not decide is `ContainerInspect`'s (C28).
+ * C11 (#85, R85-5), widened by C27 and C30: the byte sniff. A pure function over the two windows of a staged
+ * file, deciding PDF, PNG, JPEG, GIF, WebP, RTF, ODT, ODS, ODP or nothing. It takes no declared type and reads
+ * nothing but the windows; it checks signatures and end markers and parses nothing between them. A header
+ * alone is never enough: each kind must also end right. A ZIP it does not decide is `ContainerInspect`'s (C28).
  */
 object DocumentSniff {
     const val WINDOW = 1_024
@@ -15,6 +15,9 @@ object DocumentSniff {
     const val ODT = "application/vnd.oasis.opendocument.text"
     const val ODS = "application/vnd.oasis.opendocument.spreadsheet"
     const val ODP = "application/vnd.oasis.opendocument.presentation"
+    const val GIF = "image/gif"
+    const val WEBP = "image/webp"
+    const val RTF = "application/rtf"
 
     private val pdfHeader = "%PDF-".toByteArray(Charsets.ISO_8859_1)
     private val pdfEof = "%%EOF".toByteArray(Charsets.ISO_8859_1)
@@ -30,6 +33,13 @@ object DocumentSniff {
     private val zipEnd = byteArrayOf(0x50, 0x4B, 0x05, 0x06)
     private val odfEntry = "mimetype".toByteArray(Charsets.ISO_8859_1)
     private val odfTypes = listOf(ODT, ODS, ODP)
+    private val gifHeaders = listOf("GIF87a", "GIF89a").map { it.toByteArray(Charsets.ISO_8859_1) }
+    private const val GIF_TRAILER: Byte = 0x3B
+    private val riff = "RIFF".toByteArray(Charsets.ISO_8859_1)
+    private val webpForm = "WEBP".toByteArray(Charsets.ISO_8859_1)
+    private val webpChunks = listOf("VP8 ", "VP8L", "VP8X").map { it.toByteArray(Charsets.ISO_8859_1) }
+    private val rtfHeader = "{\\rtf1".toByteArray(Charsets.ISO_8859_1)
+    private val rtfPadding = " \t\r\n\u0000".toByteArray(Charsets.ISO_8859_1)
 
     /**
      * The MIME the bytes prove, or null. [size] is the file's length; [head] must be its first and [tail] its
@@ -45,6 +55,9 @@ object DocumentSniff {
             isPdf(head, tail) -> PDF
             isPng(head, tail) -> PNG
             isJpeg(head, tail) -> JPEG
+            isGif(head, tail) -> GIF
+            isWebp(size, head) -> WEBP
+            isRtf(head, tail) -> RTF
             else -> odf(head, tail)
         }
     }
@@ -62,6 +75,19 @@ object DocumentSniff {
 
     private fun isJpeg(head: ByteArray, tail: ByteArray): Boolean =
         startsWith(head, jpegSoi) && indexOf(tail, jpegEoi) >= 0
+
+    /** C30: `GIF87a` or `GIF89a`, and the file's last byte is the trailer. */
+    private fun isGif(head: ByteArray, tail: ByteArray): Boolean =
+        gifHeaders.any { startsWith(head, it) } && tail.lastOrNull() == GIF_TRAILER
+
+    /** C30: `RIFF`, a little-endian size, `WEBP`, then a `VP8 `, `VP8L` or `VP8X` chunk; the RIFF ends the file. */
+    private fun isWebp(size: Long, head: ByteArray): Boolean =
+        head.size >= 16 && startsWith(head, riff) && regionMatches(head, 8, webpForm) &&
+            webpChunks.any { regionMatches(head, 12, it) } && head.u32(4) + 8 == size
+
+    /** C30: `{\rtf1`, and the last byte that is not a space, tab, CR, LF or NUL closes the group. */
+    private fun isRtf(head: ByteArray, tail: ByteArray): Boolean =
+        startsWith(head, rtfHeader) && tail.lastOrNull { it !in rtfPadding } == '}'.code.toByte()
 
     /**
      * C27: a local header at 0 naming exactly `mimetype`, stored (method 0) with equal sizes, its data exactly

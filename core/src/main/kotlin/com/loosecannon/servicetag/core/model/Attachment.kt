@@ -156,6 +156,12 @@ object MimeTypes {
         "application/msword" to "doc",
         "application/vnd.ms-excel" to "xls",
         "application/vnd.ms-powerpoint" to "ppt",
+        "image/gif" to "gif",
+        "image/webp" to "webp",
+        "application/rtf" to "rtf",
+        "text/markdown" to "md",
+        "text/csv" to "csv",
+        "text/tab-separated-values" to "tsv",
     )
 
     /** Already-compressed payloads, which the artifacts archive STOREs rather than deflating. */

@@ -20,11 +20,12 @@ import kotlin.coroutines.cancellation.CancellationException
  *
  * Every hop, the first included, passes [HopPolicy.check] immediately before its GET, so https and the
  * address rule hold on each one. At most [FetchLimits.maxRedirects] redirects are followed. A 200 or 203
- * is a body; its declared type and length are judged before a byte is read, and the declared type is
- * never more than that: the bytes decide the kind, by their first and last windows. The body is
+ * is a body; its declared type and length are judged before a byte is read, and a declared page fails
+ * there. Otherwise the bytes decide the kind, by their first and last windows; only text also needs a
+ * text declared type or URL extension, which then names its flavour (C30, C31). The body is
  * streamed once, counted (the count, never `Content-Length`, is authoritative), digested and windowed on
  * the way in. The staged file is read back only by at most one bounded, read-only container inspection,
- * after the stream is done and only for a ZIP head the windows left undecided (C31).
+ * after the stream is done and only for a ZIP or compound-file head the windows left undecided (C31).
  *
  * **Cleanup.** Every outcome but [FetchOutcome.Fetched], every exception and every cancellation discards
  * the staging file, and every response is closed. A kept file is either handed to the caller or
@@ -95,7 +96,7 @@ class FetchDocument(
         }
     }
 
-    /** Steps 5–9: the headers, then one streamed pass, then the sniff and, for a container, the inspection. */
+    /** Steps 5–9: the headers, then one streamed pass, then the sniff, a container's inspection, then text. */
     private suspend fun download(
         url: String,
         response: TransportResponse,
@@ -161,14 +162,20 @@ class FetchDocument(
         return Streamed.Done(count, sha256, windows.head(), windows.tail())
     }
 
-    /** [declared] is the normalised declared type: for a ZIP head it can only refuse (C28 (7)), never accept. */
+    /**
+     * [declared] is the normalised declared type: for a ZIP head it can only refuse (C28 (7)), never accept;
+     * for text it is one of the two labels that may admit it and name its flavour (C30, C31). [TextSniff]
+     * is asked only when no binary family matched.
+     */
     private suspend fun judged(url: String, declared: String?, staged: StagingFile, done: Streamed.Done): FetchOutcome {
         if (done.size == 0L) return refused(FetchProblem.Empty)
         if (DocumentSniff.isZip(done.head) && OoxmlExclusions.refuses(declared, extensionOf(url))) {
             return refused(FetchProblem.NotADocument)
         }
         val proven = try {
-            DocumentSniff.classify(done.size, done.head, done.tail) ?: inspected(staged, done)
+            DocumentSniff.classify(done.size, done.head, done.tail)
+                ?: inspected(staged, done)
+                ?: TextSniff.classify(done.size, done.head, done.tail, declared, extensionOf(url))
         } catch (e: IOException) {
             currentCoroutineContext().ensureActive()
             return refused(FetchProblem.Interrupted)
@@ -226,8 +233,8 @@ class FetchDocument(
     private companion object {
         val REDIRECTS = setOf(301, 302, 303, 307, 308)
 
-        /** Declared types that fail at once (R85-5): a page, never a document. */
-        val NOT_DOCUMENTS = setOf("text/html", "application/xhtml+xml", "text/plain")
+        /** Declared types that fail at once (R85-5, C31): a page, never a document. Text proceeds to [TextSniff]. */
+        val NOT_DOCUMENTS = setOf("text/html", "application/xhtml+xml")
 
         fun refused(problem: FetchProblem) = FetchOutcome.Refused(problem)
 
