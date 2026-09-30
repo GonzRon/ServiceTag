@@ -14,6 +14,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -123,8 +124,11 @@ class UrlConnectionTransportTest {
         assertEquals(listOf("identity"), seen["accept-encoding"])
         assertEquals("ServiceTag", DocumentTransport.USER_AGENT)
         assertEquals("R85-13: no platform, version, model or build", listOf("ServiceTag"), seen["user-agent"])
-        // The three, plus what HTTP/1.1 itself carries: no cookie, no credential, nothing else.
-        assertEquals(setOf("accept", "accept-encoding", "user-agent"), seen.keys - setOf("host", "connection"))
+        // The three, plus only what the platform's HTTP/1.1 adds by itself — the host, the connection and, for
+        // `useCaches = false`, its no-cache directives: no cookie, no credential, nothing that identifies the phone.
+        val platform = setOf("host", "connection", "pragma", "cache-control")
+        assertEquals(setOf("accept", "accept-encoding", "user-agent"), seen.keys - platform)
+        listOf("pragma", "cache-control").forEach { name -> seen[name]?.let { assertEquals(listOf("no-cache"), it) } }
     }
 
     @Test
@@ -178,7 +182,7 @@ class UrlConnectionTransportTest {
     fun cancellingAPendingGetDisconnects() = runBlocking<Unit> {
         val bounded = UrlConnectionTransport(networkPermissionGranted = { true }, readTimeoutMillis = 5_000)
         RawServer(response = null).use { raw ->
-            val pending = async { bounded.get(raw.url) }
+            val pending = async(Dispatchers.IO) { bounded.get(raw.url) }
             assertTrue(raw.gotRequest.await(5, TimeUnit.SECONDS))
 
             pending.cancel()
@@ -225,7 +229,7 @@ private class RawServer(private val response: String?) : AutoCloseable {
                     readHead(input)
                     gotRequest.countDown()
                     response?.let { peer.getOutputStream().apply { write(it.toByteArray()); flush() } }
-                    while (input.read() != -1) Unit
+                    while (input.read() != -1) continue
                     sawEof.countDown()
                 }
             }

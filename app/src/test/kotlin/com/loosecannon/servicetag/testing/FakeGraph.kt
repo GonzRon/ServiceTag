@@ -153,6 +153,12 @@ import com.loosecannon.servicetag.ui.maintenance.ScanRoundMembership
 import com.loosecannon.servicetag.ui.maintenance.ScanSheetOffer
 import com.loosecannon.servicetag.ui.maintenance.ScheduleSnooze
 import com.loosecannon.servicetag.ui.maintenance.scanSheetContentFor
+import com.loosecannon.servicetag.core.fetch.FetchDocument
+import com.loosecannon.servicetag.core.fetch.HopPolicy
+import com.loosecannon.servicetag.core.fetch.HostResolver
+import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.usecase.MaterializeReference
+import com.loosecannon.servicetag.fetch.CacheStagingArea
 import java.io.File
 import java.time.ZoneOffset
 import kotlin.coroutines.CoroutineContext
@@ -408,6 +414,25 @@ class FakeGraph(
     val updateAttachment: UpdateAttachment = UpdateAttachment(attachments, uow, clock)
     val deleteAttachment: DeleteAttachment = DeleteAttachment(attachments, attachmentStorage, uow)
     val restoreArtifacts: RestoreArtifacts = RestoreArtifacts(attachments, attachmentStorage)
+
+    /**
+     * #85 (C19) — Save as document, mirroring `AppGraph.materializeReference` over app-side fakes: [documentTransport]
+     * answers each URL a test serves, every host resolves to `203.0.113.10` (a documentation address, so the host rule
+     * allows it), and staging is the real [CacheStagingArea] in a temporary directory. [networkGranted] is the
+     * permission check. The fetch runs on [queryContext], so a fixture on a test scheduler keeps it there.
+     */
+    val documentTransport: FakeDocumentTransport = FakeDocumentTransport()
+    var networkGranted: Boolean = true
+    val materializeStaging: CacheStagingArea =
+        CacheStagingArea(kotlin.io.path.createTempDirectory("materialize").toFile(), ids)
+    val materializeReference: MaterializeReference =
+        HopPolicy(HostResolver { listOf(byteArrayOf(203.toByte(), 0, 113, 10)) }).let { hops ->
+            MaterializeReference(
+                references, attachments, attachmentStorage, LinkLaunchPolicy(), hops,
+                FetchDocument(documentTransport, hops, materializeStaging, io = queryContext),
+                addAttachment, { networkGranted }, clock,
+            )
+        }
 
     /** Device-local preferences, in a map: a test can read back exactly what the UI wrote. */
     val prefs: AppPrefs = AppPrefs(InMemoryKeyValueStore())
