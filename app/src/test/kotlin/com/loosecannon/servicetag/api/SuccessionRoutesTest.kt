@@ -24,8 +24,9 @@ import org.junit.Test
  * `GET /v1/assets/{id}/succession` answers 200 `{"replaces": <row>|null, "replacedBy": <row>|null}`, each row the
  * archive's own `{id, predecessorAssetId, successorAssetId, replacedOn, createdAt}`, both keys always present; an
  * asset that is not there is the shipped 404 `no_such_asset`, and any other verb is a 404 — the `/v1/assets/{id}/…`
- * sub-resource convention. **No route records a succession**: only the phone's Replace asset does (a merge apply
- * only inserts an archive's rows), so no verb or path here appends, amends or removes one. The answers are read as raw JSON, so the wire shape — its key
+ * sub-resource convention. **No route here records a succession**: only Replace asset does — the phone's, or #92's
+ * `POST /v1/assets/{id}/replace` over the same use case (R92-1, `ReplaceRoutesTest`) — and a merge apply only inserts
+ * an archive's rows, so no verb or path here appends, amends or removes one. The answers are read as raw JSON, so the wire shape — its key
  * names, its explicit nulls — is what is pinned, not a Kotlin class that could drift with it.
  */
 class SuccessionRoutesTest {
@@ -118,8 +119,9 @@ class SuccessionRoutesTest {
     }
 
     /**
-     * R86-18: no write route. Every other verb on the sub-resource is the convention's 404, and so is every path a
-     * client would plausibly try to make or remove one — and none of them writes a row.
+     * R86-18 as #92's R92-1 left it: no write route but Replace asset's own. Every other verb on the sub-resource is the
+     * convention's 404, and so is every path a client would plausibly try to make or remove one — and none of them
+     * writes a row.
      */
     @Test fun aPostIs404() {
         val old = api.asset("Example Water Heater")

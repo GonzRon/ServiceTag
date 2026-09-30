@@ -251,6 +251,7 @@ class ReplaceRoutesTest {
             "replace-plan" to """{"predecessorId":"h1","retiredOn":"2026-02-01","successor":{"name":"Sample Pool Pump (new)"}}""",
             "replace-plan" to """{"retiredOn":"2026-02-01","successor":{"name":"Sample Pool Pump (new)"},"sourcesDigest":"$zero"}""",
             "replace" to """{"retiredOn":"2026-02-01","successor":{"name":"Sample Pool Pump (new)"}}""",
+            "replace-plan" to """{"retiredOn":"2026-02-01","successor":{"name":"Sample Pool Pump (new)"},"manualPhase":"SOMETIMES"}""",
         )) {
             val response = api.call("POST", "/v1/assets/p1/$route", body)
             assertEquals("$route $body: ${response.bodyText()}", 400, response.status)

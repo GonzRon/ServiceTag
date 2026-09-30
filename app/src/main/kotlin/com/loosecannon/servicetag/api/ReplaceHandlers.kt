@@ -35,8 +35,9 @@ internal class ReplaceHandlers(private val replaceAsset: ReplaceAsset) {
             throw ApiFailure.badRequest("sourcesDigest is replace's key; replace-plan answers one")
         }
         val id = AssetId(assetId)
+        val draft = body.toDraft(id)
         val offer = replaceAsset.offer(id)
-        val plan = replaceAsset.plan(body.toDraft(id))
+        val plan = replaceAsset.plan(draft)
         val blockedBy = when {
             offer.held -> "asset_transferred_out"
             offer.replacedBy != null -> "ASSET_ALREADY_REPLACED"
@@ -63,10 +64,10 @@ internal class ReplaceHandlers(private val replaceAsset: ReplaceAsset) {
         val digest = body.sourcesDigest
             ?: throw ApiFailure.badRequest("sourcesDigest is required: send the one replace-plan answered")
         val id = AssetId(assetId)
+        val draft = body.toDraft(id)
         val offer = replaceAsset.offer(id)
         if (offer.held) throw AssetTransferredOut(id)
         offer.replacedBy?.let { throw assetAlreadyReplaced(it) }
-        val draft = body.toDraft(id)
         val plan = replaceAsset.plan(draft)
         if (sourcesDigest(body, plan) != digest) throw ReplaceStale(id)
         if (plan.problems.isNotEmpty()) throw replaceProblems(plan.problems)
