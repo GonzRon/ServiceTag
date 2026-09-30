@@ -253,7 +253,7 @@ class AttachmentRoutesTest {
         val row = seed("att-1", AttachmentOwner.OfAsset(AssetId(heater)), "Manual")
         val before = graph.commits
 
-        for (day in listOf("2026-13-01", "01/02/2026", "")) {
+        for (day in listOf("2026-13-01", "01/02/2026", "30/09/2026", " 30/09/2026 ")) {
             val response = patch("att-1", """{"displayName":"Manual","kind":"DOCUMENT","capturedOn":"$day","role":null}""")
             assertEquals(day, 422, response.status)
             val error = response.errorDetail()
@@ -263,6 +263,36 @@ class AttachmentRoutesTest {
         }
         assertEquals(row, stored("att-1"))
         assertEquals(before, graph.commits)
+    }
+
+    /** Fix round 1: a blank date is no date, as the asset commands and the use case read one — it clears. */
+    @Test fun aBlankCapturedOnClearsTheDate() {
+        val heater = api.asset("Example Water Heater")
+        for ((id, day) in listOf("att-1" to "", "att-2" to "  ")) {
+            seed(id, AttachmentOwner.OfAsset(AssetId(heater)), "Manual")
+
+            val answer = api.ok(
+                AttachmentResponse.serializer(), "PATCH", "/v1/attachments/$id",
+                """{"displayName":"Manual","kind":"DOCUMENT","capturedOn":"$day","notes":"","role":null}""",
+            ).attachment
+
+            assertNull("'$day'", answer.capturedOn)
+            assertNull("'$day'", stored(id)?.capturedOn)
+        }
+    }
+
+    /** Fix round 1: the date is trimmed before it is checked, and stored trimmed. */
+    @Test fun aPaddedCapturedOnIsTrimmed() {
+        val heater = api.asset("Example Water Heater")
+        seed("att-1", AttachmentOwner.OfAsset(AssetId(heater)), "Manual")
+
+        val answer = api.ok(
+            AttachmentResponse.serializer(), "PATCH", "/v1/attachments/att-1",
+            """{"displayName":"Manual","kind":"DOCUMENT","capturedOn":" 2026-09-30 ","notes":"","role":null}""",
+        ).attachment
+
+        assertEquals("2026-09-30", answer.capturedOn)
+        assertEquals("2026-09-30", stored("att-1")?.capturedOn)
     }
 
     // --- row 6: provenance on the wire --------------------------------------------------------

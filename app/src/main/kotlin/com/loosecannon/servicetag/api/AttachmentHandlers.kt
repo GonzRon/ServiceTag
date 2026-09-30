@@ -62,9 +62,12 @@ internal class AttachmentHandlers(
     /**
      * `PATCH /v1/attachments/{id}` (C7): decode, then the row, then `capturedOn`, then the role against the row's
      * owner, then the use case. A no-op is 200 with the stored row and nothing written, as a reference's is.
+     * `capturedOn` is trimmed and a blank one is null, as the asset commands and the use case treat a date; only a
+     * non-blank value that is not an ISO day is refused.
      */
     suspend fun update(attachmentId: String, request: ApiRequest): ApiResponse {
-        val command = request.decode(UpdateAttachmentRequest.serializer()).toCommand()
+        val decoded = request.decode(UpdateAttachmentRequest.serializer()).toCommand()
+        val command = decoded.copy(capturedOn = decoded.capturedOn?.trim()?.takeIf { it.isNotEmpty() })
         val row = row(attachmentId)
         if (command.capturedOn?.let(::isIsoDate) == false) throw attachmentBadDate()
         if (!row.owner.accepts(command.role)) throw attachmentRoleNotAllowed()
