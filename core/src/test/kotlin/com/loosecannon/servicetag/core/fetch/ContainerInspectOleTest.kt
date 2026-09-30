@@ -101,6 +101,10 @@ class ContainerInspectOleTest {
     fun twoFamiliesContentStreamsAreRefused() {
         assertNull(inspect(cfb(stream("WordDocument"), stream("Workbook"))))
         assertNull(inspect(cfb(stream("PowerPoint Document"), stream("Book"))))
+        // names compare case-insensitively (MS-CFB §2.6.4), so a case variant is still a second family
+        assertNull(inspect(cfb(stream("WordDocument"), stream("WORKBOOK"))), "WORKBOOK")
+        assertNull(inspect(cfb(stream("WordDocument"), stream("workbook"), summary)), "workbook")
+        assertNull(inspect(cfb(stream("WordDocument"), stream("Workbook\u0000X"))), "a family before an inner NUL")
     }
 
     @Test
@@ -109,6 +113,7 @@ class ContainerInspectOleTest {
         assertNull(inspect(cfb(stream("WorkbookX"))))
         assertNull(inspect(cfb(stream("PowerPoint DocumentX"))))
         assertNull(inspect(cfb(stream("Word"))), "nor a prefix of one")
+        assertNull(inspect(cfb(stream("WORKBOOK"))), "a case variant alone is no proof (a recorded limit)")
         val lengthCut = patched(cfb(stream("WordDocumentX")), directoryEntry(1) + 64, 26, width = 2)
         assertNull(inspect(lengthCut), "a length ending at \"WordDocument\" whose terminator is X, not NUL")
     }
@@ -117,6 +122,7 @@ class ContainerInspectOleTest {
     fun aContentNameOnAStorageOrPastTheNameLimitIsRefused() {
         assertNull(inspect(cfb(storage("WordDocument"), summary)))
         assertNull(inspect(patched(doc, directoryEntry(1) + 64, 66, width = 2)), "a 66-byte name length")
+        assertNull(inspect(patched(doc, directoryEntry(3) + 64, 0xFFFE, width = 2)), "a name length past the directory's end")
     }
 
     @Test
