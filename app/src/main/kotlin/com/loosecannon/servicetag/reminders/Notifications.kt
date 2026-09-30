@@ -102,6 +102,9 @@ class AndroidReminderNotifications(
         actions.forEach { action ->
             builder.addAction(0, action.label, intents.pendingIntentFor(action.target))
         }
+        // #87 (C3, C4): the body, built by the same call from the same target as "Open", so the
+        // platform holds one pending intent for both. A deadline warning's stays inert.
+        content?.let { builder.setContentIntent(intents.pendingIntentFor(it)) }
         notify(post.tag, ITEM_ID, builder)
     }
 
@@ -114,6 +117,7 @@ class AndroidReminderNotifications(
             .setStyle(NotificationCompat.BigTextStyle().bigText(summary.body))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(false)
+            .setContentIntent(intents.pendingIntentFor(content))
         notify(summary.tag, SUMMARY_ID, builder)
     }
 

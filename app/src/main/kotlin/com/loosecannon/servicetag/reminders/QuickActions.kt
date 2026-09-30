@@ -155,8 +155,19 @@ class QuickActions(
         )
     }
 
-    /** What the body of this subject's notification opens: navigation only, no nonce, no read. */
-    fun contentFor(key: SubjectKey): QuickActionTarget? = null
+    /**
+     * #87 (C1): what the body of this subject's notification opens: navigation only, no nonce, no read.
+     *
+     * A maintenance item's body is its "Open" action's own target, so both become the one pending
+     * intent. It is read off the **key alone**, never off the action list, so it is there even when
+     * [forSchedule] offers nothing for a schedule that has just gone — whether the id still exists
+     * is the schedule screen's question, as for the shipped link. Not `suspend`: it cannot reach a
+     * port, which is what keeps a body tap from writing anything.
+     */
+    fun contentFor(key: SubjectKey): QuickActionTarget? = when (key) {
+        is SubjectKey.Schedule -> QuickActionTarget.OpenSchedule(key.scheduleId)
+        is SubjectKey.Deadline -> null // #87 scope: maintenance only; warranty and loan bodies stay as shipped
+    }
 }
 
 /** The one Android-shaped step: a target becomes something the notification shade can fire. */

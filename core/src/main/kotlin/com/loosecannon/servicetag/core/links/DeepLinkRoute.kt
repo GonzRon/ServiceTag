@@ -48,6 +48,8 @@ object DeepLinkRoute {
             // The same `single` as the host above it, deliberately: one shape rule for every host
             // is what stops a second, looser check letting a malformed id reach a repository.
             "schedule" -> single(pathSegments)?.let { DeepLink.Schedule(ScheduleId(it)) } ?: DeepLink.Malformed("servicetag://schedule needs one schedule id segment")
+            // #87 (R87-1): no path at all. A segment makes it a link this app answers but cannot follow.
+            "dashboard" -> if (pathSegments.isEmpty()) DeepLink.Dashboard else DeepLink.Malformed("servicetag://dashboard takes no path")
             else -> null
         }
     }

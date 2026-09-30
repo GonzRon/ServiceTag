@@ -623,6 +623,25 @@ private fun MutableList<NavKey>.switchTopLevel(route: Route) {
     add(route)
 }
 
+/** R87-2: the write flows whose protections a notification tap must not circumvent, idle or not. */
+private fun NavKey.isWriteFlow(): Boolean =
+    this is Route.TransferImport || this is Route.AssetEdit ||
+        this is Route.ReplaceAsset || this is Route.TransferAssets
+
+/**
+ * #87 (C6). A top-level route replaces the stack, as its tab does — unless a write flow is anywhere
+ * on the stack: then the link is ignored and the stack is untouched (the activity has simply come
+ * forward). Ignoring is the whole behaviour: no snackbar, no queue, no later replay. Every other
+ * link is pushed, as shipped.
+ *
+ * Those four screens block back while a write runs, because a pop clears the entry's view-model
+ * store and cancels the write; a reset would pop them just the same, so it never happens over one.
+ * A cold start's `[Dashboard]` stays `[Dashboard]` rather than gaining a second, identical key.
+ */
 internal fun MutableList<NavKey>.openDeepLink(route: Route) {
-    add(route)
+    when {
+        route !in TopLevelRoutes -> add(route)
+        any { it.isWriteFlow() } -> Unit
+        else -> switchTopLevel(route)
+    }
 }
