@@ -47,7 +47,7 @@ internal class ApiRouter(
     private val handlers: ApiHandlers,
     private val token: String,
 ) {
-    /** #92 (C16, C33): the one download in flight, which the listener's `stop()` cancels through [cancelDownload]. */
+    /** #92 (C16, C33): the one download in flight, tracked for observability; see [DownloadInFlight]. */
     private val download = DownloadInFlight()
 
     /**
@@ -84,8 +84,10 @@ internal class ApiRouter(
     }
 
     /**
-     * #92 (C16): what the listener's `stop()` calls — cancels the registered download's `Job`, and nothing else. It
-     * never waits: a cancelled download unwinds on its own worker, and a commit that began is not reached (R87-4).
+     * #92 (C16): what the listener's `stop()` calls — cancels the registered download's `Job`, and nothing else. A
+     * second path only: `stop()` cancelling the generation's `Job` is what stops every download of that generation
+     * (BC5). It never waits: a cancelled download unwinds on its own worker, and a commit that began is not reached
+     * (R87-4).
      */
     fun cancelDownload() = download.cancel()
 
@@ -387,14 +389,21 @@ internal class ApiRouter(
 /**
  * #92 (C16, C33): the one materialize download in flight, across listener generations. The router owns it and lives
  * for the Developer API visit; a handler [register]s its download's `Job` before it waits for `apiLongWrites`, and
- * [clear]s it in `finally` **only if the slot still holds that `Job`** (compare-and-clear, S1's rule): a stale
- * generation's handler finishing late can never unregister the new generation's download, so a later `stop()` still
- * cancels it. A stale `Job` a register overwrites is already cancelled — its generation was stopped.
+ * [clear]s it in `finally` **only if the slot still holds that `Job`** (compare-and-clear, S1's rule).
+ *
+ * **Cancellation is carried by the per-generation `Job`, not by this slot** (B2-pre BC5): every download is a child of
+ * the listener generation that read its request, and `stop()` cancels that generation, so a download is stopped
+ * whether or not it is here. The slot only tracks the current download, for observability and tests, and `stop()`'s
+ * [cancel] of it is a redundant second path. So that it tracks the live download, a `Job` already cancelled — a
+ * stale generation's request that reaches its register after `stop()` — registers nothing: it never overwrites the
+ * live one, and its compare-and-clear then finds nothing of its own to clear (review m1).
  */
 internal class DownloadInFlight {
     private val slot = AtomicReference<Job?>(null)
 
-    fun register(job: Job) = slot.set(job)
+    fun register(job: Job) {
+        if (!job.isCancelled) slot.set(job)
+    }
 
     fun clear(job: Job) {
         slot.compareAndSet(job, null)

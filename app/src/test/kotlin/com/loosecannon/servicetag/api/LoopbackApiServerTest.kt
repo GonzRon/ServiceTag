@@ -942,14 +942,20 @@ class LoopbackApiServerTest {
         assertEquals("only the stale generation's row", listOf(manualUri), rows.map { it.source?.uri })
     }
 
-    /** A reference read that parks until the test releases it: the gap between a request's decode and its register. */
+    /**
+     * A reference read whose **first** call parks until the test releases it: the gap between a request's decode and
+     * its register. Every later read passes straight through.
+     */
     private class GatedReferences(private val inner: ReferenceRepository) : ReferenceRepository by inner {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
+        private val first = java.util.concurrent.atomic.AtomicBoolean(true)
 
         override suspend fun get(id: ReferenceId) = inner.get(id).also {
-            entered.countDown()
-            release.await(30, TimeUnit.SECONDS)
+            if (first.getAndSet(false)) {
+                entered.countDown()
+                release.await(30, TimeUnit.SECONDS)
+            }
         }
     }
 
@@ -980,5 +986,46 @@ class LoopbackApiServerTest {
         assertTrue(stagingIsEmpty())
         assertTrue(runBlocking { graph.attachments.forAsset(AssetId(rig.asset)) }.isEmpty())
         assertEquals("", answer)
+    }
+
+    /**
+     * Fix round 1 (review m1): a stale generation's request that reaches its register after `stop()` — while the next
+     * generation's download is live — registers nothing, so it neither overwrites the live download in the slot nor
+     * clears it on the way out. The live one is still what the slot tracks, and `stop()` still ends it.
+     */
+    @Test fun aStaleRegistrantAfterStopLeavesTheLiveDownloadRegistered() {
+        val gatedReferences = GatedReferences(graph.references)
+        val rig = MaterializeRig(references = gatedReferences)
+        val stale = rig.reference(manualUri)
+        rig.transport.serve(manualUri, manual)
+        val slowUri = "https://slow.example.invalid/water-heater/wiring.pdf"
+        val live = rig.reference(slowUri)
+        val body = rig.transport.hang(slowUri)
+        val shared = router(rig.routes)
+        restartOver(shared)
+        val firstPort = server.boundPort
+        val first = inBackground { sendMaterialize(firstPort, stale) }
+        assertTrue("the stale request never reached its reference read", gatedReferences.entered.await(10, TimeUnit.SECONDS))
+
+        server.stop()
+        assertEquals(StartOutcome.Bound, server.start())
+        val secondPort = server.boundPort
+        val second = inBackground { sendMaterialize(secondPort, live) }
+        assertTrue("the live download never started", body.blocked.await(10, TimeUnit.SECONDS))
+        val registered = shared.downloadInFlight()
+        assertTrue("the live download was not registered", registered != null && registered.isActive)
+
+        gatedReferences.release.countDown()
+        first.join(15_000)
+        Thread.sleep(300) // the stale request registers (or not) and unwinds
+
+        assertTrue("the stale registrant displaced the live download", shared.downloadInFlight() === registered)
+        assertEquals("the stale request fetched", listOf(slowUri), rig.transport.requests)
+        server.stop()
+        awaitLockFree()
+        second.join(15_000)
+        assertTrue("the live download was not cancelled", body.closed)
+        assertTrue(stagingIsEmpty())
+        assertTrue(runBlocking { graph.attachments.forAsset(AssetId(rig.asset)) }.isEmpty())
     }
 }
