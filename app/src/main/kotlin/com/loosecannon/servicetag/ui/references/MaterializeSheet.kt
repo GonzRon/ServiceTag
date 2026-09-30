@@ -15,13 +15,13 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -59,7 +59,10 @@ import kotlinx.coroutines.Dispatchers
  *
  * The model is built here, inside the open sheet, because building it starts the download: the sheet
  * exists only after the owner's tap. Every way out but Save is `cancel()` (the job stops, the staging
- * goes), and Saving cannot be left at all — no button, no swipe, no scrim, no back.
+ * goes): the buttons, every dismissal, and the sheet leaving composition without one (an activity
+ * recreated, a route pushed over the screen). Saving cannot be left: it has no button, and swipe, scrim
+ * and back all ask the sheet state's `confirmValueChange`, which refuses Hidden while saving (material3
+ * 1.4.0's `hide()` consults it on back too); `cancel()` then ignores Saving in any case.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,8 +96,11 @@ internal fun MaterializeSheet(
             }
         }
     }
+    // Leaving composition without a dismissal must not leave a download running unseen, or staging held.
+    // Harmless after a dismissal (already Closed) and in Saving or Done, which `cancel()` ignores.
+    DisposableEffect(model) { onDispose { model.cancel() } }
 
-    val saving = state == MaterializeState.Saving
+    // The one guard for swipe, scrim and back alike (see the KDoc); no back-press property is relied on.
     val refuseHideWhileSaving = remember(model) {
         { target: SheetValue -> target != SheetValue.Hidden || model.state.value != MaterializeState.Saving }
     }
@@ -104,7 +110,6 @@ internal fun MaterializeSheet(
             skipPartiallyExpanded = true,
             confirmValueChange = refuseHideWhileSaving,
         ),
-        properties = ModalBottomSheetProperties(shouldDismissOnBackPress = !saving),
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(10.dp),
