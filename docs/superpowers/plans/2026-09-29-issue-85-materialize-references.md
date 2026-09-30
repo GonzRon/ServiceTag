@@ -792,7 +792,7 @@ gate (the release brief's optional one-row smoke on the dev phone, with INTERNET
 ## 6. Strings — RATIFIED (owner, 2026-09-29; P85-13, P85-18 and P85-19 amended)
 
 `{host}` is `ReferenceUris.hostOf(source or reference URI)` — never the redirect's; `{done}` and `{total}` are sizes by
-the shipped `Long.asFileSize()` (`A/ui/attachments/DocumentsSection.kt:361`); `{TYPE}` ∈ {`PDF`, `PNG`, `JPEG`};
+the shipped `Long.asFileSize()` (`A/ui/attachments/DocumentsSection.kt:361`); `{TYPE}` ∈ the nineteen ratified labels of §19's table (PDF, PNG, JPEG, GIF, WebP, RTF, DOC, XLS, PPT, DOCX, XLSX, PPTX, ODT, ODS, ODP, TXT, Markdown, CSV, TSV);
 `{size}` by `asFileSize()`; `{date}` is `d MMM uuuu` through `displayDate` (`A/ui/condition/ConditionWords.kt:96`);
 `{code}` is the HTTP status; `{name}` is an attachment's display name. **Home:** every P85 literal is one constant or
 one template function, on a line of its own, in `A/ui/references/MaterializeStrings.kt`; `ReferencesSection`,
@@ -804,7 +804,7 @@ one template function, on a line of its own, in `A/ui/references/MaterializeStri
 | P85-2 | Downloading | `Downloading from {host}…` | headline | `MaterializeStrings` | — |
 | P85-3 | Downloading | `{done} of {total}` — or `{done}` when the size is unknown | progress line | `MaterializeStrings` | — |
 | P85-4 | Review | `From {host}` | line | `MaterializeStrings` | — |
-| P85-5 | Review | `{TYPE} · {size}` | line | `MaterializeStrings` | `{TYPE}` for the §19 types needs ratifying: GIF, WebP, RTF, DOC, XLS, PPT, DOCX, XLSX, PPTX, ODT, ODS, ODP, TXT, Markdown, CSV, TSV (PDF, PNG, JPEG ratified) |
+| P85-5 | Review | `{TYPE} · {size}` | line | `MaterializeStrings` | all nineteen `{TYPE}` labels RATIFIED 2026-09-29 (§19's table): PDF, PNG, JPEG, GIF, WebP, RTF, DOC, XLS, PPT, DOCX, XLSX, PPTX, ODT, ODS, ODP, TXT, Markdown, CSV, TSV |
 | P85-6 | reference row | `Saved as document` | `QuietLine` | `MaterializeStrings` | — |
 | P85-7 | after Save | `Saved to Documents` | snackbar | `MaterializeStrings` | — |
 | P85-8 | attachment edit sheet | `Downloaded from {host} on {date}` | read-only line under Notes | `MaterializeStrings` | — |
