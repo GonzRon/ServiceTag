@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.fetch
 
 import com.loosecannon.servicetag.core.model.MimeTypes
+import java.io.ByteArrayOutputStream
 
 /**
  * C28 (#85, R85-5 widened): the one bounded, read-only look inside a staged container whose head the two
@@ -25,6 +26,7 @@ object ContainerInspect {
     private val mainParts = mapOf("word/document.xml" to DOCX, "xl/workbook.xml" to XLSX, "ppt/presentation.xml" to PPTX)
     private val cfbSignature = listOf(0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1).map { it.toByte() }.toByteArray()
     private val contentStreams = mapOf("WordDocument" to DOC, "Workbook" to XLS, "Book" to XLS, "PowerPoint Document" to PPT)
+    private const val NO_ENTRY = 0xFFFF_FFFFL
 
     /** Whether [head] is one this inspection is for: a ZIP local header or the compound-file signature. */
     fun inspects(head: ByteArray): Boolean = DocumentSniff.isZip(head) || isCfb(head)
@@ -47,20 +49,34 @@ object ContainerInspect {
     private fun isCfb(head: ByteArray) = DocumentSniff.regionMatches(head, 0, cfbSignature)
 
     /**
-     * C29 (3)–(4): the directory names exactly one family's content stream, `WordDocument` (DOC), `Workbook`
-     * or `Book` (XLS) or `PowerPoint Document` (PPT), whole and NUL-terminated, never a prefix. None (a bare
-     * signature, an installer, a message) or two families is refused. No stream's contents are read.
+     * C29 (3)–(4): among the root storage's own children, exactly one family's content stream: `WordDocument`
+     * (DOC), `Workbook` or `Book` (XLS), or `PowerPoint Document` (PPT), whole and NUL-terminated, never a
+     * prefix. None (a bare signature, an installer, a message) or two families is refused. The walk follows only
+     * sibling ids from the root's child, never a storage's own child, so an embedded object (a document's
+     * `ObjectPool/…/Workbook`, a message's attached `WordDocument`) never counts. No stream's contents are read.
      */
     private fun legacy(size: Long, head: ByteArray, inspection: BoundedInspection): String? {
-        val directory = CompoundFile.open(size, head, inspection)?.directory() ?: return null
+        val sectors = CompoundFile.open(size, head, inspection)?.directory() ?: return null
+        val directory = ByteArrayOutputStream().apply { sectors.forEach { write(it) } }.toByteArray()
+        for (at in directory.indices step 128) {
+            val length = directory.u16(at + 64)
+            if (directory[at + 66].toInt() != 0 && length != 0 && (length > 64 || length % 2 != 0)) return null
+        }
+        if (directory[66].toInt() != 5) return null // entry 0 must be the root storage
         val proofs = HashSet<String>()
-        for (sector in directory) for (at in sector.indices step 128) {
-            val length = sector.u16(at + 64)
-            val type = sector[at + 66].toInt()
-            if (type == 0 || length == 0) continue // an unused entry
-            if (length > 64 || length % 2 != 0) return null
-            val name = String(sector, at, length, Charsets.UTF_16LE)
-            if (type == 2 && name.last() == '\u0000') contentStreams[name.dropLast(1)]?.let { proofs += it }
+        val seen = HashSet<Long>()
+        val pending = ArrayDeque(listOf(directory.u32(76)))
+        while (pending.isNotEmpty()) {
+            val id = pending.removeLast()
+            if (id == NO_ENTRY) continue
+            if (id >= directory.size / 128 || !seen.add(id)) return null // outside the entries read, or a cycle
+            val at = id.toInt() * 128
+            val type = directory[at + 66].toInt()
+            if (type != 1 && type != 2) return null // a sibling must be a storage or a stream
+            val name = String(directory, at, directory.u16(at + 64), Charsets.UTF_16LE)
+            if (type == 2 && name.lastOrNull() == '\u0000') contentStreams[name.dropLast(1)]?.let { proofs += it }
+            pending += directory.u32(at + 68)
+            pending += directory.u32(at + 72) // left and right siblings only: a storage's child (at + 76) is never followed
         }
         return proofs.singleOrNull()
     }
