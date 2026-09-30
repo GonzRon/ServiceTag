@@ -19,6 +19,7 @@ import base64
 import hashlib
 import inspect
 import json
+import os
 import subprocess
 import threading
 import time
@@ -468,6 +469,27 @@ def test_a_file_over_256_MiB_is_refused_before_it_is_opened(paired, tmp_path: Pa
     assert client_module.MAX_ATTACHMENT_BYTES == 268_435_456
 
 
+def test_a_description_past_the_header_block_is_refused_before_the_file_is_opened(
+    paired, manual, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The phone reads a request's headers in one 8 KiB block and refuses a larger one before any body byte, so a
+    long note is refused here — nothing opened, nothing sent — and belongs to `update_attachment`."""
+    _no_open(monkeypatch)
+    with pytest.raises(ToolError, match="ATTACHMENT_NOTES_TOO_LONG") as raised:
+        server_module.add_attachment(asset_id=ASSET, file_path=str(manual), notes="x" * 6000)
+    assert "update_attachment" in str(raised.value)
+    assert paired.requests == []
+
+
+def test_a_file_name_that_is_not_utf8_needs_a_display_name(paired, tmp_path: Path) -> None:
+    odd = tmp_path / os.fsdecode(b"manual\xff.pdf")
+    odd.write_bytes(b"%PDF-1.7 fixture")
+    with pytest.raises(ToolError, match="not valid UTF-8") as raised:
+        server_module.add_attachment(asset_id=ASSET, file_path=str(odd))
+    assert "display_name" in str(raised.value)
+    assert paired.requests == []
+
+
 def test_the_file_is_reopened_on_the_connect_error_retry(phone16, manual, monkeypatch: pytest.MonkeyPatch) -> None:
     key = default_key(manual)
     phone16.reply("GET", f"/v1/attachments/{derived(key)}", 404, {"error": {"code": "NO_SUCH_ATTACHMENT"}})
@@ -599,6 +621,16 @@ def test_already_held_is_IDENTICAL_naming_the_row(with_reference) -> None:
     assert result["attachmentId"] == "att-3"
 
 
+def test_a_stored_link_with_no_readable_host_is_refused_naming_the_reference_only(with_reference) -> None:
+    bad = "https://[bad/manual.pdf?token=fixture-only"
+    with_reference.reply("GET", f"/v1/assets/{ASSET}/references", 200, {"references": [reference_row(uri=bad)]})
+    with pytest.raises(ToolError, match="REFERENCE_NOT_MATERIALIZABLE") as raised:
+        server_module.materialize_reference(asset_id=ASSET, reference_id="r1")
+    assert "'r1'" in str(raised.value)
+    assert "[bad" not in str(raised.value) and "token" not in str(raised.value)
+    assert all(r.method == "GET" for r in with_reference.requests)
+
+
 def test_a_502_is_the_error_and_never_retried(with_reference) -> None:
     with_reference.reply("POST", "/v1/references/r1/materialize", 502, {"error": {
         "code": "FETCH_TIMED_OUT", "message": "the download was refused", "problems": ["TimedOut"],
@@ -649,6 +681,8 @@ def test_the_materialize_docstring_carries_the_confirmation_and_identical_rules(
     doc = " ".join(inspect.getdoc(server_module.materialize_reference).split())
     for words in (
         "never a URL",
+        "no preview: calling it starts the download",
+        "with `list_references`",
         "the host only, never the full link",
         "explicit approval",
         "one approval covers one call",
