@@ -10,6 +10,8 @@ import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.TransferKind
+import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.coroutines.runBlocking
@@ -94,6 +96,39 @@ class AttachmentRoutesTest {
             assertFalse(response.bodyText(), "Example Folder" in response.bodyText())
             assertFalse(response.bodyText(), "com.example.provider" in response.bodyText())
         }
+    }
+
+    // --- a transferred-out asset: its rows read, and an edit is refused (branch review NOTE 6) ---
+
+    private fun transferOut(asset: String) = runBlocking {
+        graph.transferRecords.append(
+            TransferRecord(
+                id = "out-1", assetId = AssetId(asset), kind = TransferKind.OUT, packId = "0f1e2d3c-pack",
+                lineage = emptyList(), at = 1_758_960_000_000L, packSha256 = "ab".repeat(32),
+                nameSnapshot = "Example Water Heater", note = "",
+            ),
+        )
+    }
+
+    @Test fun aHeldAssetsRowsAreListedLikeAnyOther() {
+        val heater = api.asset("Example Water Heater")
+        seed("att-1", AttachmentOwner.OfAsset(AssetId(heater)), "Manual")
+        transferOut(heater)
+
+        assertEquals(listOf("att-1"), list(heater).attachments.map { it.id })
+    }
+
+    @Test fun aPatchOnAHeldAssetsRowIs409AndWritesNothing() {
+        val heater = api.asset("Example Water Heater")
+        val row = seed("att-1", AttachmentOwner.OfAsset(AssetId(heater)), "Manual")
+        transferOut(heater)
+
+        val response =
+            patch("att-1", """{"displayName":"Owner manual","kind":"MANUAL","capturedOn":null,"notes":"","role":null}""")
+
+        assertEquals(response.bodyText(), 409, response.status)
+        assertEquals("asset_transferred_out", response.errorDetail().code)
+        assertEquals(row, stored("att-1"))
     }
 
     // --- row 2: the list's verbs -------------------------------------------------------------

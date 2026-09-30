@@ -57,7 +57,8 @@ import com.loosecannon.servicetag.di.AppGraph
  * (R77-17) — no pack, mark, import or withdrawal — so no collaborator exists to ask. #86's `assetSuccessions`
  * count and its one read-only route, [getSuccession], read [successions] here on the same terms (R86-18): only the
  * phone's Replace asset records a succession, and the merge apply only inserts an archive's rows, so there is no
- * write route and no collaborator for one.
+ * write route and no collaborator for one — until #92: `POST /v1/assets/{id}/replace` records one over the same use
+ * case (R92-1 supersedes R86-18); still no verb amends or removes one.
  *
  * The asset `PATCH` keeps 1.3's exact command (spec §9.3): its `MM-DD` pair is the one
  * compatibility input, and `UpdateAsset` refuses what the pair cannot represent — a different pair

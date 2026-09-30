@@ -318,17 +318,29 @@ _REMOVED = ((0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x17B4, 0x17B
             (0x200B, 0x200B), (0x200E, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0xFEFF, 0xFEFF),
             (0xFFF0, 0xFFF8), (0x1D173, 0x1D17A), (0xE0000, 0xE001F), (0xE0080, 0xE00FF), (0xE01F0, 0xE0FFF))
 _SPACE_LIKE = {0x115F, 0x1160, 0x2800, 0x3164, 0xFFA0}
+# Kotlin/JVM `Char.isWhitespace()` (`Character.isWhitespace || isSpaceChar`), which the phone's `trim()` and
+# `CategoryKey`'s collapse use. Python's `str.split()` and `strip()` also count U+0085 (NEL); the phone keeps it.
+_KOTLIN_WHITESPACE = "".join(map(chr, (*range(0x09, 0x0E), *range(0x1C, 0x21), 0xA0, 0x1680, *range(0x2000, 0x200B),
+                                       0x2028, 0x2029, 0x202F, 0x205F, 0x3000)))
+_TO_SPACE = str.maketrans(dict.fromkeys(_KOTLIN_WHITESPACE, " "))
+
+
+def _trim(text: str) -> str:
+    """Kotlin's `trim()`: only `Char.isWhitespace()` characters, never NEL."""
+    return text.strip(_KOTLIN_WHITESPACE)
 
 
 def category_key(text: str) -> str | None:
     """The phone's category identity (`core/.../journal/CategoryKey.kt`, `of`): NFC, the removed code points
     dropped and the space-like blanks made spaces, NFC again, trimmed, whitespace runs collapsed, lower-cased;
-    None when blank. The phone stores a category in its canonical spelling, so a successor's category is compared
+    None when blank. Whitespace is Kotlin's `Char.isWhitespace()` set, not Python's (U+0085 is kept, as the
+    phone keeps it). The phone stores a category in its canonical spelling, so a successor's category is compared
     by this key. One exception is not copied: every tag character is kept here, where the phone drops those
     outside three subdivision flags, so a divergence can only read CONFLICT, never a false IDENTICAL."""
     kept = "".join(" " if ord(c) in _SPACE_LIKE else c for c in unicodedata.normalize("NFC", text)
                    if not any(lo <= ord(c) <= hi for lo, hi in _REMOVED))
-    return " ".join(unicodedata.normalize("NFC", kept).split()).lower() or None
+    runs = unicodedata.normalize("NFC", kept).translate(_TO_SPACE).split(" ")
+    return " ".join(run for run in runs if run).lower() or None
 
 
 def _differing(replacement: manifestmod.Replacement, successor: dict) -> list[str]:
@@ -337,7 +349,7 @@ def _differing(replacement: manifestmod.Replacement, successor: dict) -> list[st
     def norm(key: str, value: object) -> object:
         if not isinstance(value, str):
             return value
-        return category_key(value) if key == "category" else (value.strip() or None)
+        return category_key(value) if key == "category" else (_trim(value) or None)
     return [key for key, value in replacement.successor if norm(key, successor.get(key)) != norm(key, value)]
 
 

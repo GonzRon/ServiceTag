@@ -21,7 +21,8 @@ the one body key it is about, then the `problems` in parentheses.
   `repair_schedule_providers` needs **1.4.1 or later**; on an older build their routes are not there
   and every call answers 404. The two warranty tools need an app whose `schemaVersion` is **11 or
   later**, the five service-case tools one at **12 or later**, the five loan tools one at **13 or
-  later**, and `get_asset_succession` one at **15 or later**; each checks it itself (below).
+  later**, `get_asset_succession` one at **15 or later**, and #92's five attachment tools and two replace
+  tools one at **16 or later**; each checks it itself (below).
 - **Every write needs ServiceTag 1.4.0.** Before its first write under a pairing, the server reads
   `/v1/status` once and refuses to write to an app whose `schemaVersion` is below 8 — a `ToolError`
   carrying `APP_SCHEMA_TOO_OLD`, with nothing sent. The answer is kept for that pairing, and a new
@@ -31,7 +32,8 @@ the one body key it is about, then the `problems` in parentheses.
 - **The warranty tools need schema 11.** `get_warranty` and `set_warranty_reminder` — the read as well
   as the write — refuse an app whose `schemaVersion` is below 11 the same way, with `APP_SCHEMA_TOO_OLD`
   and nothing sent, from the same one `/v1/status` read per pairing. Every tool but these two, the
-  five service-case tools, the five loan tools and the succession tool below keeps the minimum of 8.
+  five service-case tools, the five loan tools, the succession tool and #92's seven tools below keeps
+  the minimum of 8.
 - **The service-case tools need schema 12.** `list_service_cases`, `get_service_case`,
   `open_service_case`, `update_service_case` and `add_case_entry` — the reads as well as the writes —
   refuse an app whose `schemaVersion` is below 12 the same way, from the same read.
@@ -39,9 +41,13 @@ the one body key it is about, then the `problems` in parentheses.
   `return_loan` — the reads as well as the writes — refuse an app whose `schemaVersion` is below 13 the
   same way, from the same read.
 - **The succession tool needs schema 15.** `get_asset_succession` — a read — refuses an app whose
-  `schemaVersion` is below 15 the same way, from the same read. The minima are therefore 8 for every
-  write, 11 for the warranty tools, 12 for the case tools, 13 for the loan tools and 15 for the
-  succession tool.
+  `schemaVersion` is below 15 the same way, from the same read.
+- **The #92 tools need schema 16.** The five attachment tools (`list_attachments`, `get_attachment`,
+  `update_attachment`, `add_attachment` and `materialize_reference`) and `get_replace_offer` /
+  `replace_asset` — the reads as well as the writes — refuse an app whose `schemaVersion` is below 16
+  the same way, from the same read. #92 moved no schema, so a schema-16 app that predates the routes
+  answers `APP_ROUTE_MISSING`. The minima are therefore 8 for every write, 11 for the warranty tools,
+  12 for the case tools, 13 for the loan tools, 15 for the succession tool and 16 for the #92 tools.
 
 ## Using it
 
@@ -219,12 +225,15 @@ the groups, the tag bindings with their ids, the children and an open loan. `rep
 fields and the ticks, and **plans first**: `plan_only=True`, the default, answers the phone's plan (`POST
 …/replace-plan`, which writes nothing). `plan_only=False` applies **only a clean, eligible plan** — no problems,
 not blocked — with that plan's own `sourcesDigest` and the identical draft (`POST …/replace`); any other plan is
-refused here and nothing is applied. `REPLACE_STALE` means something changed while reviewing: plan again and
-confirm again. A repeat after success is `ASSET_ALREADY_REPLACED`, and IDENTICAL when the successor carries the
-requested name; a lost answer is `UNKNOWN` — read `get_asset_succession`, and the same call is safe to run again.
-Nothing is defaulted: `retired_on`, `schedule_start_on` and `manual_phase` are sent only as given. **Tags move by
-binding id only** (`moved_tag_ids`; an "all", a label or a pattern is refused here), and a move re-targets the
-binding row and never writes NFC. `docs/api/v1.md`'s **Replacing an asset (#92)** section is the contract.
+refused here and nothing is applied. `REPLACE_STALE` means something changed between this call's own plan and
+its apply, milliseconds apart: plan again and confirm again. A plan reviewed in an earlier `plan_only=True` call
+is **not** compared: the apply plans again, so show the person the answer's `successor` and `succession`, or plan
+again right before confirming. A repeat after success is `ASSET_ALREADY_REPLACED`, and IDENTICAL when the
+successor carries the requested name; a lost answer is `UNKNOWN` — read `get_asset_succession`, and the same
+call is safe to run again. Nothing is defaulted: `retired_on`, `schedule_start_on` and `manual_phase` are sent
+only as given. **Tags move by binding id only** (`moved_tag_ids`; an "all", a label or a pattern is refused
+here), and a move re-targets the binding row and never writes NFC. `docs/api/v1.md`'s **Replacing an asset
+(#92)** section is the contract.
 
 ### The schedule's two forms, and the deprecated season arguments
 

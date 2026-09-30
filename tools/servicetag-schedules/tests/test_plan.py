@@ -803,6 +803,17 @@ def test_category_key_keeps_distinct_categories_apart() -> None:
     assert PL.category_key("  ") is None
 
 
+def test_nel_is_not_whitespace_to_the_phone_so_it_never_reads_identical() -> None:
+    """U+0085 (NEL) is whitespace to Python's `str.split()` and `strip()` but not to Kotlin's `Char.isWhitespace()`,
+    which the phone's `trim()` and `CategoryKey` use: kept inside a category, kept on a field's end. Every character
+    Kotlin does count still trims and collapses here."""
+    assert PL.category_key("a\x85b") != PL.category_key("a b")
+    assert PL.category_key("\u00a0A\u3000\u2028b\x1c") == "a b"
+    r = mk_replacement(successor=(("name", "Example pump"), ("model", "B-2")))
+    assert plan_replacement(r, replaced_asset(model="B-2\x85"), successor_asset()).decision == "CONFLICT"
+    assert plan_replacement(r, replaced_asset(model="\u2007B-2\u205f"), successor_asset()).decision == "IDENTICAL"
+
+
 def test_identical_when_the_phone_canonicalised_category_and_nulled_a_blank_currency() -> None:
     """MAJOR-1: the phone stores the built-in label and turns a blank currency into null."""
     r = mk_replacement(successor=(("name", "Example pump"), ("category", "pump"), ("currency", "")))

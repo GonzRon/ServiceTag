@@ -233,7 +233,7 @@ class CommandShapesGoldenTest {
             "/v1/assets/{id}/loans", "/v1/loans", "/v1/loans/{id}", "/v1/loans/{id}/return",
             // #86 (C20): the one read-only succession route.
             "/v1/assets/{id}/succession",
-            // #92 (C3): the eight rows' five path shapes, and the upload's golden vector.
+            // #92 (C3): the eight rows' six path shapes, and the upload's golden vector.
             "/v1/assets/{id}/attachments", "/v1/attachments/{id}", "/v1/references/{id}/materialize",
             "/v1/assets/{id}/replace-offer", "/v1/assets/{id}/replace-plan", "/v1/assets/{id}/replace",
             "attachment-operation-ids.json",

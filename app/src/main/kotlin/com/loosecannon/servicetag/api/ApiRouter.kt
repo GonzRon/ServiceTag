@@ -95,7 +95,7 @@ internal class ApiRouter(
     internal fun downloadInFlight(): Job? = download.current()
 
     /**
-     * The whole surface. Sixty-two path shapes over seventy-six method-and-path rows; anything
+     * The whole surface. Sixty-six path shapes over eighty method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -144,7 +144,8 @@ internal class ApiRouter(
      * #86 added one row over one shape: the twenty-first `/v1/assets/{id}/…` sub-resource, an asset's succession,
      * read only. **No route records a succession** (R86-18): only the phone's Replace asset records one, and the
      * import-merge apply only inserts an archive's rows, so no verb here makes, amends or removes one, and
-     * `AssetDto` carries no succession field.
+     * `AssetDto` carries no succession field — until #92: `POST /v1/assets/{id}/replace` records one over the same
+     * use case (R92-1 supersedes R86-18); still no verb amends or removes one.
      *
      * #92 (B1a) added three rows over two shapes: the twenty-second `/v1/assets/{id}/…` sub-resource (an asset's own
      * attachments and the folder's state, read only), and `/v1/attachments/{id}`, read and amended through
@@ -157,6 +158,10 @@ internal class ApiRouter(
      * #92 (B2) added one row over one shape: `POST /v1/references/{id}/materialize`, save as document for an existing
      * web reference **by id** — never a URL from the wire (R92-3) — through `MaterializeReference.prepare` and
      * `commit` alone; a 405 for any other verb. The reference itself is never written.
+     *
+     * #92 (B3) added three rows over three shapes: the twenty-third to twenty-fifth `/v1/assets/{id}/…`
+     * sub-resources, `replace-offer` (read), `replace-plan` (writes nothing) and `replace`, #86's one atomic write
+     * behind the plan's digest (R92-1 supersedes R86-18).
      */
     private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly

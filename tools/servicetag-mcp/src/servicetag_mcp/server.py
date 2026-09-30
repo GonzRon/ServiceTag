@@ -528,8 +528,8 @@ def status() -> dict[str, Any]:
     successions also `assetSuccessions`, every succession). Every write
     tool reads `schemaVersion` once per pairing and refuses with `APP_SCHEMA_TOO_OLD` below 8 (ServiceTag
     1.4.0); `get_warranty` and `set_warranty_reminder` refuse below 11, the five service-case tools below
-    12, the five loan tools below 13, `get_asset_succession` below 15, and the five attachment tools
-    (#92) below 16.
+    12, the five loan tools below 13, `get_asset_succession` below 15, and the five attachment tools and
+    the two replace tools (#92) below 16.
 
     `installationId` (#92) is this ServiceTag installation's id: opaque, random and device-local — not a
     hardware, Android or adb identifier, not authentication material (the pairing code stays the only
@@ -3397,9 +3397,15 @@ def replace_asset(
     `replacedOn`, `problems` and `sourcesDigest` — and writes nothing. With `plan_only=False` it plans, then
     applies **only a clean, eligible plan** (eligible, no `blockedBy`, no problems); any other plan is refused
     here, naming its problems, and nothing is applied. It sends that plan's `sourcesDigest` with the identical
-    draft, and never applies without it. The phone answers `REPLACE_STALE` and replaces nothing if the draft, the
-    asset or any row reviewed with it changed since that plan ("changed while reviewing"): plan again, review it
-    and confirm again — never resend an old digest. Nothing is ticked or defaulted for you:
+    draft, and never applies without it.
+
+    **What the digest guards:** only the plan this call makes itself at apply time, against a change between that
+    plan and the apply, milliseconds apart. The phone answers `REPLACE_STALE` and replaces nothing if the draft,
+    the asset or any row that plan read changed in that gap: plan again and confirm again. A plan a person
+    reviewed in an earlier `plan_only=True` call is **not** compared against the apply: the apply plans again and
+    applies that fresh plan if it is clean, so a change made since that review (a ticked schedule edited, a tag
+    moved, the asset edited) is applied unseen. Show the person the answer's `successor` and `succession`, or plan
+    again right before confirming. Nothing is ticked or defaulted for you:
     - `retired_on` is needed while the asset is not retired;
     - `schedule_start_on` is needed when a ticked schedule has a time rule;
     - `manual_phase` (`IN_SEASON` or `OUT_OF_SEASON`) is needed when carrying a MANUAL season.
