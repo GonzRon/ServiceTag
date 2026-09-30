@@ -12,6 +12,9 @@ object ContainerInspect {
     const val DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     const val XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     const val PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    const val DOC = "application/msword"
+    const val XLS = "application/vnd.ms-excel"
+    const val PPT = "application/vnd.ms-powerpoint"
 
     /** The end record's farthest reach: its 22 bytes and a 65,535-byte comment. */
     private const val END_REACH = 65_557

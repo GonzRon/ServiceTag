@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.fetch.FetchProblem.TooLarge
 import com.loosecannon.servicetag.core.fetch.FetchProblem.Unreachable
 import com.loosecannon.servicetag.core.model.MAX_ATTACHMENT_BYTES
 import com.loosecannon.servicetag.core.model.MimeTypes
+import com.loosecannon.servicetag.core.testing.CfbFixtures
 import com.loosecannon.servicetag.core.testing.FakeBody
 import com.loosecannon.servicetag.core.testing.FakeDocumentTransport
 import com.loosecannon.servicetag.core.testing.FakeDocumentTransport.Served
@@ -701,6 +702,65 @@ class FetchDocumentTest {
         for (url in listOf(docxUrl, "https://manuals.example.invalid/pool-pump/manual")) {
             val served = transport { serve(url, docx, "application/octet-stream") }
             assertEquals(ContainerInspect.DOCX, assertIs<Fetched>(fetcher(served).run(url)).mimeType, url)
+        }
+    }
+
+    // ---- row 39 (C31): the OLE2 arm — a legacy Office file is proven by its content stream, never its label ----
+
+    private val legacyUrl = "https://manuals.example.invalid/pool-pump/manual.doc"
+
+    private val legacyDoc = CfbFixtures.cfb(CfbFixtures.stream("WordDocument"))
+
+    @Test
+    fun eachLegacyFileServedAsOctetStreamIsFetchedAsItsFlavour() = runTest {
+        val files = listOf(
+            legacyDoc to ContainerInspect.DOC,
+            CfbFixtures.cfb(CfbFixtures.stream("Workbook")) to ContainerInspect.XLS,
+            CfbFixtures.cfb(CfbFixtures.stream("PowerPoint Document")) to ContainerInspect.PPT,
+        )
+        for ((file, mime) in files) {
+            val staging = FakeStaging()
+            val t = transport { serve(legacyUrl, file, "application/octet-stream") }
+            val fetched = assertIs<Fetched>(fetcher(t, staging = staging).run(legacyUrl), mime)
+            assertEquals(mime, fetched.mimeType)
+            assertEquals(sha256(file), fetched.sha256)
+            assertFalse(staging.files.single().discarded)
+            assertEquals(1, staging.files.single().readerOpens, "one inspection")
+        }
+    }
+
+    @Test
+    fun aCompoundFileWithNoContentStreamServedAsMswordIsNotADocument() = runTest {
+        val staging = FakeStaging()
+        val summaryOnly = CfbFixtures.cfb(CfbFixtures.stream("\u0005SummaryInformation"))
+        val t = transport { serve(legacyUrl, summaryOnly, ContainerInspect.DOC) }
+        assertEquals(Refused(NotADocument), fetcher(t, staging = staging).run(legacyUrl))
+        assertTrue(staging.files.single().discarded)
+        assertTrue(t.served.single().closed)
+    }
+
+    @Test
+    fun theLegacyFlavourComesFromTheStreamNeverTheDeclaredType() = runTest {
+        for (declared in listOf(ContainerInspect.XLS, ContainerInspect.PPT, ContainerInspect.DOCX)) {
+            val t = transport { serve(legacyUrl, legacyDoc, declared) }
+            assertEquals(ContainerInspect.DOC, assertIs<Fetched>(fetcher(t).run(legacyUrl)).mimeType, declared)
+        }
+    }
+
+    @Test
+    fun aLegacyInspectionReadFailureIsInterruptedAndDiscards() = runTest {
+        val staging = FakeStaging(failReads = true)
+        val t = transport { serve(legacyUrl, legacyDoc, "application/octet-stream") }
+        assertEquals(Refused(Interrupted), fetcher(t, staging = staging).run(legacyUrl))
+        assertTrue(staging.files.single().discarded)
+    }
+
+    @Test
+    fun everyLegacyTypeHasItsExtension() {
+        val expected = mapOf(ContainerInspect.DOC to "doc", ContainerInspect.XLS to "xls", ContainerInspect.PPT to "ppt")
+        for ((mime, extension) in expected) {
+            assertEquals(extension, MimeTypes.extensionFor(mime), mime)
+            assertEquals(mime, MimeTypes.mimeForExtension(extension), extension)
         }
     }
 }
