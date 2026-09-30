@@ -125,7 +125,7 @@ data class AttachmentRowState(
     val createdAt: Long = 0L,
     /** #85 (C22): P85-8 for a document saved from a reference — the source's host and day; null for any other row. */
     val provenanceLine: String? = null,
-    /** #85 (C22, R85-2 amended): what "Open source link" opens — the reference's own URI, never the redirect's. */
+    /** #85 (C22, R85-2 amended): what P85-9 opens — the reference's own URI, never the redirect's. */
     val sourceUri: String? = null,
 )
 
