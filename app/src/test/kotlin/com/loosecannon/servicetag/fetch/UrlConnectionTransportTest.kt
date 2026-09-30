@@ -4,7 +4,9 @@ import com.loosecannon.servicetag.core.fetch.DocumentTransport
 import com.loosecannon.servicetag.core.fetch.TransportFailure
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import java.io.ByteArrayInputStream
 import java.io.InputStream
+import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -207,6 +209,48 @@ class UrlConnectionTransportTest {
         assertEquals(TransportFailure.Kind.UNREACHABLE, failure.kind)
         assertNull("no platform message, which could carry the URL", failure.message)
         assertEquals("refused before anything is opened", 0, opened.get())
+    }
+
+    /**
+     * Review m3's case, the JDK's shape during a TCP connect: `disconnect()` cannot stop the head read, so the
+     * response still arrives after the cancel. A stub connection (through the `open` seam; no socket) holds its head
+     * until the test has cancelled, then answers 200. The late response must be closed, and never returned.
+     */
+    @Test
+    fun aResponseThatArrivesAfterTheCancelIsClosed() = runBlocking<Unit> {
+        val headRead = CountDownLatch(1)
+        val answer = CountDownLatch(1)
+        val answered = AtomicInteger()
+        val disconnects = AtomicInteger()
+        val closesAfterTheAnswer = AtomicInteger()
+        val late = UrlConnectionTransport(networkPermissionGranted = { true }, open = { url ->
+            object : HttpURLConnection(url) {
+                override fun getResponseCode(): Int {
+                    headRead.countDown()
+                    check(answer.await(5, TimeUnit.SECONDS))
+                    answered.set(1)
+                    return 200
+                }
+
+                override fun getInputStream(): InputStream = ByteArrayInputStream(ByteArray(0))
+                override fun connect() = Unit
+                override fun usingProxy() = false
+                override fun disconnect() {
+                    disconnects.incrementAndGet() // a no-op, as the JDK's is before a connection exists
+                    if (answered.get() == 1) closesAfterTheAnswer.incrementAndGet()
+                }
+            }
+        })
+        val pending = async(Dispatchers.IO) { late.get("http://127.0.0.1:1/manual.pdf") }
+        assertTrue(headRead.await(5, TimeUnit.SECONDS))
+
+        pending.cancel()
+        assertEquals("the cancel disconnects at once", 1, disconnects.get())
+        answer.countDown()
+        withTimeout(1_000) { pending.join() }
+
+        assertTrue("get completes as cancelled, never with the response", pending.isCancelled)
+        assertEquals("the late response is closed", 1, closesAfterTheAnswer.get())
     }
 }
 
