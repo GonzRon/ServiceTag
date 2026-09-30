@@ -1395,6 +1395,38 @@ with its CRC, first); OLE2 files by a small CFB builder in `CT/testing/CfbFixtur
 literals; text as strings. Part contents are one-line fictional XML or text (`Example Pool Pump manual`); no real
 document, name or host.
 
+### §19 errata after B2d's review (controller + owner, 2026-09-29)
+
+The B2d review demonstrated two parser differentials that let an arbitrary ZIP pass as OOXML (a patched entry count hiding
+records; a fake directory in front of an archive's real one) and one smaller one (a second end record). All three are
+closed at `efe905c9` and pinned by fixtures; the text below supersedes the corresponding C27/C28 wording.
+
+- **C28 (1) and C27's tail, tightened:** the chosen end record must be the **last** `50 4B 05 06` signature in the window at
+  all; any later signature — in a comment, or a directory offset that happens to spell one inside the record's own 22 bytes —
+  refuses the file. A genuine archive with an end signature inside its ZIP comment is refused (safe-side limit).
+- **C28 (3), corrected:** the central directory's `offset + size` must end **exactly at** the end record (not "at or before").
+- **C28 (4), tightened:** the records must fill the declared directory size exactly, and the end record's two entry-count
+  fields must be equal.
+- **C28 (7), new (owner):** the validator also refuses what it can positively identify as an OOXML type outside the list:
+  any central-directory name ending `vbaProject.bin` or `vbaData.xml` (any case), and a ZIP-headed file whose declared
+  type (normalised) or final-URL extension names a macro-enabled, template, slideshow, add-in or slide OOXML type
+  (extensions `docm dotx dotm xlsm xltx xltm xlam pptm potx potm ppsx ppsm ppam sldx sldm`; the matching
+  `application/vnd.ms-word.*`, `application/vnd.ms-excel.*`, `application/vnd.ms-powerpoint.*` (with the dot, so the exact
+  legacy types stay XLS/PPT) and the `…openxmlformats-officedocument…` template/slideshow/slide types). The declared type
+  and the extension are used here **only to refuse, never to accept**: a template or macro package the server labels as
+  plain DOCX is stored as DOCX, because its distinguishing content type lives inside a deflated part.
+- **The owner's framing (locked):** *#85 validates supported document/container families; it is not an active-content
+  sanitizer or malware scanner. OOXML materialization does not guarantee that an accepted package is macro-free. ServiceTag
+  stores downloaded content inertly and never executes it.* The validator rejects the canonical macro-enabled and
+  template/slideshow forms it can identify (C28 (6)–(7)); it makes no "macro-free DOCX/XLSX/PPTX" claim, and it never
+  decompresses a part to prove one.
+- **Recorded limits, restated:** C27 and C11 are structural sniffing, not parsing (a body framed by a stored `mimetype`
+  header and an end record is stored as ODT, as a `%PDF-`/`%%EOF`-framed body is stored as PDF); a VBA project under a
+  non-canonical part name, or an unlabeled template/slideshow, is stored as the family's document; ODF with Basic macros is
+  accepted; an ODF `mimetype` entry behind a data descriptor is refused; end-record disk-number fields are unchecked (a
+  spanned archive fails the signature rule instead); an OOXML positive proof is case-sensitive while the macro refusal is
+  not.
+
 ## 20. B2d — container: the inspection port, ODF, OOXML (C26–C28, C31's ZIP arm; core, JVM only)
 
 **Read:** §19; C10, C11; `C/fetch/{FetchPorts,DocumentSniff,FetchDocument}.kt` and `CT/testing/FakeStaging.kt` on the
