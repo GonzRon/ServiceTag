@@ -141,6 +141,29 @@ class TextSniffTest {
         assertNull(sniff(filler(900) + utf8("<Script>") + filler(3_000), "text/plain"))
     }
 
+    /**
+     * Pre-review fix (controller ruling on concern 1): the doctype allows any run of space, tab, CR, LF or FF
+     * before `html`, so a bare page (no html, head, body, meta, script, form or iframe tag) is still refused.
+     */
+    @Test
+    fun aBarePageWithADoctypeSpacedAnyWayIsRefused() {
+        val page = "\n<title>Sign in</title>\n<p>Example Manuals: sign in to download this file</p>\n"
+        val doctypes = listOf(
+            "two spaces" to "<!DOCTYPE  html>",
+            "LF" to "<!doctype\nhtml>",
+            "tab" to "<!doctype\thtml>",
+            "CRLF and a space" to "<!DocType\r\n HTML>",
+            "FF" to "<!doctype\u000Chtml>",
+        )
+        val classified = doctypes.filter { (_, doctype) -> sniff(utf8(doctype + page), "text/plain", "txt") != null }
+        assertEquals(emptyList(), classified.map { it.first }, "classified as text")
+    }
+
+    @Test
+    fun aDoctypeThatIsNotHtmlIsNotAWebPage() {
+        assertEquals("text/plain", sniff(utf8("<!doctype pump-notes>\nExample Pool Pump manual\n"), "text/plain", "txt"))
+    }
+
     @Test
     fun anXmlDeclarationFollowedByTheXhtmlNamespaceIsRefused() {
         val xhtml = "<?xml version=\"1.0\"?>\n<page xmlns=\"http://www.w3.org/1999/xhtml\">Sign in</page>\n"
