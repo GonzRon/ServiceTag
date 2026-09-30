@@ -251,4 +251,31 @@ class ContainerInspectZipTest {
         val size = u32(three, at + 12)
         assertNull(inspect(withEndField(withEndField(withEndField(cut, 12, 4, size + 14), 8, 2, 4), 10, 2, 4)))
     }
+
+    // ---- C28 (7) (owner): the OOXML types outside the list, as far as the fetch can identify them ----
+
+    @Test
+    fun aVbaDataPartIsRefused() {
+        assertNull(inspect(ooxml("word/document.xml", "word/vbaData.xml")))
+        assertNull(inspect(ooxml("word/document.xml", "word/VBADATA.XML")))
+    }
+
+    @Test
+    fun theExclusionsAreClosedSetsThatLeaveTheListedAndLegacyTypesAlone() {
+        assertEquals(15, OoxmlExclusions.EXTENSIONS.size)
+        assertEquals(16, OoxmlExclusions.MIME_TYPES.size)
+        for (extension in OoxmlExclusions.EXTENSIONS) assertTrue(OoxmlExclusions.refuses(null, extension), extension)
+        for (mime in OoxmlExclusions.MIME_TYPES) assertTrue(OoxmlExclusions.refuses(mime, null), mime)
+        assertTrue(OoxmlExclusions.refuses("Application/vnd.ms-word.document.macroEnabled.12; charset=binary", null))
+        assertTrue(OoxmlExclusions.refuses(null, "DOTX"))
+        // the exact legacy types are XLS and PPT (B2e), never an exclusion
+        assertFalse(OoxmlExclusions.refuses("application/vnd.ms-excel", "xls"))
+        assertFalse(OoxmlExclusions.refuses("application/vnd.ms-powerpoint", "ppt"))
+        assertFalse(OoxmlExclusions.refuses("application/msword", "doc"))
+        assertFalse(OoxmlExclusions.refuses(DOCX, "docx"))
+        assertFalse(OoxmlExclusions.refuses(XLSX, "xlsx"))
+        assertFalse(OoxmlExclusions.refuses(PPTX, "pptx"))
+        assertFalse(OoxmlExclusions.refuses("application/octet-stream", null))
+        assertFalse(OoxmlExclusions.refuses(null, null))
+    }
 }

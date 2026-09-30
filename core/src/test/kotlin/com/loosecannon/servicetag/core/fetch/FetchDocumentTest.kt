@@ -656,4 +656,51 @@ class FetchDocumentTest {
             assertEquals(mime, MimeTypes.mimeForExtension(extension), extension)
         }
     }
+
+    // ---- C28 (7) (owner): a label naming an excluded OOXML type refuses a ZIP head; a label never accepts ----
+
+    private val dotxUrl = "https://manuals.example.invalid/pool-pump/manual.dotx"
+
+    @Test
+    fun aDocxServedAsAWordTemplateIsNotADocument() = runTest {
+        val staging = FakeStaging()
+        val t = transport { serve(docxUrl, docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.template") }
+        assertEquals(Refused(NotADocument), fetcher(t, staging = staging).run(docxUrl))
+        assertTrue(staging.files.single().discarded)
+        assertEquals(0, staging.files.single().readerOpens, "refused before the inspection")
+    }
+
+    @Test
+    fun aDocxAtAnExcludedExtensionIsNotADocument() = runTest {
+        val urls = listOf(
+            dotxUrl,
+            "https://manuals.example.invalid/pool-pump/manual.pptm",
+            "https://manuals.example.invalid/pool-pump/Manual.XLSM?lang=en",
+            "https://manuals.example.invalid/pool-pump/manual.ppsx;jsessionid=AB12",
+        )
+        for (url in urls) {
+            val staging = FakeStaging()
+            val t = transport { serve(url, docx, "application/octet-stream") }
+            assertEquals(Refused(NotADocument), fetcher(t, staging = staging).run(url), url)
+            assertTrue(staging.files.single().discarded)
+            assertEquals(0, staging.files.single().readerOpens, "refused before the inspection")
+        }
+        // the final URL's extension is the one judged
+        val moved = transport {
+            redirect(docxUrl, dotxUrl)
+            serve(dotxUrl, docx, "application/octet-stream")
+        }
+        assertEquals(Refused(NotADocument), fetcher(moved).run(docxUrl))
+    }
+
+    @Test
+    fun theExclusionsOnlyRefuseAndOnlyAZipHead() = runTest {
+        val template = "application/vnd.openxmlformats-officedocument.wordprocessingml.template"
+        val t = transport { serve(dotxUrl, pdf, template) }
+        assertEquals("application/pdf", assertIs<Fetched>(fetcher(t).run(dotxUrl)).mimeType, "a PDF at a .dotx URL")
+        for (url in listOf(docxUrl, "https://manuals.example.invalid/pool-pump/manual")) {
+            val served = transport { serve(url, docx, "application/octet-stream") }
+            assertEquals(ContainerInspect.DOCX, assertIs<Fetched>(fetcher(served).run(url)).mimeType, url)
+        }
+    }
 }
