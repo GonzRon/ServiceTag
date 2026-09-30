@@ -26,16 +26,25 @@ object CfbFixtures {
     const val DIFAT_COUNT = 72
     const val DIFAT_SLOTS = 76
 
-    class Entry(val name: String, val type: Int)
+    /** A stream, or a storage (type 1) whose [children] sit below it, never among its parent's children. */
+    class Entry(val name: String, val type: Int, val children: List<Entry> = emptyList())
 
     fun stream(name: String) = Entry(name, 2)
 
-    fun storage(name: String) = Entry(name, 1)
+    fun storage(name: String, vararg children: Entry) = Entry(name, 1, children.toList())
 
     /** A version 3 ([shift] 9: 512-byte sectors) or version 4 ([shift] 12: 4,096) file of a root entry and [entries]. */
     fun cfb(vararg entries: Entry, shift: Int = 9): ByteArray {
         val size = 1 shl shift
-        val all = listOf(Entry("Root Entry", 5)) + entries
+        // every storage's children follow all earlier entries as one run of right siblings
+        val all = mutableListOf(Entry("Root Entry", 5, entries.toList()))
+        val first = HashMap<Int, Int>()
+        val last = HashSet<Int>()
+        var s = 0
+        while (s < all.size) {
+            all[s].children.takeIf { it.isNotEmpty() }?.let { first[s] = all.size; all += it; last += all.lastIndex }
+            s++
+        }
         val directory = (all.size * 128 + size - 1) / size
         val filler = directory + 1
         val b = ByteBuffer.allocate((filler + 2) * size).order(ByteOrder.LITTLE_ENDIAN)
@@ -57,8 +66,8 @@ object CfbFixtures {
             val at = directoryEntry(i, shift)
             e.name.toByteArray(Charsets.UTF_16LE).forEachIndexed { j, byte -> b.put(at + j, byte) }
             b.putShort(at + 64, ((e.name.length + 1) * 2).toShort()).put(at + 66, e.type.toByte()).put(at + 67, 1)
-            b.putInt(at + 68, FREE.toInt()).putInt(at + 72, if (i in 1 until all.lastIndex) i + 1 else FREE.toInt())
-                .putInt(at + 76, if (i == 0 && all.size > 1) 1 else FREE.toInt())
+            b.putInt(at + 68, FREE.toInt()).putInt(at + 72, if (i == 0 || i in last) FREE.toInt() else i + 1)
+                .putInt(at + 76, first[i] ?: FREE.toInt())
                 .putInt(at + 116, if (i == 0) filler else 0).putInt(at + 120, if (i == 0) size else FILLER.length)
         }
         FILLER.toByteArray().forEachIndexed { j, byte -> b.put((filler + 1) * size + j, byte) }

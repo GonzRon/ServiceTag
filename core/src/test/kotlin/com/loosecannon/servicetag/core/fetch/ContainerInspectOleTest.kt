@@ -190,6 +190,40 @@ class ContainerInspectOleTest {
         assertFalse(ContainerInspect.inspects(patched(doc, 7, 0, width = 1)))
     }
 
+    // ---- pre-review fix: only the root storage's own children prove the file (an embedded object never does) ----
+
+    @Test
+    fun aDocWithAnEmbeddedWorkbookIsADoc() {
+        assertEquals(DOC, inspect(cfb(stream("WordDocument"), stream("1Table"), storage("ObjectPool", stream("Workbook")))))
+        val nested = cfb(stream("WordDocument"), storage("ObjectPool", storage("_1234567890", stream("\u0001CompObj"), stream("Workbook"))))
+        assertEquals(DOC, inspect(nested), "ObjectPool/_1234567890/Workbook")
+        assertEquals(XLS, inspect(cfb(stream("Workbook"), storage("MBD0001", stream("WordDocument")))), "a Word object in a workbook")
+    }
+
+    @Test
+    fun aMessageWithAnEmbeddedWordObjectIsRefused() {
+        val message = arrayOf(stream("__substg1.0_0037001F"), stream("__substg1.0_1000001F"), stream("__properties_version1.0"))
+        assertNull(inspect(cfb(*message, storage("__attach_version1.0_#00000000", stream("WordDocument")))))
+        val nested = storage("__attach_version1.0_#00000000", storage("__substg1.0_3701000D", stream("WordDocument"), stream("1Table")))
+        assertNull(inspect(cfb(*message, nested)), "the object two storages down")
+    }
+
+    @Test
+    fun aRootTreeThatCyclesOrLeavesTheDirectoryIsRefused() {
+        // doc's root children: WordDocument (1) -> 1Table (2) -> SummaryInformation (3), linked by right siblings
+        assertNull(inspect(patched(doc, directoryEntry(3) + 72, 1)), "a right-sibling cycle")
+        assertNull(inspect(patched(doc, directoryEntry(2) + 68, 2)), "a node that is its own left sibling")
+        assertNull(inspect(patched(doc, directoryEntry(1) + 72, 40)), "a sibling past the entries read")
+        assertNull(inspect(patched(doc, directoryEntry(0) + 76, 40)), "a root child past the entries read")
+        assertNull(inspect(patched(twoSectors, directoryEntry(4) + 72, 6)), "a sibling that is an unused entry")
+        assertNull(inspect(patched(doc, directoryEntry(0) + 76, FREE)), "a root with no children")
+    }
+
+    @Test
+    fun theFirstEntryMustBeTheRootStorage() {
+        assertNull(inspect(patched(doc, directoryEntry(0) + 66, 1, width = 1)))
+    }
+
     // ---- the DIFAT (MS-CFB §2.5): FAT sectors past the header's 109 slots ----
 
     /** A [size]-byte file of zeros but for [parts] (position to bytes): room for far sectors without their bytes. */
