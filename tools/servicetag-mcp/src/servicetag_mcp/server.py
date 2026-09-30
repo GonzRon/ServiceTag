@@ -3304,10 +3304,12 @@ def _binding_ids(moved_tag_ids: Any) -> list[str]:
 
 def _clean_digest(plan: dict[str, Any]) -> str:
     """The plan's own `sourcesDigest`, only when the plan is clean — eligible, not blocked, no problems — and
-    carries one; anything else is refused here and the apply is never sent."""
+    carries one: `problems` present and exactly `[]` (missing or null is not clean) and the digest a non-empty
+    string; anything else is refused here and the apply is never sent."""
     problems, digest = plan.get("problems"), plan.get("sourcesDigest")
-    if plan.get("eligible") is True and plan.get("blockedBy") is None and problems == [] and digest:
-        return str(digest)
+    clean = plan.get("eligible") is True and plan.get("blockedBy") is None and "problems" in plan and problems == []
+    if clean and isinstance(digest, str) and digest != "":
+        return digest
     listed = "; ".join(
         f"{p.get('code')} [field={p.get('field')}] ({p.get('problem')})" if isinstance(p, dict) else str(p)
         for p in (problems if isinstance(problems, list) else [])

@@ -94,6 +94,9 @@ def test_the_apply_sends_the_plans_own_digest_with_the_identical_draft(phone) ->
     plan(eligible=False, blockedBy="asset_transferred_out"),
     plan(sourcesDigest=None),
     plan(eligible=False),
+    plan(problems=None),
+    {key: value for key, value in plan().items() if key != "problems"},
+    plan(sourcesDigest=""),
 ])
 def test_a_plan_that_is_not_clean_is_refused_here_and_never_applied(phone, unclean) -> None:
     phone.reply("POST", PLAN_PATH, 200, unclean)
