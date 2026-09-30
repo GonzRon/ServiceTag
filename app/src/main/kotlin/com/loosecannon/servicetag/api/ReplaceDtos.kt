@@ -119,7 +119,12 @@ internal data class ReplaceDraftRequest(
     val sourcesDigest: String? = null,
 )
 
-/** The phone form's own mapping (`ReplaceAssetViewModel.draftOf`): the path's predecessor, the caller's values. */
+/**
+ * The draft `ReplaceAsset` takes: the path's predecessor and **the caller's values as sent**. Unlike the phone form
+ * (`ReplaceAssetViewModel.draftOf`), nothing is trimmed, blanked to null or dropped here; core normalises what it
+ * writes (a trimmed `retiredOn` and `scheduleStartOn`, `manualPhase` only on a carried MANUAL season). The digest
+ * covers these values as sent, so a plan and its apply must send the same ones.
+ */
 internal fun ReplaceDraftRequest.toDraft(predecessorId: AssetId) = ReplaceDraft(
     predecessorId = predecessorId,
     retiredOn = retiredOn,

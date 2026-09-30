@@ -38,6 +38,7 @@ import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
 import com.loosecannon.servicetag.testing.groupOf
+import com.loosecannon.servicetag.testing.loanRow
 import com.loosecannon.servicetag.testing.meterDefinitionOf
 import com.loosecannon.servicetag.testing.scheduleOf
 import kotlinx.coroutines.runBlocking
@@ -194,6 +195,48 @@ class ReplaceRoutesTest {
         assertTrue(offer.setupOffered && offer.seasonOffered && offer.notesOffered)
         assertEquals("the offer writes nothing", commits, graph.commits)
         assertEquals(before, snapshot(graph))
+    }
+
+    /**
+     * Each flag is its own (review m2): one asset per flag with only that flag set, and one per offered item with
+     * only that item missing, so a flag swapped in `toResponse` fails by name.
+     */
+    @Test fun theOfferFlagsAreEachTheirOwn() {
+        runBlocking {
+            graph.assets.upsert(assetRow("o-notes", name = "Example Notes Only").copy(notes = "Chain drive"))
+            graph.assets.upsert(assetRow("o-season", name = "Example Season Only", seasonMode = SeasonMode.CALENDAR, seasonStart = "05-01", seasonEnd = "09-30"))
+            graph.assets.upsert(assetRow("o-setup", name = "Example Setup Only"))
+            graph.definitions.upsert(meterDefinitionOf("d-setup", "o-setup"))
+            graph.assets.upsert(assetRow("o-loan", name = "Example Loan Only"))
+            graph.loans.upsert(loanRow("l-open", "o-loan", lentOn = "2026-02-01"))
+            graph.assets.upsert(assetRow("o-held", name = "Example Held Only"))
+            graph.transferRecords.append(held("o-held"))
+            graph.assets.upsert(
+                assetRow("o-no-setup", name = "Example No Setup", seasonMode = SeasonMode.CALENDAR, seasonStart = "05-01", seasonEnd = "09-30")
+                    .copy(description = "Runs daily"),
+            )
+            graph.assets.upsert(assetRow("o-no-season", name = "Example No Season").copy(notes = "Chain drive"))
+            graph.definitions.upsert(meterDefinitionOf("d-no-season", "o-no-season"))
+            graph.assets.upsert(assetRow("o-no-notes", name = "Example No Notes", breakStart = "07-01", breakEnd = "07-15"))
+            graph.definitions.upsert(meterDefinitionOf("d-no-notes", "o-no-notes"))
+            graph.loans.upsert(loanRow("l-no-notes", "o-no-notes", lentOn = "2026-02-01"))
+        }
+        val names = listOf("eligible", "held", "setupOffered", "seasonOffered", "notesOffered", "openLoan")
+        val cases = listOf(
+            "o-notes" to listOf(true, false, false, false, true, false),
+            "o-season" to listOf(true, false, false, true, false, false),
+            "o-setup" to listOf(true, false, true, false, false, false),
+            "o-loan" to listOf(true, false, false, false, false, true),
+            "o-held" to listOf(false, true, false, false, false, false),
+            "o-no-setup" to listOf(true, false, false, true, true, false),
+            "o-no-season" to listOf(true, false, true, false, true, false),
+            "o-no-notes" to listOf(true, false, true, true, false, true),
+        )
+        for ((asset, want) in cases) {
+            val offer = api.ok(ReplaceOfferResponse.serializer(), "GET", "/v1/assets/$asset/replace-offer")
+            val got = listOf(offer.eligible, offer.held, offer.setupOffered, offer.seasonOffered, offer.notesOffered, offer.openLoan)
+            for (i in names.indices) assertEquals("$asset ${names[i]}", want[i], got[i])
+        }
     }
 
     @Test fun anUnknownAssetIs404OnEveryRouteAndAnUntakenVerbIs404() {
