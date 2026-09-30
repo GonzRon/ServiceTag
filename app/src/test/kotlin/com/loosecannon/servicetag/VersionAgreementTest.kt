@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.api.ApiJson
 import com.loosecannon.servicetag.api.ApiRequest
 import com.loosecannon.servicetag.api.ApiRouter
 import com.loosecannon.servicetag.api.StatusResponse
+import com.loosecannon.servicetag.api.attachmentHandlersFor
 import com.loosecannon.servicetag.api.loanHandlersFor
 import com.loosecannon.servicetag.api.maintenanceHandlersFor
 import com.loosecannon.servicetag.api.referenceHandlersFor
@@ -129,6 +130,7 @@ class VersionAgreementTest {
                 warrantyHandlersFor(graph),
                 serviceCaseHandlersFor(graph),
                 loanHandlersFor(graph),
+                attachmentHandlersFor(graph),
                 appVersion = BuildConfig.VERSION_NAME,
                 schemaVersion = AppGraph.SCHEMA_VERSION,
             ),

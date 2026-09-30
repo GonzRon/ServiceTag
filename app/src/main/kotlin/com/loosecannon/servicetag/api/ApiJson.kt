@@ -2,6 +2,7 @@ package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.backup.BackupCorrupt
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
+import com.loosecannon.servicetag.core.model.AttachmentProblem
 import com.loosecannon.servicetag.core.ports.StoreIoException
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.core.usecase.AssetAlreadyLent
@@ -743,4 +744,48 @@ private fun groupProblemCode(problem: GroupProblem): String = when (problem) {
     is GroupProblem.MemberAssetMissing -> "MEMBER_ASSET_MISSING"
     is GroupProblem.ForeignMember -> "FOREIGN_MEMBER"
     is GroupProblem.MemberAlreadyOpen -> "MEMBER_ALREADY_OPEN"
+}
+
+// --- #92, the attachment codes (C2) -------------------------------------------------------------
+//
+// Each code, status, `field` and sentence is C2's table, verbatim. `problems` names a domain problem by its own name
+// where one exists; a refusal decided in the API layer (a date, a role on an event's row) has none.
+
+/** 404: no attachment row has that id. */
+internal fun noSuchAttachment(): ApiFailure =
+    ApiFailure(404, "Not Found", "NO_SUCH_ATTACHMENT", "no such attachment")
+
+/** 422: `capturedOn` is not an ISO day, checked with core's own rule before the use case runs. */
+internal fun attachmentBadDate(): ApiFailure = ApiFailure(
+    422, "Unprocessable Content", "ATTACHMENT_BAD_DATE", "capturedOn is not a YYYY-MM-DD day", field = "capturedOn",
+)
+
+/** 422: a role on an event's attachment (R67-11), refused before `UpdateAttachment` could treat it as a bug. */
+internal fun attachmentRoleNotAllowed(): ApiFailure = ApiFailure(
+    422, "Unprocessable Content", "ATTACHMENT_ROLE_NOT_ALLOWED", "a document role belongs on an asset's attachment",
+    field = "role",
+)
+
+/**
+ * Every [AttachmentProblem] as C2 codes it, or null for `Unchanged`, which is no refusal: a no-op edit answers 200
+ * with the stored row (C7). Exhaustive, so a problem added later is a compile error here. `OwnerMissing` is the
+ * edited row itself; `NoStore`, `StoreUnavailable` and `TooLarge` come only from an add, never from an edit.
+ */
+internal fun attachmentRefusal(problem: AttachmentProblem): ApiFailure? = when (problem) {
+    AttachmentProblem.BlankName -> ApiFailure(
+        422, "Unprocessable Content", "ATTACHMENT_NAME_REQUIRED", "an attachment needs a name",
+        listOf(problem.toString()), "displayName",
+    )
+    AttachmentProblem.OwnerMissing -> noSuchAttachment()
+    AttachmentProblem.NoStore -> ApiFailure(
+        409, "Conflict", "ATTACHMENT_STORE_NOT_CONFIGURED", "no attachment folder is picked on this phone",
+        listOf(problem.toString()),
+    )
+    AttachmentProblem.StoreUnavailable -> ApiFailure(
+        409, "Conflict", "store_unavailable", "the attachment folder is not available", listOf(problem.toString()),
+    )
+    is AttachmentProblem.TooLarge -> ApiFailure(
+        422, "Unprocessable Content", "ATTACHMENT_TOO_LARGE", "the file is over 256 MiB", listOf(problem.toString()),
+    )
+    AttachmentProblem.Unchanged -> null
 }

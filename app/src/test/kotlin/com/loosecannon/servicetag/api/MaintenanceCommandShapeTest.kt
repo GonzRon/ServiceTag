@@ -56,6 +56,7 @@ class MaintenanceCommandShapeTest {
             warrantyHandlersFor(graph),
             serviceCaseHandlersFor(graph),
             loanHandlersFor(graph),
+            attachmentHandlersFor(graph),
             appVersion = "1.2.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),

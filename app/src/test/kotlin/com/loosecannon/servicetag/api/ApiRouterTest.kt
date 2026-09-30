@@ -60,6 +60,7 @@ class ApiRouterTest {
             warrantyHandlersFor(graph),
             serviceCaseHandlersFor(graph),
             loanHandlersFor(graph),
+            attachmentHandlersFor(graph),
             appVersion = "1.1.0",
             schemaVersion = 5,
         ),
@@ -250,6 +251,19 @@ class ApiRouterTest {
         assertEquals(1, status.counts["assets"])
         assertEquals(0, status.counts["events"])
         assertEquals(0, status.counts["attachments"])
+    }
+
+    /** #92 (C5a, R92-8; row 46): the installation's own id, additively, the same on every read. */
+    @Test fun statusCarriesInstallationId() {
+        val first = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
+        val second = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
+
+        assertEquals(graph.installationIdentity.id(), first.installationId)
+        assertEquals(first.installationId, second.installationId)
+        assertTrue(
+            first.installationId,
+            Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").matches(first.installationId),
+        )
     }
 
     // --- assets ------------------------------------------------------------------------------
@@ -621,6 +635,7 @@ class ApiRouterTest {
                 warrantyHandlersFor(graph),
                 serviceCaseHandlersFor(graph),
                 loanHandlersFor(graph),
+                attachmentHandlersFor(graph),
                 appVersion = "1.1.0",
                 schemaVersion = 5,
             ),

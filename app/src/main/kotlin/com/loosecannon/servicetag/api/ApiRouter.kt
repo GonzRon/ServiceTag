@@ -54,7 +54,7 @@ internal class ApiRouter(
     }
 
     /**
-     * The whole surface. Sixty path shapes over seventy-two method-and-path rows; anything
+     * The whole surface. Sixty-two path shapes over seventy-five method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -103,6 +103,10 @@ internal class ApiRouter(
      * read only. **No route records a succession** (R86-18): only the phone's Replace asset records one, and the
      * import-merge apply only inserts an archive's rows, so no verb here makes, amends or removes one, and
      * `AssetDto` carries no succession field.
+     *
+     * #92 (B1a) added three rows over two shapes: the twenty-second `/v1/assets/{id}/…` sub-resource (an asset's own
+     * attachments and the folder's state, read only), and `/v1/attachments/{id}`, read and amended through
+     * `UpdateAttachment` alone. **Nothing deletes an attachment here** and no row reads or writes its bytes.
      */
     private suspend fun route(request: ApiRequest): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -165,6 +169,8 @@ internal class ApiRouter(
                 "loans" to "GET" -> handlers.loans.listForAsset(rest[1])
                 // #86 — the twenty-first: which asset this one replaces and which replaced it, read only.
                 "succession" to "GET" -> handlers.getSuccession(rest[1])
+                // #92 — the twenty-second: the asset's own attachments and the folder's state, read only.
+                "attachments" to "GET" -> handlers.attachmentRoutes.listForAsset(rest[1])
                 else -> throw ApiFailure.notFound(request.path)
             }
 
@@ -285,6 +291,14 @@ internal class ApiRouter(
 
             rest.size == 3 && rest[0] == "loans" && rest[2] == "return" ->
                 if (method == "POST") handlers.loans.markReturned(rest[1], request) else notAllowed(request)
+
+            // #92 — one attachment, read and amended; a 405 for any other verb. Nothing deletes one here, and
+            // `/v1/attachments` and `/v1/attachments/{id}/…` are not shapes at all.
+            rest.size == 2 && rest[0] == "attachments" -> when (method) {
+                "GET" -> handlers.attachmentRoutes.get(rest[1])
+                "PATCH" -> handlers.attachmentRoutes.update(rest[1], request)
+                else -> notAllowed(request)
+            }
 
             rest == listOf("attention") ->
                 if (method == "GET") handlers.seasonHealth.listAttention() else notAllowed(request)

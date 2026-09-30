@@ -133,6 +133,7 @@ import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
+import com.loosecannon.servicetag.prefs.InstallationIdentity
 import com.loosecannon.servicetag.ui.condition.EventOffers
 import com.loosecannon.servicetag.ui.condition.ImpairmentOffers
 import com.loosecannon.servicetag.ui.condition.OperationalOffers
@@ -192,7 +193,16 @@ class FakeGraph(
     private var seq = 0
     val ids: IdGenerator = IdGenerator { "00000000-0000-4000-8000-%012d".format(++seq) }
 
-    val uow: UnitOfWork = RoomUnitOfWork(db)
+    private val countingUow = CountingUnitOfWork(RoomUnitOfWork(db))
+    val uow: UnitOfWork = countingUow
+
+    /** #92: the write transactions committed through [uow], so a route test can say "wrote nothing" as a number. */
+    val commits: Int get() = countingUow.commits
+
+    /** #92 (C5a): mirroring `AppGraph`'s field by name, over a fresh temporary directory in place of the no-backup one. */
+    val installationIdentity: InstallationIdentity =
+        InstallationIdentity(kotlin.io.path.createTempDirectory("installation").toFile())
+
     val links: LinkRepository = RoomLinkRepository(db.externalLinkDao())
     /** #77's transfer records, mirroring `AppGraph`'s field by name; before the ports, which its guard reads. */
     val transferRecords: TransferRecordRepository = RoomTransferRecordRepository(db.transferRecordDao())
@@ -599,4 +609,13 @@ private class InMemoryKeyValueStore : KeyValueStore {
     override fun putLong(key: String, value: Long) { longs[key] = value }
     override fun getString(key: String): String? = strings[key]
     override fun putString(key: String, value: String) { strings[key] = value }
+}
+
+/** #92: [delegate], counting each write transaction that committed. Reads are not counted. */
+private class CountingUnitOfWork(private val delegate: UnitOfWork) : UnitOfWork {
+    private val committed = java.util.concurrent.atomic.AtomicInteger()
+    val commits: Int get() = committed.get()
+
+    override suspend fun <T> write(block: suspend () -> T): T = delegate.write(block).also { committed.incrementAndGet() }
+    override suspend fun <T> read(block: suspend () -> T): T = delegate.read(block)
 }

@@ -183,6 +183,7 @@ import com.loosecannon.servicetag.data.room.RoomServiceCaseRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.prefs.AppPrefs
+import com.loosecannon.servicetag.prefs.InstallationIdentity
 import com.loosecannon.servicetag.prefs.SharedPrefsStore
 import com.loosecannon.servicetag.reminders.AndroidDigestAlarm
 import com.loosecannon.servicetag.reminders.AndroidNotificationPermission
@@ -374,6 +375,13 @@ class AppGraph(private val context: Context) {
     /** #72 (C9): the open loans' due-back dates every provider is asked to hold (#77: none of a held asset). */
     val buildLoanSubjects: BuildLoanSubjects = BuildLoanSubjects(loans, transferRecords)
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
+
+    /**
+     * #92 (C5a, R92-8) — this installation's opaque id, in one file under the app's no-backup directory: created once
+     * per installation, then loaded and cached once per process on its first read (the listener's, never here). Not
+     * in the preferences above, which Auto Backup copies, and never in a backup, an export, a merge or a pack.
+     */
+    val installationIdentity: InstallationIdentity = InstallationIdentity(context.applicationContext.noBackupFilesDir)
 
     // #24 — the platform-ownership seams B06, B07, B10 and B14 compile against (master plan §12).
     val platformState: PlatformState = AndroidPlatformState(context)

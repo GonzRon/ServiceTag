@@ -65,7 +65,7 @@ import com.loosecannon.servicetag.di.AppGraph
  * schedule 409 `SEASON_MODE_STRANDS_POLICY` — which [mapDomainFailure] names. Condition is never in
  * it (#61 AC 9).
  *
- * **Twenty-eight collaborators plus two values, named one by one, with a `constructor(graph)` beside
+ * **Twenty-nine collaborators plus two values, named one by one, with a `constructor(graph)` beside
  * them.** That is this app's pattern, stated at `AssetViewModels.kt:59`–`61`: *"Each takes the `AppGraph` members it
  * actually uses — the secondary constructor is what the Compose entry calls, the primary one is
  * what a test builds on a Room-backed fake graph."* It is the reason `ApiRouterTest` can drive the
@@ -156,6 +156,12 @@ internal class ApiHandlers(
      * `handlers.loans.*`, and asked for the one count `/v1/status` gained.
      */
     internal val loans: LoanHandlers,
+    /**
+     * #92's attachment rows, on the same terms: one collaborator, reached from the router as
+     * `handlers.attachmentRoutes.*` (the name `attachments` is the repository above), and asked for the
+     * `installationId` `/v1/status` gained (C5a). No count comes with it: `attachments` is already counted.
+     */
+    internal val attachmentRoutes: AttachmentHandlers,
     private val appVersion: String,
     private val schemaVersion: Int,
 ) {
@@ -171,6 +177,7 @@ internal class ApiHandlers(
         WarrantyHandlers(graph),
         ServiceCaseHandlers(graph),
         LoanHandlers(graph),
+        AttachmentHandlers(graph),
         BuildConfig.VERSION_NAME, AppGraph.SCHEMA_VERSION,
     )
 
@@ -183,6 +190,7 @@ internal class ApiHandlers(
             apiVersion = API_VERSION,
             schemaVersion = schemaVersion,
             backupFormatVersion = BackupCodec.FORMAT_VERSION,
+            installationId = attachmentRoutes.installationId(),
             counts = mapOf(
                 "assets" to assets.all().size,
                 "tags" to tags.all().size,
