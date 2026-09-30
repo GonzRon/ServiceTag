@@ -1,9 +1,10 @@
 package com.loosecannon.servicetag.core.fetch
 
 /**
- * C11 (#85, R85-5): the byte sniff. A pure function over the two windows of a staged file, deciding PDF, PNG,
- * JPEG or nothing. It takes no declared type and reads nothing but the windows; it checks signatures and end
- * markers and parses nothing between them. A header alone is never enough: each kind must also end right.
+ * C11 (#85, R85-5), widened by C27: the byte sniff. A pure function over the two windows of a staged file,
+ * deciding PDF, PNG, JPEG, ODT, ODS, ODP or nothing. It takes no declared type and reads nothing but the
+ * windows; it checks signatures and end markers and parses nothing between them. A header alone is never
+ * enough: each kind must also end right. A ZIP it does not decide is `ContainerInspect`'s (C28).
  */
 object DocumentSniff {
     const val WINDOW = 1_024
@@ -25,6 +26,10 @@ object DocumentSniff {
     )
     private val jpegSoi = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())
     private val jpegEoi = byteArrayOf(0xFF.toByte(), 0xD9.toByte())
+    private val zipLocal = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
+    private val zipEnd = byteArrayOf(0x50, 0x4B, 0x05, 0x06)
+    private val odfEntry = "mimetype".toByteArray(Charsets.ISO_8859_1)
+    private val odfTypes = listOf(ODT, ODS, ODP)
 
     /**
      * The MIME the bytes prove, or null. [size] is the file's length; [head] must be its first and [tail] its
@@ -40,7 +45,7 @@ object DocumentSniff {
             isPdf(head, tail) -> PDF
             isPng(head, tail) -> PNG
             isJpeg(head, tail) -> JPEG
-            else -> null
+            else -> odf(head, tail)
         }
     }
 
@@ -57,6 +62,41 @@ object DocumentSniff {
 
     private fun isJpeg(head: ByteArray, tail: ByteArray): Boolean =
         startsWith(head, jpegSoi) && indexOf(tail, jpegEoi) >= 0
+
+    /**
+     * C27: a local header at 0 naming exactly `mimetype`, stored (method 0) with equal sizes, its data exactly
+     * one of the three types; and a ZIP end record ending the tail. Nothing else in the package is parsed.
+     */
+    private fun odf(head: ByteArray, tail: ByteArray): String? {
+        if (!isZip(head) || head.size < 30 || zipEndRecord(tail) < 0) return null
+        val name = head.u16(26)
+        val data = 30 + name + head.u16(28)
+        val length = head.u32(18)
+        if (head.u16(8) != 0 || length != head.u32(22) || name != odfEntry.size || !regionMatches(head, 30, odfEntry)) return null
+        return odfTypes.firstOrNull { type ->
+            val value = type.toByteArray(Charsets.ISO_8859_1)
+            length == value.size.toLong() && regionMatches(head, data, value)
+        }
+    }
+
+    /** A ZIP local file header at 0 (C27, C28). */
+    internal fun isZip(head: ByteArray): Boolean = startsWith(head, zipLocal)
+
+    /**
+     * Where the ZIP end record starts in [window] (the file's last bytes), or -1: the last signature whose
+     * comment length equals the bytes after its 22-byte record, so the ZIP ends where the file does.
+     */
+    internal fun zipEndRecord(window: ByteArray): Int {
+        var at = window.size - 22
+        while (at >= 0) {
+            if (regionMatches(window, at, zipEnd) && at + 22 + window.u16(at + 20) == window.size) return at
+            at--
+        }
+        return -1
+    }
+
+    internal fun regionMatches(a: ByteArray, at: Int, p: ByteArray): Boolean =
+        at >= 0 && at + p.size <= a.size && p.indices.all { a[at + it] == p[it] }
 
     private fun Byte.isDigit() = this in '0'.code.toByte()..'9'.code.toByte()
 
@@ -75,3 +115,8 @@ object DocumentSniff {
         return -1
     }
 }
+
+/** Little-endian fields, as ZIP stores them. */
+internal fun ByteArray.u16(at: Int): Int = (this[at].toInt() and 0xFF) or ((this[at + 1].toInt() and 0xFF) shl 8)
+
+internal fun ByteArray.u32(at: Int): Long = u16(at).toLong() or (u16(at + 2).toLong() shl 16)

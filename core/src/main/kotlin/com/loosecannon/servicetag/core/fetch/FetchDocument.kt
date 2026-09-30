@@ -6,6 +6,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.net.URI
 import java.security.MessageDigest
@@ -21,7 +22,8 @@ import kotlin.coroutines.cancellation.CancellationException
  * is a body; its declared type and length are judged before a byte is read, and the declared type is
  * never more than that: the bytes decide the kind, by their first and last windows. The body is
  * streamed once, counted (the count, never `Content-Length`, is authoritative), digested and windowed on
- * the way in; the staged file is never read back.
+ * the way in. The staged file is read back only by at most one bounded, read-only container inspection,
+ * after the stream is done and only for a ZIP head the windows left undecided (C31).
  *
  * **Cleanup.** Every outcome but [FetchOutcome.Fetched], every exception and every cancellation discards
  * the staging file, and every response is closed. A kept file is either handed to the caller or
@@ -92,7 +94,7 @@ class FetchDocument(
         }
     }
 
-    /** Steps 5–9: the headers, then one streamed pass, then the sniff. */
+    /** Steps 5–9: the headers, then one streamed pass, then the sniff and, for a container, the inspection. */
     private suspend fun download(
         url: String,
         response: TransportResponse,
@@ -158,10 +160,24 @@ class FetchDocument(
         return Streamed.Done(count, sha256, windows.head(), windows.tail())
     }
 
-    private fun judged(url: String, staged: StagingFile, done: Streamed.Done): FetchOutcome {
+    private suspend fun judged(url: String, staged: StagingFile, done: Streamed.Done): FetchOutcome {
         if (done.size == 0L) return refused(FetchProblem.Empty)
-        val mimeType = DocumentSniff.classify(done.size, done.head, done.tail) ?: return refused(FetchProblem.NotADocument)
+        val proven = try {
+            DocumentSniff.classify(done.size, done.head, done.tail) ?: inspected(staged, done)
+        } catch (e: IOException) {
+            return refused(FetchProblem.Interrupted)
+        }
+        val mimeType = proven ?: return refused(FetchProblem.NotADocument)
         return FetchOutcome.Fetched(staged, url, mimeType, done.size, done.sha256)
+    }
+
+    /**
+     * C31: the one bounded, read-only inspection of the staged file, once the stream is done and only for a
+     * head the windows left undecided that [ContainerInspect] is for. It reads a file, so it runs on [io].
+     */
+    private suspend fun inspected(staged: StagingFile, done: Streamed.Done): String? {
+        if (!ContainerInspect.inspects(done.head)) return null
+        return withContext(io) { ContainerInspect.classify(done.size, done.head, done.tail, BoundedInspection(staged.reader())) }
     }
 
     private sealed interface Streamed {

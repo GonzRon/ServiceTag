@@ -91,6 +91,7 @@ class BoundedInspection(private val reader: StagedReader, val maxReads: Int = 16
         private set
 
     fun readAt(position: Long, length: Int): ByteArray {
+        if (position < 0 || length < 0 || reads >= maxReads || length > maxBytes - bytes) throw InspectionOverBudget()
         reads++
         bytes += length
         return reader.readAt(position, length)
