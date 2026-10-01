@@ -267,18 +267,18 @@ class BackupFormat8Test {
     // --- direction -------------------------------------------------------------------------------
 
     /**
-     * Hazard: a newer archive half-read. A manifest one format past this build's (17, since #85 made
-     * the build's own 16) over a `data.json` that no format could read is refused as **newer**, not as
+     * Hazard: a newer archive half-read. A manifest one format past this build's (18, since #91 made
+     * the build's own 17) over a `data.json` that no format could read is refused as **newer**, not as
      * corrupt — so the gate ran before a single row was parsed.
      */
     @Test
     fun aFormatPastThisBuildsIsRefusedBeforeAnyRow() {
         val unreadable = dataTreeOf(archiveOf(fixture())).editRows("healthSubjects") { it.with("weight", JsonPrimitive("heavy")) }
-        val bytes = sealed(unreadable, formatVersion = 17)
+        val bytes = sealed(unreadable, formatVersion = 18)
 
         val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(bytes) }
-        assertEquals(17, refusal.found)
-        assertEquals(16, refusal.supported)
+        assertEquals(18, refusal.found)
+        assertEquals(17, refusal.supported)
         // The same tree at a format this build reads *is* parsed — and refused as corrupt.
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(sealed(unreadable, formatVersion = 8)) }
     }

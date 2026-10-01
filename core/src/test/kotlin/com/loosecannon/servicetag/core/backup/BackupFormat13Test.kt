@@ -51,7 +51,7 @@ class BackupFormat13Test {
 
         val decoded = BackupCodec.decode(bytes)
 
-        assertEquals(16, decoded.manifest.formatVersion)
+        assertEquals(17, decoded.manifest.formatVersion)
         assertEquals(listOf("l0", "l1", "l2"), decoded.data.assetLoans.map { it.id }, "sorted by id")
         assertEquals(listOf(nameOnly, returned, open), decoded.data.assetLoans.map { it.toDomain() }, "field for field, the link null and set")
         val tree = dataTreeOf(bytes)

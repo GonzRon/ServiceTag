@@ -45,7 +45,7 @@ class BackupFormat14Test {
 
         val decoded = BackupCodec.decode(bytes)
 
-        assertEquals(16, decoded.manifest.formatVersion)
+        assertEquals(17, decoded.manifest.formatVersion)
         assertEquals(listOf("r0", "r1", "r2", "r3"), decoded.data.transferRecords.map { it.id }, "sorted by id")
         assertEquals(listOf(inP, outS, outQ, withdrawnS), decoded.data.transferRecords.map { it.toDomain() })
         val tree = dataTreeOf(bytes)
