@@ -207,7 +207,7 @@ class VersionAgreementTest {
                 .containsMatchIn(text),
         )
         assertFalse(
-            "the row's unit-gate counts are measured at the release tip, so no placeholder ships",
+            "the row carries no placeholder",
             Regex("""^\|\s*1\.3\.0\s*\|\s*15\s*\|.*PLACEHOLDER""", RegexOption.MULTILINE)
                 .containsMatchIn(text),
         )
@@ -250,7 +250,7 @@ class VersionAgreementTest {
                 row.contains("`docs/superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md`"),
         )
         assertFalse(
-            "the row's gate counts are measured, so no placeholder ships",
+            "the row carries no placeholder",
             row.contains("PLACEHOLDER"),
         )
         assertEquals(
@@ -278,7 +278,7 @@ class VersionAgreementTest {
         )
         assertTrue("the row must name both fixes by issue", row.contains("#80") && row.contains("#81"))
         assertTrue("the row must name the contract", row.contains("`docs/api/v1.md`"))
-        assertFalse("the row's gate counts are measured, so no placeholder ships", row.contains("PLACEHOLDER"))
+        assertFalse("the row carries no placeholder", row.contains("PLACEHOLDER"))
         assertEquals(
             "no other row, and no reservation, may claim versionCode 17",
             1,
@@ -314,7 +314,7 @@ class VersionAgreementTest {
             "the row must say Save as document is the one outbound use of INTERNET",
             row.contains("INTERNET") && row.contains("Save as document"),
         )
-        assertFalse("the row's gate counts are measured, so no placeholder ships", row.contains("PLACEHOLDER"))
+        assertFalse("the row carries no placeholder", row.contains("PLACEHOLDER"))
         assertEquals(
             "no other row, and no reservation, may claim versionCode 18",
             1,
@@ -364,7 +364,7 @@ class VersionAgreementTest {
             "the row must link the 1.6.0 release notes, which must exist",
             row.contains("`docs/releases/1.6.0.md`") && repoFile("docs/releases/1.6.0.md").isFile,
         )
-        assertFalse("the row's gate counts are measured, so no placeholder ships", row.contains("PLACEHOLDER"))
+        assertFalse("the row carries no placeholder", row.contains("PLACEHOLDER"))
         assertEquals(
             "no other row, and no reservation, may claim versionCode 19",
             1,
