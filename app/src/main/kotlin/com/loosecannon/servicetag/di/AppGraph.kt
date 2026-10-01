@@ -286,7 +286,7 @@ class AppGraph(private val context: Context) {
     private val roomServiceCases = RoomServiceCaseRepository(db.serviceCaseDao())
 
     /**
-     * #77 (C12) — the one write guard: every one of the sixteen asset-owned ports below is its wrapped port, so every
+     * #77 (C12) — the one write guard: every one of the seventeen asset-owned ports below is its wrapped port, so every
      * use case, view model and route that writes through this graph refuses an ordinary write on a transferred-out
      * asset's rows ([com.loosecannon.servicetag.core.transfer.AssetTransferredOut]). The derived and device-local
      * tables, the link tombstones, the categories and the records are not among them.
@@ -352,11 +352,12 @@ class AppGraph(private val context: Context) {
     /**
      * #15's two data ports (C4, C5): the SupplyItem catalog — upserted with its specifications, archived and
      * never deleted (R15-5) — and Asset applicability. The catalog is global, not asset-owned, so it is not the
-     * write guard's; the applicability port is asset-owned and the guard wraps it in C14 (B2c), not here. Their
-     * rules live in the use cases (B3).
+     * write guard's: archiving or editing an item a held asset's rows name writes no held row. The applicability
+     * port is asset-owned, the seventeenth the guard wraps (C14). Their rules live in the use cases.
      */
     val supplyItems: SupplyItemRepository = RoomSupplyItemRepository(db.supplyItemDao())
-    val assetSupplies: AssetSupplyRepository = RoomAssetSupplyRepository(db.assetSupplyDao())
+    val assetSupplies: AssetSupplyRepository =
+        heldWriteGuard.assetSupplies(RoomAssetSupplyRepository(db.assetSupplyDao()))
 
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())

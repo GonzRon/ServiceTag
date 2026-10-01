@@ -311,6 +311,9 @@ internal class ReturnScope private constructor(
                 healthSubjects = full.healthSubjects.filterNot { it.assetId in returning },
                 serviceCases = full.serviceCases.filterNot { it.id in cases },
                 caseEntries = full.caseEntries.filterNot { it.caseId in cases },
+                // #15 (C13, C-4): the applicability rows go with their asset — the delete's cascade takes them and the
+                // pack's plan as inserts. `supplyItems` is not named: global, the copy keeps every one.
+                assetSupplies = full.assetSupplies.filterNot { it.assetId in returning },
             )
             val dropped = DroppedRows(
                 assets = returning.mapTo(HashSet()) { it.value },

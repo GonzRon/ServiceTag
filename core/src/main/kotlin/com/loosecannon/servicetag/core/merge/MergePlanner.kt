@@ -1346,7 +1346,7 @@ internal fun mergePlanOf(
                 loanWrites.map { Triple(MergeTable.LOANS, it.id.value, TransferOwnership.of(it)) } +
                 successionWrites.map { Triple(MergeTable.SUCCESSIONS, it.id, TransferOwnership.of(it)) } +
                 // #15 (C11): an applicability row is its asset's; a SupplyItem is global and is never held.
-                assetSupplyWrites.map { Triple(MergeTable.ASSET_SUPPLIES, it.id, listOf(OwnerRef.OfAsset(it.assetId))) }
+                assetSupplyWrites.map { Triple(MergeTable.ASSET_SUPPLIES, it.id, TransferOwnership.of(it)) }
         for ((table, id, refs) in owned) heldOwner(refs)?.let { refuseInsert(table, id, it) }
 
         // M3 — the phone as this plan would leave it, cut by what it would hold.
