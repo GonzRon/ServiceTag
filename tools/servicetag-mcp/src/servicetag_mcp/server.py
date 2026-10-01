@@ -205,6 +205,14 @@ routes an older app does not have, so each refuses — the reads too — a phone
 minimum on the succession tool's pattern. The global write minimum stays 8. #92 moved no schema, so a phone at
 16 may still predate the routes; the router's unknown-route 404 is then `APP_ROUTE_MISSING` (`_attachment_call`)."""
 
+_MIN_REFERENCE_ROLE_SCHEMA_VERSION = 17
+"""The Room schema that carries a reference's document role (#91). `add_reference` given a `role`, and
+`update_reference` given one or clearing it, send a key an older app's strict decoder answers 400 for, so each
+refuses a phone below it, with nothing sent: a per-tool minimum on the attachment tools' pattern, applied **only
+when a role is sent** — without one both tools behave exactly as before against any phone (R91-10).
+`materialize_reference` keeps its schema-16 gate: its `role` is #92's, which a schema-16 phone already takes. The
+global write minimum stays 8."""
+
 _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
     {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan"}
 )
@@ -293,6 +301,12 @@ def _require_succession_schema(tool: str) -> None:
 def _require_attachment_schema(tool: str, feature: str = "the attachment routes") -> None:
     """One of #92's seven tools — the five attachment tools and the two replace tools — on a phone below schema 16."""
     _require_tool_schema(tool, _MIN_ATTACHMENT_SCHEMA_VERSION, feature)
+
+
+def _require_reference_role_schema(tool: str) -> None:
+    """`add_reference` or `update_reference` sending a document role, given or cleared, to a phone below schema 17
+    (#91). Never called without a role, so a reference written without one reaches any phone it always did."""
+    _require_tool_schema(tool, _MIN_REFERENCE_ROLE_SCHEMA_VERSION, "the reference document role")
 
 
 def _read_for_write(path: str) -> dict[str, Any]:
@@ -1166,7 +1180,7 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a `ServiceTag-data-*.zip` of format 1–16 (format 8, from ServiceTag
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–17 (format 8, from ServiceTag
     1.4.0, adds season activations, conditions and health subjects; format 9 adds the owner's own
     asset categories; format 10 adds each attachment's document role; an older archive's
     attachments are compared without the role and, when the phone's row carries one, without the
@@ -1193,7 +1207,9 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     anything: a replacement made on another phone retired its predecessor there, so merging it into a phone
     that holds that asset unretired conflicts on the asset's row, and nothing lands);
     format 16 adds each attachment's source provenance (#85), carried as it is on an inserted row; an
-    older archive whose attachments carry any is corrupt).
+    older archive whose attachments carry any is corrupt; format 17 adds each reference's document role
+    (#91), and an older archive's references are compared without it and, when the phone's row carries
+    one, without the last-modified stamp that giving it moved).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
@@ -1971,7 +1987,14 @@ _REFERENCE_FIELDS: tuple[str, ...] = (
     "updatedAt",
 )
 """The nine fields a reference row carries, checked on the way in by [list_references] so a version
-skew or a misconfigured `SERVICETAG_API_BASE_URL` is a message and never a `KeyError` traceback."""
+skew or a misconfigured `SERVICETAG_API_BASE_URL` is a message and never a `KeyError` traceback. A
+schema-17 row also carries `role` (#91), which is **not** among them: a schema-16 phone's rows have
+none and still pass."""
+
+_REFERENCE_CLEARABLE_FIELDS: frozenset[str] = frozenset({"role"})
+"""What `update_reference` and `materialize_reference` clear by name (#91): the document role, sent as
+`null`. A reference's name cannot be cleared (the phone refuses a blank one) and its description is
+cleared by value, `""`."""
 
 
 @mcp.tool()
@@ -1980,9 +2003,10 @@ def list_references(asset_id: str) -> dict[str, Any]:
 
     A **reference** is a URI on an asset — a manual on the web, a note in Joplin — with no bytes of
     its own. Each row carries `kind` (`WEB_URL`, `NOTE_LINK` or `OTHER`) and `scheme`, both
-    **derived from the URI** and read-only, and the `description` if it has one. Attachments are
-    the byte-bearing rows: `list_attachments` reads them, and `materialize_reference` saves a web
-    reference's document as one (#92).
+    **derived from the URI** and read-only, and the `description` if it has one. From schema 17
+    each row also carries `role` (#91), its document role or `null`; an older phone's rows have no
+    `role` key at all. Attachments are the byte-bearing rows: `list_attachments` reads them, and
+    `materialize_reference` saves a web reference's document as one (#92).
     """
     answer = _call("GET", f"/v1/assets/{_path_id(asset_id, field='asset_id')}/references")
     rows = _list_field(answer, "references", of="that asset's references")
@@ -1999,6 +2023,7 @@ def add_reference(
     uri: str,
     display_name: str,
     description: str | None = None,
+    role: str | None = None,
 ) -> dict[str, Any]:
     """Save a URI on an asset. `display_name` is required and may not be blank.
 
@@ -2014,7 +2039,17 @@ def add_reference(
     the app an unfamiliar scheme is saved once the person confirms it by name, and there is nobody
     on this wire to ask. The same URI twice on one asset is `REFERENCE_URI_TAKEN`; the same URI on
     two different assets is ordinary.
+
+    `role` is the reference's document role (#91) — `PURCHASE_INVOICE_OR_RECEIPT`, `USER_MANUAL` or
+    `SERVICE_MANUAL` — given only by the caller and never guessed from the name, the link or the
+    description. It belongs on an `http` or `https` link only: on any other link it is
+    `REFERENCE_ROLE_NOT_ALLOWED`, and an unknown name is the phone's 400. Omitted, the reference has
+    no role; there is nothing to clear on a create. A role needs a phone at schema 17 or later: an
+    older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent. Without a role this tool
+    reaches any phone it always did.
     """
+    if role is not None:
+        _require_reference_role_schema("add_reference")
     return _call(
         "POST",
         "/v1/references",
@@ -2023,6 +2058,7 @@ def add_reference(
             uri=uri,
             displayName=display_name,
             description=description,
+            role=role,
         ),
         content_type="application/json",
     )
@@ -2033,27 +2069,42 @@ def update_reference(
     reference_id: str,
     display_name: str | None = None,
     description: str | None = None,
+    role: str | None = None,
+    clear_fields: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Rename a reference or change its description. Those two fields, and nothing else.
+    """Rename a reference, change its description, or give, change or clear its document role. Those
+    three fields, and nothing else.
 
     An **omitted** argument and one sent explicitly as **`null`** both leave the current value
     alone, the shipped convention; a supplied value replaces it.
 
-    **There is no `clear_fields` here**, and that is not an omission. `display_name` cannot be
-    cleared at all — the app refuses a blank name with `REFERENCE_NAME_REQUIRED` — and
-    `description` is cleared **by value**, `description=""`, because it is a plain text column with
-    an empty default, the same reason `unit` is sent as `""` in `save_definition`.
+    **`clear_fields` takes `role` only**: `clear_fields=["role"]` sends `"role": null`, which the
+    phone reads as a clear, where an absent `role` is "unchanged". A role both given and cleared is
+    refused before the call. The other two fields have no clear by name, and that is not an
+    omission. `display_name` cannot be cleared at all — the app refuses a blank name with
+    `REFERENCE_NAME_REQUIRED` — and `description` is cleared **by value**, `description=""`, because
+    it is a plain text column with an empty default, the same reason `unit` is sent as `""` in
+    `save_definition`.
+
+    `role` (#91) is `PURCHASE_INVOICE_OR_RECEIPT`, `USER_MANUAL` or `SERVICE_MANUAL`, given only by
+    the caller and never guessed from the name, the link or the description. It belongs on an `http`
+    or `https` link only: on any other link it is `REFERENCE_ROLE_NOT_ALLOWED`, and an unknown name
+    is the phone's 400. A role given or cleared needs a phone at schema 17 or later: an older one is
+    refused with `APP_SCHEMA_TOO_OLD` and nothing is sent. Without one this tool reaches any phone it
+    always did.
 
     The `uri`, the owning asset and the derived `kind` are **not** amendable and are not arguments:
     naming one is refused before the call. An amend that changes nothing is accepted and writes
     nothing, so the row comes back with its `updatedAt` where it was.
     """
-    return _call(
-        "PATCH",
-        f"/v1/references/{_path_id(reference_id, field='reference_id')}",
-        json_body=_body(displayName=display_name, description=description),
-        content_type="application/json",
-    )
+    to_clear = _validate_clear_fields(clear_fields, _REFERENCE_CLEARABLE_FIELDS, {"role": role})
+    path = f"/v1/references/{_path_id(reference_id, field='reference_id')}"
+    if role is not None or "role" in to_clear:
+        _require_reference_role_schema("update_reference")
+    body = _body(displayName=display_name, description=description, role=role)
+    if "role" in to_clear:
+        body["role"] = None
+    return _call("PATCH", path, json_body=body, content_type="application/json")
 
 
 # --- 1.4, seasons, condition and health ------------------------------------------------------------
@@ -3187,6 +3238,7 @@ def materialize_reference(
     kind: str | None = None,
     role: str | None = None,
     notes: str | None = None,
+    clear_fields: list[str] | None = None,
 ) -> dict[str, Any]:
     """Save an existing web reference on an asset as a document: the phone downloads the reference's own https
     link, proves the file's type from its bytes, and stores it as an attachment with where it came from. It takes
@@ -3206,15 +3258,19 @@ def materialize_reference(
     them into an issue.
 
     `display_name`, `kind` (an attachment kind), `role` (a document role, never guessed) and `notes` are sent
-    only when given; absent, the phone uses the reference's name, the kind of the proven type, no role and the
-    reference's description. It reads the asset's references (the reference must be one of them, else
-    `NO_SUCH_REFERENCE` with nothing sent) and its attachments first, then makes one request with a 720-second
-    budget and never sends it twice. Every answer carries `decision` and `reference` (`{id, displayName, host}`):
-    `CREATED` adds `host`, `mimeType`, `sizeBytes` and the new `attachment`; `IDENTICAL` adds `attachmentId`, the
-    row the asset already had (and that row itself when it was found by its link); `UNKNOWN` adds `next`, what to
-    read before running it again. Needs a phone at schema 16 or later: an older one is refused with
-    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    only when given; absent, the phone uses the reference's name, the kind of the proven type, the reference's
+    own role (none before schema 17) and the reference's description. `role=None` is "not given" (the source
+    role is copied), so `clear_fields=["role"]` is the only way to save with no role: it sends `"role": null`,
+    whatever the reference carries; a role both given and cleared is refused before anything is read. It reads the asset's references
+    (the reference must be one of them, else `NO_SUCH_REFERENCE` with nothing sent) and its attachments first,
+    then makes one request with a 720-second budget and never sends it twice. Every answer carries `decision` and
+    `reference` (`{id, displayName, host}`): `CREATED` adds `host`, `mimeType`, `sizeBytes` and the new
+    `attachment`; `IDENTICAL` adds `attachmentId`, the row the asset already had (and that row itself when it was
+    found by its link); `UNKNOWN` adds `next`, what to read before running it again. Needs a phone at schema 16
+    or later, a role given or cleared included: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is
+    sent.
     """
+    to_clear = _validate_clear_fields(clear_fields, _REFERENCE_CLEARABLE_FIELDS, {"role": role})
     asset_path = _path_id(asset_id, field="asset_id")
     reference_path = _path_id(reference_id, field="reference_id")
     _require_attachment_schema("materialize_reference")
@@ -3242,6 +3298,8 @@ def materialize_reference(
             return {"decision": "IDENTICAL", "reference": echo, "attachmentId": row.get("id"), "attachment": row}
 
     body = _body(displayName=display_name, kind=kind, role=role, notes=notes)
+    if "role" in to_clear:
+        body["role"] = None
     try:
         saved = _attachment_call(
             tool, "POST /v1/references/{id}/materialize", "POST", f"/v1/references/{reference_path}/materialize",
