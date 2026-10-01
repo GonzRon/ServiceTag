@@ -57,6 +57,7 @@ import com.loosecannon.servicetag.ui.setup.AssetSetupScreen
 import com.loosecannon.servicetag.ui.setup.DefinitionEditScreen
 import com.loosecannon.servicetag.ui.setup.ProfileEditScreen
 import com.loosecannon.servicetag.ui.supplies.SupplyDetailScreen
+import com.loosecannon.servicetag.ui.supplies.SupplyEditScreen
 import com.loosecannon.servicetag.ui.supplies.SupplyListScreen
 import kotlinx.coroutines.flow.SharedFlow
 
@@ -582,6 +583,19 @@ fun ServiceTagRoot(
                         onEdit = { backStack.add(Route.SupplyEdit(it)) },
                         // A "Used by" row opens the real equipment's own screen, where its Supplies are edited (C33).
                         onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
+                    )
+                }
+                // #15 (C31): the editor. A new item opens on its own detail and the form leaves the stack, exactly as
+                // a new group does; an edit simply goes back to the detail it came from.
+                entry<Route.SupplyEdit> { key ->
+                    SupplyEditScreen(
+                        graph = graph,
+                        supplyId = key.id,
+                        onDone = { id ->
+                            backStack.removeLastOrNull()
+                            if (key.id == null) backStack.add(Route.SupplyDetail(id))
+                        },
+                        onBack = { backStack.removeLastOrNull() },
                     )
                 }
                 entry<Route.ReminderHealth> {

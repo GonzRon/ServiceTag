@@ -40,3 +40,12 @@ const val USED_BY_SECTION = "Used by"
 
 /** P15-11 — the detail, no applicability row (C30). */
 const val NOT_USED_BY_ANY_ASSET = "Not used by any asset"
+
+/** P15-7 — the editor's row button under the specification rows (C31; the "Add material" precedent). */
+const val ADD_SPECIFICATION = "Add specification"
+
+/** P15-8 — a specification row's close glyph, its accessibility label (C31; the "Remove material" precedent). */
+const val REMOVE_SPECIFICATION = "Remove specification"
+
+/** P15-12 — the editor, under the specification rows, after a save refused a row's label or value (C31). */
+const val SPECIFICATION_NEEDS_LABEL_AND_VALUE = "Each specification needs a label and a value."
