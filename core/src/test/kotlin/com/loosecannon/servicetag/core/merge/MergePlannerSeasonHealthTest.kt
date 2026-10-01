@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.core.merge
 import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
 import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
+import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSupplyRepository
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
@@ -127,15 +128,15 @@ class MergePlannerSeasonHealthTest {
     // --- order -----------------------------------------------------------------------------------
 
     /**
-     * Hazard: merge order. The twenty-two members are asserted as a list, the three 1.4 ones after
+     * Hazard: merge order. The twenty-three members are asserted as a list, the three 1.4 ones after
      * `REFERENCES`, #74's `CATEGORIES` appended after them (listed last, written first), #79's two
      * case tables after it, #72's loans after those and #77's transfer records last; and an
      * archive whose asset, schedule, facts and subject arrive together inserts every row, because
      * each owner is an INSERT of this same plan by the time its row is decided. #15 appends the
-     * supply items and their applicability after #86's successions.
+     * supply items and their applicability after #86's successions, and #47 the installed components after them.
      */
     @Test
-    fun theTwentyTwoTablesAreInTheirPinnedOrder() {
+    fun theTwentyThreeTablesAreInTheirPinnedOrder() {
         assertEquals(
             listOf(
                 MergeTable.ASSETS, MergeTable.GROUPS, MergeTable.DEFINITIONS, MergeTable.PROFILES,
@@ -148,6 +149,7 @@ class MergePlannerSeasonHealthTest {
                 MergeTable.TRANSFERS,
                 MergeTable.SUCCESSIONS,
                 MergeTable.SUPPLY_ITEMS, MergeTable.ASSET_SUPPLIES,
+                MergeTable.INSTALLED_COMPONENTS,
             ),
             MergeTable.entries.toList(),
         )
@@ -517,12 +519,14 @@ class MergePlannerSeasonHealthTest {
         val build = BuildBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
             references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow,
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(),
+            InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()), storage, uow,
         )
         val apply = ApplyBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
             references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow,
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(),
+            InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()), storage, uow,
             rebuildAll = { log += "rebuild" },
         )
         val bytes = archiveOf(

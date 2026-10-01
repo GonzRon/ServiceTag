@@ -375,9 +375,11 @@ class MergePlannerReferenceTest {
             MergeTable.TRANSFERS to report.transfers,
             // #86: the successions follow them.
             MergeTable.SUCCESSIONS to report.successions,
-            // #15: the supply items and their applicability close it.
+            // #15: the supply items and their applicability follow them.
             MergeTable.SUPPLY_ITEMS to report.supplyItems,
             MergeTable.ASSET_SUPPLIES to report.assetSupplies,
+            // #47: the installed components close it.
+            MergeTable.INSTALLED_COMPONENTS to report.installedComponents,
         )
         assertEquals(MergeTable.entries.toList(), byName.map { it.first })
         assertEquals(MergeTable.entries.map { plan.tally(it) }, byName.map { it.second })

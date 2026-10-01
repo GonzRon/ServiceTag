@@ -271,8 +271,10 @@ class MergePlannerMaintenanceTest {
                 MergeTable.TRANSFERS,
                 // #86 (format 15; `MergePlannerSuccessionTest`): appended after it, written after the assets and loans.
                 MergeTable.SUCCESSIONS,
-                // #15 (format 18; `MergePlannerSupplyTest`): appended last, though the items are decided before the profiles.
+                // #15 (format 18; `MergePlannerSupplyTest`): appended after it, though the items are decided before the profiles.
                 MergeTable.SUPPLY_ITEMS, MergeTable.ASSET_SUPPLIES,
+                // #47 (format 19; `MergePlannerInstalledComponentTest`): appended last, decided after the applicability rows.
+                MergeTable.INSTALLED_COMPONENTS,
             ),
             MergeTable.entries.toList(),
         )
