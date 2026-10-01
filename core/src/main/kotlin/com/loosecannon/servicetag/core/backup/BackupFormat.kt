@@ -22,6 +22,7 @@ import com.loosecannon.servicetag.core.model.CaseCoverage
 import com.loosecannon.servicetag.core.model.CaseStatus
 import com.loosecannon.servicetag.core.model.CaseType
 import com.loosecannon.servicetag.core.model.CompletionMode
+import com.loosecannon.servicetag.core.model.CompositionEntry
 import com.loosecannon.servicetag.core.model.ConsumableUsage
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
@@ -40,6 +41,8 @@ import com.loosecannon.servicetag.core.model.HealthDriver
 import com.loosecannon.servicetag.core.model.HealthSubject
 import com.loosecannon.servicetag.core.model.HealthSubjectId
 import com.loosecannon.servicetag.core.model.HealthSubjectKind
+import com.loosecannon.servicetag.core.model.InstalledComponent
+import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.LinkKind
@@ -662,6 +665,47 @@ data class AssetSupplyDto(
     val updatedAt: Long,
 )
 
+/**
+ * Format 19 (#47, C9; R47-2, R47-3, R47-8). One installed component: the `installed_component` table's columns, in
+ * column order, with no defaults — a format-19 row that omits one is corrupt — and its [composition] nested, as a
+ * SupplyItem's specifications are. [parentId] names a row of the same asset in the file; [replacesId] the removed
+ * row of the same asset and the same parent this one replaced; [supplyId] and every entry a SupplyItem in the file,
+ * archived or not. Every nullable key is written as an explicit null. The dates are ISO days; a null [installedOn]
+ * is a date not recorded and a null [removedOn] a current row.
+ */
+@Serializable
+data class InstalledComponentDto(
+    val id: String,
+    val assetId: String,
+    val parentId: String?,
+    val name: String,
+    val supplyId: String?,
+    val composition: List<CompositionEntryDto>,
+    val serialOrLot: String,
+    val installedOn: String?,
+    val removedOn: String?,
+    val replacesId: String?,
+    val sortOrder: Int,
+    val notes: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+/**
+ * Format 19 (#47, C9; R47-17a). One composition entry, a child row of its installed component: carries no component
+ * id, its owner is its position in the tree, as [SupplySpecificationDto] carries no `supplyId` of its owner. Its id
+ * is unique across every installed component in the file. [quantity] is how many of [supplyId] one unit is made of,
+ * in [unit] (`""` for none); nothing is counted, kept or used up by it.
+ */
+@Serializable
+data class CompositionEntryDto(
+    val id: String,
+    val supplyId: String,
+    val quantity: Double,
+    val unit: String,
+    val sortOrder: Int,
+)
+
 /** The canonical tables. Everything derived is rebuilt after an import. */
 @Serializable
 data class BackupData(
@@ -723,6 +767,12 @@ data class BackupData(
     val supplyItems: List<SupplyItemDto> = emptyList(),
     /** Format 18 (#15); the applicability rows, ordered by id. Empty on every format ≤17 archive, as [supplyItems]. */
     val assetSupplies: List<AssetSupplyDto> = emptyList(),
+    /**
+     * Format 19 (#47); the installed components, current and removed, ordered by id, each with its composition in
+     * `(sortOrder, id)` order. Empty on every format ≤18 archive, which never carries a **row** — the codec refuses
+     * one that does (an empty list is accepted).
+     */
+    val installedComponents: List<InstalledComponentDto> = emptyList(),
 )
 
 /** A decoded archive: what it claims about itself, and what it holds. */
@@ -1616,4 +1666,56 @@ fun AssetSupplyDto.toDomain(): AssetSupply = AssetSupply(
     role = role,
     createdAt = createdAt,
     updatedAt = updatedAt,
+)
+
+// --- format 19: installed components -------------------------------------------------------------
+
+fun InstalledComponent.toDto(): InstalledComponentDto = InstalledComponentDto(
+    id = id.value,
+    assetId = assetId.value,
+    parentId = parentId?.value,
+    name = name,
+    supplyId = supplyId?.value,
+    composition = composition.map { it.toDto() },
+    serialOrLot = serialOrLot,
+    installedOn = installedOn,
+    removedOn = removedOn,
+    replacesId = replacesId?.value,
+    sortOrder = sortOrder,
+    notes = notes,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+fun InstalledComponentDto.toDomain(): InstalledComponent = InstalledComponent(
+    id = InstalledComponentId(id),
+    assetId = AssetId(assetId),
+    parentId = parentId?.let(::InstalledComponentId),
+    name = name,
+    supplyId = supplyId?.let(::SupplyId),
+    composition = composition.map { it.toDomain() },
+    serialOrLot = serialOrLot,
+    installedOn = installedOn,
+    removedOn = removedOn,
+    replacesId = replacesId?.let(::InstalledComponentId),
+    sortOrder = sortOrder,
+    notes = notes,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+fun CompositionEntry.toDto(): CompositionEntryDto = CompositionEntryDto(
+    id = id,
+    supplyId = supplyId.value,
+    quantity = quantity,
+    unit = unit,
+    sortOrder = sortOrder,
+)
+
+fun CompositionEntryDto.toDomain(): CompositionEntry = CompositionEntry(
+    id = id,
+    supplyId = SupplyId(supplyId),
+    quantity = quantity,
+    unit = unit,
+    sortOrder = sortOrder,
 )
