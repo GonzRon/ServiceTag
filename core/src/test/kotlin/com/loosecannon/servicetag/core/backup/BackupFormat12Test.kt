@@ -67,8 +67,8 @@ class BackupFormat12Test {
         val tree = dataTreeOf(bytes)
         assertEquals(
             listOf("serviceCases", "serviceCaseEntries"),
-            tree.keys.toList().dropLast(5).takeLast(2),
-            "the two lists follow the categories, and format 13's loans, format 14's records, format 15's successions and format 18's two lists close data.json",
+            tree.keys.toList().dropLast(6).takeLast(2),
+            "the two lists follow the categories, and format 13's loans, format 14's records, format 15's successions, format 18's two lists and format 19's one close data.json",
         )
         assertTrue("closedOn" in tree.getValue("serviceCases").jsonArray.first().jsonObject, "an unset field is written, not left out")
     }

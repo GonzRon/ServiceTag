@@ -244,7 +244,7 @@ class Format7ImportIdentityTest {
 
         // The export is this build's: format 14 since #77 carries the transfer records beside #72's loans,
         // #79b's service cases, #79's warranty reminder lead, #67's document role, #74's categories and 1.4's rows.
-        assertEquals(18, report.formatVersion)
+        assertEquals(19, report.formatVersion)
         assertEquals(source.everything(), target.everything())
         val floor = target.schedules.all().single()
         assertEquals(dayMillis("2026-01-05"), floor.ruleChangedAt)

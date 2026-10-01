@@ -219,7 +219,7 @@ class BackupFormat7Test {
         // By position: format 8 appends its three tables after this one, format 9 one more, format 12 two,
         // format 13 one and format 14 one.
         assertEquals("assetReferences", tables[10])
-        assertEquals(22, tables.size)
+        assertEquals(23, tables.size)
         // and the tombstone is still its own list, neither bumped nor renamed (I-5)
         assertTrue("externalLinks" in tables)
     }
@@ -293,7 +293,7 @@ class BackupFormat7Test {
         val manifest = BackupCodec.decode(encoded(fixture())).manifest
 
         assertEquals(2, manifest.counts["assetReferences"])
-        assertEquals(29, manifest.counts.size)
+        assertEquals(31, manifest.counts.size)
         assertEquals(
             mapOf(
                 "assets" to 1, "nfcTags" to 0, "externalLinks" to 1,
@@ -319,6 +319,8 @@ class BackupFormat7Test {
                 "assetSuccessions" to 0,
                 // Format 18's three keys (#15), at zero here for the same reason.
                 "supplyItems" to 0, "supplySpecifications" to 0, "assetSupplies" to 0,
+                // Format 19's two keys (#47), at zero here for the same reason.
+                "installedComponents" to 0, "compositionEntries" to 0,
             ),
             manifest.counts,
         )

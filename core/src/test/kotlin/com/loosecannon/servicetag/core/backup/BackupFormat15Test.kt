@@ -45,12 +45,12 @@ class BackupFormat15Test {
 
         val decoded = BackupCodec.decode(bytes)
 
-        assertEquals(18, decoded.manifest.formatVersion)
+        assertEquals(19, decoded.manifest.formatVersion)
         assertEquals(listOf("s1", "s2"), decoded.data.assetSuccessions.map { it.id }, "sorted by id")
         assertEquals(listOf(second, first), decoded.data.assetSuccessions.map { it.toDomain() })
         val tree = dataTreeOf(bytes)
-        assertEquals("assetSuccessions", tree.keys.toList().dropLast(2).last(), "the list follows the records; format 18's two lists close data.json")
-        assertEquals("transferRecords", tree.keys.toList().dropLast(3).last(), "after #77's records")
+        assertEquals("assetSuccessions", tree.keys.toList().dropLast(3).last(), "the list follows the records; format 18's two lists and format 19's one close data.json")
+        assertEquals("transferRecords", tree.keys.toList().dropLast(4).last(), "after #77's records")
         val row = tree.getValue("assetSuccessions").jsonArray.first().jsonObject
         assertEquals(listOf("id", "predecessorAssetId", "successorAssetId", "replacedOn", "createdAt"), row.keys.toList())
     }
@@ -60,7 +60,7 @@ class BackupFormat15Test {
         val manifest = BackupCodec.decode(archiveOf(data(listOf(first, second)))).manifest
 
         assertEquals(2, manifest.counts["assetSuccessions"])
-        assertEquals(29, manifest.counts.size, "twenty-five through format 14, the successions, and format 18's three")
+        assertEquals(31, manifest.counts.size, "twenty-five through format 14, the successions, format 18's three and format 19's two")
         assertEquals(0, BackupCodec.decode(archiveOf(data())).manifest.counts["assetSuccessions"], "present at zero")
     }
 

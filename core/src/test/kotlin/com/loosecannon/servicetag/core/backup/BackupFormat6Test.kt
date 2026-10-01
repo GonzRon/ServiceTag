@@ -286,7 +286,7 @@ class BackupFormat6Test {
             listOf("maintenanceGroups", "maintenanceSchedules", "occurrenceClosures"),
             tables.subList(7, 10),
         )
-        assertEquals(22, tables.size)
+        assertEquals(23, tables.size)
         // and neither derived nor delivery state is a table of this format
         assertTrue(tables.none { it.startsWith("scheduleState") || it.startsWith("scheduleLocal") })
     }
@@ -357,7 +357,7 @@ class BackupFormat6Test {
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(unreadable)) }
 
         // What a 1.1.x build sees: 14 is greater than the 5 it supported, so its gate fires too.
-        assertEquals(18, BackupCodec.FORMAT_VERSION)
+        assertEquals(19, BackupCodec.FORMAT_VERSION)
         assertTrue(BackupCodec.FORMAT_VERSION > LAST_1_1_X_FORMAT)
     }
 
@@ -400,10 +400,12 @@ class BackupFormat6Test {
                 "assetSuccessions" to 0,
                 // Format 18's three keys (#15), at zero here for the same reason.
                 "supplyItems" to 0, "supplySpecifications" to 0, "assetSupplies" to 0,
+                // Format 19's two keys (#47), at zero here for the same reason.
+                "installedComponents" to 0, "compositionEntries" to 0,
             ),
             manifest.counts,
         )
-        assertEquals(29, manifest.counts.size)
+        assertEquals(31, manifest.counts.size)
     }
 
     // --- determinism -----------------------------------------------------------------------------

@@ -45,7 +45,7 @@ class ExportBackupSetTest {
 
         val decoded = BackupCodec.decode(install.export.run().data)
 
-        assertEquals(18, decoded.manifest.formatVersion)   // this build's export: format 18 since #15
+        assertEquals(19, decoded.manifest.formatVersion)   // this build's export: format 19 since #47
         assertEquals(rows, decoded.data.assetCategories.map { it.toDomain() })
         assertEquals(2, decoded.manifest.counts["assetCategories"])
     }

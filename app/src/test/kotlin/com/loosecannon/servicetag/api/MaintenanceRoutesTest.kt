@@ -1193,7 +1193,7 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(18, report.formatVersion)
+        assertEquals(19, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)
@@ -1528,7 +1528,7 @@ class MaintenanceRoutesTest {
      * (the succession table and the archive that carries the successions), and its B4 adds the `assetSuccessions`
      * count — none here; `SuccessionRoutesTest` counts appended ones.
      */
-    @Test fun statusReports18And18AndTheNewCounts() {
+    @Test fun statusReports19And19AndTheNewCounts() {
         val tub = createAsset("Hot tub")
         assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
         assertEquals(
@@ -1546,7 +1546,7 @@ class MaintenanceRoutesTest {
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
         assertEquals(19, status.schemaVersion)
-        assertEquals(18, status.backupFormatVersion)
+        assertEquals(19, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
         assertEquals(1, status.counts["healthSubjects"])
@@ -1577,11 +1577,11 @@ class MaintenanceRoutesTest {
     }
 
     /**
-     * Import-merge reads a **format-18** archive (this build's export) and reports **twenty-two** tables: the donor's
+     * Import-merge reads a **format-19** archive (this build's export) and reports **twenty-two** tables: the donor's
      * activation, condition and health subject each tally one INSERT on the wire, its two categories
      * (#74) two, and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
-    @Test fun importMergeReadsFormat18AndReportsTwentyTwoTables() {
+    @Test fun importMergeReadsFormat19AndReportsTwentyTwoTables() {
         val archive = donorArchive()
         fun post(path: String) = router().handle(
             ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
@@ -1593,7 +1593,7 @@ class MaintenanceRoutesTest {
         val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
         assertEquals(22, tallies.size)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(18, report.formatVersion)
+        assertEquals(19, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         val one = MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0)
         assertEquals(one, report.seasonActivations)
