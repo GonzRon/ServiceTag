@@ -207,6 +207,8 @@ suspend fun readSnapshot(repos: BackupRepositories): BackupData = with(repos) {
         // the export passes both lists to `retain`, which decides what a backup set carries (C10, C13).
         supplyItems = supplyItems.all().map { it.toDto() },
         assetSupplies = assetSupplies.all().map { it.toDto() },
+        // Format 19: every installed component, current and removed, each with its composition.
+        installedComponents = installedComponents.all().map { it.toDto() },
     )
 }
 

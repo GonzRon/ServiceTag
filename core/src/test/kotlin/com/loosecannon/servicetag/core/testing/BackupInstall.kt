@@ -48,7 +48,7 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
     val uow = FakeUnitOfWork(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions, supplyItems, assetSupplies,
+        successions, supplyItems, assetSupplies, installedComponents,
     )
 
     var rebuilds = 0

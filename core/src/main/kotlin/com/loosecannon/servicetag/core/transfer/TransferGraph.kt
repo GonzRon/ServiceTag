@@ -62,6 +62,7 @@ object TransferTables {
         // #15 (C13): a SupplyItem travels when a carried row names it, an applicability row with its asset.
         "supplyItems" to TransferTableClass.GLOBAL_IN_USE,
         "assetSupplies" to TransferTableClass.ASSET_OWNED,
+        "installedComponents" to TransferTableClass.ASSET_OWNED,
     )
 
     /** Whether any row of [table] can be in a pack. An unclassified list never travels. */
