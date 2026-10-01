@@ -423,7 +423,7 @@ internal fun CompletionRequest.toCommand() = CompletionCommand(
     tzId = tzId,
     notes = notes,
     values = values.mapKeys { (id, _) -> DefinitionId(id) },
-    consumables = consumables.map { ConsumableInput(it.name, it.quantity, it.unit) },
+    consumables = consumables.map { ConsumableInput(it.name, it.quantity, it.unit, supplyId = null) }, // B4b (C24): the request's link
     assetId = assetId?.let(::AssetId),
 )
 

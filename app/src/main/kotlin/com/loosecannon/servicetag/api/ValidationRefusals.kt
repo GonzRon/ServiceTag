@@ -90,6 +90,9 @@ internal fun eventRefusal(problem: FieldProblem): Refusal = when (problem) {
     )
     is FieldProblem.BadConsumable ->
         Refusal(EVENT_VALIDATION, "every consumable needs a name and a quantity of zero or more", "consumables")
+    // #15 (C2, C20; G2): a line's supplyId naming no SupplyItem, under the shipped family — no new code.
+    is FieldProblem.UnknownSupplyItem ->
+        Refusal(EVENT_VALIDATION, "every supplyId in consumables must name a supply item", "consumables")
 }
 
 private fun badReadingValue(): Refusal =
@@ -151,6 +154,9 @@ internal fun profileRefusal(problem: ProfileProblem): Refusal = when (problem) {
         "every consumable needs a name, and a defaultQuantity of zero or more when one is given",
         "consumables",
     )
+    // #15 (C2, C20; G2): the event arm's twin.
+    is ProfileProblem.UnknownSupplyItem ->
+        Refusal(PROFILE_VALIDATION, "every supplyId in consumables must name a supply item", "consumables")
 }
 
 // --- #79: the warranty reminder's family ------------------------------------------------------------

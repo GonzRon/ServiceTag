@@ -634,7 +634,7 @@ class EventEntryViewModel(
      */
     private fun List<ConsumableRow>.submitted(): List<Pair<Int, ConsumableInput>> = withIndex()
         .filterNot { (_, row) -> row.name.isBlank() && row.quantity.isBlank() && row.unit.isBlank() }
-        .map { (index, row) -> index to ConsumableInput(row.name, row.quantity, row.unit) }
+        .map { (index, row) -> index to ConsumableInput(row.name, row.quantity, row.unit, supplyId = null) } // B4b (C19): the row's link
 
     private companion object {
         const val TAG = "EventEntry"

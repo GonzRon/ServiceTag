@@ -383,7 +383,7 @@ internal fun SaveProfileRequest.toCommand() = ProfileCommand(
     defaultTitle = defaultTitle,
     fields = fields.map { ProfileFieldInput(DefinitionId(it.definitionId), it.required) },
     consumables = consumables.map {
-        ProfileConsumableInput(it.id, it.name, it.defaultQuantity, it.unit)
+        ProfileConsumableInput(it.id, it.name, it.defaultQuantity, it.unit, supplyId = null) // B4b (C24): the request's link
     },
 )
 
@@ -424,7 +424,7 @@ internal fun EventRequest.toCommand() = EventCommand(
     tzId = tzId,
     notes = notes,
     values = values.mapKeys { (id, _) -> DefinitionId(id) },
-    consumables = consumables.map { ConsumableInput(it.name, it.quantity, it.unit) },
+    consumables = consumables.map { ConsumableInput(it.name, it.quantity, it.unit, supplyId = null) }, // B4b (C24): the request's link
 )
 
 /**

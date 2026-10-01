@@ -775,7 +775,7 @@ class AppGraph(private val context: Context) {
     // choice: the Incident entry's Save in the combined flow (the Incident and its linked row in one
     // transaction, Workflow A) and "Mark down" / "Mark degraded" after a new Incident (Workflow B).
     val recordConditionWithIncident: RecordConditionWithIncident = RecordConditionWithIncident(
-        events, definitions, profiles, assets, uow, ids, clock, recomputeSchedules, conditions, today, recordCondition,
+        events, definitions, profiles, assets, supplyItems, uow, ids, clock, recomputeSchedules, conditions, today, recordCondition,
     )
     val acceptImpairmentOffer: AcceptImpairmentOffer = AcceptImpairmentOffer(conditions, recordCondition, uow)
     val saveHealthSubject: SaveHealthSubject =
@@ -827,9 +827,9 @@ class AppGraph(private val context: Context) {
 
     // Phase 2A — the maintenance journal.
     val logEvent: LogEvent =
-        LogEvent(events, definitions, profiles, assets, uow, ids, clock, recomputeSchedules)
+        LogEvent(events, definitions, profiles, assets, supplyItems, uow, ids, clock, recomputeSchedules)
     val updateEvent: UpdateEvent =
-        UpdateEvent(events, definitions, profiles, uow, ids, clock, recomputeSchedules)
+        UpdateEvent(events, definitions, profiles, supplyItems, uow, ids, clock, recomputeSchedules)
     val deleteEvent: DeleteEvent =
         DeleteEvent(events, attachments, attachmentStorage, uow, recomputeSchedules)
 
@@ -840,7 +840,7 @@ class AppGraph(private val context: Context) {
     val archiveDefinition: ArchiveDefinition = ArchiveDefinition(definitions, uow, clock)
     val deleteDefinition: DeleteDefinition = DeleteDefinition(definitions, events, profiles, uow)
     val reorderDefinitions: ReorderDefinitions = ReorderDefinitions(definitions, uow, clock)
-    val saveProfile: SaveProfile = SaveProfile(profiles, definitions, assets, uow, ids, clock)
+    val saveProfile: SaveProfile = SaveProfile(profiles, definitions, assets, supplyItems, uow, ids, clock)
     val archiveProfile: ArchiveProfile = ArchiveProfile(profiles, uow, clock)
     val deleteProfile: DeleteProfile = DeleteProfile(profiles, uow)
     val reorderProfiles: ReorderProfiles = ReorderProfiles(profiles, uow, clock)
@@ -857,7 +857,7 @@ class AppGraph(private val context: Context) {
     val repairScheduleProviders: RepairScheduleProviders =
         RepairScheduleProviders(schedules, assets, groups, transferRecords, uow, clock)
     val completeSchedule: CompleteSchedule =
-        CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recomputeSchedules)
+        CompleteSchedule(schedules, events, definitions, profiles, supplyItems, uow, ids, clock, recomputeSchedules)
     val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)
     val pauseSchedule: PauseSchedule = PauseSchedule(schedules, uow, recomputeSchedules)
     val archiveSchedule: ArchiveSchedule =
@@ -877,7 +877,7 @@ class AppGraph(private val context: Context) {
     )
     val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock)
     val completeGroupMembers: CompleteGroupMembers = CompleteGroupMembers(
-        schedules, groups, events, closures, definitions, profiles, uow, ids, clock, recomputeSchedules,
+        schedules, groups, events, closures, definitions, profiles, supplyItems, uow, ids, clock, recomputeSchedules,
     )
     val closeRound: CloseRound =
         CloseRound(schedules, closures, uow, ids, clock, today, recomputeSchedules)

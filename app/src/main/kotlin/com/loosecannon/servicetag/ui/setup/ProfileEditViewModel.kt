@@ -22,6 +22,7 @@ import com.loosecannon.servicetag.core.usecase.ProfileProblem
 import com.loosecannon.servicetag.core.usecase.ProfileValidation
 import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.supplies.SUPPLY_ITEM_GONE
 import com.loosecannon.servicetag.ui.journal.formatNumber
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -342,6 +343,7 @@ private fun ProfileEditState.command(assetId: AssetId, quantities: List<Double?>
             name = row.name,
             defaultQuantity = quantities[index],
             unit = row.unit,
+            supplyId = null, // B4b (C19): the row's link
         )
     },
 )
@@ -359,6 +361,8 @@ private fun Throwable?.asProblems(): Map<String, String> {
             is ProfileProblem.BadConsumable ->
                 ProfileForm.consumable(problem.index) to
                     "Needs a name, and a quantity of 0 or more"
+            // #15 (C20, C-2): the line's SupplyItem is gone — P15-20, reused verbatim.
+            is ProfileProblem.UnknownSupplyItem -> ProfileForm.consumable(problem.index) to SUPPLY_ITEM_GONE
         }
     }
 }

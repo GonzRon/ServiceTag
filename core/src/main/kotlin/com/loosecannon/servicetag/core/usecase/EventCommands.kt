@@ -13,16 +13,25 @@ import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.model.shapeMatches
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 
-/** One raw consumable line as typed on the event form; validated and snapshotted by [buildEvent]. */
-data class ConsumableInput(val name: String, val quantity: String, val unit: String)
+/**
+ * One raw consumable line as typed on the event form; validated and snapshotted by [buildEvent].
+ *
+ * #15 (C19, C20): [supplyId] is the SupplyItem this line used, or null for an unlinked line. It has no default, so
+ * every writer says which; [name] and [unit] stay the line's own readable snapshot. The identity sits only on a line
+ * that carries it: a minimal schedule completion sends no line, so it writes no material line and records no
+ * SupplyItem usage.
+ */
+data class ConsumableInput(val name: String, val quantity: String, val unit: String, val supplyId: SupplyId?)
 
 /**
  * The event form's raw input, before [buildEvent] turns it into a stored [AssetEvent]. Values are
@@ -66,6 +75,14 @@ sealed interface FieldProblem {
         override val definitionId: DefinitionId? = null
     }
     data class BadConsumable(val index: Int) : FieldProblem {
+        override val definitionId: DefinitionId? = null
+    }
+
+    /**
+     * #15 (C20): the line at [index] names a SupplyItem this phone does not hold. An archived one still resolves
+     * (R15-6), and nothing deletes a SupplyItem (R15-5), so only a race or a hand-made request lands here.
+     */
+    data class UnknownSupplyItem(val index: Int) : FieldProblem {
         override val definitionId: DefinitionId? = null
     }
 }
@@ -154,10 +171,17 @@ private fun parsedValue(definition: MeasurementDefinition, raw: String): Pair<Do
  * [existing] by definition id when there is a prior measurement for it, otherwise minted from
  * [ids] — for [UpdateEvent], that means a field new to this edit still gets a fresh id even
  * though the use case itself has no [IdGenerator] of its own (see [UpdateEvent]).
+ *
+ * #15 (C19, C20): each line stores the [ConsumableInput.supplyId] its input row carries, so a moved row keeps its own
+ * link even though line ids are reused by position. A link must name a SupplyItem in [supplyItems], archived or not
+ * (R15-6); one that does not is [FieldProblem.UnknownSupplyItem], collected beside [FieldProblem.BadConsumable]. A
+ * line's name and unit are never read from its SupplyItem. A minimal schedule completion sends no line, so nothing
+ * here records a SupplyItem usage for it.
  */
 internal suspend fun buildEvent(
     cmd: EventCommand,
     definitions: DefinitionRepository,
+    supplyItems: SupplyItemRepository,
     profile: EventProfile?,
     existing: AssetEvent?,
     ids: IdGenerator,
@@ -224,7 +248,7 @@ internal suspend fun buildEvent(
     val consumables = cmd.consumables.mapIndexedNotNull { i, input ->
         val name = input.name.trim()
         val quantity = input.quantity.trim().toDoubleOrNull()?.takeIf { it.isFinite() }
-        if (name.isBlank() || quantity == null || quantity < 0.0) {
+        val line = if (name.isBlank() || quantity == null || quantity < 0.0) {
             problems += FieldProblem.BadConsumable(i)
             null
         } else {
@@ -234,9 +258,12 @@ internal suspend fun buildEvent(
                 quantity = quantity,
                 unit = input.unit.trim(),
                 sortOrder = i,
-                supplyId = null,   // #15 placeholder (C19): the input carries the link (B4a)
+                supplyId = input.supplyId,
             )
         }
+        // A link resolves when the SupplyItem exists at all: an archived one is still the line's product.
+        input.supplyId?.let { if (supplyItems.get(it) == null) problems += FieldProblem.UnknownSupplyItem(i) }
+        line
     }
 
     if (problems.isNotEmpty()) throw EventValidation(problems)

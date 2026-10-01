@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.schedule.GroupOccurrence
@@ -53,6 +54,7 @@ class CompleteGroupMembers(
     private val closures: ClosureRepository,
     private val definitions: DefinitionRepository,
     private val profiles: ProfileRepository,
+    private val supplyItems: SupplyItemRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -143,6 +145,7 @@ class CompleteGroupMembers(
         val event = buildEvent(
             cmd = eventCmd,
             definitions = definitions,
+            supplyItems = supplyItems,
             profile = profile,
             existing = null,
             ids = ids,

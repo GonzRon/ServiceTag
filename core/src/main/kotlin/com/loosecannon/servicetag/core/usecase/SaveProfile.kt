@@ -11,6 +11,7 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -26,11 +27,17 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * a field keeps the id it already had for that definition, and a consumable keeps the id the
  * editor hands back in [ProfileConsumableInput.id] — but only when this profile already owns that
  * id. Everything else, including an id from some other profile, is minted fresh from [ids].
+ *
+ * #15 (C19, C20): each line stores the [ProfileConsumableInput.supplyId] it is given, and its name and unit stay
+ * its own readable snapshot. A link must name a SupplyItem [supplyItems] holds, archived or not (R15-6); one that
+ * does not is [ProfileProblem.UnknownSupplyItem], collected with the rest before any write. Nothing here reads a
+ * line's words from a SupplyItem, and no SupplyItem edit ever rewrites a stored line.
  */
 class SaveProfile(
     private val profiles: ProfileRepository,
     private val definitions: DefinitionRepository,
     private val assets: AssetRepository,
+    private val supplyItems: SupplyItemRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -82,7 +89,7 @@ class SaveProfile(
         val consumables = cmd.consumables.mapIndexedNotNull { i, input ->
             val consumableName = input.name.trim()
             val quantity = input.defaultQuantity
-            if (consumableName.isEmpty() || (quantity != null && (quantity < 0.0 || !quantity.isFinite()))) {
+            val line = if (consumableName.isEmpty() || (quantity != null && (quantity < 0.0 || !quantity.isFinite()))) {
                 problems += ProfileProblem.BadConsumable(i)
                 null
             } else {
@@ -94,9 +101,12 @@ class SaveProfile(
                     defaultQuantity = quantity,
                     unit = input.unit.trim(),
                     sortOrder = i,
-                    supplyId = null,   // #15 placeholder (C19): the input carries the link (B4a)
+                    supplyId = input.supplyId,
                 )
             }
+            // A link resolves when the SupplyItem exists at all: an archived one is still the line's product.
+            input.supplyId?.let { if (supplyItems.get(it) == null) problems += ProfileProblem.UnknownSupplyItem(i) }
+            line
         }
 
         if (problems.isNotEmpty()) throw ProfileValidation(problems)
