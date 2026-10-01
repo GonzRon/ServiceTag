@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.model.DocumentRole
+
 /**
  * Two outcomes and no exception, in the shape [AttachmentResult] already uses: every member of
  * [ReferenceProblem] is something a caller draws or maps to a status code, not something that has
@@ -23,10 +25,17 @@ data class AddReferenceCommand(
     val description: String = "",
     /** Set only after the person answered "Save this link?". The API and MCP never set it (§18.2). */
     val confirmedUnknownScheme: Boolean = false,
+    /** #91: set only by an owner's explicit pick; null is "no role", the shipped create. Never inferred. */
+    val role: DocumentRole? = null,
 )
 
-/** What the edit sheet can change. `uri`, `assetId` and `kind` are absent: I-1 and I-6. */
-data class UpdateReferenceCommand(val displayName: String, val description: String)
+/**
+ * What the edit sheet can change. `uri`, `assetId` and `kind` are absent: I-1 and I-6.
+ *
+ * `role` has **no default** (#91 C9, #67 C2's rule): a caller that forgot it would clear it, so a
+ * construction site that does not name one is a compile error rather than a silent clear.
+ */
+data class UpdateReferenceCommand(val displayName: String, val description: String, val role: DocumentRole?)
 
 /**
  * One thing wrong with a reference command. A **new** sealed interface and not a member of
@@ -56,4 +65,7 @@ sealed interface ReferenceProblem {
 
     /** The command says what the row already says, so nothing is written and `updated_at` holds. */
     data object Unchanged : ReferenceProblem
+
+    /** A role on a reference that is not a web link (R91-1). */
+    data object RoleNotAllowed : ReferenceProblem
 }

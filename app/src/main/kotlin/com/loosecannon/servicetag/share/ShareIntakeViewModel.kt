@@ -340,6 +340,8 @@ internal class ShareIntakeViewModel(
                 ReferenceProblem.OwnerMissing,
                 ReferenceProblem.NoSuchReference,
                 ReferenceProblem.Unchanged,
+                // #91 (R91-14): the intake never sends a role a link cannot take.
+                ReferenceProblem.RoleNotAllowed,
                 -> ownerGone()
             }
         }

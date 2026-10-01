@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.backup.AssetReferenceDto
+import com.loosecannon.servicetag.core.model.DocumentRole
 import kotlinx.serialization.Serializable
 
 /*
@@ -29,11 +30,15 @@ internal data class ReferenceResponse(val reference: AssetReferenceDto)
 // --- requests -----------------------------------------------------------------------------------
 
 /**
- * `POST /v1/references`. Four fields, and **no `kind`** (owner ruling, master plan §18.18): it is
+ * `POST /v1/references`. Five fields, and **no `kind`** (owner ruling, master plan §18.18): it is
  * derived from the scheme (spec §3.2), so nothing in the domain can hold a caller's answer, and a
  * field the server accepted and then discarded would read as settable and never take effect. With
  * `ignoreUnknownKeys = false` a body carrying `kind` is therefore a **400 naming it**, exactly as
  * any other misspelled field is.
+ *
+ * `role` (#91, R91-1) is typed, so a name that is not a `DocumentRole` is the decoder's 400; absent
+ * or `null` is no role. On a create there is nothing to keep, so its `null` and its absence are one
+ * — unlike the PATCH, where `role: null` clears ([UpdateReferenceRequest]).
  */
 @Serializable
 internal data class CreateReferenceRequest(
@@ -41,20 +46,27 @@ internal data class CreateReferenceRequest(
     val uri: String,
     val displayName: String,
     val description: String = "",
+    val role: DocumentRole? = null,
 )
 
 /**
- * `PATCH /v1/references/{id}`. Two fields, and `uri`, `assetId` and `kind` are each an **unknown
+ * `PATCH /v1/references/{id}`. Three fields, and `uri`, `assetId` and `kind` are each an **unknown
  * field** here, so naming one is a 400 and never a silent ignore: the URI is stored exactly as it
  * was validated and is never edited (I-1), and a reference cannot change owner — re-parenting is
  * delete plus re-add (I-6). `UpdateReferenceCommand` carries neither, so neither is expressible
  * below this type either.
  *
- * `null` means **unchanged**, the shipped convention: the handler reads the stored row and
- * overlays only the fields the caller actually named. Blanking the description is `""`.
+ * For `displayName` and `description`, `null` means **unchanged**, the shipped convention: the
+ * handler reads the stored row and overlays only the fields the caller actually named. Blanking
+ * the description is `""`.
+ *
+ * **`role` is the one key whose `null` is a value** (#91, R91-3): absent leaves the stored role,
+ * `null` clears it, a `DocumentRole` name sets it. A decoded `null` cannot tell those two apart, so
+ * the handler reads the raw object for the key's presence (`ReferenceHandlers.update`).
  */
 @Serializable
 internal data class UpdateReferenceRequest(
     val displayName: String? = null,
     val description: String? = null,
+    val role: DocumentRole? = null,
 )

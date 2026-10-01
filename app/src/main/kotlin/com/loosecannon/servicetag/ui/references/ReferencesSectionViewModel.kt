@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.fetch.HopPolicy
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
@@ -54,6 +55,8 @@ data class ReferenceRowState(
     val materializable: Boolean = false,
     /** #85 (C20, R85-1, R85-3): derived, never stored — an attachment on this asset has this URI as its source. */
     val savedAsDocument: Boolean = false,
+    /** #91 (C15): the stored role, so the edit sheet keeps it on a rename. Nothing draws it yet. */
+    val role: DocumentRole? = null,
 )
 
 data class ReferencesSectionState(
@@ -248,13 +251,16 @@ class ReferencesSectionViewModel(
             policy.classify(reference.uri) != LinkDecision.Blocked &&
             hops.staticProblem(reference.uri) == null,
         savedAsDocument = reference.uri in sourced,
+        role = reference.role,
     )
 
     /**
-     * One ratified line per refusal (§10). Four of the nine say nothing on this surface:
+     * One ratified line per refusal (§10). Five of the ten say nothing on this surface:
      * `UnknownSchemeNeedsConfirmation` is a question and is asked as one; `Unchanged` simply
-     * closes the sheet; and `OwnerMissing` and `NoSuchReference` mean the screen is looking at
-     * something that has gone, for which §10 ratifies no sentence and this brief may invent none.
+     * closes the sheet; `OwnerMissing` and `NoSuchReference` mean the screen is looking at
+     * something that has gone, for which §10 ratifies no sentence and this brief may invent none;
+     * and `RoleNotAllowed` (#91, R91-14) is unreachable here, because the sheets never send a role
+     * a link cannot take.
      */
     private fun say(problem: ReferenceProblem) {
         val line = when (problem) {
@@ -267,6 +273,7 @@ class ReferencesSectionViewModel(
             ReferenceProblem.Unchanged -> return
             ReferenceProblem.OwnerMissing -> return
             ReferenceProblem.NoSuchReference -> return
+            ReferenceProblem.RoleNotAllowed -> return
         }
         _messages.tryEmit(line)
     }

@@ -52,7 +52,7 @@ internal fun ReferenceEditSheet(
             SheetButtons(
                 onCancel = onDismiss,
                 onSave = {
-                    onSave(UpdateReferenceCommand(displayName = name, description = description))
+                    onSave(UpdateReferenceCommand(displayName = name, description = description, role = row.role))
                 },
             )
         }
