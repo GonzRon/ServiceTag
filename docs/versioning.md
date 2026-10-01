@@ -19,6 +19,7 @@ Rules:
 - Android's `versionCode` is independent: a monotonically increasing integer, +1 on every released APK whatever the `versionName` bump. It is never reset — a smaller code cannot install over a larger one without an uninstall.
 - A release is the tag `servicetag-v<versionName>` on the exact green commit; the release workflow refuses to publish when the APK's `versionName` differs from the tag.
 - A **forward-only** backup-format bump — where the new app reads every older archive and an older app safely refuses a newer one rather than dropping rows — is a **MINOR**. A change that makes the app unable to read data it previously could is a **MAJOR**.
+- A forward-only Room schema and backup-format bump may land on master with no version bump and no release, validated on the emulator; until a release carries it, master builds keep the last released `versionName` and go on the emulator only, never on a phone, and which release carries it and when a phone gets it are separate decisions (the practice since #67, recorded by #91).
 - Released versions are never renamed or re-cut.
 
 History:

@@ -466,6 +466,17 @@ carry no role: a reference has no column for one, and the view model does not ta
 path. The screen stays stateless (a new `onRole` callback beside `onKind`). Nothing in §3.3 (I-3, I-8,
 I-9) or §4 changes: the lift, the scheme policy and the stream, grant and security rules are untouched.
 
+**Amendment (#91, owner ruling R91-4, 2026-09-30), amending R67-9 above for web links.** A reference now
+has a column for a role (Room schema 17), so a **web-link share** — a shared link whose scheme is `http` or
+`https`, read once from the shared URI by the same `ReferenceKinds.inferFrom` the save uses — draws the
+same **Role** section directly under Description (a link share has no Type control): the "Role" header
+over the four chips in the same order, "No role" chosen until the person picks. The chosen role reaches
+`AddReferenceCommand.role` and is stored on the one reference row the save writes. A note-link share, a
+link with an unfamiliar scheme and a note share still draw no Role section and carry no role; the byte
+path is unchanged. The role is only ever the person's pick: a shared title such as "Service manual"
+prefills Name and never a role. The screen stays stateless and reuses `onRole`; the view model decides
+whether the section is drawn. Nothing else in R67-9, §3.3 or §4 changes.
+
 ---
 
 ## 8. Hazards and test matrix (hazard classes, not permutations)
