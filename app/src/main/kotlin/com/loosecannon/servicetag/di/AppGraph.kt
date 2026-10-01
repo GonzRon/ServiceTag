@@ -138,6 +138,7 @@ import com.loosecannon.servicetag.core.usecase.SaveAssetSettings
 import com.loosecannon.servicetag.core.usecase.SaveHealthSubject
 import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.core.usecase.ReplaceAsset
+import com.loosecannon.servicetag.core.usecase.ReplaceInstalledComponent
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.SaveSupplyItem
 import com.loosecannon.servicetag.core.usecase.SetHealthPolicy
@@ -150,6 +151,7 @@ import com.loosecannon.servicetag.core.usecase.UpdateAssetSupply
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
+import com.loosecannon.servicetag.core.usecase.UpdateInstalledComponent
 import com.loosecannon.servicetag.core.usecase.UpdateLoan
 import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.data.room.AppDatabase
@@ -606,6 +608,15 @@ class AppGraph(private val context: Context) {
         InstallComponent(assets, supplyItems, installedComponents, uow, ids, clock, today)
     val removeInstalledComponent: RemoveInstalledComponent =
         RemoveInstalledComponent(installedComponents, uow, clock, today)
+
+    /**
+     * #47 (C18, C19): replacing an installed component and correcting one, over the same guarded port and catalog. The
+     * last of the four; nothing deletes one.
+     */
+    val replaceInstalledComponent: ReplaceInstalledComponent =
+        ReplaceInstalledComponent(supplyItems, installedComponents, uow, ids, clock, today)
+    val updateInstalledComponent: UpdateInstalledComponent =
+        UpdateInstalledComponent(supplyItems, installedComponents, uow, ids, clock, today)
 
     /**
      * #85 (C19; R85-7, R85-8, R85-10, R85-11) — Save as document: the one network-reaching object in the graph,

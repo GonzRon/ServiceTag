@@ -102,6 +102,7 @@ import com.loosecannon.servicetag.core.usecase.SaveHealthSubject
 import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.core.usecase.ReplaceAsset
+import com.loosecannon.servicetag.core.usecase.ReplaceInstalledComponent
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
 import com.loosecannon.servicetag.core.usecase.SaveSupplyItem
@@ -113,6 +114,7 @@ import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAssetSupply
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
+import com.loosecannon.servicetag.core.usecase.UpdateInstalledComponent
 import com.loosecannon.servicetag.core.usecase.UpdateLoan
 import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.data.room.AppDatabase
@@ -592,6 +594,12 @@ class FakeGraph(
         InstallComponent(assets, supplyItems, installedComponents, uow, ids, clock, todayPort)
     val removeInstalledComponent: RemoveInstalledComponent =
         RemoveInstalledComponent(installedComponents, uow, clock, todayPort)
+
+    /** #47 (C18, C19): replace and edit, from exactly the members `AppGraph` builds them from. */
+    val replaceInstalledComponent: ReplaceInstalledComponent =
+        ReplaceInstalledComponent(supplyItems, installedComponents, uow, ids, clock, todayPort)
+    val updateInstalledComponent: UpdateInstalledComponent =
+        UpdateInstalledComponent(supplyItems, installedComponents, uow, ids, clock, todayPort)
 
     /**
      * 1.4 — the offers an event makes (spec §3.3, §5.4): "Mark operational?" and the season offer,
