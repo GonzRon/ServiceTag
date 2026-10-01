@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.api.maintenanceHandlersFor
 import com.loosecannon.servicetag.api.referenceHandlersFor
 import com.loosecannon.servicetag.api.seasonHealthHandlersFor
 import com.loosecannon.servicetag.api.serviceCaseHandlersFor
+import com.loosecannon.servicetag.api.supplyHandlersFor
 import com.loosecannon.servicetag.api.warrantyHandlersFor
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.IOException
@@ -58,6 +59,7 @@ class DeveloperApiViewModelTest {
         loanHandlersFor(graph),
         attachmentHandlersFor(graph),
         replaceHandlersFor(graph),
+        supplyHandlersFor(graph),
         appVersion = "1.1.0",
         schemaVersion = 5,
     )

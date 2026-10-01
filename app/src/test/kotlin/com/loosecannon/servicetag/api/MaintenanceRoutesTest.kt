@@ -101,6 +101,7 @@ class MaintenanceRoutesTest {
             loanHandlersFor(graph),
             attachmentHandlersFor(graph),
             replaceHandlersFor(graph),
+            supplyHandlersFor(graph),
             appVersion = "1.2.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),

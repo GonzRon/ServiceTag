@@ -144,6 +144,18 @@ internal fun attachmentHandlersFor(graph: FakeGraph): AttachmentHandlers = Attac
 /** #92's replace triad over a [FakeGraph]: the fake graph's own `ReplaceAsset`, as `AppGraph`'s. */
 internal fun replaceHandlersFor(graph: FakeGraph): ReplaceHandlers = ReplaceHandlers(replaceAsset = graph.replaceAsset)
 
+/** #15's SupplyItem and applicability rows over a [FakeGraph]: the fake graph's own repositories and use cases. */
+internal fun supplyHandlersFor(graph: FakeGraph): SupplyHandlers = SupplyHandlers(
+    supplyItems = graph.supplyItems,
+    assetSupplies = graph.assetSupplies,
+    assets = graph.assets,
+    saveSupplyItem = graph.saveSupplyItem,
+    archiveSupplyItem = graph.archiveSupplyItem,
+    addAssetSupply = graph.addAssetSupply,
+    updateAssetSupply = graph.updateAssetSupply,
+    removeAssetSupply = graph.removeAssetSupply,
+)
+
 /**
  * 1.4 (B09): one `/v1` client over a [FakeGraph] for the new suites — the production router, the
  * production handlers (every collaborator above) and the production serializers, exactly as
@@ -166,6 +178,7 @@ internal class V1Client(val graph: FakeGraph, private val token: String = "ABCD2
             loanHandlersFor(graph),
             attachmentHandlersFor(graph),
             replaceHandlersFor(graph),
+            supplyHandlersFor(graph),
             appVersion = "1.4.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),

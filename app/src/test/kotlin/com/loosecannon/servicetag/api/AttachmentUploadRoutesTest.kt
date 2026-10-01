@@ -125,6 +125,7 @@ class AttachmentUploadRoutesTest {
             loanHandlersFor(graph),
             attachmentRoutes,
             replaceHandlersFor(graph),
+            supplyHandlersFor(graph),
             appVersion = "1.4.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
