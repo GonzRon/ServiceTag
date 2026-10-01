@@ -171,9 +171,12 @@ private fun IntakeForm(
                 )
             }
         }
+    }
 
-        // #67 (R67-9): the same canonical role the edit sheet sets, on the byte path only — a
-        // reference has no column for one.
+    // #67 (R67-9), amended by #91 (R91-4): the same canonical role the edit sheet sets, on a byte
+    // share (after Type) and on a web-link share (after Description); a note link, an unfamiliar
+    // scheme and a note take none. The view model decides; the screen only reads `roleOffered`.
+    if (state.roleOffered) {
         SectionHeader(title = IntakeStrings.ROLE)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
