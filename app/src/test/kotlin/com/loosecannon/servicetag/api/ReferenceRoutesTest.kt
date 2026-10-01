@@ -726,7 +726,8 @@ class ReferenceRoutesTest {
         // range 1–14 — with no route, so the sub-resources stayed twenty — and #86's format 15 made the report
         // twenty tables, the range 1–15 and its succession read the twenty-first, and #85's format 16
         // moved the range to 1–16 (no route, no table); #92's attachment list and the replace offer, plan and apply
-        // made the sub-resources twenty-five (no table). These pins moved with the document.
+        // made the sub-resources twenty-five (no table), and #91's format 17 moved the range to 1–17 (no route,
+        // no table). These pins moved with the document.
         assertFalse(
             "the merge report is twenty tables now",
             listOf("eleven", "fourteen", "fifteen", "seventeen", "eighteen", "nineteen").any { "$it tables" in text },
@@ -734,17 +735,19 @@ class ReferenceRoutesTest {
         assertTrue("the merge report must say twenty tables", "twenty tables" in text)
         // The bare string, both sites: the document spells the emphasis two ways, and a pattern
         // pinned to one asterisk placement would leave the other stale and still report clean.
-        assertFalse("the import endpoints read format 1–16 now", "1–7" in text || "1–8" in text || "1–9" in text)
-        // "1–10" … "1–14" only in their two emphasis spellings, because a bare "1–10" is also the
+        assertFalse("the import endpoints read format 1–17 now", "1–7" in text || "1–8" in text || "1–9" in text)
+        // "1–10" … "1–16" only in their two emphasis spellings, because a bare "1–10" is also the
         // health weight's range.
         assertFalse(
-            "the import endpoints read format 1–16 now",
-            listOf("1–10", "1–11", "1–12", "1–13", "1–14", "1–15").any { "format **$it**" in text || "**format $it**" in text },
+            "the import endpoints read format 1–17 now",
+            listOf("1–10", "1–11", "1–12", "1–13", "1–14", "1–15", "1–16").any {
+                "format **$it**" in text || "**format $it**" in text
+            },
         )
         // Both emphasis spellings.
         assertTrue(
-            "the import endpoints must say 1–16",
-            "format **1–16**" in text && "**format 1–16**" in text,
+            "the import endpoints must say 1–17",
+            "format **1–17**" in text && "**format 1–17**" in text,
         )
 
         assertFalse(
@@ -780,11 +783,19 @@ class ReferenceRoutesTest {
             """^\| 422 \| `REFERENCE_URI_INVALID` \|""",
             """^\| 422 \| `REFERENCE_SCHEME_BLOCKED` \|""",
             """^\| 409 \| `REFERENCE_URI_TAKEN` \|""",
+            // #91 (C2, C-3a): the role refusal, in the table's own `| status | code | when |` shape.
+            """^\| 422 \| `REFERENCE_ROLE_NOT_ALLOWED` \|""",
         )) {
             assertTrue(
                 "docs/api/v1.md is missing a row matching $row",
                 Regex(row, RegexOption.MULTILINE).containsMatchIn(text),
             )
         }
+        // The table has no `field` column, so the role row's "when" cell names the one key it answers about.
+        assertTrue(
+            "the REFERENCE_ROLE_NOT_ALLOWED row must name `field` `role`",
+            Regex("""^\| 422 \| `REFERENCE_ROLE_NOT_ALLOWED` \|.*`field` `role`""", RegexOption.MULTILINE)
+                .containsMatchIn(text),
+        )
     }
 }
