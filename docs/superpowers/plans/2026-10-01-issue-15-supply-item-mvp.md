@@ -1,4 +1,19 @@
-# #15 — the SupplyItem MVP: identity, generic specifications, Asset applicability and usage linkage: plan and briefs (rev 1.1, 2026-10-01)
+# #15 — the SupplyItem MVP: identity, generic specifications, Asset applicability and usage linkage: plan and briefs (rev 1.2, 2026-10-01)
+
+> **Rev 1.2 (2026-10-01)** folds in the independent plan review (`.superpowers/sdd/2026-10-01-issue-15/plan-review.md`,
+> APPROVE WITH CONDITIONS) and the owner's last rulings. **Owner:** R15-15 DECIDED as recommended (limit 7 cites
+> #97 [LATER], non-blocking; §6); **§5 RATIFIED whole** (P15-1…23 with "Part number", the reused strings, G1–G3, D1);
+> every R15 ruling is now DECIDED (§6). **Conditions:** C-1 constructor plumbing → §4's B2a/B2b/B2c/B4a/B4b/B5/B8
+> rows, C11, C20, C33, "Briefs — common", and B4 **split by plan** into B4a + B4b (§14); C-2 the three exhaustive
+> `when`s → C20 (B4a; P15-20 reused verbatim, no P15-24), row 40, §5; C-3 the planning position → C11, rows 18–19;
+> C-4 the return → C13 (`ReturnScope`), row 67, B2c; C-5 the duplicate hint **dropped** → C11, limit 4a, R15-7, §7,
+> B2b; C-6 the word-anchored, tip-vs-base tripwire → C37.2, row 39 renamed, C19, B1; C-7 the clearing rule → C3, C22,
+> C25, C26, rows 47 and 54. **Notes:** N-1 → §7, B1; N-2 → C19, §7, B2a, B4a/B4b; N-3 → B7; N-4 → the pins table, rows
+> 57, B2b, B5, B6; N-5 → C7; N-6 → C14, B2c; N-7 → C27, row 56; N-8 → C11, row 17; N-9 → C16, C20; N-10 → row 30;
+> N-11 → C36; N-12 → §3's known cost. **Concerns:** limit 4 now states its consequence and is for the owner's eye;
+> the "Supplies" / "Components" adjacency is flagged in C33; the B5 ∥ B7 disjointness holds because every `AppGraph`
+> and `FakeGraph` edit lands in B1–B4a (§4). Fourteen dispatches: B1, B2a, B2b, B2c, B3, B4a, B4b, B5 ∥ (B7a → B7b),
+> B6, B8a, B8b, B9.
 
 > **Rev 1.1 (2026-10-01)** folds in the owner's rulings of 2026-10-01, recorded on issues #15 and #76. **DECIDED:**
 > R15-0 (1.6.0 is cut now from the schema-17 line; #15 targets **1.7.0 / schema 18 / format 18** and does not merge
@@ -25,18 +40,18 @@
 > preserved; **#15 targets 1.7.0 at schema 18 / format 18** and proceeds in parallel on its own branch, and **#15 does
 > not merge to master before the 1.6.0 tag**. #15 lands Room schema 18 / backup format 18 **with no version bump and no
 > release of its own**, validated on the emulator only (the R67-10 / R91-11 practice, `docs/versioning.md:22`), and
-> owes a schema-18 paragraph in `docs/release-proofs.md` (C36). The rulings' state is §6's (one OPEN: R15-15).
+> owes a schema-18 paragraph in `docs/release-proofs.md` (C36). Every ruling is DECIDED (§6).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development under the review budget.
 > **Ledger:** `.superpowers/sdd/2026-10-01-issue-15/progress.md` (the controller's; implementers never write it).
 > **Audit (inventory of record):** `.superpowers/sdd/2026-10-01-issue-15/audit.md`, every citation read on `fac0e951`;
 > three sites are cited approximately (`~`) and **B2a / B2b confirm them before writing** (C10, C11). **Ten briefs on
-> one branch `issue-15`**, three of them split at dispatch by their estimates (B2b → B2b + B2c, B7 → B7a + B7b, B8 →
-> B8a + B8b): B1, B2a, B2b, B2c, B3, B4, then **B5 ∥ (B7a → B7b)**, then B6, B8a, B8b, B9 — each `<base>` the
+> one branch `issue-15`**, four of them split by plan (B2b → B2b + B2c, B4 → B4a + B4b, B7 → B7a + B7b, B8 → B8a +
+> B8b): B1, B2a, B2b, B2c, B3, B4a, B4b, then **B5 ∥ (B7a → B7b)**, then B6, B8a, B8b, B9 — each `<base>` the
 > previous accepted tip; **B1's `<base>` is master at dispatch** (today `fac0e951`: 1.5.0 / code 18, Room
 > schema 17 / backup format 17, MCP 76 tools, gitlink `7e0377a`) plus this plan's commit. The audit's ten briefs are
-> kept by name and content, with two moves: the request-line link keys and the view models' row state join B4 (so one
-> brief closes every full-replace writer, audit §0.8), and the AC11 end-to-end fixture moves from B3 to B4 (the first
+> kept by name and content, with two moves: the request-line link keys and the view models' row state join B4b (so one
+> brief closes every full-replace writer, audit §0.8), and the AC11 end-to-end fixture moves from B3 to B4b (the first
 > brief where every piece exists). One task review each, at most one bounded fix round each, one whole-branch review,
 > the merge, one merged-tip gate.
 
@@ -157,7 +172,8 @@ references are #69." #15 adds no `AttachmentOwner` member and no `supply_id` own
 of any kind (AC2 keeps a pack and its cell as two unrelated rows); a role catalog table or enum (R15-3); notes on an
 applicability row (R15-3); #86's replace copying applicability (R15-15); a schedule naming a SupplyItem (#96); a
 "where used" list of events per SupplyItem; search inside the SupplyItem picker; a `command-shapes.json` entry
-(R15-16); a version bump or release (R15-0: 1.7.0 is cut later, by its own release work); renaming the shipped "Components" (child Assets) words (#47's).
+(R15-16); a SupplyItem duplicate hint (C-5, limit 4a); a version bump or release (R15-0: 1.7.0 is cut
+later, by its own release work); renaming the shipped "Components" (child Assets) words (#47's).
 
 **Recorded limits (stated, not fixed):**
 1. **A pre-#15 client clears links it does not carry (Q12, R15-12).** A pre-#15 MCP's `save_profile` edit rebuilds
@@ -175,13 +191,19 @@ applicability row (R15-3); #86's replace copying applicability (R15-15); a sched
    and no link: a format-17 export then re-plans that row `CONFLICT`, because C12's exception applies only while a line
    here carries a link (#91's limit 1, mirrored).
 4. **A SupplyItem edited on two phones under one id is a `CONFLICT`** that refuses the whole archive — and the whole
-   Transfer Pack (R15-7). The duplicate hint (C11) only flags two ids that look alike.
+   Transfer Pack (R15-7): a SupplyItem edited on the borrowing phone refuses the **whole return pack**, and the person
+   sees a plain `CONFLICT` naming that SupplyItem, with no surface that shows the difference or reconciles it (the
+   review's concern; the owner is told at the gate).
+4a. **No duplicate hint for SupplyItems (C-5).** Two ids for the same product (same manufacturer and part number)
+   both insert silently; the shipped hint carrier is asset-typed (`DuplicateCandidate`, `C/merge/MergePlan.kt:371-376`),
+   and a typed SupplyItem carrier is a later issue.
 5. **A format-18 archive or Transfer Pack is refused by every schema-17 build** (1.5.0 and 1.6.0 included) as a newer format —
    forward-only, MINOR by `docs/versioning.md`.
 6. **The MCP refuses supply tools, and any material line carrying a link, for a phone below schema 18 locally**
    (C27); a hand-made request to such a phone gets that phone's strict 400 for the unknown key.
-7. **#86's replace clones quick actions with their links but not the Asset's applicability** (R15-15): the successor
-   starts with no Supplies rows.
+7. **#86's replace clones quick actions with their links but not the Asset's applicability** (R15-15, DECIDED): the
+   successor starts with no Supplies rows; **#97 [LATER]** (filed, non-blocking) may add applicability to #86's
+   reviewed carry-forward.
 8. **A linked line looks like any other line on event detail and the journal row** (R15-8): the snapshot `name` is the
    readable fact; the link is drawn on the two editors (C34, C35) and returned over the API.
 9. **Role uniqueness is exact on the cleaned text** (R15-3): "Oil filter" and "oil filter" are two roles.
@@ -233,7 +255,7 @@ applicability row (R15-3); #86's replace copying applicability (R15-15); a sched
 | `GET /v1/supply-items` | `{supplyItems: [SupplyItemDto]}`, archived included, in `(name casefolded, id)` order |
 | `POST /v1/supply-items` | body `{name, category?, manufacturer?, model?, partNumber?, preferredUnit?, notes?, specifications?: [{id?, key?, label, value, unit?}]}`; absent text = `""`, absent list = none → 201 `{supplyItem}` |
 | `GET /v1/supply-items/{id}` | `{supplyItem, assetSupplies: [AssetSupplyDto]}` — every applicability row naming it, in `(assetId, role, id)` order |
-| `PATCH /v1/supply-items/{id}` | the same keys, **every one optional; absent or `null` = unchanged** (#91's shipped "null = unchanged" for non-nullable text); `specifications` given = the whole ordered list (a row sent with its `id` keeps its id and stored key unless a key is typed) → 200 `{supplyItem}` (R15-16) |
+| `PATCH /v1/supply-items/{id}` | the same keys, **every one optional; absent or `null` = unchanged** (#91's shipped "null = unchanged" for non-nullable text); **a given `""` clears** an optional text field (`category`, `manufacturer`, `model`, `partNumber`, `preferredUnit`, `notes`: trimmed, stored empty); `name` can never be blank (`""` → 422 `SUPPLY_ITEM_NAME_REQUIRED`); `specifications` given = the whole ordered list, **`[]` empties it** (a row sent with its `id` keeps its id and stored key unless a key is typed) → 200 `{supplyItem}` (R15-16, C-7) |
 | `POST /v1/supply-items/{id}/archive` | `{archived: Boolean}` (the shared `ArchiveRequest`, `A/api/ApiDtos.kt:304-306`) → 200 `{supplyItem}` |
 | `GET /v1/assets/{id}/supply-items` | the 26th asset sub-resource: `{assetSupplies: [AssetSupplyDto], supplyItems: [SupplyItemDto]}` — the asset's rows, and each SupplyItem they name once |
 | `POST /v1/asset-supplies` | `{assetId, supplyId, role}` → 201 `{assetSupply}` |
@@ -250,7 +272,8 @@ applicability row (R15-3); #86's replace copying applicability (R15-15); a sched
   the other ids in `Ids.kt:3-34`):
 
   ```kotlin
-  @JvmInline value class SupplyId(val value: String)
+  @JvmInline
+  value class SupplyId(val value: String)
 
   data class SupplyItem(                       // aggregate root; saved and loaded with its specifications
       val id: SupplyId, val name: String,
@@ -301,8 +324,9 @@ applicability row (R15-3); #86's replace copying applicability (R15-15); a sched
   (`Migration10To11Test.kt:101`, `Migration11To12Test.kt:167`, `Migration12To13Test.kt:150`,
   `Migration13To14Test.kt:109`, `Migration14To15Test.kt:114`, `ReferenceMigrationTest.kt:104-105`) gain the three
   tables; `ReferenceMigrationTest.kt:73-79`'s whole-row comparison (it seeds both line tables, `:169`, `:209`) gains a
-  V18 arm treating `supply_id` (NULL) as a known delta. `MaintenanceMigrationTest.kt:~71-77` and
-  `Migration8To9Test.kt:36-41` hold (audit §2.6: own columns only; no consumable row seeded) and are re-run, not edited.
+  V18 arm treating `supply_id` (NULL) as a known delta. `MaintenanceMigrationTest.kt:71-77` holds because it compares only
+  the columns each row had before (it does seed line rows, `:150-168`), and `Migration8To9Test.kt:36-41` seeds no line
+  row; both are re-run, not edited.
 
 ### B2a — backup format 18 (C8–C10)
 
@@ -353,26 +377,38 @@ applicability row (R15-3); #86's replace copying applicability (R15-15); a sched
     `IDENTICAL` when the ordered DTO equals the local one; `CONFLICT CONTENT_DIFFERS` when not; otherwise
     `CHILD_ROW_ID_TAKEN` when a specification id is held by another SupplyItem here or claimed earlier in this plan
     (the profile pattern, `:507-546`); else `INSERT`. Archived state is a field like any other.
+  - **The planning position (C-3).** `mergePlanOf` plans tables in code order with `accepted*` sets
+    (`MergePlanner.kt:236-1160`). **The SupplyItem section is planned before the profiles section (`:507`) and so
+    before events (`:716`)**, after the definitions (`:505`); the applicability section follows it (assets are
+    planned first, so both owners are known). Placed after profiles, every archive or pack that inserts a SupplyItem
+    named by a line would plan `CONFLICT OWNER_NOT_AVAILABLE` (row 19).
   - **An applicability row, by id:** `IDENTICAL` / `CONFLICT CONTENT_DIFFERS` as above; then `OWNER_NOT_AVAILABLE`
     naming the asset, or the SupplyItem, when either is neither here nor accepted by this plan; then **the triple
-    arm**: a local row (or one accepted earlier in this plan) holding the same `(assetId, supplyId, role)` under
-    another id → **`IDENTICAL` with the new reason `ASSET_SUPPLY_HELD_BY_AN_EQUIVALENT_LOCAL_ROW`** and nothing
-    written (the triple is the row's whole meaning; the reference pair precedent,
-    `REFERENCE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW`, `MergePlan.kt:240`); else `INSERT`, claiming the triple.
+    arm**, mirroring the reference pair arm exactly (`MergePlanner.kt:872-881`, N-8): a local row holding the same
+    `(assetId, supplyId, role)` under another id is **`IDENTICAL` with the new reason
+    `ASSET_SUPPLY_HELD_BY_AN_EQUIVALENT_LOCAL_ROW`** only when every other field (timestamps included) is equal, and
+    otherwise **`SKIPPED` with the new reason `ASSET_SUPPLY_HELD_BY_A_LOCAL_ROW`** (the local row wins, D-18 C's
+    rule); nothing is written either way; else `INSERT`. (No incoming row can meet a triple accepted earlier in this
+    plan: C9.5 makes the triple unique per file.)
   - **A material line's link (R15-6):** an incoming profile or event whose line names a `supplyId` neither here nor
     accepted by this plan is `CONFLICT OWNER_NOT_AVAILABLE` naming that id — a new arm after the definition arm
-    (`MergePlanner.kt:755`), in the same shape. (The codec already makes it unreachable from a well-formed file; the
-    arm keeps the planner total.)
-  - **The hint.** `MergeHint.SAME_MANUFACTURER_PART_NUMBER` (beside `SAME_MANUFACTURER_MODEL_SERIAL`,
-    `MergePlan.kt:344`, `MergePlanner.kt:1269`) on an `INSERT`ed SupplyItem whose manufacturer and part number, both
-    non-blank and compared through `CategoryKey.of`, equal a local SupplyItem's under another id. A hint never
-    changes a verdict.
+    (`MergePlanner.kt:755`), in the same shape. From a well-formed file it fires only when the named SupplyItem is
+    itself new and refused (`CHILD_ROW_ID_TAKEN`), as a second `CONFLICT`; the archive is refused either way.
+  - **No duplicate hint (C-5, limit 4a).** No `MergeHint` member is added: the shipped carrier is asset-typed
+    (`MergePlan.kt:371-376`; `DuplicateCandidateDto`, `A/api/ApiDtos.kt:156-158`; `docs/api/v1.md:588`), and a typed
+    SupplyItem carrier is a later issue. A same-id divergence is a plain `CONFLICT` naming the SupplyItem.
+  - **The snapshot and its builders (C-1, C-4):** `MergeSnapshot` (`MergePlan.kt:431`) gains `supplyItems` and
+    `assetSupplies`; `mergeSnapshotOf` (`MergePlanner.kt:1448-1470`) reads them, and its two callers,
+    `ApplyBackupMergePlan.kt:164` and `BuildBackupMergePlan.kt:98`, pass the two repositories (constructor arguments
+    only, plus the `AppGraph` wiring line and the `FakeGraph` / test construction sites `git grep` names).
   - **Ownership (M2) and held assets:** `ASSET_SUPPLIES` joins the asset-owned list at `MergePlanner.kt:1199-1219`;
     `SUPPLY_ITEMS` is global and is not.
   - **Apply and report.** `C/usecase/ApplyBackupMergePlan.kt:~160-215` (**B2b confirms the write order before
     writing**) writes SupplyItems (with specifications) **before** applicability rows and applicability rows after
     assets; line links need no order (no FK). The tally gains both tables (`MergePlan.kt:552-576`, 20 → 22 tables) and
-    the report its rows (`A/api/ApiDtos.kt:167-240`), each named exactly as the shipped tables are.
+    the report its rows (`A/api/ApiDtos.kt:167-240`, the report rows only — not `DuplicateCandidateDto`), each named
+    exactly as the shipped tables are, appended so the report's wire key order (`MaintenanceRoutesTest.kt:1194-1215`)
+    moves only by the two new keys at its end.
 - **C12, the older-archive exception for links (audit §0.6; R67-12 option B, R91-7 mirrored).** A link written through
   `SaveProfile` or `UpdateEvent` moves the parent's `updatedAt`, and profiles and events compare
   `dto.ordered() == local.toDto().ordered()` (`MergePlanner.kt:522-526`, `:740-743`). So, against an archive below
@@ -409,9 +445,15 @@ under B2c in §12.
   **`retain`** (`:263-297`): `assetSupplies.filterNot { it.assetId in heldIds }`; `supplyItems` kept whole (the copy
   rule, mn-2); no new entanglement (a SupplyItem is never dropped). `TransferOwnership.of(…)` gains one overload for
   `AssetSupply` → its asset (`C/transfer/TransferOwnership.kt:76-113`). A carried SupplyItem that diverges on the
-  receiving phone refuses the pack import (limit 4).
+  receiving phone refuses the pack import (limit 4). **The return (C-4):** `ReturnScope.of`
+  (`C/usecase/ApplyBackupMergePlan.kt:261-343`) builds `reduced = full.copy(...)` minus each asset-owned list of the
+  returning assets and keeps any list it does not name whole; it gains `assetSupplies = full.assetSupplies.filterNot
+  { it.assetId in returning }` (the `references` line's shape), so the stale local rows never reach the planner, the
+  pack's rows plan `INSERT`, the apply's delete of the returning assets (`:180-182`) cascades the old rows away, and a
+  row re-roled on the borrowing phone lands instead of refusing the return (row 67). `supplyItems` is not reduced
+  (global, never dropped).
 - **C14, the guard (audit §0.7).** `HeldWriteGuard` wraps `AssetSupplyRepository` beside the sixteen asset-owned ports
-  (`C/transfer/HeldWriteGuard.kt:65-69`; "sixteen" at `:67`, `:99`, `:250` moves), checking the row written **and** the stored row it
+  (`C/transfer/HeldWriteGuard.kt:65-69`; "sixteen" at `:67`, `:99` and `A/di/AppGraph.kt:284` moves), checking the row written **and** the stored row it
   replaces or deletes. `SupplyItemRepository` is global and **not** wrapped: archiving or editing a SupplyItem that a
   held asset's rows name is allowed (it writes no held row). Line links ride the already-wrapped profile and event
   ports, so a held asset's lines are guarded as today.
@@ -443,7 +485,7 @@ under B2c in §12.
   rule, `:22-26`, `:40-42`), so a re-import stays `IDENTICAL`. The save writes only `supply_item` and
   `supply_specification`: **no material line is read or written** (C20).
 - **C16, `ArchiveSupplyItem` (R15-5, R15-6).** `run(id, archived: Boolean)`: the `ArchiveGroup` shape
-  (`ArchiveGroup.kt:21-33`) — refuses nothing, writes `archived_at` only, reversible. Applicability rows and line links
+  (`ArchiveGroup.kt:21-33`) — refuses nothing, writes `archived_at` and moves `updated_at` (`ArchiveGroup.kt:29`), reversible. Applicability rows and line links
   naming it are untouched. There is no delete use case, port method, route, tool or button (R15-5).
 - **C17, applicability (audit §4; R15-3, R15-5, R15-6).** `AddAssetSupply`, `UpdateAssetSupply`, `RemoveAssetSupply`,
   each returning `AssetSupplyResult` (`Ok(row)` / `Refused(problem)`, the `ReferenceCommands` shape, one problem, a
@@ -458,7 +500,7 @@ under B2c in §12.
   order (`C/journal/CategorySuggestions.kt:14`) — is a pure function the sheet reads (C33); it never fills a role.
   Applicability works on **any** Asset, a child Asset included (the clarification); it never touches a schedule,
   profile, event or line.
-- **C18, the AC11 fixture and the AC2/AC7 shape (audit §4; owned by B4, §14).** One JVM class,
+- **C18, the AC11 fixture and the AC2/AC7 shape (audit §4; owned by B4b, §14).** One JVM class,
   `CT/usecase/SupplyItemFixtureTest`, fictional throughout: an "Example RO System" asset (from the RO water template,
   `C/journal/SeedTemplates.kt:136-157`) with three SupplyItems ("Example Prefilter Cartridge", "Example RO Membrane",
   "Example Post-filter"), each with its own specifications, three applicability rows with three stage roles, three
@@ -470,38 +512,56 @@ under B2c in §12.
   completion (no lines) writes an event with **no material line and no `supplyId` anywhere on it** — the test asserts
   that absence, so no usage record is ever implied (limit 2).
 
-### B4 — usage linkage in core, and every full-replace writer (C19–C21)
+### B4a / B4b — usage linkage in core, and every full-replace writer (C19–C21)
 
 - **C19, the inputs carry the link, with no default (audit §0.8, §3; R15-4, R15-12).**
   `ProfileConsumableInput` (`C/usecase/ProfileCommands.kt:16-21`) and `ConsumableInput`
   (`C/usecase/EventCommands.kt:25`) each append `val supplyId: SupplyId?` **with no default**, so forgetting it is a
   compile error (the `ReferenceCommands.kt:35-38` rule). **Every writer of a material line carries it** — the
-  complete list, confirmed by B4 with `git grep -nE 'ProfileConsumableInput\(|ConsumableInput\(|ProfileConsumable\(|ConsumableUsage\('
+  complete list, confirmed by B4a with `git grep -nE 'ProfileConsumableInput\(|ConsumableInput\(|ProfileConsumable\(|ConsumableUsage\('
   -- core/src/main app/src/main`:
   - `SaveProfile` stores `input.supplyId` on the line it builds (`SaveProfile.kt:89`);
   - `buildEvent` stores it on each `ConsumableUsage` (`EventCommands.kt:231`); the link travels with the input row,
-    so the by-position re-identification (`:232`) keeps it correct across a reorder;
+    so the by-position re-identification (`:232`) keeps it correct when rows are moved;
   - the API's request lines (`A/api/ApiDtos.kt:380`, `:421`; `A/api/MaintenanceDtos.kt:426`) pass the request's
-    `supplyId` (C24 adds the keys; B4 owns these three mapping lines and their route rows);
+    `supplyId` (C24 adds the keys; B4b owns these three mapping lines and their route rows; B4a passes
+    `supplyId = null` there to compile);
   - the view models' row state: `EventEntryViewModel` (`:86-92` the row, `:262-265` the load, `:390-400`
     `addSuggested`, `:635-637` the save) and `ProfileEditViewModel` (`:160` the row, `:340-343` the save) carry
-    `supplyId` from load (or the profile chip) to save, invisibly — B8 draws it;
+    `supplyId` from load (or the profile chip) to save, invisibly — B4b (B4a passes `supplyId = null` at
+    `EventEntryViewModel.kt:637` and `ProfileEditViewModel.kt:340` to compile); B8 draws it;
   - `ApplyTemplate.kt:102` passes `supplyId = null` (R15-10, C21); `ReplaceSetup.kt:84`'s `copy(id = …)` keeps it
     (C21); the codec's `toDomain`s (C8) and `JournalMappers` (C5) carry it.
 
   **B1's placeholders.** B1 adds the domain field and passes `supplyId = null` at each main constructor it cannot yet
-  feed (`BackupFormat.kt:880`, `:944`, `SaveProfile.kt:89`, `EventCommands.kt:231`); B2a replaces the codec two and B4
-  the use-case two. B1 also writes `ApplyTemplate.kt:102`'s `supplyId = null`, which is final (R15-10), and the real
-  mapping in `JournalMappers.kt:109`, `:174` (the main sites `git grep` finds today, beside the two declarations). After B4, `git grep -nE 'supplyId = null' -- core/src/main app/src/main` names only
-  `ApplyTemplate.kt` (anchored grep, §7).
+  feed (`BackupFormat.kt:880`, `:944`, `SaveProfile.kt:89`, `EventCommands.kt:231`); B2a replaces the codec two and
+  B4a the use-case two. B1 also writes `ApplyTemplate.kt:102`'s `supplyId = null`, which is final (R15-10), and the
+  real mapping in `JournalMappers.kt:109`, `:174`. B4a's own five input placeholders (`ApiDtos.kt:380`, `:421`,
+  `MaintenanceDtos.kt:426`, `EventEntryViewModel.kt:637`, `ProfileEditViewModel.kt:340`) are replaced by B4b. **The
+  check is per site (N-2):** each named placeholder line is read and no longer passes a literal `null` after its
+  replacing brief; a repo-wide `supplyId = null` grep is not used (C12's `withoutLinks()`, B8's unlink and new rows
+  write it legitimately).
 - **C20, the snapshot rule and link resolution (audit §3; D4 `04-domain-data-model.md:266-275`, `:346-353`; R15-6).**
   A line's `name` stays **required even when linked** (the shipped `BadConsumable` rules unchanged) and `name` /
-  `unit` are stored exactly as given — the core never fills them from the SupplyItem (the phone pre-fills blanks,
+  `unit` are stored as the shipped rules store them (trimmed, `SaveProfile.kt:83`, `:94`) — the core never fills them from the SupplyItem (the phone pre-fills blanks,
   C34). **A non-null `supplyId` must name an existing SupplyItem, archived or not:** `SaveProfile` collects
   `ProfileProblem.UnknownSupplyItem(index)`; `buildEvent` collects `FieldProblem.UnknownSupplyItem(index)` (beside
   `BadConsumable`, `EventCommands.kt:58-68`); each refuses before any write. `buildEvent` gains a
   `SupplyItemRepository` parameter and its five callers (`LogEvent.kt:37`, `UpdateEvent.kt:45`,
-  `CompleteSchedule.kt:102`, `CompleteGroupMembers.kt:143`, `RecordConditionWithIncident.kt:87`) pass it. **No write
+  `CompleteSchedule.kt:102`, `CompleteGroupMembers.kt:143`, `RecordConditionWithIncident.kt:87`) pass it; **those
+  five and `SaveProfile` gain it as a constructor parameter (C-1)**, so B4a also owns the `AppGraph` wiring, the
+  `FakeGraph` and the ~12 test construction sites (`HeldWriteGuardTest`, `ConditionHealthHarness`,
+  `CrossConceptWriteTest`, `GroupCompletionTest`, `ScheduleOperationsTest`, `SeasonCommandHarness`, `CloseRoundTest`,
+  `GroupMembershipTest`, `ScheduleCommandRulesTest`, `IncidentWorkflowRoomTest`, `RecordConditionWithIncidentTest`,
+  confirmed by `git grep`) — constructor arguments only. **The three exhaustive `when`s (C-2), B4a's:**
+  `eventRefusal` and `profileRefusal` (`A/api/ValidationRefusals.kt:72-93`, `:138-153`) each gain the
+  `UnknownSupplyItem` arm (C2's `EVENT_VALIDATION` / `PROFILE_VALIDATION`, `field` `consumables`, G2's message);
+  `ProfileEditViewModel.asProblems()` (`A/ui/setup/ProfileEditViewModel.kt:351-362`) maps it to the named row with
+  **P15-20 reused verbatim** ("That supply item is no longer available." — the same meaning: the row's SupplyItem is
+  gone), declared by B4a in `A/ui/supplies/SupplyStrings.kt` (new) and imported by B7 and B8; no new string. The
+  event form's `firstProblemText` (`A/ui/journal/EventEntryViewModel.kt:666-683`) keeps its `else -> null`, so the
+  event form draws the shipped `CANNOT_SAVE` sentence and marks no row — reachable only by a race, since a SupplyItem
+  is never deleted (R15-5). **No write
   path ever rewrites a stored line because its SupplyItem changed:** a rename, spec edit or archive of a SupplyItem
   leaves every past line's `name`, `unit` and `supplyId` byte-equal (C15 writes only its own tables).
 - **C21, what stays unchanged (audit §3; R15-4, R15-10; #86).** Recurrence, due state and completion are untouched:
@@ -521,6 +581,8 @@ under B2c in §12.
   calls `SaveSupplyItem.run(null, …)`. **`PATCH` is an overlay assembled in the handler** from the stored row: each
   given key replaces the stored value, absent or `null` keeps it, and an absent `specifications` sends the stored rows
   back as inputs with their ids and keys; the handler then calls `SaveSupplyItem.run(id, …)` and re-checks nothing.
+  **The clearing rule (C-7):** a given `""` clears an optional text field (trimmed, stored empty); `name: ""` is the
+  use case's `NameRequired` (422); `"specifications": []` removes every row; blank is never read as "unchanged".
   No SupplyItem field is nullable, so **no raw-key tri-state is needed** (the #91 reader,
   `A/api/ScheduleForms.kt:96-118`, is not used); a later nullable field would bring it. `Unchanged` → 200 with the
   stored row. `archive` calls `ArchiveSupplyItem`. Problems map through `supplyItemProblemCode` (the
@@ -538,14 +600,14 @@ under B2c in §12.
 - **C24, the link keys on the line requests (C19; R15-4, R15-12).** `ProfileConsumableRequest` (`ApiDtos.kt:354-359`)
   and `ConsumableRequest` (`:386-390`, used by `EventRequest` and `CompletionRequest`) append
   `val supplyId: String? = null` — absent = unlinked, because every one of these requests is a full replace (limit 1).
-  **B4 adds the two keys and the three mapping lines** (C19) with their route rows; B5 documents them. A `supplyId`
+  **B4b adds the two keys and the three mapping lines** (C19) with their route rows; B5 documents them. A `supplyId`
   naming no SupplyItem is C2's `PROFILE_VALIDATION` / `EVENT_VALIDATION` arm with `field` `consumables` and a new
   message (§5 G-list). Every profile and event answer carries `supplyId` on each line through the archive DTOs (C8).
 - **C25, status, history and the wire document.** `GET /v1/status` `counts` gains `"supplyItems"` and
   `"assetSupplies"` (`A/api/ApiHandlers.kt:201-219`). The router's history KDoc (`ApiRouter.kt:100-164`, prose that
   pins nothing) gains a "#15 added …" paragraph naming the five rows, the 26th sub-resource and the one delete verb.
   `docs/api/v1.md`: a SupplyItem section and an applicability section in the shape of the group and reference
-  sections; the "#15 family" codes table after the loan family (`:1861`), every C2 row as `| status | code | when |`;
+  sections, the SupplyItem PATCH stating C3's clearing rule (`""` clears, `[]` empties, `name` never blank); the "#15 family" codes table after the loan family (`:1861`), every C2 row as `| status | code | when |`;
   the line key on the profile, event and completion bodies — the completion section says a completion's lines may
   carry `supplyId` and **never** that a completion without lines records a SupplyItem (limit 2); the two `counts`
   keys; the import range "1–17" → "1–18"
@@ -558,7 +620,9 @@ under B2c in §12.
 - **C26, the tools (audit §6; R15-5).** In `M/src/servicetag_mcp/server.py`, on the group tools' conventions
   (`:1328-1450`) and the loan tools' (`:2709-2811`), appended to `TOOL_NAMES` (`:78`): `list_supply_items`,
   `get_supply_item`, `create_supply_item`, `update_supply_item` (overlay: only the arguments given are sent;
-  `specifications` replaces the whole list and its docstring says to pass each kept row's `id`), `archive_supply_item`
+  `specifications` replaces the whole list and its docstring says to pass each kept row's `id`; the docstring states
+  the clearing rule — pass `""` to clear a text field, `[]` to remove every specification, `name` never blank — so no
+  `clear_fields` argument is needed, unlike `update_reference`), `archive_supply_item`
   (`archived: bool = True`), `list_asset_supplies(asset_id)`, `set_asset_supply` (create when no `asset_supply_id`,
   re-role when given — the `save_profile` create/edit precedent, `:946-975`) and `remove_asset_supply` — **eight
   tools, 76 → 84** (R15-5 DECIDED: the removal tool stays). No delete tool for a SupplyItem. Docstrings name the
@@ -567,12 +631,14 @@ under B2c in §12.
   `_MIN_REFERENCE_ROLE_SCHEMA_VERSION` (`:208`); `_require_supply_schema(tool, feature)` over `_require_tool_schema`
   (`:262-280`). **All eight tools** call it before any request. **The four line-writing tools** — `save_profile`
   (`:946`), `log_event` (`:1082`), `update_event` (`:1123`), `complete_schedule` (`:1858`) — call it **only when a
-  consumable they will send carries a non-null `supplyId`**; without one they reach any phone they reach today (a
+  consumable they will send carries a `supplyId` key at all** (presence, not non-null, N-7: an explicit `null` sent to
+  a schema-17 phone would otherwise meet that phone's raw 400 instead of `APP_SCHEMA_TOO_OLD`); without one they reach any phone they reach today (a
   schema-17 test in each file stays green unchanged). `save_profile`'s `kept_consumables_from` (`:1018-1048`) keeps
   `supplyId` **exactly as read**: the key travels iff the stored row had it (a schema-17 row has none, so nothing new is
-  sent to a schema-17 phone), and a kept non-null link counts as "sent" for the gate. The three event tools' line type
-  widens from `dict[str, str]` to `dict[str, Any]` so a returned line with `"supplyId": null` can be passed back
-  verbatim (B6 confirms the argument-guard pins first, `M/tests/test_argument_guard.py`).
+  sent to a schema-17 phone), and a kept key counts as "sent" for the gate. The three event tools' line type widens from `dict[str, str]` to
+  `dict[str, Any]` only so an explicit `"supplyId": null` is admitted; a returned event line still cannot be passed
+  back verbatim (it carries `id`, `sortOrder` and a numeric `quantity`, and `ConsumableRequest` is strict) (B6
+  confirms the argument-guard pins first, `M/tests/test_argument_guard.py`).
 - **C28, documents and pins.** `import_merge`'s docstring (`:1183-1222`): format "1–17" → "1–18", the tally's table
   list and count 20 → 22. `M/README.md`: the eight tools, the gate, the line key, the range; `complete_schedule`'s docstring says a link
   travels only on a line it sends (limit 2). The count pins
@@ -618,7 +684,11 @@ under B2c in §12.
 - **C33, the asset-detail "Supplies" section (audit §4, §7; R15-3, R15-8).** New `A/ui/supplies/AssetSuppliesSection.kt`
   + `AssetSuppliesSectionViewModel.kt` on the `ReferencesSection` pair's shape, placed in
   `A/ui/asset/AssetDetailScreen.kt` as the first section of the padded column, **before "Components"**
-  (`:441-446`), with `readOnly = !current.offersWrites` (`:466-472`). Header P15-1; when writes are offered, the
+  (`:441-446`), with `readOnly = !current.offersWrites` (`:466-472`). A new `onOpenSupply` parameter on
+  `AssetDetailScreen` (`:184-206`), wired at `A/ui/nav/ServiceTagRoot.kt:200`, carries the row tap (C-1). Header
+  P15-1 — the section reads "Supplies" with no section subtitle; its placement directly above "Components" is R15-8's
+  and is **flagged for the owner's eye at the merged gate** (the two words may read as one concept until #47 renames
+  "Components"); when writes are offered, the
   header's trailing add glyph labelled P15-13 (the maintenance sections' glyph rule, `:430-433`). Rows in
   `(role casefolded, SupplyItem name casefolded, id)` order: the SupplyItem's name (with the "Archived" badge when
   archived) and the role as a quiet line; a tap opens `Route.SupplyDetail`; the overflow ("More") offers "Edit role"
@@ -654,7 +724,8 @@ under B2c in §12.
   pre-existing line answering `"supplyId": null` and otherwise equal; then creates SupplyItems with specifications,
   applicability rows and links **after** the upgrade (the MCP and the phone's own editors), re-plans the pre-upgrade
   export **applicable with zero INSERT and every row `IDENTICAL`** (C12; no link given-then-removed before it, limit
-  3), and proves the format-18 round trip (replace and merge). It names what the emulator does not observe (limit 10).
+  3) — **the seeded lines carry units, or the links are given through the MCP (N-11):** linking a unit-less line on
+  the phone editor fills its unit (C34), a content change that re-plans that quick action `CONFLICT`; and proves the format-18 round trip (replace and merge). It names what the emulator does not observe (limit 10).
   `docs/versioning.md:22` already states the practice and is **not** edited. `README.md:54`'s sentence loses "with
   optional stock/reorder information" (§5's D-text). **The asset-model page (R15-14, decided differently):**
   `docs/design/14-asset-model.md` (the next free number after `13-compatibility-policy.md`) records the **current
@@ -668,9 +739,12 @@ under B2c in §12.
 - **C37, the invariants every brief keeps.**
   1. **No inference** (Global constraints): `CT/usecase/SupplyLinkInferenceTest` (row 37) proves a line named exactly
      as a SupplyItem stays unlinked through `SaveProfile`, `LogEvent`, `ApplyTemplate`, a merge and a replace import.
-  2. **The fence tripwire:** `git diff <base> -- . ':!docs/superpowers' | grep -ciE
-     '^\+.*(stock|reorder|low.?stock|lead.?time|on.?hand|procure)'` → 0 (B9's README edit removes such words; it
-     adds none), and `'^\+.*\b(installed_?on|removed_?on|install_?date|parent_?supply)'` (case-insensitive) → 0.
+  2. **The fence tripwire (C-6), word-anchored and a tip-vs-base delta:** with
+     `P='\b(stock(s|ed|ing)?|reorder(s|ed|ing)?|low[- ]?stock|lead[- ]?times?|on[-_ ]?hand|procure(ment|d)?)\b'`,
+     `git grep -ciE "$P" -- . ':!docs/superpowers'` summed at the tip ≤ the same sum at `<base>` (base hits stay
+     neutral; B9's README edit lowers it), and the same rule for
+     `'\b(installed_?on|removed_?on|install_?date|parent_?supply)\b'`. List-order wording in code and tests says
+     "move" or "resequence", never "reorder" (row 39). B1 proves both patterns hold on its own diff before committing.
   3. **The word tripwire:** no new user-visible string contains "component" or "consumable"; "part" appears only in
      "Part number" (§5's list is the whole set).
   4. **Untouched:** `git diff <base> --` `C/reminders/`, `A/reminders/`, `C/usecase/CompleteSchedule.kt` (bar C20's one
@@ -704,9 +778,9 @@ refine; what each proves is not.
 | 14 | C9 the moving format pins | §3's pins table, B2a's rows | none: pins |
 | 15 | C11 a SupplyItem by id | `CT/merge/MergePlannerSupplyTest` (new) · `theSameItemIsIdentical`; `aRenamedItemIsAConflict`; `aSpecOnlyDifferenceIsAConflict`; `anArchiveOnlyDifferenceIsAConflict`; `aNewItemInserts` | the comparison drops `specifications` (a spec-only edit becomes `IDENTICAL`) |
 | 16 | C11 the child id | `aSpecIdHeldByAnotherItemIsChildRowIdTaken`; `…claimedEarlierInThisPlan…` | the specification `firstTaken` removed |
-| 17 | C11 applicability | `anAbsentAssetIsOwnerNotAvailable`; `anAbsentItemIsOwnerNotAvailable`; `anItemAcceptedEarlierInThisPlanInserts`; `theSameTripleUnderAnotherIdIsIdenticalWithItsReasonAndWritesNothing`; `aReRoledRowIsAConflict` | the triple arm removed (the second id plans `INSERT`) |
-| 18 | C11 the line-link arm | `aProfileLineNamingAnUnknownItemIsOwnerNotAvailable`; the event twin | the arm removed |
-| 19 | C11 the hint | `sameManufacturerAndPartNumberUnderAnotherIdInsertsWithTheHint`; `aBlankPartNumberGivesNoHint` | the hint raised on blank fields |
+| 17 | C11 applicability | `anAbsentAssetIsOwnerNotAvailable`; `anAbsentItemIsOwnerNotAvailable`; `theSameTripleUnderAnotherIdEqualInEveryFieldIsIdenticalWithItsReason`; `theSameTripleUnderAnotherIdWithOtherStampsIsSkippedWithItsReason` (nothing written either way); `aReRoledRowIsAConflict` | the triple arm removed (the second id plans `INSERT`) |
+| 18 | C11 the line-link arm | `aProfileLineNamingAnUnknownItemIsOwnerNotAvailable`; the event twin; `aLineNamingANewItemRefusedForChildRowIdTakenIsASecondConflict` | the arm removed |
+| 19 | C11 the planning position (C-3) | `MergePlannerSupplyTest` · `aProfileLineNamingAnItemThisPlanInsertsInserts`; the event twin | the SupplyItem section planned after profiles (placed last → a new SupplyItem with a linked line plans `CONFLICT OWNER_NOT_AVAILABLE`) |
 | 20 | C11 the write order on Room | `T/api/ApiRouterTest` (+1) · `aMergeInsertingItemsAndTheirApplicabilityCommits` (the Room-backed `FakeGraph`; B2b confirms the shipped import-merge case to copy) | applicability written before the SupplyItems (the FK fails) |
 | 21 | C11 tally and report | the tally pins (`MaintenanceRoutesTest:1488`, `:1541`, `:1551`, 20 → 22) and one new assertion naming both tables | none: pins |
 | 22 | C12 pre-18, linked rows | `MergePlannerSupplyTest` · `` `a format-17 archive against a profile later linked is identical` ``; the event twin | the exception removed (→ `CONFLICT`) |
@@ -717,7 +791,7 @@ refine; what each proves is not.
 | 27 | C13 selection by naming row | `CT/transfer/TransferGraphTest` (+2) · `aPackCarriesOnlyTheSupplyItemsItsRowsName` (an unrelated item stays home); `anItemNamedOnlyByACarriedLineTravels` | `inUse` built from applicability rows only |
 | 28 | C13 retain | `retainDropsAHeldAssetsApplicabilityAndKeepsEveryItem` | `supplyItems` filtered by the held set |
 | 29 | C13 the pack end to end | `ImportTransferPackTest` (+1) · `aHeldAssetsSuppliesAndLinksArriveThroughThePack` | none of its own: row 27's mutation fails it (recorded, not counted twice) |
-| 30 | C14 the guard | `HeldWriteGuardTest` (+3) · `addingApplicabilityToAHeldAssetThrows`; `removingAHeldAssetsApplicabilityThrows`; `archivingAnItemAHeldAssetUsesIsAllowed` | `AssetSupplyRepository` left unwrapped in the guard's port set |
+| 30 | C14 the guard | `HeldWriteGuardTest` (+3) · `addingApplicabilityToAHeldAssetThrows`; `removingAHeldAssetsApplicabilityThrows`; `archivingAnItemAHeldAssetUsesIsAllowed` | the guarded `AssetSupplyRepository` wrapper skips its held check (a core-side mutation; the test builds its own guarded ports, `:180-190`, so `AppGraph`'s wiring is mirrored by `FakeGraph`, not proven — N-10) |
 | 31 | C15 save and collected problems | `CT/usecase/SupplyItemUseCasesTest` (new) · `createStoresTrimmedFieldsAndOrderedSpecs`; `aBlankNameIsRefusedAndNothingIsWritten` (no transaction, no id minted); `everyRowProblemIsCollectedInOneCall` | fail-fast on the first problem |
 | 32 | C15 the key rule (R15-11) | `aBlankKeyIsTheLabelsSlug`; `twoLabelsWithOneSlugAreDeduped`; `anUnsluggableLabelGetsSpec`; `aTypedKeyOutsideThePatternIsRefused`; `aTypedKeyTakenIsRefused`; `aKeptRowKeepsItsKeyWhenItsLabelChanges` | the key re-derived on every save (the kept-key case fails) |
 | 33 | C15 child ids | `aKeptRowKeepsItsId`; `anIdThisItemDoesNotOwnIsMintedFresh` | any sent id accepted |
@@ -726,25 +800,25 @@ refine; what each proves is not.
 | 36 | C17 add, in step order | `CT/usecase/AssetSupplyUseCasesTest` (new) · `anUnknownAssetIsOwnerMissing`; `anUnknownItemIsSupplyItemMissing`; `anArchivedItemIsRefusedForANewRow`; `aBlankRoleIsRoleRequired`; `theRoleIsStoredCleaned` (no-break space, zero-width space, doubled spaces); `theSameCleanedTripleIsTaken`; `aChildAssetTakesApplicability` | the raw role stored |
 | 37 | C37 no inference | `CT/usecase/SupplyLinkInferenceTest` (new) · a line named exactly as a SupplyItem stays unlinked through `SaveProfile`, `LogEvent`, `ApplyTemplate`, a merge and a replace import | a name matcher (`supplyItems.firstOrNull { it.name == line.name }?.id`) in `SaveProfile` |
 | 38 | C17 update, remove, suggestions | `reRoleMovesUpdatedAt`; `theSameCleanedRoleIsUnchanged`; `reRoleOntoATakenTripleIsTaken`; `anArchivedItemsRowMayBeReRoled`; `removeDeletes`; `removeOfAnUnknownRowIsRefused`; `suggestionsAreTheDistinctCleanedRolesInUse` | `Unchanged` compares the raw role |
-| 39 | C19 the link is stored and carried | `CT/usecase/ProfileUseCasesTest` (+3) · `aLinkedLineIsStored`; `anEditCarryingTheLinkKeepsIt`; `anEditWithoutTheLinkClearsIt` (full replace, limit 1); `EventUseCasesTest` (+2) · `logEventStoresTheLink`; `aReorderedEditKeepsEachLinkWithItsRow` | `SaveProfile` drops `input.supplyId` |
-| 40 | C20 resolution | `anUnknownSupplyIdIsRefusedAndNothingIsWritten` (profile; event; `CompleteSchedule` with a line); `anArchivedItemMayBeLinked` | the resolution check removed |
+| 39 | C19 the link is stored and carried | `CT/usecase/ProfileUseCasesTest` (+3) · `aLinkedLineIsStored`; `anEditCarryingTheLinkKeepsIt`; `anEditWithoutTheLinkClearsIt` (full replace, limit 1); `EventUseCasesTest` (+2) · `logEventStoresTheLink`; `aResequencedEditKeepsEachLinkWithItsRow` | `SaveProfile` drops `input.supplyId` |
+| 40 | C20 resolution and its three arms (C-2) | `anUnknownSupplyIdIsRefusedAndNothingIsWritten` (profile; event; `CompleteSchedule` with a line); `anArchivedItemMayBeLinked`; `ProfileEditViewModelTest` (+1, B4b) · `anUnknownSupplyItemMarksItsRowWithP15_20`; `EventEntryViewModelTest` (+1, B4b) · `anUnknownSupplyItemDrawsCannotSaveAndMarksNoRow` | the resolution check removed |
 | 41 | C20 the snapshot survives | `renamingEditingOrArchivingAnItemLeavesEveryPastLineByteEqual` | `SaveSupplyItem` rewrites linked lines' names (a "sync") |
 | 42 | C21 what stays unchanged | `ApplyTemplateTest` (+1) · `templatesCreateNoLinkAndNoSupplyItem`; `ReplaceAssetTest` (+1) · `theSuccessorsClonedQuickActionsKeepTheirLinksAndNoApplicabilityIsCopied` | `ReplaceSetup` clones lines with `supplyId = null` |
 | 43 | C19 the view models carry the link | `EventEntryViewModelTest` (+3) · `aProfileChipCarriesItsLink`; `anEditedEventKeepsItsLinksOnSave`; `editingTheNameKeepsTheLink`; `ProfileEditViewModelTest` (+2) · `aLoadedLinkIsSavedBack`; `anAddedRowIsUnlinked` | `addSuggested` drops the link |
-| 44 | C24 the request keys (B4) | `T/api/ApiRouterTest` (+2) · `aProfileLineWithSupplyIdIsStoredAndAnswered`; `anEventLineWithSupplyIdRoundTrips`; `MaintenanceRoutesTest` (+1) · `aCompletionLineCarriesItsLink` | `ConsumableRequest.toCommand` drops `supplyId` |
+| 44 | C24 the request keys (B4b) | `T/api/ApiRouterTest` (+2) · `aProfileLineWithSupplyIdIsStoredAndAnswered`; `anEventLineWithSupplyIdRoundTrips`; `MaintenanceRoutesTest` (+1) · `aCompletionLineCarriesItsLink` | `ConsumableRequest.toCommand` drops `supplyId` |
 | 45 | C18 AC11, AC2, AC7 | `CT/usecase/SupplyItemFixtureTest` (new) · as C18 | the merge apply skips `assetSupplies` writes |
 | 46 | C22 create and read | `T/api/SupplyRoutesTest` (new) · `aPostIs201AndReadsBack`; `theListIsOrderedAndIncludesArchived`; `getAnswersTheItemAndItsApplicability` | the list left unsorted |
-| 47 | C22 the PATCH overlay | `aPatchWithOnlyNotesLeavesEverythingElse`; `aNullKeyIsUnchanged`; `anAbsentSpecificationsKeepsTheRowsTheirIdsAndKeys`; `aGivenListReplacesItWholly`; `aNoOpPatchIs200TheStoredRowAndWritesNothing` | PATCH as a full replace (an absent key becomes `""`) |
+| 47 | C22 the PATCH overlay and the clearing rule (C-7) | `aPatchWithOnlyNotesLeavesEverythingElse`; `aNullKeyIsUnchanged`; `anEmptyStringClearsAnOptionalField`; `aBlankNameIs422`; `anAbsentSpecificationsKeepsTheRowsTheirIdsAndKeys`; `aGivenListReplacesItWholly`; `anEmptySpecificationsListRemovesThem`; `aNoOpPatchIs200TheStoredRowAndWritesNothing` | PATCH as a full replace (an absent key becomes `""`), and `""` read as unchanged |
 | 48 | C22 archive | `archiveThenUnarchive`; `anUnknownIdIs404NoSuchSupplyItem` | the route passes `!archived` |
 | 49 | C2 every code | `everySupplyItemProblemHasItsOwnCode` and `everyAssetSupplyProblemHasItsCodeStatusAndField` (the mappers called directly, one case per sealed member); `everyNewCodeIsReachableOverTheWire` | `SupplyItemArchived` mapped to 422 |
 | 50 | C23 applicability | `aPostIs201`; `aTakenTripleIs409`; `anArchivedItemIs409WithFieldSupplyId`; `aPatchReRoles`; `aDeleteIs204ThenGone`; `aHeldAssetIs409AssetTransferredOut`; `theAssetSubResourceListsRowsAndEachItemOnce` | the sub-resource repeats an item per row |
 | 51 | C24 the line refusal | `aLineNamingNoItemIs422ProfileValidationWithFieldConsumables`; the `EVENT_VALIDATION` twin | mapped to a 404 |
 | 52 | C25 status | the status test (+1) · `statusCountsBothNewLists` | `counts` omits `assetSupplies` |
 | 53 | C25 the document agrees | `SupplyRoutesTest` · `everyNewCodeIsInV1md` (each C2 row as `^\| (404\|409\|422) \| `CODE` \|`) | a code missing from `v1.md` |
-| 54 | C26 the tools | `M/tests/test_supply_tools.py` (new) · each tool's recorded method, path and body; `update_supply_item` sends only given keys; `set_asset_supply` creates without an id and re-roles with one; no delete tool for an item | `update_supply_item` sends every key |
+| 54 | C26 the tools | `M/tests/test_supply_tools.py` (new) · each tool's recorded method, path and body; `update_supply_item` sends only given keys; `update_supply_item_sends_an_empty_string_to_clear` and `…_an_empty_list_to_remove_specifications`; `set_asset_supply` creates without an id and re-roles with one; no delete tool for an item | `update_supply_item` sends every key |
 | 55 | C27 the tool gate | `…_refuses_schema_17_with_nothing_sent` for all eight (only `/v1/status` read) | the gate removed from one tool |
-| 56 | C27 link-only gating | `test_maintenance_tools.py` / `test_tools.py` (+4) · `save_profile_with_a_link_refuses_schema_17`; `log_event_without_a_link_reaches_schema_17`; `kept_consumables_keep_supply_id_as_read`; `a_schema_17_row_rebuild_sends_no_supply_id_key` | `kept_consumables_from` drops `supplyId` |
-| 57 | C28 pins | 76 → 84; `test_tools.py:803-815` → "format 1–18" / "format **1–18**", "the twenty-two tables" | none: pins |
+| 56 | C27 link-only gating | `test_maintenance_tools.py` / `test_tools.py` (+5) · `save_profile_with_a_link_refuses_schema_17`; `log_event_with_an_explicit_null_supply_id_refuses_schema_17` (presence, N-7); `log_event_without_a_link_reaches_schema_17`; `kept_consumables_keep_supply_id_as_read`; `a_schema_17_row_rebuild_sends_no_supply_id_key` | `kept_consumables_from` drops `supplyId` |
+| 57 | C28 pins | 76 → 84 (`test_argument_guard.py`, `test_tools.py:118-122`'s `EXPECTED_TOOLS`, `test_reference_tools.py:64-65`); `test_tools.py:803-815` → "format 1–18" / "format **1–18**", "the twenty-two tables" | none: pins |
 | 58 | C29 the shell | **Compose** `AT/ui/maintenance/MaintenanceShellTest` (grown) · the fifth row reads P15-1 and opens the list | none in-brief: a device case |
 | 59 | C30 list and detail state | `T/ui/supplies/SupplyListViewModelTest` (new) · `rowsAreOrderedAndArchivedOnesMarked`; `SupplyDetailViewModelTest` (new) · `usedByListsEachRowWithItsAssetName`; `archiveToggles` | archived rows filtered out of the list |
 | 60 | C31 the editor state | `T/ui/supplies/SupplyEditViewModelTest` (new) · `canSaveFollowsTheTrimmedName`; `rowsKeepTheirIdsAndKeys`; `aValidationNamingARowMarksItAndDrawsP15_12`; `cancelWritesNothing` | `canSave` ignores trimming |
@@ -754,6 +828,7 @@ refine; what each proves is not.
 | 64 | C32–C35 drawn | **Compose** `AT/ui/supplies/SupplySurfacesTest` (new, ~6 cases) · the section's rows, empty line and add glyph; read-only draws no glyph or overflow; the role sheet's Save enabling and Cancel writing nothing; the picker's empty sentence; `SupplyLinkLine` linked, unlinked and archived | none in-brief: device cases |
 | 65 | C36 the documents | `ReleaseProofPolicyTest` unchanged and green; B9's anchored greps (§7) | none: tripwire |
 | 66 | C37 the fence | the tripwire, word and untouched greps (§7) at every brief | none: greps |
+| 67 | C13 the return keeps applicability (C-4) | `ImportTransferPackTest` (+1, B2c) · `aReturningPackWithAReRoledSuppliesRowAppliesAndEveryRowLands` (a held asset with applicability comes back, one row re-roled on the borrowing phone; the apply succeeds, no row lost) | the `assetSupplies` filter removed from `ReturnScope.of` (the return refuses `CONFLICT`) |
 
 **Moving pins — each named shipped assertion, the brief that may touch it, and why.** A brief touches no other
 shipped assertion (the pin rule, "Briefs — common").
@@ -766,12 +841,13 @@ shipped assertion (the pin rule, "Briefs — common").
 | the test constructor sites of `ProfileConsumable(` (5, in 5 files) and `ConsumableUsage(` (5, in 4 files) | B1 | the domain field has no default; each passes the `null` it means |
 | the 14 format literals (`VersionAgreementTest.kt:85`, `:154`; `MaintenanceRoutesTest.kt:1159`, `:1506`, `:1553`; `BackupCodecTest.kt:1063`; `BackupFormat13Test.kt:54`, `14Test.kt:48`, `15Test.kt:48`, `6Test.kt:358`, `9Test.kt:70`; `ExportBackupSetTest.kt:47`; `Format7ImportIdentityTest.kt:245`; `AT/backup/Format7RestoreContractTest.kt:164`) | B2a | the format is 18 |
 | `BackupFormat8Test.kt:277`, `:280`, `:281`; `BackupFormat17Test.kt:218`, `:222`, `:223` (and their KDoc) | B2a | the "one format past this build" archive is 18, readable now: it becomes 19 |
-| `BackupFormat6Test.kt:289` | B2a | the archive's list count is 22 (`:279`, the event field count, does **not** move: the key sits on the child DTOs) |
-| `MaintenanceRoutesTest.kt:1488`, `:1541`, `:1551` | B2b | the tally names 22 tables |
+| `BackupFormat6Test.kt:287` | B2a | the archive's list count is 22 (the event field count does **not** move: the key sits on the child DTOs) |
+| `MaintenanceRoutesTest.kt:1488`, `:1541`, `:1551`; `:1194-1215` | B2b | the tally names 22 tables; the report's wire key order gains the two new keys at its end |
 | `TransferTableClassificationTest.kt:25-31`; `HeldWriteGuardTest.kt:186` (and any port list beside it) | B2b/B2c | two lists classified; one more wrapped port |
-| the test sites of `ProfileConsumableInput(` (7, in 1 file) and `ConsumableInput(` (11, in 3 files) | B4 | the input field has no default |
+| the test sites of `ProfileConsumableInput(` (7, in 1 file) and `ConsumableInput(` (4, in 2 files) | B4a | the input field has no default |
+| `T/api/ReferenceRoutesTest.kt:~642-670` | B5 | the exact `/v1/status` `counts.keys` set gains `supplyItems` and `assetSupplies` |
 | `T/api/CommandShapesGoldenTest.kt:132-172` | B5 | `v1.md`'s import range reads 1–18 and the tally 22 tables ("Format17AndTwentyTables" renamed); `:44-60` does **not** move (R15-16) |
-| `M/tests/test_argument_guard.py:51`, `:203-204`, `:256-258`; `M/tests/test_tools.py:803-815` | B6 | 84 tools; the docstring and README read 1–18 and twenty-two tables |
+| `M/tests/test_argument_guard.py:51`, `:203-204`, `:256-258`; `M/tests/test_tools.py:118-122`, `:803-815`; `M/tests/test_reference_tools.py:64-65` | B6 | 84 tools; the docstring and README read 1–18 and twenty-two tables |
 | `AT/ui/maintenance/MaintenanceShellTest.kt` (one case grows) | B7 | the fifth row |
 | `T/VersionAgreementTest.kt:432` | — | **does not move**: three primary destinations (C29) |
 
@@ -785,36 +861,40 @@ new screens having no shipped host to grow (no Compose class hosts `ProfileEditS
 #93's merged-tip record (11.65 min, `.superpowers/sdd/2026-10-01-issue-93/progress.md`) two small classes are
 estimated at +0.5–1.0 min → **~12.2–12.7 min**, under the 14- and 15-minute reporting lines; #90's trigger is not
 reached. **Known cost:** the new Compose cases first run at the merged-tip gate, so a red there costs one fix round
-after the merge (accepted, as #91's N-10).
+after the merge (accepted, as #91's N-10); and the new Supplies section above Components shifts the asset-detail
+layout under shipped device classes — `ComponentsSmokeTest`, the `AssetDetail*Test` classes and
+`ReferencesSectionTest` — whose fallout is first seen at that gate too (N-12).
 
 ## 4. Files, fences, order and the gate budget
 
 | brief | touches | never touches |
 |---|---|---|
 | B1 | `C/model/{Ids,SupplyItem (new),Journal}.kt`; `C/ports/Repositories.kt`; the four placeholder sites (C19); `A/data/room/entities/{SupplyEntities (new),JournalEntities}.kt`; `A/data/room/dao/SupplyDaos.kt` (new); `A/data/room/{SupplyRepositories (new),SupplyMappers (new),JournalMappers,Migrations,AppDatabase}.kt`; `A/di/AppGraph.kt`; `app/schemas/…AppDatabase/18.json` (generated); `T/data/room/{Migration17To18Test (new),SupplyDaoConstraintTest (new),MigrationTestSupport,JournalDaoTest}.kt` and B1's pins | `C/backup` (bar two placeholders), `C/merge`, `C/transfer`, `C/usecase` (bar two placeholders and `ApplyTemplate.kt:102`), `A/api`, `A/ui`, `docs`, `tools`, `17.json` |
-| B2a | `C/backup/{BackupFormat,BackupCodec,BackupContentCheck}.kt`; `C/usecase/{ExportBackupSet,ImportBackupReplace}.kt`; `CT/backup/BackupFormat18Test.kt` (new); `ExportBackupSetTest`, `ImportBackupReplaceTest` (+1 each); B2a's pins | `C/merge`, `C/transfer`, `C/usecase` (else), `A/**` main, `docs`, `tools` |
-| B2b | `C/merge/{MergePlan,MergePlanner}.kt`; `C/usecase/ApplyBackupMergePlan.kt`; `A/api/ApiDtos.kt` (the report rows only, `:167-240`); `CT/merge/MergePlannerSupplyTest.kt` (new); `T/api/ApiRouterTest.kt` (row 20 only); B2b's pins | `C/backup`, `C/usecase` (else), `A/ui`, `A/data`, `docs`, `tools` |
-| B2c (split) | `C/transfer/{TransferGraph,TransferOwnership,HeldWriteGuard}.kt`; `A/di/AppGraph.kt` (the guard's port only); `CT/transfer/{TransferGraphTest,ImportTransferPackTest,HeldWriteGuardTest,TransferTableClassificationTest}.kt` | `C/backup`, `C/merge`, `C/usecase`, `A/api`, `A/ui`, `docs`, `tools` |
+| B2a | `C/backup/{BackupFormat,BackupCodec,BackupContentCheck}.kt`; `C/usecase/{ExportBackupSet,ImportBackupReplace}.kt`; **constructor arguments only (C-1):** `A/di/AppGraph.kt` (the two use cases' and `BackupRepositories`' wiring), `T/testing/FakeGraph.kt`, `CT/testing/BackupInstall.kt` and the ~10 test construction sites `git grep -nE 'ExportBackupSet\(\|ImportBackupReplace\(\|BackupRepositories\('` names; `CT/backup/BackupFormat18Test.kt` (new); `ExportBackupSetTest`, `ImportBackupReplaceTest` (+1 each); B2a's pins | `C/merge`, `C/transfer`, `C/usecase` (else), `A/**` main bar `AppGraph`'s wiring, `docs`, `tools` |
+| B2b | `C/merge/{MergePlan,MergePlanner}.kt` (with `MergeSnapshot` and `mergeSnapshotOf`); `C/usecase/{ApplyBackupMergePlan,BuildBackupMergePlan}.kt` (the writes; the snapshot call, `:164`, `:98`); **constructor arguments only:** `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` and the test sites `git grep -nE 'ApplyBackupMergePlan\(\|BuildBackupMergePlan\(\|mergeSnapshotOf\('` names; `A/api/ApiDtos.kt` (the report rows only, `:167-240`); `CT/merge/MergePlannerSupplyTest.kt` (new); `T/api/ApiRouterTest.kt` (row 20 only); B2b's pins | `C/backup`, `C/usecase` (else), `A/ui`, `A/data`, `DuplicateCandidateDto`, `docs`, `tools` |
+| B2c (split) | `C/transfer/{TransferGraph,TransferOwnership,HeldWriteGuard}.kt`; `C/usecase/ApplyBackupMergePlan.kt` (`ReturnScope.of` only, C-4); `A/di/AppGraph.kt` (the guard's port and the "sixteen" at `:284`); `T/testing/FakeGraph.kt` (the guarded port); `CT/transfer/{TransferGraphTest,ImportTransferPackTest,HeldWriteGuardTest,TransferTableClassificationTest}.kt` | `C/backup`, `C/merge`, `C/usecase` (else), `A/api`, `A/ui`, `docs`, `tools` |
 | B3 | `C/usecase/{SupplyItemCommands (new),SaveSupplyItem (new),ArchiveSupplyItem (new),AssetSupplyCommands (new),AddAssetSupply (new),UpdateAssetSupply (new),RemoveAssetSupply (new),AssetSupplyRoles (new)}.kt`; `A/di/AppGraph.kt` (wiring); the test `FakeGraph` if it builds use cases; `CT/usecase/{SupplyItemUseCasesTest,AssetSupplyUseCasesTest}.kt` (new) | `C/backup`, `C/merge`, `C/transfer`, every shipped use case, `A/api`, `A/ui`, `docs`, `tools` |
-| B4 | `C/usecase/{ProfileCommands,SaveProfile,EventCommands,LogEvent,UpdateEvent,CompleteSchedule,CompleteGroupMembers,RecordConditionWithIncident}.kt` (C19–C20 only; the last four one argument each); `A/api/{ApiDtos,MaintenanceDtos}.kt` (the two keys and three mappings only); `A/ui/journal/EventEntryViewModel.kt`, `A/ui/setup/ProfileEditViewModel.kt` (row state only); `A/di/AppGraph.kt`; `CT/usecase/{ProfileUseCasesTest,EventUseCasesTest,ApplyTemplateTest,ReplaceAssetTest,SupplyLinkInferenceTest (new),SupplyItemFixtureTest (new)}.kt`; `T/api/{ApiRouterTest,MaintenanceRoutesTest}.kt` (rows 44 only); `T/ui/journal/EventEntryViewModelTest.kt`, `T/ui/setup/ProfileEditViewModelTest.kt`; B4's pins | `ApplyTemplate.kt`, `ReplaceSetup.kt`, `ScheduleCommands.kt`, `CompletionFlow.kt`, `SeedTemplates.kt`, any `Screen.kt`, `docs`, `tools` |
-| B5 | `A/api/{SupplyDtos (new),SupplyHandlers (new),ApiRouter,ApiHandlers,ApiJson}.kt`; `docs/api/v1.md`; `T/api/{SupplyRoutesTest (new),CommandShapesGoldenTest}.kt`; the status test | `C/**`, `A/ui/**`, `A/nav`, `A/data`, `tools`, `docs/api/command-shapes.json` |
+| B4a | `C/usecase/{ProfileCommands,SaveProfile,EventCommands,LogEvent,UpdateEvent,CompleteSchedule,CompleteGroupMembers,RecordConditionWithIncident}.kt` (C19–C20; the last five and `SaveProfile` a constructor parameter); `A/api/ValidationRefusals.kt` (the two arms, C-2); `A/api/{ApiDtos,MaintenanceDtos}.kt`, `A/ui/journal/EventEntryViewModel.kt`, `A/ui/setup/ProfileEditViewModel.kt` (the five input placeholders; `asProblems`' arm); `A/ui/supplies/SupplyStrings.kt` (new: P15-20); `A/di/AppGraph.kt`; `T/testing/FakeGraph.kt` and the ~12 test construction sites (C20); `CT/usecase/{ProfileUseCasesTest,EventUseCasesTest,ApplyTemplateTest,ReplaceAssetTest}.kt`; B4a's pins | `ApplyTemplate.kt`, `ReplaceSetup.kt`, `ScheduleCommands.kt`, `CompletionFlow.kt`, `SeedTemplates.kt`, any `Screen.kt`, `docs`, `tools` |
+| B4b | `A/api/{ApiDtos,MaintenanceDtos}.kt` (the two keys and three mappings only); `A/ui/journal/EventEntryViewModel.kt`, `A/ui/setup/ProfileEditViewModel.kt` (row state only); `CT/usecase/{SupplyLinkInferenceTest (new),SupplyItemFixtureTest (new)}.kt`; `T/api/{ApiRouterTest,MaintenanceRoutesTest}.kt` (row 44 only); `T/ui/journal/EventEntryViewModelTest.kt`, `T/ui/setup/ProfileEditViewModelTest.kt` | `C/**` main, `AppGraph`, `FakeGraph`, any `Screen.kt`, `docs`, `tools` |
+| B5 | `A/api/{SupplyDtos (new),SupplyHandlers (new),ApiRouter,ApiHandlers,ApiJson}.kt` (production builds `ApiHandlers` through its `constructor(graph)`, `ApiHandlers.kt:174`, so `AppGraph` is not touched); the 8 test construction sites of `ApiHandlers`' primary constructor (`VersionAgreementTest:121`, `T/ui/api/DeveloperApiViewModelTest:47`, `ApiRouterTest:51`, `:627`, `MaintenanceFixtures:155`, `AttachmentUploadRoutesTest:114`, `MaintenanceCommandShapeTest:47`, `LoopbackApiServerTest:65`), arguments only; `docs/api/v1.md`; `T/api/{SupplyRoutesTest (new),CommandShapesGoldenTest,ReferenceRoutesTest}.kt` | `C/**`, `A/ui/**` main, `A/nav`, `A/data`, `A/di`, `FakeGraph`, `tools`, `docs/api/command-shapes.json` |
 | B7 | `A/ui/supplies/{SupplyListScreen,SupplyDetailScreen,SupplyEditScreen,SupplyListViewModel,SupplyDetailViewModel,SupplyEditViewModel}.kt` (new); `A/ui/maintenance/MaintenanceScreen.kt`; `A/ui/nav/{Route,ServiceTagRoot}.kt`; `T/ui/supplies/*` (new); `AT/ui/supplies/SupplyScreensTest.kt` (new); `AT/ui/maintenance/MaintenanceShellTest.kt` | `A/api/**`, `docs/**`, `C/**`, `A/ui/asset`, `A/ui/setup`, `A/ui/journal`, `tools` |
 | B6 | `M/src/servicetag_mcp/server.py`; `M/README.md`; `M/tests/{test_supply_tools (new),test_maintenance_tools,test_tools,test_argument_guard}.py` | `app/**`, `core/**`, `S/**`, `M/src/servicetag_mcp/command_shapes.py`, `docs` |
-| B8 | `A/ui/supplies/{SupplyItemPicker,AssetSuppliesSection,AssetSuppliesSectionViewModel,SupplyLinkLine}.kt` (new); `A/ui/asset/AssetDetailScreen.kt` (the call site only); `A/ui/setup/{ProfileEditScreen,ProfileEditViewModel}.kt`; `A/ui/journal/{EventEntryScreen,EventEntryViewModel}.kt`; `T/ui/supplies/AssetSuppliesSectionViewModelTest.kt` (new); `T/ui/setup/ProfileEditViewModelTest.kt`; `T/ui/journal/EventEntryViewModelTest.kt`; `AT/ui/supplies/SupplySurfacesTest.kt` (new) | `C/**`, `A/api`, `A/data`, `EventDetailScreen.kt`, `JournalFormat.kt`, `CompletionFlow.kt`, `docs`, `tools` |
+| B8 | `A/ui/supplies/{SupplyItemPicker,AssetSuppliesSection,AssetSuppliesSectionViewModel,SupplyLinkLine}.kt` (new); `A/ui/asset/AssetDetailScreen.kt` (the call site and the `onOpenSupply` parameter, `:184-206`); `A/ui/nav/ServiceTagRoot.kt` (the `onOpenSupply` wiring line, `:200`); `A/ui/setup/{ProfileEditScreen,ProfileEditViewModel}.kt`; `A/ui/journal/{EventEntryScreen,EventEntryViewModel}.kt`; `T/ui/supplies/AssetSuppliesSectionViewModelTest.kt` (new); `T/ui/setup/ProfileEditViewModelTest.kt`; `T/ui/journal/EventEntryViewModelTest.kt`; `AT/ui/supplies/SupplySurfacesTest.kt` (new) | `C/**`, `A/api`, `A/data`, `EventDetailScreen.kt`, `JournalFormat.kt`, `CompletionFlow.kt`, `docs`, `tools` |
 | B9 | `docs/release-proofs.md`; `README.md` (`:54`); `docs/design/14-asset-model.md` (new, R15-14); `docs/design/04-domain-data-model.md` (the two-line note) | any `.kt`, `.py`, `tools`, `docs/api` |
 
 **B5 ∥ B7 — the one parallel pair.** B5's files are `A/api/**`, `docs/api/v1.md` and `T/api/**`; B7's are
 `A/ui/supplies/**`, `A/ui/maintenance/MaintenanceScreen.kt`, `A/ui/nav/{Route,ServiceTagRoot}.kt`, `T/ui/supplies/**`,
 `AT/ui/supplies/SupplyScreensTest.kt` and `AT/ui/maintenance/MaintenanceShellTest.kt` — **no file in common**, and
-both only consume what B1–B4 wired into `AppGraph` (neither edits it). Under the owner's two-lane rule B7a → B7b may run in a
-second worktree off B4's tip while B5 runs on the branch; the controller lands B7's commits before B6, and B6's
+both only consume what B1–B4a wired into `AppGraph` and `FakeGraph` (neither edits them). Under the owner's two-lane rule B7a → B7b may run in a
+second worktree off B4b's tip while B5 runs on the branch; the controller lands B7's commits before B6, and B6's
 `<base>` is the tip holding both. Sequential execution is equally valid.
 
-**Order:** B1 → B2a → B2b → B2c → B3 → B4 → { B5 ∥ (B7a → B7b) } → B6 → B8a → B8b → B9 (the three splits are
-this plan's recommendation by estimate; §11, §17, §18). B1 makes the types, tables and the
+**Order:** B1 → B2a → B2b → B2c → B3 → B4a → B4b → { B5 ∥ (B7a → B7b) } → B6 → B8a → B8b → B9 (the four splits
+are taken by plan; §11, §14, §17, §18). **Every `AppGraph` and `FakeGraph` edit lands in B1–B4a**, so B5 and B7 share
+no file (C-1). B1 makes the types, tables and the
 placeholders; B2a needs the domain; B2b needs `FIRST_SUPPLY_FORMAT` and the DTOs; B2c needs the lists; B3 needs the
-ports and the guarded port; B4 needs `SupplyItemRepository` and B3's fixture pieces; B5 needs B3's use cases and B4's
-problems; B7 needs B3's use cases; B6 needs B5's routes; B8 needs B7's routes, B3's applicability and B4's row state;
+ports and the guarded port; B4a needs `SupplyItemRepository`; B4b needs B4a and B3's fixture pieces; B5 needs B3's use
+cases and B4a's problems; B7 needs B3's use cases; B6 needs B5's routes; B8 needs B7's routes, B3's applicability and B4b's row state;
 B9 needs everything it describes.
 
 **Gate budget** at the merged tip (estimates; B1 records the base's exact counts — #93's merged tip: core 1696, app
@@ -825,8 +905,9 @@ rerun-until-green.
 
 ## 5. Strings
 
-**AWAITING RATIFICATION — one block (owner): P15-1…23, G1–G3 and D1 below, ruled on together; wording unchanged
-from rev 1.** **New phone strings — every one PROPOSED (the largest set since 1.4).** Each is declared once
+**RATIFIED (owner, 2026-10-01) — the whole block as proposed: P15-1…23 (with "Part number" as a product-identity
+field label), the reused strings, G1–G3 and D1, wording unchanged from rev 1.** P15-20 is also the profile editor's
+`UnknownSupplyItem` sentence (C-2: the same meaning, reused verbatim; no P15-24). **New phone strings — every one PROPOSED (the largest set since 1.4).** Each is declared once
 as a `const val` in its owning file and imported, never copied (the `ROLE_HEADER` rule).
 
 | id | proposed wording | where (contract) |
@@ -891,11 +972,10 @@ as a `const val` in its owning file and imported, never copied (the `ROLE_HEADER
 problem (no key field, the `"spec"` fallback); a name-required sentence (Save disabled); a delete confirmation (R15-5:
 nothing deletes a SupplyItem; removing an applicability row is immediate).
 
-## 6. Owner rulings (owner, 2026-10-01 — recorded on #15 and #76; one OPEN: R15-15)
+## 6. Owner rulings (owner, 2026-10-01 — recorded on #15 and #76; every ruling DECIDED)
 
 **DECIDED** rulings are binding as written; **controller default, owner did not object** rulings are binding the same
-way; R15-13 is **CLOSED**; **R15-15 is OPEN** (B4 implements its recommendation, which is the do-nothing path, unless
-the owner rules otherwise before B4's dispatch). The HARD SCOPE sentence governs all.
+way; R15-13 is **CLOSED**; R15-15 was decided as recommended (#97 [LATER] filed, non-blocking). The HARD SCOPE sentence governs all.
 
 | ruling | whose | the question, and the recommendation | where it lands |
 |---|---|---|---|
@@ -906,7 +986,7 @@ the owner rules otherwise before B4's dispatch). The HARD SCOPE sentence governs
 | **R15-4** (Q4) | owner — **DECIDED** as recommended, **with the owner's precision** | **The linkage shape and the completion:** a soft nullable `supply_id` on both material-line types (no FK, no recreate), `name` and `unit` kept as the snapshot; the completion dialog unchanged. **Precision:** the plan, AC7's mapping and every document sentence **never** claim that a minimal schedule completion creates an event-level SupplyItem usage record — it writes no material line. AC7 reads: a replace-on-cadence item uses the ordinary scheduler / profile / event path, and the SupplyItem identity is retained on the profile's quick-action line and on any event line that carries it. | §1 AC7, limit 2; C4–C6, C18–C21, C25, C28; §8 |
 | **R15-5** (Q5) | owner — **DECIDED** as recommended | **Archive-only:** a SupplyItem is never deleted (no use case, route, tool or button; D4's "Delete supply" superseded); `asset_supply.supply_id` RESTRICT. Applicability rows are removable **on the phone and over the API** (`DELETE /v1/asset-supplies/{id}`, `remove_asset_supply`) — configuration, not history. The `DELETE` route and the MCP tool stay (84 tools). | C16, C23, C26 |
 | **R15-6** (Q6) | controller default, owner did not object | **An archived SupplyItem** stays on its Assets and its linked lines with the "Archived" badge, is left out of every picker, may still be named by a line (an edit re-sends existing links), is refused for a **new** applicability row (409), and can be unarchived. **A link always resolves**: no FK, so the use cases (C20), the codec (C9) and the planner (C11) hold it. | C2, C9, C11, C17, C20, C32 |
-| **R15-7** (Q7) | controller default, owner did not object | **Divergence on merge:** the same id with different content is `CONFLICT` (every id-keyed row's rule) — which refuses a whole archive **or Transfer Pack** (limit 4); a duplicate hint for the same manufacturer and part number under two ids; the older-archive exception for link-only changes (C12). The alternative is the category rule (local wins, `SKIPPED`), which would silently keep a stale spec list. | C11, C12, C13 |
+| **R15-7** (Q7) | controller default, owner did not object | **Divergence on merge:** the same id with different content is `CONFLICT` (every id-keyed row's rule) — which refuses a whole archive **or Transfer Pack** (limit 4); **no duplicate hint in the MVP** (C-5: the shipped carrier is asset-typed; limit 4a); the older-archive exception for link-only changes (C12). The alternative is the category rule (local wins, `SKIPPED`), which would silently keep a stale spec list. | C11, C12, C13 |
 | **R15-8** (Q8) | owner — **DECIDED** as recommended | **Where the UI lives:** a fifth Maintenance row "Supplies" → list / detail (specs, "Used by") / editor, no reorder control; an asset-detail "Supplies" section before "Components" with add, edit role and remove; "Link supply" on the quick-action editor's Materials rows; the event form only shows and removes a link the chip carried; event detail and the journal row unchanged (limit 8); no stock or procurement UI anywhere. | C29–C35 |
 | **R15-9** (Q9) | owner — **DECIDED** | **The loader:** no loader work in #15 (`S/` and the bundle tool untouched); the MCP and `/v1` populate the development phone. | C28, §1 |
 | **R15-10** (Q10) | controller default, owner did not object | **Templates** stay name-only: applying one creates no SupplyItem and no link; #42 later emits SupplyItems explicitly. | C21 |
@@ -914,7 +994,7 @@ the owner rules otherwise before B4's dispatch). The HARD SCOPE sentence governs
 | **R15-12** (Q12) | owner — **DECIDED** | **Older clients clear links (limit 1):** accepted and documented — the MCP ships with the app; **no per-line tri-state** (it could not protect event lines, matched by position). | C24, C27, limit 1 |
 | **R15-13** | owner — **CLOSED** (done by the owner) | **The 2026-09-29 clarification's "How is it stocked/reordered?"** (`issue-15.md:204`, the snapshot this plan read): the owner corrected the comment on GitHub to point stocking and reordering at #95. Nothing in the plan changes. | §1 |
 | **R15-14** | owner — **DECIDED differently** | **The asset-model page:** do **not** memorialize the six-bucket wording (it conflicts with the simplified #47 model). `docs/design/14-asset-model.md` records the **current architecture** — "Asset → nested Component → optional SupplyItem identity → maintenance usage/history" — and that a SupplyItem needs a #47 Component record only when fitted-instance or current-position history actually matters; worded without #95's words; plus the two-line D4 note. B9 owns it. | C36, §4, B9 |
-| **R15-15** | owner — **OPEN** | **#86's replace and applicability.** *Recommend:* do **not** copy applicability on Replace in the MVP; the cloned quick actions' lines already keep their links through `ReplaceSetup.kt:84`'s `.copy` as today; record it as limit 7; a later issue may add applicability to #86's reviewed carry-forward. **Cost if wrong:** after a replace the owner re-adds each Supplies row by hand (one add per row) until that issue lands; adding it later needs no schema or format change (new `asset_supply` rows for the successor), only a carry-forward option in the offer, the plan and apply digest input (`A/api/ReplaceDtos.kt:180-191`), a review row with its ratified strings and an MCP argument — about one brief. | C21, limit 7, row 42 |
+| **R15-15** | owner — **DECIDED** as recommended (#97 [LATER] filed, non-blocking) | **#86's replace and applicability.** Replace does **not** copy applicability in the MVP; the cloned quick actions' lines already keep their links through `ReplaceSetup.kt:84`'s `.copy` as today; record it as limit 7; a later issue may add applicability to #86's reviewed carry-forward. **Cost if wrong:** after a replace the owner re-adds each Supplies row by hand (one add per row) until that issue lands; adding it later needs no schema or format change (new `asset_supply` rows for the successor), only a carry-forward option in the offer, the plan and apply digest input (`A/api/ReplaceDtos.kt:180-191`), a review row with its ratified strings and an MCP argument — about one brief. | C21, limit 7, row 42 |
 | **R15-16** | controller default, owner did not object | **The API shape:** `PATCH /v1/supply-items/{id}` is an overlay with "absent or `null` = unchanged" (no tri-state: no nullable field); `PATCH /v1/asset-supplies/{id}` takes `role` only; the line refusals reuse the shipped `PROFILE_VALIDATION` / `EVENT_VALIDATION` codes; **no `command-shapes.json` entry** (R91-12's precedent). | C2, C3, C22–C25 |
 
 ## 7. Proofs
@@ -934,11 +1014,12 @@ the owner rules otherwise before B4's dispatch). The HARD SCOPE sentence governs
     `'MIGRATION_16_17'`'s count there (2 and 1 at `fac0e951`); ``'ADD COLUMN `supply_id` TEXT'`` in `Migrations.kt` → 2;
     `'REFERENCES'` inside `MIGRATION_17_18` → only the two `CREATE TABLE`s' (read it); `18.json` present,
     `17.json` unchanged (`git diff <base> -- app/schemas/**/17.json` → empty).
-  - `'^@JvmInline value class SupplyId\('` over `core/src/main` → 1; `'^data class SupplyItem\('` → 1;
+  - `'^value class SupplyId\('` over `core/src/main` → 1 (the shipped two-line style, `Ids.kt:3-4`, N-1); `'^data class SupplyItem\('` → 1;
     `'fun delete'` in the SupplyItem port, DAO and repository → 0 (R15-5).
-  - `'supplyId = null'` over `core/src/main app/src/main` → only `ApplyTemplate.kt` (C19).
+  - The nine named placeholder lines (C19) read, each no longer passing a literal `null` bar `ApplyTemplate.kt:102` (N-2).
   - `'SUPPLY_ITEMS, ASSET_SUPPLIES,?$'` or the appended pair after `SUCCESSIONS` in `MergePlan.kt` → 1;
-    `'ASSET_SUPPLY_HELD_BY_AN_EQUIVALENT_LOCAL_ROW'` → ≥ 1; `'SAME_MANUFACTURER_PART_NUMBER'` → ≥ 1.
+    `'ASSET_SUPPLY_HELD_BY_AN_EQUIVALENT_LOCAL_ROW'` and `'ASSET_SUPPLY_HELD_BY_A_LOCAL_ROW'` → ≥ 1 each;
+    `'^enum class MergeHint'`'s line unchanged (no new hint, C-5).
   - `'"supplyItems" to TransferTableClass.GLOBAL_IN_USE'` → 1; `'"assetSupplies" to TransferTableClass.ASSET_OWNED'` → 1.
   - Each C2 code in `A/api` → its arm(s) only; each as `'^\| (404|409|422) \| `CODE` \|'` in `docs/api/v1.md` → 1;
     `'else ->'` inside the new `when`s → 0.
@@ -983,12 +1064,14 @@ the owner rules otherwise before B4's dispatch). The HARD SCOPE sentence governs
 - **#90** — the gate-time trigger is not reached (§3). **#62** — no black-box UI driving; rows 58, 61, 64 are tier-2
   Compose semantics.
 
-## Briefs — common to all ten
+## Briefs — common to every brief (fourteen dispatches)
 
 Read §1–§8, the audit, issue #15 (with the 2026-09-29 clarification) and every earlier report on this branch.
-**Dispatch precondition:** every R15 ruling is decided or a standing controller default (§6) except R15-15, whose
-recommended do-nothing path B4 implements unless the owner rules otherwise before B4's dispatch; §5's block is
-ratified before B7a. R15-0 gates the **merge** (not before the 1.6.0 tag), not the briefs.
+**Dispatch precondition:** met — every R15 ruling is DECIDED or a standing controller default (§6) and §5 is
+RATIFIED. R15-0 gates the **merge** (not before the 1.6.0 tag), not the briefs. **Constructor plumbing (C-1):** a
+brief whose contract adds a constructor parameter owns that parameter's `AppGraph` wiring line, `FakeGraph` line and
+every test construction site `git grep` names — arguments only, nothing else in those files; no `AppGraph` or
+`FakeGraph` edit after B4a.
 
 **Gate.** `./gradlew :core:test :app:testDebugUnitTest --rerun`, zero failures and skips;
 `:app:compileDebugAndroidTestKotlin`. Then the brief's anchored greps (`git grep -nE '<pattern>' -- <paths>`, over
@@ -1039,7 +1122,7 @@ R15-2, R15-4, R15-5. **Interfaces produced:** `SupplyId`, `SupplyItem`, `SupplyS
 line types' `supplyId`, both ports, the Room tables and columns at schema 18 — consumed by every later brief.
 
 **Placeholders (C19):** pass `supplyId = null` at `BackupFormat.kt:880`, `:944`, `SaveProfile.kt:89`,
-`EventCommands.kt:231` (placeholders) and `ApplyTemplate.kt:102` (final), and nowhere else in main; report them. **Greps:** `'^@JvmInline value class SupplyId\('` → 1;
+`EventCommands.kt:231` (placeholders) and `ApplyTemplate.kt:102` (final), and nowhere else in main; report them. **Greps:** `'^value class SupplyId\('` → 1 (N-1); C37.2's two patterns hold on B1's own diff (C-6);
 `'^    version = 18,$'` → 1; `'^        const val SCHEMA_VERSION = 18$'` → 1; ``'ADD COLUMN `supply_id` TEXT'`` → 2;
 no `DEFAULT`, `UPDATE`, `CREATE INDEX` on a line table, or `REFERENCES` outside the two `CREATE TABLE`s inside
 `MIGRATION_17_18` (read it); `'MIGRATION_17_18'` counts equal `'MIGRATION_16_17'`'s (2 and 1); `18.json` added,
@@ -1056,53 +1139,62 @@ and ~25 pin sites). **Estimate:** 55 min.
 **Read:** audit §2.4; `C/backup/BackupFormat.kt:206-281`, `:546-656`, `:870-950`; `C/backup/BackupCodec.kt:100-200`,
 `:205-300`, `:330-445`, `:480-650`; `C/backup/BackupContentCheck.kt:50-90`; **confirm first** `ExportBackupSet.kt`
 (`~170-191`) and `ImportBackupReplace.kt` (its wipe and write order) and report the lines read;
-`CT/backup/BackupFormat17Test.kt`. **Rows:** 6–14. **Rulings:** R15-6 (a link resolves; archived is valid).
+`CT/backup/BackupFormat17Test.kt`; the construction sites (§4, C-1). **Rows:** 6–14. **Rulings:** R15-6 (a link
+resolves; archived is valid).
 **Interfaces produced:** the three DTOs, `BackupData.supplyItems` / `assetSupplies`, the line DTOs' `supplyId`,
-`FIRST_SUPPLY_FORMAT` — consumed by B2b, B2c, B4, B5.
+`FIRST_SUPPLY_FORMAT` — consumed by B2b, B2c, B4a, B5.
 
 **Greps:** `'^    const val FORMAT_VERSION = 18$'` → 1; `'^    internal const val FIRST_SUPPLY_FORMAT = 18$'` → 1;
-`'supplyId = null'` in `C/backup` → 0 (B1's two placeholders gone); `LegacyArchive.kt` diff → empty. **Pin list:** §3's
-B2a rows (the 14 format literals, the two one-past triples, `BackupFormat6Test.kt:289`). **Untouched:** `C/merge`,
-`C/transfer`, every use case but the two named, `A/**` main, `docs`, `tools`. **Must NOT:** give a new DTO a default
+`BackupFormat.kt:880` and `:944` read, carrying the DTO's `supplyId` (N-2); `LegacyArchive.kt` diff → empty. **Pin
+list:** §3's B2a rows (the 14 format literals, the two one-past triples, `BackupFormat6Test.kt:287`). **Untouched:**
+`C/merge`, `C/transfer`, every use case but the two named, `A/**` main bar `AppGraph`'s wiring, `docs`, `tools`. **Must NOT:** give a new DTO a default
 (only the two line keys); accept a non-null link or a supply row below format 18; skip the line-link resolution check.
 **Counted RED (5):** rows 6, 8, 9, 10, 13. **Caps:** 7 runs; 1 h / 2 h; fix round 3 runs, 45 min. **Size:** about
-200 production, 320 test lines. **Estimate:** 55 min.
+200 production, 320 test lines, plus ~13 mechanical construction sites. **Estimate:** 55–60 min. **Split clause:** if
+the dispatch estimate passes 1 h, C10 (export and replace import, their construction sites, row 13) goes to a B2a2
+off B2a's tip.
 
 ## 11. B2b — the merge (C11–C12; core JVM, one app row) — and its split clause
 
 **Read:** audit §0.6, §2.5; `C/merge/MergePlan.kt:55-110`, `:230-350`, `:540-580`; `C/merge/MergePlanner.kt:500-560`,
 `:730-800`, `:840-900`, `:1035-1070`, `:1195-1225`, `:1260-1340`; **confirm first** `ApplyBackupMergePlan.kt`
-(`~160-215`, the write order) and report it; `CT/merge/{MergePlannerLoanTest,MergePlannerReferenceTest}.kt`;
-`T/api/ApiRouterTest.kt` (its import-merge case). **Rows:** 15–25. **Rulings:** R15-6, R15-7. **Interfaces produced:**
-`MergeTable.SUPPLY_ITEMS` / `ASSET_SUPPLIES`, the new reason and hint, the tally — consumed by B5 (the report) and B6
-(the docstring).
+(`~160-215`, the write order) and report it; `C/usecase/BuildBackupMergePlan.kt:90-105`; `MergePlan.kt:425-440`
+(`MergeSnapshot`); `MergePlanner.kt:1440-1475` (`mergeSnapshotOf`); `CT/merge/{MergePlannerLoanTest,
+MergePlannerReferenceTest}.kt`; `T/api/ApiRouterTest.kt` (its import-merge case). **Rows:** 15–25. **Rulings:** R15-6,
+R15-7 (no hint, C-5). **Interfaces produced:** `MergeTable.SUPPLY_ITEMS` / `ASSET_SUPPLIES`, the two new reasons, the
+snapshot's two lists, the tally — consumed by B2c (the return), B5 (the report) and B6 (the docstring).
 
 **Split clause (taken by this plan's estimate):** whole, C11–C14 is ~75 min; **B2b carries C11–C12 and B2c (§12)
 carries C13–C14**, dispatched off B2b's accepted tip. **Greps:** `'ASSET_SUPPLY_HELD_BY_AN_EQUIVALENT_LOCAL_ROW'` in
-`MergePlan.kt` → 1 declaration; `'SAME_MANUFACTURER_PART_NUMBER'` → 1 declaration; `'FIRST_SUPPLY_FORMAT'` in
-`MergePlanner.kt` → 1; the `MergeTable` line ends `SUCCESSIONS, SUPPLY_ITEMS, ASSET_SUPPLIES,` (no shipped member
-moved). **Pin list:** `MaintenanceRoutesTest.kt:1488`, `:1541`, `:1551`. **Untouched:** `C/backup`, `C/transfer`, every
-use case but `ApplyBackupMergePlan`, `A/ui`, `A/data`, `docs`, `tools`; `A/api/ApiDtos.kt` beyond the report rows.
+`MergePlan.kt` → 1 declaration, and `'ASSET_SUPPLY_HELD_BY_A_LOCAL_ROW'` → 1; `'^enum class MergeHint'`'s line
+unchanged; the SupplyItem section's first line precedes the profiles section's in `MergePlanner.kt` (read it, C-3);
+`'FIRST_SUPPLY_FORMAT'` in `MergePlanner.kt` → 1; the `MergeTable` line ends `SUCCESSIONS, SUPPLY_ITEMS, ASSET_SUPPLIES,` (no shipped member
+moved). **Pin list:** `MaintenanceRoutesTest.kt:1488`, `:1541`, `:1551`, `:1194-1215`. **Untouched:** `C/backup`,
+`C/transfer`, every use case but `ApplyBackupMergePlan` and `BuildBackupMergePlan`, `A/ui`, `A/data`, `docs`, `tools`;
+`A/api/ApiDtos.kt` beyond the report rows (never `DuplicateCandidateDto`).
 **Must NOT:** add an `UPDATE` verdict or any write to an existing row; apply C12's exception to format 18 or to a row
-with no linked line; reorder a shipped `MergeTable` or `MergeReason` member. **Counted RED (6):** rows 15, 16, 17, 18,
-22, 25. **Caps:** 8 runs; 1 h / 2 h; fix round 3 runs, 45 min. **Size:** about 170 production, 330 test lines.
-**Estimate:** 50 min.
+with no linked line; move a shipped `MergeTable` or `MergeReason` member; add a `MergeHint` member; plan the
+SupplyItem section after profiles. **Counted RED (7):** rows 15, 16, 17, 18, 19, 22, 25. **Caps:** 9 runs; 1 h / 2 h;
+fix round 3 runs, 45 min. **Size:** about 190 production, 360 test lines, plus the construction sites. **Estimate:**
+55 min.
 
 ## 12. B2c — the Transfer Pack and the held guard (C13–C14; core JVM)
 
 **Read:** audit §0.7, §2.5; `C/transfer/TransferGraph.kt:1-60`, `:150-300`; `C/transfer/TransferOwnership.kt:70-115`;
-`C/transfer/HeldWriteGuard.kt:55-120`, `:240-260`; `A/di/AppGraph.kt` (where the guard wraps the ports);
+`C/transfer/HeldWriteGuard.kt:55-120`, `:240-260`; `A/di/AppGraph.kt` (where the guard wraps the ports, `:284`);
+`C/usecase/ApplyBackupMergePlan.kt:170-185`, `:255-345` (`ReturnScope`, C-4);
 `CT/transfer/{TransferGraphTest,ImportTransferPackTest,HeldWriteGuardTest,TransferTableClassificationTest}.kt`.
-`<base>` = B2b's accepted tip. **Rows:** 26–30. **Rulings:** R15-7 (a diverged item refuses a pack). **Interfaces
+`<base>` = B2b's accepted tip. **Rows:** 26–30, 67. **Rulings:** R15-7 (a diverged item refuses a pack, limit 4). **Interfaces
 produced:** the guarded `AssetSupplyRepository` — consumed by B3.
 
 **Greps:** `'"supplyItems" to TransferTableClass.GLOBAL_IN_USE'` → 1; `'"assetSupplies" to
 TransferTableClass.ASSET_OWNED'` → 1; `'keyed by name'` in `TransferGraph.kt` → 0; `'sixteen'` in
-`HeldWriteGuard.kt` → 0 (the count words say seventeen). **Pin list:** `TransferTableClassificationTest.kt:25-31`;
-`HeldWriteGuardTest.kt:186`. **Untouched:** `C/backup`, `C/merge`, `C/usecase`, `A/api`, `A/ui`, `docs`, `tools`.
-**Must NOT:** wrap `SupplyItemRepository`; carry an item no carried row names; drop an item in `retain`. **Counted RED
-(3):** rows 27, 28, 30. **Caps:** 5 runs; 1 h / 2 h; fix round 2 runs, 45 min. **Size:** about 60 production, 160 test
-lines. **Estimate:** 35 min.
+`HeldWriteGuard.kt` and at `AppGraph.kt:284` → 0 (the count words say seventeen, N-6); `'assetSupplies ='` inside
+`ReturnScope.of` → 1. **Pin list:** `TransferTableClassificationTest.kt:25-31`; `HeldWriteGuardTest.kt:186`.
+**Untouched:** `C/backup`, `C/merge`, `C/usecase` bar `ReturnScope.of`, `A/api`, `A/ui`, `docs`, `tools`. **Must NOT:**
+wrap `SupplyItemRepository`; carry an item no carried row names; drop an item in `retain`; reduce `supplyItems` in
+`ReturnScope`. **Counted RED (4):** rows 27, 28, 30, 67. **Caps:** 6 runs; 1 h / 2 h; fix round 2 runs, 45 min.
+**Size:** about 70 production, 200 test lines. **Estimate:** 45 min.
 
 ## 13. B3 — the SupplyItem and applicability use cases (C15–C17; core JVM)
 
@@ -1112,7 +1204,7 @@ ReferenceCommands,AddReference,UpdateReference}.kt`; `C/journal/{CategoryKey,Cat
 R15-5, R15-6, R15-11. **Interfaces produced:** `SaveSupplyItem`, `ArchiveSupplyItem`, `AddAssetSupply`,
 `UpdateAssetSupply`, `RemoveAssetSupply`, their commands, `SupplyItemValidation` / `SupplyItemProblem`,
 `AssetSupplyResult` / `AssetSupplyProblem`, `NoSuchSupplyItem`, `AssetSupplyRoles.suggestions`, all wired in
-`AppGraph` — consumed by B4, B5, B7, B8.
+`AppGraph` — consumed by B4a, B4b, B5, B7, B8.
 
 **Greps:** `'data class SupplyItemCommand\('` → 1 with no `=` default inside it (read it); `'fun slugify'` and
 `'KEY_PATTERN = '` → 1 each, unchanged (no second key rule); `'fun display'` in `CategoryKey.kt` → 1 (no second
@@ -1122,59 +1214,72 @@ cases; fill a role from anything but the command; accept a new applicability row
 (6):** rows 31, 32, 33, 34, 36, 38. **Caps:** 8 runs; 1 h / 2 h; fix round 3 runs, 45 min. **Size:** about 240
 production, 330 test lines. **Estimate:** 55 min.
 
-## 14. B4 — usage linkage in core, the request keys and the row state (C18–C21, C24's keys; core and app JVM)
+## 14. B4a / B4b — usage linkage (C18–C21, C24's keys; core and app JVM) — split by plan (C-1, C-2)
 
-**Read:** audit §0.2, §0.3, §0.8, §3; `C/usecase/{ProfileCommands,SaveProfile,EventCommands,LogEvent,UpdateEvent,
-CompleteSchedule,CompleteGroupMembers,RecordConditionWithIncident,ApplyTemplate,ReplaceSetup}.kt`;
-`A/api/ApiDtos.kt:351-425`; `A/api/MaintenanceDtos.kt:405-430`; `A/ui/journal/EventEntryViewModel.kt:80-95`,
-`:255-270`, `:385-405`, `:630-640`; `A/ui/setup/ProfileEditViewModel.kt:150-165`, `:335-345`;
+**B4a — core linkage and the constructor sites.** **Read:** audit §0.2, §0.3, §0.8, §3;
+`C/usecase/{ProfileCommands,SaveProfile,EventCommands,LogEvent,UpdateEvent,CompleteSchedule,CompleteGroupMembers,
+RecordConditionWithIncident,ApplyTemplate,ReplaceSetup}.kt`; `A/api/ValidationRefusals.kt:70-155`;
+`A/ui/setup/ProfileEditViewModel.kt:335-365`; `A/ui/journal/EventEntryViewModel.kt:630-685`; `T/testing/FakeGraph.kt`;
 `CT/usecase/{ProfileUseCasesTest,EventUseCasesTest,ApplyTemplateTest,ReplaceAssetTest}.kt`. Confirm the writer list
-first with C19's grep and report every site. **Rows:** 37, 39–45. **Rulings:** R15-4, R15-6, R15-10, R15-12, R15-15.
-**Interfaces produced:** the inputs' `supplyId`, `UnknownSupplyItem` on both problem types, the request keys, the row
-state — consumed by B5, B6, B8.
-
-**Greps:** `'^data class ConsumableInput\(val name: String, val quantity: String, val unit: String, val supplyId:
-SupplyId\?\)$'` → 1; `ProfileConsumableInput`'s `supplyId` has no default (read it); `'supplyId = null'` over main →
-only `ApplyTemplate.kt`; `git diff <base> -- C/usecase/ApplyTemplate.kt C/usecase/ReplaceSetup.kt
+and the ~12 construction sites first with `git grep` and report every site. **Rows:** 39, 40 (core cases), 41, 42.
+**Rulings:** R15-4 (with its precision), R15-6, R15-10, R15-15. **Interfaces produced:** the inputs' `supplyId`,
+`UnknownSupplyItem` on both problem types and its three arms, the `SupplyItemRepository` constructor parameter, P15-20's
+home — consumed by B4b, B5, B7, B8. **Greps:** `'^data class ConsumableInput\(val name: String, val quantity: String,
+val unit: String, val supplyId: SupplyId\?\)$'` → 1; `ProfileConsumableInput`'s `supplyId` has no default (read it);
+`SaveProfile.kt:89` and `EventCommands.kt:231` read, carrying the input's link (N-2); `'else ->'` count in
+`ValidationRefusals.kt` and in `asProblems()` unchanged; `'^const val .* = "That supply item is no longer available\."$'`
+→ 1, in `A/ui/supplies/SupplyStrings.kt`; `git diff <base> -- C/usecase/ApplyTemplate.kt C/usecase/ReplaceSetup.kt
 C/usecase/ScheduleCommands.kt A/ui/maintenance/CompletionFlow.kt C/journal/SeedTemplates.kt` → empty. **Pin list:**
 the input constructor sites (§3). **Untouched:** every `Screen.kt`, `C/backup`, `C/merge`, `C/transfer`, `docs`,
 `tools`. **Must NOT:** fill a line's `name` or `unit` from a SupplyItem in core; refuse a link to an archived item;
-link by name; change the completion command. **Split clause:** if the dispatch estimate passes 1 h, rows 37 and 45 (the
-inference and fixture classes) go to a B4b off B4's tip. **Counted RED (7):** rows 37, 39, 40, 41, 42, 43, 44.
-**Caps:** 9 runs; 1 h / 2 h; fix round 3 runs, 45 min. **Size:** about 140 production, 340 test lines (the AC11
-fixture ~110). **Estimate:** 55 min.
+change the completion command; add a phone string. **Counted RED (4):** rows 39, 40, 41, 42. **Caps:** 6 runs;
+1 h / 2 h; fix round 3 runs, 45 min. **Size:** about 110 production, 180 test lines, plus ~14 construction sites.
+**Estimate:** 50 min.
+
+**B4b — the request keys, the row state, inference and AC11.** `<base>` = B4a's accepted tip. **Read:**
+`A/api/ApiDtos.kt:351-425`; `A/api/MaintenanceDtos.kt:405-430`; `A/ui/journal/EventEntryViewModel.kt:80-95`,
+`:255-270`, `:385-405`, `:630-640`; `A/ui/setup/ProfileEditViewModel.kt:150-165`, `:335-345`; `T/api/ApiRouterTest.kt`
+(the profile and event cases); B4a's report. **Rows:** 37, 40 (the two view-model cases), 43, 44, 45. **Rulings:**
+R15-4, R15-12. **Interfaces produced:** the request keys and the row state — consumed by B5, B6, B8. **Greps:** B4a's
+five input placeholder lines read, each carrying the request's or the row's link (N-2); `'supplyId'` in
+`ProfileConsumableRequest` and `ConsumableRequest` → 1 each, `String? = null`. **Untouched:** `C/**` main, `AppGraph`,
+`FakeGraph`, every `Screen.kt`, `docs`, `tools`. **Must NOT:** link by name (row 37); draw anything (B8 draws). **Counted
+RED (4):** rows 37, 43, 44, 45. **Caps:** 6 runs; 1 h / 2 h; fix round 3 runs, 45 min. **Size:** about 60 production,
+260 test lines (the AC11 fixture ~110). **Estimate:** 50 min.
 
 ## 15. B5 — the API and the wire document (C22–C25; app JVM, docs)
 
 **Read:** audit §6; `A/api/{ApiRouter,ApiHandlers,ApiJson,ApiDtos,MaintenanceHandlers,ReferenceDtos,
 ReferenceHandlers,ValidationRefusals}.kt` at the cited lines; `docs/api/v1.md` (the group, reference and loan
 sections, `:208`, `:577`, `:1861`, `:1971`); `T/api/{LoanRoutesTest,ReferenceRoutesTest,CommandShapesGoldenTest}.kt`.
-`<base>` = B4's accepted tip (B5's lane). **Rows:** 46–53. **Rulings:** R15-5 (DELETE), R15-16. **Interfaces
+`<base>` = B4b's accepted tip (B5's lane); the 8 `ApiHandlers` test construction sites (§4, C-1). **Rows:** 46–53. **Rulings:** R15-5 (DELETE), R15-16. **Interfaces
 produced:** the five SupplyItem rows, the four applicability rows, the codes — consumed by B6.
 
 **Greps:** each C2 code in `A/api` → its arm; `'else ->'` in the new `when`s → 0; `'"supplyItems" to'` and
 `'"assetSupplies" to'` in `ApiHandlers.kt` → 1 each; each C2 row in `v1.md` as `'^\| (404|409|422) \| `CODE` \|'` → 1;
 `'1–17'` in `v1.md` → 0; `git diff <base> -- docs/api/command-shapes.json` → empty. **Pin list:**
-`CommandShapesGoldenTest.kt:132-172`. **Untouched:** `C/**`, `A/ui/**`, `A/data`, `tools`, `command-shapes.json`.
+`CommandShapesGoldenTest.kt:132-172`; `ReferenceRoutesTest.kt:~642-670` (`counts.keys`). **Untouched:** `C/**`,
+`A/ui/**` main, `A/data`, `A/di`, `FakeGraph`, `tools`, `command-shapes.json`.
 **Must NOT:** add a SupplyItem delete or a tri-state reader; draw a sentence from a `message`; widen another family's
 code. **Split clause:** if the dispatch estimate passes 1 h, the wire document (C25's `v1.md` part, row 53 and the
 golden pin) goes to a B5b in the same lane. **Counted RED (6):** rows 46, 47, 49, 50, 51, 52. **Caps:** 8 runs;
-1 h / 2 h; fix round 3 runs, 45 min. **Size:** about 300 production, 380 test, 160 document lines. **Estimate:**
-55–65 min.
+1 h / 2 h; fix round 3 runs, 45 min. **Size:** about 300 production, 400 test, 170 document lines, plus 8
+construction sites. **Estimate:** 60 min — at the target, so the split clause is the controller's call at dispatch.
 
 ## 16. B6 — the MCP (C26–C28; pytest)
 
 **Read:** audit §6 (MCP); `M/src/servicetag_mcp/server.py:70-110`, `:170-320`, `:940-1130`, `:1180-1225`,
 `:1320-1460`, `:1855-1880`, `:2700-2815`; `M/README.md`; `M/tests/{test_loan_tools,test_reference_tools,
-test_argument_guard,test_tools,test_maintenance_tools}.py`. `<base>` = the tip holding B5 and B7. **Rows:** 54–57.
+test_argument_guard,test_tools,test_maintenance_tools}.py` (`test_reference_tools.py:64-65` and `test_tools.py:118-122`
+pin the tool count, N-4). `<base>` = the tip holding B5 and B7. **Rows:** 54–57.
 **Rulings:** R15-5, R15-9, R15-12.
 
 **Greps:** `'^@mcp\.tool\('` → 84; `'^_MIN_SUPPLY_SCHEMA_VERSION = 18$'` → 1; `'_require_supply_schema\('` → the
 definition, the eight tools and the four line tools' guarded calls; `'format 1–18'` in `server.py` → 1, `'format
 1–17'` → 0; `'format \*\*1–18\*\*'` in `M/README.md` → 1; `git diff <base> -- tools/servicetag-schedules
 tools/servicetag-mcp/src/servicetag_mcp/command_shapes.py` → empty. **Pin list:** `test_argument_guard.py:51`,
-`:203-204`, `:256-258`; `test_tools.py:803-815`. **Untouched:** `app/**`, `core/**`, `S/**`, `docs`. **Must NOT:** gate
-a line tool that sends no link; send `supplyId` to a phone whose row had no such key; add a SupplyItem delete tool.
+`:203-204`, `:256-258`; `test_tools.py:118-122`, `:803-815`; `test_reference_tools.py:64-65`. **Untouched:** `app/**`, `core/**`, `S/**`, `docs`. **Must NOT:** gate
+a line tool that sends no `supplyId` key (presence, N-7); add a `clear_fields` argument to `update_supply_item`; send `supplyId` to a phone whose row had no such key; add a SupplyItem delete tool.
 **Counted RED (3):** rows 54, 55, 56. **Caps:** 5 pytest mutation runs; 1 h / 2 h; fix round 3 runs, 45 min.
 **Size:** about 200 production, 300 test lines. **Estimate:** 50 min.
 
@@ -1182,22 +1287,24 @@ a line tool that sends no link; send `supplyId` to a phone whose row had no such
 
 **Read:** audit §7; `A/ui/maintenance/{MaintenanceScreen,GroupListScreen,GroupDetailScreen,GroupEditScreen,
 GroupEditViewModel}.kt`; `A/ui/nav/{Route,ServiceTagRoot}.kt`; `A/ui/setup/ProfileEditScreen.kt:241-260`, `:370-400`,
-`:491`; `AT/ui/maintenance/{GroupScreensTest,MaintenanceShellTest}.kt`. `<base>` = B4's accepted tip (B7's lane).
+`:491`; `AT/ui/maintenance/{GroupScreensTest,MaintenanceShellTest}.kt`. `<base>` = B4b's accepted tip (B7's lane).
 **Rulings:** R15-1, R15-6, R15-8, R15-11; §5's P15-1…12, P15-20 ratified.
 
 **Split (taken by this plan's estimate, ~75 min whole):** **B7a** = C29–C30 (the row, the routes, the list, the
 detail; rows 58, 59, and 61's list and detail cases), about 300 production / 220 test lines, **40 min**; **B7b** = C31
 (the editor; rows 60 and 61's editor cases) off B7a's tip, about 250 production / 200 test lines, **40 min**.
 **Greps:** `'^const val SUPPLIES_SECTION = "Supplies"$'` → 1; the three routes → 1 each in `Route.kt`; the P-string
-constants each declared once; `'component|consumable|Part[^ ]|\bparts?\b'` (case-insensitive) in `A/ui/supplies` → 0
-bar "Part number". **Pin list:** `MaintenanceShellTest.kt` (one grown case); `VersionAgreementTest.kt:432` unchanged.
+constants each declared once; **string literals only (N-3):** `git grep -hoE '"[^"]*"' -- A/ui/supplies | grep -iE
+'component|consumable|\bparts?\b' | grep -vx '"Part number"'` → 0 (identifiers such as `partNumber` and the
+`ui.components` imports are not phone words). **Pin list:** `MaintenanceShellTest.kt` (one grown case); `VersionAgreementTest.kt:432` unchanged.
 **Untouched:** `A/api/**`, `docs/**`, `C/**`, `A/ui/{asset,setup,journal}`, `tools`. **Must NOT:** add a tab, a
 Settings row or a reorder control; draw a key field; call a repository from a view model. **Counted RED (2):** rows
 59 (B7a), 60 (B7b); rows 58 and 61 are device cases run at the merged gate. **Caps:** 5 runs per part; 1 h / 2 h each; fix round 3 runs, 45 min.
 
 ## 18. B8 — the asset section, the picker and the line controls (C32–C35; app JVM, Compose) — dispatched as B8a → B8b
 
-**Read:** audit §7; `A/ui/asset/{AssetPicker,AssetDetailScreen}.kt` (`:15-25`; `:430-476`); `A/ui/references/
+**Read:** audit §7; `A/ui/asset/{AssetPicker,AssetDetailScreen}.kt` (`:15-25`; `:184-206`, `:430-476`);
+`A/ui/nav/ServiceTagRoot.kt:190-210`; `A/ui/references/
 {ReferencesSection,ReferencesSectionViewModel,ReferenceSheets}.kt`; `A/ui/setup/{ProfileEditScreen,
 ProfileEditViewModel}.kt`; `A/ui/journal/{EventEntryScreen,EventEntryViewModel}.kt`; `AT/ui/references/
 ReferencesSectionTest.kt`. `<base>` = B6's accepted tip. **Rulings:** R15-3, R15-6, R15-8; §5's P15-1, P15-13…23.
@@ -1207,7 +1314,8 @@ and 64's section and picker cases), about 270 production / 260 test lines, **45 
 link line on both editors; rows 63 and 64's link-line cases) off B8a's tip, about 120 production / 150 test lines,
 **35 min**. **Greps:** `'fun SupplyItemPicker\('` → 1 and no `ViewModel` import in its file; `'archivedAt == null'` (or
 the hosts' equivalent filter) in each host view model → 1; the call site in `AssetDetailScreen.kt` before
-`ComponentsSection(` → 1; `git diff <base> -- A/ui/journal/EventDetailScreen.kt A/ui/journal/JournalFormat.kt` → empty.
+`ComponentsSection(` → 1; `'onOpenSupply'` in `AssetDetailScreen.kt` (the parameter and its use) and in
+`ServiceTagRoot.kt` (the wiring) → ≥ 1 each (C-1); `git diff <base> -- A/ui/journal/EventDetailScreen.kt A/ui/journal/JournalFormat.kt` → empty.
 **Untouched:** `C/**`, `A/api`, `A/data`, `EventDetailScreen.kt`, `JournalFormat.kt`, `CompletionFlow.kt`, `docs`,
 `tools`. **Must NOT:** offer an archived item in a picker; overwrite a typed name or unit on a pick; add "Link supply"
 to the event form; add a confirmation dialog. **Counted RED (2):** rows 62, 63. **Caps:** 5 runs per part; 1 h / 2 h
