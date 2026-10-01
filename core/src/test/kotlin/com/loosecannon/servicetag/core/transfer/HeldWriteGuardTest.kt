@@ -42,6 +42,7 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServiceCaseId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.ValueType
@@ -49,11 +50,13 @@ import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.SAMPLE_LOOKUP_URI
+import com.loosecannon.servicetag.core.testing.assetSupplyOf
 import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
 import com.loosecannon.servicetag.core.testing.completionOf
@@ -65,6 +68,7 @@ import com.loosecannon.servicetag.core.testing.measurementOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import com.loosecannon.servicetag.core.testing.subjectOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import com.loosecannon.servicetag.core.testing.transferOf
 import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
@@ -183,7 +187,7 @@ class HeldWriteGuardTest {
         install.serviceCases, install.links,
     )
 
-    // The sixteen guarded ports, as AppGraph hands them to every use case.
+    // The seventeen guarded ports, as AppGraph hands them to every use case (#15's applicability the seventeenth).
     private val assets = guard.assets(install.assets)
     private val tags = guard.tags(install.tags)
     private val definitions = guard.definitions(install.definitions)
@@ -200,6 +204,7 @@ class HeldWriteGuardTest {
     private val cases = guard.cases(install.serviceCases)
     private val entries = guard.entries(install.caseEntries)
     private val loans = guard.loans(install.loans)
+    private val assetSupplies = guard.assetSupplies(install.assetSupplies)
 
     private val uow = install.uow
     private val states = InMemoryScheduleStateRepository()
@@ -617,7 +622,7 @@ class HeldWriteGuardTest {
         assertEquals(setOf(heater, anode), install.transfers.heldIds(), "still held: the records are the custody facts")
     }
 
-    /** Derived state is rebuilt for a held asset like any other: schedule state is not one of the sixteen ports. */
+    /** Derived state is rebuilt for a held asset like any other: schedule state is not one of the seventeen ports. */
     @Test
     fun derivedStateIsUnguarded() = runTest {
         seed()
@@ -826,5 +831,79 @@ class HeldWriteGuardTest {
 
         uow.write { successions.append(successionOf("s3", predecessor = "o1", successor = "x1")) }
         assertEquals(listOf("s3"), install.successions.all().map { it.id })
+    }
+
+    // ---- #15 (C14, row 30): applicability is the asset's; the SupplyItem catalog is global ---------------------------
+
+    /** One SupplyItem (fictional), taken by the held heater (as1) and by the staying compressor (asx), laid down raw. */
+    private suspend fun seedSupplies() {
+        install.supplyItems.upsert(supplyItemOf("s1", "Example Anode Kit"))
+        install.assetSupplies.insert(assetSupplyOf("as1", "h1", "s1", "Anode kit"))
+        install.assetSupplies.insert(assetSupplyOf("asx", "x1", "s1", "Spare kit"))
+    }
+
+    /** A new row on a held asset, a re-role of its row, and a staying row moved onto it: each a write on it. */
+    @Test
+    fun addingApplicabilityToAHeldAssetThrows() = runTest {
+        seed()
+        seedSupplies()
+        val held = install.assetSupplies.get("as1")!!
+        val staying = install.assetSupplies.get("asx")!!
+
+        refused(
+            heater,
+            "insert on h1" to { uow.write { assetSupplies.insert(assetSupplyOf("as2", "h1", "s1", "Spare kit")) } },
+            "re-role h1's row" to { uow.write { assetSupplies.update(held.copy(role = "Other kit", updatedAt = 3_000L)) } },
+            "move x1's row onto h1" to { uow.write { assetSupplies.update(staying.copy(assetId = heater)) } },
+        )
+        refused(anode, "insert on h2, a component" to { uow.write { assetSupplies.insert(assetSupplyOf("as3", "h2", "s1")) } })
+        assertEquals(listOf(held, staying), install.assetSupplies.all(), "nothing was written")
+
+        uow.write { assetSupplies.insert(assetSupplyOf("as4", "x1", "s1", "Other kit")) }
+        assertEquals(listOf("as1", "as4", "asx"), install.assetSupplies.all().map { it.id }, "a staying asset's row writes as before")
+    }
+
+    /**
+     * Removing a held asset's row, and moving it off onto a staying asset: the stored row's asset counts as well as the
+     * row written (B1's review — `update` writes the whole row, so a row moved off a held asset is a write on it).
+     */
+    @Test
+    fun removingAHeldAssetsApplicabilityThrows() = runTest {
+        seed()
+        seedSupplies()
+        val held = install.assetSupplies.get("as1")!!
+
+        refused(
+            heater,
+            "delete h1's row" to { uow.write { assetSupplies.delete("as1") } },
+            "move h1's row onto x1" to { uow.write { assetSupplies.update(held.copy(assetId = compressor, updatedAt = 3_000L)) } },
+        )
+        assertEquals(held, install.assetSupplies.get("as1"), "the held row is as it was")
+
+        uow.write { assetSupplies.delete("asx") }
+        assertEquals(listOf("as1"), install.assetSupplies.all().map { it.id }, "a staying asset's row deletes as before")
+    }
+
+    /**
+     * The catalog is global, not asset-owned: the guard offers no SupplyItem port, and archiving, unarchiving or editing
+     * an item a held asset's row names writes no held row, so it passes — through the unwrapped port `AppGraph` hands out.
+     */
+    @Test
+    fun archivingAnItemAHeldAssetUsesIsAllowed() = runTest {
+        seed()
+        seedSupplies()
+        val held = install.assetSupplies.get("as1")!!
+        assertTrue(
+            HeldWriteGuard::class.java.declaredMethods.none { m -> m.parameterTypes.any { it == SupplyItemRepository::class.java } },
+            "no SupplyItem port is wrapped (C14)",
+        )
+
+        uow.write { install.supplyItems.setArchived(SupplyId("s1"), archivedAt = 3_000L, updatedAt = 3_000L) }
+        assertEquals(3_000L, install.supplyItems.get(SupplyId("s1"))!!.archivedAt)
+        uow.write { install.supplyItems.upsert(install.supplyItems.get(SupplyId("s1"))!!.copy(name = "Example Anode Kit, long", archivedAt = null)) }
+
+        assertEquals("Example Anode Kit, long", install.supplyItems.get(SupplyId("s1"))!!.name)
+        assertEquals(held, install.assetSupplies.get("as1"), "the held asset's row is untouched")
+        assertEquals(setOf(heater, anode), install.transfers.heldIds(), "still held")
     }
 }

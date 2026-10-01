@@ -29,6 +29,10 @@ class TransferTableClassificationTest {
         assertEquals(TransferTableClass.TOMBSTONE, TransferTables.CLASSES["externalLinks"])
         assertEquals(TransferTableClass.CROSS_ASSET, TransferTables.CLASSES["maintenanceGroups"])
         assertEquals(TransferTableClass.GLOBAL_IN_USE, TransferTables.CLASSES["assetCategories"])
+        // #15 (C13): a SupplyItem travels only when a carried row names it, as a category does; an applicability row
+        // is its asset's and travels with it.
+        assertEquals(TransferTableClass.GLOBAL_IN_USE, TransferTables.CLASSES["supplyItems"])
+        assertEquals(TransferTableClass.ASSET_OWNED, TransferTables.CLASSES["assetSupplies"])
     }
 
     /** R77-6: a returned loan is the sender's history, and it stays with the sender. */
