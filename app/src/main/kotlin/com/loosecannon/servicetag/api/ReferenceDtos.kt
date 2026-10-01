@@ -11,7 +11,8 @@ import kotlinx.serialization.Serializable
  * backup format's own row DTO** — `AssetReferenceDto`, `@Serializable` in
  * `com.loosecannon.servicetag.core.backup` — so a reference read here and the same row inside
  * `data.json` are the same JSON object, produced by the same `toDto()`. One schema, not two.
- * **Requests are declared here and nowhere else**, with plain `String` fields.
+ * **Requests are declared here and nowhere else**, with plain `String` fields, and `role` typed as
+ * `DocumentRole?` (#91), so an unknown name is the decoder's 400.
  *
  * The request shape is a **subset** of the response shape, which is the shipped convention: the
  * two derived fields, `kind` and `scheme`, plus `id`, `createdAt` and `updatedAt`, are

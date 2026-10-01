@@ -13,7 +13,7 @@ import com.loosecannon.servicetag.core.usecase.ReferenceResult
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateReferenceCommand
 import com.loosecannon.servicetag.di.AppGraph
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 /**
  * The three 1.3.0 reference endpoints, and **every write goes through exactly one use case.**
@@ -96,16 +96,17 @@ internal class ReferenceHandlers(
      * Name, description and role, overlaid onto the stored row. For the name and the description
      * an absent or `null` field is the row's current value, any other value replaces it, and `""`
      * blanks the description. **The role is three-state** (#91, R91-3): absent keeps the stored
-     * role, `null` clears it, a name sets it — so the body is read once as a `JsonObject` for the
-     * key's presence, then decoded strictly from that same object (`ScheduleForms`' idiom; the
-     * second parse keeps the shipped 400 messages, unknown keys included). The row is read first
-     * because `UpdateReferenceCommand` is a **full** triple — there is no partial command — and
-     * sending back a field the caller never named is how an amend rewrites what it was not asked
-     * to touch.
+     * role, `null` clears it, a name sets it. The typed decode runs first, over the caller's own
+     * bytes, so every 415 and 400 is the shipped one byte for byte; only then is the same text
+     * read again for whether it names `role` at all, a read that never produces a message. The
+     * row is read first because `UpdateReferenceCommand` is a **full** triple — there is no
+     * partial command — and sending back a field the caller never named is how an amend rewrites
+     * what it was not asked to touch.
      */
     suspend fun update(id: String, request: ApiRequest): ApiResponse {
-        val raw = request.decode(JsonObject.serializer())
-        val body = decodeOr400(UpdateReferenceRequest.serializer(), raw.toString())
+        val body = request.decode(UpdateReferenceRequest.serializer())
+        // The typed decode above proved the text is one JSON object, so this second parse cannot fail.
+        val namesRole = "role" in ApiJson.parseToJsonElement(request.body.decodeToString()).jsonObject
         val stored = references.get(ReferenceId(id))
             ?: throw ReferenceRefused(ReferenceProblem.NoSuchReference)
         val result = updateReference.run(
@@ -114,7 +115,7 @@ internal class ReferenceHandlers(
                 displayName = body.displayName ?: stored.displayName,
                 description = body.description ?: stored.description,
                 // Absent: unchanged; `null`: clear; a name: set.
-                role = if ("role" in raw) body.role else stored.role,
+                role = if (namesRole) body.role else stored.role,
             ),
         )
         val row = when (result) {
