@@ -66,22 +66,23 @@ internal class TransferInstall(
     val loans = guard.loans(raw.loans)
     /** #86 (C6): the guarded port for every consumer; the merge apply takes `raw.successions` (MJ-2), as `AppGraph`. */
     val successions = guard.successions(raw.successions)
+    val assetSupplies = guard.assetSupplies(raw.assetSupplies)
     var rebuilds = 0
 
     val repos = BackupRepositories(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers, successions,
-        raw.supplyItems, raw.assetSupplies,
+        raw.supplyItems, assetSupplies,
     )
     val build = BuildBackupMergePlan(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers,
-        successions, raw.supplyItems, raw.assetSupplies, storage, raw.uow,
+        successions, raw.supplyItems, assetSupplies, storage, raw.uow,
     )
     val apply = ApplyBackupMergePlan(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers,
-        raw.successions, raw.supplyItems, raw.assetSupplies, storage, raw.uow,
+        raw.successions, raw.supplyItems, assetSupplies, storage, raw.uow,
         rebuildAll = { rebuilds += 1 },
     )
     val importer = ImportTransferPack(build, apply, raw.transfers, assets, tags, storage, raw.uow, Clock { now })
