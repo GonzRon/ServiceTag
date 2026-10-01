@@ -8,6 +8,8 @@ import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.data.room.dao.AssetSupplyDao
 import com.loosecannon.servicetag.data.room.dao.SupplyItemDao
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 /**
  * The adapters for schema v18's two ports (#15, C5). Thin, as the reference adapter is: every rule about a
@@ -28,6 +30,12 @@ class RoomSupplyItemRepository(private val dao: SupplyItemDao) : SupplyItemRepos
     override suspend fun setArchived(id: SupplyId, archivedAt: Long?, updatedAt: Long) {
         dao.setArchived(id.value, archivedAt, updatedAt)
     }
+
+    /** The replace import's wipe, its only caller (R15-5). */
+    override suspend fun deleteAll() = dao.deleteAll()
+
+    override fun observeAll(): Flow<List<SupplyItem>> =
+        dao.observeAll().map { rows -> rows.map { it.toDomain() } }
 }
 
 class RoomAssetSupplyRepository(private val dao: AssetSupplyDao) : AssetSupplyRepository {
@@ -48,4 +56,7 @@ class RoomAssetSupplyRepository(private val dao: AssetSupplyDao) : AssetSupplyRe
     }
 
     override suspend fun delete(id: String) = dao.delete(id)
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<AssetSupply>> =
+        dao.observeForAsset(assetId.value).map { rows -> rows.map { it.toDomain() } }
 }

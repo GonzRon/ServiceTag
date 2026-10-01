@@ -12,7 +12,14 @@ import com.loosecannon.servicetag.data.room.entities.AssetSupplyEntity
 import com.loosecannon.servicetag.data.room.entities.SupplyItemEntity
 import com.loosecannon.servicetag.data.room.entities.SupplySpecificationEntity
 import java.io.File
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -254,6 +261,108 @@ class SupplyDaoConstraintTest {
             repo.delete("as4")
             assertNull(repo.get("as4"))
             assertEquals(listOf("as1", "as2", "as3"), repo.all().map { it.id })
+        } finally {
+            db.close()
+        }
+    }
+
+    /**
+     * The replace import's wipe, in the order B2a must use: the Asset rows first — their CASCADE takes every
+     * applicability row — and then the catalog, whose specifications go by their own CASCADE. Wiping the
+     * catalog while an Asset still names a SupplyItem is refused by the RESTRICT, and nothing moves.
+     */
+    @Test
+    fun theReplaceWipeClearsTheCatalogAfterTheAssets() = runTest {
+        val db = inMemoryDb()
+        try {
+            db.assetDao().upsert(asset("a1"))
+            db.supplyItemDao().upsert(item("s1"), listOf(spec("sp1", "s1", "micron_rating")))
+            db.supplyItemDao().upsert(item("s2", "Example Carbon Block"), listOf(spec("sp2", "s2", "micron_rating")))
+            db.assetSupplyDao().insert(applicability("as1", "a1", "s1", "Prefilter"))
+            val repo = RoomSupplyItemRepository(db.supplyItemDao())
+
+            val thrown = runCatching { repo.deleteAll() }.exceptionOrNull()
+            assertTrue("expected the RESTRICT foreign key to refuse, got $thrown", thrown is SQLiteException)
+            assertEquals(listOf(SupplyId("s1"), SupplyId("s2")), repo.all().map { it.id })
+
+            db.assetDao().deleteAllInOrder(listOf("a1"))
+            assertEquals(emptyList<AssetSupplyEntity>(), db.assetSupplyDao().all())
+            repo.deleteAll()
+            assertEquals(emptyList<SupplyItem>(), repo.all())
+            assertNull(db.supplyItemDao().byId("s1"))
+        } finally {
+            db.close()
+        }
+    }
+
+    /**
+     * One live read of the catalog, archived included (the caller filters), by name case-insensitively then
+     * id: the flow's first emission is the stored list, and an upsert made after it is emitted on the same
+     * flow — specifications and all.
+     */
+    @Test
+    fun observeAllEmitsAnInsertedItemArchivedIncluded() = runTest {
+        val db = inMemoryDb()
+        try {
+            val repo = RoomSupplyItemRepository(db.supplyItemDao())
+            db.supplyItemDao().upsert(item("s1"), emptyList())
+            db.supplyItemDao().upsert(item("s0", "Example Membrane").copy(archivedAt = 5L), emptyList())
+
+            val firstSeen = CompletableDeferred<List<String>>()
+            val observed = async(Dispatchers.Default) {
+                withTimeout(10_000) {
+                    repo.observeAll()
+                        .onEach { rows -> firstSeen.complete(rows.map { it.id.value }) }
+                        .first { rows -> rows.any { it.id.value == "s2" } }
+                }
+            }
+            assertEquals(listOf("s0", "s1"), firstSeen.await())
+
+            val added = SupplyItem(
+                id = SupplyId("s2"), name = "example carbon block", category = "Filters",
+                manufacturer = "Example Filters Co.", model = "CB-10", partNumber = "CB-10-1UM",
+                preferredUnit = "ea", notes = "", archivedAt = null, createdAt = 30L, updatedAt = 30L,
+                specifications = listOf(SupplySpecification("sp9", "micron_rating", "Micron rating", "1", "µm", 0)),
+            )
+            repo.upsert(added)
+
+            val rows = observed.await()
+            assertEquals(listOf("s2", "s0", "s1"), rows.map { it.id.value })
+            assertEquals(added, rows.first())
+        } finally {
+            db.close()
+        }
+    }
+
+    /**
+     * One live read of an Asset's applicability, by `(role, id)`: an insert on this Asset is emitted on the
+     * same flow, and a row on another Asset is not in it.
+     */
+    @Test
+    fun observeForAssetEmitsAnInsertedRowForThatAssetOnly() = runTest {
+        val db = inMemoryDb()
+        try {
+            db.assetDao().upsert(asset("a1"))
+            db.assetDao().upsert(asset("a2"))
+            db.supplyItemDao().upsert(item("s1"), emptyList())
+            val repo = RoomAssetSupplyRepository(db.assetSupplyDao())
+            repo.insert(AssetSupply("as1", AssetId("a1"), SupplyId("s1"), "Prefilter", 30L, 40L))
+
+            val firstSeen = CompletableDeferred<List<String>>()
+            val observed = async(Dispatchers.Default) {
+                withTimeout(10_000) {
+                    repo.observeForAsset(AssetId("a1"))
+                        .map { rows -> rows.map { it.id } }
+                        .onEach { firstSeen.complete(it) }
+                        .first { "as3" in it }
+                }
+            }
+            assertEquals(listOf("as1"), firstSeen.await())
+
+            repo.insert(AssetSupply("as2", AssetId("a2"), SupplyId("s1"), "Prefilter", 30L, 40L))
+            repo.insert(AssetSupply("as3", AssetId("a1"), SupplyId("s1"), "Backup prefilter", 30L, 40L))
+
+            assertEquals(listOf("as3", "as1"), observed.await())
         } finally {
             db.close()
         }

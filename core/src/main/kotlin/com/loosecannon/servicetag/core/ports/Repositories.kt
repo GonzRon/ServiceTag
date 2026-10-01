@@ -347,9 +347,11 @@ interface ReferenceRepository {
  * item row and **replaces** its specification rows, as [ProfileRepository] replaces a profile's lines — the
  * ids come from the caller, so a specification that survived an edit keeps its identity.
  *
- * **Archive-only:** there is no delete of a SupplyItem on this port or anywhere above the schema (R15-5);
- * [setArchived] writes `archived_at` and the `updated_at` stamp and nothing else. Every rule — the name,
- * the specification keys — lives in the use cases, so nothing here decides anything.
+ * **Archive-only:** a SupplyItem is never deleted one by one, on this port or anywhere above the schema
+ * (R15-5); [setArchived] writes `archived_at` and the `updated_at` stamp and nothing else. [deleteAll] is the
+ * replace import's wipe, its only caller — it runs after the Asset rows are wiped, whose CASCADE has taken
+ * every applicability row the RESTRICT would otherwise refuse it for. Every rule — the name, the
+ * specification keys — lives in the use cases, so nothing here decides anything.
  */
 interface SupplyItemRepository {
     suspend fun get(id: SupplyId): SupplyItem?
@@ -357,6 +359,12 @@ interface SupplyItemRepository {
     suspend fun all(): List<SupplyItem>
     suspend fun upsert(item: SupplyItem)
     suspend fun setArchived(id: SupplyId, archivedAt: Long?, updatedAt: Long)
+
+    /** The replace import's wipe, its only caller — a SupplyItem is never deleted otherwise (R15-5). */
+    suspend fun deleteAll()
+
+    /** Every SupplyItem, live, archived included (the caller filters), by name case-insensitively, then id. */
+    fun observeAll(): Flow<List<SupplyItem>>
 }
 
 /**
@@ -377,6 +385,9 @@ interface AssetSupplyRepository {
     suspend fun insert(row: AssetSupply)
     suspend fun update(row: AssetSupply)
     suspend fun delete(id: String)
+
+    /** An Asset's rows, live, by `(role, id)`. */
+    fun observeForAsset(assetId: AssetId): Flow<List<AssetSupply>>
 }
 
 /**

@@ -10,6 +10,7 @@ import androidx.room3.Update
 import com.loosecannon.servicetag.data.room.entities.AssetSupplyEntity
 import com.loosecannon.servicetag.data.room.entities.SupplyItemEntity
 import com.loosecannon.servicetag.data.room.entities.SupplySpecificationEntity
+import kotlinx.coroutines.flow.Flow
 
 /** A SupplyItem row with its specification rows — the aggregate as one read. */
 data class SupplyItemWithSpecifications(
@@ -19,9 +20,9 @@ data class SupplyItemWithSpecifications(
 )
 
 /**
- * Schema v18's catalog (#15, C5). **There is no delete of a SupplyItem here** (R15-5): the only writes are the
- * aggregate [upsert] and [setArchived]. [clearSpecifications] removes a SupplyItem's specification rows, never
- * the SupplyItem, and only inside [upsert]'s transaction.
+ * Schema v18's catalog (#15, C5). **A SupplyItem is never deleted one by one** (R15-5): the writes are the
+ * aggregate [upsert], [setArchived] and [deleteAll], the replace import's wipe. [clearSpecifications] removes a
+ * SupplyItem's specification rows, never the SupplyItem, and only inside [upsert]'s transaction.
  */
 @Dao
 interface SupplyItemDao {
@@ -57,6 +58,18 @@ interface SupplyItemDao {
     /** Archive or unarchive: `archived_at` and the stamp, nothing else (R15-5). */
     @Query("UPDATE supply_item SET archived_at = :archivedAt, updated_at = :updatedAt WHERE id = :id")
     suspend fun setArchived(id: String, archivedAt: Long?, updatedAt: Long): Int
+
+    /**
+     * The replace import's wipe, its only caller (R15-5). Specifications go by their CASCADE; a row an Asset
+     * still names is refused by `asset_supply`'s RESTRICT, so the wipe runs after the Asset rows'.
+     */
+    @Query("DELETE FROM supply_item")
+    suspend fun deleteAll()
+
+    /** Archived included; the caller filters. By name case-insensitively, then id. */
+    @Transaction
+    @Query("SELECT * FROM supply_item ORDER BY name COLLATE NOCASE, id")
+    fun observeAll(): Flow<List<SupplyItemWithSpecifications>>
 }
 
 /**
@@ -83,4 +96,7 @@ interface AssetSupplyDao {
 
     @Query("DELETE FROM asset_supply WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Query("SELECT * FROM asset_supply WHERE asset_id = :assetId ORDER BY role, id")
+    fun observeForAsset(assetId: String): Flow<List<AssetSupplyEntity>>
 }
