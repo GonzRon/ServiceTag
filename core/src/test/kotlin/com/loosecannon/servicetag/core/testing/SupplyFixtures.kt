@@ -177,10 +177,9 @@ object SupplyEstate {
         ),
     )
 
+    // The first three lists by position, as `BackupFormat17Test`'s fixture passes them: the 2.6 link list stays unnamed here.
     fun data(): BackupData = BackupData(
-        assets = listOf(system, softener).map { it.toDto() },
-        nfcTags = emptyList(),
-        externalLinks = emptyList(),
+        listOf(system, softener).map { it.toDto() }, emptyList(), emptyList(),
         eventProfiles = listOf(quickAction.toDto()),
         assetEvents = listOf(change.toDto()),
         supplyItems = listOf(prefilter, membrane).map { it.toDto() },
