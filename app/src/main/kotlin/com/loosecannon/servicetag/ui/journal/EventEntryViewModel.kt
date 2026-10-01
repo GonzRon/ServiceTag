@@ -22,6 +22,7 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
@@ -83,11 +84,19 @@ data class FieldRow(
         }
 }
 
-/** One material line as typed. Quantity stays text until the use case parses it. */
+/**
+ * One material line as typed. Quantity stays text until the use case parses it.
+ *
+ * [supplyId] is the line's SupplyItem link (#15, C19): it arrives with the stored line or with the quick action's
+ * chip, stays with its row through every edit of the row's words, and goes to the save unchanged. It has no
+ * default, so a row built without saying what its link is does not compile; nothing here derives it from [name]
+ * (C37), and nothing here draws it.
+ */
 data class ConsumableRow(
     val name: String,
     val quantity: String,
     val unit: String,
+    val supplyId: SupplyId?,
     val problem: Boolean = false,
 )
 
@@ -261,7 +270,7 @@ class EventEntryViewModel(
                     derivedRows = derivedRows(fields),
                     suggestions = profile?.consumables.orEmpty(),
                     consumables = existing?.consumables.orEmpty().map {
-                        ConsumableRow(it.name, formatNumber(it.quantity), it.unit)
+                        ConsumableRow(it.name, formatNumber(it.quantity), it.unit, it.supplyId)
                     },
                     notes = existing?.notes ?: draft?.second.orEmpty(),
                     alsoRecords = pending?.condition,
@@ -387,20 +396,24 @@ class EventEntryViewModel(
         current.copy(fields = fields, derivedRows = derivedRows(fields), firstProblem = null)
     }
 
-    /** A suggestion is a head start, not an entry: it arrives with its unit and an open quantity. */
+    /**
+     * A suggestion is a head start, not an entry: it arrives with its unit, an open quantity and the quick action
+     * line's SupplyItem link, if it has one (#15, C19).
+     */
     fun addSuggested(suggestion: ProfileConsumable) = _state.update { current ->
         current.copy(
             consumables = current.consumables + ConsumableRow(
                 name = suggestion.name,
                 quantity = suggestion.defaultQuantity?.let(::formatNumber).orEmpty(),
                 unit = suggestion.unit,
+                supplyId = suggestion.supplyId,
             ),
             firstProblem = null,
         )
     }
 
     fun addBlankConsumable() = _state.update { current ->
-        current.copy(consumables = current.consumables + ConsumableRow("", "", ""), firstProblem = null)
+        current.copy(consumables = current.consumables + ConsumableRow("", "", "", supplyId = null), firstProblem = null)
     }
 
     fun onConsumable(index: Int, name: String? = null, quantity: String? = null, unit: String? = null) =
@@ -634,7 +647,7 @@ class EventEntryViewModel(
      */
     private fun List<ConsumableRow>.submitted(): List<Pair<Int, ConsumableInput>> = withIndex()
         .filterNot { (_, row) -> row.name.isBlank() && row.quantity.isBlank() && row.unit.isBlank() }
-        .map { (index, row) -> index to ConsumableInput(row.name, row.quantity, row.unit, supplyId = null) } // B4b (C19): the row's link
+        .map { (index, row) -> index to ConsumableInput(row.name, row.quantity, row.unit, row.supplyId) }
 
     private companion object {
         const val TAG = "EventEntry"

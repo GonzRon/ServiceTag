@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
@@ -53,12 +54,18 @@ data class FieldPick(val definition: MeasurementDefinition, val required: Boolea
  * One consumable suggestion as the form holds it. [id] is the stored row's id when this came out of
  * the database and null for a row someone just added — that is what tells `SaveProfile` a rename is
  * a rename and not a delete plus an insert. The UI never mints one.
+ *
+ * [supplyId] is the line's SupplyItem link (#15, C19): loaded with the stored row, kept through every edit of the
+ * row's words, and sent back on the save, so a re-save never clears it. A row someone adds starts unlinked. It
+ * has no default, so a row built without saying what its link is does not compile; nothing here derives it from
+ * [name] (C37), and nothing here draws it.
  */
 data class ConsumableEdit(
     val id: String?,
     val name: String = "",
     val quantity: String = "",
     val unit: String = "",
+    val supplyId: SupplyId?,
 )
 
 /**
@@ -160,6 +167,7 @@ class ProfileEditViewModel(
                         name = it.name,
                         quantity = it.defaultQuantity?.let(::formatNumber).orEmpty(),
                         unit = it.unit,
+                        supplyId = it.supplyId,
                     )
                 },
             archived = row.archivedAt != null,
@@ -224,7 +232,7 @@ class ProfileEditViewModel(
     }
 
     fun addConsumable() = _state.update { form ->
-        form.copy(consumables = form.consumables + ConsumableEdit(id = null))
+        form.copy(consumables = form.consumables + ConsumableEdit(id = null, supplyId = null))
     }
 
     fun onConsumable(
@@ -343,7 +351,7 @@ private fun ProfileEditState.command(assetId: AssetId, quantities: List<Double?>
             name = row.name,
             defaultQuantity = quantities[index],
             unit = row.unit,
-            supplyId = null, // B4b (C19): the row's link
+            supplyId = row.supplyId,
         )
     },
 )

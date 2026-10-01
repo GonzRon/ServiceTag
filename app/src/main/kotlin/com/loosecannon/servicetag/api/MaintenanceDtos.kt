@@ -16,7 +16,6 @@ import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.reminders.ProviderId
 import com.loosecannon.servicetag.core.usecase.CompletionCommand
-import com.loosecannon.servicetag.core.usecase.ConsumableInput
 import com.loosecannon.servicetag.core.usecase.GroupCommand
 import com.loosecannon.servicetag.core.usecase.GroupMemberInput
 import com.loosecannon.servicetag.core.usecase.ProviderRepairPlan
@@ -423,7 +422,7 @@ internal fun CompletionRequest.toCommand() = CompletionCommand(
     tzId = tzId,
     notes = notes,
     values = values.mapKeys { (id, _) -> DefinitionId(id) },
-    consumables = consumables.map { ConsumableInput(it.name, it.quantity, it.unit, supplyId = null) }, // B4b (C24): the request's link
+    consumables = consumables.map { it.toInput() },
     assetId = assetId?.let(::AssetId),
 )
 

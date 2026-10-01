@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.DerivedFormula
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.ConsumableInput
@@ -356,12 +357,18 @@ internal fun SaveDefinitionRequest.toCommand() = DefinitionCommand(
 @Serializable
 internal data class ProfileFieldRequest(val definitionId: String, val required: Boolean = false)
 
+/**
+ * One quick-action line. The last key is the line's SupplyItem (#15, C24): absent and `null` both mean unlinked,
+ * because the whole request is a full replace — an edit that leaves it off a line clears that line's link
+ * (limit 1, R15-12). A link is never inferred from [name] (C37).
+ */
 @Serializable
 internal data class ProfileConsumableRequest(
     val id: String? = null,
     val name: String,
     val defaultQuantity: Double? = null,
     val unit: String = "",
+    val supplyId: String? = null,
 )
 
 /** `SaveProfile.run(id, cmd)` as one body: [id] null creates, [id] set edits. */
@@ -383,17 +390,25 @@ internal fun SaveProfileRequest.toCommand() = ProfileCommand(
     defaultTitle = defaultTitle,
     fields = fields.map { ProfileFieldInput(DefinitionId(it.definitionId), it.required) },
     consumables = consumables.map {
-        ProfileConsumableInput(it.id, it.name, it.defaultQuantity, it.unit, supplyId = null) // B4b (C24): the request's link
+        ProfileConsumableInput(it.id, it.name, it.defaultQuantity, it.unit, it.supplyId?.let(::SupplyId))
     },
 )
 
-/** A consumable line exactly as the entry form sends one: the quantity is text until validated. */
+/**
+ * A consumable line exactly as the entry form sends one: the quantity is text until validated. The last key is
+ * the line's SupplyItem (#15, C24), read as [ProfileConsumableRequest]'s is: absent and `null` both mean unlinked,
+ * and an edit is a full replace, so a line sent without it is an unlinked line (limit 1).
+ */
 @Serializable
 internal data class ConsumableRequest(
     val name: String,
     val quantity: String,
     val unit: String = "",
+    val supplyId: String? = null,
 )
+
+/** One line as the use cases take it, for an event and a completion alike (C19): the link travels with its row. */
+internal fun ConsumableRequest.toInput() = ConsumableInput(name, quantity, unit, supplyId?.let(::SupplyId))
 
 /**
  * One event, logged or edited. [values] is keyed by definition id, the text a person would type —
@@ -424,7 +439,7 @@ internal fun EventRequest.toCommand() = EventCommand(
     tzId = tzId,
     notes = notes,
     values = values.mapKeys { (id, _) -> DefinitionId(id) },
-    consumables = consumables.map { ConsumableInput(it.name, it.quantity, it.unit, supplyId = null) }, // B4b (C24): the request's link
+    consumables = consumables.map { it.toInput() },
 )
 
 /**
