@@ -131,6 +131,11 @@ class ValidationRefusalsTest {
             "C16", FieldProblem.BadConsumable(2), "BadConsumable(index=2)", EVENT,
             "every consumable needs a name and a quantity of zero or more", "consumables",
         ),
+        // #15 (B4a, C2/C20): a line's supplyId naming no SupplyItem, under the shipped family (G2, ratified).
+        Row(
+            "G2-event", FieldProblem.UnknownSupplyItem(1), "UnknownSupplyItem(index=1)", EVENT,
+            "every supplyId in consumables must name a supply item", "consumables",
+        ),
     )
 
     private val derivedRows = listOf(
@@ -218,6 +223,11 @@ class ValidationRefusalsTest {
         Row(
             "C37", ProfileProblem.BadConsumable(1), "BadConsumable(index=1)", PROFILE,
             "every consumable needs a name, and a defaultQuantity of zero or more when one is given", "consumables",
+        ),
+        // #15 (B4a, C2/C20): the quick action's twin of the event row above (G2, ratified).
+        Row(
+            "G2-profile", ProfileProblem.UnknownSupplyItem(0), "UnknownSupplyItem(index=0)", PROFILE,
+            "every supplyId in consumables must name a supply item", "consumables",
         ),
     )
 

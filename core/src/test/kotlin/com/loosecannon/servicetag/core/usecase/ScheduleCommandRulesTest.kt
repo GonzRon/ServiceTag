@@ -15,6 +15,7 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.testing.FakeAttachmentStorage
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
@@ -82,7 +83,7 @@ class ScheduleCommandRulesTest {
             InMemoryHealthSubjectRepository(),
         )
     private val completeMembers = CompleteGroupMembers(
-        schedules, groups, events, closures, defs, profiles, uow, ids, clock, recompute,
+        schedules, groups, events, closures, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute,
     )
 
     private suspend fun seedAsset(id: String): AssetId {

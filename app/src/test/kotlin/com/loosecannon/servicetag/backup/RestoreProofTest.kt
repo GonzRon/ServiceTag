@@ -426,7 +426,7 @@ class RestoreProofTest {
                     tzId = "UTC",
                     notes = "after the storm",
                     values = waterTest.fields.associate { it.definitionId to "7.4" },
-                    consumables = listOf(ConsumableInput("Chlorine", "2", "tab")),
+                    consumables = listOf(ConsumableInput("Chlorine", "2", "tab", supplyId = null)),
                 ),
             )
             // Only the data archive: see the note on `Graph.export` above.

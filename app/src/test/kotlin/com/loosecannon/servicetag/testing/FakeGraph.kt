@@ -362,7 +362,7 @@ class FakeGraph(
     val acceptOperationalOffer: AcceptOperationalOffer = AcceptOperationalOffer(conditions, recordCondition, uow)
     // #82: the combined write (Workflow A) and the impairment offer's accept (Workflow B), as `AppGraph` wires them.
     val recordConditionWithIncident: RecordConditionWithIncident = RecordConditionWithIncident(
-        events, definitions, profiles, assets, uow, ids, clock, recomputeSchedules, conditions, todayPort, recordCondition,
+        events, definitions, profiles, assets, supplyItems, uow, ids, clock, recomputeSchedules, conditions, todayPort, recordCondition,
     )
     val acceptImpairmentOffer: AcceptImpairmentOffer = AcceptImpairmentOffer(conditions, recordCondition, uow)
     val saveHealthSubject: SaveHealthSubject =
@@ -403,9 +403,9 @@ class FakeGraph(
 
     val provisionTag: ProvisionTag = ProvisionTag(tags, assets, uow, ids, clock)
     val logEvent: LogEvent =
-        LogEvent(events, definitions, profiles, assets, uow, ids, clock, recomputeSchedules)
+        LogEvent(events, definitions, profiles, assets, supplyItems, uow, ids, clock, recomputeSchedules)
     val updateEvent: UpdateEvent =
-        UpdateEvent(events, definitions, profiles, uow, ids, clock, recomputeSchedules)
+        UpdateEvent(events, definitions, profiles, supplyItems, uow, ids, clock, recomputeSchedules)
     val deleteEvent: DeleteEvent =
         DeleteEvent(events, attachments, attachmentStorage, uow, recomputeSchedules)
     val saveDefinition: SaveDefinition =
@@ -427,7 +427,7 @@ class FakeGraph(
         }
     }
 
-    val saveProfile: SaveProfile = SaveProfile(gatedProfilesForSave, definitions, assets, uow, ids, clock)
+    val saveProfile: SaveProfile = SaveProfile(gatedProfilesForSave, definitions, assets, supplyItems, uow, ids, clock)
     val archiveProfile: ArchiveProfile = ArchiveProfile(profiles, uow, clock)
     val deleteProfile: DeleteProfile = DeleteProfile(profiles, uow)
     val reorderProfiles: ReorderProfiles = ReorderProfiles(profiles, uow, clock)
@@ -533,7 +533,7 @@ class FakeGraph(
      * `AppGraph`'s field; the schedule and group use cases it sits beside are declared below.
      */
     val completeGroupMembers: CompleteGroupMembers = CompleteGroupMembers(
-        schedules, groups, events, closures, definitions, profiles, uow, ids, clock, recomputeSchedules,
+        schedules, groups, events, closures, definitions, profiles, supplyItems, uow, ids, clock, recomputeSchedules,
     )
 
     /**
@@ -550,7 +550,7 @@ class FakeGraph(
     val repairScheduleProviders: RepairScheduleProviders =
         RepairScheduleProviders(schedules, assets, groups, transferRecords, uow, clock)
     val completeSchedule: CompleteSchedule =
-        CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recomputeSchedules)
+        CompleteSchedule(schedules, events, definitions, profiles, supplyItems, uow, ids, clock, recomputeSchedules)
     val postponeSchedule: PostponeSchedule = PostponeSchedule(schedules, uow, recomputeSchedules)
     val pauseSchedule: PauseSchedule = PauseSchedule(schedules, uow, recomputeSchedules)
     val archiveSchedule: ArchiveSchedule =

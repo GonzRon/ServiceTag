@@ -38,8 +38,9 @@ class EventUseCasesTest {
         com.loosecannon.servicetag.core.ports.Today { java.time.LocalDate.parse("2026-02-10") }, clock,
         zone = { java.time.ZoneOffset.UTC },
     )
-    private val logEvent = LogEvent(events, defs, profiles, assets, uow, ids, clock, recompute)
-    private val updateEvent = UpdateEvent(events, defs, profiles, uow, ids, clock, recompute)
+    private val supplyItems = InMemorySupplyItemRepository()
+    private val logEvent = LogEvent(events, defs, profiles, assets, supplyItems, uow, ids, clock, recompute)
+    private val updateEvent = UpdateEvent(events, defs, profiles, supplyItems, uow, ids, clock, recompute)
     private val deleteEvent = DeleteEvent(events, attachments, storage, uow, recompute)
 
     private suspend fun asset(id: String, name: String): Asset =
@@ -92,7 +93,7 @@ class EventUseCasesTest {
             cmd(
                 assetId, profileId = waterTest,
                 values = mapOf(phId to "7.8", clId to "0.8"),
-                consumables = listOf(ConsumableInput("Chlorine", "1", "oz")),
+                consumables = listOf(ConsumableInput("Chlorine", "1", "oz", supplyId = null)),
             ),
         )
 
@@ -157,7 +158,7 @@ class EventUseCasesTest {
                 cmd(
                     assetId, profileId = waterTest,
                     values = mapOf(phId to "7.4", clId to "1.0"),
-                    consumables = listOf(ConsumableInput("Chlorine", "Infinity", "oz")),
+                    consumables = listOf(ConsumableInput("Chlorine", "Infinity", "oz", supplyId = null)),
                 ),
             )
         }
@@ -232,7 +233,7 @@ class EventUseCasesTest {
             cmd(
                 assetId, profileId = treatment,
                 values = mapOf(phId to "7.4", clId to "1.0"),
-                consumables = listOf(ConsumableInput("Chlorine", "1", "oz")),
+                consumables = listOf(ConsumableInput("Chlorine", "1", "oz", supplyId = null)),
             ),
         )
 
@@ -431,5 +432,212 @@ class EventUseCasesTest {
         assertNull(events.rows["e1"])
         assertEquals(0, storage.store.deletes)
         assertTrue(storage.store.exists("events/e1/att-1.jpg"))   // an orphan for 4B to sweep
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // #15 (B4a) — rows 39–41: an event's line carries the SupplyItem it names when its writer sends one (C19,
+    // C20). A minimal schedule completion sends no line, so it writes no material line and records no SupplyItem
+    // usage; the identity sits only on a line that carries it.
+    // ---------------------------------------------------------------------------------------------------------
+
+    private val saveProfile = SaveProfile(profiles, defs, assets, supplyItems, uow, ids, clock)
+    private val saveSupplyItem = SaveSupplyItem(supplyItems, uow, ids, clock)
+    private val archiveSupplyItem = ArchiveSupplyItem(supplyItems, uow, clock)
+    private val completeSchedule = CompleteSchedule(schedules, events, defs, profiles, supplyItems, uow, ids, clock, recompute)
+
+    private suspend fun filterAsset(): AssetId = asset("a9", "Example Spa").id
+
+    private fun line(name: String, quantity: String = "1", unit: String = "ea", supplyId: SupplyId? = null) =
+        ConsumableInput(name, quantity, unit, supplyId)
+
+    @Test fun logEventStoresTheLink() = runTest {
+        val assetId = filterAsset()
+        supplyItems.upsert(supplyItemOf("s-cart", "Example Filter Cartridge"))
+
+        val event = logEvent.run(
+            cmd(
+                assetId, kind = EventKind.MAINTENANCE, title = "Filter change",
+                consumables = listOf(line("Filter cartridge", unit = "", supplyId = SupplyId("s-cart")), line("Rinse water", "2", "L")),
+            ),
+        )
+
+        assertEquals(listOf(SupplyId("s-cart"), null), event.consumables.map { it.supplyId })
+        // The line's words are its own snapshot, never filled from the item (the blank unit stays blank).
+        assertEquals(listOf("Filter cartridge", "Rinse water"), event.consumables.map { it.name })
+        assertEquals(listOf("", "L"), event.consumables.map { it.unit })
+        assertEquals(event, events.get(event.id))
+    }
+
+    @Test fun aResequencedEditKeepsEachLinkWithItsRow() = runTest {
+        // Event lines are matched by position (the id at index i is reused), so the link must travel with the
+        // input row, not with the stored row it lands on.
+        val assetId = filterAsset()
+        supplyItems.upsert(supplyItemOf("s-cart", "Example Filter Cartridge"))
+        supplyItems.upsert(supplyItemOf("s-gask", "Example Lid Gasket"))
+        val logged = logEvent.run(
+            cmd(
+                assetId, kind = EventKind.MAINTENANCE, title = "Filter change",
+                consumables = listOf(
+                    line("Filter cartridge", supplyId = SupplyId("s-cart")),
+                    line("Lid gasket", supplyId = SupplyId("s-gask")),
+                    line("Rinse water", "2", "L"),
+                ),
+            ),
+        )
+
+        now += 1_000L
+        val moved = updateEvent.run(
+            logged.id,
+            cmd(
+                assetId, kind = EventKind.MAINTENANCE, title = "Filter change",
+                consumables = listOf(
+                    line("Rinse water", "2", "L"),
+                    line("Filter cartridge", supplyId = SupplyId("s-cart")),
+                    line("Lid gasket", supplyId = SupplyId("s-gask")),
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf("Rinse water" to null, "Filter cartridge" to SupplyId("s-cart"), "Lid gasket" to SupplyId("s-gask")),
+            moved.consumables.map { it.name to it.supplyId },
+        )
+        assertEquals(moved, events.get(logged.id))
+    }
+
+    @Test fun anUnknownSupplyIdIsRefusedAndNothingIsWritten() = runTest {
+        val assetId = filterAsset()
+        supplyItems.upsert(supplyItemOf("s-cart", "Example Filter Cartridge"))
+        val logged = logEvent.run(
+            cmd(assetId, kind = EventKind.MAINTENANCE, title = "Filter change", consumables = listOf(line("Filter cartridge", supplyId = SupplyId("s-cart")))),
+        )
+        schedules.upsert(
+            scheduleOf(
+                "sch-filter", assetId = assetId.value, title = "Change spa filter",
+                timeInterval = 3, timeUnit = RecurrenceUnit.MONTH, anchorOn = "2026-01-01",
+            ),
+        )
+        val commits = uow.commits
+
+        // Logging: collected with the shipped line problem, each by its row.
+        val logRefused = assertFailsWith<EventValidation> {
+            logEvent.run(
+                cmd(
+                    assetId, kind = EventKind.MAINTENANCE, title = "Filter change",
+                    consumables = listOf(line("Filter cartridge", quantity = "-1"), line("Lid gasket", supplyId = SupplyId("s-gone"))),
+                ),
+            )
+        }
+        assertEquals(listOf(FieldProblem.BadConsumable(0), FieldProblem.UnknownSupplyItem(1)), logRefused.problems)
+
+        // Editing: the stored event stays byte-equal.
+        val editRefused = assertFailsWith<EventValidation> {
+            updateEvent.run(
+                logged.id,
+                cmd(assetId, kind = EventKind.MAINTENANCE, title = "Filter change", consumables = listOf(line("Filter cartridge", supplyId = SupplyId("s-gone")))),
+            )
+        }
+        assertEquals(listOf(FieldProblem.UnknownSupplyItem(0)), editRefused.problems)
+
+        // A completion that sends a line goes through the same path: refused, nothing written.
+        val completionRefused = assertFailsWith<EventValidation> {
+            completeSchedule.run(
+                ScheduleId("sch-filter"),
+                CompletionCommand(occurredOn = "2026-03-30", tzId = "UTC", consumables = listOf(line("Filter cartridge", supplyId = SupplyId("s-gone")))),
+            )
+        }
+        assertEquals(listOf(FieldProblem.UnknownSupplyItem(0)), completionRefused.problems)
+
+        assertEquals(commits, uow.commits, "nothing written")
+        assertEquals(listOf(logged), events.all())
+    }
+
+    @Test fun anArchivedItemMayBeLinked() = runTest {
+        // R15-6: an archived SupplyItem still resolves, so an edit re-sending a line's link is never refused.
+        val assetId = filterAsset()
+        supplyItems.upsert(supplyItemOf("s-old", "Example Filter Cartridge", archivedAt = 500L))
+        schedules.upsert(
+            scheduleOf(
+                "sch-filter", assetId = assetId.value, title = "Change spa filter",
+                timeInterval = 3, timeUnit = RecurrenceUnit.MONTH, anchorOn = "2026-01-01",
+            ),
+        )
+
+        val logged = logEvent.run(
+            cmd(assetId, kind = EventKind.MAINTENANCE, title = "Filter change", consumables = listOf(line("Filter cartridge", supplyId = SupplyId("s-old")))),
+        )
+        val completed = completeSchedule.run(
+            ScheduleId("sch-filter"),
+            CompletionCommand(occurredOn = "2026-03-30", tzId = "UTC", consumables = listOf(line("Filter cartridge", supplyId = SupplyId("s-old")))),
+        )
+
+        assertEquals(SupplyId("s-old"), events.get(logged.id)!!.consumables.single().supplyId)
+        assertEquals(SupplyId("s-old"), events.get(completed.id)!!.consumables.single().supplyId)
+    }
+
+    @Test fun renamingEditingOrArchivingAnItemLeavesEveryPastLineByteEqual() = runTest {
+        val assetId = filterAsset()
+        val item = saveSupplyItem.run(
+            null,
+            SupplyItemCommand(
+                "Example Filter Cartridge", "Filter", "Example Filters Co.", "SC-50", "EF-SC50", "ea", "",
+                listOf(SpecificationInput(null, "", "Length", "230", "mm")),
+            ),
+        ).item
+        val profile = saveProfile.run(
+            null,
+            ProfileCommand(
+                assetId, "Change filter", EventKind.MAINTENANCE, "", emptyList(),
+                listOf(ProfileConsumableInput(null, "Filter cartridge", 1.0, "", supplyId = item.id)),
+            ),
+        )
+        val event = logEvent.run(
+            cmd(assetId, profileId = profile.id, kind = EventKind.MAINTENANCE, title = "Filter change", consumables = listOf(line("Filter cartridge", unit = "", supplyId = item.id))),
+        )
+
+        now += 1_000L
+        val spec = item.specifications.single()
+        saveSupplyItem.run(
+            item.id,
+            SupplyItemCommand(
+                "Example Filter Cartridge Mk2", "Filters", "Example Filters Co.", "SC-60", "EF-SC60", "pack", "renamed",
+                listOf(SpecificationInput(spec.id, spec.key, "Overall length", "240", "mm")),
+            ),
+        )
+        archiveSupplyItem.run(item.id, archived = true)
+
+        // Every past line byte-equal: name, unit and supplyId, and the rows that carry them.
+        assertEquals(profile, profiles.get(profile.id))
+        assertEquals(event, events.get(event.id))
+
+        // A re-save from the stored lines keeps the snapshot: the core never fills a line from its item.
+        val resaved = saveProfile.run(
+            profile.id,
+            ProfileCommand(
+                assetId, "Change filter", EventKind.MAINTENANCE, "", emptyList(),
+                profile.consumables.map { ProfileConsumableInput(it.id, it.name, it.defaultQuantity, it.unit, it.supplyId) },
+            ),
+        )
+        assertEquals(profile.consumables, resaved.consumables)
+        val reEdited = updateEvent.run(
+            event.id,
+            cmd(
+                assetId, profileId = profile.id, kind = EventKind.MAINTENANCE, title = "Filter change",
+                consumables = event.consumables.map { line(it.name, "1", it.unit, it.supplyId) },
+            ),
+        )
+        assertEquals(event.consumables, reEdited.consumables)
+
+        // And no "sync" is possible: the two use cases that change an item hold no port a material line lives in.
+        val linePorts = setOf(
+            com.loosecannon.servicetag.core.ports.ProfileRepository::class.java,
+            com.loosecannon.servicetag.core.ports.EventRepository::class.java,
+        )
+        for (useCase in listOf(SaveSupplyItem::class.java, ArchiveSupplyItem::class.java)) {
+            assertTrue(
+                useCase.constructors.all { c -> c.parameterTypes.none { it in linePorts } },
+                "${useCase.simpleName} takes no ProfileRepository or EventRepository",
+            )
+        }
     }
 }

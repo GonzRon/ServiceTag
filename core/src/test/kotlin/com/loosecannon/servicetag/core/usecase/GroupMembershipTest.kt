@@ -10,6 +10,7 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.schedule.GroupOccurrences
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
@@ -77,7 +78,7 @@ class GroupMembershipTest {
             InMemoryHealthSubjectRepository(),
         )
     private val completeMembers = CompleteGroupMembers(
-        schedules, groups, events, closures, defs, profiles, uow, ids, clock, recompute,
+        schedules, groups, events, closures, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute,
     )
     private val archiveAsset = ArchiveAsset(assets, uow, clock) { recompute.forAsset(it) }
     private val retireAsset = RetireAsset(assets, uow, clock) { recompute.forAsset(it) }

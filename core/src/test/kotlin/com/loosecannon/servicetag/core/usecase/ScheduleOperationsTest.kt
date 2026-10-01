@@ -114,14 +114,14 @@ class ScheduleOperationsTest {
             InMemoryHealthSubjectRepository(),
         )
     private val complete =
-        CompleteSchedule(countedSchedules, events, defs, profiles, uow, ids, clock, recompute)
+        CompleteSchedule(countedSchedules, events, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
     private val postpone = PostponeSchedule(countedSchedules, uow, recompute)
     private val pause = PauseSchedule(countedSchedules, uow, recompute)
     private val archive = ArchiveSchedule(
         countedSchedules, uow, recompute, InMemoryHealthSubjectRepository(), assets, clock,
     )
-    private val logEvent = LogEvent(events, defs, profiles, assets, uow, ids, clock, recompute)
-    private val updateEvent = UpdateEvent(events, defs, profiles, uow, ids, clock, recompute)
+    private val logEvent = LogEvent(events, defs, profiles, assets, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
+    private val updateEvent = UpdateEvent(events, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
     private val deleteEvent = DeleteEvent(events, attachments, storage, uow, recompute)
 
     private suspend fun seedAsset(id: String = "a1"): AssetId {

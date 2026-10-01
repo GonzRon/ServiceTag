@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.core.model.*
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.testing.*
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
@@ -82,5 +83,20 @@ class ApplyTemplateTest {
         assertEquals(0, defs.forAsset(plain.id).size); assertEquals(0, profiles.forAsset(plain.id).size)
         assertNull(assets.get(plain.id)!!.templateKey)
         assertTrue(apply.run(plain.id, hotTub) is ApplyResult.Applied)   // can be set up later
+    }
+
+    @Test fun templatesCreateNoLinkAndNoSupplyItem() = runTest {
+        // #15 (B4a) row 42, R15-10: a template stays name-only. Every line it writes is unlinked, and it holds no
+        // SupplyItem port, so applying one can neither create a SupplyItem nor look one up to link.
+        asset()
+        apply.run(AssetId("a1"), hotTub)
+
+        val lines = profiles.forAsset(AssetId("a1")).flatMap { it.consumables }
+        assertTrue(lines.isNotEmpty(), "the template writes material lines")
+        assertTrue(lines.all { it.supplyId == null }, "$lines")
+        assertTrue(
+            ApplyTemplate::class.java.constructors.all { c -> c.parameterTypes.none { it == SupplyItemRepository::class.java } },
+            "ApplyTemplate takes no SupplyItemRepository",
+        )
     }
 }

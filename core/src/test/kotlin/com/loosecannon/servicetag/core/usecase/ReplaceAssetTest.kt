@@ -36,6 +36,7 @@ import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServicePolicy
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
@@ -51,6 +52,7 @@ import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
 import com.loosecannon.servicetag.core.testing.activationOf
+import com.loosecannon.servicetag.core.testing.assetSupplyOf
 import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
 import com.loosecannon.servicetag.core.testing.conditionOf
@@ -62,6 +64,7 @@ import com.loosecannon.servicetag.core.testing.groupOf
 import com.loosecannon.servicetag.core.testing.loanOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import com.loosecannon.servicetag.core.testing.successionOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import com.loosecannon.servicetag.core.testing.transferOf
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
@@ -690,6 +693,28 @@ class ReplaceAssetTest {
         assertEquals(old.sortOrder, profile.sortOrder)
         assertEquals("water-heater", h.raw.assets.rows.getValue(successor.value).templateKey, "the asset's provenance, as a template stamps it")
         assertEquals(oldDefinitions, h.raw.definitions.rows.filterValues { it.assetId == AssetId(PRED) }, "the old set-up untouched")
+    }
+
+    @Test fun theSuccessorsClonedQuickActionsKeepTheirLinksAndNoApplicabilityIsCopied() = runTest {
+        // #15 (B4a) row 42, C21 / R15-15: the clone copies each quick action's lines with their links — the same
+        // product on the successor — and copies no applicability row (limit 7).
+        h.put(h.assetRow(PRED, "Example Water Heater"))
+        h.put(h.definitionRow("d-in", key = "inlet", sortOrder = 0))
+        h.raw.supplyItems.upsert(supplyItemOf("s-anode", "Example Anode Rod"))
+        h.raw.assetSupplies.insert(assetSupplyOf("as-1", assetId = PRED, supplyId = "s-anode", role = "Anode"))
+        val flush = h.profileRow("p-flush", fields = listOf("d-in"), consumables = listOf("Anode rod", "Descaler"))
+        h.put(flush.copy(consumables = flush.consumables.map { if (it.name == "Anode rod") it.copy(supplyId = SupplyId("s-anode")) else it }))
+        val applicability = h.raw.assetSupplies.rows.toMap()
+
+        val successor = h.replaceWith(h.draft(carrySetup = true)).successor.id
+
+        val clone = h.raw.profiles.rows.values.single { it.assetId == successor }
+        assertEquals(
+            listOf("Anode rod" to SupplyId("s-anode"), "Descaler" to null),
+            clone.consumables.map { it.name to it.supplyId },
+        )
+        assertTrue(h.raw.assetSupplies.rows.values.none { it.assetId == successor }, "no applicability row is copied")
+        assertEquals(applicability, h.raw.assetSupplies.rows.toMap(), "the predecessor's rows untouched")
     }
 
     @Test fun anArchivedSourceOfACarriedDerivedDefinitionIsClonedArchived() = runTest {

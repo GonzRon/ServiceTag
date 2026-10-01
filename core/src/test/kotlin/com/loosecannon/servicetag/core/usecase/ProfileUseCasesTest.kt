@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.model.EventSource
 import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
@@ -19,6 +20,8 @@ import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryEventRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -34,11 +37,12 @@ class ProfileUseCasesTest {
     private val defs = InMemoryDefinitionRepository()
     private val profiles = InMemoryProfileRepository()
     private val events = InMemoryEventRepository()
+    private val supplyItems = InMemorySupplyItemRepository()
     private val uow = FakeUnitOfWork(assets, defs, profiles, events)
     private var seq = 0
     private val ids = IdGenerator { "id-${++seq}" }
     private val clock = Clock { 5_000L }
-    private val save = SaveProfile(profiles, defs, assets, uow, ids, clock)
+    private val save = SaveProfile(profiles, defs, assets, supplyItems, uow, ids, clock)
     private val archive = ArchiveProfile(profiles, uow, clock)
     private val delete = DeleteProfile(profiles, uow)
     private val reorder = ReorderProfiles(profiles, uow, clock)
@@ -139,8 +143,8 @@ class ProfileUseCasesTest {
                     cmd(
                         "TDS retest",
                         consumables = listOf(
-                            ProfileConsumableInput(null, "Filter", 1.0, "pcs"),
-                            ProfileConsumableInput(null, " ", null, "pcs"),
+                            ProfileConsumableInput(null, "Filter", 1.0, "pcs", supplyId = null),
+                            ProfileConsumableInput(null, " ", null, "pcs", supplyId = null),
                         ),
                     ),
                 )
@@ -206,8 +210,8 @@ class ProfileUseCasesTest {
                     ProfileFieldInput(waterTemp.id, required = false),
                 ),
                 consumables = listOf(
-                    ProfileConsumableInput(chlorineConsumable.id, "Chlorine", 2.0, "oz"),
-                    ProfileConsumableInput(null, "Clarifier", null, "oz"),
+                    ProfileConsumableInput(chlorineConsumable.id, "Chlorine", 2.0, "oz", supplyId = null),
+                    ProfileConsumableInput(null, "Clarifier", null, "oz", supplyId = null),
                 ),
             ),
         )
@@ -242,9 +246,9 @@ class ProfileUseCasesTest {
             cmd(
                 "Water test",
                 consumables = listOf(
-                    ProfileConsumableInput(ownId, "Chlorine", 1.0, "oz"),
-                    ProfileConsumableInput(foreignId, "pH reducer", null, "oz"),
-                    ProfileConsumableInput("made-up", "Clarifier", null, "oz"),
+                    ProfileConsumableInput(ownId, "Chlorine", 1.0, "oz", supplyId = null),
+                    ProfileConsumableInput(foreignId, "pH reducer", null, "oz", supplyId = null),
+                    ProfileConsumableInput("made-up", "Clarifier", null, "oz", supplyId = null),
                 ),
             ),
         )
@@ -308,5 +312,128 @@ class ProfileUseCasesTest {
         archive.run(waterTest.id, archived = false)
         assertNull(profiles.get(waterTest.id)!!.archivedAt)
         assertFailsWith<NoSuchProfile> { archive.run(ProfileId("nope"), archived = true) }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // #15 (B4a) — rows 39 and 40: a quick action's line carries the SupplyItem it names (C19, C20). The line's
+    // name and unit stay its own readable snapshot; the link only says which SupplyItem the line is.
+    // ---------------------------------------------------------------------------------------------------------
+
+    private suspend fun prefilterQuickAction(supplyId: SupplyId?): EventProfile {
+        assets.upsert(Asset(id = a1, name = "Example RO System", createdAt = 1L, updatedAt = 1L))
+        return save.run(
+            null,
+            cmd(
+                "Change prefilter",
+                eventKind = EventKind.MAINTENANCE,
+                consumables = listOf(
+                    ProfileConsumableInput(null, "Prefilter cartridge", 1.0, "", supplyId = supplyId),
+                    ProfileConsumableInput(null, "O-ring grease", null, "g", supplyId = null),
+                ),
+            ),
+        )
+    }
+
+    @Test fun aLinkedLineIsStored() = runTest {
+        supplyItems.upsert(supplyItemOf("s-pf", "Example Prefilter Cartridge"))
+
+        val saved = prefilterQuickAction(SupplyId("s-pf"))
+
+        assertEquals(listOf(SupplyId("s-pf"), null), saved.consumables.map { it.supplyId })
+        // The snapshot is the line's own: never the item's name, and a blank unit is not filled from the
+        // item's preferred unit ("ea") — the phone pre-fills a blank, the core never does.
+        assertEquals(listOf("Prefilter cartridge", "O-ring grease"), saved.consumables.map { it.name })
+        assertEquals(listOf("", "g"), saved.consumables.map { it.unit })
+        assertEquals(saved, profiles.get(saved.id))
+    }
+
+    @Test fun anEditCarryingTheLinkKeepsIt() = runTest {
+        supplyItems.upsert(supplyItemOf("s-pf", "Example Prefilter Cartridge"))
+        val created = prefilterQuickAction(SupplyId("s-pf"))
+        val line = created.consumables.first()
+
+        val edited = save.run(
+            created.id,
+            cmd(
+                "Change the prefilter",
+                eventKind = EventKind.MAINTENANCE,
+                consumables = listOf(ProfileConsumableInput(line.id, "Prefilter cartridge", 2.0, "ea", supplyId = line.supplyId)),
+            ),
+        )
+
+        assertEquals(line.id, edited.consumables.single().id)
+        assertEquals(SupplyId("s-pf"), edited.consumables.single().supplyId)
+        assertEquals(edited, profiles.get(created.id))
+    }
+
+    @Test fun anEditWithoutTheLinkClearsIt() = runTest {
+        // The request is a full replace (limit 1): a line sent with no supplyId is an unlinked line.
+        supplyItems.upsert(supplyItemOf("s-pf", "Example Prefilter Cartridge"))
+        val created = prefilterQuickAction(SupplyId("s-pf"))
+        val line = created.consumables.first()
+
+        val edited = save.run(
+            created.id,
+            cmd(
+                "Change prefilter",
+                eventKind = EventKind.MAINTENANCE,
+                consumables = listOf(ProfileConsumableInput(line.id, line.name, line.defaultQuantity, line.unit, supplyId = null)),
+            ),
+        )
+
+        assertEquals(line.id, edited.consumables.single().id, "the row keeps its identity; only the link went")
+        assertNull(edited.consumables.single().supplyId)
+        assertNull(profiles.get(created.id)!!.consumables.single().supplyId)
+    }
+
+    @Test fun anUnknownSupplyIdIsRefusedAndNothingIsWritten() = runTest {
+        supplyItems.upsert(supplyItemOf("s-pf", "Example Prefilter Cartridge"))
+        val created = prefilterQuickAction(SupplyId("s-pf"))
+        val commits = uow.commits
+
+        // A new quick action: every problem collected, each by its row; a blank name and a dangling link are two.
+        assertEquals(
+            listOf(ProfileProblem.BadConsumable(0), ProfileProblem.UnknownSupplyItem(1)),
+            problemsOf {
+                save.run(
+                    null,
+                    cmd(
+                        "Change membrane",
+                        consumables = listOf(
+                            ProfileConsumableInput(null, " ", null, "ea", supplyId = null),
+                            ProfileConsumableInput(null, "Membrane", 1.0, "ea", supplyId = SupplyId("s-gone")),
+                        ),
+                    ),
+                )
+            },
+        )
+        // An edit: refused before any write, the stored quick action byte-equal.
+        assertEquals(
+            listOf(ProfileProblem.UnknownSupplyItem(0)),
+            problemsOf {
+                save.run(
+                    created.id,
+                    cmd(
+                        "Change prefilter",
+                        consumables = listOf(
+                            ProfileConsumableInput(created.consumables.first().id, "Prefilter cartridge", 1.0, "ea", supplyId = SupplyId("s-gone")),
+                        ),
+                    ),
+                )
+            },
+        )
+        assertEquals(commits, uow.commits, "nothing written")
+        assertEquals(listOf(created), profiles.forAsset(a1))
+    }
+
+    @Test fun anArchivedItemMayBeLinked() = runTest {
+        // R15-6: an archived SupplyItem is left out of every picker, but a line may still name it — an edit
+        // re-sends the links it loaded.
+        supplyItems.upsert(supplyItemOf("s-old", "Example Prefilter Cartridge", archivedAt = 3_000L))
+
+        val saved = prefilterQuickAction(SupplyId("s-old"))
+
+        assertEquals(SupplyId("s-old"), saved.consumables.first().supplyId)
+        assertEquals(saved, profiles.get(saved.id))
     }
 }

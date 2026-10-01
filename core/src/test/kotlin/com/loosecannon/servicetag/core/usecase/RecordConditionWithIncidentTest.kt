@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.ports.ConditionRepository
 import com.loosecannon.servicetag.core.testing.RiggedFailure
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
@@ -98,7 +99,7 @@ class RecordConditionWithIncidentTest {
         }
         val record = RecordCondition(h.assets, h.events, throwing, h.uow, h.ids, h.clock, h.todayPort)
         return RecordConditionWithIncident(
-            h.events, h.definitions, h.profiles, h.assets, h.uow, h.ids, h.clock, h.recompute, throwing, h.todayPort,
+            h.events, h.definitions, h.profiles, h.assets, InMemorySupplyItemRepository(), h.uow, h.ids, h.clock, h.recompute, throwing, h.todayPort,
             record,
         )
     }
