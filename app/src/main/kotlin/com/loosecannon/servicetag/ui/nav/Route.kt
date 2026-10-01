@@ -158,6 +158,18 @@ sealed interface Route : NavKey {
     /** New when [id] is null. */
     @Serializable data class GroupEdit(val id: String?) : Route
 
+    /**
+     * #15 (C29) — every SupplyItem, archived included, under Maintenance's fifth row. A pushed destination, never
+     * a fourth tab: [TopLevelRoutes] stays the three.
+     */
+    @Serializable data object Supplies : Route
+
+    /** #15 (C30) — one SupplyItem: its identity, its specifications and the assets that take it. */
+    @Serializable data class SupplyDetail(val id: String) : Route
+
+    /** #15 (C31) — the SupplyItem editor; new when [id] is null. */
+    @Serializable data class SupplyEdit(val id: String?) : Route
+
     /** #27's findings and their repairs, under Maintenance. */
     @Serializable data object ReminderHealth : Route
 
