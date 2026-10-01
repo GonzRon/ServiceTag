@@ -7,14 +7,21 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.servicetag.core.model.Asset
+import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.ui.asset.AssetRow
+import com.loosecannon.servicetag.ui.asset.AssetsState
+import com.loosecannon.servicetag.ui.asset.EmptyReason
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -36,15 +43,25 @@ class ShareIntakeScreenTest {
 
     private val mower = AssetChoice("asset-1", "Cub Cadet XT1")
 
+    /** #93: the picker step's list — the same asset as one of the tab's rows. */
+    private val pickerRows = AssetsState(
+        items = listOf(
+            AssetRow(asset = Asset(id = AssetId(mower.id), name = mower.name, createdAt = 1L, updatedAt = 1L)),
+        ),
+    )
+
     private var saved = 0
     private var cancelled = 0
     private var confirmed = 0
+    private var changes = 0
     private val roles = mutableListOf<DocumentRole?>()
+    private val choices = mutableListOf<Pair<String, String>>()
+    private val queries = mutableListOf<String>()
 
     private fun form(
         path: IntakePath = IntakePath.LINK,
         received: String = "https://example-mower.invalid/xt1/manual.pdf",
-        chosen: String? = mower.id,
+        chosen: AssetChoice? = mower,
         name: String = "OEM parts lookup",
         storeReady: Boolean = true,
         message: String? = null,
@@ -64,13 +81,27 @@ class ShareIntakeScreenTest {
 
     private fun show(state: ShareIntakeState) = show(mutableStateOf(state))
 
-    /** The state is held, so a case can move the one composition from one share to another. */
-    private fun show(state: MutableState<ShareIntakeState>) {
+    /**
+     * The state is held, so a case can move the one composition from one share to another; so is the picker's list
+     * (#93), so a case can move it from rows to an empty reason.
+     */
+    private fun show(
+        state: MutableState<ShareIntakeState>,
+        picker: MutableState<AssetsState> = mutableStateOf(pickerRows),
+    ) {
         rule.setContent {
             ServiceTagTheme {
                 ShareIntakeScreen(
                     state = state.value,
-                    onChoose = {},
+                    picker = picker.value,
+                    pickerQuery = "",
+                    onQueryChange = { queries += it },
+                    onClearQuery = {},
+                    onPickType = {},
+                    onToggleComponents = {},
+                    onToggleArchived = {},
+                    onChoose = { id, name -> choices += id to name },
+                    onChangeAsset = { changes += 1 },
                     onName = {},
                     onDescribe = {},
                     onKind = {},
@@ -85,21 +116,51 @@ class ShareIntakeScreenTest {
         rule.waitForIdle()
     }
 
-    /** `SectionHeader` renders its title uppercased, so the section labels read as shouted. */
+    /**
+     * `SectionHeader` renders its title uppercased, so the section labels read as shouted. #93 (C5, C7, C8): the
+     * picker step first — the title once, what arrived, "Choose asset", the tab's search box, controls and row, and
+     * no Save and no Name — then, chosen, the form: the asset's name alone with "Change", which reaches its callback.
+     */
     @Test fun theScreenDrawsTheRatifiedLabelsAndNothingElse() {
-        show(form())
+        val state = mutableStateOf(form(chosen = null))
+        show(state)
 
+        rule.onAllNodesWithText("Save to ServiceTag").assertCountEquals(1)
         rule.onNodeWithText("Save to ServiceTag").assertIsDisplayed()
         rule.onNodeWithText("RECEIVED").assertIsDisplayed()
         rule.onNodeWithText("ATTACH TO").assertIsDisplayed()
         rule.onNodeWithText("Choose asset").assertIsDisplayed()
+        rule.onNodeWithText("Search assets").assertIsDisplayed()
+        rule.onNodeWithText("Type").assertIsDisplayed()
+        rule.onNodeWithText("Components").assertIsDisplayed()
+        rule.onNodeWithText("Archived").assertIsDisplayed()
         rule.onNodeWithText("Cub Cadet XT1").assertIsDisplayed()
+        rule.onNodeWithText("Cancel").assertIsDisplayed()
+        rule.onAllNodesWithText("Save").assertCountEquals(0)
+        rule.onAllNodesWithText("Name").assertCountEquals(0)
+        rule.onAllNodesWithText("Change").assertCountEquals(0)
+
+        state.value = form()
+        rule.waitForIdle()
+
+        rule.onAllNodesWithText("Save to ServiceTag").assertCountEquals(1)
+        rule.onNodeWithText("Save to ServiceTag").assertIsDisplayed()
+        rule.onNodeWithText("RECEIVED").assertIsDisplayed()
+        rule.onNodeWithText("ATTACH TO").assertIsDisplayed()
+        rule.onNodeWithText("Cub Cadet XT1").assertIsDisplayed()
+        rule.onNodeWithText("Change").assertIsDisplayed()
+        rule.onAllNodesWithText("Choose asset").assertCountEquals(0)
+        rule.onAllNodesWithText("Search assets").assertCountEquals(0)
         rule.onNodeWithText("Name").assertIsDisplayed()
         rule.onNodeWithText("Description (optional)").assertIsDisplayed()
         rule.onNodeWithText("Save").assertIsEnabled()
         rule.onNodeWithText("Cancel").assertIsDisplayed()
         // The 2.6 wording the owner refused, and the one #43's mock used.
         rule.onAllNodesWithText("Share to ServiceTag").assertCountEquals(0)
+
+        rule.onNodeWithText("Change").performClick()
+        assertEquals(1, changes)
+        assertEquals(0, saved)
     }
 
     @Test fun withNoAssetsTheOnlyThingOfferedIsClose() {
@@ -162,9 +223,29 @@ class ShareIntakeScreenTest {
         rule.onNodeWithText("Cancel").assertIsDisplayed()
     }
 
+    /**
+     * #93 (R93-9's qualification): a byte share starts on the picker, which draws no "TYPE"; with no folder the picker
+     * says D-20's sentence and offers "Close", never "Cancel" or Save (C-2). Once an asset is chosen the form draws the
+     * Type control — the assertion relocated from `ShareBoundaryTest`'s byte case.
+     */
     @Test fun theTypeControlIsDrawnOnBytesAndNeverOnALink() {
-        show(form(path = IntakePath.BYTES, received = "manual.pdf"))
+        val state = mutableStateOf(form(path = IntakePath.BYTES, received = "manual.pdf", chosen = null))
+        show(state)
 
+        rule.onNodeWithText("Choose asset").assertIsDisplayed()
+        rule.onAllNodesWithText("TYPE").assertCountEquals(0)
+
+        state.value = form(path = IntakePath.BYTES, received = "manual.pdf", chosen = null, storeReady = false)
+        rule.waitForIdle()
+        rule.onNodeWithText(
+            "Choose an attachment folder in ServiceTag Settings, then share this again.",
+        ).assertIsDisplayed()
+        rule.onNodeWithText("Close").assertIsDisplayed()
+        rule.onAllNodesWithText("Cancel").assertCountEquals(0)
+        rule.onAllNodesWithText("Save").assertCountEquals(0)
+
+        state.value = form(path = IntakePath.BYTES, received = "manual.pdf")
+        rule.waitForIdle()
         rule.onNodeWithText("TYPE").assertIsDisplayed()
         // The seven shipped labels, reused and not re-spelled.
         listOf("Photo", "Label photo", "Receipt", "Manual", "Warranty", "Document", "Other")
@@ -220,10 +301,31 @@ class ShareIntakeScreenTest {
         rule.onAllNodesWithText("Give the file a name").assertCountEquals(0)
     }
 
-    @Test fun noAssetChosenDisablesSave() {
-        show(form(chosen = null))
+    /**
+     * #93 (C3, C7): with nothing chosen the picker is drawn and Save is not; a row's tap carries its id and name, a
+     * keystroke reaches the query; its empty states are the tab's sentences, with no "Add asset" (SPEC:80-81).
+     */
+    @Test fun noAssetChosenOffersThePickerAndNoSave() {
+        val picker = mutableStateOf(pickerRows)
+        show(mutableStateOf(form(chosen = null)), picker)
 
-        rule.onNodeWithText("Save").assertIsNotEnabled()
+        rule.onAllNodesWithText("Save").assertCountEquals(0)
+        rule.onNodeWithText("Cub Cadet XT1").performClick()
+        assertEquals(listOf(mower.id to mower.name), choices)
+        rule.onNode(hasSetTextAction()).performTextInput("cub")
+        assertEquals(listOf("cub"), queries)
+
+        picker.value = AssetsState(archivedCount = 2, emptyReason = EmptyReason.NO_ACTIVE_ASSETS)
+        rule.waitForIdle()
+        rule.onNodeWithText("No active assets · 2 archived").assertIsDisplayed()
+        rule.onNodeWithText("Show archived").assertIsDisplayed()
+        rule.onAllNodesWithText("Add asset").assertCountEquals(0)
+
+        picker.value = AssetsState(query = "zzz", emptyReason = EmptyReason.NOTHING_MATCHES)
+        rule.waitForIdle()
+        rule.onNodeWithText("Nothing matches that.").assertIsDisplayed()
+        rule.onAllNodesWithText("Add asset").assertCountEquals(0)
+        rule.onAllNodesWithText("Save").assertCountEquals(0)
     }
 
     @Test fun anUnknownSchemeIsAskedAboutByNameBeforeItIsSaved() {
