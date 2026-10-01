@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAssetSupplyRepository
 import com.loosecannon.servicetag.core.testing.successionOf
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
@@ -238,7 +240,7 @@ class ImportBackupMergeTest {
             f.closures, f.events, f.attachments, f.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             f.categories, f.serviceCases, f.caseEntries, f.loans, f.transfers,
-            f.successions, f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
+            f.successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), f.uow, IdGenerator { "set-merge" }, Clock { 1_758_400_000_000L },
             appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
     }

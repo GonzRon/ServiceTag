@@ -38,11 +38,15 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
     val transfers = InMemoryTransferRecordRepository()
     /** #86's successions; the asset double's delete takes a row naming it at either end, as the schema does. */
     val successions = InMemoryAssetSuccessionRepository().also { assets.cascadesTo(it::cascadeFromAsset) }
+    /** #15's applicability; the asset double's delete takes it, as the schema's CASCADE does. */
+    val assetSupplies = InMemoryAssetSupplyRepository().also { assets.cascadesTo(it::cascadeFromAsset) }
+    /** #15's catalog; its wipe is refused while applicability remains, as the schema's RESTRICT is. */
+    val supplyItems = InMemorySupplyItemRepository(assetSupplies)
     val storage = FakeAttachmentStorage()
     val uow = FakeUnitOfWork(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions,
+        successions, supplyItems, assetSupplies,
     )
 
     var rebuilds = 0
@@ -50,13 +54,13 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
     val export = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions,
+        successions, supplyItems, assetSupplies,
         uow, IdGenerator { setId }, Clock { now }, appVersion = "1.4.1", schemaVersion = 9,
     )
     val replace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions, storage, uow,
+        successions, supplyItems, assetSupplies, storage, uow,
         rebuildAll = { rebuilds += 1 },
     )
     val build = BuildBackupMergePlan(

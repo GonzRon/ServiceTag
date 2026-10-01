@@ -137,7 +137,7 @@ class StageABundleConformanceTest {
             assertKeysMatch(
                 "eventProfiles[].consumables",
                 profile.jsonObject.getValue("consumables").jsonArray,
-                ProfileConsumableDto.serializer().descriptor.elementNames,
+                ProfileConsumableDto.serializer().descriptor.elementNames.toSet() - FORMAT_18_LINE_FIELDS,
             )
         }
 
@@ -156,7 +156,7 @@ class StageABundleConformanceTest {
             assertKeysMatch(
                 "assetEvents[].consumables",
                 event.jsonObject.getValue("consumables").jsonArray,
-                ConsumableUsageDto.serializer().descriptor.elementNames,
+                ConsumableUsageDto.serializer().descriptor.elementNames.toSet() - FORMAT_18_LINE_FIELDS,
             )
         }
     }
@@ -188,6 +188,9 @@ class StageABundleConformanceTest {
         private val FORMAT_6_TABLES =
             setOf("maintenanceGroups", "maintenanceSchedules", "occurrenceClosures")
         private val FORMAT_6_EVENT_FIELDS = setOf("scheduleId", "occurrenceOn", "detailsPending")
+
+        /** What format 18 appended to both material lines (#15), named for the same reason. */
+        private val FORMAT_18_LINE_FIELDS = setOf("supplyId")
 
         /** What format 7 added, for the same reason [FORMAT_6_TABLES] is named rather than derived. */
         private val FORMAT_7_TABLES = setOf("assetReferences")

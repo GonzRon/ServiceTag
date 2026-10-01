@@ -35,6 +35,8 @@ import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomTransferRecordRepository
 import com.loosecannon.servicetag.data.room.RoomAssetSuccessionRepository
+import com.loosecannon.servicetag.data.room.RoomAssetSupplyRepository
+import com.loosecannon.servicetag.data.room.RoomSupplyItemRepository
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
 import com.loosecannon.servicetag.data.room.RoomCategoryRepository
@@ -98,6 +100,8 @@ class RestoreProofTest {
         val loans = RoomAssetLoanRepository(db.assetLoanDao())
         val transfers = RoomTransferRecordRepository(db.transferRecordDao())
         val successions = RoomAssetSuccessionRepository(db.assetSuccessionDao())
+        val supplyItems = RoomSupplyItemRepository(db.supplyItemDao())
+        val assetSupplies = RoomAssetSupplyRepository(db.assetSupplyDao())
         val uow = RoomUnitOfWork(db)
         // The restore's rebuild seam, wired to the real engine over the same database: the proof
         // is about the canonical rows, and derived state is rebuilt after any import.
@@ -111,13 +115,13 @@ class RestoreProofTest {
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
             attachments, references, seasonActivations, conditions, healthSubjects, categories,
             serviceCases, caseEntries, loans, transfers,
-            successions, uow, IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
+            successions, supplyItems, assetSupplies, uow, IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
         )
         val import = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
             attachments, references, seasonActivations, conditions, healthSubjects, categories,
             serviceCases, caseEntries, loans, transfers,
-            successions, FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
+            successions, supplyItems, assetSupplies, FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
             rebuildAll = { recompute.all() },
         )
     }

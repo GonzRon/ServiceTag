@@ -16,6 +16,10 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.CaseStatus
 import com.loosecannon.servicetag.core.testing.BackupInstall
+import com.loosecannon.servicetag.core.testing.SupplyEstate
+import com.loosecannon.servicetag.core.testing.assetSupplyOf
+import com.loosecannon.servicetag.core.testing.dataTreeOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import com.loosecannon.servicetag.core.testing.archiveOf
 import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
@@ -381,5 +385,31 @@ class ImportBackupReplaceTest {
 
         assertEquals(listOf(saved, plain), install.attachments.all().sortedBy { it.id.value })
         assertEquals(1, install.uow.commits)
+    }
+
+    /**
+     * #15 (C10, row 13): a replace of a format-18 archive restores every SupplyItem, specification, applicability row
+     * and line link byte-equal to the file, and leaves none of this install's own: the wipe takes the old catalog
+     * after the assets (whose CASCADE took the old applicability first), the writes land the catalog before its rows.
+     */
+    @Test
+    fun aReplaceRestoresEverySupplyRowAndLinkByteEqual() = runBlocking<Unit> {
+        val install = BackupInstall()
+        install.assets.upsert(plainAssetOf("old", "Example Old Filter Housing"))
+        install.supplyItems.upsert(supplyItemOf("s-old", "Example Old Cartridge"))
+        install.assetSupplies.insert(assetSupplyOf("as-old", "old", "s-old", "Cartridge"))
+        val bytes = archiveOf(SupplyEstate.data())
+
+        install.replace.run(bytes)
+
+        assertEquals(listOf(SupplyEstate.prefilter, SupplyEstate.membrane), install.supplyItems.all())
+        assertEquals(listOf(SupplyEstate.prefilterOnSystem, SupplyEstate.membraneOnSoftener), install.assetSupplies.all())
+        assertEquals(listOf(SupplyEstate.quickAction), install.profiles.all())
+        assertEquals(1, install.uow.commits)
+        val written = dataTreeOf(bytes)
+        val again = dataTreeOf(install.export.run().data)
+        for (list in listOf("supplyItems", "assetSupplies", "eventProfiles", "assetEvents")) {
+            assertEquals(written.getValue(list).toString(), again.getValue(list).toString(), "$list byte-equal")
+        }
     }
 }

@@ -2,6 +2,8 @@ package com.loosecannon.servicetag.core.backup
 
 import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAssetSupplyRepository
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.ports.Clock
@@ -147,7 +149,7 @@ class BackupFormat7Test {
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), uow, IdGenerator { "set-format-7" },
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), uow, IdGenerator { "set-format-7" },
             Clock { 1_758_400_000_000L }, appVersion = "1.3.0", schemaVersion = 7,
         )
         val restore = ImportBackupReplace(
@@ -155,7 +157,7 @@ class BackupFormat7Test {
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), storage, uow, rebuildAll = { },
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow, rebuildAll = { },
         )
     }
 
@@ -291,7 +293,7 @@ class BackupFormat7Test {
         val manifest = BackupCodec.decode(encoded(fixture())).manifest
 
         assertEquals(2, manifest.counts["assetReferences"])
-        assertEquals(26, manifest.counts.size)
+        assertEquals(29, manifest.counts.size)
         assertEquals(
             mapOf(
                 "assets" to 1, "nfcTags" to 0, "externalLinks" to 1,
@@ -315,6 +317,8 @@ class BackupFormat7Test {
                 "transferRecords" to 0,
                 // Format 15's key (#86), at zero here for the same reason.
                 "assetSuccessions" to 0,
+                // Format 18's three keys (#15), at zero here for the same reason.
+                "supplyItems" to 0, "supplySpecifications" to 0, "assetSupplies" to 0,
             ),
             manifest.counts,
         )

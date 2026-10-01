@@ -2,6 +2,8 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAssetSupplyRepository
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
 import com.loosecannon.servicetag.core.model.Asset
@@ -239,7 +241,7 @@ class BackupUseCasesTest {
             f.closures, f.events, f.attachments, f.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             f.categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), f.uow, IdGenerator { "set-1" }, Clock { now }, appVersion = "2.0", schemaVersion = 1,
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), f.uow, IdGenerator { "set-1" }, Clock { now }, appVersion = "2.0", schemaVersion = 1,
         ).run().data
     }
 
@@ -249,7 +251,7 @@ class BackupUseCasesTest {
             f.closures, f.events, f.attachments, f.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             f.categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), f.storage, f.uow, rebuildAll = { },
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), f.storage, f.uow, rebuildAll = { },
         ).run(bytes)
     }
 
@@ -441,6 +443,8 @@ class BackupUseCasesTest {
                 "transferRecords" to 0,
                 // Format 15's key (#86), at zero here for the same reason.
                 "assetSuccessions" to 0,
+                // Format 18's three keys (#15), at zero here for the same reason.
+                "supplyItems" to 0, "supplySpecifications" to 0, "assetSupplies" to 0,
             ),
             decoded.manifest.counts,
         )

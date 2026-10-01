@@ -1,5 +1,7 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAssetSupplyRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
 import com.loosecannon.servicetag.core.backup.BackupCodec
@@ -119,14 +121,14 @@ class Format7ImportIdentityTest {
         val export = ExportBackupSet(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
             attachments, references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(),
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(),
             uow, IdGenerator { "set-format-8" }, Clock { 1_758_700_000_000L },
             appVersion = "1.4.0", schemaVersion = 8,
         )
         val replace = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
             attachments, references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(),
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(),
             storage, uow, rebuildAll = { },
         )
         val build = BuildBackupMergePlan(
@@ -242,7 +244,7 @@ class Format7ImportIdentityTest {
 
         // The export is this build's: format 14 since #77 carries the transfer records beside #72's loans,
         // #79b's service cases, #79's warranty reminder lead, #67's document role, #74's categories and 1.4's rows.
-        assertEquals(17, report.formatVersion)
+        assertEquals(18, report.formatVersion)
         assertEquals(source.everything(), target.everything())
         val floor = target.schedules.all().single()
         assertEquals(dayMillis("2026-01-05"), floor.ruleChangedAt)

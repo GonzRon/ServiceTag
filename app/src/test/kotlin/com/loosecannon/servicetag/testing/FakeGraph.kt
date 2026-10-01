@@ -8,6 +8,8 @@ import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
+import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.model.lineageFor
 import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
@@ -108,6 +110,8 @@ import com.loosecannon.servicetag.core.usecase.UpdateServiceCase
 import com.loosecannon.servicetag.data.room.AppDatabase
 import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomAssetSuccessionRepository
+import com.loosecannon.servicetag.data.room.RoomAssetSupplyRepository
+import com.loosecannon.servicetag.data.room.RoomSupplyItemRepository
 import com.loosecannon.servicetag.data.room.RoomTransferRecordRepository
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
 import com.loosecannon.servicetag.data.room.RoomAttachmentRepository
@@ -248,6 +252,9 @@ class FakeGraph(
     /** #86 (C6, MJ-2) — the guarded port for every consumer; the raw one for the merge apply alone, as `AppGraph`. */
     private val roomAssetSuccessions = RoomAssetSuccessionRepository(db.assetSuccessionDao())
     val assetSuccessions: AssetSuccessionRepository = heldWriteGuard.successions(roomAssetSuccessions)
+    /** #15 — the catalog and its applicability, unwrapped as `AppGraph`'s are until the guard takes the second. */
+    val supplyItems: SupplyItemRepository = RoomSupplyItemRepository(db.supplyItemDao())
+    val assetSupplies: AssetSupplyRepository = RoomAssetSupplyRepository(db.assetSupplyDao())
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
 
     /** `T`, injected: a test says which day it is and the engine answers the same way every run. */
@@ -457,12 +464,13 @@ class FakeGraph(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
         serviceCases, serviceCaseEntries, loans, transferRecords,
-        assetSuccessions, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
+        assetSuccessions, supplyItems, assetSupplies, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
     )
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, transferRecords, assetSuccessions, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, assetSuccessions, supplyItems, assetSupplies,
+        attachmentStorage, uow,
         // The real engine: "once, inside the transaction, after the last insert" is proved against
         // the seam in `:core`, so there is no counter to keep here.
         rebuildAll = { recomputeSchedules.all() },
@@ -489,7 +497,7 @@ class FakeGraph(
     val backupRepositories = BackupRepositories(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         seasonActivations, conditions, healthSubjects, categories, serviceCases, serviceCaseEntries, loans,
-        transferRecords, assetSuccessions,
+        transferRecords, assetSuccessions, supplyItems, assetSupplies,
     )
     val createTransferPack: CreateTransferPack = CreateTransferPack(
         backupRepositories, uow, ids, clock, APP_VERSION, SCHEMA_VERSION,
