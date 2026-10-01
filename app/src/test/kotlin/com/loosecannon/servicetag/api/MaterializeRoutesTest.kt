@@ -132,13 +132,19 @@ class MaterializeRoutesTest {
 
     private class Seeded(val asset: String, val reference: String)
 
-    /** The asset and its one web reference; the reference's PDF served unless [serve] is false. */
-    private fun seed(uri: String = URI, serve: Boolean = true): Seeded {
+    /**
+     * The asset and its one web reference, given [role] over the shipped `POST /v1/references` (#91) when one is named;
+     * the reference's PDF served unless [serve] is false.
+     */
+    private fun seed(uri: String = URI, serve: Boolean = true, role: DocumentRole? = null): Seeded {
         val asset = client.asset("Example Water Heater")
+        val roleKey = role?.let { ""","role":"${it.name}"""" }.orEmpty()
         val reference = client.ok(
             ReferenceResponse.serializer(), "POST", "/v1/references",
-            """{"assetId":"$asset","uri":"$uri","displayName":"$NAME","description":"$DESCRIPTION"}""", status = 201,
+            """{"assetId":"$asset","uri":"$uri","displayName":"$NAME","description":"$DESCRIPTION"$roleKey}""",
+            status = 201,
         ).reference.id
+        assertEquals("the seeded reference's role", role, referenceRow(reference)?.role)
         if (serve) transport.serve(uri, PDF)
         return Seeded(asset, reference)
     }
@@ -264,6 +270,64 @@ class MaterializeRoutesTest {
         assertEquals(AttachmentKind.MANUAL.name, row.kind)
         assertEquals(DocumentRole.USER_MANUAL.name, row.role)
         assertEquals("Kept for the annual flush", row.notes)
+    }
+
+    // --- #91 row 32 (C17, R91-2): the role is three-state; the other keys keep "absent or null = the prefill" -------
+
+    @Test fun anAbsentRoleCopiesTheSourceRole() {
+        val seeded = seed(role = DocumentRole.SERVICE_MANUAL)
+        val row = attachmentOf(post(router(), seeded.reference, "{}").also { assertEquals(it.bodyText(), 201, it.status) })
+        assertEquals(DocumentRole.SERVICE_MANUAL.name, row.role)
+        assertEquals("the kind is the proven type's, never the role's (R91-9)", AttachmentKind.DOCUMENT.name, row.kind)
+        assertEquals(NAME, row.displayName)
+        assertEquals(DESCRIPTION, row.notes)
+    }
+
+    @Test fun aGivenRoleWins() {
+        val seeded = seed(role = DocumentRole.SERVICE_MANUAL)
+        val response = post(router(), seeded.reference, """{"role":"PURCHASE_INVOICE_OR_RECEIPT"}""")
+        val row = attachmentOf(response.also { assertEquals(it.bodyText(), 201, it.status) })
+        assertEquals(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT.name, row.role)
+        assertEquals(AttachmentKind.DOCUMENT.name, row.kind)
+    }
+
+    @Test fun anExplicitNullRoleIsNoRole() {
+        val seeded = seed(role = DocumentRole.SERVICE_MANUAL)
+        val row = attachmentOf(
+            post(router(), seeded.reference, """{"role":null}""").also { assertEquals(it.bodyText(), 201, it.status) },
+        )
+        assertEquals("an explicit null is no role, never the source's", null, row.role)
+        assertEquals(NAME, row.displayName)
+        assertEquals(AttachmentKind.DOCUMENT.name, row.kind)
+        assertEquals(DESCRIPTION, row.notes)
+        assertEquals("the source keeps its role", DocumentRole.SERVICE_MANUAL, referenceRow(seeded.reference)?.role)
+    }
+
+    @Test fun aNullNameStillTakesThePrefill() {
+        val seeded = seed(role = DocumentRole.USER_MANUAL)
+        val body = """{"displayName":null,"kind":null,"notes":null}"""
+        val row = attachmentOf(post(router(), seeded.reference, body).also { assertEquals(it.bodyText(), 201, it.status) })
+        assertEquals(NAME, row.displayName)
+        assertEquals(AttachmentKind.DOCUMENT.name, row.kind)
+        assertEquals(DESCRIPTION, row.notes)
+        assertEquals("no role key: the source's", DocumentRole.USER_MANUAL.name, row.role)
+    }
+
+    /**
+     * The presence read goes through the shipped 400 path (B2a's re-review R-1): a key with no value, and a missing
+     * comma the lenient typed decoder takes but the element parser refuses, are each the 400 — never a 500, never a
+     * materialized row.
+     */
+    @Test fun aMalformedBodyIs400AndNothingIsMaterialized() {
+        val seeded = seed(role = DocumentRole.SERVICE_MANUAL)
+        val commits = graph.commits
+        for (body in listOf("""{"role":}""", """{"displayName":"a" "role":"USER_MANUAL"}""")) {
+            assertRefused(post(router(), seeded.reference, body), 400, "bad_request")
+        }
+        assertEquals(emptyList<String>(), transport.requests)
+        assertTrue(rows(seeded.asset).isEmpty())
+        assertTrue(stagingIsEmpty())
+        assertEquals(commits, graph.commits)
     }
 
     // --- row 20 and BC1: no fetch on a caller's mistake, and no URL from the wire ----------------------------------
