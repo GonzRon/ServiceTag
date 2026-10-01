@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.data.room.dao.DefinitionDao
 import com.loosecannon.servicetag.data.room.dao.EventDao
 import com.loosecannon.servicetag.data.room.dao.ExternalLinkDao
 import com.loosecannon.servicetag.data.room.dao.HealthSubjectDao
+import com.loosecannon.servicetag.data.room.dao.InstalledComponentDao
 import com.loosecannon.servicetag.data.room.dao.MaintenanceGroupDao
 import com.loosecannon.servicetag.data.room.dao.MaintenanceScheduleDao
 import com.loosecannon.servicetag.data.room.dao.NfcTagDao
@@ -43,6 +44,8 @@ import com.loosecannon.servicetag.data.room.entities.DeadlineLocalDeliveryEntity
 import com.loosecannon.servicetag.data.room.entities.EventProfileEntity
 import com.loosecannon.servicetag.data.room.entities.ExternalLinkEntity
 import com.loosecannon.servicetag.data.room.entities.HealthSubjectEntity
+import com.loosecannon.servicetag.data.room.entities.InstalledComponentCompositionEntity
+import com.loosecannon.servicetag.data.room.entities.InstalledComponentEntity
 import com.loosecannon.servicetag.data.room.entities.MaintenanceGroupEntity
 import com.loosecannon.servicetag.data.room.entities.MaintenanceGroupMemberEntity
 import com.loosecannon.servicetag.data.room.entities.MaintenanceScheduleEntity
@@ -94,8 +97,10 @@ import com.loosecannon.servicetag.data.room.entities.SupplySpecificationEntity
         SupplyItemEntity::class,
         SupplySpecificationEntity::class,
         AssetSupplyEntity::class,
+        InstalledComponentEntity::class,
+        InstalledComponentCompositionEntity::class,
     ],
-    version = 18,
+    version = 19,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -124,4 +129,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun assetSuccessionDao(): AssetSuccessionDao
     abstract fun supplyItemDao(): SupplyItemDao
     abstract fun assetSupplyDao(): AssetSupplyDao
+    abstract fun installedComponentDao(): InstalledComponentDao
 }

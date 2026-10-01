@@ -29,6 +29,7 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
@@ -128,6 +129,7 @@ import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomHealthSubjectRepository
+import com.loosecannon.servicetag.data.room.RoomInstalledComponentRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
 import com.loosecannon.servicetag.data.room.RoomReferenceRepository
@@ -261,6 +263,9 @@ class FakeGraph(
     val supplyItems: SupplyItemRepository = RoomSupplyItemRepository(db.supplyItemDao())
     val assetSupplies: AssetSupplyRepository =
         heldWriteGuard.assetSupplies(RoomAssetSupplyRepository(db.assetSupplyDao()))
+    /** #47 — installed components, unguarded until B2c wraps the port (C14), as `AppGraph`'s. */
+    val installedComponents: InstalledComponentRepository =
+        RoomInstalledComponentRepository(db.installedComponentDao())
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
 
     /** `T`, injected: a test says which day it is and the engine answers the same way every run. */

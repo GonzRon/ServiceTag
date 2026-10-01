@@ -51,6 +51,7 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
@@ -167,6 +168,7 @@ import com.loosecannon.servicetag.data.room.MIGRATION_14_15
 import com.loosecannon.servicetag.data.room.MIGRATION_15_16
 import com.loosecannon.servicetag.data.room.MIGRATION_16_17
 import com.loosecannon.servicetag.data.room.MIGRATION_17_18
+import com.loosecannon.servicetag.data.room.MIGRATION_18_19
 import com.loosecannon.servicetag.data.room.RoomTransferRecordRepository
 import com.loosecannon.servicetag.data.room.RoomAssetLoanRepository
 import com.loosecannon.servicetag.data.room.RoomAssetSuccessionRepository
@@ -181,6 +183,7 @@ import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomHealthSubjectRepository
+import com.loosecannon.servicetag.data.room.RoomInstalledComponentRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
 import com.loosecannon.servicetag.data.room.RoomReferenceRepository
@@ -265,7 +268,7 @@ class AppGraph(private val context: Context) {
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
             MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
-            MIGRATION_16_17, MIGRATION_17_18,
+            MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19,
         )
         .build()
 
@@ -363,6 +366,14 @@ class AppGraph(private val context: Context) {
     val supplyItems: SupplyItemRepository = RoomSupplyItemRepository(db.supplyItemDao())
     val assetSupplies: AssetSupplyRepository =
         heldWriteGuard.assetSupplies(RoomAssetSupplyRepository(db.assetSupplyDao()))
+
+    /**
+     * #47's one data port (C6): installed components, each row with its composition, inserted and updated and never
+     * deleted one by one — a row leaves only by its asset's CASCADE. Unguarded until B2c wraps it (C14); its rules
+     * live in the use cases.
+     */
+    val installedComponents: InstalledComponentRepository =
+        RoomInstalledComponentRepository(db.installedComponentDao())
 
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
@@ -1060,6 +1071,6 @@ class AppGraph(private val context: Context) {
         const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 18
+        const val SCHEMA_VERSION = 19
     }
 }
