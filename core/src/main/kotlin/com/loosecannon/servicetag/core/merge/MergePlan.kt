@@ -358,7 +358,7 @@ enum class MergeReason {
 
     /**
      * #15 (C11). A local applicability row under a different row id holds this `(asset_id, supply_id, role)` and
-     * differs — in practice its stamps, since two phones that each added the row agree about them never. It rides
+     * differs — in practice its stamps, since two phones that each added the row never agree about them. It rides
      * on a **`SKIPPED`**, for [REFERENCE_HELD_BY_A_LOCAL_ROW]'s reason (D-18 C): there is no `UPDATE` verdict, the
      * triple is the whole of the row's meaning, and a conflict could only refuse the whole archive. The local row
      * stays exactly as it was. [MergeDecision.detail] is the local row's id.

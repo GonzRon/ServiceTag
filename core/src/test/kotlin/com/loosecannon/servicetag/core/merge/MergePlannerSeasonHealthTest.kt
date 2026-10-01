@@ -127,7 +127,7 @@ class MergePlannerSeasonHealthTest {
     // --- order -----------------------------------------------------------------------------------
 
     /**
-     * Hazard: merge order. The eighteen members are asserted as a list, the three 1.4 ones after
+     * Hazard: merge order. The twenty-two members are asserted as a list, the three 1.4 ones after
      * `REFERENCES`, #74's `CATEGORIES` appended after them (listed last, written first), #79's two
      * case tables after it, #72's loans after those and #77's transfer records last; and an
      * archive whose asset, schedule, facts and subject arrive together inserts every row, because
