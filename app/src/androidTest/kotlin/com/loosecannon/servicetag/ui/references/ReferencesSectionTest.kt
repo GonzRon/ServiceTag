@@ -242,7 +242,7 @@ class ReferencesSectionTest {
 
         rule.onNodeWithText("Save").performClick()
         rule.waitForIdle()
-        assertEquals(UpdateReferenceCommand("Deck manual", "Section 4"), saved)
+        assertEquals(UpdateReferenceCommand("Deck manual", "Section 4", role = null), saved)
     }
 
     /**
