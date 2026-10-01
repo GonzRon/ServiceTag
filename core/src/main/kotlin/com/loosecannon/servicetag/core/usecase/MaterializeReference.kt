@@ -109,7 +109,7 @@ class MaterializeReference(
                 .filter { it.sha256 == fetched.sha256 && it.sizeBytes == fetched.sizeBytes }
                 .minWithOrNull(compareBy<Attachment>({ it.createdAt }, { it.id.value }))
             if (same != null) return refused(MaterializeRefusal.AlreadyHave(same.displayName, same.id))
-            val snapshot = SourceSnapshot(uri, reference.displayName, reference.description, host)
+            val snapshot = SourceSnapshot(uri, reference.displayName, reference.description, host, reference.role)
             return Prepared.Ready(assetId, snapshot, fetched, retrievedAt).also { handedOver = true }
         } finally {
             if (!handedOver) fetched.staged.discard()
@@ -198,10 +198,17 @@ sealed interface Prepared {
 }
 
 /**
- * The reference as it was at [MaterializeReference.prepare]: [uri] verbatim, its name and description, and
- * [host] (`ReferenceUris.hostOf`) for the review. [toString] names the host only, never the URI.
+ * The reference as it was at [MaterializeReference.prepare]: [uri] verbatim, its name and description, [host]
+ * (`ReferenceUris.hostOf`) for the review, and [role], the owner's own designation of it (#91, none = null) —
+ * deliberately without a default, so no construction can drop it. [toString] names the host only, never the URI.
  */
-data class SourceSnapshot(val uri: String, val displayName: String, val description: String, val host: String) {
+data class SourceSnapshot(
+    val uri: String,
+    val displayName: String,
+    val description: String,
+    val host: String,
+    val role: DocumentRole?,
+) {
     override fun toString() = "SourceSnapshot(host=$host)"
 }
 

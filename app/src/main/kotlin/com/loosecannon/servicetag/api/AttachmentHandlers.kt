@@ -52,6 +52,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.jsonObject
 
 /**
  * #92's attachment rows (C5–C8), reached from the router as `handlers.attachmentRoutes.*` — not `attachments`, which
@@ -250,8 +252,9 @@ internal class AttachmentHandlers(
     /**
      * `POST /v1/references/{id}/materialize` (C14–C17, R92-3): save as document, synchronously, for the reference
      * `{id}` as it is stored. In C14's order:
-     * 1. the four review fields (BC1: any other key, `url` and `uri` included, is the strict decoder's 400); a
-     *    **given** name blank after trim is 422 — before any fetch;
+     * 1. the four review fields (BC1: any other key, `url` and `uri` included, is the strict decoder's 400), then
+     *    whether the body names `role` at all (#91, C17), read through the same 400 path; a **given** name blank
+     *    after trim is 422 — before any fetch;
      * 2. the reference by id (404), its asset, and that asset transferred out (409) — before any fetch;
      * 3. the download's `Job`, a child of the listener [generation] that read the request, registered in [downloads]
      *    **before** it waits for [apiLongWrites]: a `stop()` while it waits, or one that landed before it registered
@@ -268,6 +271,11 @@ internal class AttachmentHandlers(
         val references = checkNotNull(references) { "save as document is not wired" }
         val materializeReference = checkNotNull(materializeReference) { "save as document is not wired" }
         val given = request.decode(MaterializeRequest.serializer())
+        // #91 (C17, R91-2): `role` is three-state, so whether the body names it matters. The typed decode above keeps
+        // every shipped 415/400 byte for byte; this presence read goes through the shipped 400 path too, because the
+        // typed decoder is lenient (it takes a missing comma between pairs) and the element parser is not — a body that
+        // passed the first step can still fail here, and then it is a 400, not a 500.
+        val namesRole = "role" in decodeOr400(JsonElement.serializer(), request.body.decodeToString()).jsonObject
         if (given.displayName?.isBlank() == true) throw nameRequired()
         val reference = references.get(ReferenceId(referenceId))
             ?: throw ReferenceRefused(ReferenceProblem.NoSuchReference)
@@ -278,7 +286,7 @@ internal class AttachmentHandlers(
         downloads.register(download)
         try {
             return withContext(download) {
-                apiLongWrites.withLock { saveAsDocument(materializeReference, assetId, reference.id, given) }
+                apiLongWrites.withLock { saveAsDocument(materializeReference, assetId, reference.id, given, namesRole) }
             }
         } finally {
             downloads.clear(download)
@@ -290,7 +298,8 @@ internal class AttachmentHandlers(
      * C14 steps 3–6, under the lock and inside the registered download's `Job`:
      * - `prepare` downloads (the address policy, the limits, the nineteen types and R85-6's same-bytes check are all
      *   its own); a refusal answers C17's code, and a cancel propagates with its staging already discarded;
-     * - the review is [prefill]'s with each given key laid over it;
+     * - the review is [prefill]'s with each given key laid over it; for `role` "given" is [namesRole] — absent takes
+     *   the prefill (the source reference's role), `null` is no role, a name is that role (#91, R91-2);
      * - **the hand-off:** a `stop()` that landed after `prepare` returned and before the commit began wins — the
      *   download's `Job` is cancelled, so nothing is written; otherwise the commit runs `NonCancellable` and wins —
      *   neither `stop()` nor a client disconnect can cut it, and a cancellation that surfaces after it is not a
@@ -305,6 +314,7 @@ internal class AttachmentHandlers(
         assetId: AssetId,
         referenceId: ReferenceId,
         given: MaterializeRequest,
+        namesRole: Boolean,
     ): ApiResponse {
         val ready = when (val prepared = materializeReference.prepare(assetId, referenceId)) {
             is Prepared.Refused -> throw materializeRefusal(prepared.why)
@@ -315,7 +325,8 @@ internal class AttachmentHandlers(
             val review = MaterializeReview(
                 displayName = given.displayName ?: prefilled.displayName,
                 kind = given.kind ?: prefilled.kind,
-                role = given.role ?: prefilled.role,
+                // Absent: the source's role; `null`: no role; a name: that role (C17).
+                role = if (namesRole) given.role else prefilled.role,
                 notes = given.notes ?: prefilled.notes,
             )
             currentCoroutineContext().ensureActive()
@@ -428,9 +439,11 @@ internal class AttachmentHandlers(
 }
 
 /**
- * `POST /v1/references/{id}/materialize` (C14): the review's four fields, every one optional — absent or null takes
- * the phone's prefill. **No key carries a URL, a host or a path** (R92-3, BC1): the strict decoder answers any other
- * key with the shipped 400, and the URI fetched is the stored reference's, read by `prepare` alone.
+ * `POST /v1/references/{id}/materialize` (C14): the review's four fields, every one optional — for the name, kind and
+ * notes absent or null takes the phone's prefill; `role` is three-state (#91, C17): absent takes the prefill, which is
+ * the source reference's role, `null` is no role, a name is that role. **No key carries a URL, a host or a path**
+ * (R92-3, BC1): the strict decoder answers any other key with the shipped 400, and the URI fetched is the stored
+ * reference's, read by `prepare` alone.
  */
 @Serializable
 internal data class MaterializeRequest(

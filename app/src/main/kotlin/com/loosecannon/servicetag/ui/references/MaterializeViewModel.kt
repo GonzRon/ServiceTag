@@ -203,14 +203,14 @@ class MaterializeViewModel(
 /**
  * **The owner's designation invariant (#85):** materialization carries forward any semantic designation the source
  * Reference already has, exactly, and never guesses or silently downgrades it. The one place the review's starting
- * designation is decided. A reference has no role and no document kind today, so the role starts empty for the
- * owner to choose, and the kind is the one the proven type implies; nothing is read from the name or description.
- * When references gain a role (#91), it is copied here exactly.
+ * designation is decided. A reference has no document kind, so the kind is the one the proven type implies — never
+ * one derived from the role (R91-9); nothing is read from the name or description, and the owner can still change or
+ * clear the role on the review before Save. The reference's role is copied here exactly (#91).
  */
 internal fun reviewPrefill(snapshot: SourceSnapshot, mimeType: String): MaterializeReview = MaterializeReview(
     displayName = snapshot.displayName,
     kind = AttachmentKinds.inferFrom(mimeType, fromCamera = false),
-    role = null,
+    role = snapshot.role,
     notes = snapshot.description,
 )
 
