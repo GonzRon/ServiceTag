@@ -1,10 +1,24 @@
-# #47 — the Installed Components MVP: nested identity, current fitted state, install/remove/replacement history, direct SupplyItem linkage and aggregate composition: plan and briefs (rev 1, 2026-10-01)
+# #47 — the Installed Components MVP: nested identity, current fitted state, install/remove/replacement history, direct SupplyItem linkage and aggregate composition: plan and briefs (rev 1.1, 2026-10-01)
+
+> **Rev 1.1 (2026-10-01)** folds in the independent plan review (`.superpowers/sdd/2026-10-01-issue-47/plan-review.md`,
+> APPROVE WITH CONDITIONS) and the owner's two acts. **Owner:** §5 **RATIFIED** as one block (P47-6 "Serial or lot",
+> P47-21 "%1$s × %2$s", the R-list, G1–G3); **R47-17 FLIPPED** → §6 R47-17b, C3, C15, C18, C20, C23, C26, rows 34, 42,
+> 51, 52. **Conditions:** C-1 (the flip; the direct link on replace = none when omitted; the archived draft) → Global
+> constraints' "No inference" (exception dropped), C3, C15, C18, C20, C23, C25, C26, §6 R47-17a/b, rows 34, 42, 51,
+> 52; C-2 (the core double) → C5, §4 (B1a), rows 17, 34, 37, "Briefs — common", B1a and each later brief's read list;
+> C-3 (fenced words in denials) → C22, C23, C29, "Briefs — common"; C-4 (`add_installed_component`) → C1, C23, row 47,
+> §6 R47-1, B5; C-5 (the word greps) → C28, C30.3, B7; C-6 (the relabel pins) → §3's B7 rows, B7; C-7 (a repeated
+> entry id) → C15, C19, C20, rows 36, 41; C-8 (the reused codes in `v1.md`) → C2, C22, §5, row 45. **Notes:** N-1 →
+> C11, C13, §4; N-2, N-3 → §3's pins; N-4 → C6, row 8; N-5 → C12, row 37; N-6 → C3, C22; N-7 → row 3; N-8 → row 28;
+> N-9 → C10; N-10 → C25; N-11 → C25, C26; N-12 → C26; N-13 → header, §4, the B3c and B6b2 split clauses; N-14 →
+> Inputs; N-15 → C25, C29; N-16 → §7; N-17 → C28; N-18 → C14, §7; N-19 → C20, C23; N-20 → §4 (no change).
+> **Fifteen dispatches** (B2a2 by default; more only if B4b, B3c or B6b2 is taken).
 
 > **Rev 1 folds in the owner's correction and rulings of 2026-10-01, recorded on #47** (the issue body on GitHub is
 > updated): **aggregate installed composition** — an installed component may be made of one or more #15 SupplyItems
 > with quantities (a battery pack = `4 × Battery X`) without those becoming child rows (C4, C9, C12, C16–C19, C20,
 > C23, C26); the pointer is **`replacesId` on the successor**; **no `eventId` at all**; every owner ruling R47-1…R47-10
-> and R47-12 is **DECIDED** (§6). §5's strings await ratification as **one block**.
+> and R47-12 is **DECIDED** (§6). §5's strings awaited ratification as **one block** (ratified, rev 1.1).
 
 > **HARD SCOPE (owner, binding across every brief):** "#47 MVP = canonical nested InstalledComponent identity +
 > current fitted state + install/remove/replacement history + optional direct SupplyItem linkage + aggregate
@@ -18,7 +32,7 @@
 > promised "for #47 later" (**not in #47**, R47-12); `schedule_supply_requirement` (#96, R47-10); a journal link (no
 > `eventId`, R47-7); a stock decrement or automatic event from a composition (never).
 
-> **Status: PLANNING ONLY, owner rulings DECIDED.** **Dispatch precondition:** §5 RATIFIED as one block. **Release
+> **Status: PLANNING ONLY, owner rulings DECIDED, §5 RATIFIED.** **Dispatch precondition:** met. **Release
 > line:** no version bump and no release — `versionName` / `versionCode` stay **1.6.0 / 19**; the vehicle is the
 > owner's (the post-#98 fresh 1.0.0 on the train #47 → #69 → #16 → #98). #47 lands **Room schema 19 / backup format
 > 19** (R47-5) on master, validated on the emulator only; master builds never go on a phone.
@@ -27,8 +41,8 @@
 > **Ledger:** `.superpowers/sdd/2026-10-01-issue-47/progress.md` (the controller's; implementers never write it).
 > **Audit (inventory of record):** `.superpowers/sdd/2026-10-01-issue-47/audit.md`, every citation read on `1476e0d8`.
 > The audit predates the composition ruling: **its counts are recomputed here** (§4's table), never copied. This
-> planner re-read on the same base every site it cites beyond the audit. **Fourteen dispatches on one branch
-> `issue-47`:** B1a, B1b, B2a, B2b, B2c, B3a, B3b, then **B4 ∥ (B6a → B6b → B6c)**, then B5, B7, B8 — each `<base>`
+> planner re-read on the same base every site it cites beyond the audit. **Fifteen dispatches on one branch
+> `issue-47`:** B1a, B1b, B2a, B2a2, B2b, B2c, B3a, B3b, then **B4 ∥ (B6a → B6b → B6c)**, then B5, B7, B8 — each `<base>`
 > the previous accepted tip; **B1a's `<base>` is master at dispatch** (today `1476e0d8`: 1.6.0 / code 19, Room schema
 > 18 / backup format 18, MCP 84 tools, gitlink `7e0377a`) plus this plan's commit. One task review each, at most one
 > bounded fix round each, one whole-branch review, the merge, one merged-tip gate.
@@ -45,8 +59,8 @@ reachable over `/v1` and the MCP, and drawn by one section on asset detail. NFC,
 Replace and health are unchanged.
 
 **Inputs:** issue #47 with the owner's binding 2026-09-29 clarification, the #69 amendment and the 2026-10-01
-correction (`.superpowers/sdd/2026-10-01-issue-47/issue-47.md` is the pre-correction snapshot; the GitHub body is the
-record); the audit; the #15 plan rev 1.2 with its §20 errata (`docs/superpowers/plans/2026-10-01-issue-15-supply-item-mvp.md`);
+correction (`.superpowers/sdd/2026-10-01-issue-47/issue-47.md`, the corrected body with its "Aggregate SupplyItem
+composition" section); the audit; the #15 plan rev 1.2 with its §20 errata (`docs/superpowers/plans/2026-10-01-issue-15-supply-item-mvp.md`);
 `docs/design/14-asset-model.md` (D14); `docs/api/v1.md`; `docs/release-proofs.md`; `docs/superpowers/planning-policy.md`.
 Paths: `C/` = `core/src/main/kotlin/com/loosecannon/servicetag/core/`, `CT/` =
 `core/src/test/kotlin/com/loosecannon/servicetag/core/`, `A/` = `app/src/main/kotlin/com/loosecannon/servicetag/`,
@@ -89,8 +103,8 @@ Paths: `C/` = `core/src/main/kotlin/com/loosecannon/servicetag/core/`, `CT/` =
 - **No inference.** Installing a component creates no applicability row, no event, no material line, no SupplyItem
   and no stock change; a composition entry decrements nothing and schedules nothing; applicability or a material line
   creates no component; nothing links or composes by matching names. A link or an entry exists only because a person
-  (phone, API, MCP) chose it, or a row carrying it was copied verbatim (archive, merge, pack) — or, on a replace, the
-  documented copy of the predecessor's direct link and composition when the caller names none (R47-17).
+  (phone, API, MCP) chose it, or a row carrying it was copied verbatim (archive, merge, pack). **No exception:** a
+  replace that omits the link or the composition gets none (R47-17b); the phone's prefill is a draft the person saves.
 - **The fence (C30).** No column, field, key, route, tool, string or test about stock, quantity on hand, reorder,
   lead time or procurement (#95); schedule material requirements, kits, batch replacement or orchestration (#96); an
   attachment, reference, photo or document owned by a component (#69 — `AttachmentOwner` untouched); a range,
@@ -197,8 +211,9 @@ removed pack's child positions into its replacement (#96); the schedules loader 
   `compositionEntries`; wire keys `parentId`, `supplyId`, `composition`, `quantity`, `unit`, `serialOrLot`,
   `installedOn`, `removedOn`, `replacesId`, `sortOrder`; routes `/v1/installed-components` and
   `/v1/assets/{id}/installed-components`; `MergeTable.INSTALLED_COMPONENTS`; MCP `list_installed_components`,
-  `install_component`, `update_installed_component`, `remove_installed_component`, `replace_installed_component`
-  (each docstring: "not `create_component`, which makes a child Asset"); phone words "Installed components" and, in
+  `add_installed_component` (the `add_reference` / `add_case_entry` shape — C-4: never `install_component` beside the
+  shipped `create_component`), `update_installed_component`, `remove_installed_component`,
+  `replace_installed_component` (each docstring: "not `create_component`, which makes a child Asset"); phone words "Installed components" and, in
   its sentences, "component"; "Composition" for the entry list (§5). **Never a bare `component` / `components` on a
   new machine surface** (a child Asset in five shipped layers, audit §0.2). The eleven child-Asset phone strings become
   "Child asset(s)" (C28). Never "part", "assembly", "kit" or "position" as a type or key name.
@@ -220,7 +235,9 @@ removed pack's child positions into its replacement (#96); the schedules loader 
   Reused unchanged: `no_such_asset` (404, `OwnerMissing`); `NO_SUCH_SUPPLY_ITEM` (404, `field` `supplyId` for the
   direct link, `composition` for an entry — `SupplyItemMissing` / `EntrySupplyItemMissing(index)`);
   `SUPPLY_ITEM_ARCHIVED` (409, the same two fields — `SupplyItemArchived` / `EntrySupplyItemArchived(index)`,
-  `A/api/ApiJson.kt:814`); the guard's 409 `asset_transferred_out`; `400 bad_request` for an unknown key (a PATCH
+  `A/api/ApiJson.kt:814`) — **both with their shipped messages, verbatim** (G1 ratified them; C-8: "an archived supply
+  item takes no new asset" reads loosely on a component, and the owner may replace it later — code and status
+  unchanged); the guard's 409 `asset_transferred_out`; `400 bad_request` for an unknown key (a PATCH
   naming `assetId`, `parentId`, `removedOn` or `replacesId` is the decoder's 400) or a malformed body; the MCP's local
   `APP_SCHEMA_TOO_OLD` (C24). An edit that changes nothing answers **200 with the stored row** and writes nothing
   (`Unchanged`, never a code — E-13's precedent).
@@ -231,16 +248,16 @@ removed pack's child positions into its replacement (#96); the schedules loader 
 | `GET /v1/assets/{id}/installed-components` | the **27th** asset sub-resource: `{installedComponents: [InstalledComponentDto], supplyItems: [SupplyItemDto]}` — every row of the asset, current and removed, by id, each with its `composition`, and each SupplyItem the rows and entries name once, by name casefolded then id (`A/api/SupplyDtos.kt:38-39`'s shape); a held asset reads as any other |
 | `POST /v1/installed-components` | `{assetId, parentId?, name, supplyId?, composition?: [{id?, supplyId, quantity, unit?}], serialOrLot?, installedOn?, notes?, sortOrder?}`; absent text `""`, absent date unknown, absent `composition` none, absent `sortOrder` appended (C16) → 201 `{installedComponent}` |
 | `GET /v1/installed-components/{id}` | `{installedComponent}` |
-| `PATCH /v1/installed-components/{id}` | an **overlay**: `{name?, supplyId?, composition?, serialOrLot?, installedOn?, notes?, sortOrder?}`; **absent or `null` = unchanged**; **a given `""` clears** `supplyId`, `installedOn`, `serialOrLot`, `notes`; a given `composition` is **the whole ordered list** (an entry sent with its `id` keeps it when this row owns it), **`[]` empties it**; `name` never blank → 200 `{installedComponent}` (no-op: 200, nothing written) |
+| `PATCH /v1/installed-components/{id}` | an **overlay**: `{name?, supplyId?, composition?, serialOrLot?, installedOn?, notes?, sortOrder?}`; **absent or `null` = unchanged**; **a given `""` clears** `supplyId`, `installedOn`, `serialOrLot`, `notes`; a given `composition` is **the whole ordered list** (an entry sent with its `id` keeps it when this row owns it — **the first occurrence only; a repeated id is minted fresh**, C-7), **`[]` empties it**; an entry's `quantity` is a JSON number (a string is the decoder's 400); `name` never blank → 200 `{installedComponent}` (no-op: 200, nothing written) |
 | `POST /v1/installed-components/{id}/remove` | `{removedOn}` (required) → 200 `{installedComponent, closed: [InstalledComponentDto]}` — every current descendant the write closed (R47-6), by id |
-| `POST /v1/installed-components/{id}/replace` | `{replacedOn, name?, supplyId?, composition?, serialOrLot?, notes?}`; `replacedOn` required; absent or `null` `name`, `supplyId` or `composition` = **the predecessor's** (the composition copied with fresh entry ids, R47-17); `""` `supplyId` = none, `[]` composition = none; absent `serialOrLot` / `notes` = `""` → 201 `{installedComponent: <the new row>, replaced: <the closed row>, closed: [...]}` |
+| `POST /v1/installed-components/{id}/replace` | `{replacedOn, name?, supplyId?, composition?, serialOrLot?, notes?}`; `replacedOn` required; absent or `null` `name` = the predecessor's (a label, not a link); **absent, `null` or `""` `supplyId` = none, and absent, `null` or `[]` `composition` = none — never the predecessor's** (R47-17b: a caller keeps them by sending them, entry ids ignored and minted fresh); absent `serialOrLot` / `notes` = `""` → 201 `{installedComponent: <the new row>, replaced: <the closed row>, closed: [...]}` |
 | no `DELETE` | nothing deletes a component; any other verb is the shipped 405, any other sub-path the shipped 404 |
-| `GET /v1/status` | `schemaVersion` 19, `backupFormatVersion` 19; `counts` gains `installedComponents` and `compositionEntries` |
+| `GET /v1/status` | `schemaVersion` 19, `backupFormatVersion` 19; `counts` gains `installedComponents` and `compositionEntries` — **unlike #15**, which counts SupplyItems but not their specifications (`A/api/ApiHandlers.kt:225-226`): a composition entry is a fitted fact a client checks after a load (how many entries landed), a specification is catalog detail (N-6) |
 | `data.json` | `installedComponents[]` appended last; each row every key, nulls written explicitly, `composition` in `(sortOrder, id)` order |
 
 ### B1a — the domain, the tree and the shape rules (C4–C5)
 
-- **C4, the domain and the port (audit §2.1, §2.2, §4; R47-2, R47-3, R47-8, R47-11, R47-17).** In
+- **C4, the domain and the port (audit §2.1, §2.2, §4; R47-2, R47-3, R47-8, R47-11, R47-17a).** In
   `C/model/InstalledComponent.kt` (new); `InstalledComponentId` beside `SupplyId` (`C/model/Ids.kt:36-37`):
 
   ```kotlin
@@ -297,6 +314,17 @@ removed pack's child positions into its replacement (#96); the schedules loader 
   `NameRequired`, `BadDate(field)`, `AfterToday(field)` only with a today, `RemovedBeforeInstalled("removedOn")`;
   and `compositionProblems(entries)` — `QuantityInvalid(index)` for a quantity not finite or not above zero. Every
   problem collected. The use cases pass their `Today`; the content check (C10) passes none.
+  **The core test double (C-2).** Core fakes enforce no foreign key and cascade only by registration
+  (`CT/testing/BackupInstall.kt:34-42`; `CT/testing/SupplyFixtures.kt:46`, `:83`), so B1a owns
+  `CT/testing/InstalledComponentFixtures.kt` (new, beside `SupplyFixtures.kt`): `InMemoryInstalledComponentRepository`,
+  `Rollbackable` and `Witnessed` as the supply doubles are, **storing each entry as its own keyed record** (so an entry
+  that moves or is re-used is observable), with `cascadeFromAsset(assetId)` registered in `BackupInstall`
+  (`assets.cascadesTo(it::cascadeFromAsset)`, `:42`'s line) and checks that mirror the schema on `insert` and
+  `update` — the parent already stored **on the same asset**; a non-null direct `supplyId` and every entry's naming a
+  SupplyItem the double was handed (a lookup it is constructed with); entry ids unique across every row; `replacesId`
+  unique — each violation an `IllegalStateException`, as an FK failure is. The parent CASCADE comes with the asset's
+  (rows leave only with their asset). The catalog double's RESTRICT (`SupplyFixtures.kt:92`) is not widened: Room's
+  row 7 proves the `supply_id` RESTRICT. Every later core brief consumes this double.
 
 ### B1b — Room schema 19 (C6–C8)
 
@@ -317,8 +345,10 @@ removed pack's child positions into its replacement (#96); the schedules loader 
     `DeleteAsset`, `ReturnScope`'s removal (`ApplyBackupMergePlan.kt:187`) and the replace wipe
     (`ImportBackupReplace.kt:191`). Row 7 decides it on Room. The two `supply_id` RESTRICTs never fire: SupplyItems are
     archive-only and the replace wipe deletes assets before the catalog (`:191`, `:199`). No SQL `CHECK`.
-  - DAO `A/data/room/dao/InstalledComponentDao.kt`, the `SupplyItemDao` aggregate shape (`SupplyDaos.kt`, the
-    child list replaced inside the upsert's transaction) for `insert` / `update`, and `asset_supply`'s
+  - DAO `A/data/room/dao/InstalledComponentDao.kt`, the `SupplyItemDao` aggregate shape (`SupplyDaos.kt:34-39`, the
+    child list replaced inside the upsert's transaction) for `insert` / `update` — **a row update is an SQL `UPDATE`,
+    never `REPLACE` / delete-and-reinsert** (N-4: with the CASCADE self-FK a delete-and-reinsert would silently take the
+    row's closed subtree; the house update-then-insert, `A/data/room/dao/AssetDao.kt:14-17`), and `asset_supply`'s
     (`SupplyDaos.kt:79-101`) for the reads; repository and mapper beside the supply ones; `AppDatabase` registers both
     entities and the DAO (`A/data/room/AppDatabase.kt:94-98`, `:125-126`); `AppGraph` wires `val installedComponents:
     InstalledComponentRepository` **unguarded** (B2c wraps it, C14) beside `:364-365`.
@@ -357,14 +387,15 @@ removed pack's child positions into its replacement (#96); the schedules loader 
      `replacesId` names a row in the file of the same asset, not itself, and **that row is removed**; no two rows hold
      one `replacesId`; **a current row's parent is current**; no parent cycle (`InstalledComponentTree.parentsFirst`
      throwing → `BackupCorrupt("installedComponents: cycle")`, `:563-569`'s shape); following `replacesId` never
-     returns to a row.
+     returns to a row; **a successor's `parentId` equals its predecessor's** (N-9: one position; C18 guarantees it).
   5. **Content** (`C/backup/BackupContentCheck.kt:140-142`, a `checkInstalledComponents` beside `checkSupplies`):
      `installedComponentProblems(name, installedOn, removedOn)` with no today, and `compositionProblems(entries)`,
      through the shipped `refuse` helper naming the list, the row and the entry.
 - **C11, export and replace import.** `readSnapshot` (`C/usecase/ExportBackupSet.kt:169-205`) reads
-  `installedComponents.all()`; `BackupRepositories` (`:136-162`) and `ExportBackupSet`'s constructor (`:94-105`) gain
-  the port. `ImportBackupReplace` gains the port: **the wipe adds nothing** — `assets.deleteAll()` (`:191`) CASCADEs
-  the rows and their entries before the catalog wipe (`:199`), whose comment (`:194-198`) gains one sentence; **the
+  `installedComponents.all()`; `BackupRepositories` (`:136-162`) and `ExportBackupSet`'s constructor (opening at
+  `:66`) gain the port. `ImportBackupReplace` gains the port: **the wipe adds nothing** — `assets.deleteAll()` (`:191`)
+  CASCADEs the rows and their entries (the core double's registered cascade, C5) before the catalog wipe (`:199`), whose
+  comment (`:195-198`) gains one sentence; **the
   write**, straight after the applicability rows (`:218`): `InstalledComponentTree.parentsFirst(rows).forEach {
   installedComponents.insert(it) }`. **The pack class line lands here** (E-7: `TransferTableClassificationTest` pins
   every `BackupData` list): `"installedComponents" to TransferTableClass.ASSET_OWNED` (`TransferGraph.kt:62-63`).
@@ -396,7 +427,9 @@ removed pack's child positions into its replacement (#96); the schedules loader 
     older-archive exception** (audit §0.4): an archive below 19 names no component, so every local component is not
     decided and every older row compares as before (row 23).
   - **Snapshot, writes, report (C-1).** `MergeSnapshot` (`MergePlan.kt:461-489`) and `MergeWrites` (`:421-427`) gain
-    a defaulted `installedComponents` list; `mergeSnapshotOf` reads the port, its callers pass it
+    a defaulted `installedComponents` list; `mergeSnapshotOf` (`MergePlanner.kt:1590`) reads the port — **the default
+    means a forgotten read still compiles** (N-5), so row 37 re-plans an unedited export through
+    `BuildBackupMergePlan` on a non-empty install and must read `IDENTICAL`, not `INSERT` — and its callers pass it
     (`ApplyBackupMergePlan.kt:168-173`, `BuildBackupMergePlan.kt:106`); `MergeReport` (`:503-534`, `:612`) gains
     `installedComponents: MergeTally` last; `A/api/ApiDtos.kt`'s report rows gain the one key at their end.
   - **Held (M2).** The writes join the M2 list (`MergePlanner.kt:1324-1340`) through `TransferOwnership.of(…)`.
@@ -415,12 +448,14 @@ removed pack's child positions into its replacement (#96); the schedules loader 
   rows of that asset and SupplyItems, never dropped). `TransferOwnership.of(component: InstalledComponent) =
   listOf(OwnerRef.OfAsset(component.assetId))` beside `:113`. **The return** (`ReturnScope.of`,
   `ApplyBackupMergePlan.kt:298-317`): `installedComponents = full.installedComponents.filterNot { it.assetId in
-  returning }` beside `:316` — the pack's rows plan `INSERT`, the returning assets' delete (`:187`) cascades the old
-  rows and entries; a component removed, replaced or recomposed on the borrowing phone lands instead of refusing the
+  returning }` beside `:316` — the pack's rows plan `INSERT`, the returning assets' delete (`:188`) cascades the old
+  rows and entries (in core, the double's registered cascade); a component removed, replaced or recomposed on the borrowing phone lands instead of refusing the
   return (row 30; #15's C-4 lesson).
 - **C14, the guard.** `HeldWriteGuard.installedComponents(port)` beside `:148`, a `GuardedInstalledComponents` beside
   `:480-481`, checking the row written **and** the stored row an update replaces (its composition rides the row). The
-  count words "seventeen" (`HeldWriteGuard.kt:69`, `:101`, `:257`; `A/di/AppGraph.kt:294`, `:361`) say **eighteen**.
+  count words "seventeen" (`HeldWriteGuard.kt:69`, `:101`, `:257`; `A/di/AppGraph.kt:294`) say **eighteen**; "seventeenth"
+  (`HeldWriteGuard.kt:70`, `A/di/AppGraph.kt:361`) names #15's port and **stays**, and the new port's KDoc says
+  **eighteenth** — so the grep is word-anchored, `'\bseventeen\b'` → 0 (N-18).
   No `HeldWriteGuard` constructor changes.
 
 ### B3a / B3b — the use cases (C15–C19)
@@ -431,8 +466,9 @@ removed pack's child positions into its replacement (#96); the schedules loader 
   - `InstallComponentCommand(assetId, parentId?, name, supplyId?, composition: List<CompositionInput>, serialOrLot,
     installedOn?, notes, sortOrder: Int?)`;
   - `ReplaceComponentCommand(replacedOn, name, supplyId?, composition: List<CompositionInput>, serialOrLot, notes)` —
-    the caller fills `name`, `supplyId` and `composition` from the predecessor when its person gave none (C3,
-    R47-17); entry ids sent are ignored (every successor entry is minted fresh);
+    what the command carries is what the successor gets: the API fills only `name` from the predecessor when absent
+    (a label); a missing link or composition is **none** (R47-17b); the phone's prefill is a draft the person saves
+    (C26); entry ids sent are ignored (every successor entry is minted fresh);
   - `UpdateInstalledComponentCommand(name, supplyId?, composition, serialOrLot, installedOn?, notes, sortOrder: Int)` —
     the whole editable set; **no `assetId`, `parentId`, `removedOn` or `replacesId`** (immutable by construction);
   - `sealed interface InstalledComponentProblem`: `OwnerMissing`, `ParentMissing`, `ParentOnAnotherAsset`,
@@ -445,9 +481,11 @@ removed pack's child positions into its replacement (#96); the schedules loader 
 
   **Two kinds of check, in order.** Command-only problems (C5's rules, with today) are collected **before any
   transaction**; a refusal opens none. State problems are checked **inside the one `uow.write`, before its first
-  write** (`ReplaceAsset.run`'s shape) — a state refusal returns having written nothing. **Entry ids** follow
-  `SaveProfile`'s rule (`C/usecase/SaveProfile.kt:88`, `ownConsumableIds`): an entry `id` is kept only when the stored row owns it,
-  otherwise minted; `sortOrder` is the list position. **The archived rule (R47-3):** on an edit, a direct `supplyId` naming
+  write** (`ReplaceAsset.run`'s shape) — a state refusal returns having written nothing. **Entry ids** (C-7): an
+  entry `id` is kept only when the stored row owns it **and only at its first occurrence in the list**; a repeated or
+  foreign id is minted fresh — `SaveSupplyItem`'s stricter rule for specifications (#15 E-12), not `SaveProfile`'s
+  (`C/usecase/SaveProfile.kt:99` keeps an owned id every time, which here would be a primary-key collision and a 500);
+  `sortOrder` is the list position. **The archived rule (R47-3):** on an edit, a direct `supplyId` naming
   an archived SupplyItem is accepted **only when the stored direct link is that SupplyItem**, and an entry naming one
   **only when the stored composition already names it** — so an existing link or composition may keep it; install and
   replace never accept one. A held asset's write throws `AssetTransferredOut` at the guarded port, after every check.
@@ -466,8 +504,8 @@ removed pack's child positions into its replacement (#96); the schedules loader 
   `AfterToday("replacedOn")`, `QuantityInvalid`. State: `NoSuchInstalledComponent`, `AlreadyRemoved`, the successor's
   direct and entry SupplyItems as C16 (**an archived one is refused even when the predecessor names it**: the
   successor's links are new), `RemovedBeforeInstalled("replacedOn")` as C17. One `uow.write`: **insert the successor**
-  — a new id, the predecessor's `assetId`, `parentId` and `sortOrder`, the command's name, link, composition (fresh
-  entry ids), serial or lot and notes, `installedOn = replacedOn`, `replacesId = predecessor.id`, current; **close the
+  — a new id, the predecessor's `assetId`, `parentId` and `sortOrder`, the command's name, link and composition
+  (**exactly what the command carries — none when it carries none**, R47-17b; fresh entry ids), serial or lot and notes, `installedOn = replacedOn`, `replacesId = predecessor.id`, current; **close the
   predecessor** — `removedOn = replacedOn`, `updatedAt = now`, **its composition unchanged**; close every current
   descendant (R47-6: the successor starts with no children). **Every other row of every table is byte-equal before
   and after** (row 34). No event, line, applicability row or stock is written.
@@ -475,7 +513,7 @@ removed pack's child positions into its replacement (#96); the schedules loader 
   with the stored `removedOn`, and the composition's quantities, with today (an install date after the removal date
   is `RemovedBeforeInstalled("installedOn")`). State: `NoSuchInstalledComponent`; the direct link and entries under
   C15's archived rule. Current or removed rows alike (corrections, R47-15). Equal after trimming, the composition
-  compared with its kept ids → `Unchanged`, nothing written. Otherwise one update (the composition replaced whole),
+  compared with its kept ids (C15's first-occurrence rule, C-7) → `Unchanged`, nothing written. Otherwise one update (the composition replaced whole),
   `updatedAt = now`.
 - **Wiring.** The four use cases in `A/di/AppGraph.kt` beside #15's, each with the guarded port and what it needs
   (`AssetRepository`, `SupplyItemRepository`, `UnitOfWork`, `IdGenerator`, `Clock`, `Today`); `FakeGraph` mirrors.
@@ -493,9 +531,12 @@ removed pack's child positions into its replacement (#96); the schedules loader 
   rows (`:267-291`). **PATCH is an overlay assembled in the handler** from the stored row
   (`SupplyHandlers.update`, `:91-109`): each given key replaces, absent or `null` keeps, **`""` clears** `supplyId`,
   `installedOn`, `serialOrLot`, `notes`; a given `composition` is the whole list, absent sends the stored entries back
-  with their ids, `[]` empties; `name: ""` is `NameRequired`. Every clearable field clears by `""`, so **no raw-key
-  tri-state reader** (`A/api/ScheduleForms.kt:96-118` unused). Replace's absent `name` / `supplyId` / `composition` are
-  filled from the stored predecessor in the handler. `Unchanged` → 200 with the stored row.
+  with their ids, `[]` empties, a repeated id is minted fresh (C15, C-7); an entry's `quantity` is a JSON number the
+  handler passes to the command as its decimal string (`CompositionInput.quantity`), and a JSON string is the decoder's
+  400 (N-19); `name: ""` is `NameRequired`. Every clearable field clears by `""`, so **no raw-key tri-state reader**
+  (`A/api/ScheduleForms.kt:96-118` unused). **Replace:** only an absent `name` is filled from the stored predecessor;
+  an absent `supplyId` or `composition` is none (R47-17b) — the handler never copies a link or an entry.
+  `Unchanged` → 200 with the stored row.
 - **C21, the mappers.** `installedComponentRefusal(problems)` in `A/api/ApiJson.kt` after #15's block (`:772-827`):
   one exhaustive `when` over the first problem, `problems` naming every problem; `OwnerMissing` → `no_such_asset`;
   the SupplyItem arms → `NO_SUCH_SUPPLY_ITEM` / `SUPPLY_ITEM_ARCHIVED` with `field` `supplyId` or `composition`;
@@ -504,24 +545,31 @@ removed pack's child positions into its replacement (#96); the schedules loader 
   `"compositionEntries"` beside `ApiHandlers.kt:227-228`. The router KDoc (`ApiRouter.kt:98`) reads **"Seventy-seven
   path shapes over ninety-five method-and-path rows"** (six rows over five shapes) with a "#47 added …" paragraph
   after `:166-172`. `docs/api/v1.md`: "Installed components (#47)" after "Asset supplies (#15)" (`:1563`) — C3's shapes,
-  the composition (a quantity is what the unit is made of, never stock), the overlay's clearing rule, replace and
-  remove, the subtree rule, and that `/v1/assets/{id}/components` and the `components` keys are **child Assets**; a
-  "#47 codes" table after "The #15 codes" (`:2000`); the two status keys; the import range **1–18 → 1–19** (`:209`,
+  the composition (C-3's wording, no fenced word even to deny it: "a quantity is how many of that SupplyItem one unit
+  is made of; nothing is counted, kept or used up"), the overlay's clearing rule, replace (an omitted link or
+  composition is none) and remove, the subtree rule, and that `/v1/assets/{id}/components` and the `components` keys
+  are **child Assets**; a "#47 codes" table after "The #15 codes" (`:2000`); **the shipped `NO_SUCH_SUPPLY_ITEM` and
+  `SUPPLY_ITEM_ARCHIVED` rows (`:2000`'s table, `:2019`) widened to the #47 routes, `field` `supplyId` or
+  `composition`, their messages unchanged** (C-8); the two status keys; the import range **1–18 → 1–19** (`:209`,
   `:2110`); the tally count **22 → 23** (`:582`) and a **"Table 23 (format 19, #47)"** paragraph after `:2301`. No
   `command-shapes.json` entry. **Split clause:** past 1 h, C22's `v1.md` part and row 45 go to **B4b** in the lane.
 
 ### B5 — the MCP (C23–C24)
 
 - **C23, the tools.** In `M/src/servicetag_mcp/server.py`, appended to `TOOL_NAMES` (`:78`):
-  `list_installed_components(asset_id)`; `install_component(asset_id, name, parent_id=None, supply_id=None,
-  composition=None, serial_or_lot=None, installed_on=None, notes=None, sort_order=None)`;
-  `update_installed_component(installed_component_id, …)` (overlay: only given arguments are sent; `""` clears the
-  four clearable fields, `composition` replaces the whole list and its docstring says to pass each kept entry's `id`,
-  `[]` empties it — no `clear_fields`); `remove_installed_component(installed_component_id, removed_on)`;
-  `replace_installed_component(installed_component_id, replaced_on, name=None, supply_id=None, composition=None,
-  serial_or_lot=None, notes=None)` — **five tools, 84 → 89**; `composition` is `list[dict[str, Any]]` of `{id?,
-  supplyId, quantity, unit?}`. No delete tool. Docstrings say "not `create_component`", name the subtree rule, and say a
-  composition quantity is never stock; no #95/#96 word.
+  `list_installed_components(asset_id)`; `add_installed_component(asset_id, name, parent_id=None, supply_id=None,
+  composition=None, serial_or_lot=None, installed_on=None, notes=None, sort_order=None)` (C-4);
+  `update_installed_component(installed_component_id, name=None, supply_id=None, composition=None,
+  serial_or_lot=None, installed_on=None, notes=None, sort_order=None)` (overlay: only given arguments are sent; `""`
+  clears `supply_id`, `installed_on`, `serial_or_lot`, `notes`; `composition` replaces the whole list and its
+  docstring says to pass each kept entry's `id`, once; `[]` empties it — no `clear_fields`);
+  `remove_installed_component(installed_component_id, removed_on)`; `replace_installed_component(installed_component_id,
+  replaced_on, name=None, supply_id=None, composition=None, serial_or_lot=None, notes=None)` — its docstring says an
+  omitted `supply_id` or `composition` gives the new unit **none**, and to pass the predecessor's (read with
+  `list_installed_components`) to keep them (R47-17b) — **five tools, 84 → 89**; `composition` is `list[dict[str,
+  Any]]` of `{id?, supplyId, quantity (a number), unit?}`. No delete tool. Docstrings say "not `create_component`" and
+  name the subtree rule; they say what a quantity is ("how many of that SupplyItem one unit is made of") and carry
+  **no #95/#96 word, even to deny it** (C-3).
 - **C24, the gate, documents and pins.** `_MIN_INSTALLED_COMPONENT_SCHEMA_VERSION = 19` after `:225`;
   `_require_installed_component_schema(tool)` over `_require_tool_schema` (`:281`), beside `:331`; **all five** call
   it before any request. `import_merge`'s docstring (`:1248`, `:1292`): "1–18" → "1–19", "twenty-two" →
@@ -541,16 +589,24 @@ removed pack's child positions into its replacement (#96); the schedules loader 
   with " · " what is there — the direct SupplyItem's name and part number (read from the catalog, never copied; the
   "Archived" badge when archived), the composition summarised as P47-21 per entry (`"4 × Example 12 V Battery"`, at
   most two then "+{n}", P47-22), the serial or lot, "Installed {day}" (P47-15); empty: P47-2. Below, when any exist,
-  the toggle **"Removed ({n})"** (P47-18) expanding `removedUnreplaced(rows)` with "Removed {day}" (P47-17). Picker
-  rows: `listRowsOf(items.filter { it.archivedAt == null })` (R47-3).
+  the toggle **"Removed ({n})"** (P47-18) expanding `removedUnreplaced(rows)` with "Removed {day}" (P47-17) and, on a
+  removed row whose parent is not current, the ratified "Inside {name}" (P47-5) (N-10: two pack replacements leave
+  same-named positions). A nested row's content description carries P47-5 too (TalkBack cannot hear an indent).
+  **Two SupplyItem sets (C-1):** `SupplyLinkLine` and the composition lines get a map of **every** SupplyItem,
+  archived included, so the shipped "Archived" badge draws on a link or entry that names one (`SupplyLinkLine` draws
+  nothing for an id missing from its map, `A/ui/supplies/SupplyLinkLine.kt:46`); the picker gets
+  `listRowsOf(items.filter { it.archivedAt == null })` only (R47-3). Quantities are drawn through the shipped
+  `formatNumber` (`A/ui/journal/JournalFormat.kt`, as `EventDetailScreen.kt:259` draws a material line), so "4 ×",
+  never "4.0 ×"; an empty composition draws no "Composition" section and no sentence (N-11). B6a also updates the
+  comment at `AssetDetailScreen.kt:445-446` ("directly above the child assets") (N-15).
 - **C26, the sheets (B6b, B6c).** `ModalBottomSheet`s (`AssetSuppliesSection.kt:182`, `:196-198`) in
   `A/ui/installed/InstalledComponentSheets.kt`:
   - **The row sheet (B6b):** the name; the direct SupplyItem (a tap opens it via `onOpenSupply`); **"Composition"**
     (P47-23), one line per entry (P47-21; a tap opens that SupplyItem); the serial or lot (P47-6); the install date
     (P47-7, or P47-16); the removal date (P47-8); **"History"** (P47-14): `history(rows, id)` newest first — each
     instance's name, its install line, and "Replaced by {name} on {day}" (`ReplaceStrings.replacedBy`,
-    `A/ui/replace/ReplaceStrings.kt:106`) or "Removed {day}", the oldest with "Replaces {name}" where it applies
-    (`:109`); then, for a **current** row with writes offered, **"Install inside"** (P47-4), **"Replace"** (P47-9),
+    `A/ui/replace/ReplaceStrings.kt:106`) or "Removed {day}", and each instance that has a predecessor reads
+    "Replaces {name}" (`:109`) (N-12); then, for a **current** row with writes offered, **"Install inside"** (P47-4), **"Replace"** (P47-9),
     **"Remove"** and **"Edit"** (reused); a removed row offers **"Edit"** only.
   - **The install / edit / replace sheet (B6b without composition, B6c adds it):** titles P47-3 / P47-13 / P47-10;
     "Name" (prefilled on replace); a quiet "Inside {name}" (P47-5) when installing inside; the direct link through
@@ -559,7 +615,14 @@ removed pack's child positions into its replacement (#96); the schedules loader 
     "Archived" badge, "Qty" and "Unit" fields (reused, `A/ui/setup/ProfileEditScreen.kt:409`,
     `:420`), a close glyph labelled P47-24 — and an "Add supply" row button
     (reused P15-13) opening the picker; a pick appends an entry with quantity empty and the unit filled from the
-    item's preferred unit **only if** blank (#15 C34's rule), prefilled on replace with the predecessor's entries;
+    item's preferred unit **only if** blank (#15 C34's rule).
+    **The replace draft (R47-17b, C-1):** the replace sheet prefills the name, the direct link and the composition
+    from the predecessor **as an editable draft**; on Save the view model sends them as an explicit command (the
+    successor's entries minted fresh by the use case) — the person's Save is the choice, and nothing is copied
+    behind it. A draft link or entry naming an **archived** SupplyItem is drawn with the shipped "Archived" mark and
+    stays removable ("Remove link", the entry's P47-24); Save is refused with the reused `SupplyItemArchived` /
+    `EntrySupplyItemArchived(i)` → P15-20 under that link or entry until it is removed or replaced (row 52).
+    Continuing the form:
     "Serial or lot" (P47-6, empty on replace); "Installed on" (P47-7) through `DateField` — on replace, the
     replacement date, prefilled today; "Notes". Save ("Save", or "Replace" on replace) enabled while the trimmed name
     is non-blank and nothing is saving. A replace of a row with current children draws P47-12 above the button.
@@ -569,8 +632,11 @@ removed pack's child positions into its replacement (#96); the schedules loader 
     `DATE_NOT_LATER_THAN_TODAY` (`A/ui/condition/ChangeConditionViewModel.kt:35`); `QuantityInvalid(i)` → P47-25 under
     the rows, entry `i` marked; `SupplyItemMissing` / `SupplyItemArchived` / the entry twins → P15-20 (reused);
     `NoSuchInstalledComponent` / `AlreadyRemoved` / `ParentMissing` / `ParentRemoved` / `ParentOnAnotherAsset` /
-    `OwnerMissing` / `BadDate` → P47-19; `Unchanged` closes as saved; `NameRequired` unreachable (Save disabled).
-    Cancel and dismiss write nothing.
+    `OwnerMissing` / `BadDate` → P47-19; `Unchanged` closes as saved; `NameRequired` unreachable (Save disabled); a
+    held-asset race (`AssetTransferredOut` at the port) shows the shipped transferred-out snackbar, the
+    `AssetSuppliesSectionViewModel.kt:217` path (N-11). Cancel and dismiss write nothing.
+  - **Split clause (B6b):** past a 1 h dispatch estimate, the row sheet and history stay in B6b and the write sheets
+    (install / edit / replace without composition, remove) go to **B6b2** off its tip (N-13).
 - **C27, the placement and the read-only rule (B6a).** `A/ui/asset/AssetDetailScreen.kt`: the call after
   `AssetSuppliesSection(…)` (`:447-453`), **before** `ComponentsSection(…)` (`:454-458`), with `readOnly =
   !current.offersWrites` and the **existing** `onOpenSupply` — **no new `AssetDetailScreen` parameter, no
@@ -583,8 +649,12 @@ removed pack's child positions into its replacement (#96); the schedules loader 
 - **C28.** The eleven child-Asset phone strings move to "Child asset(s)" at their one home each (§5's R-list):
   `A/ui/asset/AssetDetailScreen.kt:729`, `:999`, `:1001`, `:1020`; `A/ui/asset/AssetsScreen.kt:450`, `:459`, `:462`,
   `:465`; `A/ui/transfer/TransferStrings.kt:27`, `:48`; `A/ui/dashboard/DashboardScreen.kt:162`. The chip constant's
-  picker and share-intake uses (`A/ui/asset/AssetPicker.kt:33`, `A/share/ShareIntakeScreen.kt:60`) move with it.
-  **Untouched:** every identifier (`ComponentRow`, `componentsOf`, `onToggleComponents`, `isComponent`,
+  picker and share-intake uses draw it through the shared composable — `A/ui/asset/AssetPicker.kt:33` and
+  `A/share/ShareIntakeScreen.kt:60` are `onToggleComponents` parameter declarations, **nothing to edit there** (N-17).
+  **The five KDoc quotes of the old button text** (`"+ Add component"` at `AssetDetailScreen.kt:987`,
+  `AssetEditScreen.kt:258`, `:292`, `AssetViewModels.kt:1982`, `A/ui/nav/Route.kt:24`) and `"No components"`
+  (`AssetDetailScreen.kt:988`) are updated to the new words (comment-only; they describe a label that will no longer
+  exist — C-5). **Untouched:** every identifier (`ComponentRow`, `componentsOf`, `onToggleComponents`, `isComponent`,
   `ComponentCondition`), every API/MCP noun, the API message `"this asset still has components"`
   (`A/api/ApiJson.kt:366`, the child-Asset API vocabulary until #98), S27's format
   (`A/ui/condition/ConditionWords.kt:86-90`).
@@ -604,15 +674,19 @@ removed pack's child positions into its replacement (#96); the schedules loader 
     between, on app-made archives (replace restore reads every row, entry, pointer and date back; a merge into an
     install without them inserts them, tallying `installedComponents`). It names the emulator's blind spots (limit
     11), makes no Transfer Pack, and names no release number.
-  - **`docs/design/14-asset-model.md`:** `:15-18` (Component built at schema 19 as "installed component"; the phone's
-    "Installed components"; child Assets read "Child assets"), `:45` (the table row), and a "What #47 built" paragraph
-    in §4 (`:81-104`) — one row per fitted instance; current = no removal date; a replace closes one and inserts one;
+  - **Wording (C-3):** no sentence in these documents carries a #95/#96 word, even to deny it — a composition is
+    described as "how many of that SupplyItem one unit is made of; nothing is counted, kept or used up".
+  - **`docs/design/14-asset-model.md`:** `:13-14` (the "**Components** section" and "the Assets list's Components
+    control" become "Child assets", N-15), `:15-18` (Component built at schema 19 as "installed component"; the phone's
+    "Installed components"; child Assets read "Child assets"), `:45` (the table row), and a **new heading "What #47
+    built"** after §4 (`:81-104`, titled for #15; N-15) — one row per fitted instance; current = no removal date; a replace closes one and inserts one;
     **the two compositions: instance-level (child rows, each with its history) and aggregate (`4 × X` on one row, no
     per-unit history)**, and that choosing between them for a service is #96's; a removed container closes its
     subtree; no journal link; #86 carries none; health `PART` not bound. `:30-32`'s sentence is **kept verbatim**; the
     §3 example table (`:62`) gains the aggregate form on the UPS pack row.
   - **`docs/design/04-domain-data-model.md`:** a two-line note after `:199-204` (installed components hold fitted
-    structure without Asset identity; child Assets remain the escalation path).
+    structure without Asset identity; child Assets remain the escalation path), and `:202`'s "COMPONENTS lists the
+    direct children" reads "CHILD ASSETS" (N-15).
   - **Untouched:** `docs/versioning.md`, `README.md`, `docs/api/command-shapes.json`, the 1.4 spec and archaeology.
 - **C30, the invariants every brief keeps.**
   1. **No inference:** row 39.
@@ -621,9 +695,13 @@ removed pack's child positions into its replacement (#96); the schedules loader 
      `P96='\b(schedule_supply_requirement|material[_ ]?requirements?|batch[_ ]?replace(ment)?|kits?)\b'`:
      `git grep -ciE "$P" -- . ':!docs/superpowers'` summed at the tip ≤ the same sum at `<base>`, each pattern; list
      order says "move" or "resequence", never "reorder".
-  3. **The word tripwire:** no new phone string contains "part", "assembly" or "kit"; after B7, `git grep -hoE
-     '"[^"]*"' -- 'app/src/main/**/*.kt' | grep -iE '\bcomponents?\b'` lists only §5's P47 strings and the API message
-     at `ApiJson.kt:366`.
+  3. **The word tripwire (C-5):** no new phone string contains "part", "assembly" or "kit". After B7,
+     `git grep -nE '"[^"]*\b[Cc]omponents?\b[^"]*"' -- app/src/main` (with file and line) lists only: the P47 strings
+     in `A/ui/installed/`; the **allowlist** — the route literal `"components"` (`A/api/ApiRouter.kt:202`), the API
+     message (`A/api/ApiJson.kt:366`), S27's format (`A/ui/condition/ConditionWords.kt:90`) and the KDoc quotes at
+     `ConditionWords.kt:86` and `A/ui/theme/Theme.kt:20` ("how do generic components look"); and **nothing else** — the
+     tip's list minus the allowlist and `A/ui/installed/` is empty, and the allowlist's count equals `<base>`'s for
+     those five sites (a tip-vs-base delta, read line by line).
   4. **Untouched, `git diff <base> --` → empty:** `A/nfc/`, `C/model/TagBinding.kt`,
      `A/data/room/entities/NfcTagEntity.kt` (AC1); `C/model/Attachment.kt`, `A/data/room/entities/AttachmentEntity.kt`
      (#69); `C/usecase/ReplaceAsset.kt`, `C/usecase/ReplaceSetup.kt` (#86); `C/model/Health.kt`, `A/ui/health/`
@@ -645,12 +723,12 @@ each proves is not. Fixtures are fictional (Global constraints).
 |---|---|---|---|
 | 1 | C5 parents first | `CT/model/InstalledComponentTreeTest` (new) · `aShuffledThreeDeepTreeComesParentsFirst`; `aParentOutsideTheListIsARoot`; `aCycleThrows`; ties by id | a row whose parent is outside the list counted with indegree 1 (it never comes out) |
 | 2 | C5 current view and sibling order | `currentDropsRemovedRowsAndAnnotatesDepth`; `siblingsBySortOrderThenNameThenId` ("Position 10" after "Position 2" by `sortOrder`) | siblings ordered by name only |
-| 3 | C5 history | `historyFollowsReplacesIdBackNewestFirst`; `successorOfFindsTheRowNamingIt`; `removedUnreplacedListsOnlyRowsWithNoSuccessor`; `aReplacesIdCycleTerminates` | the walk unbounded (the cycle case hangs → the test's timeout) |
+| 3 | C5 history | `historyFollowsReplacesIdBackNewestFirst`; `successorOfFindsTheRowNamingIt`; `removedUnreplacedListsOnlyRowsWithNoSuccessor`; `aReplacesIdCycleTerminates` | the walk unbounded — the cycle case runs under `assertTimeoutPreemptively` (or asserts a bounded step count), so the hang is a quotable failure (N-7) |
 | 4 | C5 shape rules | `CT/usecase/InstalledComponentShapeTest` (new) · blank name; bad dates; `afterTodayOnlyWithAToday`; `removedBeforeInstalled`; `aZeroNegativeOrNonFiniteQuantityIsRefusedByIndex`; every problem collected | `RemovedBeforeInstalled` dropped |
 | 5 | C7 the migration adds two tables only | `T/data/room/Migration18To19Test` (new) · `bothTablesExistEmptyWithTheirIndicesAndForeignKeys`; `everyV18TableIsUnchanged`; `theMigratedSchemaEqualsAFreshVersion19` | the migration's `parent_id` FK `RESTRICT` while the entity says CASCADE (the schema compare fails) |
 | 6 | C8 the whole chain | the six table-set pins gain `V19_TABLES` | none: pins |
 | 7 | C6/C8 H1 and the constraints | `T/data/room/InstalledComponentDaoConstraintTest` (new) · `deletingAnAssetCascadesAThreeDeepTreeAndEveryEntry`; `theReplaceWipeTakesTheTree` (`assets.deleteAll()`); `aSupplyItemNamedDirectlyOrByAnEntryCannotBeDeleted` (raw SQL); `replacesIdIsUniqueAndNullsRepeat`; `anUnknownParentOrAssetIsRefused` | **the `parent_id` FK made RESTRICT** — H1 decided on Room: the cascade fails mid-tree |
-| 8 | C6 the aggregate port | same class · `insertWritesTheEntriesInOrder`; `updateReplacesTheCompositionWhole`; `forAssetReturnsCurrentAndRemovedByIdWithEntries`; `observeForAssetEmitsOnAnEntryChange` | `update` leaves stale entries |
+| 8 | C6 the aggregate port | same class · `insertWritesTheEntriesInOrder`; `updateReplacesTheCompositionWhole`; `forAssetReturnsCurrentAndRemovedByIdWithEntries`; `observeForAssetEmitsOnAnEntryChange`; `updatingARowWithChildrenKeepsItsSubtreeAndEntries` (N-4) | `update` leaves stale entries |
 | 9 | C7 schema pins | `VersionAgreementTest.kt:85`, `:155`; `MaintenanceRoutesTest.kt:1548` → 19 | none: pins |
 | 10 | C9/C10 round trip | `CT/backup/BackupFormat19Test` (new) · `everyRowEntryPointerAndDateRoundTrips` (nulls written explicitly) | `toDto` drops `replacesId` |
 | 11 | C9 the fence, structurally | `theDtosCarryExactlyTheseKeys` (both DTOs' descriptor names pinned in order) | a `quantityOnHand` key added to `CompositionEntryDto` |
@@ -659,7 +737,7 @@ each proves is not. Fixtures are fictional (Global constraints).
 | 14 | C10 the content | blank name; bad date; removed before installed; `aZeroQuantityEntryIsCorrupt`; `aFutureDateIsAcceptedOnRestore` (no today) | the content check passed a today |
 | 15 | C10 sort and counts | `rowsByIdEntriesBySortOrderThenId`; `theManifestCountsRowsAndEntries` (31 keys) | the entry sort dropped |
 | 16 | C10 newer refused | `aFormat20ArchiveIsRefusedAsNewer` | none: pin |
-| 17 | C11 export and replace | `ExportBackupSetTest` (+1) · `anExportCarriesRowsAndEntries`; `ImportBackupReplaceTest` (+2) · `aShuffledTreeRestoresParentsFirstByteEqual`; `replacingAnInstallHoldingATreeSucceeds` | the restore writes in file order (a child before its parent: the FK fails) |
+| 17 | C11 export and replace | `ExportBackupSetTest` (+1) · `anExportCarriesRowsAndEntries`; `ImportBackupReplaceTest` (+2) · `aShuffledTreeRestoresParentsFirstByteEqual`; `replacingAnInstallHoldingATreeSucceeds` (over the core double, C5) | the restore writes in file order — the double's parent check throws as the FK would (C-2) |
 | 18 | C9/C10 format pins | §3's B2a pins | none: pins |
 | 19 | C12 by id | `CT/merge/MergePlannerInstalledComponentTest` (new) · `theSameRowIsIdentical`; `aRowRemovedHereAfterTheExportIsAConflict`; `aCompositionOnlyDifferenceIsAConflict`; `aNewRowInserts` | the comparison drops `composition` |
 | 20 | C12 parents first | `aShuffledNewTreeInsertsParentsFirst`; `aChildOfAnAcceptedParentInserts`; `anOrphanIsOwnerNotAvailable` | decided in file order (the child meets an undecided parent) |
@@ -670,35 +748,36 @@ each proves is not. Fixtures are fictional (Global constraints).
 | 25 | C12 held (M2) | `anInsertForAHeldAssetIsAssetTransferredOut` | the M2 line omitted |
 | 26 | C12 tally and report | the tally and report-key pins (B2b) and one new assertion naming the table | none: pins |
 | 27 | C11 classification | `TransferTableClassificationTest:25` · the new list classified (B2a, E-7) | none: pin |
-| 28 | C13 carry | `CT/transfer/TransferGraphTest` (+2) · `aPackCarriesAnAssetsWholeHistoryWithEntries`; `aSupplyItemNamedOnlyByAnEntryTravels` | `supplyIdsInUse` built from direct links only |
+| 28 | C13 carry | `CT/transfer/TransferGraphTest` (+2) · `aPackCarriesAnAssetsWholeHistoryWithEntries`; `aSupplyItemNamedOnlyByAnEntryTravels`; `aSupplyItemNamedOnlyByADirectLinkTravels` (N-8) | `supplyIdsInUse` built from direct links only (and, for the second case, from entries only) |
 | 29 | C13 retain | `retainDropsAHeldAssetsRows` | `retain` keeps them |
 | 30 | C13 the return | `ImportTransferPackTest` (+1) · `aReturningPackWithARowReplacedAndAPackRecomposedOnTheBorrowingPhoneLands` | the `installedComponents` filter removed from `ReturnScope.of` (the return refuses `CONFLICT`) |
 | 31 | C14 the guard | `HeldWriteGuardTest` (+2) · `installingOnAHeldAssetThrows`; `updatingAHeldAssetsRowThrows` | the wrapper skips its check |
 | 32 | C16 install | `CT/usecase/InstalledComponentUseCasesTest` (new) · `installStoresTrimmedTextAndAppendsSortOrder`; `anUnknownDateIsAccepted` (R47-8); `ownerParentAndSupplyStepsRefuseInOrder` (each problem); `aRefusalOpensNoTransaction`; `anArchivedDirectSupplyItemIsRefused` | the archived check removed |
 | 33 | C15/C16 the composition on install | `entriesAreStoredInOrderWithMintedIds`; `oneSupplyItemTwiceIsTwoEntries`; `anArchivedEntryIsRefusedByIndex`; `aBadQuantityIsCollectedByIndex` | an archived entry accepted |
-| 34 | C18 replace — AC6 | `replaceClosesOneAndInsertsOneInOneWrite` (**whole-table snapshot compare: every other row and entry byte-equal**); `theSuccessorTakesParentAndSortOrderAndNamesItsPredecessor`; `thePredecessorKeepsItsComposition`; `anAbsentCompositionIsCopiedWithFreshIds` (handler-filled command, R47-17); `anArchivedSupplyItemIsRefusedForTheSuccessorEvenIfThePredecessorNamesIt`; `replacingARemovedRowIsAlreadyRemoved`; `replacingAPackClosesItsSubtreeAndTheSuccessorStartsEmpty` | the successor's entries reuse the predecessor's ids (the snapshot compare fails: the predecessor's entries move) |
+| 34 | C18 replace — AC6 | `replaceClosesOneAndInsertsOneInOneWrite` (**whole-table snapshot compare: every other row and entry byte-equal**); `theSuccessorTakesParentAndSortOrderAndNamesItsPredecessor`; `thePredecessorKeepsItsComposition`; `anEmptyCompositionInTheCommandGivesTheSuccessorNone` (R47-17b); `theSuccessorsAndPredecessorsEntryIdSetsAreDisjoint` (asserted directly, C-2); `aCompositionNamingAnArchivedItemIsRefusedByIndexOnReplace` (C-1); `anArchivedSupplyItemIsRefusedForTheSuccessorEvenIfThePredecessorNamesIt`; `replacingARemovedRowIsAlreadyRemoved`; `replacingAPackClosesItsSubtreeAndTheSuccessorStartsEmpty` | the successor's entries reuse the predecessor's ids (the double's unique-entry-id check throws, and the disjointness assertion fails) |
 | 35 | C17 remove | `removeWritesRemovedOnAndUpdatedAtOnce`; `removingTwiceIsAlreadyRemoved`; `beforeAnInstallDateIsRefused`; `theCurrentSubtreeClosesOnTheSameDateInTheSameWrite` (R47-6); `closedRowsKeepTheirComposition`; `nothingIsDeleted` | the subtree left current |
-| 36 | C19 update | `editableFieldsMoveUpdatedAt`; `anEditChangingNothingIsUnchangedAndWritesNothing`; `aRemovedRowMayBeCorrected`; `anInstallDateAfterTheRemovalDateIsRefused`; `aKeptArchivedLinkOrEntryIsAccepted`; `aNewArchivedLinkOrEntryIsRefused`; `theCompositionIsReplacedWholeKeepingOwnedIds` | `Unchanged` compares without the composition |
-| 37 | AC2/AC4/AC-C/AC8 the UPS shapes | `CT/usecase/InstalledComponentFixtureTest` (new) · **instance-level**: a tray with four positions naming one SupplyItem, position 2 replaced, the other three byte-equal; **aggregate**: a pack composed of `4 ×` that SupplyItem plus its pack SKU as the direct link, replaced whole; both exported, replace-imported and re-planned `IDENTICAL` | the merge apply skips `installedComponents` |
+| 36 | C19 update | `editableFieldsMoveUpdatedAt`; `anEditChangingNothingIsUnchangedAndWritesNothing`; `aRemovedRowMayBeCorrected`; `anInstallDateAfterTheRemovalDateIsRefused`; `aKeptArchivedLinkOrEntryIsAccepted`; `aNewArchivedLinkOrEntryIsRefused`; `theCompositionIsReplacedWholeKeepingOwnedIds`; `aRepeatedEntryIdKeepsTheFirstAndMintsTheRest` (C-7) | `Unchanged` compares without the composition |
+| 37 | AC2/AC4/AC-C/AC8 the UPS shapes | `CT/usecase/InstalledComponentFixtureTest` (new) · **instance-level**: a tray with four positions naming one SupplyItem, position 2 replaced, the other three byte-equal; **aggregate**: a pack composed of `4 ×` that SupplyItem plus its pack SKU as the direct link, replaced whole (the successor's composition sent explicitly); both exported, replace-imported into an empty install, and the export re-planned through `BuildBackupMergePlan` against the non-empty install `IDENTICAL` (N-5) | the replace import skips `installedComponents` (the re-plan reads `INSERT`, not `IDENTICAL`) (C-2) |
 | 38 | AC10/AC11 the RO fixture | same class, on the RO water template (`C/journal/SeedTemplates.kt:133-137`) with `LinkageInstall` (`CT/usecase/SupplyItemFixtureTest.kt:39`) · a membrane and a lamp as installed components only where instance history matters; the sanitizer and the cartridge as SupplyItems with no row | none of its own: row 37's mutation fails it (recorded) |
-| 39 | no inference | `installingCreatesNoApplicabilityEventLineOrStockAndApplicabilityCreatesNoComponent` | `InstallComponent` adds an `AssetSupply` for its link |
+| 39 | no inference | `installingCreatesNoApplicabilityEventLineOrStockAndApplicabilityCreatesNoComponent` (the install carries a direct link **and** a composition) | `InstallComponent` adds an `AssetSupply` for its link |
 | 40 | C20 install and read | `T/api/InstalledComponentRoutesTest` (new) · `aPostIs201AndReadsBack`; `theSubResourceListsCurrentAndRemovedAndEachSupplyItemOnce` (direct and entry); `getById` | the sub-resource drops removed rows |
-| 41 | C20 the PATCH overlay | `onlyNotesLeavesEverythingElse`; `aNullKeyIsUnchanged`; `anEmptyStringClearsTheLinkTheDateTheSerialAndTheNotes`; `aBlankNameIs422`; `anAbsentCompositionKeepsEntriesAndIds`; `aGivenCompositionReplacesIt`; `anEmptyCompositionEmptiesIt`; `assetParentRemovedOnAndReplacesIdKeysAre400`; `aNoOpIs200AndWritesNothing` | PATCH as a full replace (an absent key becomes `""`) |
-| 42 | C20 remove and replace | `removeIs200WithTheClosedSubtree`; `removeTwiceIs409`; `replaceIs201WithBothRows`; `anAbsentNameLinkAndCompositionAreThePredecessors`; `anEmptyCompositionReplacesWithNone` | the handler fills the composition from nothing |
+| 41 | C20 the PATCH overlay | `onlyNotesLeavesEverythingElse`; `aNullKeyIsUnchanged`; `anEmptyStringClearsTheLinkTheDateTheSerialAndTheNotes`; `aBlankNameIs422`; `anAbsentCompositionKeepsEntriesAndIds`; `aGivenCompositionReplacesIt`; `anEmptyCompositionEmptiesIt`; `aRepeatedEntryIdKeepsTheFirstAndMintsTheRest` (C-7); `aStringQuantityIs400` (N-19); `assetParentRemovedOnAndReplacesIdKeysAre400`; `aNoOpIs200AndWritesNothing` | PATCH as a full replace (an absent key becomes `""`) |
+| 42 | C20 remove and replace | `removeIs200WithTheClosedSubtree`; `removeTwiceIs409`; `replaceIs201WithBothRows`; `anAbsentNameIsThePredecessors`; `anAbsentLinkIsNone`; `anAbsentCompositionIsNone` (R47-17b); `aSentCompositionGetsFreshIds` | the handler copies the predecessor's composition (or link) when absent |
 | 43 | C2/C21 every code | `everyProblemHasItsCodeStatusAndField` (the mapper called directly, one case per sealed member); `everyNewCodeIsReachableOverTheWire` | `AlreadyRemoved` mapped to 422 |
 | 44 | C22 status | the status test (+1) · `statusCountsRowsAndEntries` | `compositionEntries` omitted |
-| 45 | C22 the document agrees | `everyNewCodeIsInV1md` (each as `^\| (404\|409\|422) \| `CODE` \|`) | a code missing from `v1.md` |
+| 45 | C22 the document agrees | `everyNewCodeIsInV1md` (each as `^\| (404\|409\|422) \| `CODE` \|`); `theReusedSupplyCodesNameTheComponentRoutes` (C-8) | a code missing from `v1.md` |
 | 46 | C20 held | `aHeldAssetIs409AssetTransferredOut` (install, PATCH, remove, replace) | none: row 31's mutation fails it (recorded) |
-| 47 | C23 the tools | `M/tests/test_installed_component_tools.py` (new) · each tool's method, path and body; `update_sends_only_given_keys`; `update_sends_an_empty_string_to_clear`; `composition_is_sent_whole_and_an_empty_list_empties` ; no delete tool | `update_installed_component` sends every key |
+| 47 | C23 the tools | `M/tests/test_installed_component_tools.py` (new) · each tool's method, path and body (`add_installed_component`, C-4); `replace_sends_no_composition_or_link_unless_given` (R47-17b); `update_sends_only_given_keys`; `update_sends_an_empty_string_to_clear`; `composition_is_sent_whole_and_an_empty_list_empties` ; no delete tool | `update_installed_component` sends every key |
 | 48 | C24 the gate | `…_refuses_schema_18_with_nothing_sent` for all five | the gate removed from one tool |
 | 49 | C24 pins | 84 → 89; 22 → 23 tallies; "1–19" | none: pins |
 | 50 | C25 the section state (B6a) | `T/ui/installed/InstalledComponentsSectionViewModelTest` (new) · `currentRowsAreIndentedByDepthInSiblingOrder`; `theQuietLineReadsLinkCompositionSerialAndDate`; `removedUnreplacedSitBehindTheToggle`; `thePickerOffersUnarchivedOnly`; `readOnlyOffersNothing` | the picker includes archived items |
-| 51 | C26 the write state (B6b) | same class (+5) · `installPassesTheCommand`; `installInsideCarriesTheParent`; `replacePrefillsNameAndLink`; `removeWithChildrenDrawsP47_12`; `eachProblemDrawsItsSentenceUnderItsField` | replace prefill drops the link |
-| 52 | C26 the composition state (B6c) | same class (+4) · `aPickAppendsAnEntryAndFillsOnlyABlankUnit`; `replacePrefillsTheEntries`; `removingAnEntryRemovesOnlyIt`; `aBadQuantityMarksItsEntryWithP47_25` | a pick overwrites a typed unit |
+| 51 | C26 the write state (B6b) | same class (+5) · `installPassesTheCommand`; `installInsideCarriesTheParent`; `replacePrefillsNameAndLinkAsADraftAndSendsThemExplicitly` (R47-17b); `removeWithChildrenDrawsP47_12`; `eachProblemDrawsItsSentenceUnderItsField` | replace prefill drops the link |
+| 52 | C26 the composition state (B6c) | same class (+4) · `aPickAppendsAnEntryAndFillsOnlyABlankUnit`; `replacePrefillsTheEntriesAsADraft`; `replacePrefillShowsAnArchivedLinkAndEntryWithTheBadgeAndSaveIsRefusedUntilRemoved` (C-1); `removingAnEntryRemovesOnlyIt`; `aBadQuantityMarksItsEntryWithP47_25` | a pick overwrites a typed unit; the link line handed unarchived SupplyItems only (the archived draft draws nothing) |
 | 53 | C25–C27 drawn | **Compose** `AT/ui/installed/InstalledComponentsSectionTest` (new, ~14 cases) · rows, indentation and quiet lines; empty line; the add glyph; read-only draws no glyph or action; the toggle; the row sheet's facts, composition and history; the install sheet's Save enabling and Cancel writing nothing; the composition rows' add and remove; the remove sheet with P47-12 | none in-brief: device cases |
 | 54 | C28 the relabel | the JVM pins (`AssetViewModelsTest`, `TransferSelectionViewModelTest`, `MaintenanceSheetViewModelTest`) and the device pins (§3's B7 rows) move to the R-list's words | none: pins (the words are ratified, the tests follow) |
 | 55 | C29 the documents | `ReleaseProofPolicyTest` unchanged and green; B8's anchored greps (§7) | none: tripwire |
 | 56 | C30 the fence | the tripwire, word and untouched greps (§7) at every brief | none: greps |
+| 57 | C5 the core double mirrors the schema (C-2) | `CT/testing/InstalledComponentDoubleTest` (new) · `aParentNotStoredOrOnAnotherAssetThrows`; `anUnknownDirectOrEntrySupplyItemThrows`; `aRepeatedEntryIdAcrossRowsThrows`; `aRepeatedReplacesIdThrows`; `anAssetDeleteThroughBackupInstallTakesItsRowsAndEntries` | the `BackupInstall` registration line removed (the asset delete leaves the rows) |
 
 **Moving pins — each named shipped assertion, the brief that may touch it, and why** (the audit's §2.7 inventory,
 re-sorted by brief and recomputed for two manifest keys; each brief confirms by grep and lists twins).
@@ -707,18 +786,18 @@ re-sorted by brief and recomputed for two manifest keys; each brief confirms by 
 |---|---|---|
 | `T/VersionAgreementTest.kt:85`, `:155`; `T/api/MaintenanceRoutesTest.kt:1548` | B1b | the schema is 19 |
 | `Migration10To11Test` … `Migration14To15Test`, `ReferenceMigrationTest` (the six table sets); `MigrationTestSupport.kt:68` | B1b | the chain gains two tables and one step |
-| the format literals: `VersionAgreementTest.kt:86`, `:156`; `MaintenanceRoutesTest.kt:1196`, `:1549`, `:1596`; `CT/backup/BackupCodecTest.kt:1067`; `BackupFormat6Test:360`, `8Test:281`, `9Test:70`, `13Test:54`, `14Test:48`, `15Test:48`, `17Test:99`, `18Test:74` (`17Test:223` and `18Test:350` are the triples' third lines, next row); `ExportBackupSetTest.kt:48`; `Format7ImportIdentityTest.kt:247`; `AT/backup/Format7RestoreContractTest.kt:164` | B2a | the format is 19 (25 `assertEquals(18,` hits on `1476e0d8`; B1b and B2a split them by reading each line) |
+| the format literals: `VersionAgreementTest.kt:86`, `:156`; `MaintenanceRoutesTest.kt:1196`, `:1549`, `:1596`; `CT/backup/BackupCodecTest.kt:1067`; `BackupFormat6Test:360`, `9Test:70`, `13Test:54`, `14Test:48`, `15Test:48`, `17Test:99`, `18Test:74` (`8Test:281`, `17Test:223` and `18Test:350` are the triples' third lines, next row); `ExportBackupSetTest.kt:48`; `Format7ImportIdentityTest.kt:247`; `AT/backup/Format7RestoreContractTest.kt:164` | B2a | the format is 19. The 25 `assertEquals(18,` hits on `1476e0d8` are **22 pins** (3 schema in B1b, 19 format here, the triples' third lines included) **plus 3 unrelated literals that never move**: `T/reminders/ReminderPrefsTest.kt:37` (a digest hour), `CT/backup/BackupFormat6Test.kt:281` (the event field count), `CT/nfc/NdefCodecV1Test.kt:43` (a payload size) (N-2) |
 | `BackupFormat8Test:277`, `:280`, `:281`; `17Test:218`, `:222`, `:223`; `18Test:345`, `:349`, `:350` | B2a | the "one format past this build" archive becomes 20 |
 | the manifest `counts.size` 29 → **31**: `BackupFormat6Test:406`, `7Test:296`, `8Test:310`, `13Test:68`, `14Test:65`, `15Test:63`, `18Test:334` | B2a | two count keys |
 | from-the-end manifest key positions: `BackupFormat12Test:70`, `13Test:58`, `14Test:52`, `15Test:52-53`, `9Test:102` | B2a | two keys appended (each position moves by 2; B2a reads each) |
-| the `BackupData` list counts: `BackupFormat6Test:289`, `7Test:222`; `StageABundleConformanceTest:90-98`, `:215` (`FORMAT_18_TABLES` → `FORMAT_19_TABLES`) | B2a | one list (22 → 23) |
+| the `BackupData` list counts: `BackupFormat6Test:289`, `7Test:222`; `StageABundleConformanceTest:90-98`, `:215` (**add** `FORMAT_19_TABLES = setOf("installedComponents")` and subtract it beside `FORMAT_18_TABLES` at `:98`, `:215`; the 18 set is not renamed, N-3) | B2a | one list (22 → 23) |
 | `TransferTableClassificationTest.kt:25` | B2a | the new list must be classified (E-7) |
 | merge tables 22 → 23: `CT/merge/MergePlannerTransferTest.kt:383`; the enum mirrors `MergePlannerMaintenanceTest:274-277`, `MergePlannerReferenceTest:379-383`, `MergePlannerSeasonHealthTest:152`; `MaintenanceRoutesTest:1323`, `:1376` (report key positions, `dropLast` +1 each, E-6) | B2b | one table and one report key |
 | `HeldWriteGuardTest` (its port list) | B2c | one more wrapped port |
 | `T/api/CommandShapesGoldenTest.kt:137-139`, `:174-175`, `:187`; `T/api/ReferenceRoutesTest.kt:736`, `:741`, `:744-756`, `:760-767` (range, tables, sub-resources 26 → 27, `counts.keys`); `T/api/SupplyRoutesTest.kt:634-635`; the `ApiHandlers(` test sites (arguments) | B4 | range 1–19, 23 tables, 27 sub-resources, two status keys, "19 since #47" |
 | `M/tests/test_argument_guard.py` (12 mentions, e.g. `:51`, `:203-204`, `:257-258`), `test_tools.py` (`EXPECTED_TOOLS`, `:971`, `:975`, `:984`), `test_reference_tools.py`, `test_maintenance_tools.py`, `test_supply_tools.py` | B5 | 89 tools; 23 tallies; 1–19 |
-| `T/ui/asset/AssetViewModelsTest.kt:154`, `:604`, `:1035`; `T/ui/transfer/TransferSelectionViewModelTest` (one); `T/ui/maintenance/MaintenanceSheetViewModelTest.kt:338` (B7 reads it: a block name may stay) | B7 | the relabel |
-| `AT/ui/asset/AssetsFiltersTest.kt:155`, `:157`, `:159`, `:315`; `AssetsSearchTest.kt:75`; `AssetTransferDetailTest.kt:94`, `:111`; `AT/ui/AssetModelDeviceProofTest.kt:79`, `:125`, `:131`, `:156`, `:172`, `:190`, `:230`, `:283`; `AT/share/ShareIntakeScreenTest.kt:135`; `AT/ui/transfer/TransferFlowScreenTest` (one); `AT/ui/dashboard/DashboardAttentionTest` (one); **`AT/ui/maintenance/GroupScreensTest.kt:162`** (`"COMPONENTS"`, the upper-cased header — outside the audit's list) | B7 | the relabel (device classes: 8) |
+| `T/ui/transfer/TransferSelectionViewModelTest.kt:137` — the one JVM assertion (C-6; `AssetViewModelsTest.kt:154`, `:604`, `:1035` are KDoc and `AssetPickerModelTest.kt:295`, `AT/…/AssetsFiltersTest.kt:100` failure messages: B7 updates their words with the strings, not as pins) | B7 | the relabel |
+| `AT/ui/asset/AssetsFiltersTest.kt:155`, `:157`, `:159`, `:315`; `AssetsSearchTest.kt:75`; `AssetTransferDetailTest.kt:94`, `:111`; `AT/ui/AssetModelDeviceProofTest.kt:79`, `:125`, `:131`, `:156`, **`:165`**, `:172`, **`:186`**, `:190`, `:230`, `:283`; **`AT/ui/asset/AssetsSearchTest.kt:70`** (C-6); `AT/share/ShareIntakeScreenTest.kt:135`; `AT/ui/transfer/TransferFlowScreenTest` (one); `AT/ui/dashboard/DashboardAttentionTest` (one); **`AT/ui/maintenance/GroupScreensTest.kt:162`** (`"COMPONENTS"`, the upper-cased header — outside the audit's list) | B7 | the relabel (device classes: 8) |
 
 **Device rows.** No device-boundary class: #47 crosses no Android or OS boundary (planning policy,
 `docs/superpowers/planning-policy.md:61-91`). Every rule — migration, codec, merge, pack, guard, use cases, routes,
@@ -735,13 +814,13 @@ device classes also first run there.
 
 | brief | touches | never touches |
 |---|---|---|
-| B1a | `C/model/{Ids,InstalledComponent (new),InstalledComponentTree (new)}.kt`; `C/ports/Repositories.kt`; `C/usecase/InstalledComponentCommands.kt` (new: the problem type and the two shape functions only); `CT/model/InstalledComponentTreeTest.kt`, `CT/usecase/InstalledComponentShapeTest.kt` (new) | `app/**`, `C/backup`, `C/merge`, `C/transfer`, every shipped use case, `docs`, `tools` |
+| B1a | `C/model/{Ids,InstalledComponent (new),InstalledComponentTree (new)}.kt`; `C/ports/Repositories.kt`; `C/usecase/InstalledComponentCommands.kt` (new: the problem type and the two shape functions only); `CT/model/InstalledComponentTreeTest.kt`, `CT/usecase/InstalledComponentShapeTest.kt` (new); **`CT/testing/InstalledComponentFixtures.kt` (new: the core double, C5/C-2) and `CT/testing/BackupInstall.kt` (its one registration line)** | `app/**`, `C/backup`, `C/merge`, `C/transfer`, every shipped use case, `docs`, `tools` |
 | B1b | `A/data/room/entities/InstalledComponentEntities.kt` (new); `A/data/room/dao/InstalledComponentDao.kt` (new); `A/data/room/{InstalledComponentRepositories (new),InstalledComponentMappers (new),Migrations,AppDatabase}.kt`; `A/di/AppGraph.kt`; `T/testing/FakeGraph.kt` (the port); `app/schemas/…AppDatabase/19.json` (generated); `T/data/room/{Migration18To19Test (new),InstalledComponentDaoConstraintTest (new),MigrationTestSupport}.kt` and B1b's pins | `C/**` main, `A/api`, `A/ui`, `18.json`, `docs`, `tools` |
 | B2a | `C/backup/{BackupFormat,BackupCodec,BackupContentCheck}.kt`; `C/usecase/{ExportBackupSet,ImportBackupReplace}.kt`; `C/transfer/TransferGraph.kt` (the `CLASSES` line only); constructor arguments only (C-1): `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt`, `CT/testing/BackupInstall.kt` and the 24 test sites; `CT/backup/BackupFormat19Test.kt` (new); `ExportBackupSetTest`, `ImportBackupReplaceTest`; B2a's pins | `C/merge`, `C/transfer` (bar one line), other use cases, `A/**` main bar wiring, `docs`, `tools` |
 | B2b | `C/merge/{MergePlan,MergePlanner}.kt`; `C/usecase/{ApplyBackupMergePlan,BuildBackupMergePlan}.kt` (the writes; the snapshot call); constructor arguments only: `AppGraph`, `FakeGraph` and the 18 test sites; `A/api/ApiDtos.kt` (the report rows only); `CT/merge/MergePlannerInstalledComponentTest.kt` (new); `T/api/ApiRouterTest.kt` (row 24 only); B2b's pins | `C/backup`, `C/transfer`, other use cases, `A/ui`, `A/data`, `docs`, `tools` |
 | B2c | `C/transfer/{TransferGraph,TransferOwnership,HeldWriteGuard}.kt`; `C/usecase/ApplyBackupMergePlan.kt` (`ReturnScope.of` only); `A/di/AppGraph.kt` (the guard's wrap and the count words); `T/testing/FakeGraph.kt` (the guarded port); `CT/transfer/{TransferGraphTest,ImportTransferPackTest,HeldWriteGuardTest}.kt` | `C/backup`, `C/merge`, other use cases, `A/api`, `A/ui`, `docs`, `tools` |
 | B3a | `C/usecase/{InstalledComponentCommands,InstallComponent (new),RemoveInstalledComponent (new)}.kt`; `A/di/AppGraph.kt`, `T/testing/FakeGraph.kt` (wiring); `CT/usecase/InstalledComponentUseCasesTest.kt` (new) | `C/backup`, `C/merge`, `C/transfer`, every shipped use case, `A/api`, `A/ui`, `docs`, `tools` |
-| B3b | `C/usecase/{ReplaceInstalledComponent (new),UpdateInstalledComponent (new)}.kt`; `AppGraph`, `FakeGraph` (wiring — **the last edit of either**); `CT/usecase/{InstalledComponentUseCasesTest,InstalledComponentFixtureTest (new)}.kt` | as B3a |
+| B3b | `C/usecase/{ReplaceInstalledComponent (new),UpdateInstalledComponent (new)}.kt`; `AppGraph`, `FakeGraph` (wiring — **the last edit of either**); `CT/usecase/{InstalledComponentUseCasesTest,InstalledComponentFixtureTest (new)}.kt` — **split clause (N-13):** past a 1 h dispatch estimate, rows 37–38 (the fixture class) go to **B3c** off B3b's tip | as B3a |
 | B4 | `A/api/{InstalledComponentDtos (new),InstalledComponentHandlers (new),ApiRouter,ApiHandlers,ApiJson}.kt`; the `ApiHandlers(` test sites, arguments only; `docs/api/v1.md`; `T/api/{InstalledComponentRoutesTest (new),CommandShapesGoldenTest,ReferenceRoutesTest,SupplyRoutesTest}.kt` | `C/**`, `A/ui/**` main, `A/data`, `A/di`, `FakeGraph`, `tools`, `command-shapes.json` |
 | B5 | `M/src/servicetag_mcp/server.py`; `M/README.md`; `M/tests/{test_installed_component_tools (new),test_tools,test_argument_guard,test_reference_tools,test_maintenance_tools,test_supply_tools}.py` | `app/**`, `core/**`, `S/**`, `command_shapes.py`, `docs` |
 | B6a | `A/ui/installed/{InstalledComponentsSection,InstalledComponentsSectionViewModel,InstalledComponentStrings}.kt` (new); `A/ui/asset/AssetDetailScreen.kt` (the one call); `T/ui/installed/InstalledComponentsSectionViewModelTest.kt` (new); `AT/ui/installed/InstalledComponentsSectionTest.kt` (new: the list cases) | `C/**`, `A/api`, `A/data`, `A/di`, `A/nav`, `A/ui/supplies`, `docs`, `tools` |
@@ -751,18 +830,18 @@ device classes also first run there.
 | B8 | `docs/release-proofs.md`; `docs/design/{14-asset-model,04-domain-data-model}.md` | any `.kt`, `.py`, `tools`, `docs/api`, `docs/versioning.md`, `README.md` |
 
 **B4 ∥ (B6a → B6b → B6c) — the one parallel pair.** B4's files are `A/api/**`, `docs/api/v1.md`, `T/api/**` and the
-`ApiHandlers(` sites (all in `T/api`, `T/VersionAgreementTest.kt`, `T/ui/api/` and `T/testing/MaintenanceFixtures.kt`
+`ApiHandlers(` sites (all in `T/api` (`MaintenanceFixtures.kt` included, N-1), `T/VersionAgreementTest.kt` and `T/ui/api/`
 — B4 lists them first and stops if one is in `T/ui/installed/`); the UI lane's are `A/ui/installed/**`, one line of
 `AssetDetailScreen.kt`, `T/ui/installed/**`, `AT/ui/installed/**` — **no file in common**, and neither edits
 `AppGraph` or `FakeGraph`. Under the two-lane rule the UI lane may run in a second worktree off B3b's tip; the
 controller lands it before B5, whose `<base>` holds both.
 
-**Order:** B1a → B1b → B2a → B2b → B2c → B3a → B3b → { B4 ∥ (B6a → B6b → B6c) } → B5 → B7 → B8. B1b needs the
+**Order:** B1a → B1b → B2a → B2a2 → B2b → B2c → B3a → B3b (→ B3c) → { B4 (→ B4b) ∥ (B6a → B6b (→ B6b2) → B6c) } → B5 → B7 → B8 — **fifteen dispatches** with B2a2 taken by default (N-13). B1b needs the
 domain; B2a the tree and the shape rules; B2b `FIRST_INSTALLED_COMPONENT_FORMAT` and the DTOs; B2c the snapshot list;
 B3a the guarded port; B4 and B6 the use cases; B5 B4's routes; B7 follows B6 (both touch `AssetDetailScreen.kt`); B8
 describes everything.
 
-**The composition's representation, costed (R47-17).**
+**The composition's representation, costed (R47-17a).**
 
 | | **A. nested child table (chosen)** — `supply_specification`'s pattern | B. a separate archive relation |
 |---|---|---|
@@ -779,7 +858,7 @@ describes everything.
 A is chosen: the composition is part of what one fitted instance **is**, it never outlives or leaves its row, and it
 needs no identity of its own beyond the durable id an archive round trip needs. B buys per-entry merge granularity no
 AC asks for at about twice the surface. The cost of A is one stated limit (8) and that a two-phone composition edit
-conflicts as a whole (limit 6).
+conflicts as a whole (limit 6). (N-20: a separate relation could keep the nested wire shape and drop the entry routes and tools; it would still add the list, the table, the class, the filter and the port, and A still wins.)
 
 **Recomputed counts** (the audit's figures predate the composition ruling; recounted on `1476e0d8`).
 
@@ -793,13 +872,13 @@ conflicts as a whole (limit 6).
 | pack classes / guarded ports | +1 / 17 → 18 | +1 / 17 → 18 |
 | asset sub-resources; router | 26 → 27; 72/89 → 77/95 | the same (no entry route) |
 | new API codes | ~5 | **10** (+ `NO_SUCH_SUPPLY_ITEM` / `SUPPLY_ITEM_ARCHIVED` reused with `field` `composition`) |
-| `/v1/status` count keys | +1 | **+2** |
+| `/v1/status` count keys | +1 | **+2** (unlike #15's specifications, entries are counted — C3, N-6) |
 | MCP tools | 84 → ~89 | 84 → 89 (`composition` is an argument) |
 | moving pins | ~90 in ~45 files | ~95 in ~47 files (§3), plus the relabel's 11 test classes and 10–20 twins |
 | construction sites | 42 (+ `ApiHandlers` ~12) | 10 + 9 + 5 (B2a), 10 + 8 (B2b), ~12 (B4) |
 | new phone strings | ~22–26, + 11 relabel | **25**, + 11 relabel |
 | device classes | 57 → 58, ~+12 cases, ~13.0 min | 57 → 58, **~+14–18** cases, **~13.1–13.3 min** |
-| dispatches | 10–11 | **14** (B1, B3 and B6 split by plan) |
+| dispatches | 10–11 | **15** (B1, B3 and B6 split by plan, B2a2 by default; B4b, B3c and B6b2 by clause) |
 
 **Gate budget** at the merged tip (estimates; B1a records the base's exact counts): core +~110 (tree and shape 18,
 format 24, merge 18, pack and guard 8, use cases 42); app +~70 (Room 12, routes 30, view models 16, relabel 0 new);
@@ -807,7 +886,7 @@ MCP +~30; loader unchanged; device classes **58**. Timed against #15's record, r
 
 ## 5. Strings
 
-**Awaiting ratification as one block** (P47-1…25, P47-R1…R11, the reused list, G1–G3). Each new string is declared
+**RATIFIED (owner, 2026-10-01) as one block** — P47-1…25 (P47-6 "Serial or lot", P47-21 "%1$s × %2$s"), P47-R1…R11, the reused list and G1–G3, wording unchanged. Each new string is declared
 once as a `const val` (or a one-line function for a format) in `A/ui/installed/InstalledComponentStrings.kt` and
 imported, never copied (the `ROLE_HEADER` rule); the R-list stays at its existing homes.
 
@@ -818,7 +897,7 @@ imported, never copied (the `ROLE_HEADER` rule); the R-list stays at its existin
 | P47-3 | "Install component" | the add glyph's accessibility label and the install sheet's title (C26, C27) |
 | P47-4 | "Install inside" | a current row's sheet action (C26) |
 | P47-5 | "Inside %s" — `%s` the parent's name | the install sheet's quiet line (C26) |
-| P47-6 | "Serial or lot" | the sheet field and the row fact (C26) — the shipped "Serial number" (`SERIAL_NUMBER_FIELD`, `A/ui/asset/AssetEditScreen.kt:236`) is the alternative if the owner prefers it |
+| P47-6 | "Serial or lot" | the sheet field and the row fact (C26; ratified over the shipped "Serial number") |
 | P47-7 | "Installed on" | the date field and the fact; on replace, the replacement date (C26) |
 | P47-8 | "Removed on" | the remove sheet's date field and the fact (C26) |
 | P47-9 | "Replace" | a current row's sheet action and the replace sheet's button (C26; the word ships inline at `A/ui/backup/BackupScreen.kt:302` for a replace restore) |
@@ -866,12 +945,14 @@ imported, never copied (the `ROLE_HEADER` rule); the R-list stays at its existin
 "Replaced by %s on %s", "Replaces %s" and the day format (`ReplaceStrings.replacedBy`, `.replaces`, `.day`,
 `A/ui/replace/ReplaceStrings.kt:106`, `:109`, `:115`).
 
-**G-list (developer-facing, for the same ratification):**
+**G-list (developer-facing, ratified with the block):**
 - **G1** — each C2 code's `message`: "no such installed component"; "an installed component needs a name"; "a date
   must be YYYY-MM-DD"; "a date cannot be later than today"; "the removal date cannot be before the install date";
   "the parent belongs to another asset"; "the parent has been removed"; "this installed component has already been
   removed"; "every composition quantity must be a number above zero"; "the installed component was refused" (the
-  fallback); and the reused codes' shipped messages.
+  fallback); and the reused codes' shipped messages, **kept verbatim** — `SUPPLY_ITEM_ARCHIVED`'s "an archived supply
+  item takes no new asset" reads loosely on a component (C-8); the owner may replace it later (code and status
+  unchanged); no new string now.
 - **G2** — the codec's `BackupCorrupt` messages (C10), in the shipped templates.
 - **G3** — the MCP's `APP_SCHEMA_TOO_OLD` feature name "installed components".
 
@@ -882,7 +963,7 @@ imported, never copied (the `ROLE_HEADER` rule); the R-list stays at its existin
 
 | ruling | whose | the ruling | where it lands |
 |---|---|---|---|
-| **R47-1** (Q1) | owner — **DECIDED** | **Names:** `InstalledComponent` / `installed_component` / `/v1/installed-components` / `*_installed_component(s)` (and `install_component`); the phone "Installed components"; the eleven child-Asset phone strings → "Child asset(s)"; the child-Asset API/MCP contract (`/v1/assets/{id}/components`, the `components` keys, `create_component`, the loader's read) untouched until #98. | C1, C28, §5, B7 |
+| **R47-1** (Q1) | owner — **DECIDED** | **Names:** `InstalledComponent` / `installed_component` / `/v1/installed-components` / `*_installed_component(s)` (the MCP's `add_installed_component` is the controller's application of this rule, C-4); the phone "Installed components"; the eleven child-Asset phone strings → "Child asset(s)"; the child-Asset API/MCP contract (`/v1/assets/{id}/components`, the `components` keys, `create_component`, the loader's read) untouched until #98. | C1, C23, C28, §5, B5, B7 |
 | **R47-2** (Q2) | owner — **DECIDED** | **One row per fitted instance** (parent?, `supplyId?` FK RESTRICT, `installedOn?`, `removedOn?`, **`replacesId?` on the successor**, `sortOrder`); closed rows are the history; no history table; no `InstalledAssembly`. (The planner brief's `replacedById` on the closed row is superseded.) | C4, C6, C18 |
 | **R47-3** (Q3) | owner — **DECIDED** | **`supply_id` FK RESTRICT** (direct and composition alike); an archived SupplyItem may stay on an existing link or composition and never enter a new one; no rule ties fitted state to applicability. | C6, C15–C19 |
 | **R47-C** | owner — **DECIDED** (the correction) | **Aggregate composition:** an installed component may be made of several SupplyItem entries with quantity and unit, same or different SupplyItems; the composition belongs to its instance row and stays with it when it closes; a replacement starts with its own; no stock decrement, reorder, schedule requirement, automatic event or per-unit history (that is the child-row form). | C4, C5, C9–C26 |
@@ -899,7 +980,8 @@ imported, never copied (the `ROLE_HEADER` rule); the R-list stays at its existin
 | **R47-14** | controller default | **The tree helper is a new typed `InstalledComponentTree`**; `AssetTree` untouched. The alternative (a generic helper `AssetTree` delegates to) touches shipped restore, merge and wipe code. | C5 |
 | **R47-15** | controller default | **Edit's reach:** name, direct link, composition, serial or lot, install date, notes (and `sortOrder` over the API), on current and removed rows; never the asset, parent, removal date or `replacesId`. | C19, limit 7 |
 | **R47-16** | controller default | **UI shape:** no parent picker ("Install inside" from a row's sheet); removed rows with no successor behind one toggle; the SupplyItem detail gains nothing (the #15 fence). | C25–C27 |
-| **R47-17** | controller default | **The composition is a nested child table** (§4's costing); on a replace, an absent `composition` (and `name`, `supplyId`) is the predecessor's, copied with fresh ids, and the phone prefills it. If the owner reads "starts with its own composition" as "starts empty", the default flips to `[]` in one handler line and one prefill. | C3, C15, C18, C20, C26 |
+| **R47-17a** | controller — **DECIDED** | **The composition's representation:** a nested child table on #15's specifications pattern (§4's costing). | C4, C6, C9, C12 |
+| **R47-17b** | owner — **DECIDED (flipped 2026-10-01)** | **A replacement gets its own composition.** An API or MCP omission of `composition` means **none supplied**, never "copy the predecessor"; the phone may prefill the predecessor's composition as an editable draft that becomes, on Save, an explicit new composition with fresh entry ids. **Controller, matching (C-1):** the direct `supplyId` follows the same rule (omitted = none; the phone prefills it as a draft); `name` alone may default to the predecessor's (a label, not a link); a draft naming an archived SupplyItem is drawn with its mark and refused on Save until removed. | C3, C15, C18, C20, C23, C26, rows 34, 42, 51, 52 |
 
 ## 7. Proofs
 
@@ -922,14 +1004,16 @@ imported, never copied (the `ROLE_HEADER` rule); the R-list stays at its existin
   - `MergeTable`'s last line ends `ASSET_SUPPLIES, INSTALLED_COMPONENTS,`; `'INSTALLED_COMPONENT_REPLACEMENT_TAKEN'` in
     `MergePlan.kt` → 1 declaration; the installed-component section's first line between the applicability and the
     profiles sections (read it).
-  - `'"installedComponents" to TransferTableClass.ASSET_OWNED'` → 1; `'seventeen'` in `HeldWriteGuard.kt` and
-    `AppGraph.kt` → 0; `'installedComponents ='` inside `ReturnScope.of` → 1.
+  - `'"installedComponents" to TransferTableClass.ASSET_OWNED'` → 1; `'\bseventeen\b'` in `HeldWriteGuard.kt` and
+    `AppGraph.kt` → 0 ("seventeenth" stays at `HeldWriteGuard.kt:70`, `AppGraph.kt:361`, N-18); `'installedComponents ='` inside `ReturnScope.of` → 1.
   - Each C2 code in `A/api` → its arm(s) only; each as `'^\| (404|409|422) \| `CODE` \|'` in `docs/api/v1.md` → 1;
     `'else ->'` inside the new `when`s → 0; `'1–18'` in `v1.md` → 0.
   - `'^@mcp\.tool\('` in `server.py` → 89; `'^_MIN_INSTALLED_COMPONENT_SCHEMA_VERSION = 19$'` → 1; `'format 1–19'`
     → 1 and `'format 1–18'` → 0; `'format \*\*1–19\*\*'` in `M/README.md` → 1.
   - C30's tripwires, word and untouched greps; the tombstone check → 0; gitlink `7e0377a`; `versionName` /
     `versionCode` unchanged; `git diff <base> -- tools/servicetag-schedules tools/servicetag-bundle` → empty.
+  - **The child-Asset contract did not move (N-16):** `git diff <base> -U0 -- app/src/main tools/servicetag-mcp/src |
+    grep -cE '^[-+].*("components"|create_component|createComponent)'` → 0.
 - **The schema-19 upgrade note.** The schema 18 → 19 in-place upgrade of a signed build is **not** proven by this
   plan's gate: it is the carrying release's gate, written by B8 (C29) beside the schema-18 one — and since no release
   carries 18 yet, that first release proves both paragraphs.
@@ -947,7 +1031,8 @@ imported, never copied (the `ROLE_HEADER` rule); the R-list stays at its existin
   (`C/model/Attachment.kt:17-20`, `accepts` at `:29`), a nullable owner column on `attachment` (the 12-step recreate is
   #69's), the codec's owner check and `TransferOwnership.of(attachment)`; the row sheet has room below "History". #47
   guarantees an immutable id and asset, no single-row delete, and the route noun (#92 plan `:787`).
-- **#95 — inventory.** A composition quantity is never stock; C30's tripwire guards it.
+- **#95 — inventory.** A composition quantity says what one unit is made of and nothing more; C30's tripwire guards
+  the fence, and no shipped document or docstring names a #95 word even to deny it (C-3).
 - **#96 — requirements and orchestration.** Schedules naming SupplyItems or positions, choosing pack-vs-rebuild,
   batch replacement and one completion composing several component mutations are #96's; #47's use cases each write
   inside one `uow.write`, so #96 can compose them later without a #47 column.
@@ -958,10 +1043,14 @@ imported, never copied (the `ROLE_HEADER` rule); the R-list stays at its existin
   (`docs/superpowers/specs/2026-09-24-servicetag-1.4-seasons-policy-condition-health.md:1244`); the narrowed #47 does
   not build it (R47-12) — a later issue may bind a `PART` subject to an `InstalledComponentId`.
 
-## Briefs — common to every brief (fourteen dispatches)
+## Briefs — common to every brief (fifteen dispatches)
 
-Read §1–§8, the audit, issue #47 (the GitHub body with the 2026-10-01 correction) and every earlier report on this
-branch. **Dispatch precondition:** §5 RATIFIED (every owner ruling is DECIDED, §6). **Constructor plumbing (C-1):** a
+Read §1–§8, the audit, the plan review, issue #47 (`.superpowers/sdd/2026-10-01-issue-47/issue-47.md`, the corrected
+body) and every earlier report on this branch. **Dispatch precondition:** met — §5 RATIFIED, every owner ruling
+DECIDED (§6). **The core double (C5, C-2):** every core brief after B1a builds its fixtures on
+`CT/testing/InstalledComponentFixtures.kt` through `BackupInstall`, never a bare list, so a missing cascade or a
+broken parent order fails for the right reason. **Fenced words (C-3):** no KDoc, docstring, document or test name
+added by a brief carries a #95/#96 word, even to deny it — say what the surface does. **Constructor plumbing (C-1):** a
 brief whose contract adds a constructor parameter owns its `AppGraph` line, its `FakeGraph` line and every test
 construction site `git grep` names — arguments only; no `AppGraph` or `FakeGraph` edit after B3b.
 
@@ -1007,15 +1096,18 @@ name, host, serial or e-mail address (fixtures: `example.invalid`).
 
 **Read:** audit §2.1, §2.2, §3, §4; `C/model/{Ids,SupplyItem,AssetTree,AssetLoan}.kt`; `C/ports/Repositories.kt:350-391`;
 `C/usecase/{LoanCommands,AssetSupplyCommands}.kt`; `CT/model/AssetTreeTest.kt`. `<base>` = master at dispatch plus
-this plan's commit. **Rows:** 1–4. **Rulings:** R47-2, R47-3, R47-8, R47-11, R47-14, R47-17. **Interfaces produced:**
-`InstalledComponentId`, `InstalledComponent`, `CompositionEntry`, `InstalledComponentRepository`,
-`InstalledComponentTree`, `InstalledComponentProblem`, `installedComponentProblems`, `compositionProblems` — consumed by
-every later brief. **Greps:** `'^value class InstalledComponentId\('` → 1; `'^data class InstalledComponent\('` → 1;
+this plan's commit; also `CT/testing/{BackupInstall,SupplyFixtures,InMemoryRepositories}.kt` (the double's shape,
+`:34-42`, `:46-92`, `:110`). **Rows:** 1–4, 57. **Rulings:** R47-2, R47-3, R47-8, R47-11, R47-14, R47-17a.
+**Interfaces produced:** `InstalledComponentId`, `InstalledComponent`, `CompositionEntry`,
+`InstalledComponentRepository`, `InstalledComponentTree`, `InstalledComponentProblem`, `installedComponentProblems`,
+`compositionProblems`, and **the core double `InMemoryInstalledComponentRepository` registered in `BackupInstall`**
+(C5, C-2) — consumed by every later brief (the core ones build on the double). **Greps:** `'^value class InstalledComponentId\('` → 1; `'^data class InstalledComponent\('` → 1;
 `'^data class CompositionEntry\('` → 1, no `=` default in either (read them); `'fun delete'` in the port block → 0;
 `git diff <base> -- C/model/AssetTree.kt` → empty. **Untouched:** `app/**`, `C/backup`, `C/merge`, `C/transfer`, every
 shipped use case. **Must NOT:** add a field beyond C4's; give a field a default; add `eventId`, a quantity-on-hand, or a
-delete. **Counted RED (4):** rows 1, 2, 3, 4. **Caps:** 6 runs; 1 h / 2 h; fix round 3 runs, 45 min. **Size:** about
-170 production, 220 test lines. **Estimate:** 40 min.
+delete; give the double a check the schema does not have. **Counted RED (5):** rows 1, 2, 3, 4, 57. **Caps:** 7 runs;
+1 h / 2 h; fix round 3 runs, 45 min. **Size:** about 170 production, 220 test lines, plus the double (~110) and its
+test (~80). **Estimate:** 55 min.
 
 ## 10. B1b — Room schema 19 (C6–C8; app JVM)
 
@@ -1038,7 +1130,7 @@ rows 5, 7 (the H1 mutation — its quoted failure is the H1 evidence), 8. **Caps
 **Read:** audit §2.4, §2.7; `C/backup/BackupFormat.kt:620-726`; `C/backup/BackupCodec.kt:100-215`, `:270-330`,
 `:440-485`, `:540-575`, `:900-950`; `C/backup/BackupContentCheck.kt:80-175`, `:215-230`; `C/usecase/ExportBackupSet.kt:85-210`;
 `C/usecase/ImportBackupReplace.kt:100-225`; `C/transfer/TransferGraph.kt:36-64`; `CT/backup/BackupFormat18Test.kt`;
-the construction sites (§4). `<base>` = B1b's accepted tip. **Rows:** 10–18, 27. **Rulings:** R47-3, R47-5, R47-17.
+the construction sites (§4). `<base>` = B1b's accepted tip. **Rows:** 10–18, 27. **Rulings:** R47-3, R47-5, R47-17a.
 **Interfaces produced:** both DTOs, `BackupData.installedComponents`, `FIRST_INSTALLED_COMPONENT_FORMAT`, the
 `BackupRepositories` port — consumed by B2b, B2c, B4. **Greps:** `'^    const val FORMAT_VERSION = 19$'` → 1;
 `'^    internal const val FIRST_INSTALLED_COMPONENT_FORMAT = 19$'` → 1; `'"compositionEntries" to'` → 1;
@@ -1048,8 +1140,9 @@ classification). **Untouched:** `C/merge`, every use case but the two named, `C/
 bar wiring, `docs`, `tools`. **Must NOT:** give a DTO field a default (only the `BackupData` list); accept a row below
 format 19; skip an entry's SupplyItem resolution. **Counted RED (6):** rows 10, 12, 13, 14, 15, 17. **Caps:** 8 runs;
 1 h / 2 h; fix round 3 runs, 45 min. **Size:** about 200 production, 380 test lines, plus 24 construction sites and ~45
-pin assertions. **Estimate:** 60–70 min — **split clause taken by this estimate unless the controller's dispatch
-estimate is under 1 h:** **B2a2** = C11 (export, replace import, their 24 construction sites, row 17) off B2a's tip.
+pin assertions. **Estimate:** 60–70 min — **split by default (N-13): B2a** = C9–C10 (rows 10–16, 18, 27; ~40 min),
+**B2a2** = C11 (export, replace import, their 24 construction sites, row 17; ~30 min) off B2a's tip; the controller
+may merge them back only with a dispatch estimate under 1 h.
 
 ## 12. B2b — the merge (C12; core JVM, one app row)
 
@@ -1073,8 +1166,8 @@ runs, 45 min. **Size:** about 150 production, 340 test lines, plus 18 constructi
 `C/transfer/HeldWriteGuard.kt:55-150`, `:250-260`, `:470-490`; `A/di/AppGraph.kt:288-302`, `:355-366`;
 `C/usecase/ApplyBackupMergePlan.kt:160-190`, `:255-360`; `CT/transfer/{TransferGraphTest,ImportTransferPackTest,
 HeldWriteGuardTest}.kt`. `<base>` = B2b's tip. **Rows:** 28–31. **Rulings:** R47-4. **Interfaces produced:** the
-guarded `InstalledComponentRepository` — consumed by B3a. **Greps:** `'seventeen'` in `HeldWriteGuard.kt` and
-`AppGraph.kt` → 0; `'installedComponents ='` inside `ReturnScope.of` → 1; `'fun of\(component: InstalledComponent\)'`
+guarded `InstalledComponentRepository` — consumed by B3a. **Greps:** `'\bseventeen\b'` in `HeldWriteGuard.kt` and
+`AppGraph.kt` → 0 ("seventeenth" stays, N-18); `'installedComponents ='` inside `ReturnScope.of` → 1; `'fun of\(component: InstalledComponent\)'`
 → 1. **Untouched:** `C/backup`, `C/merge`, `C/usecase` bar `ReturnScope.of`, `A/api`, `A/ui`, `docs`, `tools`.
 **Must NOT:** drop removed rows from a pack; filter `supplyItems` in `retain` or `ReturnScope`; add an
 `entangledRefs` rule. **Counted RED (4):** rows 28, 29, 30, 31. **Caps:** 6 runs; 1 h / 2 h; fix round 2 runs, 45 min.
@@ -1086,7 +1179,7 @@ guarded `InstalledComponentRepository` — consumed by B3a. **Greps:** `'sevente
 SaveSupplyItem,SaveProfile,LoanCommands,EventCommands}.kt` (the entry-id rule `SaveProfile.kt:88`, the quantity
 parse `EventCommands.kt:250`); `C/usecase/ReplaceAsset.kt:195-230`; `CT/usecase/{AddReferenceTest,
 SupplyItemUseCasesTest}.kt`. `<base>` = B2c's tip. **Rows:** 32, 33, 35. **Rulings:** R47-3, R47-6, R47-8, R47-11,
-R47-17. **Interfaces produced:** the commands, results, `InstallComponent`, `RemoveInstalledComponent`, wired —
+R47-17a, R47-17b. **Interfaces produced:** the commands, results, `InstallComponent`, `RemoveInstalledComponent`, wired —
 consumed by B3b, B4, B6. **Greps:** `'data class InstallComponentCommand\('` → 1, no `=` default (read it);
 `'class DeleteInstalledComponent|fun deleteInstalledComponent'` → 0. **Must NOT:** write an event, line,
 applicability row or SupplyItem; accept an archived SupplyItem on install; open a transaction for a command-only
@@ -1095,20 +1188,22 @@ refusal. **Counted RED (3):** rows 32, 33, 35. **Caps:** 5 runs; 1 h / 2 h; fix 
 
 **B3b — replace, update and the fixtures.** `<base>` = B3a's tip. **Read:** B3a's report;
 `C/journal/SeedTemplates.kt:100-140`; `CT/usecase/SupplyItemFixtureTest.kt:30-130`. **Rows:** 34, 36–39. **Rulings:**
-R47-2, R47-3, R47-6, R47-15, R47-17. **Interfaces produced:** `ReplaceInstalledComponent`,
+R47-2, R47-3, R47-6, R47-15, R47-17b. **Interfaces produced:** `ReplaceInstalledComponent`,
 `UpdateInstalledComponent`, wired — **the last `AppGraph` / `FakeGraph` edit** — consumed by B4, B6. **Greps:**
 `'data class UpdateInstalledComponentCommand\('` carries no `assetId`, `parentId`, `removedOn` or `replacesId` (read
 it); `git diff <base> -- C/journal/SeedTemplates.kt C/usecase/ReplaceAsset.kt` → empty. **Must NOT:** reuse a
 predecessor's entry ids; move a predecessor's composition; touch any row outside the predecessor, its current subtree
 and the successor; edit a removal date. **Counted RED (4):** rows 34, 36, 37, 39. **Caps:** 6 runs; 1 h / 2 h; fix
 round 3 runs, 45 min. **Size:** about 170 production, 380 test lines (the fixtures ~150). **Estimate:** 55 min.
+**Split clause (N-13):** past a 1 h dispatch estimate, rows 37–38 (`InstalledComponentFixtureTest`, ~150 test lines)
+go to **B3c** off B3b's tip, its counted RED row 37; B3b keeps rows 34, 36, 39 (REDs 34, 36, 39).
 
 ## 15. B4 — the API and the wire document (C20–C22; app JVM, docs) — and its split clause
 
 **Read:** audit §8; `A/api/{ApiRouter,ApiHandlers,ApiJson,SupplyDtos,SupplyHandlers}.kt` at the cited lines;
 `docs/api/v1.md` (`:200-215`, `:575-590`, `:1515-1610`, `:2000-2050`, `:2105-2115`, `:2295-2310`);
 `T/api/{SupplyRoutesTest,ReferenceRoutesTest,CommandShapesGoldenTest}.kt`. `<base>` = B3b's tip (B4's lane); count the
-`ApiHandlers(` sites first. **Rows:** 40–46. **Rulings:** R47-1, R47-17. **Interfaces produced:** the six rows and the
+`ApiHandlers(` sites first. **Rows:** 40–46. **Rulings:** R47-1, R47-17b. **Interfaces produced:** the six rows and the
 codes — consumed by B5. **Greps:** each C2 code in `A/api` → its arm; `'else ->'` in the new `when`s → 0;
 `'"installedComponents" to'` and `'"compositionEntries" to'` in `ApiHandlers.kt` → 1 each; `'Seventy-seven path
 shapes over ninety-five'` → 1; each C2 row in `v1.md` → 1; `'1–18'` in `v1.md` → 0; `git diff <base> --
@@ -1123,11 +1218,13 @@ split is the controller's call at dispatch.
 
 **Read:** `M/src/servicetag_mcp/server.py:70-90`, `:180-340`, `:1240-1300`, and the supply tools; `M/README.md`
 (`:390-420`); `M/tests/{test_supply_tools,test_argument_guard,test_tools}.py`. `<base>` = the tip holding B4 and B6c.
-**Rows:** 47–49. **Rulings:** R47-1, R47-17. **Greps:** `'^@mcp\.tool\('` → 89; `'^_MIN_INSTALLED_COMPONENT_SCHEMA_VERSION
+**Rows:** 47–49. **Rulings:** R47-1, R47-17b. **Greps:** `'^@mcp\.tool\('` → 89; `'^def add_installed_component\('` →
+1 and `'install_component'` (word-anchored, `'\binstall_component\b'`) → 0 (C-4); `'^_MIN_INSTALLED_COMPONENT_SCHEMA_VERSION
 = 19$'` → 1; `'_require_installed_component_schema\('` → the definition and five calls; `'format 1–19'` → 1, `'format
 1–18'` → 0; `git diff <base> -- tools/servicetag-schedules tools/servicetag-mcp/src/servicetag_mcp/command_shapes.py`
 → empty. **Pin list:** §3's B5 rows. **Untouched:** `app/**`, `core/**`, `S/**`, `docs`. **Must NOT:** touch
-`create_component`; add a delete tool or a `clear_fields` argument; send a key the caller did not give. **Counted RED
+`create_component`; add a delete tool or a `clear_fields` argument; send a key the caller did not give; copy a
+predecessor's link or composition into a replace (R47-17b); write a #95/#96 word in a docstring (C-3). **Counted RED
 (2):** rows 47, 48. **Caps:** 4 pytest mutation runs; 1 h / 2 h; fix round 3 runs, 45 min. **Size:** about 220
 production, 300 test lines. **Estimate:** 50 min.
 
@@ -1136,19 +1233,21 @@ production, 300 test lines. **Estimate:** 50 min.
 **Read (all three):** audit §7; `A/ui/supplies/{AssetSuppliesSection,AssetSuppliesSectionViewModel,SupplyItemPicker,
 SupplyLinkLine,SupplyListViewModel,SupplyStrings}.kt`; `A/ui/asset/AssetDetailScreen.kt:430-460`; `A/ui/asset/
 AssetEditScreen.kt:940-990` (`DateField`); `A/ui/replace/ReplaceStrings.kt:100-125`; `AT/ui/supplies/SupplySurfacesTest.kt`.
-**Rulings:** R47-1, R47-3, R47-6, R47-15, R47-16, R47-17; §5 ratified. **Shared greps:** each P47 constant declared
+**Rulings:** R47-1, R47-3, R47-6, R47-15, R47-16, R47-17b; §5 ratified. **Shared greps:** each P47 constant declared
 once in `InstalledComponentStrings.kt`; string literals only: `git grep -hoE '"[^"]*"' -- A/ui/installed | grep -iE
 '\bparts?\b|assembly|\bkits?\b'` → 0; no `ViewModel` import in the stateless list or sheet composables; `'archivedAt ==
 null'` in the view model → 1. **Untouched:** `C/**`, `A/api`, `A/data`, `A/di`, `A/nav`, `A/ui/supplies`, `docs`,
 `tools`. **Must NOT:** add a parent picker, a reorder control or a typed confirmation; offer an archived item in a
-picker; overwrite a typed unit on a pick; call a repository from a view model; draw an API `message`.
+picker, or hand the link and composition lines unarchived items only (C-1: they get every item); save a prefilled
+draft without the person's Save; overwrite a typed unit on a pick; call a repository from a view model; draw an API `message`.
 
 - **B6a — the section and its read state** (C25, C27; rows 50 and 53's list cases). `<base>` = B3b's tip (the UI
   lane). The one call in `AssetDetailScreen.kt` before `ComponentsSection(` → 1. **Counted RED (1):** row 50. **Size:**
   about 230 production, 200 test lines. **Estimate:** 45 min.
 - **B6b — the sheets without composition** (C26: row sheet, install/edit/replace, remove; rows 51 and 53's sheet
   cases). `<base>` = B6a's tip. **Counted RED (1):** row 51. **Size:** about 300 production, 230 test lines.
-  **Estimate:** 55 min.
+  **Estimate:** 55 min. **Split clause (N-13):** past a 1 h dispatch estimate, the row sheet and history stay here
+  and the write sheets (install / edit / replace without composition, remove; row 51's write cases) go to **B6b2**.
 - **B6c — the composition editor and display** (C26's composition parts; rows 52 and 53's composition cases).
   `<base>` = B6b's tip. **Counted RED (1):** row 52. **Size:** about 160 production, 160 test lines. **Estimate:**
   40 min.
@@ -1159,9 +1258,10 @@ merged-tip gate; each part compiles them (`:app:compileDebugAndroidTestKotlin`).
 ## 18. B7 — the relabel (C28; app JVM, Compose sources)
 
 **Read:** audit §1.1, §9; the eleven homes (C28); the §3 B7 pins, each read. `<base>` = the tip holding B5. **Rows:**
-54. **Rulings:** R47-1; §5's R-list ratified. **Greps:** after the edit, `git grep -nE '"[^"]*\b[Cc]omponents?\b[^"]*"'
--- app/src/main` lists only `A/ui/installed/` strings, `ApiJson.kt:366` and comments or KDoc (read each); each R-string
-→ 1 at its home; every identifier named in C28 unchanged (`git diff <base> -U0 | grep -cE '^[-+].*(ComponentRow|
+54. **Rulings:** R47-1; §5's R-list ratified. **Before editing (C-6):** one anchored grep per old R-string and for
+`"COMPONENTS"` over `app/src/test app/src/androidTest`, every hit reported against §3's B7 rows. **Greps:** after the
+edit, C30.3's `git grep -nE` with its allowlist and tip-vs-base delta (C-5) — nothing outside `A/ui/installed/` and the
+five allowlisted sites; each R-string → 1 at its home; the five KDoc quotes of the old button text updated (C28); every identifier named in C28 unchanged (`git diff <base> -U0 | grep -cE '^[-+].*(ComponentRow|
 componentsOf|onToggleComponents|isComponent|ComponentCondition)'` → 0). **Pin list:** §3's B7 rows. **Untouched:** `C/**`,
 `A/api`, `tools`, `docs`, `A/ui/installed`. **Must NOT:** rename an identifier, an API key, a route or a tool; change a
 sentence's meaning beyond the word. **Counted RED:** none (ratified words; the tests follow). **Caps:** 1 h / 2 h.
