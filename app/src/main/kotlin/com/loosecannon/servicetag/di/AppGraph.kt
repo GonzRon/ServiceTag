@@ -74,6 +74,7 @@ import com.loosecannon.servicetag.core.transfer.HeldWriteGuard
 import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
 import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
+import com.loosecannon.servicetag.core.usecase.AddAssetSupply
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.AddServiceCaseEntry
@@ -85,6 +86,7 @@ import com.loosecannon.servicetag.core.usecase.ArchiveProfile
 import com.loosecannon.servicetag.core.usecase.ArchiveGroup
 import com.loosecannon.servicetag.core.usecase.ArchiveHealthSubject
 import com.loosecannon.servicetag.core.usecase.ArchiveSchedule
+import com.loosecannon.servicetag.core.usecase.ArchiveSupplyItem
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.BuildBackupMergePlan
 import com.loosecannon.servicetag.core.usecase.CloseRound
@@ -117,6 +119,7 @@ import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RelinkLoanContact
+import com.loosecannon.servicetag.core.usecase.RemoveAssetSupply
 import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
@@ -133,12 +136,14 @@ import com.loosecannon.servicetag.core.usecase.SaveHealthSubject
 import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.core.usecase.ReplaceAsset
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
+import com.loosecannon.servicetag.core.usecase.SaveSupplyItem
 import com.loosecannon.servicetag.core.usecase.SetHealthPolicy
 import com.loosecannon.servicetag.core.usecase.SetMaintenanceBreak
 import com.loosecannon.servicetag.core.usecase.SetSeasonMode
 import com.loosecannon.servicetag.core.usecase.SetWarrantyReminder
 import com.loosecannon.servicetag.core.usecase.StoreIsEmpty
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
+import com.loosecannon.servicetag.core.usecase.UpdateAssetSupply
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
@@ -568,6 +573,16 @@ class AppGraph(private val context: Context) {
         AddReference(references, assets, linkLaunchPolicy, uow, ids, clock)
     val updateReference: UpdateReference = UpdateReference(references, uow, clock)
     val removeReference: RemoveReference = RemoveReference(references, uow)
+
+    /**
+     * #15 (C15–C17): the SupplyItem catalog's save and archive, over the unwrapped catalog port (it is global, never
+     * the guard's), and applicability's add, re-role and remove, over the guarded [assetSupplies]. No delete (R15-5).
+     */
+    val saveSupplyItem: SaveSupplyItem = SaveSupplyItem(supplyItems, uow, ids, clock)
+    val archiveSupplyItem: ArchiveSupplyItem = ArchiveSupplyItem(supplyItems, uow, clock)
+    val addAssetSupply: AddAssetSupply = AddAssetSupply(assets, supplyItems, assetSupplies, uow, ids, clock)
+    val updateAssetSupply: UpdateAssetSupply = UpdateAssetSupply(assetSupplies, uow, clock)
+    val removeAssetSupply: RemoveAssetSupply = RemoveAssetSupply(assetSupplies, uow)
 
     /**
      * #85 (C19; R85-7, R85-8, R85-10, R85-11) — Save as document: the one network-reaching object in the graph,

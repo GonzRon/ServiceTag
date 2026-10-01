@@ -44,6 +44,7 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
 import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
 import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
+import com.loosecannon.servicetag.core.usecase.AddAssetSupply
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddServiceCaseEntry
 import com.loosecannon.servicetag.core.usecase.ApplyTemplate
@@ -54,6 +55,7 @@ import com.loosecannon.servicetag.core.usecase.ArchiveGroup
 import com.loosecannon.servicetag.core.usecase.ArchiveHealthSubject
 import com.loosecannon.servicetag.core.usecase.ArchiveProfile
 import com.loosecannon.servicetag.core.usecase.ArchiveSchedule
+import com.loosecannon.servicetag.core.usecase.ArchiveSupplyItem
 import com.loosecannon.servicetag.core.usecase.BuildBackupMergePlan
 import com.loosecannon.servicetag.core.usecase.CloseRound
 import com.loosecannon.servicetag.core.usecase.CompleteGroupMembers
@@ -82,6 +84,7 @@ import com.loosecannon.servicetag.core.usecase.RecomputeSchedules
 import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
+import com.loosecannon.servicetag.core.usecase.RemoveAssetSupply
 import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
 import com.loosecannon.servicetag.core.usecase.ReorderProfiles
@@ -98,11 +101,13 @@ import com.loosecannon.servicetag.core.usecase.RepairScheduleProviders
 import com.loosecannon.servicetag.core.usecase.ReplaceAsset
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
+import com.loosecannon.servicetag.core.usecase.SaveSupplyItem
 import com.loosecannon.servicetag.core.usecase.SetHealthPolicy
 import com.loosecannon.servicetag.core.usecase.SetMaintenanceBreak
 import com.loosecannon.servicetag.core.usecase.SetSeasonMode
 import com.loosecannon.servicetag.core.usecase.SetWarrantyReminder
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
+import com.loosecannon.servicetag.core.usecase.UpdateAssetSupply
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
 import com.loosecannon.servicetag.core.usecase.UpdateLoan
@@ -566,6 +571,13 @@ class FakeGraph(
         uow, ids, clock, todayPort, retireAsset, saveAssetSettings, saveSchedule, saveGroup, bindTag,
     )
     val archiveGroup: ArchiveGroup = ArchiveGroup(groups, uow, clock)
+
+    /** #15 (C15–C17): the SupplyItem and applicability use cases, from exactly the members `AppGraph` builds them from. */
+    val saveSupplyItem: SaveSupplyItem = SaveSupplyItem(supplyItems, uow, ids, clock)
+    val archiveSupplyItem: ArchiveSupplyItem = ArchiveSupplyItem(supplyItems, uow, clock)
+    val addAssetSupply: AddAssetSupply = AddAssetSupply(assets, supplyItems, assetSupplies, uow, ids, clock)
+    val updateAssetSupply: UpdateAssetSupply = UpdateAssetSupply(assetSupplies, uow, clock)
+    val removeAssetSupply: RemoveAssetSupply = RemoveAssetSupply(assetSupplies, uow)
 
     /**
      * 1.4 — the offers an event makes (spec §3.3, §5.4): "Mark operational?" and the season offer,
