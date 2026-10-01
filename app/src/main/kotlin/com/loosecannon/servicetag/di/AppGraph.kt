@@ -108,6 +108,7 @@ import com.loosecannon.servicetag.core.usecase.ImportTransferPack
 import com.loosecannon.servicetag.ui.transfer.`import`.CacheTransferPackInbox
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferPackInbox
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
+import com.loosecannon.servicetag.core.usecase.InstallComponent
 import com.loosecannon.servicetag.core.usecase.LendAsset
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.OpenServiceCase
@@ -121,6 +122,7 @@ import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RelinkLoanContact
 import com.loosecannon.servicetag.core.usecase.RemoveAssetSupply
+import com.loosecannon.servicetag.core.usecase.RemoveInstalledComponent
 import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
@@ -595,6 +597,15 @@ class AppGraph(private val context: Context) {
     val addAssetSupply: AddAssetSupply = AddAssetSupply(assets, supplyItems, assetSupplies, uow, ids, clock)
     val updateAssetSupply: UpdateAssetSupply = UpdateAssetSupply(assetSupplies, uow, clock)
     val removeAssetSupply: RemoveAssetSupply = RemoveAssetSupply(assetSupplies, uow)
+
+    /**
+     * #47 (C16, C17): installing and removing an installed component, over the guarded [installedComponents] (a held
+     * asset's write throws after every check) and the unwrapped catalog port for the SupplyItems a row names. No delete.
+     */
+    val installComponent: InstallComponent =
+        InstallComponent(assets, supplyItems, installedComponents, uow, ids, clock, today)
+    val removeInstalledComponent: RemoveInstalledComponent =
+        RemoveInstalledComponent(installedComponents, uow, clock, today)
 
     /**
      * #85 (C19; R85-7, R85-8, R85-10, R85-11) — Save as document: the one network-reaching object in the graph,

@@ -74,6 +74,7 @@ import com.loosecannon.servicetag.core.usecase.ImportBackupMerge
 import com.loosecannon.servicetag.core.usecase.ImportTransferPack
 import com.loosecannon.servicetag.ui.transfer.`import`.CacheTransferPackInbox
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
+import com.loosecannon.servicetag.core.usecase.InstallComponent
 import com.loosecannon.servicetag.core.usecase.LendAsset
 import com.loosecannon.servicetag.core.usecase.LogEvent
 import com.loosecannon.servicetag.core.usecase.OpenServiceCase
@@ -86,6 +87,7 @@ import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RemoveAssetSupply
+import com.loosecannon.servicetag.core.usecase.RemoveInstalledComponent
 import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
 import com.loosecannon.servicetag.core.usecase.ReorderProfiles
@@ -584,6 +586,12 @@ class FakeGraph(
     val addAssetSupply: AddAssetSupply = AddAssetSupply(assets, supplyItems, assetSupplies, uow, ids, clock)
     val updateAssetSupply: UpdateAssetSupply = UpdateAssetSupply(assetSupplies, uow, clock)
     val removeAssetSupply: RemoveAssetSupply = RemoveAssetSupply(assetSupplies, uow)
+
+    /** #47 (C16, C17): install and remove, from exactly the members `AppGraph` builds them from. */
+    val installComponent: InstallComponent =
+        InstallComponent(assets, supplyItems, installedComponents, uow, ids, clock, todayPort)
+    val removeInstalledComponent: RemoveInstalledComponent =
+        RemoveInstalledComponent(installedComponents, uow, clock, todayPort)
 
     /**
      * 1.4 — the offers an event makes (spec §3.3, §5.4): "Mark operational?" and the season offer,
