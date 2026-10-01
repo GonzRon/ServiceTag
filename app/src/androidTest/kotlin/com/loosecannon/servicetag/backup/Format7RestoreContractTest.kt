@@ -38,7 +38,7 @@ import org.junit.Test
  * **no navigation**. B01's committed golden format-7 archive (fictional: a CALENDAR and a YEAR_ROUND
  * asset; IGNORE and FOLLOW_ASSET schedules with null, `AT_START`, `RESUME_CLAMPED` and `MM-DD`
  * re-entries and out-of-range offsets) is restored in process through the production
- * `importBackupReplace` into the real Room schema (19 since #15), and exported again through the
+ * `importBackupReplace` into the real Room schema (19 since #47), and exported again through the
  * production `exportBackupSet` (format 19 since #47). Its two assets share the category `Yard`, which
  * the restore promotes into the catalog (#74, C12).
  *
