@@ -51,7 +51,7 @@ ServiceTag 1.5.0 completed the post-1.4 work: reminder and developer-surface rel
 
 Transfer Packs, shipped in 1.5.0, cover cases such as selling a house where some equipment stays behind (see **Transfer Packs** above). They reuse the existing backup, artifact, merge, and NFC identity machinery rather than a second synchronization system.
 
-The next product phase is **supplies and consumables**: a canonical catalog for filters, batteries, belts, cartridges, chemicals, fluids and other service materials, with optional stock/reorder information and replacement-on-cadence workflows. After that, ServiceTag can attach manuals, receipts, photos, links and share-intake resources directly to those supply identities.
+The next product phase is **supplies and consumables**: a canonical catalog for filters, batteries, belts, cartridges, chemicals, fluids and other service materials, with their specifications, the assets they fit, and replacement-on-cadence through ordinary maintenance schedules. After that, ServiceTag can attach manuals, receipts, photos, links and share-intake resources directly to those supply identities.
 
 Larger ideas such as installed-component tracking, richer backup conflict resolution, telemetry/BLE ingestion, Home Assistant integrations, and LLM-assisted equipment research remain later work rather than prerequisites for the core maintenance app.
 
