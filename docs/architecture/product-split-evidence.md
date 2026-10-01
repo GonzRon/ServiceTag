@@ -1360,4 +1360,59 @@ Annotated tag `servicetag-v1.5.0` → `1cfd6891`, pushed after CI was green ther
 
 ## ServiceTag 1.6.0 — a document role on web links, the phone-only workflows over the API, a searchable share picker (issues #92 #91 #93; versionCode 19; 2026-10-01)
 
-**What shipped.** A MINOR on 1.5.0: versionName 1.6.0, versionCode 19, Room schema 17 / backup format 17, forward-only (the new app reads every older archive; 1.5.x refuses a format-17 archive or Transfer Pack with `BackupNewerFormat`). Release notes: `docs/releases/1.6.0.md`. *(controller: the proofs, the two emulator upgrade paths — 1.5.0/16 and 1.4.1/8 — the release and the development phone are recorded here once each is done.)*
+**What shipped.** A MINOR on 1.5.0: versionName 1.6.0, versionCode 19, Room schema 17 / backup format 17, forward-only (the new app reads every older archive; 1.5.x refuses a format-17 archive or Transfer Pack with `BackupNewerFormat`). Release notes: `docs/releases/1.6.0.md`.
+
+### Proofs
+
+**The release tip is `19e3d5b3`** (the tag `servicetag-v1.6.0` sits on it; branch `release/1.6` is kept at it as the
+schema-17 line; master carries it through the merge `cc462479`). The branch `release-1.6.0` on master `fac0e951` carried
+four commits, all documents and the version: `acde7b34` (versionName 1.6.0, versionCode 19, `VersionAgreementTest`, the
+versioning row, README, the release notes), `16a21cd9` (the Known limits and this stub), `8d1ea6b6` and `19e3d5b3` (the
+whole-patch review's wording fixes and the owner's #92 heading). No behaviour: the code is byte-identical to `fac0e951`
+(`git diff --stat` over `app/src/main core tools libs app/schemas app/build.gradle.kts` = 0 lines), so every proof below
+holds for the tag whichever of those commits it ran on.
+
+**Final-tip proofs** (`final/`, `final2/`, `final3/` in the release ledger; run 10:11–10:38): the dry run exit 0 (the
+submodule pin, version 1.6.0, the checksum; the rebuilt candidate ONE signer `894afa76…f73c`, versionCode 19, 8
+permissions, not debuggable); R1 from scratch nfc-core 50 / nfc-android 10 / core 1696 / app 1758, 0 failures; lint 0
+errors; R2 — the 70-class release suite on `emulator-5554` — 70 classes / 334 tests / 0 failures (the same counts as
+1.5.0: #91 and #93 grew shipped cases and added no class); R3 at the final tip MCP 473 / schedules 154 / bundle 158,
+0 failures. The whole-patch review (opus): READY TO TAG, 0 BLOCKING, 4 SHOULD (all taken as wording or recorded here),
+8 NIT.
+
+### Emulator upgrade proofs — two paths (the schema-17 paragraph)
+
+Both PASS (`upgrade-proof/report.md`; 10:21–10:38). **A, signed 1.5.0 (schema 16) → the candidate:** in place, uid and
+`firstInstallTime` unchanged, 1.5.0 / 16 / 16 → 1.6.0 / 17 / 17, all 20 count keys identical, 26 routes equal (24 raw,
+`/references` once `role: null` is stripped — null on every pre-existing reference, a link named "…user manual"
+included), roles given after the upgrade through PATCH, POST, the MCP and the Edit reference sheet (the UI driver),
+422 `REFERENCE_ROLE_NOT_ALLOWED` on the note link, the pre-upgrade **device-made** format-16 export re-planned 256
+IDENTICAL with every reference IDENTICAL (four of them given a role), the format-17 export carried the roles by name
+and re-planned 257 IDENTICAL, the replace restore read all eight back, and the merge into a reference-less install
+inserted the eight. **B, signed 1.4.1 (schema 8) → the candidate:** in place, identity unchanged, 1.4.1 / 8 / 8 → 1.6.0
+/ 17 / 17, the fourteen 1.4.1 counts identical and only the six 1.5.0 keys new, the category catalog 23 keys / 0
+violations, `/warranty` 404 → 200 on all 52, every reference `role: null`, the format-8 archive 232 IDENTICAL / 8
+SKIPPED (attachments; no folder) before and after two roles were given.
+
+**How 1.6.0 met the schema-17 paragraph, and what it did not exercise.** Met: the direct in-place upgrade from each
+release a phone runs (1.5.0 on the development phone, 1.4.1 on the production phone), the schema-16 checks on the 1.4.1
+path, nothing inferred, roles after the upgrade by every path the paragraph names, the pre-upgrade export IDENTICAL on
+roled references, the format-17 round trip with a replace restore and a merge. Not exercised: on path B "still IDENTICAL
+on that reference" is empty (the format-8 archive carries no references — the rule is proven on path A's real
+format-16 export); on path A no export was taken between the upgrade and the role-giving (the null check rests on the
+API read straight after the upgrade and the three untouched rows in the later export); attachment `role`/`source*` nulls
+were not observable (no folder; a replace restore of the format-8 archive does write the eight attachment rows, which
+a future gate may use); `PreservedSetRestoreTest` ran at the gate, not in the proof; the schedules loader re-plan was
+not run; Save as document copying a link's role and a role chosen on a real-app share remain development-phone checks.
+
+### Release
+
+CI 36877781718 SUCCESS on `19e3d5b3`; the annotated tag pushed; release run 36878410097 completed after the owner's
+environment approval. **The published asset** `ServiceTag-1.6.0.apk` (12,002,033 B) verifies: sha256 `293c068e…` ==
+the published `.sha256`; `apksigner` Verifies with ONE signer `894afa76…f73c` == `RELEASE_CERT_SHA256` == the 1.5.0
+signer; versionCode 19 / 1.6.0; 8 permissions; not debuggable. The roadmap relabel of the same day (owner): 1.6.0 =
+#92 + #91 + #93; Phase 2 = 1.7.0.
+
+### Development phone (R7)
+
+**PASS** (10:59–11:03): `adb install -r` of the verified published asset over 1.5.0 / 18 → **1.6.0 / 19 in place**; uid 10176 and `firstInstallTime` 2026-09-21 20:26:37 unchanged; 1.6.0 / schema 17 / format 17; all 20 count keys identical (assets 48, references 4, attachments 10, events 35, profiles 67, schedules 48 …); 26 routes — 24 equal raw, `/references` equal once `role: null` is stripped, `/status` equal on its counts, no finding; the four references all `role: null` after, nothing inferred; no export, no clear, no write after; the production phone untouched. (`r7-dev-phone/` in the release ledger.)
