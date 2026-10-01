@@ -3259,9 +3259,9 @@ def materialize_reference(
 
     `display_name`, `kind` (an attachment kind), `role` (a document role, never guessed) and `notes` are sent
     only when given; absent, the phone uses the reference's name, the kind of the proven type, the reference's
-    own role (none before schema 17) and the reference's description. `clear_fields` takes `role` only:
-    `clear_fields=["role"]` sends `"role": null`, so the document is saved with no role whatever the reference
-    carries; a role both given and cleared is refused before anything is read. It reads the asset's references
+    own role (none before schema 17) and the reference's description. `role=None` is "not given" (the source
+    role is copied), so `clear_fields=["role"]` is the only way to save with no role: it sends `"role": null`,
+    whatever the reference carries; a role both given and cleared is refused before anything is read. It reads the asset's references
     (the reference must be one of them, else `NO_SUCH_REFERENCE` with nothing sent) and its attachments first,
     then makes one request with a 720-second budget and never sends it twice. Every answer carries `decision` and
     `reference` (`{id, displayName, host}`): `CREATED` adds `host`, `mimeType`, `sizeBytes` and the new
