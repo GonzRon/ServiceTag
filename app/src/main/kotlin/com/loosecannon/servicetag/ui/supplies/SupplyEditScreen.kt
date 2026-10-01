@@ -45,8 +45,8 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
  * "Value" and "Unit", each with a close glyph labelled P15-8 (the Materials rows' shape), under them P15-12 after a
  * refused save, then the P15-7 row button.
  *
- * Save is disabled while the name is blank once trimmed, the one refusal this form could otherwise ask for, so no
- * sentence is drawn for it. The rows go in screen order with their loaded ids; **there is no key field and no
+ * Save is disabled while the name is blank once trimmed, so no sentence is drawn for that refusal; a blank
+ * specification label or value is the other one, drawn as P15-12 after the save refuses. The rows go in screen order with their loaded ids; **there is no key field and no
  * control to move a row** (R15-8, R15-11). An item no longer there draws P15-20. Cancel and Back write nothing.
  * Archiving is the detail's, not this form's.
  */
