@@ -1335,3 +1335,79 @@ maintenance usage/history", with no six-bucket wording, no private value and no 
 `docs/api`, `tools`. **Must NOT:** quote the owner's private data; add a #95 word; reproduce the six-bucket wording; claim a usage record for
 a minimal completion; promise a release. **Counted RED:**
 none (documents). **Caps:** 1 h / 2 h. **Size:** about 120 document lines. **Estimate:** 30 min.
+
+## 20. Errata after the merge (controller, 2026-10-01; merged b20e86c9)
+
+Rev 1.2 is the ratified spec; the code and the documents are as built (`docs/api/v1.md`, `docs/release-proofs.md`'s schema-18 paragraph, the MCP README, `docs/design/14-asset-model.md`). Where they differ, this section records the difference and who ruled it — collected by the whole-branch review from the thirteen task reviews, the reports and the ledger. Nothing above is rewritten. E-30's two wording fixes landed before the merge (9b418e68).
+
+- **E-1** B1 needed `SupplyItemRepository.deleteAll()` for B2a's replace wipe (fix round `858118f5`); C5's R6 grep
+  `'fun delete'` → 0 must read `'fun delete\('`, counted per type block (`AssetSupplyRepository.delete` is allowed).
+- **E-2** C5's ports gained `observeAll()` (archived included, NOCASE order) and `observeForAsset()` (B1 fix round) —
+  B7/B8 need live reads; no observe-by-item port, so "Used by" is re-read on resume (E-15).
+- **E-3** The replace wipe order is assets first (their CASCADE takes `asset_supply`), then the catalog (RESTRICT);
+  `AssetSupplyRepository` has no `deleteAll` by design.
+- **E-4** The manifest count is **29**, not 28: `supplyItems`, `supplySpecifications` and `assetSupplies` (B2a C).
+- **E-5** Pins outside §3's moving-pins table, granted: `BackupFormat17Test:99`, `BackupFormat13/14/15Test`
+  `counts.size` (B2a); `MergePlannerTransferTest:383`, `MergePlannerSeasonHealthTest:135` (B2b);
+  `ReferenceRoutesTest:721-765`, `CommandShapesGoldenTest:132-185` renamed + "18 since #15" (B5); and B2a's ~20
+  assertions in 11 files (three more `counts.size` 26 pins, five whole-map count equalities, five from-the-end key
+  positions, the format-8 strip fixture, `StageABundleConformanceTest:140/:159`, a `Format7RestoreContractTest`
+  comment) under the format-15 precedent `78a3ab40`.
+- **E-6** Twin pins (the B2a rule): `BackupFormat7Test:222` 20 → 22, `StageABundleConformanceTest:94-98` via
+  `FORMAT_18_TABLES` (B2a); `MergePlannerMaintenanceTest` enum list, `MergePlannerReferenceTest` report mirror,
+  `MergePlannerSuccessionTest:211`, `MaintenanceRoutesTest` `dropLast` 4 → 6 ×2 (B2b); four extra `ApiHandlers`
+  construction sites (12, not 8; B5); the MCP argument-guard counts, the "76" mentions, `TWENTY_TWO_TALLIES` (B6).
+- **E-7** `TransferGraph.kt`'s two `CLASSES` lines landed in B2a (pinned by `TransferTableClassificationTest`), not
+  B2c; `TransferOwnership.of(AssetSupply)` + the `MergePlanner.kt:1349` swap in B2c (granted at B2b).
+- **E-8** C-1's construction-site counts: B4a moved **32 sites in 14 files**; C37.4's "bar C20's one argument" on
+  `CompleteSchedule.kt` is three lines (import, parameter, pass), the same on `CompleteGroupMembers.kt` (B4a review).
+- **E-9** C3 "casefolded": Room's NOCASE folds ASCII only, the API sorts by `lowercase()` — two orders on non-ASCII
+  names (B1 NOTE-3, B5; NOTE-5 above).
+- **E-10** `ValidationRefusalsTest` (outside every list) gained two rows — G2's message, field `consumables` — a plan
+  gap (B4a); `v1.md`'s families table lists both (`:1734`, `:1756`).
+- **E-11** C17's suggestion-order cite is `CategoryCatalog.kt:33-37` (R74-10), not `CategorySuggestions.kt:14` (B3).
+- **E-12** `SaveSupplyItem` is stricter than `SaveProfile`: a repeated owned spec id is a new row; `SavedSupplyItem`
+  (item, unchanged) named by B3; the `Unchanged` comparison renumbers and trims, so a hand-made archive's item is
+  rewritten by its first save (hence the gate's "app-made archives" order).
+- **E-13** `AssetSupplyProblem.Unchanged` has no wire code (a no-op re-role answers 200 with the re-read row); no
+  twelfth code; the API mapper is named `supplyItemRefusal` (B5).
+- **E-14** `SupplyListViewModel.listRowsOf()` extracted and `SupplyRow` made internal so the picker reuses the list's
+  rows; `SupplyStrings.kt` the one home — three files outside §4's B8 list (B8a, accepted).
+- **E-15** "Used by" is re-read on resume, not observed (B7a ruling 6).
+- **E-16** `SUPPLIES_SECTION` lives in `SupplyStrings.kt`, not the Maintenance screen (C29; B7a ruling 2).
+- **E-17** The editor route `Route.SupplyEdit` registered by B7b, not B7a (the side-branch order; B7a's add button
+  crashed until then); B7b's `clearInstall` catalog wipe in `AppSmokeTest.kt` (outside B7's fence, granted).
+- **E-18** The Compose budget: `SupplyScreensTest` **7** (plan ~5), `SupplySurfacesTest` **10** (plan ~6); ~300
+  device tests, not ~295.
+- **E-19** The MCP tool names follow C26/row 54 — `archive_supply_item(archived=…)` and one `set_asset_supply` (create
+  or re-role); the dispatch's list was wrong (B6).
+- **E-20** `save_profile`'s edit gates **after its read** (the body to be sent decides; nothing written); C27's
+  "nothing sent" is loose on that path (B6).
+- **E-21** The MCP line type is `dict[str, str | None]` (admits the explicit null), not the plan's `Any` (B6); the C37
+  regex kept out of the MCP tests (it raised the tripwire).
+- **E-22** `""` as a line `supplyId` → 422 `UnknownSupplyItem` (field `consumables`); as an applicability `supplyId` →
+  404 `NO_SUCH_SUPPLY_ITEM` (B4b/B5).
+- **E-23** The import range moves 1–17 → 1–18 (the plan right, B5's dispatch wrong).
+- **E-24** B5's `v1.md` needed a fix round for the merge section (nine non-conflict codes, the SKIPPED reason, the
+  IDENTICAL row's C12 clause, the format-18 sentence, Tables 21–22, the kept-row unit) — §4's B5 list should have named
+  it.
+- **E-25** C34: a pick fills a blank **name** and a blank unit (the plan right; the dispatch said unit only) — the
+  unit-fill trap N-11 the gate paragraph states.
+- **E-26** B8b: a linked all-blank event row reaches validation (`&& row.supplyId == null`), a behaviour change on edit
+  (NOTE-3); the event form's catalog parameter has a default (`supplyItems: SupplyItemRepository? = null`), an
+  exception to the no-default style (production passes the graph's).
+- **E-27** B2b: the triple arm checks local rows only (the codec keeps the triple unique per file); `SUPPLY_ITEMS` /
+  `ASSET_SUPPLIES` listed last in `MergeTable` though planned before profiles (C-3).
+- **E-28** B2c's `TransferImportTesting.kt` (outside its list) handed the merge the raw applicability port — fixed
+  `57010387`; `HeldWriteGuardTest` +1 granted to B3; `dd8c1290` "a component" → "a child asset" in a test label.
+- **E-29** C36 as built: the production phone is **1.5.0 (schema 16)** (`7c68b5ff`; the plan's "any older release";
+  B9 first wrote 1.4.1 from master's record); `versioning.md` untouched (the dispatch asked for a sentence — the plan
+  wins); the release line is **R15-0**, not R15-11 (the dispatch's and this brief's mis-cite); the D4 note cites §13,
+  not `:568`; the design-index row; the paragraph adds a post-upgrade pre-link export, the merge tallies, the route and
+  tool names, the hand-made-archive reason, and words limit 10 as this gate's blind spots.
+- **E-30** The controller's queued "whole-branch mechanical fix" (the `deleteAll` KDoc) and B1's stale
+  `SupplyItem.kt:4-5` sentence — MINOR-2.
+
+**30 errata.**
+
+- **Reviews and rounds.** Fourteen dispatches (nine briefs, three split by plan, two with split clauses not needed), one task review each; one fix round (B1: `deleteAll` + the observe flows); every other finding closed by controller inspection; three side branches (UI, MCP, docs) folded without a shared file; master merged into the branch before the whole-branch review (the 1.6.0 release and evidence; three doc/test conflicts resolved, both texts kept); one whole-branch review (MERGE WITH FIXES: 0 BLOCKER, 0 MAJOR, 2 MINOR wording, 12 NOTE) with B9's task review folded in. Controller rulings of record: the twin-pin rule (a twin of a listed pin moves and is listed; anything else stops); the manifest count 29; SupplyItems planned before profiles; `ReturnScope` keeps a returning asset's rows; the duplicate hint dropped (limit 4a); `""` as a `supplyId` refused; `save_profile`'s edit gated on the body it sends; the production phone's release corrected to 1.5.0 (schema 16) in C36. The gate is `.superpowers/sdd/2026-10-01-issue-15/gate/` (57 device classes — 55 + `SupplyScreensTest` + `SupplySurfacesTest`, never run before it — the MCP and loader pytests), run once on b20e86c9.
