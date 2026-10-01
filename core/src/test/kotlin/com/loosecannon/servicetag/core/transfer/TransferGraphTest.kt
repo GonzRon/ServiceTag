@@ -305,9 +305,10 @@ class TransferGraphTest {
     /**
      * The estate with four SupplyItems, fictional: s1 the heater and its anode take, s3 the compressor takes; s2 is
      * named only by the heater's quick-action line and s4 only by its completion's line; s5 only by the compressor's
-     * completion line. Specifications travel inside their item.
+     * completion line. Specifications travel inside their item. The compressor's loan is returned, so it may be a root.
      */
     private fun supplied(): BackupData = estate.copy(
+        assetLoans = estate.assetLoans.map { it.copy(returnedOn = it.returnedOn ?: "2026-09-21") },
         eventProfiles = estate.eventProfiles.map { p ->
             if (p.assetId == HEATER) p.copy(consumables = p.consumables.map { it.copy(supplyId = "s2") }) else p
         },
