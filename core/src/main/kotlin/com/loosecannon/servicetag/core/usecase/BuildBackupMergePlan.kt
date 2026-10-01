@@ -29,6 +29,8 @@ import com.loosecannon.servicetag.core.ports.StoredBytes
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
+import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -37,15 +39,15 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  *
  * Four steps and no more: decode — which refuses a corrupt or future-format file before anything
  * else happens — ask whether there is an attachment folder at all, hash and size whatever that
- * folder holds for the locators the archive names, and read the twenty canonical tables in one
- * `uow.read` so the planner sees a single consistent point in time rather than twenty. The decision
+ * folder holds for the locators the archive names, and read the twenty-two canonical tables in one
+ * `uow.read` so the planner sees a single consistent point in time rather than twenty-two. The decision
  * itself is `mergePlanOf`, a pure function.
  *
- * The same twenty-two collaborators, in the same order, as [ImportBackupReplace] — because the two are
+ * The same twenty-four collaborators, in the same order, as [ImportBackupReplace] — because the two are
  * the two halves of the same question, and a reader comparing them should have nothing to subtract.
  * #74's [categories] is read like the rest: the planner decides the archive's category rows against
  * it and plans the rows its accepted assets need; and so are #79's [serviceCases] and [caseEntries], and
- * #72's [loans], #77's [transfers] and #86's [successions].
+ * #72's [loans], #77's [transfers], #86's [successions] and #15's [supplyItems] and [assetSupplies].
  */
 class BuildBackupMergePlan(
     private val assets: AssetRepository,
@@ -74,6 +76,9 @@ class BuildBackupMergePlan(
     private val transfers: TransferRecordRepository,
     /** #86 — the successions (format 15). */
     private val successions: AssetSuccessionRepository,
+    /** #15 — the SupplyItems and their applicability (format 18). */
+    private val supplyItems: SupplyItemRepository,
+    private val assetSupplies: AssetSupplyRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
 ) {
@@ -98,7 +103,8 @@ class BuildBackupMergePlan(
             mergeSnapshotOf(
                 assets, groups, tags, links, definitions, profiles, schedules, closures,
                 events, attachments, references, seasonActivations, conditions, healthSubjects,
-                categories, serviceCases, caseEntries, loans, transfers, successions, stored + overlay, configured,
+                categories, serviceCases, caseEntries, loans, transfers, successions, supplyItems, assetSupplies,
+                stored + overlay, configured,
             )
         }
         return mergePlanOf(backup, ReturnScope.of(snapshot, returning).snapshot, returning)

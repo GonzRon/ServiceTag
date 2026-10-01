@@ -43,6 +43,8 @@ import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
+import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -130,6 +132,9 @@ class ApplyBackupMergePlan(
      * rebuilds inside its own write.
      */
     private val successions: AssetSuccessionRepository,
+    /** #15 — the SupplyItems with their specifications, and the applicability rows (format 18). */
+    private val supplyItems: SupplyItemRepository,
+    private val assetSupplies: AssetSupplyRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -164,7 +169,8 @@ class ApplyBackupMergePlan(
                 mergeSnapshotOf(
                     assets, groups, tags, links, definitions, profiles, schedules, closures,
                     events, attachments, references, seasonActivations, conditions, healthSubjects,
-                    categories, serviceCases, caseEntries, loans, transfers, successions, stored, configured,
+                    categories, serviceCases, caseEntries, loans, transfers, successions, supplyItems, assetSupplies,
+                    stored, configured,
                 ),
                 returning,
             )
@@ -190,6 +196,11 @@ class ApplyBackupMergePlan(
             scope.keptLoans.forEach { loans.upsert(it) }
             // #86 (C6, Hazard 2; MJ-2): the successions the cascades above took, back unchanged, through the raw port.
             scope.keptSuccessions.forEach { successions.append(it) }
+            // #15 (C11): the SupplyItems, each with its specifications, after the assets and before the applicability
+            // rows whose `supply_id` foreign key names them (RESTRICT) — and before the material lines that link them,
+            // though a link is soft and needs no order. The applicability rows after both their owners.
+            fresh.writes.supplyItems.forEach { supplyItems.upsert(it) }
+            fresh.writes.assetSupplies.forEach { assetSupplies.insert(it) }
             fresh.writes.groups.forEach { groups.upsert(it) }
             fresh.writes.definitions.forEach { definitions.upsert(it) }
             fresh.writes.profiles.forEach { profiles.upsert(it) }

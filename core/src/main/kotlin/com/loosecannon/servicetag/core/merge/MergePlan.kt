@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetSuccession
+import com.loosecannon.servicetag.core.model.AssetSupply
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
@@ -19,13 +20,14 @@ import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.ServiceCase
 import com.loosecannon.servicetag.core.model.ServiceCaseEntry
+import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.ports.StoredBytes
 import java.security.MessageDigest
 
 /**
- * The twenty canonical tables. The first fourteen are **in the order a merge must write them**:
+ * The twenty-two canonical tables. The first fourteen are **in the order a merge must write them**:
  * every reference a row makes points at a table declared before it (assets first, attachment rows
  * last, when every owner is in). The ordinal is also the first key decisions and conflicts are
  * sorted by, which is what makes a report deterministic.
@@ -67,11 +69,18 @@ import java.security.MessageDigest
  * #86's [SUCCESSIONS] is appended after [TRANSFERS], so no shipped ordinal moves. A succession points at two assets,
  * both real foreign keys, and [MergeWrites] writes the successions after the assets and the loans, before the
  * transfer records.
+ *
+ * #15 appended [SUPPLY_ITEMS] then [ASSET_SUPPLIES] after [SUCCESSIONS], so no shipped ordinal moves. Like #74's
+ * categories, their ordinals are **not** their decision position: the SupplyItems are decided after the definitions
+ * and **before the profiles and events** whose material lines may link one (C-3), and the applicability rows right
+ * after them, once both owners — the asset and the SupplyItem — are known. [MergeWrites] writes the SupplyItems,
+ * each with its specifications, before the applicability rows that name them (`asset_supply.supply_id` RESTRICT),
+ * and both after the assets.
  */
 enum class MergeTable {
     ASSETS, GROUPS, DEFINITIONS, PROFILES, SCHEDULES, CLOSURES, LINKS, TAGS, EVENTS, ATTACHMENTS,
     REFERENCES, SEASON_ACTIVATIONS, CONDITIONS, HEALTH_SUBJECTS, CATEGORIES,
-    SERVICE_CASES, CASE_ENTRIES, LOANS, TRANSFERS, SUCCESSIONS,
+    SERVICE_CASES, CASE_ENTRIES, LOANS, TRANSFERS, SUCCESSIONS, SUPPLY_ITEMS, ASSET_SUPPLIES,
 }
 
 /**
@@ -338,6 +347,23 @@ enum class MergeReason {
      * row id on it, by id, comma-separated.
      */
     SUCCESSION_CYCLE,
+
+    /**
+     * #15 (C11). A local applicability row under a different row id already **is** this row, field for field —
+     * the same `(asset_id, supply_id, role)` and the same stamps. It rides on an `IDENTICAL`, exactly as
+     * [REFERENCE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW] does, and like it is reachable in practice only from a copied or
+     * replayed archive. Nothing is written. [MergeDecision.detail] is the local row's id.
+     */
+    ASSET_SUPPLY_HELD_BY_AN_EQUIVALENT_LOCAL_ROW,
+
+    /**
+     * #15 (C11). A local applicability row under a different row id holds this `(asset_id, supply_id, role)` and
+     * differs — in practice its stamps, since two phones that each added the row agree about them never. It rides
+     * on a **`SKIPPED`**, for [REFERENCE_HELD_BY_A_LOCAL_ROW]'s reason (D-18 C): there is no `UPDATE` verdict, the
+     * triple is the whole of the row's meaning, and a conflict could only refuse the whole archive. The local row
+     * stays exactly as it was. [MergeDecision.detail] is the local row's id.
+     */
+    ASSET_SUPPLY_HELD_BY_A_LOCAL_ROW,
 }
 
 /** A review hint (#44: "review hints only, never automatic identity"). It never blocks an apply. */
@@ -395,6 +421,10 @@ data class MergeTally(val insert: Int, val identical: Int, val conflict: Int, va
 data class MergeWrites(
     val categories: List<AssetCategory> = emptyList(),
     val assets: List<Asset> = emptyList(),
+    /** #15 — the SupplyItems with their specifications, after the assets and before anything that names one. */
+    val supplyItems: List<SupplyItem> = emptyList(),
+    /** #15 — the applicability rows, after both their owners. */
+    val assetSupplies: List<AssetSupply> = emptyList(),
     val groups: List<MaintenanceGroup> = emptyList(),
     val definitions: List<MeasurementDefinition> = emptyList(),
     val profiles: List<EventProfile> = emptyList(),
@@ -454,6 +484,9 @@ data class MergeSnapshot(
     val transfers: List<TransferRecord> = emptyList(),
     /** #86 — the successions. */
     val successions: List<AssetSuccession> = emptyList(),
+    /** #15 — the SupplyItems, archived included, and the applicability rows. */
+    val supplyItems: List<SupplyItem> = emptyList(),
+    val assetSupplies: List<AssetSupply> = emptyList(),
     val storedBytes: Map<String, StoredBytes> = emptyMap(),
     val attachmentStoreConfigured: Boolean,
 )
@@ -494,8 +527,11 @@ data class MergeReport(
     val loans: MergeTally,
     /** #77 — the transfer records. */
     val transfers: MergeTally,
-    /** #86 — the successions: the report is twenty tables. */
+    /** #86 — the successions. */
     val successions: MergeTally,
+    /** #15 — the SupplyItems, then their applicability: the report is twenty-two tables. */
+    val supplyItems: MergeTally,
+    val assetSupplies: MergeTally,
     /** Deterministic: table order, then id. */
     val conflicts: List<MergeDecision>,
     val duplicateCandidates: List<DuplicateCandidate>,
@@ -572,6 +608,8 @@ class MergePlan internal constructor(
         loans = tally(MergeTable.LOANS),
         transfers = tally(MergeTable.TRANSFERS),
         successions = tally(MergeTable.SUCCESSIONS),
+        supplyItems = tally(MergeTable.SUPPLY_ITEMS),
+        assetSupplies = tally(MergeTable.ASSET_SUPPLIES),
         conflicts = conflicts,
         duplicateCandidates = duplicateCandidates,
     )

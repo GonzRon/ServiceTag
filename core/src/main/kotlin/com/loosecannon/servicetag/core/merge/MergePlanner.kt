@@ -29,6 +29,7 @@ import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.EventProfileDto
 import com.loosecannon.servicetag.core.backup.MaintenanceGroupDto
 import com.loosecannon.servicetag.core.backup.MaintenanceScheduleDto
+import com.loosecannon.servicetag.core.backup.SupplyItemDto
 import com.loosecannon.servicetag.core.backup.toDomain
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.journal.AssetRow
@@ -53,6 +54,8 @@ import com.loosecannon.servicetag.core.model.OccurrenceClosure
 import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetSuccession
+import com.loosecannon.servicetag.core.model.AssetSupply
+import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.model.SuccessionProblem
 import com.loosecannon.servicetag.core.model.successionProblems
 import com.loosecannon.servicetag.core.model.ServiceCase
@@ -76,6 +79,8 @@ import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
+import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.StoredBytes
@@ -163,6 +168,14 @@ import java.security.MessageDigest
  * as before. A format-17 archive compares the role and the stamp like any field: a different role, a
  * role against none, or none against a role is `CONFLICT` / `CONTENT_DIFFERS` on the same id and
  * `SKIPPED` `REFERENCE_HELD_BY_A_LOCAL_ROW` on the same pair, with no update path.
+ * And the sixth (#15, C12: the third's rule, mirrored for the material lines' links): an archive older than
+ * format 18 has its profiles and events compared **without any line's `supplyId`**, and — when the row here has at
+ * least one linked line — **with the archive's last-modified stamp taken as this row's**, since a link is given
+ * through `SaveProfile` or `UpdateEvent`, which stamp every save. So a link given on this phone since that export
+ * keeps the row `IDENTICAL`. Every other field still counts — a rename, a retitle or any other line change here is
+ * still a `CONFLICT` — and a row here with no linked line compares as always, so a link given and then removed (the
+ * stamp moved, no link left) conflicts. Profiles and events have no second identity, so the exception is on the id
+ * arm alone. A format-18 archive compares the links and the stamp like any field.
  *
  * ### Categories (#74, C13)
  *
@@ -224,6 +237,21 @@ import java.security.MessageDigest
  * (`TransferOwnership`). `successionProblems` is the one home of MS3's and MS4's rules. The dev ↔ production limit
  * stands: a replacement made elsewhere retired the predecessor there, so merging it into a phone that holds the
  * predecessor unretired conflicts on that asset's row, and nothing lands.
+ *
+ * ### Supply items (#15, C11; R15-6, R15-7)
+ *
+ * Decided after the definitions and **before the profiles and events** (C-3), though listed after the successions:
+ * a material line may link a SupplyItem, and a link must resolve (R15-6) — to a SupplyItem here, archived included,
+ * or one this plan inserts — or its profile or event is `OWNER_NOT_AVAILABLE`, naming the id. A SupplyItem by its
+ * id, every field compared, its specifications in `(sortOrder, id)` and its archived state included: IDENTICAL, or
+ * CONFLICT `CONTENT_DIFFERS` — **no UPDATE**, so an item edited on two phones refuses the archive (limit 4), and
+ * there is no duplicate hint (C-5). One this phone lacks is `CHILD_ROW_ID_TAKEN` when a specification id is held by
+ * another item here or claimed earlier in this plan; else INSERT. Then each applicability row by its id: IDENTICAL,
+ * or CONFLICT `CONTENT_DIFFERS`; `OWNER_NOT_AVAILABLE` naming the asset, or the SupplyItem, when either is neither
+ * here nor accepted; then its triple `(asset_id, supply_id, role)`, the reference pair arm mirrored — a local row
+ * holding it under another id is IDENTICAL `ASSET_SUPPLY_HELD_BY_AN_EQUIVALENT_LOCAL_ROW` when equal in every other
+ * field, and SKIPPED `ASSET_SUPPLY_HELD_BY_A_LOCAL_ROW` otherwise, nothing written either way; else INSERT. An
+ * applicability row is its asset's (M2); a SupplyItem is global and never is.
  *
  * ### Not total, and only for a hand-built [Backup]
  *
@@ -504,6 +532,98 @@ internal fun mergePlanOf(
 
     fun definitionAvailable(id: String) = id in localDefinitions || id in acceptedDefinitions
 
+    // --- supply items (#15, C11; R15-7) ---------------------------------------------------------
+    // Decided here, after the definitions and **before the profiles and events** whose lines may link one (C-3),
+    // though `SUPPLY_ITEMS` is listed after the successions. By id, every field compared — the loan rule, no UPDATE —
+    // with the specifications in `(sortOrder, id)` and the archived state a field like any other. A specification's
+    // own id is an aggregate child-row key: held by another item here, or claimed earlier in this plan, it refuses
+    // the item, as a profile's line id refuses its profile.
+    val localSupplyItems = snapshot.supplyItems.associateBy { it.id.value }
+    val claimedSpecificationIds = snapshot.supplyItems
+        .flatMap { s -> s.specifications.map { it.id to s.id.value } }.toMap(mutableMapOf())
+    val supplyItemWrites = mutableListOf<SupplyItem>()
+    val acceptedSupplyItems = mutableSetOf<String>()
+    for (dto in data.supplyItems) {
+        val id = dto.id
+        val local = localSupplyItems[id]
+        val takenChild = firstTaken(dto.specifications.map { it.id }, claimedSpecificationIds)
+        decisions += when {
+            local != null && dto.ordered() == local.toDto().ordered() ->
+                MergeDecision(MergeTable.SUPPLY_ITEMS, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.SUPPLY_ITEMS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            takenChild != null ->
+                MergeDecision(MergeTable.SUPPLY_ITEMS, id, MergeVerdict.CONFLICT, MergeReason.CHILD_ROW_ID_TAKEN, takenChild)
+            else -> {
+                supplyItemWrites += dto.toDomain()
+                acceptedSupplyItems += id
+                dto.specifications.forEach { claimedSpecificationIds[it.id] = id }
+                MergeDecision(MergeTable.SUPPLY_ITEMS, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
+    /** True when a SupplyItem id resolves — to a local row, archived included (R15-6), or to one this plan inserts. */
+    fun supplyItemAvailable(id: String) = id in localSupplyItems || id in acceptedSupplyItems
+
+    /** R15-6: the first link of a profile's or event's material lines that resolves to nothing; null when all do. */
+    fun firstUnresolvedSupply(links: List<String?>): String? = links.filterNotNull().firstOrNull { !supplyItemAvailable(it) }
+
+    // --- applicability (#15, C11) ---------------------------------------------------------------
+    // After the SupplyItems, with the assets long decided, so both owners are known. The reference pass's arms,
+    // mirrored on the triple `(asset_id, supply_id, role)`: the id, then the owners, then the triple — a local row
+    // holding it under another id is IDENTICAL when equal in every other field, and otherwise SKIPPED, the local row
+    // winning (D-18 C); nothing is written either way. No incoming row can meet a triple accepted earlier in this
+    // plan, because the codec holds the triple unique per file (C9.5).
+    val localAssetSupplies = snapshot.assetSupplies.associateBy { it.id }
+    val localAssetSuppliesByTriple = snapshot.assetSupplies
+        .associateBy { Triple(it.assetId.value, it.supplyId.value, it.role) }
+    val assetSupplyWrites = mutableListOf<AssetSupply>()
+    for (dto in data.assetSupplies) {
+        val id = dto.id
+        val local = localAssetSupplies[id]
+        val sameTriple = localAssetSuppliesByTriple[Triple(dto.assetId, dto.supplyId, dto.role)]
+        decisions += when {
+            local != null && dto == local.toDto() ->
+                MergeDecision(MergeTable.ASSET_SUPPLIES, id, MergeVerdict.IDENTICAL)
+            local != null ->
+                MergeDecision(MergeTable.ASSET_SUPPLIES, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
+            !assetAvailable(dto.assetId) ->
+                MergeDecision(MergeTable.ASSET_SUPPLIES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.assetId)
+            !supplyItemAvailable(dto.supplyId) ->
+                MergeDecision(MergeTable.ASSET_SUPPLIES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, dto.supplyId)
+            // A local row under a different id already *is* this row, field for field.
+            sameTriple != null && dto.copy(id = sameTriple.id) == sameTriple.toDto() ->
+                MergeDecision(
+                    MergeTable.ASSET_SUPPLIES, id, MergeVerdict.IDENTICAL,
+                    MergeReason.ASSET_SUPPLY_HELD_BY_AN_EQUIVALENT_LOCAL_ROW, sameTriple.id,
+                )
+            sameTriple != null ->
+                MergeDecision(
+                    MergeTable.ASSET_SUPPLIES, id, MergeVerdict.SKIPPED,
+                    MergeReason.ASSET_SUPPLY_HELD_BY_A_LOCAL_ROW, sameTriple.id,
+                )
+            else -> {
+                assetSupplyWrites += dto.toDomain()
+                MergeDecision(MergeTable.ASSET_SUPPLIES, id, MergeVerdict.INSERT)
+            }
+        }
+    }
+
+    // #15 (C12; R67-12 option B, R91-7 mirrored): see the KDoc's canonical-content paragraph. A link given through
+    // `SaveProfile` or `UpdateEvent` moves the parent's stamp, so against an archive older than format 18 a profile or
+    // event here with at least one linked line is compared with every line's link cleared and the archive's stamp
+    // taken as its own; one with no linked line compares as always, and a format-18 archive compares everything.
+    val supplyLinksCompared = backup.manifest.formatVersion >= BackupCodec.FIRST_SUPPLY_FORMAT
+    fun sameProfile(incoming: EventProfileDto, here: EventProfileDto): Boolean = when {
+        supplyLinksCompared || here.consumables.none { it.supplyId != null } -> incoming.ordered() == here.ordered()
+        else -> incoming.ordered() == here.withoutLinks().copy(updatedAt = incoming.updatedAt).ordered()
+    }
+    fun sameEvent(incoming: AssetEventDto, here: AssetEventDto): Boolean = when {
+        supplyLinksCompared || here.consumables.none { it.supplyId != null } -> incoming.ordered() == here.ordered()
+        else -> incoming.ordered() == here.withoutLinks().copy(updatedAt = incoming.updatedAt).ordered()
+    }
+
     // --- profiles ---------------------------------------------------------------------------
     val profileWrites = mutableListOf<EventProfile>()
     val acceptedProfiles = mutableSetOf<String>()
@@ -519,8 +639,9 @@ internal fun mergePlanOf(
         )
         val takenChild = firstTaken(row.fields.map { it.id }, claimedFieldIds)
             ?: firstTaken(row.consumables.map { it.id }, claimedProfileConsumableIds)
+        val missingSupply = firstUnresolvedSupply(dto.consumables.map { it.supplyId })
         decisions += when {
-            local != null && dto.ordered() == local.toDto().ordered() ->
+            local != null && sameProfile(dto, local.toDto()) ->
                 MergeDecision(MergeTable.PROFILES, id, MergeVerdict.IDENTICAL)
             local != null ->
                 MergeDecision(MergeTable.PROFILES, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
@@ -528,6 +649,9 @@ internal fun mergePlanOf(
                 MergeDecision(MergeTable.PROFILES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, owner)
             missingField != null ->
                 MergeDecision(MergeTable.PROFILES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingField)
+            // #15 (R15-6): a line's link resolves, or the quick action waits for its SupplyItem.
+            missingSupply != null ->
+                MergeDecision(MergeTable.PROFILES, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingSupply)
             takenPair != null ->
                 MergeDecision(MergeTable.PROFILES, id, MergeVerdict.CONFLICT, MergeReason.PROFILE_FIELD_DEFINITION_TAKEN, takenPair.second)
             takenChild != null ->
@@ -736,8 +860,9 @@ internal fun mergePlanOf(
         val missingDefinition = dto.measurements.map { it.definitionId }.firstOrNull { !definitionAvailable(it) }
         val takenChild = firstTaken(row.measurements.map { it.id }, claimedMeasurementIds)
             ?: firstTaken(row.consumables.map { it.id }, claimedUsageIds)
+        val missingSupply = firstUnresolvedSupply(dto.consumables.map { it.supplyId })
         decisions += when {
-            local != null && dto.ordered() == local.toDto().ordered() ->
+            local != null && sameEvent(dto, local.toDto()) ->
                 MergeDecision(MergeTable.EVENTS, id, MergeVerdict.IDENTICAL)
             local != null ->
                 MergeDecision(MergeTable.EVENTS, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
@@ -753,6 +878,9 @@ internal fun mergePlanOf(
                 MergeDecision(MergeTable.EVENTS, id, MergeVerdict.CONFLICT, MergeReason.SCHEDULE_OCCURRENCE_TAKEN, occurrenceHolder)
             missingDefinition != null ->
                 MergeDecision(MergeTable.EVENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingDefinition)
+            // #15 (R15-6): a line's link resolves, or the event waits for its SupplyItem.
+            missingSupply != null ->
+                MergeDecision(MergeTable.EVENTS, id, MergeVerdict.CONFLICT, MergeReason.OWNER_NOT_AVAILABLE, missingSupply)
             takenChild != null ->
                 MergeDecision(MergeTable.EVENTS, id, MergeVerdict.CONFLICT, MergeReason.CHILD_ROW_ID_TAKEN, takenChild)
             else -> {
@@ -1216,7 +1344,9 @@ internal fun mergePlanOf(
                 caseWrites.map { Triple(MergeTable.SERVICE_CASES, it.id.value, TransferOwnership.of(it)) } +
                 entryWrites.map { Triple(MergeTable.CASE_ENTRIES, it.id.value, TransferOwnership.of(it)) } +
                 loanWrites.map { Triple(MergeTable.LOANS, it.id.value, TransferOwnership.of(it)) } +
-                successionWrites.map { Triple(MergeTable.SUCCESSIONS, it.id, TransferOwnership.of(it)) }
+                successionWrites.map { Triple(MergeTable.SUCCESSIONS, it.id, TransferOwnership.of(it)) } +
+                // #15 (C11): an applicability row is its asset's; a SupplyItem is global and is never held.
+                assetSupplyWrites.map { Triple(MergeTable.ASSET_SUPPLIES, it.id, listOf(OwnerRef.OfAsset(it.assetId))) }
         for ((table, id, refs) in owned) heldOwner(refs)?.let { refuseInsert(table, id, it) }
 
         // M3 — the phone as this plan would leave it, cut by what it would hold.
@@ -1282,6 +1412,8 @@ internal fun mergePlanOf(
             MergeWrites(
                 categories = categoryWrites.sortedBy { it.key },
                 assets = canonicalAssetWrites,
+                supplyItems = supplyItemWrites,
+                assetSupplies = assetSupplyWrites,
                 groups = groupWrites,
                 definitions = definitionWrites,
                 profiles = profileWrites,
@@ -1364,6 +1496,16 @@ private fun AssetEventDto.ordered() = copy(
     consumables = consumables.sortedWith(compareBy({ it.sortOrder }, { it.id })),
 )
 
+/** #15 (C12): every material line's link cleared — all an archive older than format 18 can say about a row. */
+private fun EventProfileDto.withoutLinks() = copy(consumables = consumables.map { it.copy(supplyId = null) })
+
+private fun AssetEventDto.withoutLinks() = copy(consumables = consumables.map { it.copy(supplyId = null) })
+
+/** #15: a SupplyItem's specifications, in the same `(sortOrder, id)` the encoder writes them in. */
+private fun SupplyItemDto.ordered() = copy(
+    specifications = specifications.sortedWith(compareBy({ it.sortOrder }, { it.id })),
+)
+
 /** A group's members, in the same `(sortOrder, id)` the encoder writes them in. */
 private fun MaintenanceGroupDto.ordered() = copy(
     members = members.sortedWith(compareBy({ it.sortOrder }, { it.id })),
@@ -1439,7 +1581,7 @@ internal suspend fun storedBytesOf(
 }
 
 /**
- * Twenty reads. **The caller owns the transaction** — see each use case for which one.
+ * Twenty-two reads. **The caller owns the transaction** — see each use case for which one.
  *
  * Schema 8's other two tables are deliberately not among them, and are named nowhere in this
  * package: derived due state never appears in a plan, and device-local delivery state is never
@@ -1466,6 +1608,9 @@ internal suspend fun mergeSnapshotOf(
     loans: AssetLoanRepository,
     transfers: TransferRecordRepository,
     successions: AssetSuccessionRepository,
+    /** #15 — the SupplyItems and their applicability. */
+    supplyItems: SupplyItemRepository,
+    assetSupplies: AssetSupplyRepository,
     storedBytes: Map<String, StoredBytes>,
     attachmentStoreConfigured: Boolean,
 ): MergeSnapshot = MergeSnapshot(
@@ -1489,6 +1634,8 @@ internal suspend fun mergeSnapshotOf(
     loans = loans.all(),
     transfers = transfers.all(),
     successions = successions.all(),
+    supplyItems = supplyItems.all(),
+    assetSupplies = assetSupplies.all(),
     storedBytes = storedBytes,
     attachmentStoreConfigured = attachmentStoreConfigured,
 )
