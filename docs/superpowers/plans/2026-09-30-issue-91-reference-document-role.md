@@ -995,3 +995,87 @@ gains the 422 row pattern, C-3a). **Untouched:** any `.kt` under `src/main`,
 run (the upgrade is the release's); name a device serial or the owner's data. **Counted RED (1):** row 45. **Caps:** 2
 JVM mutation runs; **1 h target, 2 h hard stop**; fix round 2 runs, 45 min. **Size:** about 90 document lines, 25 test
 lines. **Estimate:** 40 min.
+
+## 18. Errata after the merge (controller, 2026-09-30; merged 8e4528be)
+
+Rev 1.1 is the ratified spec; the code and the documents are as built (`docs/api/v1.md`, `docs/release-proofs.md`, the MCP README). Where they differ, this section records the difference and who ruled it — collected by the whole-branch review from the nine task reviews, the reports and the ledger. Nothing above is rewritten. E-18's clause landed before the merge (b4d4adcb); E-22 closes the last open item.
+
+the reports and the ledger, plus my own (marked *new*).
+
+- **E-1 (C6, B1b N1).** The plan says "`validateGraph` checks references through `toDomain`". That is wrong: it is the
+  decode's naming pass (`BackupCodec.kt:454`). `validateGraph` checks unique ids and the owning asset. The conclusion
+  stands: a bad archive is refused before anything is written.
+- **E-2 (C1, B1a MINOR, `1489a6c1`).** The `DocumentRole` KDoc cannot say a kind never constrains the role (R91-1). It
+  now says a reference's kind decides only *whether* a role may be carried, never which.
+- **E-3 (C14, N-1; B2a MAJOR-1 → R-1, `916d5b7d` + `eb84e2ca`).** The snippet `request.decode(JsonObject.serializer())`
+  followed by `decodeOr400(…, raw.toString())` is replaced. The typed decode runs first, `request.decode(UpdateReferenceRequest.serializer())`, then the presence read
+  `"role" in decodeOr400(JsonElement.serializer(), request.body.decodeToString()).jsonObject` (`ReferenceHandlers.kt:114`).
+  N-1's "the second parse is deliberate" rationale is superseded. B2a's grep `JsonObject.serializer()` → 1 is now 0,
+  and its replacement is `decodeOr400(JsonElement.serializer()` → 1 per handler.
+- **E-4 (C17; B2c).** The same idiom, at `AttachmentHandlers.kt:278`. It is carried to `saveAsDocument` as a Boolean
+  `namesRole`, the plan's "small value". B2c's grep `"role" in raw` is superseded.
+- **E-5 (limit 7, C3 "API v1 additive"; B2c NOTE-1, B4 #2).** A second place an existing request's answer moves: a
+  missing-comma body is now **400** on PATCH `/v1/references/{id}` (was 200) and POST `/v1/references/{id}/materialize`
+  (was 201; with a blank name, was 422, because the presence read runs before the blank-name check).
+- **E-6 (ledger, B2c concern 3).** The controller's B2c dispatch named `/v1/assets/{id}/references/{ref}/materialize`.
+  The route is the plan's `POST /v1/references/{id}/materialize`, which is what was implemented. No plan text moves.
+- **E-7 (§3 row 16, B1c MINOR, `384efefd`).** One case was added: a format-17 archive still compares `updatedAt`.
+  Without it, a stamp-ignoring mutation passed all 22 cases.
+- **E-8 (C23, B3b).** `ReferencesSectionViewModel.addLink(uri, displayName, description, role)` has **no default** on
+  `role`, mirroring C9. The six test sites pass `role = null`, inside the pin list.
+- **E-9 (C18, N-9; B2b MINOR, `ab0f1da0`).** On `materialize_reference`, `role=None` means "not given" and copies the
+  source role. `clear_fields=["role"]` is the only way to save with no role. `_REFERENCE_CLEARABLE_FIELDS` serves both
+  `update_reference` and `materialize_reference`.
+- **E-10 (§4 order).** B2b landed as three commits (`bdb47145`, `35032799`, `ab0f1da0`) through one merge commit,
+  `b75ce1e0`, not as "B2b's one commit".
+- **E-11 (§4 gate budget).** The actuals:
+  - core 1659 → **1696** (+37 against the ~32 estimate);
+  - app base **1704**, not 1702, → **1737** (+33);
+  - MCP 460 → **473** (+13 against ~12);
+  - loader 154, unchanged.
+- **E-12 (§3, matrix additions beyond the rows).**
+  - `anUnknownRoleNameIs400` also covers the PATCH (B2a).
+  - Two cases from R-1: `aMalformedPatchBodyIsStillA400` and `aMalformedBodyIs400AndNothingIsMaterialized`.
+  - Two MCP docstring tests (B2b).
+  - The 422 row's `` `field` `role` `` regex (B4).
+  - Test-method renames beside the moved format pins, per the #85 precedent (B1b).
+- **E-13 (Briefs — common, "committed test-first").** The test-first commits of B1a, B2a, B2c, B3a and B3b do not
+  compile alone. Their RED is the compile error, and each behavioural RED is a mutation run. This is the branch's
+  convention (NOTE-5).
+- **E-14 (C3/C26, B4 #1).** The POST body keeps the shipped notation `{assetId, uri, displayName, description, role?}`,
+  not `description?`.
+- **E-15 (C26 422 row, B4 #4).** The row states the as-built order. On POST: invalid/blocked URI, then role, then name,
+  asset and duplicate. On PATCH: unknown id, then blank name, then role. It also says "a `null` role is never
+  refused". **The PATCH order is unpinned** (B2a NOTE-5; NOTE B4-2).
+- **E-16 (C26 additions in `v1.md`, B4 #3, #5–#8).**
+  - The reference surface: "five fields / three", the C25 "User manual" example, "never changes `kind`", the no-op
+    200, and R8's "drawn only on its own row".
+  - The code table: "the six above", and "`field` is `null` … except `REFERENCE_ROLE_NOT_ALLOWED`'s".
+  - The import paragraph: the per-format sentence for format 17.
+  - The `IDENTICAL` row: the pair arm's `SKIPPED` clause, which goes beyond #67's words but is how the planner decides.
+  - The materialize body: "never chooses the `kind`", plus the body-reading sentence.
+- **E-17 (C26 release-proofs, B4 #9).**
+  - It names today's two paths, 1.5.0/schema 16 and 1.4.1/schema 8. On the 1.4.1 path, the schema-16 paragraph's
+    checks apply too.
+  - It adds an API read of `"role": null` and the "no give-then-clear before the re-plan" caution (limit 1).
+  - It omits `OTHER` seeds, which the API cannot make.
+  - It adds Save as document's role copy to "what the emulator does not observe".
+- **E-18 (C26 release-proofs; *new*, NOTE B4-1).** "Every row `IDENTICAL`" inherits the schema-16 paragraph's words,
+  which 1.5.0 met as 232 IDENTICAL / 8 SKIPPED. On an emulator with no attachment folder, an export that carries
+  attachments re-plans them `SKIPPED`. Say "every reference `IDENTICAL`, zero INSERT, no CONFLICT".
+- **E-19 (C26 intake amendment, B4 #10).** The amendment adds three things: a link with an unfamiliar scheme draws
+  no Role; the scheme is read once by `ReferenceKinds.inferFrom`; a shared title never becomes a role.
+- **E-20 (row 45, B3a/B4 line drift).**
+  - `ReferenceRoutesTest:556-566` / `:597-604` → `:737-750` / `:774-800`.
+  - The `ShareIntakeScreenTest` pin moved two lines.
+  - `theContractDocumentNamesFormat16…` was renamed `…Format17…`.
+  - "17 since #91" is pinned as exactly 2.
+  - The `IDENTICAL` pin reads "a reference's document role" and "format 17".
+  - The code-list entry sits at `CommandShapesGoldenTest:229-230`.
+- **E-21 (R91-11, `versioning.md`; B4 #12 + *new*, NOTE B4-3).** The sentence is the implementer's. "The practice
+  since #67" is loose: the first master-only schema step was #74's schema 9 (`5fecd555`), and R67-10 named the
+  practice.
+- **E-22 (header, §5, §6 "G2 … awaiting ratification / still open").** The owner ratified G2 as written on 2026-09-30
+  (ledger). `a document role belongs on an http or https link` ships unchanged. **Nothing in rev 1.1 is open.**
+
+- **Reviews and rounds.** Nine briefs, one task review each; fix rounds on B2a only (one round + one scoped re-review, then R-1 closed by controller inspection); controller-inspection fixes on B1a, B1b, B1c, B2b; one whole-branch review (MERGE: 0 BLOCKER, 0 MAJOR, 0 MINOR, 7 NOTE) with B4's task review folded in. Controller rulings: the C14/C17 body-reading idiom (typed decode first, then a presence read through the shipped 400 path — E-3/E-4), the 400-before-422 order (E-5), B2b on its own branch and merged in (E-10). Follow-up outside #91: the shipped schedule routes' latent 500 on a missing-comma body (`ScheduleForms.kt:86`). The gate is `.superpowers/sdd/2026-09-30-issue-91/gate/` (55 device classes — the three grown Compose cases run there first — the MCP and loader pytests), run once on 8e4528be.
