@@ -424,6 +424,42 @@ class InstalledComponentDaoConstraintTest {
     }
 
     /**
+     * The update is one transaction: on a stored row, a new name and a composition whose second entry names no
+     * SupplyItem is refused by that entry's foreign key, and nothing of the call stays — not the new name, not the
+     * cleared entries, not the first new entry. The row reads back exactly as it was stored.
+     */
+    @Test
+    fun aRefusedUpdateLeavesTheStoredRowAndItsEntriesWhole() = runTest {
+        val db = inMemoryDb()
+        try {
+            seedCatalog(db)
+            val repo = RoomInstalledComponentRepository(db.installedComponentDao())
+            val stored = component(
+                "c1", name = "Example Battery Pack",
+                composition = listOf(entry("e1", "s1", 2.0), entry("e2", "s1", 2.0, sortOrder = 1)),
+            )
+            repo.insert(stored)
+
+            val thrown = runCatching {
+                repo.update(
+                    stored.copy(
+                        name = "Example Battery Pack, rebuilt",
+                        updatedAt = 80L,
+                        composition = listOf(entry("e3", "s1", 4.0), entry("e4", "no-such-item", sortOrder = 1)),
+                    ),
+                )
+            }.exceptionOrNull()
+            assertTrue("expected the entry's supply_id foreign key to refuse, got $thrown", thrown is SQLiteException)
+
+            val read = repo.get(InstalledComponentId("c1"))!!
+            assertEquals(listOf("e1", "e2"), read.composition.map { it.id })
+            assertEquals(stored, read)
+        } finally {
+            db.close()
+        }
+    }
+
+    /**
      * The core double's rule (C-2), on Room: an update of a row that is not stored writes no row, as an SQL `UPDATE`
      * matching nothing does, and does not throw; carrying entries, the entries name no row, so their foreign key
      * refuses and nothing is written.
