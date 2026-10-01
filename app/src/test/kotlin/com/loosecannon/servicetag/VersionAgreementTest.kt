@@ -54,10 +54,10 @@ class VersionAgreementTest {
      * `BuildConfig`, and the tag the release workflow checks the APK against is built from the
      * first of them.
      */
-    @Test fun theReleaseIdentityIs150AndCode18() {
-        assertEquals("1.5.0", BuildConfig.VERSION_NAME)
-        assertEquals(18, BuildConfig.VERSION_CODE)
-        assertEquals("servicetag-v1.5.0", "servicetag-v${BuildConfig.VERSION_NAME}")
+    @Test fun theReleaseIdentityIs160AndCode19() {
+        assertEquals("1.6.0", BuildConfig.VERSION_NAME)
+        assertEquals(19, BuildConfig.VERSION_CODE)
+        assertEquals("servicetag-v1.6.0", "servicetag-v${BuildConfig.VERSION_NAME}")
     }
 
     /**
@@ -149,7 +149,7 @@ class VersionAgreementTest {
         val status = ApiJson.decodeFromString(
             StatusResponse.serializer(), response.body.decodeToString(),
         )
-        assertEquals("1.5.0", status.appVersion)
+        assertEquals("1.6.0", status.appVersion)
         assertEquals(17, status.schemaVersion)
         assertEquals(17, status.backupFormatVersion)
     }
@@ -324,6 +324,56 @@ class VersionAgreementTest {
         assertEquals("the 1.4.1 / 17 row must still be there, once", 1, previous.size)
         assertTrue(
             "the 1.5.0 row must follow the 1.4.1 row",
+            previous.single().range.first < text.indexOf(rows.single()),
+        )
+    }
+
+    /**
+     * The 1.6.0 / 19 row: a MINOR, so it names its three issues, the schema and the format it
+     * ships, and the forward-only reason it is a MINOR, as the 1.5.0 row does. It also names the
+     * one `/v1` change a script could meet — a body that is not strict JSON is now 400 on the two
+     * reference routes — and links release notes that exist. Anchored at the start of the row;
+     * `versionCode` 19 is claimed by this row and by nothing else, and the 1.5.0 row it follows is
+     * still there, once (`versioningRecords150` holds what that row says).
+     */
+    @Test fun versioningRecords160() {
+        val text = repoFile("docs/versioning.md").readText()
+        val rows = Regex("""^\|\s*1\.6\.0\s*\|\s*19\s*\|.*$""", RegexOption.MULTILINE).findAll(text)
+            .map { it.value }.toList()
+        assertEquals("the supported release history must carry exactly one 1.6.0 / 19 row", 1, rows.size)
+        val row = rows.single()
+        for (issue in listOf("#92", "#91", "#93")) {
+            assertTrue("the row must name $issue", Regex("""$issue\b""").containsMatchIn(row))
+        }
+        assertTrue(
+            "the row must name the schema and the format it ships",
+            Regex("""schema \*\*17\*\*.*format \*\*17\*\*""").containsMatchIn(row),
+        )
+        assertTrue("the row must say the format bump is forward-only", row.contains("forward-only"))
+        assertTrue(
+            "the row must give the forward-only reason it is a MINOR",
+            row.contains("`BackupNewerFormat`") && row.contains("MINOR by the rule above"),
+        )
+        assertTrue(
+            "the row must name the strict-JSON 400 on the two reference routes",
+            row.contains("`PATCH /v1/references/{id}`") &&
+                row.contains("`POST /v1/references/{id}/materialize`") &&
+                row.contains("not strict JSON") && row.contains("400"),
+        )
+        assertTrue(
+            "the row must link the 1.6.0 release notes, which must exist",
+            row.contains("`docs/releases/1.6.0.md`") && repoFile("docs/releases/1.6.0.md").isFile,
+        )
+        assertFalse("the row's gate counts are measured, so no placeholder ships", row.contains("PLACEHOLDER"))
+        assertEquals(
+            "no other row, and no reservation, may claim versionCode 19",
+            1,
+            Regex("""^\|[^\n]*\|\s*19\s*\|""", RegexOption.MULTILINE).findAll(text).count(),
+        )
+        val previous = Regex("""^\|\s*1\.5\.0\s*\|\s*18\s*\|""", RegexOption.MULTILINE).findAll(text).toList()
+        assertEquals("the 1.5.0 / 18 row must still be there, once", 1, previous.size)
+        assertTrue(
+            "the 1.6.0 row must follow the 1.5.0 row",
             previous.single().range.first < text.indexOf(rows.single()),
         )
     }
