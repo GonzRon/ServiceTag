@@ -81,18 +81,20 @@ object InstalledComponentTree {
 
     /**
      * The instances that have held [id]'s position, newest first: [id]'s row, then the row it replaced, following
-     * [InstalledComponent.replacesId] back. Empty when [rows] hold no [id]. The walk is bounded by the row count,
-     * so a `replacesId` cycle, which every writer refuses, still ends.
+     * [InstalledComponent.replacesId] back. Empty when [rows] hold no [id]. The walk takes at most one step per
+     * row, so a `replacesId` cycle, which every writer refuses, still ends, and a row it meets twice is listed once.
      */
     fun history(rows: Collection<InstalledComponent>, id: InstalledComponentId): List<InstalledComponent> {
         val byId = rows.associateBy { it.id }
-        val result = mutableListOf<InstalledComponent>()
+        val result = LinkedHashSet<InstalledComponent>()
         var next = byId[id]
-        while (next != null && result.size < rows.size) {
+        var steps = 0
+        while (next != null && steps < rows.size) {
             result += next
+            steps += 1
             next = next.replacesId?.let(byId::get)
         }
-        return result
+        return result.toList()
     }
 
     /** The row that replaced [id] — the one whose [InstalledComponent.replacesId] is [id] — or null. */

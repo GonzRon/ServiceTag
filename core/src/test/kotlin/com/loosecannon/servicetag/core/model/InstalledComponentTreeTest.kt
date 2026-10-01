@@ -172,6 +172,13 @@ class InstalledComponentTreeTest {
         )
         assertEquals(listOf("h1", "h2"), ids(walked))
 
+        // More rows than the cycle holds: the walk meets h1 again and lists it once.
+        val among = assertTimeoutPreemptively(
+            Duration.ofSeconds(2),
+            ThrowingSupplier { InstalledComponentTree.history(listOf(one, two, itself, unrelated), InstalledComponentId("h2")) },
+        )
+        assertEquals(listOf("h2", "h1"), ids(among))
+
         val alone = assertTimeoutPreemptively(
             Duration.ofSeconds(2),
             ThrowingSupplier { InstalledComponentTree.history(listOf(itself), InstalledComponentId("h3")) },
