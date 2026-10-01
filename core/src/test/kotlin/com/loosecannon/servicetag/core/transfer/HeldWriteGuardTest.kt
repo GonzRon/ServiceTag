@@ -76,6 +76,8 @@ import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
 import com.loosecannon.servicetag.core.usecase.ActivationCommand
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
+import com.loosecannon.servicetag.core.usecase.AddAssetSupply
+import com.loosecannon.servicetag.core.usecase.AddAssetSupplyCommand
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.AddReferenceCommand
 import com.loosecannon.servicetag.core.usecase.AddServiceCaseEntry
@@ -86,8 +88,11 @@ import com.loosecannon.servicetag.core.usecase.ArchiveGroup
 import com.loosecannon.servicetag.core.usecase.ArchiveHealthSubject
 import com.loosecannon.servicetag.core.usecase.ArchiveProfile
 import com.loosecannon.servicetag.core.usecase.ArchiveSchedule
+import com.loosecannon.servicetag.core.usecase.ArchiveSupplyItem
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.AssetSettingsCommand
+import com.loosecannon.servicetag.core.usecase.AssetSupplyProblem
+import com.loosecannon.servicetag.core.usecase.AssetSupplyResult
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.BreakCommand
 import com.loosecannon.servicetag.core.usecase.CaseEntryCommand
@@ -122,6 +127,7 @@ import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RelinkLoanContact
+import com.loosecannon.servicetag.core.usecase.RemoveAssetSupply
 import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
@@ -137,6 +143,7 @@ import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveHealthSubject
 import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
+import com.loosecannon.servicetag.core.usecase.SaveSupplyItem
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.core.usecase.ServiceCaseCommand
@@ -144,7 +151,10 @@ import com.loosecannon.servicetag.core.usecase.SetHealthPolicy
 import com.loosecannon.servicetag.core.usecase.SetMaintenanceBreak
 import com.loosecannon.servicetag.core.usecase.SetSeasonMode
 import com.loosecannon.servicetag.core.usecase.SetWarrantyReminder
+import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
+import com.loosecannon.servicetag.core.usecase.UpdateAssetSupply
+import com.loosecannon.servicetag.core.usecase.UpdateAssetSupplyCommand
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
@@ -904,6 +914,49 @@ class HeldWriteGuardTest {
 
         assertEquals("Example Anode Kit, long", install.supplyItems.get(SupplyId("s1"))!!.name)
         assertEquals(held, install.assetSupplies.get("as1"), "the held asset's row is untouched")
+        assertEquals(setOf(heater, anode), install.transfers.heldIds(), "still held")
+    }
+
+    /**
+     * B3 (C17 over C14): the applicability use cases on the guarded port. Each answers its own checks first and the
+     * write then meets the guard, so a held asset's add, re-role and remove throw and commit nothing — a child asset's
+     * add included. A re-role to the role the row already holds is `Unchanged` and writes nothing, so it never reaches
+     * the guard (the `UpdateReference` precedent). The catalog's own use cases take the unwrapped port and pass.
+     */
+    @Test
+    fun theSupplyUseCasesMeetTheGuardOnlyAtAHeldAssetsWrite() = runTest {
+        seed()
+        seedSupplies()
+        val add = AddAssetSupply(assets, install.supplyItems, assetSupplies, uow, ids, clock)
+        val update = UpdateAssetSupply(assetSupplies, uow, clock)
+        val remove = RemoveAssetSupply(assetSupplies, uow)
+        val held = install.assetSupplies.get("as1")!!
+
+        refused(
+            heater,
+            "AddAssetSupply on h1" to { add.run(AddAssetSupplyCommand(heater, SupplyId("s1"), "Spare kit")) },
+            "UpdateAssetSupply re-roles h1's row" to { update.run("as1", UpdateAssetSupplyCommand("Other kit")) },
+            "RemoveAssetSupply on h1's row" to { remove.run("as1") },
+        )
+        refused(anode, "AddAssetSupply on h2, a child asset" to { add.run(AddAssetSupplyCommand(anode, SupplyId("s1"), "Anode kit")) })
+        assertEquals(
+            AssetSupplyResult.Refused(AssetSupplyProblem.Unchanged),
+            update.run("as1", UpdateAssetSupplyCommand(" Anode  kit ")),
+            "a no-op re-role on a held asset is Unchanged, never the guard's refusal",
+        )
+        assertEquals(0, uow.commits)
+        assertEquals(held, install.assetSupplies.get("as1"), "the held row is as it was")
+
+        assertIs<AssetSupplyResult.Ok>(add.run(AddAssetSupplyCommand(compressor, SupplyId("s1"), "Other kit")), "a staying asset adds")
+        val save = SaveSupplyItem(install.supplyItems, uow, ids, clock)
+        val renamed = save.run(
+            SupplyId("s1"),
+            SupplyItemCommand("Example Anode Kit, long", "Filter", "Example Filters Co.", "PF-10", "EF-PF10-5", "ea", "", emptyList()),
+        )
+        assertEquals("Example Anode Kit, long", renamed.item.name)
+        ArchiveSupplyItem(install.supplyItems, uow, clock).run(SupplyId("s1"), archived = true)
+        assertNotNull(install.supplyItems.get(SupplyId("s1"))!!.archivedAt, "the item a held row names archives")
+        assertEquals(held, install.assetSupplies.get("as1"), "and the held row is still as it was")
         assertEquals(setOf(heater, anode), install.transfers.heldIds(), "still held")
     }
 }
