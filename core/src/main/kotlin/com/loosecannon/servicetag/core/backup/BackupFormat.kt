@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetLoanId
 import com.loosecannon.servicetag.core.model.AssetSuccession
+import com.loosecannon.servicetag.core.model.AssetSupply
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.Attachment
@@ -68,6 +69,9 @@ import com.loosecannon.servicetag.core.model.ServiceCaseEntryId
 import com.loosecannon.servicetag.core.model.ServiceCaseId
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.model.StorageProvider
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
+import com.loosecannon.servicetag.core.model.SupplySpecification
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
@@ -218,6 +222,12 @@ data class ProfileConsumableDto(
     val defaultQuantity: Double?,
     val unit: String,
     val sortOrder: Int,
+    /**
+     * Format 18 (#15, C8). The SupplyItem this line names, beside its own `name` and `unit` snapshot; written as an
+     * explicit null when unlinked, and defaulting to null because a format ≤17 line has no key. It must name a
+     * SupplyItem in the file (R15-6), archived or not.
+     */
+    val supplyId: String? = null,
 )
 
 @Serializable
@@ -253,6 +263,8 @@ data class ConsumableUsageDto(
     val quantity: Double,
     val unit: String,
     val sortOrder: Int,
+    /** Format 18 (#15, C8). As on [ProfileConsumableDto]: the link beside the snapshot, an explicit null when unlinked. */
+    val supplyId: String? = null,
 )
 
 @Serializable
@@ -600,6 +612,56 @@ data class AssetSuccessionDto(
     val createdAt: Long,
 )
 
+/**
+ * Format 18 (#15, C8; R15-2). One SupplyItem: the `supply_item` table's columns, in column order, with no defaults —
+ * a format-18 row that omits one is corrupt — and its [specifications] nested, as a group's members are. Identity and
+ * generic specifications only: no quantity, threshold, price, URL, position or fitting state (the HARD SCOPE).
+ */
+@Serializable
+data class SupplyItemDto(
+    val id: String,
+    val name: String,
+    val category: String,
+    val manufacturer: String,
+    val model: String,
+    val partNumber: String,
+    val preferredUnit: String,
+    val notes: String,
+    val archivedAt: Long?,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val specifications: List<SupplySpecificationDto>,
+)
+
+/**
+ * Format 18 (#15, C8; R15-11). One specification, a child row of its SupplyItem: carries no `supplyId`, its owner is
+ * its position in the tree, as [GroupMemberDto] carries no `groupId`. Its id is unique across every SupplyItem in the
+ * file; its [key] matches the definition slug rule and is unique within its SupplyItem.
+ */
+@Serializable
+data class SupplySpecificationDto(
+    val id: String,
+    val key: String,
+    val label: String,
+    val value: String,
+    val unit: String,
+    val sortOrder: Int,
+)
+
+/**
+ * Format 18 (#15, C8; R15-3). One applicability row: [assetId] takes [supplyId] in [role], stored cleaned by
+ * `CategoryKey.display`. Both must be in the file, and the triple is unique in it. No notes, no position, no date.
+ */
+@Serializable
+data class AssetSupplyDto(
+    val id: String,
+    val assetId: String,
+    val supplyId: String,
+    val role: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
 /** The canonical tables. Everything derived is rebuilt after an import. */
 @Serializable
 data class BackupData(
@@ -653,6 +715,14 @@ data class BackupData(
      * naming an asset transferred out from this phone (`TransferGraph.retain` drops it).
      */
     val assetSuccessions: List<AssetSuccessionDto> = emptyList(),
+    /**
+     * Format 18 (#15); the SupplyItems, archived included, ordered by id, each with its specifications in
+     * `(sortOrder, id)` order. Empty on every format ≤17 archive, which never carries a **row** — the codec refuses
+     * one that does (an empty list is accepted).
+     */
+    val supplyItems: List<SupplyItemDto> = emptyList(),
+    /** Format 18 (#15); the applicability rows, ordered by id. Empty on every format ≤17 archive, as [supplyItems]. */
+    val assetSupplies: List<AssetSupplyDto> = emptyList(),
 )
 
 /** A decoded archive: what it claims about itself, and what it holds. */
@@ -875,6 +945,7 @@ fun ProfileConsumable.toDto(): ProfileConsumableDto = ProfileConsumableDto(
     defaultQuantity = defaultQuantity,
     unit = unit,
     sortOrder = sortOrder,
+    supplyId = supplyId?.value,
 )
 
 fun ProfileConsumableDto.toDomain(): ProfileConsumable = ProfileConsumable(
@@ -883,7 +954,7 @@ fun ProfileConsumableDto.toDomain(): ProfileConsumable = ProfileConsumable(
     defaultQuantity = defaultQuantity,
     unit = unit,
     sortOrder = sortOrder,
-    supplyId = null,   // #15 placeholder (C19): format 18 carries the link (B2a)
+    supplyId = supplyId?.let(::SupplyId),
 )
 
 fun EventProfile.toDto(): EventProfileDto = EventProfileDto(
@@ -940,6 +1011,7 @@ fun ConsumableUsage.toDto(): ConsumableUsageDto = ConsumableUsageDto(
     quantity = quantity,
     unit = unit,
     sortOrder = sortOrder,
+    supplyId = supplyId?.value,
 )
 
 fun ConsumableUsageDto.toDomain(): ConsumableUsage = ConsumableUsage(
@@ -948,7 +1020,7 @@ fun ConsumableUsageDto.toDomain(): ConsumableUsage = ConsumableUsage(
     quantity = quantity,
     unit = unit,
     sortOrder = sortOrder,
-    supplyId = null,   // #15 placeholder (C19): format 18 carries the link (B2a)
+    supplyId = supplyId?.let(::SupplyId),
 )
 
 fun AssetEvent.toDto(): AssetEventDto = AssetEventDto(
@@ -1476,4 +1548,72 @@ fun AssetSuccessionDto.toDomain(): AssetSuccession = AssetSuccession(
     successorAssetId = AssetId(successorAssetId),
     replacedOn = replacedOn,
     createdAt = createdAt,
+)
+
+// --- format 18: supply items ---------------------------------------------------------------------
+
+fun SupplyItem.toDto(): SupplyItemDto = SupplyItemDto(
+    id = id.value,
+    name = name,
+    category = category,
+    manufacturer = manufacturer,
+    model = model,
+    partNumber = partNumber,
+    preferredUnit = preferredUnit,
+    notes = notes,
+    archivedAt = archivedAt,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    specifications = specifications.map { it.toDto() },
+)
+
+fun SupplyItemDto.toDomain(): SupplyItem = SupplyItem(
+    id = SupplyId(id),
+    name = name,
+    category = category,
+    manufacturer = manufacturer,
+    model = model,
+    partNumber = partNumber,
+    preferredUnit = preferredUnit,
+    notes = notes,
+    archivedAt = archivedAt,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    specifications = specifications.map { it.toDomain() },
+)
+
+fun SupplySpecification.toDto(): SupplySpecificationDto = SupplySpecificationDto(
+    id = id,
+    key = key,
+    label = label,
+    value = value,
+    unit = unit,
+    sortOrder = sortOrder,
+)
+
+fun SupplySpecificationDto.toDomain(): SupplySpecification = SupplySpecification(
+    id = id,
+    key = key,
+    label = label,
+    value = value,
+    unit = unit,
+    sortOrder = sortOrder,
+)
+
+fun AssetSupply.toDto(): AssetSupplyDto = AssetSupplyDto(
+    id = id,
+    assetId = assetId.value,
+    supplyId = supplyId.value,
+    role = role,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+fun AssetSupplyDto.toDomain(): AssetSupply = AssetSupply(
+    id = id,
+    assetId = AssetId(assetId),
+    supplyId = SupplyId(supplyId),
+    role = role,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
 )

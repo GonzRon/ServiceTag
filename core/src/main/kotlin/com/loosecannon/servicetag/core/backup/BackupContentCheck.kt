@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.transfer.TransferPack
 import com.loosecannon.servicetag.core.journal.CategoryKey
 import com.loosecannon.servicetag.core.model.ScheduleTarget
 import com.loosecannon.servicetag.core.usecase.BreakCommand
+import com.loosecannon.servicetag.core.usecase.KEY_PATTERN
 import com.loosecannon.servicetag.core.usecase.SeasonProblem
 import com.loosecannon.servicetag.core.usecase.ServiceCaseProblem
 import com.loosecannon.servicetag.core.usecase.breakProblems
@@ -68,6 +69,10 @@ import com.loosecannon.servicetag.core.usecase.wellFormedZone
  *
  * - a succession (#86, C3) with a blank id, one asset at both ends (I1), a `replacedOn` that is not an ISO date, or a
  *   `createdAt` not after the epoch. A missing end, a taken end and a cycle are the graph check's.
+ *
+ * - a SupplyItem (#15, C9) with a blank name, or a specification with a blank label or value or a key outside the
+ *   slug rule or taken within its SupplyItem; an applicability row with a blank or uncleaned role, or holding the
+ *   `(asset, SupplyItem, role)` another row holds. A missing target is the graph check's.
  *
  * What depends on **other rows or on today** is deliberately not asked: a subject naming an archived
  * or retargeted schedule (NOT TRACKED, which a merge may bring — plan decision 17), a TRACK_ONE
@@ -133,6 +138,40 @@ internal object BackupContentCheck {
         checkLoans(data)
         checkTransferRecords(data)
         checkSuccessions(data)
+        checkSupplies(data)
+    }
+
+    /**
+     * #15 (C9): a SupplyItem with a blank name; a specification with a blank label or value, a key outside the
+     * definition slug rule (`KEY_PATTERN`, R15-11) or one another specification of the same SupplyItem holds; an
+     * applicability row whose role is blank or not in `CategoryKey.display` form (R15-3); and two rows holding one
+     * `(asset, SupplyItem, role)` — what the schema's unique index would refuse only after a replace had wiped the
+     * owner's data. A missing asset, SupplyItem or link target is the graph check's.
+     */
+    private fun checkSupplies(data: BackupData) {
+        data.supplyItems.forEach { item ->
+            fun refuse(problem: String): Nothing = throw BackupCorrupt("supplyItems: supply item ${item.id} $problem")
+            if (item.name.isBlank()) refuse("has a blank name")
+            val keyHolders = HashMap<String, String>()
+            item.specifications.forEach { spec ->
+                if (spec.label.isBlank()) refuse("specification ${spec.id} has a blank label")
+                if (spec.value.isBlank()) refuse("specification ${spec.id} has a blank value")
+                if (!KEY_PATTERN.matches(spec.key)) refuse("specification ${spec.id} has a key \"${spec.key}\" outside the key rule")
+                keyHolders.put(spec.key, spec.id)?.let { first ->
+                    refuse("specifications $first and ${spec.id} share the key \"${spec.key}\"")
+                }
+            }
+        }
+        val tripleHolders = HashMap<Triple<String, String, String>, String>()
+        data.assetSupplies.forEach { row ->
+            if (row.role.isBlank()) throw BackupCorrupt("assetSupplies: row ${row.id} has a blank role")
+            if (row.role != CategoryKey.display(row.role)) {
+                throw BackupCorrupt("assetSupplies: row ${row.id} has a role not in its stored form")
+            }
+            tripleHolders.put(Triple(row.assetId, row.supplyId, row.role), row.id)?.let { first ->
+                throw BackupCorrupt("assetSupplies: rows $first and ${row.id} name the same asset, supply item and role")
+            }
+        }
     }
 
     /** #86 (C3): each succession by its form, one row at a time; the rules about other rows are the graph check's. */

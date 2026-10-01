@@ -142,6 +142,20 @@ import kotlinx.serialization.json.JsonObject
  * at decode. The merge's rule for an archive older than 17 against a row that gained a role since is the planner's
  * (#91, C7), mirroring the attachment role's exception.
  *
+ * **Format 18 (#15, C8, C9) adds two lists and one line key, and no upgrade.** `supplyItems` — the canonical
+ * SupplyItems, archived included, sorted by id, each with its generic `specifications` nested in `(sortOrder, id)`
+ * order as a group's members are — and `assetSupplies` — which SupplyItem an Asset takes in which role, sorted by id —
+ * default to empty, and `supplyId` on each quick-action and event material line is written as an explicit null when
+ * unlinked, last in the row, and defaults to null; so a format ≤17 archive decodes through the same strict decode with
+ * no supplies and no links. `LAST_LEGACY_FORMAT` stays 7. No shipped writer put any of them into a format ≤17 archive,
+ * so one that carries a row, or a non-null link on any line, is a hand-built file and is refused
+ * ([FIRST_SUPPLY_FORMAT]); an empty list and an explicit null are accepted. Ids are unique within each list, and a
+ * specification's id across every SupplyItem; an applicability row's asset and SupplyItem, and **every non-null line
+ * link**, must name a row in the file (R15-6: there is no foreign key, so the codec holds it) — an archived SupplyItem
+ * included. What a row says about itself — a blank name, a specification's blank label or value, a key outside the
+ * definition slug rule or taken within its SupplyItem, a role blank or not in its stored form, and a duplicate
+ * `(asset, SupplyItem, role)` — is the content check's. The merge's rule for an older archive is the planner's.
+ *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
@@ -149,7 +163,7 @@ import kotlinx.serialization.json.JsonObject
  * at read time (inv. 111).
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 17
+    const val FORMAT_VERSION = 18
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -188,6 +202,12 @@ object BackupCodec {
      * [FIRST_ROLE_FORMAT]: an older archive's references are compared without the role.
      */
     internal const val FIRST_REFERENCE_ROLE_FORMAT = 17
+
+    /**
+     * The first format that can carry a SupplyItem, an applicability row or a line's supply link (#15). Internal for
+     * the same reason as [FIRST_ROLE_FORMAT]: an older archive's lines are compared without the link.
+     */
+    internal const val FIRST_SUPPLY_FORMAT = 18
 
     /** Lowercase hex, 64 chars — the shape every attachment row promises for its bytes. */
     private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
@@ -261,6 +281,11 @@ object BackupCodec {
             transferRecords = data.transferRecords.sortedBy { it.id },
             // Format 15: one immutable row per succession.
             assetSuccessions = data.assetSuccessions.sortedBy { it.id },
+            // Format 18: specifications tie-break on `id`, as group members do and for the same reason.
+            supplyItems = data.supplyItems.sortedBy { it.id }.map { item ->
+                item.copy(specifications = item.specifications.sortedWith(compareBy({ it.sortOrder }, { it.id })))
+            },
+            assetSupplies = data.assetSupplies.sortedBy { it.id },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
         // The artifact tallies are derived here, in one place, from the rows themselves: a MANAGED
@@ -298,6 +323,9 @@ object BackupCodec {
                 "assetLoans" to sorted.assetLoans.size,
                 "transferRecords" to sorted.transferRecords.size,
                 "assetSuccessions" to sorted.assetSuccessions.size,
+                "supplyItems" to sorted.supplyItems.size,
+                "supplySpecifications" to sorted.supplyItems.sumOf { it.specifications.size },
+                "assetSupplies" to sorted.assetSupplies.size,
             ),
             dataSha256 = sha256Hex(dataBytes),
             backupSetId = backupSetId,
@@ -439,6 +467,28 @@ object BackupCodec {
             throw BackupCorrupt("assetSuccessions: a format ${manifest.formatVersion} archive cannot carry asset successions")
         }
 
+        // #15, the same rule for the SupplyItems, their applicability and a line's link: none existed before format 18,
+        // so a row or a non-null link in an older archive was put there by hand. An empty list and an explicit null
+        // are accepted.
+        if (manifest.formatVersion < FIRST_SUPPLY_FORMAT) {
+            if (data.supplyItems.isNotEmpty()) {
+                throw BackupCorrupt("supplyItems: a format ${manifest.formatVersion} archive cannot carry supply items")
+            }
+            if (data.assetSupplies.isNotEmpty()) {
+                throw BackupCorrupt("assetSupplies: a format ${manifest.formatVersion} archive cannot carry asset supplies")
+            }
+            data.eventProfiles.firstOrNull { profile -> profile.consumables.any { it.supplyId != null } }?.let { linked ->
+                throw BackupCorrupt(
+                    "eventProfiles: a format ${manifest.formatVersion} archive cannot carry a supply link (profile ${linked.id})",
+                )
+            }
+            data.assetEvents.firstOrNull { event -> event.consumables.any { it.supplyId != null } }?.let { linked ->
+                throw BackupCorrupt(
+                    "assetEvents: a format ${manifest.formatVersion} archive cannot carry a supply link (event ${linked.id})",
+                )
+            }
+        }
+
         // Every row must be nameable in the domain, otherwise the caller would only find out
         // halfway through a destructive import. Result discarded; this is a validation pass.
         data.assets.forEach { it.toDomain() }
@@ -461,6 +511,8 @@ object BackupCodec {
         data.assetLoans.forEach { it.toDomain() }
         data.transferRecords.forEach { it.toDomain() }
         data.assetSuccessions.forEach { it.toDomain() }
+        data.supplyItems.forEach { it.toDomain() }
+        data.assetSupplies.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
         // replays the insert loops in one transaction: a duplicate id or a reference to a row
@@ -476,7 +528,7 @@ object BackupCodec {
     }
 
     /**
-     * The version dispatch: formats 8 to 17 decode strictly as they stand; formats 1–7 are rewritten as a
+     * The version dispatch: formats 8 to 18 decode strictly as they stand; formats 1–7 are rewritten as a
      * tree by [LegacyArchive] first and then go through the very same strict decode.
      * `SerializationException` is an `IllegalArgumentException`, and so is the malformed-number
      * failure a tree decode can raise, so one catch covers both.
@@ -859,6 +911,44 @@ object BackupCodec {
                     is SuccessionProblem.SelfLink -> error("the content check's")
                 },
             )
+        }
+
+        // --- supply items and applicability (format 18) ------------------------------------------
+        // Ids are unique within each list, and a specification's across every SupplyItem (a child row id, as a group
+        // member's). An applicability row's asset and SupplyItem are real foreign keys. A line's link is soft — no
+        // foreign key holds it — so **every non-null link must name a SupplyItem in the file** (#15, R15-6), checked
+        // here for the quick actions' lines and the events' alike; an archived SupplyItem is a valid target.
+
+        val supplyIds = uniqueIds("supplyItems", data.supplyItems.map { it.id })
+        uniqueIds("supplySpecifications", data.supplyItems.flatMap { item -> item.specifications.map { it.id } })
+        uniqueIds("assetSupplies", data.assetSupplies.map { it.id })
+        data.assetSupplies.forEach { row ->
+            if (row.assetId !in assetIds) {
+                throw BackupCorrupt("assetSupplies: row ${row.id} points at asset ${row.assetId}, which is not in assets")
+            }
+            if (row.supplyId !in supplyIds) {
+                throw BackupCorrupt("assetSupplies: row ${row.id} names supply item ${row.supplyId}, which is not in supplyItems")
+            }
+        }
+        data.eventProfiles.forEach { profile ->
+            profile.consumables.forEach { line ->
+                if (line.supplyId != null && line.supplyId !in supplyIds) {
+                    throw BackupCorrupt(
+                        "eventProfiles: profile ${profile.id} line ${line.id} names supply item ${line.supplyId}, " +
+                            "which is not in supplyItems",
+                    )
+                }
+            }
+        }
+        data.assetEvents.forEach { event ->
+            event.consumables.forEach { line ->
+                if (line.supplyId != null && line.supplyId !in supplyIds) {
+                    throw BackupCorrupt(
+                        "assetEvents: event ${event.id} line ${line.id} names supply item ${line.supplyId}, " +
+                            "which is not in supplyItems",
+                    )
+                }
+            }
         }
 
         // --- events ------------------------------------------------------------------------------

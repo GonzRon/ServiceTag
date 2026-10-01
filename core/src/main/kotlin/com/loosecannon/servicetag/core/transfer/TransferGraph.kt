@@ -56,6 +56,10 @@ object TransferTables {
         "transferRecords" to TransferTableClass.SENDER_ONLY,
         // #86 (C6; R86-16): a succession is this installation's own lineage; a pack never carries one.
         "assetSuccessions" to TransferTableClass.SENDER_ONLY,
+        // #15 (C13): the plan's classification — a SupplyItem travels when a carried row names it, an applicability
+        // row with its asset. A pack carries no supplies until `select` names these two lists (B2c).
+        "supplyItems" to TransferTableClass.GLOBAL_IN_USE,
+        "assetSupplies" to TransferTableClass.ASSET_OWNED,
     )
 
     /** Whether any row of [table] can be in a pack. An unclassified list never travels. */

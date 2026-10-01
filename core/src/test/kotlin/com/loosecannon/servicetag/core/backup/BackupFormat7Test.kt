@@ -219,7 +219,7 @@ class BackupFormat7Test {
         // By position: format 8 appends its three tables after this one, format 9 one more, format 12 two,
         // format 13 one and format 14 one.
         assertEquals("assetReferences", tables[10])
-        assertEquals(20, tables.size)
+        assertEquals(22, tables.size)
         // and the tombstone is still its own list, neither bumped nor renamed (I-5)
         assertTrue("externalLinks" in tables)
     }

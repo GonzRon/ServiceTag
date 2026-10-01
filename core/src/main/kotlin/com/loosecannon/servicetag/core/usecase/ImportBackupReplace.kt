@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.model.heldIds
 import com.loosecannon.servicetag.core.model.returnsHere
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.CategoryRepository
@@ -30,6 +31,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
@@ -107,6 +109,9 @@ class ImportBackupReplace(
     private val transfers: TransferRecordRepository,
     /** #86 — the successions (format 15): wiped by name, restored after their assets. */
     private val successions: AssetSuccessionRepository,
+    /** #15 — the SupplyItems and their applicability (format 18): wiped after the assets, restored after them. */
+    private val supplyItems: SupplyItemRepository,
+    private val assetSupplies: AssetSupplyRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**
@@ -187,6 +192,11 @@ class ImportBackupReplace(
             // Nothing points at a category and a category points at nothing, so its place in the
             // wipe is free; it goes with the assets it classified.
             categories.deleteAll()
+            // #15's catalog, after the assets and never before: `asset_supply.asset_id` CASCADEs, so the assets' wipe
+            // above has already taken every applicability row, and `asset_supply.supply_id` is RESTRICT, so a
+            // SupplyItem wipe while one remained would be refused. Specifications go with their SupplyItem by CASCADE.
+            // A line's `supply_id` is soft, so the quick actions and events wiped above never held one back.
+            supplyItems.deleteAll()
 
             // insert in reference order so foreign keys are satisfied at every step. Assets go
             // in parents-first order (AssetTree.parentsFirst) regardless of the file's own list
@@ -202,6 +212,10 @@ class ImportBackupReplace(
             // Straight after the assets: `asset_id` is a reference's only foreign key, so this is
             // the earliest point at which every one of them resolves.
             data.assetReferences.forEach { references.upsert(it.toDomain()) }
+            // #15: the SupplyItems (each with its specifications) after the assets, then their applicability, which
+            // names both. A line's link is soft, so the quick actions and events below need nothing more.
+            data.supplyItems.forEach { supplyItems.upsert(it.toDomain()) }
+            data.assetSupplies.forEach { assetSupplies.insert(it.toDomain()) }
             // Groups before schedules, and both before events: a group's members name assets, a
             // schedule names an asset or a group plus a meter definition and a profile, a closure
             // names a schedule, and an event may name one too. This is `MergeTable`'s order.

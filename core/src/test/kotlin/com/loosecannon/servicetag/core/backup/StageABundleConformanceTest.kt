@@ -87,14 +87,15 @@ class StageABundleConformanceTest {
         // decode away silently unless the root's own key set is pinned here too. The fixture is a
         // **format-5** archive and the generator writes format 5, so the three format-6 tables, the
         // one format-7 table, the three format-8 tables, format 9's categories, format 12's two
-        // case lists, format 13's loans and format 14's transfer records are subtracted by
+        // case lists, format 13's loans, format 14's transfer records, format 15's successions and format 18's
+        // SupplyItems and applicability are subtracted by
         // name — which keeps the guard live: a further table added to BackupData without a thought
         // for the generator still fails here. (A restore of the bundle promotes its assets'
         // categories itself, so the generator needs no category list.)
         assertEquals(
             BackupData.serializer().descriptor.elementNames.toSet() -
                 FORMAT_6_TABLES - FORMAT_7_TABLES - FORMAT_8_TABLES - FORMAT_9_TABLES - FORMAT_12_TABLES - FORMAT_13_TABLES -
-                FORMAT_14_TABLES - FORMAT_15_TABLES,
+                FORMAT_14_TABLES - FORMAT_15_TABLES - FORMAT_18_TABLES,
             data.keys,
             "data.json root",
         )
@@ -209,5 +210,8 @@ class StageABundleConformanceTest {
         private val FORMAT_13_TABLES = setOf("assetLoans")
         private val FORMAT_14_TABLES = setOf("transferRecords")
         private val FORMAT_15_TABLES = setOf("assetSuccessions")
+
+        /** #15's two lists: default empty, and the format-5 generator never emits them. */
+        private val FORMAT_18_TABLES = setOf("supplyItems", "assetSupplies")
     }
 }
