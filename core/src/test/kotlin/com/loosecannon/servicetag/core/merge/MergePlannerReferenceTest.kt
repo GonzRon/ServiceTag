@@ -539,6 +539,12 @@ class MergePlannerReferenceTest {
 
     /** Row 16, format 17: two roles disagree like two names do — a blocking conflict, nothing written. */
     @Test
+    fun `a format-17 archive still compares the stamp, same role with an old stamp is a conflict`() {
+        val tagged = givenARoleHere(reference("r1"), DocumentRole.USER_MANUAL)
+        assertEquals(differs(), roleDecision(reference("r1", role = DocumentRole.USER_MANUAL), 17, tagged))
+    }
+
+    @Test
     fun `a different role is a conflict`() {
         val plan = mergePlanOf(
             backupOf(
