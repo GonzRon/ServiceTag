@@ -1,14 +1,30 @@
-# #91 — a canonical document role on an HTTP(S) reference: plan and briefs (rev 1, 2026-09-30)
+# #91 — a canonical document role on an HTTP(S) reference: plan and briefs (rev 1.1, 2026-09-30)
 
-> **Status: PLANNING ONLY.** Not authorized for execution. Placement is the roadmap of record's (issue #76); this plan
-> assumes #92 merged (`f55ffb5b`, errata `66aa9987`) and nothing after it. **Eleven owner questions from the audit and
-> three the plan surfaced are open (§6, R91-1…14)**; every contract that rests on one says "pending R91-n". Nothing is
-> dispatched until they are answered. If the recommendations are ratified as written, this plan **amends R67-9** (a
-> web link share offers the Role chips, R91-4), **mirrors R67-12 option B** for references (R91-7), **follows R67-10**
-> (schema 17 / format 17 on master with no release, emulator only, R91-11), and **supersedes the #85 plan's row
-> "`role` = none"** (`docs/superpowers/plans/2026-09-29-issue-85-materialize-references.md:633`) and `v1.md`'s
-> "absent or `null` takes … no role" on the materialize body (`docs/api/v1.md:1350-1352`) with a three-state rule
-> (R91-2).
+> **Rev 1.1** applies the owner's rulings of 2026-09-30 (recorded on issue #91) and the independent plan review's
+> conditions C-1…C-4 and notes N-1…N-10 (`.superpowers/sdd/2026-09-30-issue-91/plan-review.md`).
+> **HARD SCOPE (owner, binding across all nine briefs):** "#91 = add `DocumentRole?` to HTTP(S) References and
+> propagate it faithfully through existing paths. Nothing more. No new role vocabulary, no inference, no new document
+> model, no new API tools, no new device class, no redesign of References, no Key Documents treatment for links, no
+> generalized resource work (#69)." The owner ruled **"the five as stated"** — (1) roles legal on web references only
+> → R91-1; (2) editing nullable, explicit set/clear, never inferred → R91-3, R91-5, R91-6; (3) materialize inherits
+> unless overridden or cleared, kind untouched → R91-2, R91-9; (4) old rows no role, old clients keep working, the
+> merge handles pre-17 deliberately → R91-7, R91-10; (5) a quiet label, intake chips on web links, a link is not a Key
+> Document until materialized → R91-4, R91-8 — and ratified R91-11, R91-12, R91-13 and R91-14. **R91-1…14 are DECIDED
+> at their recommendations (§6)**; the reused strings are approved unchanged on the new surfaces. **The one open item
+> is G2's developer-facing message (§5).** Review conditions: C-1 → §3's pins table, row 10, the B1b/B2a/B3b pin
+> lists and confirm greps; C-2 → C20, B2b, row 39, R6; C-3 → C2, C26, §7 R6, the B2a/B3b/B4 greps; C-4 → C21, C23.
+> Notes N-1…N-4 and N-6…N-10 applied (C14, C12/B2a, row 25, §12, C24, B1c, C26, limit 7, §3); **N-5 taken another
+> way:** `roleOffered` is a derived getter over a stored `linkTakesRole` (the `noFolder` getter's style,
+> `ShareIntakeViewModel.kt:133`), so a hand-built `BYTES` state still draws Role and the `form(…)` helper needs no new
+> default.
+
+> **Status: PLANNING ONLY.** Not authorized for execution until the owner dispatches it. Placement is the roadmap of
+> record's (issue #76); this plan assumes #92 merged (`f55ffb5b`, errata `66aa9987`) and nothing after it. As
+> decided, this plan **amends R67-9** (a web link share offers the Role chips, R91-4), **mirrors R67-12 option B**
+> for references (R91-7), **follows R67-10** (schema 17 / format 17 on master with no version bump or release,
+> validated on the emulator, R91-11), and **supersedes the #85 plan's row "`role` = none"**
+> (`docs/superpowers/plans/2026-09-29-issue-85-materialize-references.md:633`) and `v1.md`'s "absent or `null` takes
+> … no role" on the materialize body (`docs/api/v1.md:1350-1352`) with a three-state rule (R91-2).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development under the review budget.
 > **Ledger:** `.superpowers/sdd/2026-09-30-issue-91/progress.md` (the controller's; implementers never write it).
@@ -67,8 +83,8 @@ plan (§2 Common, §8); `docs/api/v1.md`; `docs/release-proofs.md`; `docs/versio
   `joplin://x-callback-url/openNote?id=example`); no real name, host, serial or e-mail address in code, tests, docs or
   commits.
 - **Strings.** Every user-visible string is ratified before it ships (§5). This plan adds **no new phone sentence**
-  if R91-5, R91-8 and R91-14 are ratified as recommended; every phone word it draws is a shipped, ratified one reused
-  verbatim.
+  (R91-5, R91-8, R91-14 decided); every phone word it draws is a shipped, ratified one reused verbatim, approved by
+  the owner on the new surfaces. The one open text is G2's developer-facing wire message (§5).
 - **Tests.** JVM first (core, then app over the production router and the Room-backed `FakeGraph`); **no new device
   class and no new device case** — three shipped Compose cases grow (§3, R91-13). Device rows exist only for
   platform-only facts, and #91 adds none. No test touches the network. Every counted RED is a real mutation run with
@@ -85,11 +101,16 @@ plan (§2 Common, §8); `docs/api/v1.md`; `docs/release-proofs.md`; `docs/versio
 
 ## 1. Scope
 
+**HARD SCOPE (owner, 2026-09-30, binding):** "#91 = add `DocumentRole?` to HTTP(S) References and propagate it
+faithfully through existing paths. Nothing more. No new role vocabulary, no inference, no new document model, no new
+API tools, no new device class, no redesign of References, no Key Documents treatment for links, no generalized
+resource work (#69)."
+
 **In scope — the nine acceptance criteria, each on its contracts:**
 
 | AC | the issue's words (abridged) | contracts |
 |---|---|---|
-| AC1 | an asset HTTP(S) reference can be classified with one of the three roles, or none | C1, C4, C5, C9–C11 (pending R91-1) |
+| AC1 | an asset HTTP(S) reference can be classified with one of the three roles, or none | C1, C4, C5, C9–C11 (R91-1) |
 | AC2 | share-URL intake and the reference editor can set/change it | C21 (R91-4), C22, C23 (R91-5), C13, C14, C18 |
 | AC3 | the role is not inferred from URL/name/description/MIME | C25; C10, C16, C21, C23 |
 | AC4 | backup/restore/merge preserve it | C6, C7 (R91-7), C8 |
@@ -122,12 +143,16 @@ any inference, heuristic or suggestion of a role.
    phone's strict 400 for the unknown `role` key.
 6. **No `/v1` export route exists**, so the schema-17 release gate's pre/post export comparison is a phone-side step
    (the 1.5.0 erratum's gap, `docs/release-proofs.md:114`), unchanged by #91 (C26).
+7. **A pre-#91 MCP's `materialize_reference` without `role`, against a schema-17 phone, gets the source reference's
+   role**, though that MCP's docstring says "no role" (N-9). This is AC5 working as intended and the one place the
+   "API v1 additive" claim changes an existing request's result; no existing result moves until a role is given,
+   because before #91 no source had one.
 
 ## 2. Contracts
 
 ### Common (C1–C3)
 
-- **C1, the enum and the reference predicate (audit §0.1, §2, §9; pending R91-1 for the predicate's rule).**
+- **C1, the enum and the reference predicate (audit §0.1, §2, §9; R91-1).**
   - **The enum moves, unchanged, to `C/model/DocumentRole.kt`, same package** (`com.loosecannon.servicetag.core.model`).
     The fully qualified name, the three values and their order, and the serialised names are identical, so no import,
     call site, Room value or archive string moves. Its KDoc becomes owner-neutral ("what a document is *for*";
@@ -152,7 +177,7 @@ any inference, heuristic or suggestion of a role.
 
 | code | status | field | when | `message` (developer-facing) |
 |---|---|---|---|---|
-| `REFERENCE_ROLE_NOT_ALLOWED` | 422 | `role` | `ReferenceProblem.RoleNotAllowed`: a role on a reference whose kind is not `WEB_URL`, on `POST` or `PATCH` | proposed `a document role belongs on an http or https link` (G2, pending R91-1) |
+| `REFERENCE_ROLE_NOT_ALLOWED` | 422 | `role` | `ReferenceProblem.RoleNotAllowed`: a role on a reference whose kind is not `WEB_URL`, on `POST` or `PATCH` | `a document role belongs on an http or https link` — **awaiting ratification** (G2, the only open string) |
 
   Reused unchanged: `400 bad_request` (the decoder's own message) for an unknown role name, since every request type
   types `role` as `DocumentRole?` (the `MaterializeRequest` precedent, `A/api/AttachmentHandlers.kt:436-441`);
@@ -166,8 +191,8 @@ any inference, heuristic or suggestion of a role.
 |---|---|
 | `GET /v1/assets/{id}/references`, and every reference in a `POST`/`PATCH` answer | each row gains `role`: a `DocumentRole` name, or `null` (always present: `encodeDefaults = true`, `ApiJson.kt:95-99`) |
 | `POST /v1/references` | `{assetId, uri, displayName, description?, role?}`; `role` absent or `null` = no role; a name on a non-web link = C2's 422 |
-| `PATCH /v1/references/{id}` | `{displayName?, description?, role?}`; **`role` is three-state** — absent: unchanged; `null`: clear; a name: set (C14, pending R91-3). `displayName`/`description` keep the shipped "`null` = unchanged" |
-| `POST /v1/references/{id}/materialize` | **`role` is three-state** — absent: the source reference's role; `null`: no role; a name: that role (C17, pending R91-2). The other three keys keep "absent or `null` = the prefill" |
+| `PATCH /v1/references/{id}` | `{displayName?, description?, role?}`; **`role` is three-state** — absent: unchanged; `null`: clear; a name: set (C14, R91-3). `displayName`/`description` keep the shipped "`null` = unchanged" |
+| `POST /v1/references/{id}/materialize` | **`role` is three-state** — absent: the source reference's role; `null`: no role; a name: that role (C17, R91-2). The other three keys keep "absent or `null` = the prefill" |
 | `GET /v1/status` | `schemaVersion` 17, `backupFormatVersion` 17 (read from the constants); `counts` unchanged |
 | `data.json` `assetReferences[]` | appends `role`, written explicitly as `"role": null` when unset (`explicitNulls` default) |
 
@@ -179,7 +204,7 @@ any inference, heuristic or suggestion of a role.
   three). `kind` and `scheme` stay derived exactly as today (`AddReference.kt:43`, `:72`, `:78`). The two core
   construction sites (`AddReference.kt:69`, `C/backup/BackupFormat.kt:1200`) and the Room mapper each pass the role
   explicitly; a default is not an excuse to drop it (rows 4, 6, 19 catch each).
-- **C5, Room schema 17 (pending R91-6).**
+- **C5, Room schema 17 (R91-6).**
   - `AssetReferenceEntity` (`A/data/room/entities/AssetReferenceEntity.kt:9-53`) appends
     `@ColumnInfo(name = "document_role") val documentRole: String?`, the attachment's column name
     (`AttachmentEntity.kt:69`). No CHECK, no index (nothing queries by role).
@@ -199,7 +224,7 @@ any inference, heuristic or suggestion of a role.
 
 ### B1b — backup format 17 (C6)
 
-- **C6, format 17 (the codec; pending R91-1 for the eligibility clause).**
+- **C6, format 17 (the codec; R91-1).**
   - `AssetReferenceDto` (`C/backup/BackupFormat.kt:402-417`) **appends** `val role: String? = null` as its tenth and
     last field (column order). `AssetReference.toDto()` writes `role?.name`; the KDoc "nine columns" becomes ten.
   - `BackupCodec.FORMAT_VERSION = 17` (`BackupCodec.kt:144`); the stale "v15" KDoc header line (`:31`) is corrected
@@ -216,15 +241,19 @@ any inference, heuristic or suggestion of a role.
     anything is written.
   - **Strict names:** the codec keeps `ignoreUnknownKeys` unset (`:181-184`); nothing here loosens it.
   - The Transfer Pack needs no code: its `data.zip` is this codec's output unchanged (`C/transfer/TransferPack.kt:10-19`).
-  - **Moving pins (format):** every literal-16 **format** assertion in audit §3's list moves to 17 in this brief —
+  - **Moving pins (format):** the **thirteen** literal-16 **format** assertions move to 17 in this brief —
     `CT/backup/{BackupFormat6Test:358, BackupFormat8Test:281, BackupFormat9Test:70, BackupFormat13Test:54,
     BackupFormat14Test:48, BackupFormat15Test:48, BackupCodecTest:1063}`, `CT/usecase/Format7ImportIdentityTest:245`,
-    `AT/backup/Format7RestoreContractTest:164`, `T/api/MaintenanceRoutesTest:1159`, `:1506`, `:1553`, and the format
-    halves of `T/VersionAgreementTest:83-86` (`:85`) and `:153-154` (`:154`). The schema halves moved in B1a.
+    `CT/usecase/ExportBackupSetTest:47`, `AT/backup/Format7RestoreContractTest:164`, `T/api/MaintenanceRoutesTest:1159`,
+    `:1506`, `:1553` — and the format halves of `T/VersionAgreementTest:83-86` (`:85`) and `:153-154` (`:154`). The
+    schema halves moved in B1a. Two structural pins move too (C-1): `CT/backup/BackupFormat7Test.kt:204-212` pins
+    `AssetReferenceDto`'s element names in order and `elementsCount == 9` — both become ten with `"role"` last, and its
+    KDoc (`:195-200`) says ten; `CT/backup/BackupFormat8Test.kt:270-281` seals its "one past this build" archive at
+    **literal 17** (`:277`) and asserts `found == 17` (`:280`) — both become 18 with its KDoc, beside `:281`'s 16 → 17.
 
 ### B1c — the merge and the Transfer Pack (C7–C8)
 
-- **C7, the merge: R67-12 option B, mirrored for references, on both arms (pending R91-7).** Once `role` is in the
+- **C7, the merge: R67-12 option B, mirrored for references, on both arms (R91-7).** Once `role` is in the
   DTO, the reference pass (`C/merge/MergePlanner.kt:838-875`) compares it automatically on the id arm (`:846`) and the
   second-identity arm (`:851`). The exception, a sibling of `sameAttachment` (`:776-781`) in its shape and not a
   generalisation of it:
@@ -278,7 +307,7 @@ any inference, heuristic or suggestion of a role.
   `AT/ui/references/ReferencesSectionTest.kt:245`, `CT/transfer/HeldWriteGuardTest.kt:412`. The one production site,
   `ReferenceEditSheet` (`A/ui/references/ReferenceSheets.kt:55`), passes `role = row.role` in this brief — a rename
   keeps the stored role — and gains its picker in B3b.
-- **C10, `AddReference` (pending R91-1).** The step order stays the contract (`AddReference.kt:19-32`), with one step
+- **C10, `AddReference` (R91-1).** The step order stays the contract (`AddReference.kt:19-32`), with one step
   inserted after the tier: **structural → length → tier → role → name → owner → identity**. The role step:
   `ReferenceKinds.inferFrom(scheme).accepts(cmd.role)` is false → `Refused(RoleNotAllowed)`, nothing generated or
   written. The row stores `role = cmd.role` exactly. An unknown scheme confirmed by the person classifies `OTHER`, so a
@@ -295,16 +324,18 @@ any inference, heuristic or suggestion of a role.
   2. `referenceProblemCode`, `ApiJson.kt:703-715`: `-> "REFERENCE_ROLE_NOT_ALLOWED"`.
   3. `ReferencesSectionViewModel.say`, `A/ui/references/ReferencesSectionViewModel.kt:259-270`: `-> return` — says
      nothing, the shipped treatment of an arm the surface cannot reach (`:253-258`), because the sheets never send a
-     role a link cannot take (C22, C23). **Pending R91-14.**
+     role a link cannot take (C22, C23). (R91-14)
   4. `ShareIntakeViewModel.saveLink`, `A/share/ShareIntakeViewModel.kt:330-344`: joins the `OwnerMissing,
      NoSuchReference, Unchanged -> ownerGone()` group — the shipped treatment of arms a create cannot reach — because
-     the intake never sends a role a link cannot take (C21). **Pending R91-14.**
-  No new sentence exists for arms 3 and 4 (G1 avoided, R91-5).
+     the intake never sends a role a link cannot take (C21). (R91-14)
+  No new sentence exists for arms 3 and 4 (G1 avoided, R91-5). Comments that count the arms move with them (N-2):
+  `ApiJson.kt:410` "Nine arms" → ten; `say`'s KDoc (`ReferencesSectionViewModel.kt:253-258`) "Four of the nine say
+  nothing" → five of ten.
 - **C13, `POST /v1/references`.** `CreateReferenceRequest` (`A/api/ReferenceDtos.kt:38-44`) appends
   `val role: DocumentRole? = null` — typed, so an unknown name is the decoder's 400; its KDoc becomes "five fields,
   and no `kind`". The handler passes `role = body.role` into the one `addReference.run` (`ReferenceHandlers.kt:78-90`)
   and re-checks nothing. `kind` stays an unknown field (400).
-- **C14, `PATCH /v1/references/{id}`: the tri-state (pending R91-3).** `UpdateReferenceRequest` (`:56-60`) appends
+- **C14, `PATCH /v1/references/{id}`: the tri-state (R91-3).** `UpdateReferenceRequest` (`:56-60`) appends
   `val role: DocumentRole? = null`. The handler reads the body **once as a `JsonObject`** and then decodes it strictly
   from that object — the `ScheduleForms` precedent for telling a JSON `null` from an absent key
   (`A/api/ScheduleForms.kt:86`, `:103-115`, `:156-157`):
@@ -321,8 +352,12 @@ any inference, heuristic or suggestion of a role.
   )
   ```
 
-  Then exactly one `updateReference.run`; `Unchanged` stays the 200 with the stored row (`:110-115`). The KDoc of
-  both request types and the handler state the asymmetry once.
+  Then exactly one `updateReference.run`; `Unchanged` stays the 200 with the stored row (`:110-115`). **The second
+  parse is deliberate** (N-1): `raw.toString()` through `decodeOr400` is exactly `ScheduleForms.strict`, so the 400s
+  keep the shipped decoder messages (`decodeFromJsonElement` would change them), and the 64 KiB tier makes the cost
+  negligible. The asymmetry is stated once in each KDoc that counts or describes the fields (N-2):
+  `CreateReferenceRequest`'s, `UpdateReferenceRequest`'s "Two fields" (`ReferenceDtos.kt:47`) and
+  `ReferenceHandlers.update`'s "full pair" (`ReferenceHandlers.kt:92-98`).
 - **C15, reads.** `listForAsset` and both write answers reuse `AssetReferenceDto` verbatim (`ReferenceDtos.kt:23-27`),
   so `role` appears with no handler change; `/v1/status` reports 17/17 from the constants. `ReferenceRowState`
   (`ReferencesSectionViewModel.kt:45-57`) appends `val role: DocumentRole? = null`, mapped in `row()` (`:237-251`) —
@@ -330,7 +365,7 @@ any inference, heuristic or suggestion of a role.
 
 ### B2c — materialize carries the source role (C16–C17)
 
-- **C16, the snapshot and the prefill (pending R91-2, R91-9).** `SourceSnapshot`
+- **C16, the snapshot and the prefill (R91-2, R91-9).** `SourceSnapshot`
   (`C/usecase/MaterializeReference.kt:204-206`) appends `val role: DocumentRole?` with **no default** (one production
   site, `prepare` at `:112`, passes `reference.role`; the three test sites pass it explicitly); `toString` stays
   host-only. `reviewPrefill` (`A/ui/references/MaterializeViewModel.kt:210-215`) sets `role = snapshot.role` and
@@ -339,7 +374,7 @@ any inference, heuristic or suggestion of a role.
   already offers "No role" and every role (`MaterializeSheet.kt:163-164`, `chooseRole` `:129`), so the owner can change
   or clear the copied role before Save (AC6) with **no UI change**; `commit` carries `review.role` into
   `AddAttachmentCommand` as today (`MaterializeReference.kt:144`).
-- **C17, `POST /v1/references/{id}/materialize`: the tri-state (pending R91-2).** The handler
+- **C17, `POST /v1/references/{id}/materialize`: the tri-state (R91-2).** The handler
   (`A/api/AttachmentHandlers.kt:262-320`) reads the body once as a `JsonObject` and strictly decodes `MaterializeRequest`
   from it (C14's idiom); in `saveAsDocument` the review's role is `if ("role" in raw) given.role else prefilled.role`
   (today `given.role ?: prefilled.role`, `:318`). `displayName`, `kind`, `notes` keep "absent or `null` = the
@@ -352,13 +387,13 @@ any inference, heuristic or suggestion of a role.
 - **C18, three tools gain arguments; the count stays 76.**
   - `add_reference(…, role: str | None = None)` (`M/src/servicetag_mcp/server.py:1996-2028`): `role` in the body only
     when given (`_body` drops `None`, `:356`). No `clear_fields` (nothing to clear on a create).
-  - `update_reference(…, role: str | None = None, clear_fields: list[str] | None = None)` (`:2031-2056`, pending
+  - `update_reference(…, role: str | None = None, clear_fields: list[str] | None = None)` (`:2031-2056`,
     R91-3): `clear_fields` takes **`role` only**, validated by the shipped `_validate_clear_fields` (`:385`) against a
     new `_REFERENCE_CLEARABLE_FIELDS = frozenset({"role"})`; a cleared role is sent as `"role": null` after `_body`
     (the `update_attachment` idiom, `:2985-3009`). `display_name` still cannot be cleared and `description` is still
     cleared by `""`; the docstring's "There is no `clear_fields` here" paragraph (`:2042-2045`) is rewritten to say
     exactly that.
-  - `materialize_reference(…, clear_fields: list[str] | None = None)` (`:3183-3216`, pending R91-2): `clear_fields`
+  - `materialize_reference(…, clear_fields: list[str] | None = None)` (`:3183-3216`, R91-2): `clear_fields`
     takes `role` only and sends `"role": null`; `role` given sends it; neither sends no `role` key, and the phone copies
     the source role. Its docstring's "absent, the phone uses … no role" (`:3208-3210`) becomes "the reference's own
     role (none before schema 17)". The `IDENTICAL` short-circuit (`:3240-3242`) is unchanged.
@@ -368,7 +403,7 @@ any inference, heuristic or suggestion of a role.
     pins (`M/tests/test_argument_guard.py:51`, `:256-258`; `M/tests/test_reference_tools.py:54-59`).
   - The role names are the phone's to validate (its decoder's 400); the MCP carries no second list of them unless
     `update_attachment` already has one, which it then reuses.
-- **C19, the schema-17 gate (pending R91-10 — a correction to the audit's Q10).** `_MIN_REFERENCE_ROLE_SCHEMA_VERSION =
+- **C19, the schema-17 gate (R91-10 — a correction to the audit's Q10).** `_MIN_REFERENCE_ROLE_SCHEMA_VERSION =
   17`, documented in `_MIN_ATTACHMENT_SCHEMA_VERSION`'s pattern (`:202-205`), and `_require_reference_role_schema(tool)`
   → `_require_tool_schema(tool, 17, "the reference document role")` (`:254-270`). Called by `add_reference` **only when
   `role` is given**, and by `update_reference` **only when `role` is given or `clear_fields` names it**: an
@@ -379,15 +414,25 @@ any inference, heuristic or suggestion of a role.
   working call away from a 16 phone. It keeps `_require_attachment_schema` at 16 (`:3220`).
 - **C20, the MCP documents.** `M/README.md:112`'s references paragraph names `role` and `clear_fields=["role"]`; the
   three docstrings as above; `M/tests/test_reference_tools.py`'s module docstring (`:1-12`) is rewritten (its "no
-  `clear_fields`" rationale now holds for `add_reference` and for the name and description only).
+  `clear_fields`" rationale now holds for `add_reference` and for the name and description only). **The import range
+  (C-2, the format-16 precedent `05dc90b0`):** `import_merge`'s docstring (`M/src/servicetag_mcp/server.py:1169`) and
+  `M/README.md:356` move "format 1–16" / "format **1–16**" to 1–17, each with one clause in #67's words — format 17
+  adds each reference's document role, and an older archive's references are compared without it; `test_tools.py`'s
+  two assertions (`:806`, `:815`) move with them (the function's name may follow).
 
 ### B3a — share intake (C21)
 
-- **C21, a web link share offers the Role chips (pending R91-4; amends R67-9).**
-  - `ShareIntakeState` gains `val roleOffered: Boolean = false`, decided once where the share is classified
-    (`ShareIntakeViewModel.kt:466-480`): **true** for `BYTES` (unchanged behaviour); for `LINK`, true iff
-    `ReferenceKinds.inferFrom(policy.schemeOf(uri.trim())).takesRole` — the shipped policy instance and classifier,
-    never a prefix test; false for `NOTE` and `TRANSFER_PACK`. "No role" is preselected (`role = null`, `:116-117`).
+- **C21, a web link share offers the Role chips (R91-4; amends R67-9).**
+  - **The policy (C-4):** `ShareIntakeViewModel` (`:165-178`) holds none today, so it gains a trailing constructor
+    parameter `private val linkPolicy: LinkLaunchPolicy = LinkLaunchPolicy()` — stateless (`schemeOf` is pure), so
+    `ShareIntakeActivity.kt` and the four `ShareIntakeViewModelTest` construction sites stay untouched and B3a's file
+    list is unchanged.
+  - `ShareIntakeState` gains a stored `val linkTakesRole: Boolean = false`, decided once where the share is
+    classified (`ShareIntakeViewModel.kt:466-480`): true iff the link's
+    `ReferenceKinds.inferFrom(linkPolicy.schemeOf(uri.trim())).takesRole` — the shipped classifier, never a prefix
+    test. **`roleOffered` is a derived getter** in the `noFolder` getter's style (`:133`): `path == BYTES || (path ==
+    LINK && linkTakesRole)` — so `BYTES` is unchanged and a hand-built `BYTES` state still draws Role (N-5, taken this
+    way); false for `NOTE` and `TRANSFER_PACK`. "No role" is preselected (`role = null`, `:116-117`).
   - `role(value)` (`:270-272`) records a pick iff `roleOffered` (today: iff `BYTES`).
   - `saveLink` (`:308-324`) passes `role = current.role.takeIf { current.roleOffered }` into `AddReferenceCommand`; the
     unknown-scheme re-submit (`:286-291`) is the same path.
@@ -409,12 +454,12 @@ any inference, heuristic or suggestion of a role.
   `rememberModalBottomSheetState(skipPartiallyExpanded = true)` and a `verticalScroll(rememberScrollState())` column,
   applied once in `SheetColumn` (`ReferenceSheets.kt:145-154`) and `ModalBottomSheet`'s state at `:47` and `:80`, so
   Save stays reachable on a narrow phone at a large text size.
-- **C23, Add link (pending R91-5).** The sheet's state is a **plain class the JVM tests** (the sheet renders it):
+- **C23, Add link (R91-5).** The sheet's state is a **plain class the JVM tests** (the sheet renders it):
 
   ```kotlin
   // A/ui/references/AddLinkForm.kt (#91, R91-5) — shape, not code; the implementer names the members.
   internal data class AddLinkForm(val link: String = "", val role: DocumentRole? = null)
-  //  roleOffered: the typed text's kind, by LinkLaunchPolicy.schemeOf(link.trim()) + ReferenceKinds.inferFrom, takesRole
+  //  roleOffered: given by a (String) -> Boolean the view model supplies (below) — never a second classifier
   //  withLink(text): the new text; a pick is CLEARED when the new text is not offered (so re-offering shows "No role")
   //  withRole(pick): recorded only while offered
   //  role at Save:   role.takeIf { roleOffered } — a non-web link is never sent with a role
@@ -423,10 +468,14 @@ any inference, heuristic or suggestion of a role.
   The chips (the C22 block) are drawn **only while `roleOffered`**; no refusal sentence is needed (G1). The view model's
   `addLink(uri, displayName, description, role)` (`ReferencesSectionViewModel.kt:144-146`) passes the role into
   `AddReferenceCommand`; `confirmUnknownScheme` re-submits the same command (`:148-153`), which for an `OTHER` link
-  carries no role by construction. The policy comes from the view model (`policy`, `:246`); the sheet does not
-  construct one.
-- **C24, the row's role line (pending R91-8).** `ReferenceRow` (`A/ui/references/ReferencesSection.kt:203-234`) draws
-  `QuietLine(role.label())` **after the kind line** (`:228`) when `row.role != null`, the label verbatim; never "No
+  carries no role by construction. **Where the classification comes from (C-4):** the view model, which already holds
+  `policy` (`ReferencesSectionViewModel.kt:80`), exposes `fun roleOffered(link: String): Boolean` =
+  `ReferenceKinds.inferFrom(policy.schemeOf(link.trim())).takesRole`; `AddLinkSheet` gains a `roleOffered: (String) ->
+  Boolean` parameter (the section passes the view model's) and its `onSave` gains the role, `(uri, name, description,
+  role) -> Unit`. The sheet constructs no policy. That signature is the C-1 pin at `ReferencesSectionTest.kt:281-303`.
+- **C24, the row's role line (R91-8).** `ReferenceRow` (`A/ui/references/ReferencesSection.kt:203-234`) draws
+  `QuietLine(role.label())` when `row.role != null`, in the order **kind, role, "Saved as document", description**
+  (N-6: after `:228`, before #85's line at `:230`), the label verbatim; never "No
   role"; no composed "Web link · User manual". The overflow's `contentDescription` stays `"More"` (`:237`; G3 not
   taken). Key documents (`DocumentsSection`) and the Details "Purchase document" fact (`AssetDetailScreen.kt:911`) are
   untouched.
@@ -443,9 +492,11 @@ any inference, heuristic or suggestion of a role.
   C/usecase/UpdateReference.kt A/api/ReferenceHandlers.kt A/share/ShareIntakeViewModel.kt
   A/ui/references/ReferencesSectionViewModel.kt A/ui/references/MaterializeViewModel.kt` — each brief records the
   count at its base and its tip; the count must not grow except by a KDoc line the brief names.
-- **C26, the documents (B4; pending R91-11 for `versioning.md`).**
+- **C26, the documents (B4; R91-11, R91-12).**
   - `docs/api/v1.md`: the reference surface (`:589-616`) — `role?` on `POST`, the `PATCH` tri-state and its asymmetry,
-    `role` on every row; the reference codes (`:1703-1724`) — `REFERENCE_ROLE_NOT_ALLOWED` (422, `role`); the import
+    `role` on every row; the reference codes (`:1703-1724`) — a row `| 422 | `REFERENCE_ROLE_NOT_ALLOWED` | … |` in the
+    table's own `| status | code | when |` shape (`:1709-1715`; it has no `field` column, so the "when" cell names
+    `field` `role`, C-3a); the import
     range "format **1–16**" / "**format 1–16**" → 1–17 wherever it stands (`:208`, `:1946`, and each emphasis
     spelling); both status lines (`:213`, `:215`) gain "17 since #91 (reference document role)"; the `IDENTICAL` row
     (`:1971`) gains the reference-role sentence in #67's words; the materialize body (`:1350-1352`) states R91-2's
@@ -453,8 +504,8 @@ any inference, heuristic or suggestion of a role.
   - `docs/release-proofs.md`: a new paragraph after the #92 note (`:116`) and before "## Environment notes", **the
     first signed release carrying Room schema 17 / backup format 17**: the direct upgrade from **each installed
     release** (the development phone's 1.5.0 and whatever the production phone runs, on the older-release path,
-    `:100`) on the emulator before any phone; seed references with and without roles on the older side the old
-    way (no role exists there) and give roles **after** the upgrade through `POST`/`PATCH /v1/references` and at least
+    `:100`) on the emulator before any phone; seed references on the older side (N-8); give roles to some
+    of them **after** the upgrade through `POST`/`PATCH /v1/references` and at least
     one through the edit sheet; show a post-upgrade export carries `"role": null` on every pre-existing reference and
     every other reference field equal; the pre-upgrade export re-plans **applicable with zero INSERT, every row
     `IDENTICAL`** (the role-bearing references included, by C7); the format-17 round trip restores every role (a
@@ -464,10 +515,11 @@ any inference, heuristic or suggestion of a role.
   - `docs/superpowers/specs/2026-09-23-servicetag-share-intake.md`: an "Amendment (#91, R91-4)" paragraph after #67's
     (`:459-466`): a web-link share draws the Role section after Description, "No role" chosen; a note-link and a note
     share draw none.
-  - `docs/versioning.md`: **pending R91-11** — one sentence recording R67-10's shipped practice (a forward-only schema
-    and format bump may land on master with no release; master builds run on the emulator only until a release gate
-    passes). No new rule beyond what R67-10 and `release-proofs.md` already say.
-  - Not touched: `docs/api/command-shapes.json` (pending R91-12), `README.md`, the manifest.
+  - `docs/versioning.md`: **R91-11** — one sentence recording R67-10's shipped practice (a forward-only schema
+    and format bump may land on master with no version bump or release, validated on the emulator; the release
+    vehicle and phone promotion are separate decisions). No new rule beyond what R67-10, R91-11 and
+    `release-proofs.md` already say.
+  - Not touched: `docs/api/command-shapes.json` (R91-12: no entry), `README.md`, the manifest.
 
 ## 3. Test matrix
 
@@ -485,7 +537,7 @@ named; core in `CT/`; MCP in `M/tests/`. "Pin" = a shipped assertion that moves 
 | 7 | C6 the ≤ 16 gate | `aFormat16ArchiveDecodesWithNoRoles` (the key absent); `aFormat16ArchiveCarryingARoleIsCorrupt` (names the reference); `anExplicitNullInAFormat16ArchiveIsAccepted` | the gate removed |
 | 8 | C6 eligibility and names at decode | `aRoleOnANoteLinkIsCorruptNamingTheReference`; `aRoleOnAnOtherLinkIsCorrupt`; `anUnknownRoleNameIsCorrupt` | the `accepts` check removed from `toDomain` |
 | 9 | C6 newer refused | `aFormat18ArchiveIsRefusedAsNewer` (the shipped `BackupNewerFormat`, now at 17) | none: pin |
-| 10 | C6 the moving format pins | the eleven literal-16 format assertions (C6's list) → 17 | none: pins |
+| 10 | C6 the moving format pins | the **thirteen** literal-16 format assertions (C6's list, `ExportBackupSetTest:47` included) → 17; `BackupFormat8Test:277`/`:280`'s "newer" 17 → 18; `BackupFormat7Test:204-212`'s names and count → ten, `"role"` last | none: pins |
 | 11 | C6 the tombstones | `PreservedSetRestoreTest` untouched (format 5, no references); the tombstone grep → 0 | none: the device class runs at the merged gate |
 | 12 | C7 pre-17, id arm | `MergePlannerReferenceTest` · `` `a format-16 archive against a row later given a role is identical` `` | the exception removed (→ `CONFLICT`) |
 | 13 | C7 pre-17, pair arm | `` `a format-16 archive against an equivalent row under another id later given a role is identical` `` | the exception on the id arm only (→ `SKIPPED`) |
@@ -500,7 +552,7 @@ named; core in `CT/`; MCP in `M/tests/`. "Pin" = a shipped assertion that moves 
 | 22 | C25 no inference (core) | `AddReferenceTest` · `noRoleIsEverInferred` — a table of names ("User manual", "Service manual", "manual", "Invoice", "Purchase receipt"), descriptions and a uri ending `/user-manual.pdf`, each with `role = null` → the row's role null | a name matcher (`"manual" in name.lowercase()` → `USER_MANUAL`) |
 | 23 | C11 update | `CT/usecase/UpdateReferenceTest` · `aRoleOnlyChangeWritesAndMovesUpdatedAt`; `theSameRoleIsUnchangedAndWritesNothing`; `clearingARoleWrites`; `aRenameCarryingTheStoredRoleKeepsIt`; `aRoleOnANoteRowIsRefusedAndNothingWritten` | `Unchanged` compares name and description only (a role-only change is refused) |
 | 24 | C9 no default on the update | anchored grep (B2a) · `'^data class UpdateReferenceCommand\(val displayName: String, val description: String, val role: DocumentRole\?\)$'` → 1 | none: grep |
-| 25 | C12 every problem has its code and status | `T/api/ReferenceRoutesTest` · `everyReferenceProblemHasItsOwnCode` (`:428`) grows `RoleNotAllowed` → `REFERENCE_ROLE_NOT_ALLOWED`; the status arm → 422 with `field` `role`, calling the mapper directly | `RoleNotAllowed` mapped to 409, or no `field` |
+| 25 | C12 every problem has its code and status | `T/api/ReferenceRoutesTest` · `everyReferenceProblemHasItsOwnCode` (`:428`) grows `RoleNotAllowed` → `REFERENCE_ROLE_NOT_ALLOWED`; the status arm → 422 with `field` `role`, calling the mapper directly; `everyReferenceCodeIsReachableOverTheWire` (`:342-388`, "five of them" → six) gains a live `REFERENCE_ROLE_NOT_ALLOWED` (N-3) | `RoleNotAllowed` mapped to 409, or no `field` |
 | 26 | C13 POST | `aPostWithARoleIs201AndReadsBack` (list and answer carry it); `aPostWithARoleOnANoteLinkIs422AndWritesNothing`; `anUnknownRoleNameIs400`; `aPostWithANullRoleIsNoRole`; `kindIsRefused…` (`:193`) unchanged | the handler drops `body.role` |
 | 27 | C14 PATCH tri-state | `aPatchWithoutRoleLeavesItAlone`; `aPatchWithANullRoleClearsIt`; `aPatchWithARoleSetsIt`; `aRoleOnANoteRowIs422`; `aRoleOnlyNoOpIs200TheStoredRowAndWritesNothing`; `nullLeavesAFieldAlone…` (`:263`) unchanged for the name and description | `role = body.role ?: stored.role` (a `null` can no longer clear) |
 | 28 | C15 reads carry the key | `theListCarriesRoleAndNullWhenNone` (the key present on every row) | none: `AssetReferenceDto` reuse |
@@ -514,13 +566,13 @@ named; core in `CT/`; MCP in `M/tests/`. "Pin" = a shipped assertion that moves 
 | 36 | C18 update | `update_reference(clear_fields=["role"])` → `{"role": null}`; `role` given → sent; `clear_fields=["description"]` refused locally; a field both given and cleared refused (the shipped helper's rule); `test_update_reference_sends_only_the_fields_it_was_given` (`:145-158`) unchanged | the cleared null dropped by `_body` (body `{}`) |
 | 37 | C18 materialize | `test_attachment_tools.py` · `materialize_reference(clear_fields=["role"])` → `{"role": null}`; no role → `{}` (`:610-611` unchanged); **a schema-16 phone accepts both** (the gate stays 16) | `clear_fields` ignored (body `{}`) |
 | 38 | C18 reads | `list_references` passes a schema-16 row without `role` and a schema-17 row with one | `role` added to `_REFERENCE_FIELDS` |
-| 39 | C18 pins | 76 tools (both files); `kind` on neither reference write tool; no delete tool; **`clear_fields` absent on `add_reference` only** (`:73` moves); `materialize_reference`'s names (`test_attachment_tools.py:147-149`) gain `clear_fields`; the materialize docstring words (`:680-695`) unchanged and green | none: pins |
-| 40 | C21 share intake (R91-4) | `ShareIntakeViewModelTest` · `aWebLinkShareCarriesTheChosenRole` (the `AddReferenceCommand` role); `aWebLinkShareStartsWithNoRole`; `aLinkShareHasNoRole` (`:410-428`) **becomes** `aNoteLinkShareOffersNoRoleAndRecordsNone` (its note-share arm kept); `aSharedTitleNeverBecomesARole` (a link whose suggested name is "Service manual" → role `null`) | `role()` still gated on `BYTES` (row 1 of this set fails); `roleOffered` true for every `LINK` (the note-link case fails) |
-| 41 | C21 the screen | `AT/share/ShareIntakeScreenTest` · `theRoleControlIsDrawnOnBytesAndNeverOnALink` (`:179-193`) **grows** into `…OnBytesAndOnAWebLinkAndNeverOnANoteLink`: a `roleOffered` web-link state draws the header and four chips with "No role" selected; the shipped `LINK` arm (`roleOffered = false`) still draws none | none in-brief: a device case, run at the merged gate |
-| 42 | C23 Add link (R91-5) | `T/ui/references/AddLinkFormTest` (new) · `noChipsUntilTheTextIsAWebLink` (empty, `joplin://…`, `mailto:` → not offered; `https://…`, `HTTP://…` with leading spaces → offered); `aPickIsClearedWhenTheTextStopsBeingAWebLink`; `aPickIsIgnoredWhileNotOffered`; `theRoleAtSaveIsNullForANonWebLink` | the pick kept when the text stops classifying `WEB_URL`; `offered` by `startsWith("http")` (the `HTTP://` and `http:`-less cases) |
-| 43 | C22/C23 the view model | `ReferencesSectionViewModelTest` · `addLinkPassesTheRole`; `saveCarriesTheCommandsRole`; the three command sites (`:405`, `:424`, `:495`) pass `role` | `addLink` drops the role |
+| 39 | C18 pins | 76 tools (both files); `kind` on neither reference write tool; no delete tool; **`clear_fields` absent on `add_reference` only** (`:73` moves); `materialize_reference`'s names (`test_attachment_tools.py:147-149`) gain `clear_fields`; the materialize docstring words (`:680-695`) unchanged and green; `test_tools.py:801-815` → "format 1–17" and "format **1–17**" (C-2) | none: pins |
+| 40 | C21 share intake (R91-4) | `ShareIntakeViewModelTest` · `aWebLinkShareCarriesTheChosenRole` (the `AddReferenceCommand` role); `aWebLinkShareStartsWithNoRole`; `aLinkShareHasNoRole` (`:410-428`) **becomes** `aNoteLinkShareOffersNoRoleAndRecordsNone` (its note-share arm kept); `aSharedTitleNeverBecomesARole` (a link whose suggested name is "Service manual" → role `null`) | `role()` still gated on `BYTES` (row 1 of this set fails); `linkTakesRole` true for every link (the note-link case fails) |
+| 41 | C21 the screen | `AT/share/ShareIntakeScreenTest` · `theRoleControlIsDrawnOnBytesAndNeverOnALink` (`:179-193`) **grows** into `…OnBytesAndOnAWebLinkAndNeverOnANoteLink`: a `LINK` state with `linkTakesRole = true` draws the header and four chips with "No role" selected; the shipped `LINK` arm (`linkTakesRole` false by default) still draws none, and the `BYTES` arm is unchanged (the derived getter, N-5) | none in-brief: a device case, run at the merged gate |
+| 42 | C23 Add link (R91-5) | `T/ui/references/AddLinkFormTest` (new), the form driven by the view model's real `roleOffered` (C-4) · `noChipsUntilTheTextIsAWebLink` (empty, `joplin://…`, `mailto:` → not offered; `https://…`, `HTTP://…` with leading spaces → offered); `aPickIsClearedWhenTheTextStopsBeingAWebLink`; `aPickIsIgnoredWhileNotOffered`; `theRoleAtSaveIsNullForANonWebLink` | the pick kept when the text stops classifying `WEB_URL`; `offered` by `startsWith("http")` (the `HTTP://` and `http:`-less cases) |
+| 43 | C22/C23 the view model | `ReferencesSectionViewModelTest` · `addLinkPassesTheRole`; `saveCarriesTheCommandsRole`; `roleOfferedIsTheKindAddReferenceWouldDerive`; the three command sites (`:405`, `:424`, `:495`) pass `role` | `addLink` drops the role |
 | 44 | C22–C24 the sheets and the row | `AT/ui/references/ReferencesSectionTest` · `theEditSheetHasExactlyTwoFieldsAndTheUriIsNotOneOfThem` (`:223-246`) **grows**: a web-link row draws "Role" and its role's chip selected, a pick reaches the saved command, Save found by `performScrollTo()`; a note-link row draws no "Role"; still exactly two text fields. `eachKindDrawsItsOwnRatifiedWord` (`:132`) **grows**: a row with a role draws its label once; a row with none never draws "No role" | none in-brief: device cases, run at the merged gate |
-| 45 | C26 the documents | `CommandShapesGoldenTest` · the range pins (`:132-166`: "format **1–17**", "17 since #91") and the `IDENTICAL` row (`:167-172`) gain the reference-role sentence; every code named in `v1.md` (`REFERENCE_ROLE_NOT_ALLOWED` included); `ReferenceRoutesTest:556-566` → 1–17 | `REFERENCE_ROLE_NOT_ALLOWED` missing from `v1.md` |
+| 45 | C26 the documents | `CommandShapesGoldenTest` · the range pins (`:132-166`: "format **1–17**", "17 since #91") and the `IDENTICAL` row (`:167-172`) gain the reference-role sentence; every code named in `v1.md` (`REFERENCE_ROLE_NOT_ALLOWED` included); `ReferenceRoutesTest:556-566` → 1–17; `theApiDocumentAgreesWithTheRouter`'s row list (`ReferenceRoutesTest.kt:597-604`) gains `^\| 422 \| `REFERENCE_ROLE_NOT_ALLOWED` \|` | `REFERENCE_ROLE_NOT_ALLOWED` missing from `v1.md` |
 | 46 | policy | `ReleaseProofPolicyTest` unchanged and green | none: the tripwire |
 
 **Moving pins — each named shipped assertion, the brief that may touch it, and why.** A brief touches no other
@@ -530,36 +582,43 @@ shipped assertion (the pin rule, "Briefs — common").
 |---|---|---|
 | `T/VersionAgreementTest.kt:84`, `:153`; `T/api/MaintenanceRoutesTest.kt:1505` | B1a | the schema is 17 (the test method's name follows: "Seventeen…Sixteen", then B1b "…Seventeen") |
 | `T/data/room/Migration8To9Test.kt:37` | B1a | the whole chain now adds `document_role`, a known delta like `V11_ASSET_COLUMNS` |
-| C6's eleven format literals; `VersionAgreementTest.kt:85`, `:154` | B1b | the format is 17 |
+| C6's thirteen format literals (`CT/usecase/ExportBackupSetTest.kt:47` included); `VersionAgreementTest.kt:85`, `:154` | B1b | the format is 17 |
+| `CT/backup/BackupFormat8Test.kt:277`, `:280` (and its KDoc) | B1b | its "one format past this build" archive is literal 17, readable at 17: it becomes 18 (C-1) |
+| `CT/backup/BackupFormat7Test.kt:195-212` | B1b | `AssetReferenceDto`'s pinned element names and `elementsCount` become ten, `"role"` last (C-1) |
 | `CT/usecase/UpdateReferenceTest.kt` (4 sites), `T/ui/references/ReferencesSectionViewModelTest.kt:405`, `:424`, `:495`, `AT/ui/references/ReferencesSectionTest.kt:245`, `CT/transfer/HeldWriteGuardTest.kt:412` | B2a | `UpdateReferenceCommand.role` has no default (C9); each passes the role it means (null on those rows) |
-| `T/api/ReferenceRoutesTest.kt:428` (`everyReferenceProblemHasItsOwnCode`) | B2a | one more `ReferenceProblem` member |
+| `T/api/ReferenceRoutesTest.kt:428` (`everyReferenceProblemHasItsOwnCode`); `:342-388` (`everyReferenceCodeIsReachableOverTheWire`, "five" → six) | B2a | one more `ReferenceProblem` member and one more live code (N-3) |
+| `CT/usecase/AddReferenceTest.kt:279-282`; `CT/usecase/UpdateReferenceTest.kt:115-118` | B2a | each pins its command's `declaredFields`, which gain `role` (C-1) |
+| `T/ui/references/ReferencesSectionViewModelTest.kt:264-271` | B2a | `theRowStateCarriesNothingThatBelongsToBytes` pins `ReferenceRowState`'s fields, which gain `role` (C15, C-1) |
 | `T/ui/references/MaterializeViewModelTest.kt:221-225`, `:232-245`; the three `SourceSnapshot(` test sites | B2c | the prefill copies `snapshot.role`; `SourceSnapshot.role` has no default |
 | `T/api/MaterializeRoutesTest.kt:249-256` | B2c | re-read, not edited: its source has no role, so "no role" still holds — listed so a reviewer knows it was checked |
 | `M/tests/test_reference_tools.py:1-12`, `:73`; `M/tests/test_attachment_tools.py:147-149` | B2b | `update_reference` and `materialize_reference` gain `clear_fields` (R91-3, R91-2) |
+| `M/tests/test_tools.py:801-815` | B2b | `import_merge`'s docstring and README range read 1–17 (C-2, the `05dc90b0` precedent) |
 | `T/share/ShareIntakeViewModelTest.kt:410-428`; `AT/share/ShareIntakeScreenTest.kt:174-193` | B3a | R67-9 is amended for web links (R91-4) |
 | `AT/ui/references/ReferencesSectionTest.kt:132`, `:223-246` | B3b | the edit sheet gains a Role section on a web row; the row gains a role line (R91-13) |
-| `T/api/CommandShapesGoldenTest.kt:132-172`; `T/api/ReferenceRoutesTest.kt:556-566` | B4 | the import range reads 1–17; the `IDENTICAL` row gains the reference sentence |
+| `AT/ui/references/ReferencesSectionTest.kt:281-303` | B3b | `AddLinkSheet` gains `roleOffered` and a four-argument `onSave` (C23, C-1); its string-set assertion still holds (empty text, no chips) |
+| `T/api/CommandShapesGoldenTest.kt:132-172`; `T/api/ReferenceRoutesTest.kt:556-566`, `:597-604` | B4 | the import range reads 1–17; the `IDENTICAL` row gains the reference sentence; the document's code rows gain `| 422 | REFERENCE_ROLE_NOT_ALLOWED |` (C-3a) |
 
 **Device rows: none new** (R91-13). #91 adds no platform-only fact: the column, the codec, the merge, the use cases,
 the routes, the MCP and every rule a phone surface applies (C21's `roleOffered`, C23's form, C22/C24's state) are
 JVM-proven. What remains on a device is Compose rendering of an already-proven state, which three **shipped** cases
 already exercise; they grow (rows 41, 44) rather than a class or case being added. The sheets' reshape (C22) is
 observed by `performScrollTo()` on Save in row 44, the idiom `ShareIntakeScreenTest` ships (`:183-186`). No row needs
-the network, NFC, a picker or a second UID.
+the network, NFC, a picker or a second UID. **Known cost (N-10):** the grown cases first run at the merged-tip gate,
+so a red there costs one fix round after the merge — accepted under the device-boundary rule.
 
 ## 4. Files, fences, order and the gate budget
 
 | brief | touches | never touches |
 |---|---|---|
 | B1a | `C/model/{DocumentRole (new),Attachment,AssetReference}.kt`; `C/references/ReferenceKinds.kt`; `A/data/room/{entities/AssetReferenceEntity,ReferenceMappers,Migrations,AppDatabase}.kt`; `A/di/AppGraph.kt`; `app/schemas/…AppDatabase/17.json` (generated); `CT/references/ReferenceRolesTest.kt` (new); `T/data/room/{Migration16To17Test (new),MigrationTestSupport,Migration8To9Test,ReferenceDaoConstraintTest}.kt`; `T/VersionAgreementTest.kt`, `T/api/MaintenanceRoutesTest.kt` (schema lines only) | `C/backup`, `C/merge`, `C/usecase`, `A/api`, `A/ui`, `A/share`, `docs`, `tools`, `app/schemas/…/16.json` |
-| B1b | `C/backup/{BackupFormat,BackupCodec}.kt`; `CT/backup/BackupFormat17Test.kt` (new); C6's eleven format pins; `T/VersionAgreementTest.kt`, `T/api/MaintenanceRoutesTest.kt` (format lines only) | `C/merge`, `C/usecase`, `A/**` main, `docs`, `tools` |
+| B1b | `C/backup/{BackupFormat,BackupCodec}.kt`; `CT/backup/BackupFormat17Test.kt` (new); C6's thirteen format pins and its two structural pins (`BackupFormat7Test`, `BackupFormat8Test:277/:280`); `T/VersionAgreementTest.kt`, `T/api/MaintenanceRoutesTest.kt` (format lines only) | `C/merge`, `C/usecase`, `A/**` main, `docs`, `tools` |
 | B1c | `C/merge/MergePlanner.kt`; `CT/merge/MergePlannerReferenceTest.kt`; `CT/transfer/ImportTransferPackTest.kt` (+1) | `C/backup`, `C/transfer` main, `A/**`, `docs`, `tools` |
 | B2a | `C/usecase/{ReferenceCommands,AddReference,UpdateReference}.kt`; `A/api/{ReferenceDtos,ReferenceHandlers,ApiJson}.kt`; `A/ui/references/{ReferencesSectionViewModel,ReferenceSheets}.kt` (C12 arm 3, C15's field, C9's one site — no picker); `A/share/ShareIntakeViewModel.kt` (C12 arm 4 only); `CT/usecase/{AddReferenceTest,UpdateReferenceTest}.kt`; `CT/transfer/HeldWriteGuardTest.kt` (`:412`); `T/api/ReferenceRoutesTest.kt`; `T/ui/references/ReferencesSectionViewModelTest.kt`; `AT/ui/references/ReferencesSectionTest.kt` (`:245` only) | `C/backup`, `C/merge`, `MaterializeReference.kt`, `AttachmentHandlers.kt`, `A/share/ShareIntakeScreen.kt`, `docs`, `tools` |
 | B2c | `C/usecase/MaterializeReference.kt` (`SourceSnapshot`, `prepare`'s one line); `A/ui/references/MaterializeViewModel.kt` (`reviewPrefill`); `A/api/AttachmentHandlers.kt` (C17 only); `CT/usecase/MaterializeReferenceTest.kt`; `T/ui/references/MaterializeViewModelTest.kt`; `T/api/MaterializeRoutesTest.kt`; the three `SourceSnapshot(` test sites | `MaterializeSheet.kt`, `C/fetch/*`, `A/fetch/*`, the lock and hand-off in `AttachmentHandlers.kt`, `docs`, `tools` |
-| B2b | `M/src/servicetag_mcp/server.py`; `M/README.md`; `M/tests/{test_reference_tools,test_attachment_tools}.py` | `app/**`, `core/**`, `S/**`, `M/src/servicetag_mcp/command_shapes.py`, `docs` |
+| B2b | `M/src/servicetag_mcp/server.py` (the three tools, the gate, `import_merge`'s range); `M/README.md` (`:112`, `:356`); `M/tests/{test_reference_tools,test_attachment_tools,test_tools}.py` | `app/**`, `core/**`, `S/**`, `M/src/servicetag_mcp/command_shapes.py`, `docs` |
 | B3a | `A/share/{ShareIntakeViewModel,ShareIntakeScreen}.kt`; `T/share/ShareIntakeViewModelTest.kt`; `AT/share/ShareIntakeScreenTest.kt` | `A/ui/**`, `C/**`, `A/api`, `tools`, `docs` |
 | B3b | `A/ui/references/{ReferenceSheets,ReferencesSection,ReferencesSectionViewModel,AddLinkForm (new)}.kt`; `T/ui/references/{AddLinkFormTest (new),ReferencesSectionViewModelTest}.kt`; `AT/ui/references/ReferencesSectionTest.kt` | `A/share/**`, `A/ui/attachments/**`, `MaterializeSheet.kt`, `C/**`, `A/api`, `tools`, `docs` |
-| B4 | `docs/api/v1.md`; `docs/release-proofs.md`; `docs/superpowers/specs/2026-09-23-servicetag-share-intake.md`; `docs/versioning.md` (pending R91-11); `T/api/{CommandShapesGoldenTest,ReferenceRoutesTest}.kt` (the document pins only) | any `.kt` under `src/main`, `tools`, `docs/api/command-shapes.json` |
+| B4 | `docs/api/v1.md`; `docs/release-proofs.md`; `docs/superpowers/specs/2026-09-23-servicetag-share-intake.md`; `docs/versioning.md` (R91-11); `T/api/{CommandShapesGoldenTest,ReferenceRoutesTest}.kt` (the document pins only) | any `.kt` under `src/main`, `tools`, `docs/api/command-shapes.json` |
 
 **Order:** B1a → B1b → B1c → B2a → B2c → { B2b ∥ (B3a → B3b) } → B4. B1a creates the enum's home, the predicate and
 the column; B1b needs the domain field; B1c needs `FIRST_REFERENCE_ROLE_FORMAT`; B2a needs the domain field and the
@@ -577,8 +636,8 @@ record, reporting only, no rerun-until-green.
 
 ## 5. Strings
 
-**No new user-visible sentence** if R91-5, R91-8 and R91-14 are ratified as recommended. Every phone word #91 draws is
-shipped and ratified, reused **verbatim** from its one home — the owner ratifies only their appearance on new surfaces:
+**No new user-visible sentence** (R91-5, R91-8, R91-14 decided). Every phone word #91 draws is shipped and ratified,
+reused **verbatim** from its one home, and **approved unchanged on the new surfaces** (owner, 2026-09-30):
 
 | string | resource (one home) | new surfaces |
 |---|---|---|
@@ -588,44 +647,53 @@ shipped and ratified, reused **verbatim** from its one home — the owner ratifi
 | "Purchase invoice or receipt" / "User manual" / "Service manual" as a row line | `DocumentRole?.label()` (never its `null` arm) | the References row, one `QuietLine` (C24, R91-8) |
 | "Edit reference", "Add link", "Link", "Name", "Description", "Save", "Cancel" | `A/ui/references/ReferenceSheets.kt:49`, `:82`, `:86`, the shared fields and `SheetButtons` (audit §5: `:183-184`) | unchanged |
 
-**Gaps (audit §5) as ratification items:**
-- **G1** — a refusal sentence for a role picked on a link that cannot take one. **Not needed** if R91-5 is ratified
-  (the chips follow the live text, C23), nor for share intake (C21 decides once, from the shared URI), nor for C12's
+**Gaps (audit §5):**
+- **G1** — a refusal sentence for a role picked on a link that cannot take one. **Not needed** (R91-5 decided: the
+  chips follow the live text, C23), nor for share intake (C21 decides once, from the shared URI), nor for C12's
   arms 3–4 (R91-14). The plan invents none.
-- **G2** — the wire code and `message`: `REFERENCE_ROLE_NOT_ALLOWED`, 422, `field` `role`, message proposed `a document
-  role belongs on an http or https link` (developer-facing, in the shape of `attachmentRoleNotAllowed`,
-  `A/api/ApiJson.kt:773-777`). Part of R91-1.
+- **G2 — awaiting ratification (the only open string).** The wire code `REFERENCE_ROLE_NOT_ALLOWED`, 422, `field`
+  `role` (decided with R91-1), and its developer-facing `message`, literally:
+  `a document role belongs on an http or https link` — in the shape of `attachmentRoleNotAllowed`
+  (`A/api/ApiJson.kt:773-777`). B2a implements it as written; a different ratified wording is a one-line change in
+  `ApiJson.kt` and its route assertion, closed by controller inspection.
 - **G3** — an accessibility phrase naming the role on the row's overflow. **Not taken** (R91-8): the overflow stays
   `"More"` (`ReferencesSection.kt:237`); the role line is ordinary text TalkBack reads with the row.
 
 **Developer-facing texts** (listed for the plan review, not phone strings): C2's `message`; C6's two `BackupCorrupt`
 messages (in the shape of the attachment's, `C/backup/BackupFormat.kt:1025`, and #67's format-gate message,
 `BackupCodec.kt:355-357`); C19's `APP_SCHEMA_TOO_OLD` text (the shipped template, with "the reference document role");
-the MCP docstrings and README line. If the owner wants any of these ratified, C2, C6 and C19 are the table.
+the MCP docstrings and README lines (C20). Of these, only C2's `message` (G2) is awaiting ratification.
 
-## 6. Owner rulings needed (R91-1…14, all OPEN)
+## 6. Owner rulings (owner, 2026-09-30 — R91-1…14 DECIDED, recorded on issue #91)
 
-Each is a genuine question; the recommendation is the plan's default, and the contracts named are written to it and
-marked "pending". Cost if wrong = what changes if the owner rules otherwise.
+The owner ruled "the five as stated" and ratified R91-11…14; every ruling is DECIDED at the plan's recommendation and
+is binding as written. The HARD SCOPE sentence (§1) governs all of them.
 
-| ruling | question | recommendation | cost if wrong | contracts |
-|---|---|---|---|---|
-| **R91-1** (Q1, G2) | Which references may carry a role? | `WEB_URL` only (http and https — the issue's "HTTP(S)", AC1); a role elsewhere is `ReferenceProblem.RoleNotAllowed` → 422 `REFERENCE_ROLE_NOT_ALLOWED` with `field` `role` and C2's message | "https only": C1's predicate reads the scheme too, C21/C23 hide chips on http, and limit 2 disappears; "any kind": C1, C6's decode check, C10/C11's step, C12 and G2 vanish (a smaller plan) | C1, C2, C6, C10–C12, C21–C23 |
-| **R91-2** (Q2) | On `POST /v1/references/{id}/materialize` (and MCP `materialize_reference`) when the reference has a role, what do absent / `null` / a value mean? | Three states: absent → the source role exactly; a value → that value (the caller is the reviewer); `"role": null` → no role, read as a raw key; MCP `clear_fields=["role"]` sends the null. Every pre-#91 call keeps its result | "null stays 'take the prefill'": no caller can say "no role" over the wire once the source has one (phone-only); C17 reverts to `?:`, C18 drops `materialize_reference`'s `clear_fields`, row 32's third case inverts | C16, C17, C18, C26 |
-| **R91-3** (Q3) | `PATCH /v1/references/{id}` with a role? | absent = unchanged, `null` = clear, a name = set (raw-key tri-state; name/description keep "null = unchanged"); MCP `update_reference(role, clear_fields=["role"])`, reversing `test_reference_tools.py:73` for that tool | "null = unchanged for role too": clearing needs a new mechanism (none shipped for references); "PATCH becomes a full command": every client must resend name and description, a breaking change at API version 1 | C3, C14, C18, C19 |
-| **R91-4** (Q4) | Share intake: offer Role chips on a link share? | Yes, on a `LINK` share whose URI classifies `WEB_URL` only, "No role" preselected, after Description; bytes and notes unchanged. Amends R67-9 for web links | "No": AC2's intake half is unmet (a role is set afterwards in Edit reference); C21 and rows 40–41 drop | C21, C26 (the intake spec amendment) |
-| **R91-5** (Q5, G1) | Add link: when are the Role chips drawn? | Only while the typed text classifies `WEB_URL`; a pick is cleared when it stops doing so; no new sentence | "Always drawn": a ratified refusal sentence (G1) is needed for a role on a non-web link, and C12 arm 3 draws it | C23, C12 |
-| **R91-6** (Q6) | Existing rows at upgrade? | No role on every existing reference; a NULL column only, never backfilled or inferred | any backfill is inference by construction (AC3) — not recommended in any form | C5 |
-| **R91-7** (Q7) | The merge? | Mirror R67-12 option B: a format ≤ 16 archive compares references without the role and, when the row here has one, without `updatedAt`, on **both** the id and the pair arm; in format 17 a role difference is `CONFLICT` (same id) / `SKIPPED` (same pair, D-18 C); no update path | "Plain comparison (R67-12 A)": every pre-#91 export re-plans `CONFLICT` on any reference given a role since — the release gate's "every row `IDENTICAL`" (`release-proofs.md:107`) fails for them | C7, C26 |
-| **R91-8** (Q8, G3) | How is a reference's role shown? | Its label verbatim as one `QuietLine` after the kind line; never "No role"; the overflow stays "More"; it does **not** join Key documents or the Details "Purchase document" fact (#91 keeps both attachment-only) | "Join Key documents": a new section contract, its ordering with attachments, and new accessibility text — a separate plan; "a composed line": a new ratified string | C24 |
-| **R91-9** (Q9) | The Save as document Review's kind when the source has a role? | Keep #85's proven-type kind (`MaterializeViewModel.kt:212`); no role-to-kind derivation on this path | "Derive from the role (`editorKindFor`, R84-3)": a USER_MANUAL source would prefill `MANUAL`; row 33 inverts; an intentional role-to-kind mapping enters the materialize path | C16 |
-| **R91-10** (Q10, **corrected**) | The MCP against an older phone? | `add_reference` / `update_reference` **with a role (or clearing it)** refuse below schema 17 with `APP_SCHEMA_TOO_OLD`, nothing sent; without a role, unchanged. **`materialize_reference` keeps its schema-16 gate and no new one** — the audit's Q10 included it, but its `role` is #92's and works on 16, and a `null` there means "no role" on 16 as well | "Gate materialize at 17 too": a working call on a 1.5.0 phone is taken away for no safety gain | C19 |
-| **R91-11** (Q11) | Release vehicle, and `versioning.md`? | Schema 17 / format 17 land on master with no release (R67-10: emulator only), version the owner's call (a MINOR by `versioning.md:21`); the schema-17 release-proofs paragraph is written with the change (C26); **and** one sentence in `versioning.md` recording R67-10's practice | "No `versioning.md` sentence": B4 drops that file (the practice stays recorded in `release-proofs.md` and R67-10) | C26, B4 |
-| **R91-12** (plan) | Add `referenceCreate` / `referenceUpdate` entries to `docs/api/command-shapes.json`? | **No.** The reference `PATCH` stays a server-side overlay and the MCP sends only what it is given, so no client needs a key list; the golden moved for `attachmentUpdate` because that tool overlays client-side | "Yes": B4 adds two entries, `CommandShapesGoldenTest` grows, B2b vendors them (and then waits for B4) | C26, B2b's order |
-| **R91-13** (plan) | Device coverage for the new surfaces? | No new device class or case; grow three shipped Compose cases (rows 41, 44) — the R67-9 screen case and two `ReferencesSectionTest` cases that must move anyway; every rule is JVM-proven | "JVM only": the grown assertions are dropped and the chips' drawing is unobserved below a person; "a new case per surface": +3–4 device cases against the device-boundary rule | §3, B3a, B3b |
-| **R91-14** (plan) | What does the unreachable `RoleNotAllowed` arm draw on the phone? | Nothing new: the References section says nothing (`return`, the shipped treatment of unreachable arms, `ReferencesSectionViewModel.kt:253-258`); share intake joins `OwnerMissing / NoSuchReference / Unchanged → ownerGone()` (`ShareIntakeViewModel.kt:340-343`). Both surfaces never send such a role (C21, C23) | "A sentence": G1 is needed and ratified; C12's arms 3–4 draw it | C12 |
+| ruling | decision, binding as written | where it lands |
+|---|---|---|
+| **R91-1** (Q1; owner's 1) | **Roles are legal on web references only** — `WEB_URL`, http and https. A role elsewhere is `ReferenceProblem.RoleNotAllowed` → 422 `REFERENCE_ROLE_NOT_ALLOWED`, `field` `role` (its `message` is G2, §5) | C1, C2, C6, C10–C12, C21–C23; rows 1, 8, 20, 25, 26 |
+| **R91-2** (Q2; owner's 3) | **Materialize inherits unless overridden or cleared**: absent → the source role exactly; a value → that value; `"role": null` → no role, read as a raw key; MCP `materialize_reference(clear_fields=["role"])` sends the null | C16, C17, C18, C26; limit 7; rows 31, 32, 37 |
+| **R91-3** (Q3; owner's 2) | **Editing is nullable, with explicit set and clear**: on `PATCH`, absent = unchanged, `null` = clear, a name = set; name and description keep "null = unchanged"; MCP `update_reference(role, clear_fields=["role"])`, reversing `test_reference_tools.py:73` for that tool | C3, C14, C18, C19; rows 27, 36, 39 |
+| **R91-4** (Q4; owner's 5) | **Intake chips on web links**: a `LINK` share whose URI classifies `WEB_URL` draws the Role chips after Description, "No role" preselected; bytes and notes unchanged. Amends R67-9 for web links | C21, C26 (the intake spec); rows 40, 41 |
+| **R91-5** (Q5; owner's 2) | Add link draws the chips **only while the typed text classifies `WEB_URL`**; a pick is cleared when it stops doing so; no new sentence (G1 not needed) | C23, C12; row 42 |
+| **R91-6** (Q6; owner's 4) | **Old rows have no role**: a NULL column only, never backfilled or inferred | C5; row 2 |
+| **R91-7** (Q7; owner's 4) | **The merge handles pre-17 deliberately**: R67-12 option B mirrored on both the id and the pair arm; in format 17 a role difference is `CONFLICT` (same id) / `SKIPPED` (same pair, D-18 C); no update path | C7, C26; rows 12–17 |
+| **R91-8** (Q8, G3; owner's 5) | **A quiet label**: the role's label verbatim as one `QuietLine`; never "No role"; the overflow stays "More". **A link is not a Key Document until materialized**: no Key documents or Details "Purchase document" treatment | C24; row 44 |
+| **R91-9** (Q9; owner's 3) | **Kind untouched**: the Review keeps #85's proven-type kind; no role-to-kind derivation | C16; row 33 |
+| **R91-10** (Q10, corrected; owner's 4) | **Old clients keep working**: `add_reference` / `update_reference` with a role, or clearing it, refuse below schema 17 with `APP_SCHEMA_TOO_OLD`, nothing sent; without a role, unchanged; `materialize_reference` keeps its schema-16 gate and gains none | C19; rows 34, 35, 37 |
+| **R91-11** (Q11) | **RATIFIED:** schema 17 / format 17 may land on master with **no version bump or release**, validated on the emulator; the **release vehicle and phone promotion remain separate decisions**. The schema-17 release-proofs paragraph and the one `versioning.md` sentence are written with the change | C26, B4; §7 |
+| **R91-12** (plan) | **RATIFIED: no** `command-shapes.json` entry for references | C26; B2b runs without B4 |
+| **R91-13** (plan) | **RATIFIED:** "prove the field's propagation through appropriate existing coverage" — no new device class or case; the three shipped Compose cases grow (rows 41, 44); every rule is JVM-proven first | §3, B3a, B3b |
+| **R91-14** (plan) | **RATIFIED:** the unreachable `RoleNotAllowed` arm draws nothing new — the References section says nothing; share intake joins `OwnerMissing / NoSuchReference / Unchanged → ownerGone()` | C12 |
 
-Where decisions land: on issue #91, then in this plan's header (rev 1.1), as #92 did.
+**Still open:** G2's developer-facing `message` only (§5).
+
+**The plan review's conditions (2026-09-30, `plan-review.md`) — where each landed.** C-1 → §3's pins table (seven
+added), row 10 (thirteen format sites), B1b/B2a/B3b pin lists and widened confirm greps. C-2 → C20, B2b's touch and
+pin lists, row 39, R6. C-3 → (a) C2/C26, row 45, R6 and B4's table grep; (b) B2a's scoped grep; (c) B3b's
+"unchanged" grep. C-4 → C21 (a constructor parameter defaulting to `LinkLaunchPolicy()`), C23 (`AddLinkSheet` takes
+`roleOffered`). N-1 → C14; N-2 → B2a and B3a; N-3 → row 25; N-4 → §12; N-5 → C21 (another way, header); N-6 → C24;
+N-7 → B1c; N-8 → C26; N-9 → limit 7; N-10 → §3's device paragraph and §7.
 
 ## 7. Proofs
 
@@ -634,7 +702,8 @@ Where decisions land: on issue #91, then in this plan's header (rev 1.1), as #92
   --frozen pytest` in `M/` (and `S/`'s suite, unchanged, because the loader imports the MCP in process,
   `S/src/servicetag_schedules/phone.py:1-3`); B4 the app JVM suite (the document pins). No device run in any brief.
 - **The merged-tip gate, once:** R1 (JVM from scratch), R2 (the connected suite on the emulator: **55 classes,
-  unchanged**, zero skips; rows 41 and 44 run here for the first time), R3 (the three Python suites), R5
+  unchanged**, zero skips; rows 41 and 44 run here for the first time — a red there is one post-merge fix round,
+  N-10), R3 (the three Python suites), R5
   (`ManifestContractTest`, `MergedManifestContractTest`, `VersionAgreementTest`), R6 greps. `ReleaseProofPolicyTest`
   unchanged and green. Timed; the 14- and 15-minute lines are reporting only.
 - **R6 greps (anchored; `git grep -nE`), expected counts at the tip:**
@@ -649,13 +718,15 @@ Where decisions land: on issue #91, then in this plan's header (rev 1.1), as #92
     (`git diff <base> -- app/schemas/**/16.json` → empty).
   - `'^enum class DocumentRole '` over `core/src/main` → 1, in `C/model/DocumentRole.kt`;
     `'^val ReferenceKind\.takesRole'` → 1 and `'^fun ReferenceKind\.accepts\('` → 1, both in `ReferenceKinds.kt`.
-  - `'"REFERENCE_ROLE_NOT_ALLOWED"'` in `A/api` → 1 (the code arm); `'^\| `REFERENCE_ROLE_NOT_ALLOWED` \|'` in
-    `docs/api/v1.md` → 1; `'REFERENCE_ROLE_NOT_ALLOWED'` in `app/src/test` → ≥ 1.
+  - `'"REFERENCE_ROLE_NOT_ALLOWED"'` in `A/api` → 1 (the code arm); `'^\| 422 \| `REFERENCE_ROLE_NOT_ALLOWED` \|'` in
+    `docs/api/v1.md` → 1 (the table is `| status | code | when |`, C-3a); `'REFERENCE_ROLE_NOT_ALLOWED'` in
+    `app/src/test` → ≥ 1.
   - `'data object RoleNotAllowed'` in `C/usecase/ReferenceCommands.kt` → 1; `'else ->'` count in
     `ApiJson.kt`'s two reference `when`s unchanged (0 inside them).
   - `'^@mcp\.tool\('` in `M/src/servicetag_mcp/server.py` → 76; `'^_MIN_REFERENCE_ROLE_SCHEMA_VERSION = 17$'` → 1;
     `'_require_reference_role_schema\('` → 3 (the definition and the two callers), and **0** inside
-    `materialize_reference`.
+    `materialize_reference`; `'format 1–17'` in `server.py` → 1 and `'format 1–16'` → 0; `'format \*\*1–17\*\*'` in
+    `M/README.md` → 1 and `'1–16'` → 0 (C-2).
   - The tombstone check → 0; C25's baseline-equal greps; gitlink `7e0377a`; `versionName`/`versionCode` unchanged.
 - **The emulator and the phones.** The merged-tip gate runs a debug build at schema 17 on the emulator only. The
   **schema 16 → 17 in-place upgrade** is **not** proven by this plan's gate: it is the next signed release's gate,
@@ -712,8 +783,11 @@ or build failure the brief did not cause (reported, not retried); any network ac
 in §5; a schema, format, table or count change outside B1a/B1b; an owner question the brief finds undecided; the cap
 reached, the 1-hour target passed with under half the rows green, or the 2-hour hard stop.
 
-**Must NOT, always:** delete a shipped assertion; commit outside the brief's files; add a device class or case or run a
-device; bump a version; write a repository from a handler or a view model; re-check in the API or UI a rule the use
+**Must NOT, always:** step outside the **HARD SCOPE** (owner, binding): "#91 = add `DocumentRole?` to HTTP(S)
+References and propagate it faithfully through existing paths. Nothing more. No new role vocabulary, no inference, no
+new document model, no new API tools, no new device class, no redesign of References, no Key Documents treatment for
+links, no generalized resource work (#69)." Also never: delete a shipped assertion; commit outside the brief's files;
+add a device class or case or run a device; bump a version; write a repository from a handler or a view model; re-check in the API or UI a rule the use
 case owns; infer a role from anything (C25); compare a kind to `WEB_URL` for a role anywhere but C1; touch
 `external_link`, `ExternalLinkEntity`, `LinkKind`, `ExternalLinkDto` or `externalLinks`; edit `16.json`; log a URI;
 name a screen-driving tool under `tools/`; touch `tools/emulator/*`, a harness helper or the gate script; add a
@@ -756,8 +830,10 @@ follow); B1a's report. **`<base>`** = B1a's accepted tip. **Rows:** 6–11. **Ru
 **Greps:** `'^    const val FORMAT_VERSION = 17$'` → 1; `'^    internal const val FIRST_REFERENCE_ROLE_FORMAT = 17$'` → 1;
 `'val role: String\? = null'` inside `AssetReferenceDto` → 1 and it is the last field; `'ignoreUnknownKeys'` in
 `BackupCodec.kt` unchanged from `<base>`; `'LAST_LEGACY_FORMAT = 7'` unchanged; the stale `v15` header line gone; the
-tombstone check → 0. **Pin list:** C6's eleven format literals; `VersionAgreementTest.kt:85`, `:154`; confirm first
-with `git grep -nE 'assertEquals\(16, .*[Ff]ormat' -- core/src/test app/src/test app/src/androidTest`. **Untouched:**
+tombstone check → 0. **Pin list:** C6's thirteen format literals (`ExportBackupSetTest:47` included);
+`VersionAgreementTest.kt:85`, `:154`; `BackupFormat8Test.kt:277`, `:280` (17 → 18, with its KDoc);
+`BackupFormat7Test.kt:195-212` (ten names, `"role"` last). Confirm first with `git grep -nE 'assertEquals\(1[67],
+|formatVersion = 17|elementNames|elementsCount' -- core/src/test app/src/test app/src/androidTest` (C-1). **Untouched:**
 `C/merge`, `C/usecase`, `C/transfer` main, `A/**` main, `docs`, `tools`. **Must NOT:** loosen strict decoding; reorder
 `AssetReferenceDto`'s fields or `data.json`'s keys; re-derive `kind` from the uri at decode; accept a role on a
 non-web row at decode. **Counted RED (3):** rows 6, 7, 8. **Caps:** 5 JVM mutation runs; **1 h target, 2 h hard
@@ -773,7 +849,7 @@ stop**; fix round 3 runs, 45 min. **Size:** about 45 production, 260 test lines.
 **Connected:** none. **Greps:** `'FIRST_REFERENCE_ROLE_FORMAT'` in `MergePlanner.kt` → 1; `'sameReference\('` in
 `MergePlanner.kt` → 3 (the definition and the two arms); `'dto == local\.toDto\(\)'` inside the reference pass → 0;
 `'MergeReason\.|MergeVerdict\.'` counts in the reference pass unchanged from `<base>`; no new `MergeTable`,
-`MergeReason` or tally member (`git diff <base> -- C/merge/MergeModel*.kt` or wherever those enums live → empty).
+`MergeReason` or tally member (`git diff <base> -- C/merge/MergePlan.kt` → empty, N-7).
 **Pin list:** none (new cases only; the eleven shipped `MergePlannerReferenceTest` cases stay unchanged and green).
 **Untouched:** `C/backup`, `C/transfer` main, `C/usecase`, `A/**`, `docs`, `tools`. **Must NOT:** add an UPDATE verdict
 or any update path; apply the exception to format 17; touch arms 5–7 or the attachment pass; generalise `sameAttachment`
@@ -796,16 +872,21 @@ anchored `UpdateReferenceCommand` → 1; `'val role: DocumentRole\? = null'` in 
 `'data object RoleNotAllowed'` → 1; `'"REFERENCE_ROLE_NOT_ALLOWED"'` in `A/api` → 1; `'JsonObject\.serializer\(\)'` in
 `ReferenceHandlers.kt` → 1 (the PATCH only; the POST decodes typed); `'addReference\.run\('` → 1 and
 `'updateReference\.run\('` → 1 in `ReferenceHandlers.kt`; `'\.upsert\('` in `A/api/ReferenceHandlers.kt` → 0;
-`'takesRole|accepts\('` in `A/api` → 0 (the handler re-checks nothing); `'ReferenceKind\.WEB_URL'` in
-`AddReference.kt` and `UpdateReference.kt` → 0 (they ask C1); C25's baseline-equal counts. **Pin list:** the C9 sites
-and `ReferenceRoutesTest.kt:428` (§3's table). **Untouched:** `C/backup`, `C/merge`, `MaterializeReference.kt`,
+`'takesRole|accepts\('` in `A/api/{ReferenceHandlers,ReferenceDtos}.kt` → 0 (the handler re-checks nothing) and over
+`A/api` unchanged from `<base>` (1: `AttachmentHandlers.kt:136`, C-3b); `'ReferenceKind\.WEB_URL'` in
+`AddReference.kt` and `UpdateReference.kt` → 0 (they ask C1); C25's baseline-equal counts; the count comments of N-2 moved (`ApiJson.kt:410` "ten arms"; `say`'s "five of the ten").
+**Pin list:** the C9 sites; `ReferenceRoutesTest.kt:428`, `:342-388`; `AddReferenceTest.kt:279-282`,
+`UpdateReferenceTest.kt:115-118`, `ReferencesSectionViewModelTest.kt:264-271` (§3's table). Confirm first with
+`git grep -nE 'declaredFields|UpdateReferenceCommand\(|five of' -- core/src/test app/src/test app/src/androidTest` (C-1). **Untouched:** `C/backup`, `C/merge`, `MaterializeReference.kt`,
 `AttachmentHandlers.kt`, `ShareIntakeScreen.kt`, the sheets' layout (only `ReferenceSheets.kt:55`'s command),
 `docs`, `tools`. **Must NOT:** give `UpdateReferenceCommand.role` a default; let a `null` name or description clear
 anything; draw anything new on a phone surface; add a sentence for `RoleNotAllowed` on the phone. **Counted RED (8):**
 rows 19, 20, 21, 22, 23, 25, 26, 27 (row 29 is a one-line mapper; recorded without a separate run if row 27's
 fixtures already cover it). **Caps:** 10 JVM mutation runs; **1 h target, 2 h hard stop**; fix round 3 runs, 45 min.
-**Size:** about 95 production, 380 test lines. **Estimate:** 60 min — the plan's tightest brief; if the 1-hour mark
-passes with under half the rows green, stop and report (the controller splits the routes, rows 25–28, into a B2a′).
+**Size:** about 95 production, 390 test lines. **Estimate:** 60 min — the plan's tightest brief; if the 1-hour mark
+passes with under half the rows green, stop and report. **The split's limit (N-4):** adding `RoleNotAllowed` makes all
+four `when`s non-exhaustive at once, so C9–C12 (rows 19–25) are compile-coupled and stay in B2a; a B2a′ can take only
+C13/C14's handler changes and rows 26–28 (row 25 enumerates explicitly, so it does not break on the new member).
 
 ## 13. B2c — materialize carries the source role (C16, C17; core and app JVM)
 
@@ -829,35 +910,39 @@ change what an absent `displayName`, `kind` or `notes` means; move #92's C33 loc
 ## 14. B2b — the MCP (C18–C20; pytest)
 
 **Read:** audit §7 (MCP); `M/src/servicetag_mcp/server.py:170-292`, `:356-400`, `:1962-2056`, `:2800-2815`,
-`:2985-3040`, `:3183-3260`; `M/tests/{test_reference_tools,test_attachment_tools,test_argument_guard}.py`;
-`M/tests/test_season_health_tools.py:360-380`; `M/README.md:100-130`; B2a's and B2c's reports (the wire).
+`:2985-3040`, `:3183-3260`, `:1163-1185`; `M/tests/{test_reference_tools,test_attachment_tools,test_argument_guard}.py`;
+`M/tests/test_tools.py:790-815`; `M/tests/test_season_health_tools.py:360-380`; `M/README.md:100-130`, `:350-360`;
+`git show --stat 05dc90b0` (the format-16 precedent); B2a's and B2c's reports (the wire).
 **`<base>`** = B2c's accepted tip (a second worktree if run beside B3a/B3b; §4). **Rows:** 34–39. **Rulings:** R91-2,
 R91-3, R91-10.
 
 **Connected:** none; no app build. **Greps:** `'^@mcp\.tool\('` → 76; `'^_MIN_REFERENCE_ROLE_SCHEMA_VERSION = 17$'` →
 1; `'_require_reference_role_schema\('` → 3, and 0 between `def materialize_reference` and the next `@mcp.tool`;
 `'^_REFERENCE_CLEARABLE_FIELDS'` → 1; `"role"` not among `_REFERENCE_FIELDS`' nine; `'screen|uiautomator|adb shell
-input'` under `tools/servicetag-mcp` unchanged from `<base>` (the tripwire's terms). **Pin list:**
-`test_reference_tools.py:1-12`, `:73`; `test_attachment_tools.py:147-149` (§3's table); confirm first with `git grep
--nE 'clear_fields|TOOL_NAMES|== 76|names\(server_module\.' -- tools/servicetag-mcp/tests`. **Untouched:** `app/**`,
+input'` under `tools/servicetag-mcp` unchanged from `<base>` (the tripwire's terms); `'format 1–17'` in `server.py` →
+1, `'format 1–16'` → 0; `'format \*\*1–17\*\*'` in `M/README.md` → 1, `'1–16'` → 0 (C-2). **Pin list:**
+`test_reference_tools.py:1-12`, `:73`; `test_attachment_tools.py:147-149`; `test_tools.py:801-815` (§3's table);
+confirm first with `git grep -nE 'clear_fields|TOOL_NAMES|== 76|names\(server_module\.|1–16' -- tools/servicetag-mcp`. **Untouched:** `app/**`,
 `core/**`, `S/**`, `command_shapes.py`, `docs`. **Must NOT:** add or remove a tool; add `kind` to either reference write
 tool; gate `materialize_reference` or `list_references` at 17; require `role` on a read row; retry a materialize.
 **Counted RED (5):** rows 34, 35, 36, 37, 38. **Caps:** 7 pytest mutation runs; **1 h target, 2 h hard stop**; fix
-round 3 runs, 45 min. **Size:** about 70 production (code and docstrings), 200 test lines. **Estimate:** 50 min.
+round 3 runs, 45 min. **Size:** about 75 production (code and docstrings), 205 test lines. **Estimate:** 50 min.
 
 ## 15. B3a — share intake offers the Role chips on a web link (C21; app JVM, one grown Compose case)
 
-**Read:** audit §5 (intake); `A/share/ShareIntakeViewModel.kt:55-130`, `:250-346`, `:455-485`;
+**Read:** audit §5 (intake); `A/share/ShareIntakeViewModel.kt:55-130`, `:160-180`, `:250-346`, `:455-485`;
 `A/share/ShareIntakeScreen.kt:100-205`; `T/share/ShareIntakeViewModelTest.kt:380-430`;
 `AT/share/ShareIntakeScreenTest.kt:1-60`, `:170-200` (the `form(…)` helper); `docs/superpowers/specs/2026-09-23-servicetag-share-intake.md:459-466`;
 B2a's report. **`<base>`** = B2c's accepted tip (B2b may be in flight beside it). **Rows:** 40, 41. **Rulings:**
 R91-4, R91-14.
 
 **Connected:** none run (row 41 is edited and compiled; it runs at the merged gate). **Greps:**
-`'roleOffered'` in `ShareIntakeViewModel.kt` ≥ 3 (the field, its decision, `role()`/`saveLink`); `'path == IntakePath\.BYTES'`
-in `role()` → 0; `'if \(state\.roleOffered\)'` in `ShareIntakeScreen.kt` → 1; `'startsWith\("http'` over `A/share` →
+`'linkTakesRole'` in `ShareIntakeViewModel.kt` ≥ 3 (the field, its decision, the getter) and `'roleOffered'` ≥ 3 (the
+getter, `role()`, `saveLink`); `'path == IntakePath\.BYTES'` in `role()` → 0;
+`'private val linkPolicy: LinkLaunchPolicy = LinkLaunchPolicy\(\)'` → 1 (C-4); `ShareIntakeActivity.kt` untouched; `'if \(state\.roleOffered\)'` in `ShareIntakeScreen.kt` → 1; `'startsWith\("http'` over `A/share` →
 0; `'suggestedName'` never on a line assigning `role` (read it); C25's baseline-equal count for
-`ShareIntakeViewModel.kt`. **Pin list:** `ShareIntakeViewModelTest.kt:410-428`, `ShareIntakeScreenTest.kt:174-193`.
+`ShareIntakeViewModel.kt`; the KDocs naming R67-9 (`:116`, `:266-269`; the screen's `:175-176`) name R91-4 (N-2).
+**Pin list:** `ShareIntakeViewModelTest.kt:410-428`, `ShareIntakeScreenTest.kt:174-193`.
 **Untouched:** `A/ui/**`, `C/**`, `A/api`, `tools`, `docs` (the spec amendment is B4's). **Must NOT:** draw the Type
 chips on a link; offer a role on a note link, an `OTHER` link, a note share or a pack; change the byte path's order or
 behaviour; add a string. **Counted RED (2):** row 40's two mutations. **Caps:** 4 JVM mutation runs; **1 h target, 2 h
@@ -873,12 +958,16 @@ ReferencesSectionViewModel}.kt`; `A/ui/attachments/AttachmentEditSheet.kt:55-125
 
 **Connected:** none run (row 44 edited and compiled; it runs at the merged gate). **Greps:**
 `'skipPartiallyExpanded = true'` in `ReferenceSheets.kt` → 2 (both sheets); `'verticalScroll\('` there → 1 (in
-`SheetColumn`); `'takesRole'` in `ReferenceSheets.kt` or `AddLinkForm.kt` ≥ 2 (edit and add), and
-`'ReferenceKind\.WEB_URL'` in `A/ui/references/{ReferenceSheets,AddLinkForm,ReferencesSection}.kt` → 0;
+`SheetColumn`); `'takesRole'` over `A/ui/references` ≥ 2 (the edit sheet's `row.kind.takesRole`, the view model's
+`roleOffered`); `'ReferenceKind\.WEB_URL'` in `ReferenceSheets.kt` and `AddLinkForm.kt` → 0, and unchanged from `<base>`
+in `ReferencesSection.kt` (1, the kind label `:259`) and `ReferencesSectionViewModel.kt` (1, #85's `materializable`
+`:247`) (C-3c); `'roleOffered: \(String\) -> Boolean'` in `ReferenceSheets.kt` → 1 (C-4);
 `'startsWith\("http'` over `A/ui/references` → 0; `'ROLE_CHOICES'` ≥ 2 and `'"(No role|User manual|Service manual|Purchase
 invoice or receipt|Role)"'` over `A/ui/references` → 0 (reused, never re-typed); `contentDescription = "More"` in
-`ReferencesSection.kt` unchanged. **Pin list:** `ReferencesSectionTest.kt:132`, `:223-246`;
-`ReferencesSectionViewModelTest.kt` command sites (already moved in B2a; the `addLink` signature moves here).
+`ReferencesSection.kt` unchanged. **Pin list:** `ReferencesSectionTest.kt:132`, `:223-246`, `:281-303` (the
+four-argument `onSave` and `roleOffered`, C-1); `ReferencesSectionViewModelTest.kt` command sites (already moved in
+B2a; the `addLink` signature moves here). Confirm first with `git grep -nE 'AddLinkSheet\(|addLink\(' -- app/src/test
+app/src/androidTest` (C-1).
 **Untouched:** `A/share/**`, `A/ui/attachments/**`, `MaterializeSheet.kt`, `C/**`, `A/api`, `tools`, `docs`. **Must
 NOT:** draw "No role" on a row; compose the kind and role into one line; offer a role on a non-web row or typed text;
 send a role for a non-web link; add a refusal sentence; name the role in the overflow's description. **Counted RED
@@ -890,16 +979,18 @@ send a role for a non-web link; add a refusal sentence; name the role in the ove
 **Read:** audit §3 (versioning), §4 (the `IDENTICAL` row), §7; `docs/api/v1.md:200-220`, `:589-616`, `:1340-1356`,
 `:1700-1726`, `:1940-1975`; `docs/release-proofs.md:100-118`; `docs/versioning.md`;
 `docs/superpowers/specs/2026-09-23-servicetag-share-intake.md:455-470`; `T/api/CommandShapesGoldenTest.kt:40-175`;
-`T/api/ReferenceRoutesTest.kt:540-570`; every earlier report on the branch. **`<base>`** = the tip holding B2b and
+`T/api/ReferenceRoutesTest.kt:540-612`; every earlier report on the branch. **`<base>`** = the tip holding B2b and
 B3b. **Row:** 45. **Rulings:** R91-11, R91-12.
 
 **Connected:** none. **Greps:** `'format \*\*1–17\*\*'` and `'\*\*format 1–17\*\*'` in `v1.md` each ≥ 1, and `'1–16'`
-→ 0; `'17 since #91'` → 2; `'^\| `REFERENCE_ROLE_NOT_ALLOWED` \|'` → 1; `'"role": null'` or the tri-state sentence
+→ 0; `'17 since #91'` → 2; `'^\| 422 \| `REFERENCE_ROLE_NOT_ALLOWED` \|'` → 1, its "when" cell naming `field` `role`
+(C-3a); `'"role": null'` or the tri-state sentence
 present in both the `PATCH` and the materialize sections (read them); `'Room schema 17 / backup format 17'` in
 `release-proofs.md` → 1, placed after the #92 note and before `## Environment notes`; `'Amendment \(#91, owner ruling
-R91-4'` in the intake spec → 1; `docs/api/command-shapes.json` unchanged (pending R91-12); the `release-proofs.md`
+R91-4'` in the intake spec → 1; `docs/api/command-shapes.json` unchanged (R91-12: no entry); the `release-proofs.md`
 paragraphs for 1.5.0 and #92 unchanged (`git diff` touches only added lines there). **Pin list:**
-`CommandShapesGoldenTest.kt:132-172`, `ReferenceRoutesTest.kt:556-566`. **Untouched:** any `.kt` under `src/main`,
+`CommandShapesGoldenTest.kt:132-172`, `ReferenceRoutesTest.kt:556-566` and `:597-604` (`theApiDocumentAgreesWithTheRouter`
+gains the 422 row pattern, C-3a). **Untouched:** any `.kt` under `src/main`,
 `tools`, the #67 and #85 plans. **Must NOT:** edit the 1.5.0 erratum or the #92 note; claim a proof #91's gate does not
 run (the upgrade is the release's); name a device serial or the owner's data. **Counted RED (1):** row 45. **Caps:** 2
 JVM mutation runs; **1 h target, 2 h hard stop**; fix round 2 runs, 45 min. **Size:** about 90 document lines, 25 test
