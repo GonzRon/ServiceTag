@@ -478,7 +478,8 @@ class FakeGraph(
     val buildBackupMergePlan: BuildBackupMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, transferRecords, assetSuccessions, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, assetSuccessions, supplyItems, assetSupplies,
+        attachmentStorage, uow,
     )
 
     /** How many times an apply asked for the total recompute. Mirrors `AppGraph`'s no-op seam. */
@@ -487,7 +488,8 @@ class FakeGraph(
     val applyBackupMergePlan: ApplyBackupMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
-        serviceCases, serviceCaseEntries, loans, transferRecords, roomAssetSuccessions, attachmentStorage, uow,
+        serviceCases, serviceCaseEntries, loans, transferRecords, roomAssetSuccessions, supplyItems, assetSupplies,
+        attachmentStorage, uow,
         rebuildAll = { rebuilds += 1 },
     )
     val importBackupMerge: ImportBackupMerge =

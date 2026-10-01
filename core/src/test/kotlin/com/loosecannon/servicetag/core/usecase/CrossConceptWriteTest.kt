@@ -301,12 +301,12 @@ class CrossConceptWriteTest {
     private val buildMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(),
-        InMemoryAssetSuccessionRepository(), storage, uow,
+        InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow,
     )
     private val applyMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(),
-        InMemoryAssetSuccessionRepository(), storage, uow,
+        InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow,
         rebuildAll = { recompute.all() },
     )
     private val importBackupReplace = ImportBackupReplace(

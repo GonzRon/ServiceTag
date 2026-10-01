@@ -76,12 +76,12 @@ internal class TransferInstall(
     val build = BuildBackupMergePlan(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers,
-        successions, storage, raw.uow,
+        successions, raw.supplyItems, raw.assetSupplies, storage, raw.uow,
     )
     val apply = ApplyBackupMergePlan(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers,
-        raw.successions, storage, raw.uow,
+        raw.successions, raw.supplyItems, raw.assetSupplies, storage, raw.uow,
         rebuildAll = { rebuilds += 1 },
     )
     val importer = ImportTransferPack(build, apply, raw.transfers, assets, tags, storage, raw.uow, Clock { now })

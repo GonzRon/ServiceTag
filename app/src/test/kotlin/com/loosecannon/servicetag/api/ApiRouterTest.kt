@@ -4,9 +4,13 @@ import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.AssetSupply
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.PayloadFormat
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
+import com.loosecannon.servicetag.core.model.SupplySpecification
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
@@ -730,6 +734,64 @@ class ApiRouterTest {
         assertEquals(200, again.status)
         assertEquals(MergeTallyDto(insert = 0, identical = 1, conflict = 0, skipped = 0), reportIn(again).assets)
         runBlocking { assertEquals(2, graph.assets.all().size) }
+    }
+
+    /**
+     * #15 (C11, row 20) — a merge inserting SupplyItems and the applicability naming them commits on Room. The apply
+     * writes each item, with its specifications, before the `asset_supply` rows whose `supply_id` foreign key needs
+     * it (RESTRICT), and after the asset those rows name. Two items and one row, so a report mirror wired to the
+     * wrong table fails on its value; the second apply is all IDENTICAL. The names are fictional.
+     */
+    @Test fun aMergeInsertingItemsAndTheirApplicabilityCommits() {
+        val donor = FakeGraph()
+        val (archive, items, rows) = try {
+            var n = 0
+            val disjoint = IdGenerator { "00000000-0000-4000-8000-9100%08d".format(++n) }
+            val createAsset = CreateAsset(
+                donor.assets, donor.uow, disjoint, donor.clock, donor.applyTemplate, donor.promoteCategory,
+            )
+            runBlocking {
+                val system = createAsset.run("Example RO System", "Water")
+                fun itemOf(id: String, name: String, archivedAt: Long?, specifications: List<SupplySpecification>) =
+                    SupplyItem(
+                        id = SupplyId(id), name = name, category = "Filter", manufacturer = "Example Filters Co.",
+                        model = "PF-10", partNumber = "EF-PF10-5", preferredUnit = "ea", notes = "",
+                        archivedAt = archivedAt, createdAt = 1_000L, updatedAt = 2_000L, specifications = specifications,
+                    )
+                donor.supplyItems.upsert(
+                    itemOf(
+                        "supply-prefilter", "Example Prefilter Cartridge", null,
+                        listOf(
+                            SupplySpecification("spec-length", "length", "Length", "10", "in", 0),
+                            SupplySpecification("spec-micron", "micron_rating", "Micron rating", "5", "um", 1),
+                        ),
+                    ),
+                )
+                donor.supplyItems.upsert(itemOf("supply-membrane", "Example RO Membrane", 3_000L, emptyList()))
+                donor.assetSupplies.insert(
+                    AssetSupply("supply-row-1", system.id, SupplyId("supply-prefilter"), "Prefilter", 1_000L, 2_000L),
+                )
+                Triple(donor.exportBackupSet.run().data, donor.supplyItems.all(), donor.assetSupplies.all())
+            }
+        } finally {
+            donor.close()
+        }
+        createHotTub()
+
+        val applied = postArchive(IMPORT_MERGE_APPLY_PATH, archive)
+
+        assertEquals(applied.text(), 200, applied.status)
+        assertEquals(MergeTallyDto(insert = 2, identical = 0, conflict = 0, skipped = 0), reportIn(applied).supplyItems)
+        assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), reportIn(applied).assetSupplies)
+        runBlocking {
+            assertEquals(items, graph.supplyItems.all())
+            assertEquals(rows, graph.assetSupplies.all())
+        }
+
+        val again = postArchive(IMPORT_MERGE_APPLY_PATH, archive)
+        assertEquals(200, again.status)
+        assertEquals(MergeTallyDto(insert = 0, identical = 2, conflict = 0, skipped = 0), reportIn(again).supplyItems)
+        assertEquals(MergeTallyDto(insert = 0, identical = 1, conflict = 0, skipped = 0), reportIn(again).assetSupplies)
     }
 
     /**

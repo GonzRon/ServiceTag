@@ -146,13 +146,13 @@ class ImportBackupMergeTest {
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, serviceCases, caseEntries, loans, transfers, successions, storage, uow,
+            categories, serviceCases, caseEntries, loans, transfers, successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow,
         )
         val apply = ApplyBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures,
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
-            categories, serviceCases, caseEntries, loans, transfers, successions, storage, uow,
+            categories, serviceCases, caseEntries, loans, transfers, successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow,
             rebuildAll = {
                 rebuilds += 1
                 writesAtRebuild = runBlocking {
@@ -771,7 +771,7 @@ class ImportBackupMergeTest {
             target.closures, events, target.attachments, target.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             target.categories, cases, entries, target.loans, target.transfers,
-            target.successions, target.storage, target.uow, rebuildAll = { log += "rebuild" },
+            target.successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), target.storage, target.uow, rebuildAll = { log += "rebuild" },
         )
 
         apply.run(target.build.run(archive))
@@ -805,7 +805,7 @@ class ImportBackupMergeTest {
             target.closures, target.events, target.attachments, target.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             target.categories, target.serviceCases, target.caseEntries, loans, target.transfers,
-            target.successions, target.storage, target.uow,
+            target.successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), target.storage, target.uow,
             rebuildAll = { log += "rebuild" },
         )
 
@@ -847,7 +847,7 @@ class ImportBackupMergeTest {
             target.closures, target.events, target.attachments, target.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             target.categories, target.serviceCases, target.caseEntries, loans, transfers,
-            target.successions, target.storage, target.uow,
+            target.successions, InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), target.storage, target.uow,
             rebuildAll = { log += "rebuild" },
         )
 
