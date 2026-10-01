@@ -81,6 +81,9 @@ internal fun clearInstall() {
             graph.deadlineLocalDelivery.deleteAll()
             // #77: so do the transfer records (no foreign key, R77-4); a leftover would make the store "not empty".
             graph.transferRecords.deleteAll()
+            // #15: the SupplyItem catalog outlives its assets; their wipe above took every applicability row by its
+            // CASCADE, so `asset_supply`'s RESTRICT lets the catalog go.
+            graph.supplyItems.deleteAll()
         }
     }
     // A thumbnail is keyed by id and sha256 prefix, so a stale one cannot normally be served — but

@@ -1,15 +1,22 @@
 package com.loosecannon.servicetag.ui.supplies
 
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasTextExactly
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.MainActivity
 import com.loosecannon.servicetag.core.model.SupplyId
@@ -37,24 +44,25 @@ import com.loosecannon.servicetag.ui.asset.MODEL_FIELD
  * B7a's cases are the list's and the detail's; B7b adds the editor's here. Every string is imported from its one
  * home (`SupplyStrings.kt`, the shipped field labels), so a re-worded constant moves this test with it.
  *
- * Emulator only — the suite wipes app data. `clearInstall` predates #15 and leaves the SupplyItem catalog in
- * place, so this class clears the catalog itself, before and after each case: after `clearInstall`'s asset wipe,
- * which takes every applicability row by its CASCADE and so lets the catalog go past `asset_supply`'s RESTRICT.
+ * Emulator only — the suite wipes app data. `clearInstall` wipes the SupplyItem catalog too, after its asset wipe
+ * (whose CASCADE takes every applicability row first), so running it before and after each case leaves no item
+ * behind for a later class.
  */
 @RunWith(AndroidJUnit4::class)
 class SupplyScreensTest {
 
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
 
-    @Before fun freshInstall() = clearCatalog()
+    @Before fun freshInstall() = clearInstall()
 
-    @After fun leaveNoCatalog() = clearCatalog()
+    @After fun leaveNoCatalog() = clearInstall()
 
-    private fun clearCatalog() {
-        clearInstall()
-        val graph = app.graph
-        runBlocking { graph.uow.write { graph.supplyItems.deleteAll() } }
-    }
+    /** One labelled field of the editor: a Material text field merges its label into its own semantics node. */
+    private fun field(label: String): SemanticsNodeInteraction = rule.onNode(hasSetTextAction() and hasText(label))
+
+    /** The [index]th field labelled [label]: each specification row draws its own "Label", "Value" and "Unit". */
+    private fun rowField(label: String, index: Int): SemanticsNodeInteraction =
+        rule.onAllNodes(hasSetTextAction() and hasText(label))[index]
 
     private fun save(
         name: String,
@@ -173,5 +181,100 @@ class SupplyScreensTest {
         rule.onAllNodesWithText(PART_NUMBER_FIELD).assertCountEquals(0)
         rule.onAllNodesWithText(PREFERRED_UNIT_FIELD).assertCountEquals(0)
         check(runBlocking { app.graph.assetSupplies.forSupply(bare) }.isEmpty())
+    }
+
+    /**
+     * B7b (C31). The list's P15-2 button opens the editor under the P15-2 title; Save waits for a name; a new item
+     * saved opens on its own detail, the editor gone from the stack.
+     */
+    @Test fun theAddButtonOpensTheEditorWhereSaveWaitsForANameAndTheNewItemOpensOnItsDetail() {
+        openSupplies()
+        rule.awaitText(NO_SUPPLIES_YET)
+        rule.onNodeWithText(SUPPLY_ITEM).performClick()
+
+        rule.awaitText(PART_NUMBER_FIELD)
+        rule.onNodeWithText(SUPPLY_ITEM).assertIsDisplayed()
+        rule.onNodeWithText("Save").assertIsNotEnabled()
+        field("Name").performTextInput("   ")
+        rule.onNodeWithText("Save").assertIsNotEnabled()
+        field("Name").performTextInput("Example Carbon Block")
+        field(PART_NUMBER_FIELD).performScrollTo().performTextInput("CB-5")
+        rule.onNodeWithText("Save").assertIsEnabled().performClick()
+
+        // The detail, which only a stored item has: its fact and its two empty lines.
+        rule.awaitText(NO_SPECIFICATIONS)
+        rule.onNodeWithText("CB-5").assertIsDisplayed()
+        val stored = runBlocking { app.graph.supplyItems.all() }
+        check(stored.map { it.name to it.partNumber } == listOf("Example Carbon Block" to "CB-5")) { "$stored" }
+    }
+
+    /**
+     * B7b (C31). The detail's Edit opens the editor on the stored rows; "Add specification" adds an empty row and
+     * a row's close glyph (P15-8) takes it away; the save keeps the untouched row's id and lands back on the detail.
+     */
+    @Test fun anEditAddsAndRemovesASpecificationRowAndTheSaveKeepsTheRest() {
+        val cartridge = save(
+            name = "Example Prefilter Cartridge",
+            specifications = listOf(
+                SpecificationInput(id = null, key = "", label = "Micron rating", value = "5", unit = "µm"),
+                SpecificationInput(id = null, key = "", label = "Connection", value = "Quick-connect", unit = ""),
+            ),
+        )
+
+        openSupplies()
+        rule.onNode(hasText("Example Prefilter Cartridge") and hasClickAction()).performClick()
+        rule.awaitText("Micron rating — 5 µm")
+        rule.onNodeWithContentDescription("Edit").performClick()
+
+        rule.awaitText(PART_NUMBER_FIELD)
+        rule.onNodeWithText(SPECIFICATIONS_SECTION).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Micron rating").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Quick-connect").performScrollTo().assertIsDisplayed()
+
+        rule.onNodeWithText(ADD_SPECIFICATION).performScrollTo().performClick()
+        rule.onAllNodes(hasSetTextAction() and hasText("Label")).assertCountEquals(3)
+        rowField("Label", 2).performScrollTo().performTextInput("Length")
+        rowField("Value", 2).performScrollTo().performTextInput("10")
+        rowField("Unit", 2).performScrollTo().performTextInput("in")
+
+        rule.onAllNodesWithContentDescription(REMOVE_SPECIFICATION)[1].performScrollTo().performClick()
+        rule.onAllNodesWithText("Quick-connect").assertCountEquals(0)
+        rule.onAllNodes(hasSetTextAction() and hasText("Label")).assertCountEquals(2)
+
+        rule.onNodeWithText("Save").performClick()
+
+        rule.awaitText("Length — 10 in")
+        rule.onNodeWithText("Micron rating — 5 µm").assertIsDisplayed()
+        rule.onAllNodesWithText("Connection — Quick-connect").assertCountEquals(0)
+        val rows = runBlocking { app.graph.supplyItems.get(cartridge.id)!!.specifications }
+        check(rows.map { it.label } == listOf("Micron rating", "Length")) { "$rows" }
+        check(rows[0].id == cartridge.specifications[0].id) { "the untouched row keeps its id: $rows" }
+    }
+
+    /**
+     * B7b (C31). A row with a label and no value is refused: P15-12 is drawn under the rows, the form stays open and
+     * nothing is stored; Cancel then leaves, writing nothing.
+     */
+    @Test fun aSpecificationWithoutAValueIsRefusedWithP15_12AndCancelWritesNothing() {
+        openSupplies()
+        rule.awaitText(NO_SUPPLIES_YET)
+        rule.onNodeWithText(SUPPLY_ITEM).performClick()
+
+        rule.awaitText(PART_NUMBER_FIELD)
+        field("Name").performTextInput("Example Carbon Block")
+        rule.onNodeWithText(ADD_SPECIFICATION).performScrollTo().performClick()
+        rowField("Label", 0).performScrollTo().performTextInput("Length")
+        rule.onAllNodesWithText(SPECIFICATION_NEEDS_LABEL_AND_VALUE).assertCountEquals(0)
+        rule.onNodeWithText("Save").performClick()
+
+        rule.awaitText(SPECIFICATION_NEEDS_LABEL_AND_VALUE)
+        rule.onNodeWithText(SPECIFICATION_NEEDS_LABEL_AND_VALUE).performScrollTo().assertIsDisplayed()
+        // Still the editor: its P15-4 field is there, scrolled out of view or not.
+        rule.onAllNodes(hasSetTextAction() and hasText(PART_NUMBER_FIELD)).assertCountEquals(1)
+        check(runBlocking { app.graph.supplyItems.all() }.isEmpty()) { "a refused save stores nothing" }
+
+        rule.onNodeWithContentDescription("Cancel").performClick()
+        rule.awaitText(NO_SUPPLIES_YET)
+        check(runBlocking { app.graph.supplyItems.all() }.isEmpty()) { "Cancel stores nothing" }
     }
 }
