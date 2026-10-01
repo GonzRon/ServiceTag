@@ -33,8 +33,9 @@ the one body key it is about, then the `problems` in parentheses.
 - **The warranty tools need schema 11.** `get_warranty` and `set_warranty_reminder` — the read as well
   as the write — refuse an app whose `schemaVersion` is below 11 the same way, with `APP_SCHEMA_TOO_OLD`
   and nothing sent, from the same one `/v1/status` read per pairing. Every tool but these two, the
-  five service-case tools, the five loan tools, the succession tool and #92's seven tools below keeps
-  the minimum of 8.
+  five service-case tools, the five loan tools, the succession tool, #92's seven tools and #15's eight
+  supply tools below keeps the minimum of 8 — and a line tool that sends `supplyId` needs 18 for that
+  call.
 - **The service-case tools need schema 12.** `list_service_cases`, `get_service_case`,
   `open_service_case`, `update_service_case` and `add_case_entry` — the reads as well as the writes —
   refuse an app whose `schemaVersion` is below 12 the same way, from the same read.
