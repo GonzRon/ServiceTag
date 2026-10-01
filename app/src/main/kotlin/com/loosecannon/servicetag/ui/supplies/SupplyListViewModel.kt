@@ -15,8 +15,8 @@ import kotlinx.coroutines.flow.stateIn
 private const val SUBSCRIPTION_GRACE_MS = 5_000L
 
 /**
- * One SupplyItem as the Supplies list draws it (C30): its name, the quiet [detail] line — "manufacturer · part
- * number", each half only when it is there, `""` when neither is — and whether it is archived.
+ * One SupplyItem as the Supplies list draws it (C30): its name, the quiet [detail] line — the manufacturer and the
+ * P15-4 field joined by a middle dot, each only when it is there, empty when neither is — and whether it is archived.
  *
  * [archived] is carried, never filtered on (R15-6): an archived SupplyItem stays on its assets and its linked
  * lines, so the one list naming every SupplyItem names it too, marked, in its own place.

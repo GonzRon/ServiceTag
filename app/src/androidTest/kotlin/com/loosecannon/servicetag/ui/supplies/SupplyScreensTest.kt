@@ -86,7 +86,7 @@ class SupplyScreensTest {
 
     /**
      * The fifth row opens the list: every item, the archived one marked with the shipped "Archived" badge and kept
-     * in its name-order place, the quiet "manufacturer · part number" line, and the P15-2 add button.
+     * in its name-order place, the quiet line of the manufacturer and the P15-4 field, and the P15-2 add button.
      */
     @Test fun theMaintenanceRowOpensTheListAndAnArchivedRowIsMarked() {
         val carbon = save("Example Carbon Block", partNumber = "CB-5")

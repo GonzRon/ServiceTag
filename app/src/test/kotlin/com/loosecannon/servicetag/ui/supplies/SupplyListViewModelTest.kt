@@ -59,7 +59,7 @@ class SupplyListViewModelTest {
 
     /**
      * Row 59. Every SupplyItem in `(name casefolded, id)` order; the archived one keeps its place — first here, by
-     * its name — and is marked; the quiet line is "manufacturer · part number", each half only when it is there.
+     * its name — and is marked; the quiet line is the manufacturer and the P15-4 field, each only when it is there.
      */
     @Test fun rowsAreOrderedAndArchivedOnesMarked() = runTest {
         save("example prefilter cartridge", manufacturer = "Example Filters Co.", partNumber = "PF-10")

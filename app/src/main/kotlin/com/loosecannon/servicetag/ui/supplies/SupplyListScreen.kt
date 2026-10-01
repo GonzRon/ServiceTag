@@ -42,7 +42,7 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
  * its place in the name order and draws the shipped "Archived" badge, because it stays on its assets and its
  * linked lines and a SupplyItem the owner cannot find is one whose uses cannot be read.
  *
- * A row says the name and, when either is there, "manufacturer · part number" as a quiet second line; the detail
+ * A row says the name and, when either is there, the manufacturer and the P15-4 field as a quiet second line; the detail
  * it opens says the rest. **A name is a label, never identity**: rows are keyed and opened by id, and two items may
  * share a name.
  *

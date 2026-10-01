@@ -23,7 +23,7 @@ const val SUPPLY_ITEM = "Supply item"
 /** P15-3 — the Supplies list, empty (C30). */
 const val NO_SUPPLIES_YET = "No supplies yet."
 
-/** P15-4 — the editor's field and the detail's fact (C30, C31): the one "part" word (R15-2). */
+/** P15-4 — the editor's field and the detail's fact (C30, C31): the one label allowed that word (R15-2). */
 const val PART_NUMBER_FIELD = "Part number"
 
 /** P15-5 — the editor's field and the detail's fact (C30, C31). */
