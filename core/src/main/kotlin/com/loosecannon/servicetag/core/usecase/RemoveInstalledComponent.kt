@@ -20,7 +20,7 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * held asset's update throws at the guarded port, after every check (C14).
  */
 class RemoveInstalledComponent(
-    private val components: InstalledComponentRepository,
+    private val installedComponents: InstalledComponentRepository,
     private val uow: UnitOfWork,
     private val clock: Clock,
     private val today: Today,
@@ -31,9 +31,9 @@ class RemoveInstalledComponent(
         val closedOn = checkNotNull(parseDate(removedOn))
 
         return uow.write {
-            val row = components.get(id) ?: return@write refused(InstalledComponentProblem.NoSuchInstalledComponent)
+            val row = installedComponents.get(id) ?: return@write refused(InstalledComponentProblem.NoSuchInstalledComponent)
             if (!row.isCurrent) return@write refused(InstalledComponentProblem.AlreadyRemoved)
-            val subtree = currentDescendants(components.forAsset(row.assetId), id)
+            val subtree = currentDescendants(installedComponents.forAsset(row.assetId), id)
             if (closesBeforeInstalled(closedOn, subtree + row)) {
                 return@write refused(InstalledComponentProblem.RemovedBeforeInstalled(FIELD))
             }
@@ -41,8 +41,8 @@ class RemoveInstalledComponent(
             val now = clock.nowMillis()
             val removed = row.copy(removedOn = removedOn, updatedAt = now)
             val closed = subtree.map { it.copy(removedOn = removedOn, updatedAt = now) }
-            components.update(removed)
-            closed.forEach { components.update(it) }
+            installedComponents.update(removed)
+            closed.forEach { installedComponents.update(it) }
             InstalledComponentResult.Ok(removed, replaced = null, closed = closed)
         }
     }

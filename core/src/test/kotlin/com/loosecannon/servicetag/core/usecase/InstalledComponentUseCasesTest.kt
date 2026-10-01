@@ -38,7 +38,7 @@ class InstalledComponentUseCasesTest {
         install.transfers, install.events, install.definitions, install.profiles, install.groups, install.schedules,
         install.serviceCases, install.links,
     )
-    private val components = guard.installedComponents(install.installedComponents)
+    private val guarded = guard.installedComponents(install.installedComponents)
     private val stored = install.installedComponents
     private val uow = RecordingUnitOfWork(
         install.assets, install.supplyItems, install.assetSupplies, install.installedComponents, install.events,
@@ -49,8 +49,8 @@ class InstalledComponentUseCasesTest {
     private var now = 9_000L
     private val clock = Clock { now }
     private val today = Today { LocalDate.parse("2026-09-30") }
-    private val installComponent = InstallComponent(install.assets, install.supplyItems, components, uow, ids, clock, today)
-    private val remove = RemoveInstalledComponent(components, uow, clock, today)
+    private val installComponent = InstallComponent(install.assets, install.supplyItems, guarded, uow, ids, clock, today)
+    private val remove = RemoveInstalledComponent(guarded, uow, clock, today)
 
     /**
      * "Example UPS" (x1), "Example RO System" (x2) and "Example Water Heater" (h1); a live 12 V battery (s1) and tray

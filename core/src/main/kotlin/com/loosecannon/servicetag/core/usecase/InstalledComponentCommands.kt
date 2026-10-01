@@ -212,7 +212,13 @@ internal fun compositionQuantity(typed: String): Double = typed.trim().toDoubleO
 internal fun compositionInputProblems(inputs: List<CompositionInput>): List<InstalledComponentProblem> =
     compositionProblems(
         inputs.mapIndexed { index, input ->
-            CompositionEntry(id = "", supplyId = input.supplyId, quantity = compositionQuantity(input.quantity), unit = input.unit, sortOrder = index)
+            CompositionEntry(
+                id = "",
+                supplyId = input.supplyId,
+                quantity = compositionQuantity(input.quantity),
+                unit = input.unit,
+                sortOrder = index,
+            )
         },
     )
 
@@ -263,7 +269,8 @@ internal suspend fun supplyProblems(
         val item = items.get(input.supplyId)
         when {
             item == null -> InstalledComponentProblem.EntrySupplyItemMissing(index)
-            item.archivedAt != null && input.supplyId !in keptInComposition -> InstalledComponentProblem.EntrySupplyItemArchived(index)
+            item.archivedAt != null && input.supplyId !in keptInComposition ->
+                InstalledComponentProblem.EntrySupplyItemArchived(index)
             else -> null
         }
     }

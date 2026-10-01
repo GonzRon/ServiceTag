@@ -32,7 +32,7 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
 class InstallComponent(
     private val assets: AssetRepository,
     private val items: SupplyItemRepository,
-    private val components: InstalledComponentRepository,
+    private val installedComponents: InstalledComponentRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -47,7 +47,7 @@ class InstallComponent(
             val problems = stateProblems(cmd)
             if (problems.isNotEmpty()) return@write InstalledComponentResult.Refused(problems)
 
-            val siblings = components.forAsset(cmd.assetId).filter { it.isCurrent && it.parentId == cmd.parentId }
+            val siblings = installedComponents.forAsset(cmd.assetId).filter { it.isCurrent && it.parentId == cmd.parentId }
             val now = clock.nowMillis()
             val row = InstalledComponent(
                 id = InstalledComponentId(ids.newId()),
@@ -65,7 +65,7 @@ class InstallComponent(
                 createdAt = now,
                 updatedAt = now,
             )
-            components.insert(row)
+            installedComponents.insert(row)
             InstalledComponentResult.Ok(row, replaced = null, closed = emptyList())
         }
     }
@@ -74,7 +74,7 @@ class InstallComponent(
     private suspend fun stateProblems(cmd: InstallComponentCommand): List<InstalledComponentProblem> {
         if (assets.get(cmd.assetId) == null) return listOf(InstalledComponentProblem.OwnerMissing)
         if (cmd.parentId != null) {
-            val parent = components.get(cmd.parentId) ?: return listOf(InstalledComponentProblem.ParentMissing)
+            val parent = installedComponents.get(cmd.parentId) ?: return listOf(InstalledComponentProblem.ParentMissing)
             if (parent.assetId != cmd.assetId) return listOf(InstalledComponentProblem.ParentOnAnotherAsset)
             if (!parent.isCurrent) return listOf(InstalledComponentProblem.ParentRemoved)
         }
