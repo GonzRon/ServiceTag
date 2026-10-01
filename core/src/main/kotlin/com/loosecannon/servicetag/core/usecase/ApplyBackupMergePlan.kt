@@ -321,6 +321,10 @@ internal class ReturnScope private constructor(
                 // #15 (C13, C-4): the applicability rows go with their asset — the delete's cascade takes them, and the
                 // pack's rows plan as inserts. `supplyItems` is not named: global, the copy keeps every one.
                 assetSupplies = full.assetSupplies.filterNot { it.assetId in returning },
+                // #47 (C13): the installed components go with their asset, current and removed — the delete's cascade
+                // takes them and their entries, and the pack's rows plan as inserts, so a row closed, replaced or
+                // recomposed on the borrowing phone lands instead of refusing the return.
+                installedComponents = full.installedComponents.filterNot { it.assetId in returning },
             )
             val dropped = DroppedRows(
                 assets = returning.mapTo(HashSet()) { it.value },

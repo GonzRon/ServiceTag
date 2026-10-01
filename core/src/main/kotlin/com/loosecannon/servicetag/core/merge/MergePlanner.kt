@@ -1420,7 +1420,7 @@ internal fun mergePlanOf(
                 assetSupplyWrites.map { Triple(MergeTable.ASSET_SUPPLIES, it.id, TransferOwnership.of(it)) } +
                 // #47 (C12): an installed component is its asset's, as every row owned by its own `assetId` is.
                 installedComponentWrites.map {
-                    Triple(MergeTable.INSTALLED_COMPONENTS, it.id.value, listOf<OwnerRef>(OwnerRef.OfAsset(it.assetId)))
+                    Triple(MergeTable.INSTALLED_COMPONENTS, it.id.value, TransferOwnership.of(it))
                 }
         for ((table, id, refs) in owned) heldOwner(refs)?.let { refuseInsert(table, id, it) }
 

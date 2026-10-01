@@ -219,7 +219,7 @@ class FakeGraph(
     /** #77's transfer records, mirroring `AppGraph`'s field by name; before the ports, which its guard reads. */
     val transferRecords: TransferRecordRepository = RoomTransferRecordRepository(db.transferRecordDao())
 
-    // #77 (C12): the write guard over the seventeen asset-owned ports, wired exactly as `AppGraph` wires it, so a
+    // #77 (C12): the write guard over the eighteen asset-owned ports, wired exactly as `AppGraph` wires it, so a
     // view-model or route test writes through the same refusal the app does.
     private val roomEvents = RoomEventRepository(db.eventDao())
     private val roomDefinitions = RoomDefinitionRepository(db.definitionDao())
@@ -263,9 +263,9 @@ class FakeGraph(
     val supplyItems: SupplyItemRepository = RoomSupplyItemRepository(db.supplyItemDao())
     val assetSupplies: AssetSupplyRepository =
         heldWriteGuard.assetSupplies(RoomAssetSupplyRepository(db.assetSupplyDao()))
-    /** #47 — installed components, unguarded until B2c wraps the port (C14), as `AppGraph`'s. */
+    /** #47 — installed components behind the guard (C14), the merge apply's included, as `AppGraph`'s. */
     val installedComponents: InstalledComponentRepository =
-        RoomInstalledComponentRepository(db.installedComponentDao())
+        heldWriteGuard.installedComponents(RoomInstalledComponentRepository(db.installedComponentDao()))
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())
 
     /** `T`, injected: a test says which day it is and the engine answers the same way every run. */

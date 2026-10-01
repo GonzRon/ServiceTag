@@ -294,7 +294,7 @@ class AppGraph(private val context: Context) {
     private val roomServiceCases = RoomServiceCaseRepository(db.serviceCaseDao())
 
     /**
-     * #77 (C12) — the one write guard: every one of the seventeen asset-owned ports below is its wrapped port, so every
+     * #77 (C12) — the one write guard: every one of the eighteen asset-owned ports below is its wrapped port, so every
      * use case, view model and route that writes through this graph refuses an ordinary write on a transferred-out
      * asset's rows ([com.loosecannon.servicetag.core.transfer.AssetTransferredOut]). The derived and device-local
      * tables, the link tombstones, the categories and the records are not among them.
@@ -369,11 +369,12 @@ class AppGraph(private val context: Context) {
 
     /**
      * #47's one data port (C6): installed components, each row with its composition, inserted and updated and never
-     * deleted one by one — a row leaves only by its asset's CASCADE. Unguarded until B2c wraps it (C14); its rules
-     * live in the use cases.
+     * deleted one by one — a row leaves only by its asset's CASCADE. It is asset-owned, the eighteenth port the guard
+     * wraps (C14), and every consumer's, the merge apply's included: a return writes back no row of its own, so it
+     * needs no raw port. Its rules live in the use cases.
      */
     val installedComponents: InstalledComponentRepository =
-        RoomInstalledComponentRepository(db.installedComponentDao())
+        heldWriteGuard.installedComponents(RoomInstalledComponentRepository(db.installedComponentDao()))
 
     /** Derived due state. Its one writer is [recomputeSchedules]; nothing else may reach it. */
     val scheduleStates: ScheduleStateRepository = RoomScheduleStateRepository(db.scheduleStateDao())

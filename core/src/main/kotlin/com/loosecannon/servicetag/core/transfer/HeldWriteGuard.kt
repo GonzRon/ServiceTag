@@ -18,6 +18,7 @@ import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthSubject
+import com.loosecannon.servicetag.core.model.InstalledComponent
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.MaintenanceGroup
 import com.loosecannon.servicetag.core.model.MaintenanceSchedule
@@ -41,6 +42,7 @@ import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
+import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
@@ -66,9 +68,9 @@ class AssetTransferredOut(val assetId: AssetId) :
 /**
  * #77 (C12, R77-4; the owner's direction) — **the one home of the write guard**: a held asset (an open OUT in the
  * transfer records, `heldIds`) is inspectable and ordinarily immutable everywhere — the phone's use cases, the API,
- * and everything the MCP tools reach through it. It wraps the seventeen asset-owned repository ports (#15's
- * applicability the seventeenth, C14), and #86's successions; `AppGraph` hands every use case the wrapped ones, so no
- * use case, screen or route needs a guard of its own.
+ * and everything the MCP tools reach through it. It wraps the eighteen asset-owned repository ports (#15's
+ * applicability the seventeenth, C14; #47's installed components the eighteenth, C14), and #86's successions;
+ * `AppGraph` hands every use case the wrapped ones, so no use case, screen or route needs a guard of its own.
  *
  * Each write reads `heldIds` **in the caller's transaction** and, when that set is empty — the ordinary case — writes
  * exactly as before. Otherwise it throws [AssetTransferredOut] **before** the port writes when:
@@ -98,7 +100,7 @@ class AssetTransferredOut(val assetId: AssetId) :
  * - every port's `deleteAll` — the Replace restore's wipe, which wipes the records first (R77-13 refuses a held
  *   graph before anything is wiped).
  * - the derived and device-local tables (schedule state, the two delivery tables), the 2.6 link tombstones, the
- *   categories and the transfer records themselves: none of them is one of the seventeen ports.
+ *   categories and the transfer records themselves: none of them is one of the eighteen ports.
  * - #15's SupplyItem catalog (C14): global, not asset-owned, so archiving or editing an item a held asset's rows name
  *   writes no held row and passes. A material line's link rides the profile and event ports, already guarded.
  *
@@ -146,6 +148,13 @@ class HeldWriteGuard(
 
     /** #15 (C14): an Asset's applicability rows — the row written and the stored row it replaces or deletes. */
     fun assetSupplies(port: AssetSupplyRepository): AssetSupplyRepository = GuardedAssetSupplies(port, this)
+
+    /**
+     * #47 (C14): an Asset's installed components, the eighteenth port — the row written **and** the stored row an
+     * update replaces. The composition rides its row, so a recomposition is an update like any other.
+     */
+    fun installedComponents(port: InstalledComponentRepository): InstalledComponentRepository =
+        GuardedInstalledComponents(port, this)
 
     /**
      * #86 (C6, I8; R86-16): no **new** succession may name a held asset at either end. The one writer that re-inserts
@@ -254,7 +263,7 @@ class HeldWriteGuard(
 /** An archive slice with no rows: each check below names the one list it fills. */
 private val NO_ROWS = BackupData(assets = emptyList(), nfcTags = emptyList(), externalLinks = emptyList())
 
-// ---- the seventeen wrapped ports: reads delegate, each write asks the guard first --------------------------------
+// ---- the eighteen wrapped ports: reads delegate, each write asks the guard first ---------------------------------
 
 private class GuardedAssets(private val port: AssetRepository, private val guard: HeldWriteGuard) :
     AssetRepository by port {
@@ -494,6 +503,23 @@ private class GuardedAssetSupplies(private val port: AssetSupplyRepository, priv
     override suspend fun delete(id: String) {
         guard.check { owned(port.get(id)?.let(TransferOwnership::of).orEmpty()) }
         port.delete(id)
+    }
+}
+
+private class GuardedInstalledComponents(
+    private val port: InstalledComponentRepository,
+    private val guard: HeldWriteGuard,
+) : InstalledComponentRepository by port {
+    override suspend fun insert(row: InstalledComponent) {
+        guard.check { owned(TransferOwnership.of(row)) }
+        port.insert(row)
+    }
+
+    // The port writes the row whole, its composition with it, so the stored row's asset counts too: a row moved off a
+    // held asset is a write on it.
+    override suspend fun update(row: InstalledComponent) {
+        guard.check { owned(TransferOwnership.of(row) + port.get(row.id)?.let(TransferOwnership::of).orEmpty()) }
+        port.update(row)
     }
 }
 

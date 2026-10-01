@@ -94,7 +94,10 @@ class ExportBackupSet(
     /** #15 — the SupplyItems with their specifications, and their applicability (format 18). */
     private val supplyItems: SupplyItemRepository,
     private val assetSupplies: AssetSupplyRepository,
-    /** #47 — the installed components (format 19): every row, current and removed, each with its composition. */
+    /**
+     * #47 — the installed components (format 19): every row, current and removed, each with its composition, but those
+     * of an asset held here (`retain` drops them).
+     */
     private val installedComponents: InstalledComponentRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
@@ -207,7 +210,8 @@ suspend fun readSnapshot(repos: BackupRepositories): BackupData = with(repos) {
         // the export passes both lists to `retain`, which decides what a backup set carries (C10, C13).
         supplyItems = supplyItems.all().map { it.toDto() },
         assetSupplies = assetSupplies.all().map { it.toDto() },
-        // Format 19: every installed component, current and removed, each with its composition.
+        // Format 19: every installed component, current and removed, each with its composition; the export's `retain`
+        // drops a held asset's rows (#47, C13).
         installedComponents = installedComponents.all().map { it.toDto() },
     )
 }
