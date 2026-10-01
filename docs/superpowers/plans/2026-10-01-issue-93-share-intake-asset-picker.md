@@ -619,3 +619,49 @@ or edit beyond `:56`, `:94-109`, `:156`; re-add a byte-form check to the boundar
 edit any other R-layer; re-word anything the owner has not ratified. **Counted RED:** none (docs and a device
 assertion, compiled only). **Caps:** no mutation runs; **1 h target, 2 h hard stop**; fix round 45 min. **Size:**
 about 45 doc lines, 6 test lines. **Estimate:** 25 min.
+
+## 12. Errata after the merge (controller, 2026-10-01; merged bca5939a)
+
+Rev 1.2 is the ratified spec; the code and the documents are as built (the share-intake spec, `docs/release-proofs.md` R4, `planning-policy.md` layer 4). Where they differ, this section records the difference — collected by the whole-branch review from the three task reviews, the reports and the ledger. Nothing above is rewritten.
+
+1. **E-1, the `excludeHeld` grep.** §7's R6 line "`'excludeHeld'` anywhere else under `app/src/main` → 0"
+   contradicts its own "`AssetsViewModel\(graph, excludeHeld = true\)` in `ShareIntakeActivity.kt` → 1". The tree
+   has 1, at `ShareIntakeActivity.kt:106`, the C9 builder.
+   - Correct wording: "`excludeHeld` outside `AssetViewModels.kt` → 1 (`ShareIntakeActivity.kt`), 0 in any other
+     file".
+2. **E-2, `ReachesTheIntake`.** §11's "`'ReachesTheIntake'` → 1" in `ShareBoundaryTest.kt` is really **2**. Case 1
+   was already `anExternalTextShareFromAnotherUidReachesTheIntake`.
+3. **E-3, "reaches the intake".** It is **2** in `release-proofs.md` and **2** in `planning-policy.md` (1 each at
+   base: R4 item 1 and layer 4's text clause). Any "→ 1" reading is wrong. The two "byte form" greps → 0 as specified.
+4. **E-4, the `chip` count.** "chip" in the SPEC goes 4 → **5**: §7's new sentence names the retired "chip cloud"
+   historically. Rev 1.2's replacement check, `'Choose asset'` base + ≥ 1, holds (1 → 2).
+5. **E-5, the `CHOOSE_ASSET` constant.** C11 says the dead `TYPE` const "is removed". B3 *replaced* it with
+   `const val CHOOSE_ASSET = "Choose asset"` (`ShareBoundaryTest.kt:156`) rather than a literal, which is the file's
+   idiom. `'const val TYPE = '` → 0 holds.
+6. **E-6, `cancel()`'s KDoc.** It became false with R93-4 but was not in C9/N-6's list of KDocs to amend. The
+   controller fixed it in `ce92b16a`, and it is now true. It is one 197-character line (NOTE-3).
+7. **E-7, `EmptyList`'s KDoc** (`AssetsScreen.kt:268-273`). It still promises "adding an asset", and it is not in
+   N-6's list. It is left on purpose by B1's three-line fence (NOTE-4).
+8. **E-8, `ShareBoundaryTest.kt:105`.** C11 says `:103-106` "stay". The comment at `:105` became false and was not
+   amended (MINOR-1).
+9. **E-9, `ShareBoundaryTest.kt:121`.** The KDoc "never a byte form with an empty Received line" is stale. It sits
+   outside C11's fence (`:56`, `:94-109`, `:156`) (NOTE-1).
+10. **E-10, C10's I-8 citation.** C10 says the hosted model's read path is `ReadPathsWriteNothingTest.kt:506`,
+    "re-run". That case builds the tab-shaped model without `transfers`, `excludeHeld` or `refresh()`. The hosted
+    instance's no-write property holds by construction, not by that re-run (NOTE-5).
+11. **E-11, C7's header.** C7 lists four header elements: the title, the Received block, ATTACH TO and "Choose
+    asset". By the controller's ruling (after B1's NOTE-2) they ship as **three** unkeyed items, with ATTACH TO and
+    "Choose asset" sharing one. That keeps the item count fixed for a visit. Intended; recorded.
+
+**Not errata, checked:**
+- C9 names the resume refresh, and it is in the code verbatim.
+- The #93 SPEC amendment sits at `:574`, directly after the #67 amendment. The "beside :566" line numbers shifted by
+  B3's own earlier edits.
+- §10's "All 50 RATIFIED" header is unchanged, as N-3 rules.
+- `AssetPicker`'s signature matches C3's fragment exactly.
+
+**Errata count: 11.**
+
+---
+
+- **Reviews and rounds.** Three briefs, one task review each (no fix rounds; controller-inspection fixes: B2's `cancel()` KDoc, the two `ShareBoundaryTest` comments at the branch review); one whole-branch review (MERGE WITH FIXES: 0 BLOCKER, 0 MAJOR, 1 MINOR, 8 NOTE) with B3's task review folded in. Controller rulings: the tab's resume `refresh()` copied into the intake activity (B1 review concern 4); the picker's header a fixed item count, never keyed by an asset id. Owner-visible, as ratified: the list scrolls to the top after Change; a no-folder byte share's form says Close yet Back returns to the picker. The gate is `.superpowers/sdd/2026-10-01-issue-93/gate/` (55 device classes; the picker step's first device composition and the three grown Compose cases; the MCP and loader pytests), run once on bca5939a.
