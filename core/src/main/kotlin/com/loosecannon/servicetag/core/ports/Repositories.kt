@@ -349,7 +349,7 @@ interface ReferenceRepository {
  *
  * **Archive-only:** a SupplyItem is never deleted one by one, on this port or anywhere above the schema
  * (R15-5); [setArchived] writes `archived_at` and the `updated_at` stamp and nothing else. [deleteAll] is the
- * replace import's wipe, its only caller — it runs after the Asset rows are wiped, whose CASCADE has taken
+ * replace import's wipe, its only production caller (test helpers also wipe) — it runs after the Asset rows are wiped, whose CASCADE has taken
  * every applicability row the RESTRICT would otherwise refuse it for. Every rule — the name, the
  * specification keys — lives in the use cases, so nothing here decides anything.
  */
@@ -360,7 +360,7 @@ interface SupplyItemRepository {
     suspend fun upsert(item: SupplyItem)
     suspend fun setArchived(id: SupplyId, archivedAt: Long?, updatedAt: Long)
 
-    /** The replace import's wipe, its only caller — a SupplyItem is never deleted otherwise (R15-5). */
+    /** The replace import's wipe, its only production caller (test helpers also wipe) — a SupplyItem is never deleted otherwise (R15-5). */
     suspend fun deleteAll()
 
     /** Every SupplyItem, live, archived included (the caller filters), by name case-insensitively, then id. */
@@ -454,7 +454,7 @@ interface CategoryRepository {
 /**
  * #79 (C13; R79-1). A service case's **header**: upsert and query. There is **no delete** — a case
  * leaves only by its asset's CASCADE, and CANCELLED is how an owner abandons one (R79-9). `deleteAll`
- * is the replace import's wipe, which is its only caller. Lists by asset order by
+ * is the replace import's wipe, which is its only production caller (test helpers also wipe). Lists by asset order by
  * `(openedOn descending, id)`; [all] orders by id.
  */
 interface ServiceCaseRepository {
@@ -484,7 +484,7 @@ interface ServiceCaseEntryRepository {
 /**
  * #72 (C1; R72-1, R72-17). The loans of an asset, one row per loan: upsert and query, and **no delete**
  * — "Mark returned" is a loan's only exit, a returned loan stays as history, and a loan leaves only by
- * its asset's CASCADE. `deleteAll` is the replace import's wipe, which is its only caller. An asset
+ * its asset's CASCADE. `deleteAll` is the replace import's wipe, which is its only production caller (test helpers also wipe). An asset
  * holds at most one open loan; the use cases refuse a second, and the schema's unique index is the
  * last word. Lists by asset order by `(lentOn descending, id)`; [all] and [open] order by id.
  */
@@ -507,7 +507,7 @@ interface AssetLoanRepository {
  * #77 (C6; R77-3, R77-12). The transfer records: **append and query only** — no update and no delete of
  * one row anywhere. [append] **aborts** on an id already held, never overwriting it. There is no foreign
  * key: a record names its asset softly and outlives it (`DeleteAsset` keeps it, R77-4). `deleteAll` is the
- * replace import's wipe, which is its only caller. [all] orders by id; [forAsset] by `(at, id)`.
+ * replace import's wipe, which is its only production caller (test helpers also wipe). [all] orders by id; [forAsset] by `(at, id)`.
  * [heldIds] is `heldIds(all())`, the one rule, asked in the caller's transaction.
  */
 interface TransferRecordRepository {
@@ -525,7 +525,7 @@ interface TransferRecordRepository {
  * #86 (C1, C2; R86-1, R86-15). The successions: **append and query only** — no update and no delete of one row
  * anywhere. [append] **aborts** on an id already held, and on a predecessor or a successor another row already
  * names (the two unique indexes, I2). A row leaves only by an endpoint's CASCADE: deleting either asset removes it,
- * with no refusal and no re-linking. `deleteAll` is the replace import's wipe, which is its only caller. [all]
+ * with no refusal and no re-linking. `deleteAll` is the replace import's wipe, which is its only production caller (test helpers also wipe). [all]
  * orders by id; [observeForAsset] is every row naming the asset at either end, by id.
  */
 interface AssetSuccessionRepository {

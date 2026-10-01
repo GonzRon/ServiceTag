@@ -60,7 +60,7 @@ interface SupplyItemDao {
     suspend fun setArchived(id: String, archivedAt: Long?, updatedAt: Long): Int
 
     /**
-     * The replace import's wipe, its only caller (R15-5). Specifications go by their CASCADE; a row an Asset
+     * The replace import's wipe, its only production caller (test helpers also wipe) (R15-5). Specifications go by their CASCADE; a row an Asset
      * still names is refused by `asset_supply`'s RESTRICT, so the wipe runs after the Asset rows'.
      */
     @Query("DELETE FROM supply_item")

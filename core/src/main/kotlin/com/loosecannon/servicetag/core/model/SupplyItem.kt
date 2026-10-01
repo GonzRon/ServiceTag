@@ -2,7 +2,7 @@ package com.loosecannon.servicetag.core.model
 
 // #15, the SupplyItem MVP's **shapes** (C4; R15-1, R15-2, R15-3, R15-5): canonical identity, generic
 // specifications and Asset applicability — nothing more. No rule lives here; the use cases that write these
-// rows, and the codec and the merge that carry them, are later briefs'.
+// rows, and the codec and the merge that carry them, live in `usecase`, `backup` and `merge`.
 //
 // The fence, by construction: no quantity, threshold, price, URL, position, fitting date, fitted serial,
 // parent SupplyItem or owner column on any of these types (#95, #47 and #69 own those). A pack and a single

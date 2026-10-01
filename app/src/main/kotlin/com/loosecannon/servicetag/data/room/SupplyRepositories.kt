@@ -31,7 +31,7 @@ class RoomSupplyItemRepository(private val dao: SupplyItemDao) : SupplyItemRepos
         dao.setArchived(id.value, archivedAt, updatedAt)
     }
 
-    /** The replace import's wipe, its only caller (R15-5). */
+    /** The replace import's wipe, its only production caller (test helpers also wipe) (R15-5). */
     override suspend fun deleteAll() = dao.deleteAll()
 
     override fun observeAll(): Flow<List<SupplyItem>> =
