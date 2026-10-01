@@ -22,6 +22,7 @@ import com.loosecannon.servicetag.core.transfer.TransferOwnership
 import com.loosecannon.servicetag.core.transfer.TransferRetention
 import com.loosecannon.servicetag.core.backup.AssetDto
 import com.loosecannon.servicetag.core.backup.AssetEventDto
+import com.loosecannon.servicetag.core.backup.AssetReferenceDto
 import com.loosecannon.servicetag.core.backup.AttachmentDto
 import com.loosecannon.servicetag.core.backup.Backup
 import com.loosecannon.servicetag.core.backup.BackupCodec
@@ -130,7 +131,7 @@ import java.security.MessageDigest
  *
  * **Canonical content is every backup-format field**, `createdAt` and the last-modified stamp
  * included, compared as `incoming == local.toDto()` in every pass and in the same direction. There
- * are four normalisations. The aggregate tables' child lists are read in `(sortOrder, id)`
+ * are five normalisations. The aggregate tables' child lists are read in `(sortOrder, id)`
  * order: `sortOrder` is the order the format writes them in (`BackupCodec.kt:85`–`96`) and the id
  * makes the key total, because the format does not promise `sortOrder` is unique within a parent.
  * And (#74, C13) an asset's `category` is read through `CategoryKey.of` on **both** sides, so a
@@ -152,6 +153,16 @@ import java.security.MessageDigest
  * re-planning `IDENTICAL`. Every other field still counts — a rename or another warranty date here is
  * still a `CONFLICT` — and a row here with no lead compares its stamp as before. A format-11 archive
  * compares the lead and the stamp like any field, with no update path.
+ * And the fifth (#91, R91-7: the third's rule, mirrored for references): an archive older than
+ * format 17 has its references compared **without the document role**, and — when the row here
+ * carries one — **without the last-modified stamp**, on **both** arms that compare a row: the row's
+ * own id and the second identity `(asset_id, uri)`. So a role given on this phone since that export
+ * keeps the row `IDENTICAL`, and an equivalent row under another id `IDENTICAL`
+ * `REFERENCE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW`. Every other field still counts — a rename here is still
+ * a `CONFLICT`, or the diverged `SKIPPED` on the pair — and a row here with no role compares its stamp
+ * as before. A format-17 archive compares the role and the stamp like any field: a different role, a
+ * role against none, or none against a role is `CONFLICT` / `CONTENT_DIFFERS` on the same id and
+ * `SKIPPED` `REFERENCE_HELD_BY_A_LOCAL_ROW` on the same pair, with no update path.
  *
  * ### Categories (#74, C13)
  *
@@ -836,6 +847,16 @@ internal fun mergePlanOf(
     // A SKIPPED row claims no pair and writes nothing, which is why `claimedReferencePairs` is
     // only ever written in the INSERT arm.
     val referenceWrites = mutableListOf<AssetReference>()
+    // #91 (R91-7): R67-12 option B for references — an archive older than format 17 cannot speak about
+    // roles. See the KDoc's canonical-content paragraph: against such an archive a row here that carries a
+    // role is compared without it and without the stamp giving it moved, on both arms below that compare
+    // a row; one without a role compares as always, and a format-17 archive compares everything.
+    val referenceRolesCompared = backup.manifest.formatVersion >= BackupCodec.FIRST_REFERENCE_ROLE_FORMAT
+    fun sameReference(incoming: AssetReferenceDto, here: AssetReferenceDto): Boolean = when {
+        referenceRolesCompared -> incoming == here
+        here.role == null -> incoming.copy(role = null) == here
+        else -> incoming.copy(role = null, updatedAt = here.updatedAt) == here.copy(role = null)
+    }
     for (dto in data.assetReferences) {
         val id = dto.id
         val pair = dto.assetId to dto.uri
@@ -843,12 +864,12 @@ internal fun mergePlanOf(
         val samePair = localReferencesByPair[pair]
         val pairHolder = claimedReferencePairs[pair]
         decisions += when {
-            local != null && dto == local.toDto() ->
+            local != null && sameReference(dto, local.toDto()) ->
                 MergeDecision(MergeTable.REFERENCES, id, MergeVerdict.IDENTICAL)
             local != null ->
                 MergeDecision(MergeTable.REFERENCES, id, MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, id)
             // A local row under a different id already *is* this reference, field for field.
-            samePair != null && dto.copy(id = samePair.id.value) == samePair.toDto() ->
+            samePair != null && sameReference(dto.copy(id = samePair.id.value), samePair.toDto()) ->
                 MergeDecision(
                     MergeTable.REFERENCES, id, MergeVerdict.IDENTICAL,
                     MergeReason.REFERENCE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW, samePair.id.value,
