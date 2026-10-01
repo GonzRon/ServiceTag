@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.usecase.ReferenceResult
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateReferenceCommand
 import com.loosecannon.servicetag.di.AppGraph
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
 
 /**
@@ -98,15 +99,19 @@ internal class ReferenceHandlers(
      * blanks the description. **The role is three-state** (#91, R91-3): absent keeps the stored
      * role, `null` clears it, a name sets it. The typed decode runs first, over the caller's own
      * bytes, so every 415 and 400 is the shipped one byte for byte; only then is the same text
-     * read again for whether it names `role` at all, a read that never produces a message. The
+     * read again for whether it names `role` at all, through the same 400 path (a body the lenient
+     * typed decoder took but the element parser refuses — a missing comma — is a 400 here where it
+     * was a 200 before #91). The
      * row is read first because `UpdateReferenceCommand` is a **full** triple — there is no
      * partial command — and sending back a field the caller never named is how an amend rewrites
      * what it was not asked to touch.
      */
     suspend fun update(id: String, request: ApiRequest): ApiResponse {
         val body = request.decode(UpdateReferenceRequest.serializer())
-        // The typed decode above proved the text is one JSON object, so this second parse cannot fail.
-        val namesRole = "role" in ApiJson.parseToJsonElement(request.body.decodeToString()).jsonObject
+        // The presence read goes through the shipped 400 path: the typed decoder is lenient (it accepts a
+        // missing comma between pairs), the element parser is not, so a body that passed the first step can
+        // still fail here — and then it is a 400, not a 500 (B2a re-review R-1).
+        val namesRole = "role" in decodeOr400(JsonElement.serializer(), request.body.decodeToString()).jsonObject
         val stored = references.get(ReferenceId(id))
             ?: throw ReferenceRefused(ReferenceProblem.NoSuchReference)
         val result = updateReference.run(

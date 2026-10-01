@@ -603,7 +603,13 @@ class ReferenceRoutesTest {
         val asset = createAsset()
         val row = referenceIn(createReference(asset, MANUAL, "Example Water Heater manual", role = "\"USER_MANUAL\""))
         graph.now = SECOND_DAY
-        for (body in listOf("""{"role":}""", """{"displayName": }""")) {
+        // Re-review R-1: the lenient typed decoder takes a missing comma; the presence read must still be a 400.
+        val missingComma = listOf(
+            """{"displayName":"a" "description":"b"}""",
+            """{"displayName":"Example manual" "role":"USER_MANUAL"}""",
+            """{"role":null "displayName":"a"}""",
+        )
+        for (body in listOf("""{"role":}""", """{"displayName": }""") + missingComma) {
             val refused = call("PATCH", "/v1/references/${row.id}", body)
             assertEquals(body + " " + refused.text(), 400, refused.status)
             assertEquals(body, "bad_request", refused.error().code)
