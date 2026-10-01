@@ -7,7 +7,9 @@ import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.testing.assetSupplyOf
 import com.loosecannon.servicetag.core.testing.completionOf
+import com.loosecannon.servicetag.core.testing.compositionEntryOf
 import com.loosecannon.servicetag.core.testing.groupOf
+import com.loosecannon.servicetag.core.testing.installedComponentOf
 import com.loosecannon.servicetag.core.testing.specificationOf
 import com.loosecannon.servicetag.core.testing.subjectOf
 import com.loosecannon.servicetag.core.testing.supplyItemOf
@@ -382,5 +384,95 @@ class TransferGraphTest {
         assertEquals(listOf("as3"), kept.assetSupplies.map { it.id }, "only the compressor's row stays")
         assertEquals(data.supplyItems, kept.supplyItems, "every item, s1, s2 and s4 included")
         BackupCodec.decode(encode(kept))
+    }
+
+    // --- #47 (C13, rows 28–29; R47-4): installed components with their asset, history whole ---------------------------
+
+    /**
+     * [supplied] with installed components (fictional) and three more SupplyItems: on the heater a tray (c1) whose
+     * direct link is s7, a pack under it removed on 2026-06-01 (c2, composed of 4 × s6) and the pack that replaced it
+     * (c3, composed of 4 × s1); on the anode one row (c4); on the compressor one (c5, an s8 composed of one s8). s6 is
+     * named only by the removed pack's entry, s7 only by the tray's direct link, s8 only by the compressor's row. The
+     * rows come out of id order, so the pack's own order is the selection's.
+     */
+    private fun fitted(): BackupData = supplied().let { data ->
+        data.copy(
+            supplyItems = data.supplyItems + listOf(
+                supplyItemOf("s6", "Example 12 V Battery"),
+                supplyItemOf("s7", "Example Battery Tray"),
+                supplyItemOf("s8", "Example Intake Housing"),
+            ).map { it.toDto() },
+            installedComponents = listOf(
+                installedComponentOf(
+                    "c3", assetId = HEATER, name = "Example Battery Pack", parentId = "c1", installedOn = "2026-06-01",
+                    replacesId = "c2", composition = listOf(compositionEntryOf("k2", "s1", 4.0)),
+                ),
+                installedComponentOf("c5", assetId = COMPRESSOR, name = "Example Intake Housing", supplyId = "s8",
+                    composition = listOf(compositionEntryOf("k3", "s8", 1.0))),
+                installedComponentOf("c1", assetId = HEATER, name = "Example Battery Tray", supplyId = "s7"),
+                installedComponentOf(
+                    "c2", assetId = HEATER, name = "Example Battery Pack", parentId = "c1", installedOn = "2026-01-10",
+                    removedOn = "2026-06-01", composition = listOf(compositionEntryOf("k1", "s6", 4.0)),
+                ),
+                installedComponentOf("c4", assetId = ANODE, name = "Example Anode Sleeve"),
+            ).map { it.toDto() },
+        )
+    }
+
+    /**
+     * Every row of a carried asset travels — current and removed, each with its composition, the anode's with its
+     * parent asset — and the pack, once sorted, round-trips through the codec unchanged; the compressor's row stays.
+     */
+    @Test
+    fun aPackCarriesAnAssetsWholeHistoryWithEntries() {
+        val data = fitted()
+
+        val pack = selected(data, HEATER).data
+
+        assertEquals(
+            data.installedComponents.filter { it.assetId in setOf(HEATER, ANODE) }.sortedBy { it.id },
+            pack.installedComponents,
+            "c1–c4 by id, verbatim: the removed pack and the pack that replaced it both",
+        )
+        assertEquals(listOf("k1"), pack.installedComponents.single { it.id == "c2" }.composition.map { it.id }, "the closed row keeps its entry")
+        assertEquals(listOf("s1", "s2", "s4", "s6", "s7"), pack.supplyItems.map { it.id }, "s3, s5 and s8 stay home")
+        assertEquals(pack, BackupCodec.decode(encode(pack)).data, "the whole history decodes inside the pack")
+    }
+
+    /** A SupplyItem named only by a carried row's composition entry — here a removed row's — travels with it, verbatim. */
+    @Test
+    fun aSupplyItemNamedOnlyByAnEntryTravels() {
+        val data = fitted()
+
+        val pack = selected(data, HEATER).data
+
+        assertEquals(data.supplyItems.filter { it.id == "s6" }, pack.supplyItems.filter { it.id == "s6" }, "the removed pack's entry names it")
+        assertTrue(pack.supplyItems.none { it.id == "s8" }, "s8 stays home: only the compressor's row names it")
+    }
+
+    /** N-8: a SupplyItem named only by a carried row's direct link travels with it, verbatim. */
+    @Test
+    fun aSupplyItemNamedOnlyByADirectLinkTravels() {
+        val data = fitted()
+
+        val pack = selected(data, HEATER).data
+
+        assertEquals(data.supplyItems.filter { it.id == "s7" }, pack.supplyItems.filter { it.id == "s7" }, "the tray's direct link names it")
+        assertTrue("s8" in selected(data, COMPRESSOR).data.supplyItems.map { it.id }, "the compressor's own row names s8 and takes it")
+    }
+
+    /**
+     * C3 (C13): `retain` drops a held asset's installed components, current and removed, with their entries, and keeps
+     * every SupplyItem — s6 and s7, named only by held rows, included — so what stays still decodes.
+     */
+    @Test
+    fun retainDropsAHeldAssetsRows() {
+        val data = fitted()
+
+        val kept = assertIs<TransferRetention.Retained>(TransferGraph.retain(data, setOf(AssetId(HEATER), AssetId(ANODE)))).data
+
+        assertEquals(listOf("c5"), kept.installedComponents.map { it.id }, "only the compressor's row stays")
+        assertEquals(data.supplyItems, kept.supplyItems, "every item, s6 and s7 included")
+        assertEquals(kept.installedComponents, BackupCodec.decode(encode(kept)).data.installedComponents)
     }
 }

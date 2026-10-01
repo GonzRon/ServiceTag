@@ -33,6 +33,8 @@ class TransferTableClassificationTest {
         // is its asset's and travels with it.
         assertEquals(TransferTableClass.GLOBAL_IN_USE, TransferTables.CLASSES["supplyItems"])
         assertEquals(TransferTableClass.ASSET_OWNED, TransferTables.CLASSES["assetSupplies"])
+        // #47 (C13; R47-4): an installed component is its asset's and travels with it, current and removed.
+        assertEquals(TransferTableClass.ASSET_OWNED, TransferTables.CLASSES["installedComponents"])
     }
 
     /** R77-6: a returned loan is the sender's history, and it stays with the sender. */

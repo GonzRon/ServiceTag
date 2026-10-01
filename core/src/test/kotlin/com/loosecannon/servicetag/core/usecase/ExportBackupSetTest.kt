@@ -392,6 +392,35 @@ class ExportBackupSetTest {
         assertEquals(2, decoded.manifest.counts["compositionEntries"])
     }
 
+    /**
+     * #47 (C13; R47-4): an export taken after the heater and its anode are transferred out carries none of their
+     * installed components — current or removed, nor their entries — and what leaves decodes; the compressor's row
+     * leaves as always, every SupplyItem stays (s1, named only by a held row's entry, included), and the rows stay here.
+     */
+    @Test
+    fun aHeldAssetsInstalledComponentsAreNotExportedAndTheArchiveDecodes() = runBlocking<Unit> {
+        val install = heldEstate()
+        listOf(supplyItemOf("s1", "Example 12 V Battery"), supplyItemOf("s2", "Example Intake Housing"))
+            .forEach { install.supplyItems.upsert(it) }
+        val staying = installedComponentOf("cx", assetId = TransferFixtures.COMPRESSOR, name = "Example Intake Housing", supplyId = "s2")
+        listOf(
+            installedComponentOf("c1", assetId = TransferFixtures.HEATER, name = "Example Battery Tray"),
+            installedComponentOf(
+                "c2", assetId = TransferFixtures.HEATER, name = "Example Battery Pack", parentId = "c1", installedOn = "2026-01-10",
+                removedOn = "2026-06-01", composition = listOf(compositionEntryOf("k1", "s1", 4.0)),
+            ),
+            installedComponentOf("c3", assetId = TransferFixtures.ANODE, name = "Example Anode Sleeve"),
+            staying,
+        ).forEach { install.installedComponents.insert(it) }
+
+        val decoded = BackupCodec.decode(install.export.run().data)
+
+        assertEquals(listOf(staying), decoded.data.installedComponents.map { it.toDomain() })
+        assertEquals(1 to 0, decoded.manifest.counts["installedComponents"] to decoded.manifest.counts["compositionEntries"])
+        assertEquals(listOf("s1", "s2"), decoded.data.supplyItems.map { it.id }, "every item stays")
+        assertEquals(4, install.installedComponents.all().size, "the rows stay here; only the export leaves them out")
+    }
+
     private companion object {
         /** A whole source, redirect included: fictional names only. */
         val SAVED_SOURCE = AttachmentSource(

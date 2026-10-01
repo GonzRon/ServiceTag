@@ -6,6 +6,7 @@ import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.testing.completionOf
+import com.loosecannon.servicetag.core.testing.installedComponentOf
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.ANODE
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.COMPRESSOR
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.EMPTY_GROUP
@@ -56,10 +57,15 @@ class TransferGraphRetainTest {
      */
     @Test
     fun retainingNothingIsTheIdentity() {
-        val lists = Json.encodeToJsonElement(BackupData.serializer(), estate).jsonObject
+        // #47 (C13): one installed component on the heater, so `installedComponents` is a list this identity checks.
+        val fitted = estate.copy(
+            installedComponents = listOf(installedComponentOf("c1", assetId = HEATER, name = "Example Element").toDto()),
+        )
+        val lists = Json.encodeToJsonElement(BackupData.serializer(), fitted).jsonObject
         assertEquals(emptyList(), lists.filterValues { it.jsonArray.isEmpty() }.keys.toList(), "the fixture fills every list")
+        assertEquals(true, "installedComponents" in lists, "the installed components are among them")
 
-        assertEquals(TransferRetention.Retained(estate), TransferGraph.retain(estate, emptySet()))
+        assertEquals(TransferRetention.Retained(fitted), TransferGraph.retain(fitted, emptySet()))
     }
 
     /** MJ-2: an empty group is wholly held by nothing, so no held set ever drops it. */

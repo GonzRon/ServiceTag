@@ -67,22 +67,24 @@ internal class TransferInstall(
     /** #86 (C6): the guarded port for every consumer; the merge apply takes `raw.successions` (MJ-2), as `AppGraph`. */
     val successions = guard.successions(raw.successions)
     val assetSupplies = guard.assetSupplies(raw.assetSupplies)
+    /** #47 (C14): the guarded port for every consumer, the merge apply's included — no kept row is written back. */
+    val installedComponents = guard.installedComponents(raw.installedComponents)
     var rebuilds = 0
 
     val repos = BackupRepositories(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers, successions,
-        raw.supplyItems, assetSupplies, raw.installedComponents,
+        raw.supplyItems, assetSupplies, installedComponents,
     )
     val build = BuildBackupMergePlan(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers,
-        successions, raw.supplyItems, assetSupplies, raw.installedComponents, storage, raw.uow,
+        successions, raw.supplyItems, assetSupplies, installedComponents, storage, raw.uow,
     )
     val apply = ApplyBackupMergePlan(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers,
-        raw.successions, raw.supplyItems, assetSupplies, raw.installedComponents, storage, raw.uow,
+        raw.successions, raw.supplyItems, assetSupplies, installedComponents, storage, raw.uow,
         rebuildAll = { rebuilds += 1 },
     )
     val importer = ImportTransferPack(build, apply, raw.transfers, assets, tags, storage, raw.uow, Clock { now })
