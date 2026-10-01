@@ -221,4 +221,73 @@ class SupplySurfacesTest {
         rule.onNodeWithText("Example Sediment Cartridge").performClick()
         assertEquals(SupplyId("si-sediment"), picked?.id)
     }
+
+    // --- B8b (C34, C35): the material line's link -------------------------------------------------------------
+
+    private val catalog = mapOf(
+        SupplyId("si-prefilter") to
+            SupplyListRow(SupplyId("si-prefilter"), "Example Prefilter Cartridge", "Example Filters Co. · PF-10", false),
+        SupplyId("si-carbon") to SupplyListRow(SupplyId("si-carbon"), "Example Carbon Block", "", true),
+    )
+
+    /**
+     * An unlinked row: the quick-action editor's line (given `onLink`) offers P15-21 and its tap asks to link; the
+     * event form's line (no `onLink`) draws nothing, so the event form never offers a link (C35).
+     */
+    @Test fun anUnlinkedRowOffersLinkSupplyOnTheQuickActionEditorOnly() {
+        var linkTaps = 0
+        rule.setContent {
+            ServiceTagTheme {
+                Column {
+                    SupplyLinkLine(supplyId = null, supplies = catalog, onUnlink = {}, onLink = { linkTaps += 1 })
+                    SupplyLinkLine(supplyId = null, supplies = catalog, onUnlink = {})
+                }
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onAllNodesWithText(LINK_SUPPLY).assertCountEquals(1)
+        rule.onAllNodesWithText(REMOVE_LINK).assertCountEquals(0)
+        rule.onNodeWithText(LINK_SUPPLY).performClick()
+        assertEquals(1, linkTaps)
+    }
+
+    /**
+     * A linked row says P15-22 with its item's name and offers P15-23, whose tap clears the link; never P15-21 or the
+     * badge for an active item. A link whose item is not loaded draws no line at all (C34), on either form.
+     */
+    @Test fun aLinkedRowSaysWhatItIsLinkedToAndOffersRemoveLink() {
+        var unlinked = 0
+        rule.setContent {
+            ServiceTagTheme {
+                Column {
+                    SupplyLinkLine(
+                        supplyId = SupplyId("si-prefilter"), supplies = catalog,
+                        onUnlink = { unlinked += 1 }, onLink = {},
+                    )
+                    SupplyLinkLine(supplyId = SupplyId("si-not-loaded"), supplies = catalog, onUnlink = {}, onLink = {})
+                }
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText(LINKED_TO.format("Example Prefilter Cartridge")).assertIsDisplayed()
+        rule.onAllNodesWithText(REMOVE_LINK).assertCountEquals(1)
+        rule.onAllNodesWithText(LINK_SUPPLY).assertCountEquals(0)
+        rule.onAllNodesWithText("ARCHIVED").assertCountEquals(0)
+        rule.onNodeWithText(REMOVE_LINK).performClick()
+        assertEquals(1, unlinked)
+    }
+
+    /** A row linked to an archived item still names it, wears the shipped "Archived" badge, and can drop the link. */
+    @Test fun aLinkToAnArchivedItemWearsTheBadge() {
+        rule.setContent {
+            ServiceTagTheme { SupplyLinkLine(supplyId = SupplyId("si-carbon"), supplies = catalog, onUnlink = {}) }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText(LINKED_TO.format("Example Carbon Block")).assertIsDisplayed()
+        rule.onNodeWithText("ARCHIVED").assertIsDisplayed()
+        rule.onNodeWithText(REMOVE_LINK).assertIsDisplayed()
+    }
 }

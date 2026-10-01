@@ -52,7 +52,7 @@ class ProfileEditViewModelTest {
     }
 
     private fun model(assetId: AssetId, profileId: ProfileId? = null) = ProfileEditViewModel(
-        graph.profiles, graph.definitions, graph.assets,
+        graph.profiles, graph.definitions, graph.assets, graph.supplyItems,
         graph.saveProfile, graph.archiveProfile, graph.deleteProfile,
         assetId, profileId,
     )
@@ -456,5 +456,105 @@ class ProfileEditViewModelTest {
 
         assertEquals(mapOf(ProfileForm.consumable(1) to SUPPLY_ITEM_GONE), refused.problems)
         assertEquals(stored, graph.profiles.get(created.id))
+    }
+
+    // --- #15 (C34, row 63): the line controls — a pick, "Remove link", and what the picker offers ----------
+
+    /** A catalog item carrying a preferred unit, the one field a pick may copy onto a row besides the name. */
+    private suspend fun catalogItem(name: String, preferredUnit: String): SupplyId =
+        graph.saveSupplyItem.run(null, SupplyItemCommand(name, "", "", "", "", preferredUnit, "", emptyList())).item.id
+
+    /**
+     * Row 63 (C34): a pick links the row and fills its name only while the name is blank and its unit — from the
+     * item's preferred unit — only while the unit is blank. Typed words are never overwritten, the quantity is never
+     * touched, and the save stores exactly what the rows show.
+     */
+    @Test fun aPickFillsOnlyABlankNameAndUnit() = runTest {
+        val ro = graph.createAsset.run("Example RO System", "Water")
+        val cartridge = catalogItem("Example Prefilter Cartridge", preferredUnit = "pcs")
+        val vm = model(ro.id)
+        vm.state.first { it.loaded && it.supplyChoices.isNotEmpty() }
+
+        vm.onName("Replace filters")
+        vm.addConsumable()                                   // 0: blank — the pick fills its name and its unit
+        vm.addConsumable()                                   // 1: name and unit typed — the pick fills neither
+        vm.addConsumable()                                   // 2: name typed, unit blank — the pick fills the unit
+        vm.onConsumable(1, name = "Prefilter (10 in)", quantity = "2", unit = "ea")
+        vm.onConsumable(2, name = "Spare prefilter", quantity = "1")
+
+        (0..2).forEach { vm.linkSupply(it, cartridge) }
+
+        val rows = vm.state.value.consumables
+        assertEquals(listOf(cartridge, cartridge, cartridge), rows.map { it.supplyId })
+        assertEquals(listOf("Example Prefilter Cartridge", "Prefilter (10 in)", "Spare prefilter"), rows.map { it.name })
+        assertEquals(listOf("pcs", "ea", "pcs"), rows.map { it.unit })
+        assertEquals(listOf("", "2", "1"), rows.map { it.quantity })
+
+        vm.save()
+        vm.state.first { !it.saving && it.problems.isEmpty() }
+
+        val stored = graph.profiles.forAsset(ro.id).single().consumables.sortedBy { it.sortOrder }
+        assertEquals(listOf(cartridge, cartridge, cartridge), stored.map { it.supplyId })
+        assertEquals(listOf("Example Prefilter Cartridge", "Prefilter (10 in)", "Spare prefilter"), stored.map { it.name })
+        assertEquals(listOf("pcs", "ea", "pcs"), stored.map { it.unit })
+    }
+
+    /**
+     * Row 63 (C34): "Remove link" clears that row's link and nothing else — its id, name, quantity and unit stay as
+     * they were, the other row keeps its own link, and the save stores the row unlinked.
+     */
+    @Test fun unlinkClearsOnlyTheLink() = runTest {
+        val ro = graph.createAsset.run("Example RO System", "Water")
+        val cartridge = supplyItem("Example Prefilter Cartridge")
+        val membrane = supplyItem("Example RO Membrane")
+        val created = replaceAction(ro.id, "Prefilter cartridge" to cartridge, "RO membrane" to membrane)
+
+        val vm = model(ro.id, created.id)
+        val loaded = vm.state.first { it.loaded }
+        vm.unlinkSupply(0)
+
+        val rows = vm.state.value.consumables
+        assertEquals(loaded.consumables[0].copy(supplyId = null), rows[0])
+        assertEquals(loaded.consumables[1], rows[1])
+
+        vm.save()
+        vm.state.first { !it.saving && it.problems.isEmpty() }
+
+        val before = created.consumables.sortedBy { it.sortOrder }
+        val after = graph.profiles.get(created.id)!!.consumables.sortedBy { it.sortOrder }
+        assertEquals(listOf(null, membrane), after.map { it.supplyId })
+        assertEquals(before.map { it.copy(supplyId = null) }, after.map { it.copy(supplyId = null) })
+    }
+
+    /**
+     * Row 63 (C32, R15-6): the picker is offered the unarchived SupplyItems only, in the Supplies list's order — the
+     * filter is this host's — while a row linked to an archived item still names it, marked archived, so its line
+     * can say so. Unarchiving it puts it back on offer, live.
+     */
+    @Test fun thePickerOffersUnarchivedOnly() = runTest {
+        val ro = graph.createAsset.run("Example RO System", "Water")
+        supplyItem("Example Sediment Cartridge")
+        val carbon = supplyItem("Example Carbon Block")
+        supplyItem("example prefilter cartridge")
+        val created = replaceAction(ro.id, "Carbon block" to carbon)
+        graph.archiveSupplyItem.run(carbon, archived = true)
+
+        val vm = model(ro.id, created.id)
+        val state = vm.state.first { it.loaded && it.supplies.size == 3 && it.supplies.getValue(carbon).archived }
+
+        assertEquals(
+            listOf("example prefilter cartridge", "Example Sediment Cartridge"),
+            state.supplyChoices.map { it.name },
+        )
+        assertTrue(state.supplyChoices.none { it.archived })
+        assertEquals(carbon, state.consumables.single().supplyId)
+        assertEquals("Example Carbon Block", state.supplies.getValue(carbon).name)
+
+        graph.archiveSupplyItem.run(carbon, archived = false)
+        val live = vm.state.first { it.supplyChoices.size == 3 }
+        assertEquals(
+            listOf("Example Carbon Block", "example prefilter cartridge", "Example Sediment Cartridge"),
+            live.supplyChoices.map { it.name },
+        )
     }
 }

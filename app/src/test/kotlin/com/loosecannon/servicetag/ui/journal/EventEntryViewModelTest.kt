@@ -104,6 +104,7 @@ class EventEntryViewModelTest {
         graph.assets, graph.definitions, graph.profiles, graph.events,
         graph.logEvent, graph.updateEvent, graph.clock,
         assetId, profileId, eventId, presetKind = kind, offers = offers,
+        supplyItems = graph.supplyItems,
     )
 
     /** #82: counts what reaches the graph's one [EntryOffers], delegating everything to it. */
@@ -871,5 +872,71 @@ class EventEntryViewModelTest {
         assertEquals(CANNOT_SAVE, refused.firstProblem)
         assertEquals(listOf(false), refused.consumables.map { it.problem })
         assertEquals(emptyList<AssetEvent>(), graph.events.forAsset(spa.id))
+    }
+
+    // --- #15 (C35, row 63): the event form shows a link and removes it; it never links -------------------
+
+    /**
+     * Row 63 (C35): the form can name a linked row's item (for "Linked to %s"), and "Remove link" clears that row's
+     * link and nothing else — its words stay as typed, the other row keeps its link, and the save stores both lines
+     * with their words.
+     */
+    @Test fun removeLinkClearsOnlyTheLink() = runTest {
+        val spa = spa()
+        val cartridge = supplyItem("Example Filter Cartridge")
+        val swap = filterSwap(spa, cartridge)
+        val vm = entryModel(spa.id, swap.id, null)
+        val loaded = vm.state.first { it.loaded && it.supplies.isNotEmpty() }
+        assertEquals("Example Filter Cartridge", loaded.supplies.getValue(cartridge).name)
+
+        vm.addSuggested(loaded.suggestions.single())
+        vm.addSuggested(loaded.suggestions.single())
+        vm.onConsumable(0, quantity = "2")
+        val before = vm.state.value.consumables
+
+        vm.unlinkSupply(0)
+
+        val after = vm.state.value.consumables
+        assertEquals(before[0].copy(supplyId = null), after[0])
+        assertEquals(before[1], after[1])
+
+        vm.save()
+        vm.state.first { !it.saving }
+
+        val used = graph.events.forAsset(spa.id).single().consumables.sortedBy { it.sortOrder }
+        assertEquals(listOf(null, cartridge), used.map { it.supplyId })
+        assertEquals(listOf("Filter cartridge", "Filter cartridge"), used.map { it.name })
+        assertEquals(listOf(2.0, 1.0), used.map { it.quantity })
+        assertEquals(listOf("ea", "ea"), used.map { it.unit })
+    }
+
+    /**
+     * B8b's ruling on the untouched-row filter (B4b review, NOTE 3): a linked row whose words were all cleared is not
+     * an untouched row — it carries the chip's link — so it reaches validation and is named, rather than vanishing
+     * on Save with its link while its "Linked to" line was showing. Once "Remove link" clears the link it is an
+     * untouched row again, dropped as it always was.
+     */
+    @Test fun aLinkedRowWithItsWordsClearedIsNamedNotDropped() = runTest {
+        val spa = spa()
+        val cartridge = supplyItem("Example Filter Cartridge")
+        val swap = filterSwap(spa, cartridge)
+        val vm = entryModel(spa.id, swap.id, null)
+        val loaded = vm.state.first { it.loaded }
+
+        vm.addSuggested(loaded.suggestions.single())
+        vm.onConsumable(0, name = "", quantity = "", unit = "")
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+
+        assertEquals("Check material 1", refused.firstProblem)
+        assertEquals(listOf(true), refused.consumables.map { it.problem })
+        assertEquals(listOf(cartridge), refused.consumables.map { it.supplyId })
+        assertEquals(emptyList<AssetEvent>(), graph.events.forAsset(spa.id))
+
+        vm.unlinkSupply(0)
+        vm.save()
+        vm.state.first { !it.saving }
+
+        assertEquals(emptyList<Any>(), graph.events.forAsset(spa.id).single().consumables)
     }
 }
