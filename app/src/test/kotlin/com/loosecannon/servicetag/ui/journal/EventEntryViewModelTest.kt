@@ -934,6 +934,7 @@ class EventEntryViewModelTest {
         assertEquals(emptyList<AssetEvent>(), graph.events.forAsset(spa.id))
 
         vm.unlinkSupply(0)
+        assertEquals("remove link clears the row's mark too", listOf(false), vm.state.value.consumables.map { it.problem })
         vm.save()
         vm.state.first { !it.saving }
 

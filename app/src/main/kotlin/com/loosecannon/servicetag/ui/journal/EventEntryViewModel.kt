@@ -465,7 +465,7 @@ class EventEntryViewModel(
      */
     fun unlinkSupply(index: Int) = _state.update { current ->
         current.copy(
-            consumables = current.consumables.mapIndexed { i, row -> if (i == index) row.copy(supplyId = null) else row },
+            consumables = current.consumables.mapIndexed { i, row -> if (i == index) row.copy(supplyId = null, problem = false) else row },
             firstProblem = null,
         )
     }
