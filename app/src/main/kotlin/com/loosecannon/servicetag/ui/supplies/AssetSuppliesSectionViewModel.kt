@@ -65,7 +65,7 @@ data class RoleSheetState(
     /** Save is offered while the role, cleaned by the one role cleaner, says something (P15-19 is reserved). */
     val canSave: Boolean get() = !saving && CategoryKey.display(role).isNotEmpty()
 
-    /** The same sheet a later answer belongs to: a save answered after the sheet changed lands nowhere. */
+    /** The same row and item a later answer belongs to: a save answered after the sheet moved to another row lands nowhere (the same row reopened still takes it). */
     internal fun sameAs(other: RoleSheetState): Boolean = rowId == other.rowId && supplyId == other.supplyId
 }
 
