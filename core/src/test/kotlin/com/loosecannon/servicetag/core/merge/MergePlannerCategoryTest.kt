@@ -367,8 +367,8 @@ class MergePlannerCategoryTest {
             assets, phone.groups, phone.tags, phone.links, phone.definitions, phone.profiles, phone.schedules,
             phone.closures, phone.events, phone.attachments, phone.references, phone.activations, phone.conditions,
             phone.subjects, categories, phone.serviceCases, phone.caseEntries, phone.loans, InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), phone.supplyItems, phone.assetSupplies, phone.storage, phone.uow,
-            rebuildAll = { log += "rebuild" },
+            InMemoryAssetSuccessionRepository(), phone.supplyItems, phone.assetSupplies, phone.installedComponents, phone.storage,
+            phone.uow, rebuildAll = { log += "rebuild" },
         )
         val bytes = archiveOf(
             data(assets = listOf(asset("n1", "Test gear"), asset("n2", "Appliance")), categories = listOf(row("appliance", "Appliance"))),
@@ -444,7 +444,8 @@ class MergePlannerCategoryTest {
             phone.assets, phone.groups, phone.tags, phone.links, phone.definitions, phone.profiles, phone.schedules,
             phone.closures, phone.events, phone.attachments, phone.references, phone.activations, phone.conditions,
             phone.subjects, InMemoryCategoryRepository(), phone.serviceCases, phone.caseEntries, phone.loans, InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), phone.supplyItems, phone.assetSupplies, phone.storage, phone.uow,
+            InMemoryAssetSuccessionRepository(), phone.supplyItems, phone.assetSupplies, phone.installedComponents, phone.storage,
+            phone.uow,
         )
         val bytes = archiveOf(data(categories = listOf(row("appliance", "APPLIANCE"))))
 

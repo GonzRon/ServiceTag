@@ -175,9 +175,9 @@ internal data class MergeReportResponse(
     // reference an asset, and a health subject an asset and, softly, a schedule. #74's `categories`
     // follows here, as in the enum, though a merge writes categories **first** (`MergeWrites`), and
     // #79's `serviceCases` and `caseEntries` follow, as they follow in the enum, then #72's `loans`, #77's
-    // `transfers`, #86's `successions`, and #15's `supplyItems` and `assetSupplies` close the list. Fifteen tables
-    // since format 9, seventeen since format 12, eighteen since 13, nineteen since 14, twenty since 15, twenty-two
-    // since 18.
+    // `transfers`, #86's `successions`, #15's `supplyItems` and `assetSupplies`, and #47's `installedComponents` close
+    // the list. Fifteen tables since format 9, seventeen since format 12, eighteen since 13, nineteen since 14, twenty
+    // since 15, twenty-two since 18, twenty-three since 19.
     val assets: MergeTallyDto,
     val groups: MergeTallyDto,
     val definitions: MergeTallyDto,
@@ -206,6 +206,8 @@ internal data class MergeReportResponse(
     /** #15 — the SupplyItems, then their applicability rows (format 18). */
     val supplyItems: MergeTallyDto,
     val assetSupplies: MergeTallyDto,
+    /** #47 — the installed components, each with its composition (format 19). */
+    val installedComponents: MergeTallyDto,
     /** Deterministic: table order, then id. Empty when [applicable]. */
     val conflicts: List<MergeDecisionDto>,
     val duplicateCandidates: List<DuplicateCandidateDto>,
@@ -245,6 +247,7 @@ internal fun MergeReport.toResponse() = MergeReportResponse(
     successions = successions.dto(),
     supplyItems = supplyItems.dto(),
     assetSupplies = assetSupplies.dto(),
+    installedComponents = installedComponents.dto(),
     conflicts = conflicts.map { it.dto() },
     duplicateCandidates = duplicateCandidates.map { it.dto() },
 )
