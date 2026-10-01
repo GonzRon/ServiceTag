@@ -153,8 +153,8 @@ class JournalFormatTest {
 
         val treated = event(
             consumables = listOf(
-                ConsumableUsage(id = "c-1", name = "Chlorine", quantity = 1.0, unit = "oz", sortOrder = 0),
-                ConsumableUsage(id = "c-2", name = "pH reducer", quantity = 0.5, unit = "oz", sortOrder = 1),
+                ConsumableUsage(id = "c-1", name = "Chlorine", quantity = 1.0, unit = "oz", sortOrder = 0, supplyId = null),
+                ConsumableUsage(id = "c-2", name = "pH reducer", quantity = 0.5, unit = "oz", sortOrder = 1, supplyId = null),
             ),
             notes = "topped up",
         )

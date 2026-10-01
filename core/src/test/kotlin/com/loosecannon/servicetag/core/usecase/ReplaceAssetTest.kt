@@ -1011,7 +1011,7 @@ internal class ReplaceHarness(today: String = REPLACE_TODAY) {
         defaultTitle = "Flushed", templateKey = "water-heater", sortOrder = 0, archivedAt = archivedAt,
         createdAt = 1_000L, updatedAt = 2_000L,
         fields = fields.mapIndexed { j, d -> ProfileField("$id-f$j", DefinitionId(d), required = true, sortOrder = j) },
-        consumables = consumables.mapIndexed { j, n -> ProfileConsumable("$id-c$j", n, 1.0, "L", j) },
+        consumables = consumables.mapIndexed { j, n -> ProfileConsumable("$id-c$j", n, 1.0, "L", j, supplyId = null) },
     )
 
     fun activationRow(id: String, action: SeasonAction, on: String, assetId: String = PRED) =

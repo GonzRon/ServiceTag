@@ -150,7 +150,7 @@ class BackupUseCasesTest {
         ProfileField(id, DefinitionId(definitionId), required = true, sortOrder = sortOrder)
 
     private fun profileConsumable(id: String, sortOrder: Int = 0) =
-        ProfileConsumable(id, "Consumable $id", 1.0, "unit", sortOrder)
+        ProfileConsumable(id, "Consumable $id", 1.0, "unit", sortOrder, supplyId = null)
 
     private fun profile(
         id: String,
@@ -172,7 +172,7 @@ class BackupUseCasesTest {
     ) = Measurement(id, DefinitionId(definitionId), valueNum, valueText, "", sortOrder)
 
     private fun consumableUsage(id: String, sortOrder: Int = 0) =
-        ConsumableUsage(id, "Usage $id", 1.0, "unit", sortOrder)
+        ConsumableUsage(id, "Usage $id", 1.0, "unit", sortOrder, supplyId = null)
 
     private fun event(
         id: String,

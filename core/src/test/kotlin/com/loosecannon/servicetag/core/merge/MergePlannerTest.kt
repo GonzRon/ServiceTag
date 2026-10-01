@@ -136,7 +136,7 @@ class MergePlannerTest {
 
     /** A profile's consumable: the fourth child list, and the second of the four durable child ids. */
     private fun consumable(id: String, sortOrder: Int = 0) = ProfileConsumable(
-        id = id, name = "Cartridge", defaultQuantity = 1.0, unit = "ea", sortOrder = sortOrder,
+        id = id, name = "Cartridge", defaultQuantity = 1.0, unit = "ea", sortOrder = sortOrder, supplyId = null,
     )
 
     private fun profile(
@@ -158,7 +158,7 @@ class MergePlannerTest {
 
     /** An event's consumable use: the last of the four durable child ids. */
     private fun usage(id: String, sortOrder: Int = 0) = ConsumableUsage(
-        id = id, name = "Cartridge", quantity = 1.0, unit = "ea", sortOrder = sortOrder,
+        id = id, name = "Cartridge", quantity = 1.0, unit = "ea", sortOrder = sortOrder, supplyId = null,
     )
 
     private fun event(

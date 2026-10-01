@@ -65,7 +65,7 @@ internal fun openMigrated(file: File): AppDatabase = Room
     .addMigrations(
         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
         MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
-        MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
+        MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18,
     )
     .build()
 
@@ -220,6 +220,15 @@ internal val V16_ATTACHMENT_COLUMNS = setOf("source_uri", "source_resolved_uri",
 
 /** The one column schema v17 appends to `asset_reference` (#91): nullable, never backfilled. */
 internal val V17_REFERENCE_COLUMNS = setOf("document_role")
+
+/** The three tables schema v18 added (#15): the SupplyItem catalog, its specifications, and applicability. */
+internal val V18_TABLES = setOf("supply_item", "supply_specification", "asset_supply")
+
+/** The two material-line tables schema v18 appends a column to (#15). */
+internal val V18_LINE_TABLES = setOf("profile_consumable", "consumable_usage")
+
+/** The one column schema v18 appends to each of [V18_LINE_TABLES] (#15): nullable, no foreign key, never backfilled. */
+internal val V18_LINE_COLUMNS = setOf("supply_id")
 
 /** The one column schema v11 appends to `asset` (#79): nullable, never backfilled. */
 internal val V11_ASSET_COLUMNS = setOf("warranty_reminder_lead_days")
