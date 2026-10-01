@@ -362,7 +362,8 @@ class FakeGraph(
     val acceptOperationalOffer: AcceptOperationalOffer = AcceptOperationalOffer(conditions, recordCondition, uow)
     // #82: the combined write (Workflow A) and the impairment offer's accept (Workflow B), as `AppGraph` wires them.
     val recordConditionWithIncident: RecordConditionWithIncident = RecordConditionWithIncident(
-        events, definitions, profiles, assets, supplyItems, uow, ids, clock, recomputeSchedules, conditions, todayPort, recordCondition,
+        events, definitions, profiles, assets, supplyItems,
+        uow, ids, clock, recomputeSchedules, conditions, todayPort, recordCondition,
     )
     val acceptImpairmentOffer: AcceptImpairmentOffer = AcceptImpairmentOffer(conditions, recordCondition, uow)
     val saveHealthSubject: SaveHealthSubject =

@@ -775,7 +775,8 @@ class AppGraph(private val context: Context) {
     // choice: the Incident entry's Save in the combined flow (the Incident and its linked row in one
     // transaction, Workflow A) and "Mark down" / "Mark degraded" after a new Incident (Workflow B).
     val recordConditionWithIncident: RecordConditionWithIncident = RecordConditionWithIncident(
-        events, definitions, profiles, assets, supplyItems, uow, ids, clock, recomputeSchedules, conditions, today, recordCondition,
+        events, definitions, profiles, assets, supplyItems,
+        uow, ids, clock, recomputeSchedules, conditions, today, recordCondition,
     )
     val acceptImpairmentOffer: AcceptImpairmentOffer = AcceptImpairmentOffer(conditions, recordCondition, uow)
     val saveHealthSubject: SaveHealthSubject =
