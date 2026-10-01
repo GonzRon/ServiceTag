@@ -41,8 +41,8 @@ schedule listings — every schedule, one asset's, one group's — because §10 
 three are one question asked of three scopes. The registered total was 21 + 17 = **38** at 1.2,
 **41** after 1.3's three reference tools, **55** after 1.4's fourteen, **56** after 1.4.1's
 `repair_schedule_providers`, **58** after #79's two warranty tools, **63** after #79's five
-service-case tools, is 68 after #72's five loan tools, **69** after #86's `get_asset_succession`, and is **76**
-since #92's seven, which `test_argument_guard.py` pins."""
+service-case tools, is 68 after #72's five loan tools, **69** after #86's `get_asset_succession`, **76** after
+#92's seven, and is **84** since #15's eight supply tools, which `test_argument_guard.py` pins."""
 
 
 def body_of(recorded) -> dict:
@@ -701,6 +701,47 @@ def test_complete_schedule_sends_every_argument_and_reads_nothing_back(paired) -
         "values": {"d1": "3.2"},
         "consumables": [{"name": "Cartridge", "quantity": "1", "unit": "ea"}],
     }
+
+
+_STATUS_17 = {"appVersion": "1.5.0", "apiVersion": 1, "schemaVersion": 17, "backupFormatVersion": 17, "counts": {}}
+_STATUS_18 = dict(_STATUS_17, schemaVersion=18, backupFormatVersion=18)
+
+
+def _complete(consumables: list[dict]) -> None:
+    server_module.complete_schedule(
+        schedule_id="s1", occurred_on="2026-02-10", tz_id="Etc/UTC", asset_id=None, occurred_time=None,
+        notes="", values={}, consumables=consumables,
+    )
+
+
+def test_complete_schedule_with_a_link_refuses_schema_17_and_sends_it_to_schema_18(paired) -> None:
+    """#15 (C27, row 56): a line carrying `supplyId` — `null` included — is gated on schema 18 by its presence;
+    a completion without one reaches a schema-17 phone exactly as before."""
+    line = {"name": "Example Prefilter Cartridge", "quantity": "1", "unit": "ea"}
+    paired.reply("GET", "/v1/status", 200, _STATUS_17)
+    for linked in (dict(line, supplyId="si-1"), dict(line, supplyId=None)):
+        with pytest.raises(ToolError, match="APP_SCHEMA_TOO_OLD") as raised:
+            _complete([linked])
+        assert "complete_schedule needs schema 18 or later (a supply link on a material line)" in str(raised.value)
+    _complete([line])
+    _complete([])
+    assert [(r.method, r.path) for r in paired.requests] == [
+        ("GET", "/v1/status"), ("POST", "/v1/schedules/s1/complete"), ("POST", "/v1/schedules/s1/complete"),
+    ]
+
+    server_module.device.schema_version = None
+    paired.reply("GET", "/v1/status", 200, _STATUS_18)
+    _complete([dict(line, supplyId="si-1")])
+    assert body_of(paired.last())["consumables"] == [dict(line, supplyId="si-1")]
+
+
+def test_complete_schedules_docstring_never_claims_a_minimal_completion_records_a_supply_item() -> None:
+    """R15-4's precision (limit 2): a link travels only on a line the call sends, and a completion sent with
+    no line writes none, so it names no supply item."""
+    doc = " ".join((server_module.complete_schedule.__doc__ or "").split())
+    assert "`supplyId`" in doc
+    assert "only on a line this call sends" in doc
+    assert "`consumables=[]` writes no line, so it names no supply item" in doc
 
 
 def test_close_round_sends_every_argument_and_reads_nothing_back(paired) -> None:
