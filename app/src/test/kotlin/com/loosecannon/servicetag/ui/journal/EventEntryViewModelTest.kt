@@ -10,8 +10,13 @@ import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.usecase.ConsumableInput
 import com.loosecannon.servicetag.core.usecase.EventCommand
 import com.loosecannon.servicetag.core.usecase.FieldProblem
+import com.loosecannon.servicetag.core.usecase.ProfileCommand
+import com.loosecannon.servicetag.core.usecase.ProfileConsumableInput
+import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.testing.FakeGraph
 import com.loosecannon.servicetag.testing.assetRow
 import com.loosecannon.servicetag.testing.dayMillis
@@ -754,5 +759,117 @@ class EventEntryViewModelTest {
         assertEquals(first, second)
         assertEquals(1, graph.events.forAsset(pump).size)
         assertEquals(listOf(held.id), graph.conditions.forAsset(pump).map { it.id })
+    }
+
+    // --- #15 (C19, C20): a material row keeps its SupplyItem link, invisibly ---------------------
+
+    private suspend fun supplyItem(name: String): SupplyId =
+        graph.saveSupplyItem.run(null, SupplyItemCommand(name, "", "", "", "", "", "", emptyList())).item.id
+
+    /** One REPLACEMENT quick action on the spa whose one line names [link] (null: unlinked). */
+    private suspend fun filterSwap(spa: Spa, link: SupplyId?): EventProfile = graph.saveProfile.run(
+        null,
+        ProfileCommand(
+            spa.id, "Filter swap", EventKind.REPLACEMENT, "", emptyList(),
+            listOf(ProfileConsumableInput(null, "Filter cartridge", 1.0, "ea", link)),
+        ),
+    )
+
+    /** Row 43: the quick action's chip brings its link into the row, and the save stores it with the line. */
+    @Test fun aProfileChipCarriesItsLink() = runTest {
+        val spa = spa()
+        val cartridge = supplyItem("Example Filter Cartridge")
+        val swap = filterSwap(spa, cartridge)
+        val vm = entryModel(spa.id, swap.id, null)
+        val loaded = vm.state.first { it.loaded }
+
+        vm.addSuggested(loaded.suggestions.single())
+        assertEquals(listOf(cartridge), vm.state.value.consumables.map { it.supplyId })
+        vm.save()
+        vm.state.first { !it.saving }
+
+        val used = graph.events.forAsset(spa.id).single().consumables.single()
+        assertEquals("Filter cartridge", used.name)
+        assertEquals(cartridge, used.supplyId)
+    }
+
+    /**
+     * Row 43: an edited event loads each row's link and saves it back with that row, even when a row above it
+     * is removed and the linked row moves up (the link travels with its row, C19).
+     */
+    @Test fun anEditedEventKeepsItsLinksOnSave() = runTest {
+        val spa = spa()
+        val cartridge = supplyItem("Example Filter Cartridge")
+        val logged = graph.logEvent.run(
+            EventCommand(
+                assetId = spa.id,
+                profileId = null,
+                kind = EventKind.REPLACEMENT,
+                title = "Filter swap",
+                occurredOn = "2026-09-15",
+                occurredTime = null,
+                tzId = "UTC",
+                notes = "",
+                values = emptyMap(),
+                consumables = listOf(
+                    ConsumableInput("Sanitiser", "50", "ml", supplyId = null),
+                    ConsumableInput("Filter cartridge", "1", "ea", cartridge),
+                ),
+            ),
+        )
+
+        val vm = entryModel(spa.id, null, logged.id)
+        val state = vm.state.first { it.loaded }
+        assertEquals(listOf(null, cartridge), state.consumables.map { it.supplyId })
+
+        vm.removeConsumable(0)
+        vm.save()
+        vm.state.first { !it.saving }
+
+        val after = graph.events.get(logged.id)!!.consumables.single()
+        assertEquals("Filter cartridge", after.name)
+        assertEquals(cartridge, after.supplyId)
+    }
+
+    /** Row 43: typing over a linked row's name, quantity and unit leaves its link alone (C20: the words are the person's). */
+    @Test fun editingTheNameKeepsTheLink() = runTest {
+        val spa = spa()
+        val cartridge = supplyItem("Example Filter Cartridge")
+        val swap = filterSwap(spa, cartridge)
+        val vm = entryModel(spa.id, swap.id, null)
+        val loaded = vm.state.first { it.loaded }
+
+        vm.addSuggested(loaded.suggestions.single())
+        vm.onConsumable(0, name = "Filter cartridge (pleated)", quantity = "2", unit = "pcs")
+        assertEquals(cartridge, vm.state.value.consumables.single().supplyId)
+        vm.save()
+        vm.state.first { !it.saving }
+
+        val used = graph.events.forAsset(spa.id).single().consumables.single()
+        assertEquals("Filter cartridge (pleated)", used.name)
+        assertEquals("pcs", used.unit)
+        assertEquals(cartridge, used.supplyId)
+    }
+
+    /**
+     * Row 40 (C20, C-2): a chip whose SupplyItem is gone — only a race, since nothing deletes one (R15-5) — is
+     * refused by `LogEvent`; the event form keeps its shipped sentence, marks no row, and writes nothing.
+     */
+    @Test fun anUnknownSupplyItemDrawsCannotSaveAndMarksNoRow() = runTest {
+        val spa = spa()
+        val swap = filterSwap(spa, link = null)
+        // Written straight to the store: the column has no foreign key (R79-4), so a link can outlive its row.
+        graph.profiles.upsert(swap.copy(consumables = swap.consumables.map { it.copy(supplyId = SupplyId("s-gone")) }))
+        val vm = entryModel(spa.id, swap.id, null)
+        val loaded = vm.state.first { it.loaded }
+
+        vm.addSuggested(loaded.suggestions.single())
+        vm.onConsumable(0, quantity = "1")
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+
+        assertEquals(CANNOT_SAVE, refused.firstProblem)
+        assertEquals(listOf(false), refused.consumables.map { it.problem })
+        assertEquals(emptyList<AssetEvent>(), graph.events.forAsset(spa.id))
     }
 }

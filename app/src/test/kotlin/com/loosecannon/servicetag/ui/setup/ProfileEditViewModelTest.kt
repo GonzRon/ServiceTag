@@ -4,7 +4,12 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.usecase.ProfileCommand
+import com.loosecannon.servicetag.core.usecase.ProfileConsumableInput
+import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.testing.FakeGraph
+import com.loosecannon.servicetag.ui.supplies.SUPPLY_ITEM_GONE
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -365,5 +370,91 @@ class ProfileEditViewModelTest {
         val stored = graph.profiles.forAsset(thing.id).single()
         assertEquals("Oil service", stored.name)
         assertEquals("Engine oil + filter", stored.defaultTitle)
+    }
+
+    // --- #15 (C19, C20): a Materials row keeps its SupplyItem link, invisibly --------------------
+
+    private suspend fun supplyItem(name: String): SupplyId =
+        graph.saveSupplyItem.run(null, SupplyItemCommand(name, "", "", "", "", "", "", emptyList())).item.id
+
+    /** One REPLACEMENT quick action on [assetId] with [lines] (name to link), stored through `SaveProfile`. */
+    private suspend fun replaceAction(assetId: AssetId, vararg lines: Pair<String, SupplyId?>) =
+        graph.saveProfile.run(
+            null,
+            ProfileCommand(
+                assetId, "Replace filters", EventKind.REPLACEMENT, "", emptyList(),
+                lines.map { (name, link) -> ProfileConsumableInput(null, name, 1.0, "ea", link) },
+            ),
+        )
+
+    /**
+     * Row 43: a line loaded with a link carries it through an edit of its words and back to the save, and an
+     * unlinked line beside it stays unlinked. The link is never drawn or re-derived here (B8 draws it).
+     */
+    @Test fun aLoadedLinkIsSavedBack() = runTest {
+        val ro = graph.createAsset.run("Example RO System", "Water")
+        val cartridge = supplyItem("Example Prefilter Cartridge")
+        val created = replaceAction(ro.id, "Prefilter cartridge" to cartridge, "O-ring grease" to null)
+
+        val vm = model(ro.id, created.id)
+        val loaded = vm.state.first { it.loaded }
+        assertEquals(listOf(cartridge, null), loaded.consumables.map { it.supplyId })
+
+        vm.onConsumable(0, name = "Prefilter cartridge (10 in)", quantity = "2", unit = "pcs")
+        assertEquals(cartridge, vm.state.value.consumables.first().supplyId)
+        vm.save()
+        vm.state.first { !it.saving && it.problems.isEmpty() }
+
+        val after = graph.profiles.get(created.id)!!.consumables.sortedBy { it.sortOrder }
+        assertEquals(listOf(cartridge, null), after.map { it.supplyId })
+        assertEquals(listOf("Prefilter cartridge (10 in)", "O-ring grease"), after.map { it.name })
+        assertEquals(created.consumables.sortedBy { it.sortOrder }.map { it.id }, after.map { it.id })
+    }
+
+    /** Row 43: a row someone adds starts unlinked and is saved unlinked; the loaded link keeps its own row. */
+    @Test fun anAddedRowIsUnlinked() = runTest {
+        val ro = graph.createAsset.run("Example RO System", "Water")
+        val cartridge = supplyItem("Example Prefilter Cartridge")
+        val created = replaceAction(ro.id, "Prefilter cartridge" to cartridge)
+
+        val vm = model(ro.id, created.id)
+        vm.state.first { it.loaded }
+        vm.addConsumable()
+        vm.onConsumable(1, name = "Example Prefilter Cartridge", quantity = "1", unit = "ea")
+        assertEquals(listOf(cartridge, null), vm.state.value.consumables.map { it.supplyId })
+        vm.save()
+        vm.state.first { !it.saving && it.problems.isEmpty() }
+
+        val after = graph.profiles.get(created.id)!!.consumables.sortedBy { it.sortOrder }
+        // The added row is named exactly as the SupplyItem and is still unlinked: no name ever links (C37).
+        assertEquals(listOf(cartridge, null), after.map { it.supplyId })
+    }
+
+    /**
+     * Row 40 (C20, C-2): a line whose SupplyItem is gone — only a race, since nothing deletes one (R15-5) — is
+     * refused by `SaveProfile`, and the form marks that row with P15-20; nothing is written.
+     */
+    @Test fun anUnknownSupplyItemMarksItsRowWithP15_20() = runTest {
+        val ro = graph.createAsset.run("Example RO System", "Water")
+        val created = replaceAction(ro.id, "Prefilter cartridge" to null, "RO membrane" to null)
+        val second = created.consumables.sortedBy { it.sortOrder }[1].id
+        // Written straight to the store: the column has no foreign key (R79-4), so a link can outlive its row.
+        graph.profiles.upsert(
+            created.copy(
+                consumables = created.consumables.map {
+                    if (it.id == second) it.copy(supplyId = SupplyId("s-gone")) else it
+                },
+            ),
+        )
+        val stored = graph.profiles.get(created.id)!!
+
+        val vm = model(ro.id, created.id)
+        vm.state.first { it.loaded }
+        vm.onName("Replace both filters")
+        vm.save()
+        val refused = vm.state.first { !it.saving }
+
+        assertEquals(mapOf(ProfileForm.consumable(1) to SUPPLY_ITEM_GONE), refused.problems)
+        assertEquals(stored, graph.profiles.get(created.id))
     }
 }

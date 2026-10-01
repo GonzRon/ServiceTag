@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.CaseCoverage
 import com.loosecannon.servicetag.core.model.CaseType
+import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthDriver
@@ -30,6 +31,7 @@ import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.OccurrenceAlreadyComplete
 import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
+import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.coroutines.runBlocking
@@ -873,6 +875,40 @@ class MaintenanceRoutesTest {
             ApiJson.decodeFromString(CompletionResponse.serializer(), withValues.text())
                 .event.detailsPending,
         )
+    }
+
+    /**
+     * Row 44 (#15, C24): a completion that **sends** a line may give it a `supplyId`, and the event it writes
+     * carries that link on that line (AC7). An absent key is an unlinked line. A completion sending no line
+     * writes no line at all, so it records no SupplyItem usage (limit 2).
+     */
+    @Test fun aCompletionLineCarriesItsLink() {
+        val asset = createAsset("Example RO System")
+        val schedule = createAssetSchedule(asset, title = "Replace prefilter")
+        val cartridge = runBlocking {
+            graph.saveSupplyItem.run(
+                null, SupplyItemCommand("Example Prefilter Cartridge", "", "", "", "", "", "", emptyList()),
+            ).item.id
+        }
+
+        val done = call(
+            "POST", "/v1/schedules/$schedule/complete",
+            """{"occurredOn":"2026-02-10","tzId":"UTC","consumables":[""" +
+                """{"name":"Prefilter cartridge","quantity":"1","unit":"ea","supplyId":"${cartridge.value}"},""" +
+                """{"name":"O-ring grease","quantity":"1","unit":"g"}]}""",
+        )
+        assertEquals(done.text(), 201, done.status)
+        val event = ApiJson.decodeFromString(CompletionResponse.serializer(), done.text()).event
+        assertEquals(
+            listOf("Prefilter cartridge" to cartridge.value, "O-ring grease" to null),
+            event.consumables.sortedBy { it.sortOrder }.map { it.name to it.supplyId },
+        )
+        runBlocking {
+            assertEquals(
+                listOf(cartridge, null),
+                graph.events.get(EventId(event.id))!!.consumables.sortedBy { it.sortOrder }.map { it.supplyId },
+            )
+        }
     }
 
     /**

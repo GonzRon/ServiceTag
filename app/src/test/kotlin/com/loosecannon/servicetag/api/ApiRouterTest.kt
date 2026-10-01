@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.core.model.AssetSupply
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.PayloadFormat
+import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.model.SupplySpecification
@@ -16,6 +17,7 @@ import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CreateAsset
+import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
@@ -467,6 +469,104 @@ class ApiRouterTest {
 
         assertEquals(204, call("DELETE", "/v1/events/${event.id}").status)
         runBlocking { assertEquals(null, graph.events.get(EventId(event.id))) }
+    }
+
+    // --- #15 (C24): the line requests carry `supplyId` --------------------------------------
+
+    /** One SupplyItem through the use case (its routes are B5's), returned as its id. */
+    private fun supplyItem(name: String): String = runBlocking {
+        graph.saveSupplyItem.run(null, SupplyItemCommand(name, "", "", "", "", "", "", emptyList())).item.id.value
+    }
+
+    /**
+     * Row 44: a profile line's `supplyId` is stored and answered; absent and `null` both read as no link and
+     * answer `"supplyId":null`; an edit that leaves the key off a line clears its link (the request is a full
+     * replace, limit 1), and one that sends it keeps it.
+     */
+    @Test fun aProfileLineWithSupplyIdIsStoredAndAnswered() {
+        val id = createHotTub()
+        val cartridge = supplyItem("Example Filter Cartridge")
+
+        val saved = call(
+            "POST", "/v1/profiles",
+            """{"assetId":"$id","name":"Filter swap","eventKind":"REPLACEMENT","consumables":[""" +
+                """{"name":"Filter cartridge","defaultQuantity":1,"unit":"ea","supplyId":"$cartridge"},""" +
+                """{"name":"Sanitiser","unit":"ml","supplyId":null},""" +
+                """{"name":"O-ring"}]}""",
+        )
+        assertEquals(saved.text(), 200, saved.status)
+        val profile = ApiJson.decodeFromString(ProfileResponse.serializer(), saved.text()).profile
+        val lines = profile.consumables.sortedBy { it.sortOrder }
+        assertEquals(listOf(cartridge, null, null), lines.map { it.supplyId })
+        assertEquals(2, Regex(""""supplyId":null""").findAll(saved.text()).count())
+        runBlocking {
+            assertEquals(
+                listOf(SupplyId(cartridge), null, null),
+                graph.profiles.get(ProfileId(profile.id))!!.consumables.sortedBy { it.sortOrder }.map { it.supplyId },
+            )
+        }
+
+        val edited = call(
+            "POST", "/v1/profiles",
+            """{"id":"${profile.id}","assetId":"$id","name":"Filter swap","eventKind":"REPLACEMENT","consumables":[""" +
+                """{"id":"${lines[0].id}","name":"Filter cartridge","defaultQuantity":1,"unit":"ea"},""" +
+                """{"id":"${lines[1].id}","name":"Sanitiser","unit":"ml","supplyId":"$cartridge"}]}""",
+        )
+        assertEquals(edited.text(), 200, edited.status)
+        val after = ApiJson.decodeFromString(ProfileResponse.serializer(), edited.text()).profile
+        assertEquals(listOf(null, cartridge), after.consumables.sortedBy { it.sortOrder }.map { it.supplyId })
+        runBlocking {
+            assertEquals(
+                listOf(null, SupplyId(cartridge)),
+                graph.profiles.get(ProfileId(profile.id))!!.consumables.sortedBy { it.sortOrder }.map { it.supplyId },
+            )
+        }
+    }
+
+    /**
+     * Row 44: an event line's `supplyId` round-trips through `POST /v1/events`, the asset's list and
+     * `PATCH /v1/events/{id}`; the link travels with its line when the lines are resequenced, and an absent
+     * key is an unlinked line.
+     */
+    @Test fun anEventLineWithSupplyIdRoundTrips() {
+        val id = createHotTub()
+        val cartridge = supplyItem("Example Filter Cartridge")
+
+        val logged = call(
+            "POST", "/v1/events",
+            """{"assetId":"$id","kind":"REPLACEMENT","title":"Filter swap","occurredOn":"2026-09-21","tzId":"UTC",""" +
+                """"consumables":[{"name":"Filter cartridge","quantity":"1","unit":"ea","supplyId":"$cartridge"},""" +
+                """{"name":"Sanitiser","quantity":"50","unit":"ml","supplyId":null}]}""",
+        )
+        assertEquals(logged.text(), 201, logged.status)
+        val event = ApiJson.decodeFromString(EventResponse.serializer(), logged.text()).event
+        assertEquals(listOf(cartridge, null), event.consumables.sortedBy { it.sortOrder }.map { it.supplyId })
+        assertTrue(logged.text(), """"supplyId":null""" in logged.text())
+
+        val listed = ApiJson.decodeFromString(EventListResponse.serializer(), call("GET", "/v1/assets/$id/events").text())
+        assertEquals(
+            listOf(cartridge, null),
+            listed.events.single().consumables.sortedBy { it.sortOrder }.map { it.supplyId },
+        )
+
+        val edited = call(
+            "PATCH", "/v1/events/${event.id}",
+            """{"assetId":"$id","kind":"REPLACEMENT","title":"Filter swap","occurredOn":"2026-09-21","tzId":"UTC",""" +
+                """"consumables":[{"name":"Sanitiser","quantity":"50","unit":"ml"},""" +
+                """{"name":"Filter cartridge","quantity":"1","unit":"ea","supplyId":"$cartridge"}]}""",
+        )
+        assertEquals(edited.text(), 200, edited.status)
+        val after = ApiJson.decodeFromString(EventResponse.serializer(), edited.text()).event
+        assertEquals(
+            listOf("Sanitiser" to null, "Filter cartridge" to cartridge),
+            after.consumables.sortedBy { it.sortOrder }.map { it.name to it.supplyId },
+        )
+        runBlocking {
+            assertEquals(
+                listOf(null, SupplyId(cartridge)),
+                graph.events.get(EventId(event.id))!!.consumables.sortedBy { it.sortOrder }.map { it.supplyId },
+            )
+        }
     }
 
     // --- tag bindings, read only -------------------------------------------------------------
