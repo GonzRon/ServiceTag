@@ -642,7 +642,7 @@ class AppGraph(private val context: Context) {
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
         serviceCases, serviceCaseEntries, loans, transferRecords,
-        assetSuccessions, supplyItems, assetSupplies, uow, ids, clock, BuildConfig.VERSION_NAME,
+        assetSuccessions, supplyItems, assetSupplies, installedComponents, uow, ids, clock, BuildConfig.VERSION_NAME,
         SCHEMA_VERSION,
     )
 
@@ -651,7 +651,7 @@ class AppGraph(private val context: Context) {
         assets, groups, tags, links, definitions, profiles, schedules, closures, events,
         attachments, references, seasonActivations, conditions, healthSubjects, categories,
         serviceCases, serviceCaseEntries, loans, transferRecords, assetSuccessions, supplyItems, assetSupplies,
-        attachmentStorage, uow,
+        installedComponents, attachmentStorage, uow,
         // Derived state is rebuilt after any import, and the wipe took it with the schedule rows.
         rebuildAll = { recomputeSchedules.all() },
     )
@@ -699,7 +699,7 @@ class AppGraph(private val context: Context) {
     private val backupRepositories = BackupRepositories(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         seasonActivations, conditions, healthSubjects, categories, serviceCases, serviceCaseEntries, loans,
-        transferRecords, assetSuccessions, supplyItems, assetSupplies,
+        transferRecords, assetSuccessions, supplyItems, assetSupplies, installedComponents,
     )
     val createTransferPack: CreateTransferPack = CreateTransferPack(
         backupRepositories, uow, ids, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION,

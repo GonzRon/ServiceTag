@@ -302,6 +302,7 @@ class TransferPackViewModelTest {
                 graph.closures, graph.events, graph.attachments, graph.references, graph.seasonActivations,
                 graph.conditions, graph.healthSubjects, graph.categories, graph.serviceCases, graph.serviceCaseEntries,
                 graph.loans, graph.transferRecords, graph.assetSuccessions, graph.supplyItems, graph.assetSupplies,
+                graph.installedComponents,
             ),
             graph.uow, graph.ids, graph.clock,
         ) { throw IllegalStateException("the store would not take the mark") }

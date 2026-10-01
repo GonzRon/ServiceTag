@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
+import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSupplyRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
@@ -122,14 +123,14 @@ class Format7ImportIdentityTest {
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
             attachments, references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(),
             InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(),
-            uow, IdGenerator { "set-format-8" }, Clock { 1_758_700_000_000L },
+            InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()), uow, IdGenerator { "set-format-8" }, Clock { 1_758_700_000_000L },
             appVersion = "1.4.0", schemaVersion = 8,
         )
         val replace = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
             attachments, references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(),
             InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(),
-            storage, uow, rebuildAll = { },
+            InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()), storage, uow, rebuildAll = { },
         )
         val build = BuildBackupMergePlan(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,

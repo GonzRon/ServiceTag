@@ -969,7 +969,7 @@ internal class ReplaceHarness(today: String = REPLACE_TODAY) {
     private val repos = BackupRepositories(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers, successions,
-        raw.supplyItems, raw.assetSupplies,
+        raw.supplyItems, raw.assetSupplies, raw.installedComponents,
     )
 
     /** Every canonical row here, as an archive names it. */

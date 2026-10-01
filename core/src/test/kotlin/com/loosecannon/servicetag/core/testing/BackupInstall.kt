@@ -56,13 +56,13 @@ class BackupInstall(setId: String = "set-install", now: Long = 1_758_900_000_000
     val export = ExportBackupSet(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions, supplyItems, assetSupplies,
+        successions, supplyItems, assetSupplies, installedComponents,
         uow, IdGenerator { setId }, Clock { now }, appVersion = "1.4.1", schemaVersion = 9,
     )
     val replace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments,
         references, activations, conditions, subjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions, supplyItems, assetSupplies, storage, uow,
+        successions, supplyItems, assetSupplies, installedComponents, storage, uow,
         rebuildAll = { rebuilds += 1 },
     )
     val build = BuildBackupMergePlan(

@@ -27,7 +27,7 @@ internal object TransferPackTesting {
         install.schedules, install.closures, install.events, install.attachments, install.references,
         install.activations, install.conditions, install.subjects, install.categories, install.serviceCases,
         install.caseEntries, install.loans, install.transfers, install.successions, install.supplyItems,
-        install.assetSupplies,
+        install.assetSupplies, install.installedComponents,
     )
 
     fun creationOf(

@@ -46,6 +46,7 @@ import com.loosecannon.servicetag.data.room.RoomDefinitionRepository
 import com.loosecannon.servicetag.data.room.RoomEventRepository
 import com.loosecannon.servicetag.data.room.RoomGroupRepository
 import com.loosecannon.servicetag.data.room.RoomHealthSubjectRepository
+import com.loosecannon.servicetag.data.room.RoomInstalledComponentRepository
 import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomProfileRepository
 import com.loosecannon.servicetag.data.room.RoomReferenceRepository
@@ -102,6 +103,7 @@ class RestoreProofTest {
         val successions = RoomAssetSuccessionRepository(db.assetSuccessionDao())
         val supplyItems = RoomSupplyItemRepository(db.supplyItemDao())
         val assetSupplies = RoomAssetSupplyRepository(db.assetSupplyDao())
+        val installedComponents = RoomInstalledComponentRepository(db.installedComponentDao())
         val uow = RoomUnitOfWork(db)
         // The restore's rebuild seam, wired to the real engine over the same database: the proof
         // is about the canonical rows, and derived state is rebuilt after any import.
@@ -115,13 +117,13 @@ class RestoreProofTest {
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
             attachments, references, seasonActivations, conditions, healthSubjects, categories,
             serviceCases, caseEntries, loans, transfers,
-            successions, supplyItems, assetSupplies, uow, IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
+            successions, supplyItems, assetSupplies, installedComponents, uow, IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
         )
         val import = ImportBackupReplace(
             assets, groups, tags, links, definitions, profiles, schedules, closures, events,
             attachments, references, seasonActivations, conditions, healthSubjects, categories,
             serviceCases, caseEntries, loans, transfers,
-            successions, supplyItems, assetSupplies, FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
+            successions, supplyItems, assetSupplies, installedComponents, FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
             rebuildAll = { recompute.all() },
         )
     }

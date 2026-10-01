@@ -72,7 +72,7 @@ internal class TransferInstall(
     val repos = BackupRepositories(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, raw.categories, cases, entries, loans, raw.transfers, successions,
-        raw.supplyItems, assetSupplies,
+        raw.supplyItems, assetSupplies, raw.installedComponents,
     )
     val build = BuildBackupMergePlan(
         assets, groups, tags, raw.links, definitions, profiles, schedules, closures, events, attachments, references,

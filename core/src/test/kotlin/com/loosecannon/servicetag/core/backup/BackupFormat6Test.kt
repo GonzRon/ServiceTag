@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSupplyRepository
 import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
+import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
 import com.loosecannon.servicetag.core.model.ServicePolicy
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
@@ -197,7 +198,8 @@ class BackupFormat6Test {
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), uow, IdGenerator { "set-format-6" },
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()),
+            uow, IdGenerator { "set-format-6" },
             Clock { 1_758_400_000_000L }, appVersion = "1.2.0", schemaVersion = 6,
         )
         val restore = ImportBackupReplace(
@@ -205,7 +207,8 @@ class BackupFormat6Test {
             events, attachments, references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow, rebuildAll = { },
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()),
+            storage, uow, rebuildAll = { },
         )
     }
 

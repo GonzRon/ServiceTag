@@ -24,6 +24,7 @@ import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
+import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
@@ -112,6 +113,8 @@ class ImportBackupReplace(
     /** #15 — the SupplyItems and their applicability (format 18): wiped after the assets, restored after them. */
     private val supplyItems: SupplyItemRepository,
     private val assetSupplies: AssetSupplyRepository,
+    /** #47 — the installed components (format 19): their assets' CASCADE wipes them; restored parents first. */
+    private val installedComponents: InstalledComponentRepository,
     private val storage: AttachmentStorage,
     private val uow: UnitOfWork,
     /**

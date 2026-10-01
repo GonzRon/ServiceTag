@@ -25,6 +25,7 @@ import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.GroupRepository
 import com.loosecannon.servicetag.core.ports.HealthSubjectRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.InstalledComponentRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
@@ -93,6 +94,8 @@ class ExportBackupSet(
     /** #15 — the SupplyItems with their specifications, and their applicability (format 18). */
     private val supplyItems: SupplyItemRepository,
     private val assetSupplies: AssetSupplyRepository,
+    /** #47 — the installed components (format 19): every row, current and removed, each with its composition. */
+    private val installedComponents: InstalledComponentRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -102,7 +105,7 @@ class ExportBackupSet(
     private val repos = BackupRepositories(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         seasonActivations, conditions, healthSubjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions, supplyItems, assetSupplies,
+        successions, supplyItems, assetSupplies, installedComponents,
     )
 
     /**
@@ -129,9 +132,9 @@ class ExportBackupSet(
 }
 
 /**
- * The twenty-two canonical stores an archive is read from, in `ExportBackupSet`'s order — one value to hand
- * [readSnapshot] instead of twenty-two ports (#77, mn-8; #86 adds the successions, #15 the SupplyItems and their
- * applicability).
+ * The twenty-three canonical stores an archive is read from, in `ExportBackupSet`'s order — one value to hand
+ * [readSnapshot] instead of twenty-three ports (#77, mn-8; #86 adds the successions, #15 the SupplyItems and their
+ * applicability, #47 the installed components).
  */
 class BackupRepositories(
     val assets: AssetRepository,
@@ -159,6 +162,8 @@ class BackupRepositories(
     /** #15 — the SupplyItems and their applicability (format 18). */
     val supplyItems: SupplyItemRepository,
     val assetSupplies: AssetSupplyRepository,
+    /** #47 — the installed components, each with its composition (format 19). */
+    val installedComponents: InstalledComponentRepository,
 )
 
 /**

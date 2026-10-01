@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSupplyRepository
 import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
+import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.CompletionMode
@@ -766,7 +767,8 @@ class ScheduleOperationsTest {
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(),
             InMemoryHealthSubjectRepository(), categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(),
             InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), uow, IdGenerator { "set-1" }, clock, appVersion = "1.2.0", schemaVersion = 6,
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()),
+            uow, IdGenerator { "set-1" }, clock, appVersion = "1.2.0", schemaVersion = 6,
         ).run().data
 
         fun restore(rebuildAll: suspend () -> Unit) = ImportBackupReplace(
@@ -775,7 +777,8 @@ class ScheduleOperationsTest {
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(),
             InMemoryHealthSubjectRepository(), categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(),
             InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow, rebuildAll = rebuildAll,
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()),
+            storage, uow, rebuildAll = rebuildAll,
         )
 
         // Once, and after the last insert: everything the file carried was already in when it ran.

@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSupplyRepository
 import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
+import com.loosecannon.servicetag.core.testing.InMemoryInstalledComponentRepository
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupNewerFormat
 import com.loosecannon.servicetag.core.model.Asset
@@ -241,7 +242,8 @@ class BackupUseCasesTest {
             f.closures, f.events, f.attachments, f.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             f.categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), f.uow, IdGenerator { "set-1" }, Clock { now }, appVersion = "2.0", schemaVersion = 1,
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()),
+            f.uow, IdGenerator { "set-1" }, Clock { now }, appVersion = "2.0", schemaVersion = 1,
         ).run().data
     }
 
@@ -251,7 +253,8 @@ class BackupUseCasesTest {
             f.closures, f.events, f.attachments, f.references,
             InMemorySeasonActivationRepository(), InMemoryConditionRepository(), InMemoryHealthSubjectRepository(),
             f.categories, InMemoryServiceCaseRepository(), InMemoryServiceCaseEntryRepository(), InMemoryAssetLoanRepository(), InMemoryTransferRecordRepository(),
-            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), f.storage, f.uow, rebuildAll = { },
+            InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), InMemoryInstalledComponentRepository(InMemorySupplyItemRepository()),
+            f.storage, f.uow, rebuildAll = { },
         ).run(bytes)
     }
 
