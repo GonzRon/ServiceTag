@@ -1281,9 +1281,9 @@ class MaintenanceRoutesTest {
         assertEquals(2, inserts("serviceCases"))
         assertEquals(3, inserts("caseEntries"))
         assertEquals(
-            "after categories, in table order, before #72's loans, #77's transfers and #86's successions",
+            "after categories, in table order, before #72's loans, #77's transfers, #86's successions and #15's two",
             listOf("serviceCases", "caseEntries", "loans"),
-            wire.keys.toList().dropLast(4).takeLast(3),
+            wire.keys.toList().dropLast(6).takeLast(3),
         )
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
@@ -1333,7 +1333,11 @@ class MaintenanceRoutesTest {
         fun inserts(key: String) = wire.getValue(key).jsonObject.getValue("insert").jsonPrimitive.content.toInt()
         assertEquals(2, inserts("assets"))
         assertEquals(5, inserts("loans"))
-        assertEquals("after the case entries, before #77's transfers and #86's successions", "loans", wire.keys.toList().dropLast(4).last())
+        assertEquals(
+            "after the case entries, before #77's transfers, #86's successions and #15's two",
+            "loans",
+            wire.keys.toList().dropLast(6).last(),
+        )
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
         runBlocking {
