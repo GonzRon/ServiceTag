@@ -1207,7 +1207,7 @@ fun AssetReference.toDto(): AssetReferenceDto = AssetReferenceDto(
 
 /**
  * The kind and the role are names first: each must be one of its enum's. Then the role must be one the
- * row's stored kind takes (#91, R91-1: [accepts], the reference rule's one home) — so a role on a note link
+ * row's stored kind takes (#91, R91-1: [ReferenceKind.accepts], the reference rule's one home) — so a role on a note link
  * or an "other" link is a refusal naming the row. The kind read is the row's stored one, never re-derived from
  * the uri. The decode's naming pass runs every row through here, so an archive breaking either rule is refused
  * before anything is written.

@@ -134,6 +134,14 @@ import kotlinx.serialization.json.JsonObject
  * (`attachmentSourceProblem`, the one home of the shape rule, on any owner), checked before the row is built. The
  * merge planner compares them like any other field, with no exception: provenance is only ever set on a new id.
  *
+ * **Format 17 (#91, C6) adds one reference field and no upgrade.** `role` on a reference — the same `DocumentRole`
+ * an attachment carries (R91-1: a web link only), written as an explicit null when unset, last in the row, and
+ * defaulting to null, so a format ≤16 archive decodes through the same strict decode with no role. No shipped
+ * writer put a role into a format ≤16 archive, so one whose reference carries a non-null role is a hand-built file
+ * and is refused (`FIRST_REFERENCE_ROLE_FORMAT`); an unknown name and a role on a note or other link are refused
+ * at decode. The merge's rule for an archive older than 17 against a row that gained a role since is the planner's
+ * (#91, C7), mirroring the attachment role's exception.
+ *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
