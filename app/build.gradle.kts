@@ -42,16 +42,16 @@ android {
         // `targetSdk` stays 36 on purpose: `targetSdk 37` plus the `DISPATCH_NFC_MESSAGE`
         // permission on the dispatch activity is Phase 7 (spec §5.8), not 1.2.
         targetSdk = 36
-        // 1.5.0 is a MINOR: new user-facing capability (lending #72, Transfer Packs #77, Replace
-        // asset #86, Save as document #85, notification bodies that open the Dashboard or the
-        // schedule #87, and #84's fixes), with a forward-only backup-format bump — schema 16 /
-        // format 16, the new app reading every older archive and 1.4.x refusing a format-16 archive
-        // rather than dropping rows (docs/versioning.md). `versionCode` is +1 on every release and
-        // is never reset; it must agree with the tag `servicetag-v1.5.0` or the release workflow
-        // refuses to publish. VersionAgreementTest asserts these two against the schema and format
-        // numbers.
-        versionCode = 18
-        versionName = "1.5.0"
+        // 1.6.0 is a MINOR: new user-facing capability (the Developer API and MCP routes for the
+        // phone-only workflows #92, a document role on a web link #91, and share intake that picks
+        // the asset from the Assets tab's own searchable list #93), with a forward-only
+        // backup-format bump — schema 17 / format 17, the new app reading every older archive and
+        // 1.5.x refusing a format-17 archive or Transfer Pack rather than dropping rows
+        // (docs/versioning.md). `versionCode` is +1 on every release and is never reset; it must
+        // agree with the tag `servicetag-v1.6.0` or the release workflow refuses to publish.
+        // VersionAgreementTest asserts these two against the schema and format numbers.
+        versionCode = 19
+        versionName = "1.6.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         manifestPlaceholders["ndefTagPath"] = "/$tagExternalDomain:$tagTypeName"
