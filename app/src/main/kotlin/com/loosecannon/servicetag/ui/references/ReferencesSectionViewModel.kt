@@ -7,12 +7,15 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.fetch.HopPolicy
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AttachmentOwner
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.references.LinkDecision
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.references.ReferenceKinds
+import com.loosecannon.servicetag.core.references.takesRole
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.AddReferenceCommand
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
@@ -54,6 +57,8 @@ data class ReferenceRowState(
     val materializable: Boolean = false,
     /** #85 (C20, R85-1, R85-3): derived, never stored — an attachment on this asset has this URI as its source. */
     val savedAsDocument: Boolean = false,
+    /** #91 (C15, C22, C24): the stored role — the edit sheet's chips start from it, and the row draws its label. */
+    val role: DocumentRole? = null,
 )
 
 data class ReferencesSectionState(
@@ -140,10 +145,20 @@ class ReferencesSectionViewModel(
     /**
      * "Add link", which calls **the same use case a share does** and writes an identical row: no
      * `provenance`, nothing set differently, the two indistinguishable afterwards (D-21 C).
+     *
+     * #91 (C23): [role] is the person's pick, or null; the sheet sends one only while [roleOffered]
+     * says the link takes it, so an unknown scheme's confirmed re-submit carries none by construction.
      */
-    fun addLink(uri: String, displayName: String, description: String) {
-        submit(AddReferenceCommand(uri = uri, displayName = displayName, description = description))
+    fun addLink(uri: String, displayName: String, description: String, role: DocumentRole?) {
+        submit(AddReferenceCommand(uri = uri, displayName = displayName, description = description, role = role))
     }
+
+    /**
+     * #91 (C23, R91-5, C-4): whether Add link draws the Role chips for [link] as typed — the kind
+     * `AddReference` will derive from the same text, asked whether it takes a role. The one
+     * classifier and the one rule; never a prefix test, and never a role guessed from the text.
+     */
+    fun roleOffered(link: String): Boolean = ReferenceKinds.inferFrom(policy.schemeOf(link.trim())).takesRole
 
     /** "Save this link?" answered with Save: the same command again, confirmed exactly once. */
     fun confirmUnknownScheme() {
@@ -248,13 +263,16 @@ class ReferencesSectionViewModel(
             policy.classify(reference.uri) != LinkDecision.Blocked &&
             hops.staticProblem(reference.uri) == null,
         savedAsDocument = reference.uri in sourced,
+        role = reference.role,
     )
 
     /**
-     * One ratified line per refusal (§10). Four of the nine say nothing on this surface:
+     * One ratified line per refusal (§10). Five of the ten say nothing on this surface:
      * `UnknownSchemeNeedsConfirmation` is a question and is asked as one; `Unchanged` simply
-     * closes the sheet; and `OwnerMissing` and `NoSuchReference` mean the screen is looking at
-     * something that has gone, for which §10 ratifies no sentence and this brief may invent none.
+     * closes the sheet; `OwnerMissing` and `NoSuchReference` mean the screen is looking at
+     * something that has gone, for which §10 ratifies no sentence and this brief may invent none;
+     * and `RoleNotAllowed` (#91, R91-14) is unreachable here, because the sheets never send a role
+     * a link cannot take.
      */
     private fun say(problem: ReferenceProblem) {
         val line = when (problem) {
@@ -267,6 +285,7 @@ class ReferencesSectionViewModel(
             ReferenceProblem.Unchanged -> return
             ReferenceProblem.OwnerMissing -> return
             ReferenceProblem.NoSuchReference -> return
+            ReferenceProblem.RoleNotAllowed -> return
         }
         _messages.tryEmit(line)
     }

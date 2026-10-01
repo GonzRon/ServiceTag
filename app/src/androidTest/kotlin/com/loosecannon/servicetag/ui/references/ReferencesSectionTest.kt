@@ -5,12 +5,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTextExactly
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -18,8 +20,13 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceKind
+import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.references.ReferenceKinds
+import com.loosecannon.servicetag.core.references.takesRole
 import com.loosecannon.servicetag.core.usecase.UpdateReferenceCommand
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
@@ -58,6 +65,8 @@ class ReferencesSectionTest {
         description: String = "",
         uri: String = "https://example-mower.invalid/$id",
         launchable: Boolean = true,
+        savedAsDocument: Boolean = false,
+        role: DocumentRole? = null,
     ) = ReferenceRowState(
         id = id,
         displayName = name,
@@ -65,6 +74,8 @@ class ReferencesSectionTest {
         uri = uri,
         kind = kind,
         launchable = launchable,
+        savedAsDocument = savedAsDocument,
+        role = role,
     )
 
     private fun draw(vararg rows: ReferenceRowState, handled: Boolean = true) {
@@ -128,17 +139,34 @@ class ReferencesSectionTest {
         rule.onAllNodesWithText("REFERENCES").assertCountEquals(0)
     }
 
-    /** A `kind.name` rendered raw would show `WEB_URL` to a person. */
+    /**
+     * A `kind.name` rendered raw would show `WEB_URL` to a person. #91 (C24, R91-8): a row with a
+     * role draws its label once, as its own quiet line in the order kind, role, "Saved as document",
+     * description; a row with none draws no role line at all — never "No role".
+     */
     @Test fun eachKindDrawsItsOwnRatifiedWord() {
         draw(
-            row("a", "Deck manual", ReferenceKind.WEB_URL),
+            row(
+                "a", "Deck manual", ReferenceKind.WEB_URL, description = "Section 4",
+                savedAsDocument = true, role = DocumentRole.USER_MANUAL,
+            ),
             row("b", "Teardown note", ReferenceKind.NOTE_LINK, uri = "joplin://x-callback-url/o"),
             row("c", "Zotero item", ReferenceKind.OTHER, uri = "zotero://select/items/0"),
+            row("d", "Parts list", ReferenceKind.WEB_URL),
         )
 
-        rule.onNodeWithText("Web link").assertIsDisplayed()
+        rule.onAllNodesWithText("Web link").assertCountEquals(2)
         rule.onNodeWithText("Note").assertIsDisplayed()
         rule.onNodeWithText("Other").assertIsDisplayed()
+
+        rule.onAllNodesWithText("User manual").assertCountEquals(1)
+        rule.onNode(
+            hasTextExactly(
+                "Deck manual", "Web link", "User manual", MaterializeStrings.SAVED_AS_DOCUMENT, "Section 4",
+            ),
+        ).assertIsDisplayed()
+        rule.onNode(hasTextExactly("Parts list", "Web link")).assertIsDisplayed()
+        rule.onAllNodesWithText("No role").assertCountEquals(0)
     }
 
     /**
@@ -219,13 +247,23 @@ class ReferencesSectionTest {
         assertEquals("a", removed)
     }
 
-    /** I-1: a URI field on the sheet would make "never edited after creation" unenforceable. */
+    /**
+     * I-1: a URI field on the sheet would make "never edited after creation" unenforceable.
+     *
+     * #91 (C22, R91-13): on a web link the sheet also draws the Role chips under Description, the
+     * row's own role chosen, and a pick reaches the saved command; Save is found by scrolling, as
+     * the reshaped sheet allows. The same composition moved onto a note link draws no Role section
+     * and saves the row's (null) role. Either way there are exactly two text fields.
+     */
     @Test fun theEditSheetHasExactlyTwoFieldsAndTheUriIsNotOneOfThem() {
         var saved: UpdateReferenceCommand? = null
+        val current = mutableStateOf(
+            row("a", "Deck manual", description = "Section 4", role = DocumentRole.USER_MANUAL),
+        )
         rule.setContent {
             ServiceTagTheme {
                 ReferenceEditSheet(
-                    row = row("a", "Deck manual", description = "Section 4"),
+                    row = current.value,
                     onSave = { saved = it },
                     onDismiss = {},
                 )
@@ -240,9 +278,28 @@ class ReferencesSectionTest {
         rule.onAllNodesWithText("Link").assertCountEquals(0)
         rule.onAllNodesWithText("example-mower.invalid", substring = true).assertCountEquals(0)
 
-        rule.onNodeWithText("Save").performClick()
+        rule.onNodeWithText("ROLE").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("User manual").performScrollTo().assertIsSelected()
+        rule.onNodeWithText("Service manual").performScrollTo().performClick()
+        rule.onNodeWithText("Save").performScrollTo().performClick()
         rule.waitForIdle()
-        assertEquals(UpdateReferenceCommand("Deck manual", "Section 4"), saved)
+        assertEquals(
+            UpdateReferenceCommand("Deck manual", "Section 4", role = DocumentRole.SERVICE_MANUAL),
+            saved,
+        )
+
+        current.value = row(
+            "b", "Teardown note", ReferenceKind.NOTE_LINK, description = "Section 4",
+            uri = "joplin://x-callback-url/openNote?id=example",
+        )
+        rule.waitForIdle()
+        rule.onAllNodesWithText("ROLE").assertCountEquals(0)
+        listOf("No role", "Purchase invoice or receipt", "User manual", "Service manual")
+            .forEach { rule.onAllNodesWithText(it).assertCountEquals(0) }
+        rule.onAllNodes(hasSetTextAction()).assertCountEquals(2)
+        rule.onNodeWithText("Save").performScrollTo().performClick()
+        rule.waitForIdle()
+        assertEquals(UpdateReferenceCommand("Teardown note", "Section 4", role = null), saved)
     }
 
     /**
@@ -279,11 +336,14 @@ class ReferencesSectionTest {
      * line, a helper text or a placeholder added later turns this red rather than passing.
      */
     @Test fun theAddLinkSheetShipsItsFiveRatifiedStringsAndNoOther() {
-        var saved: Triple<String, String, String>? = null
+        var saved: List<Any?>? = null
         rule.setContent {
             ServiceTagTheme {
                 AddLinkSheet(
-                    onSave = { uri, name, description -> saved = Triple(uri, name, description) },
+                    // The view model's question, asked through the same two calls (C-4): an empty
+                    // link is not a web link, so no Role chips are drawn and the set below holds.
+                    roleOffered = { ReferenceKinds.inferFrom(LinkLaunchPolicy().schemeOf(it.trim())).takesRole },
+                    onSave = { uri, name, description, role -> saved = listOf(uri, name, description, role) },
                     onDismiss = {},
                 )
             }
@@ -299,7 +359,7 @@ class ReferencesSectionTest {
 
         rule.onNodeWithText("Save").performClick()
         rule.waitForIdle()
-        assertEquals(Triple("", "", ""), saved)
+        assertEquals(listOf<Any?>("", "", "", null), saved)
     }
 
     /** The scheme is named, because the person is being asked about that scheme and no other. */

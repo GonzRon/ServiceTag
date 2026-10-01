@@ -1,6 +1,11 @@
 package com.loosecannon.servicetag.data.room
 
 import androidx.sqlite.SQLiteException
+import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.data.room.entities.AssetEntity
 import com.loosecannon.servicetag.data.room.entities.AssetReferenceEntity
 import kotlinx.coroutines.test.runTest
@@ -33,7 +38,7 @@ class ReferenceDaoConstraintTest {
         displayName: String = "Manual",
     ) = AssetReferenceEntity(
         id = id, assetId = assetId, kind = "WEB_URL", uri = uri, displayName = displayName,
-        description = "", scheme = "https", createdAt = 10L, updatedAt = 20L,
+        description = "", scheme = "https", createdAt = 10L, updatedAt = 20L, documentRole = null,
     )
 
     /**
@@ -132,5 +137,43 @@ class ReferenceDaoConstraintTest {
         val updates = queries.filter { it.trimStart().startsWith("UPDATE", ignoreCase = true) }
         assertEquals("no @Query on asset_reference may be an UPDATE", emptyList<String>(), updates)
         assertFalse("AssetReferenceDao must not offer a bare @Delete", "@Delete" in dao)
+    }
+
+    /**
+     * #91 (C4, C5): the mapper carries `document_role` both ways. Each of the three roles and no role
+     * at all go in through the adapter and come back as the same reference; the column holds the
+     * enum's name, the attachment column's spelling, and SQL NULL for no role.
+     */
+    @Test
+    fun eachRoleAndNoneRoundTripsThroughRoom() = runTest {
+        val db = inMemoryDb()
+        try {
+            db.assetDao().upsert(asset("a1"))
+            val repo = RoomReferenceRepository(db.assetReferenceDao())
+            val written = (listOf(null) + DocumentRole.entries).mapIndexed { i, role ->
+                AssetReference(
+                    id = ReferenceId("r$i"),
+                    assetId = AssetId("a1"),
+                    kind = ReferenceKind.WEB_URL,
+                    uri = "https://manuals.example.invalid/water-heater/$i",
+                    displayName = "Example Water Heater document $i",
+                    description = "",
+                    scheme = "https",
+                    createdAt = 10L + i,
+                    updatedAt = 20L + i,
+                    role = role,
+                )
+            }
+            written.forEach { repo.upsert(it) }
+
+            for (row in written) assertEquals("${row.role}", row, repo.get(row.id))
+            assertEquals(written, repo.all())
+            assertEquals(
+                listOf("r0" to null) + DocumentRole.entries.mapIndexed { i, role -> "r${i + 1}" to role.name },
+                db.assetReferenceDao().all().map { it.id to it.documentRole },
+            )
+        } finally {
+            db.close()
+        }
     }
 }

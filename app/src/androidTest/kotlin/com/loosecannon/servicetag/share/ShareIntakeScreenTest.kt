@@ -172,11 +172,13 @@ class ShareIntakeScreenTest {
     }
 
     /**
-     * #67, C7 (R67-9): a byte share draws the Role control — the header and the four chips from
-     * their one home, "No role" chosen until the person picks — and a pick reaches `onRole`. The
-     * same composition moved onto a link draws none of it.
+     * #67, C7 (R67-9), amended by #91 (R91-4): a byte share draws the Role control — the header and
+     * the four chips from their one home, "No role" chosen until the person picks — and a pick
+     * reaches `onRole`. The same composition moved onto a web link draws it too, on "No role" and
+     * with no Type control; moved onto a link that takes no role (`linkTakesRole` false, the
+     * default) it draws none of it.
      */
-    @Test fun theRoleControlIsDrawnOnBytesAndNeverOnALink() {
+    @Test fun theRoleControlIsDrawnOnBytesAndOnAWebLinkAndNeverOnANoteLink() {
         val state = mutableStateOf(form(path = IntakePath.BYTES, received = "manual.pdf"))
         show(state)
 
@@ -186,7 +188,14 @@ class ShareIntakeScreenTest {
         rule.onNodeWithText("Service manual").performScrollTo().performClick()
         assertEquals(listOf<DocumentRole?>(DocumentRole.SERVICE_MANUAL), roles)
 
-        state.value = form(path = IntakePath.LINK)
+        state.value = form(path = IntakePath.LINK).copy(linkTakesRole = true)
+        rule.waitForIdle()
+        rule.onAllNodesWithText("TYPE").assertCountEquals(0)
+        rule.onNodeWithText("ROLE").performScrollTo().assertIsDisplayed()
+        ROLE_CHIPS.forEach { rule.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
+        rule.onNodeWithText("No role").assertIsSelected()
+
+        state.value = form(path = IntakePath.LINK, received = "joplin://x-callback-url/openNote?id=example")
         rule.waitForIdle()
         rule.onAllNodesWithText("ROLE").assertCountEquals(0)
         ROLE_CHIPS.forEach { rule.onAllNodesWithText(it).assertCountEquals(0) }

@@ -407,7 +407,7 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     )
     // --- 1.3, the reference domain (master plan §7) -----------------------------------------
     //
-    // Nine arms over one exhaustive `when`, so a member added to `ReferenceProblem` later is a
+    // Ten arms over one exhaustive `when`, so a member added to `ReferenceProblem` later is a
     // **compile error here** rather than a refusal carrying a code nobody documented. The code is
     // [referenceProblemCode]'s, which is exhaustive for the same reason; only the status and the
     // sentence are chosen here.
@@ -442,9 +442,16 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
         // carrying the stored row** (§18.13), answered in `ReferenceHandlers.update` before
         // anything is wrapped. If it ever arrives here it still must not be a 500, and
         // `REFERENCE_UNCHANGED` is therefore in no `docs/api/v1.md` table: the document lists the
-        // five codes a client can actually receive.
+        // six codes a client can actually receive.
         ReferenceProblem.Unchanged ->
             referenceError(409, "Conflict", problem, "this reference already says that")
+        // #91 (C2, R91-1): a role on a link that is not a web link — change this body, so 422,
+        // naming the one key at fault. The reference family's first `field`.
+        ReferenceProblem.RoleNotAllowed ->
+            referenceError(
+                422, "Unprocessable Content", problem, "a document role belongs on an http or https link",
+                field = "role",
+            )
     }
     // --- 1.4, seasons, policy, condition and health (spec §9.2; master plan §11.5) -----------
     //
@@ -683,7 +690,8 @@ private fun referenceError(
     reason: String,
     problem: ReferenceProblem,
     message: String,
-): ApiResponse = errorResponse(status, reason, referenceProblemCode(problem), message)
+    field: String? = null,
+): ApiResponse = errorResponse(status, reason, referenceProblemCode(problem), message, field = field)
 
 /**
  * One stable wire code per [ReferenceProblem], in 1.2's `UPPER_SNAKE` style — with one deliberate
@@ -712,6 +720,7 @@ internal fun referenceProblemCode(problem: ReferenceProblem): String = when (pro
     // Never emitted: the handler answers 200 with the stored row. It exists so the `when` stays
     // exhaustive, which is the whole point of this function.
     ReferenceProblem.Unchanged -> "REFERENCE_UNCHANGED"
+    ReferenceProblem.RoleNotAllowed -> "REFERENCE_ROLE_NOT_ALLOWED"
 }
 
 /**

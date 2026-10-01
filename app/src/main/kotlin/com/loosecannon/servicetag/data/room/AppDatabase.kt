@@ -87,7 +87,7 @@ import com.loosecannon.servicetag.data.room.entities.ServiceCaseEntryEntity
         TransferRecordEntity::class,
         AssetSuccessionEntity::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

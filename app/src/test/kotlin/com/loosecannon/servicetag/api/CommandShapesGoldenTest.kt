@@ -129,20 +129,20 @@ class CommandShapesGoldenTest {
         assertEquals((keys + legacy).toSet(), row.map { rename[it] ?: it }.filter { it in command }.toSet())
     }
 
-    @Test fun theContractDocumentNamesFormat16AndTwentyTables() {
+    @Test fun theContractDocumentNamesFormat17AndTwentyTables() {
         val doc = repoFile("docs/api/v1.md").readText()
         val lines = doc.lines()
         // Anchored to the two spellings: a bare "1–10" is also the health weight's range.
         assertEquals(
-            "the import range reads 1–16 at both sites",
+            "the import range reads 1–17 at both sites",
             2,
-            lines.count { "format **1–16**" in it || "**format 1–16**" in it },
+            lines.count { "format **1–17**" in it || "**format 1–17**" in it },
         )
         assertEquals(
             "a shipped spelling of an old import range survives",
             emptyList<String>(),
             lines.filter { line ->
-                listOf("1–7", "1–8", "1–9", "1–10", "1–11", "1–12", "1–13", "1–14", "1–15").any {
+                listOf("1–7", "1–8", "1–9", "1–10", "1–11", "1–12", "1–13", "1–14", "1–15", "1–16").any {
                     "format **$it**" in line || "**format $it**" in line
                 }
             },
@@ -164,11 +164,22 @@ class CommandShapesGoldenTest {
             "the status line says 16 since #85",
             lines.count { "16 since #85 (attachment provenance)" in it } >= 1,
         )
+        // #91: and 17 since the reference document role, on both status lines (schema and format), and
+        // IDENTICAL states C7's rule for a reference's role in #67's words.
+        assertEquals(
+            "both status lines say 17 since #91",
+            2,
+            lines.count { "17 since #91 (reference document role)" in it },
+        )
         val identical = lines.single { it.startsWith("| `IDENTICAL` |") }
         assertTrue("IDENTICAL must state the role rule: $identical", "document role" in identical && "format 10" in identical)
         assertTrue(
             "IDENTICAL must state the lead rule: $identical",
             "`warrantyReminderLeadDays`" in identical && "format 11" in identical,
+        )
+        assertTrue(
+            "IDENTICAL must state the reference role rule: $identical",
+            "a reference's document role" in identical && "format 17" in identical,
         )
         assertEquals(emptyList<String>(), lines.filter { "the eleven tables" in it.lowercase() })
         assertTrue("the report's twenty tables", "twenty tables" in doc.lowercase())
@@ -215,6 +226,8 @@ class CommandShapesGoldenTest {
             "REPLACE_NAME_REQUIRED", "REPLACE_BAD_DATE", "REPLACE_NOT_OFFERED", "REPLACE_NEEDS_SETUP",
             "REPLACE_NEEDS_SEASON", "REPLACE_PHASE_REQUIRED", "REPLACE_DATE_AFTER_TODAY", "asset_validation",
             "installationId", "X-ServiceTag-Attachment", "sourcesDigest",
+            // #91 (C2): the one new code, a role on a reference that is not a web link.
+            "REFERENCE_ROLE_NOT_ALLOWED",
         )) {
             assertTrue("docs/api/v1.md does not name $code", "`$code`" in doc)
         }

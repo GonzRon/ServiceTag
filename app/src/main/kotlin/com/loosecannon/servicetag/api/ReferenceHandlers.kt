@@ -13,6 +13,8 @@ import com.loosecannon.servicetag.core.usecase.ReferenceResult
 import com.loosecannon.servicetag.core.usecase.UpdateReference
 import com.loosecannon.servicetag.core.usecase.UpdateReferenceCommand
 import com.loosecannon.servicetag.di.AppGraph
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.jsonObject
 
 /**
  * The three 1.3.0 reference endpoints, and **every write goes through exactly one use case.**
@@ -83,21 +85,33 @@ internal class ReferenceHandlers(
                 uri = body.uri,
                 displayName = body.displayName,
                 description = body.description,
-                // Never set here, and the default is only half the reason: see this class's KDoc.
+                role = body.role,
+                // `confirmedUnknownScheme` is never set here, and the default is only half the
+                // reason: see this class's KDoc.
             ),
         ).orRefuse()
         return createdResponse(ReferenceResponse.serializer(), ReferenceResponse(saved.toDto()))
     }
 
     /**
-     * Name and description, overlaid onto the stored row: an absent or `null` field is the row's
-     * current value, any other value replaces it, and `""` blanks the description. The row is read
-     * first because `UpdateReferenceCommand` is a **full** pair — there is no partial command —
-     * and sending back a field the caller never named is how an amend rewrites what it was not
-     * asked to touch.
+     * Name, description and role, overlaid onto the stored row. For the name and the description
+     * an absent or `null` field is the row's current value, any other value replaces it, and `""`
+     * blanks the description. **The role is three-state** (#91, R91-3): absent keeps the stored
+     * role, `null` clears it, a name sets it. The typed decode runs first, over the caller's own
+     * bytes, so every 415 and 400 is the shipped one byte for byte; only then is the same text
+     * read again for whether it names `role` at all, through the same 400 path (a body the lenient
+     * typed decoder took but the element parser refuses — a missing comma — is a 400 here where it
+     * was a 200 before #91). The
+     * row is read first because `UpdateReferenceCommand` is a **full** triple — there is no
+     * partial command — and sending back a field the caller never named is how an amend rewrites
+     * what it was not asked to touch.
      */
     suspend fun update(id: String, request: ApiRequest): ApiResponse {
         val body = request.decode(UpdateReferenceRequest.serializer())
+        // The presence read goes through the shipped 400 path: the typed decoder is lenient (it accepts a
+        // missing comma between pairs), the element parser is not, so a body that passed the first step can
+        // still fail here — and then it is a 400, not a 500 (B2a re-review R-1).
+        val namesRole = "role" in decodeOr400(JsonElement.serializer(), request.body.decodeToString()).jsonObject
         val stored = references.get(ReferenceId(id))
             ?: throw ReferenceRefused(ReferenceProblem.NoSuchReference)
         val result = updateReference.run(
@@ -105,6 +119,8 @@ internal class ReferenceHandlers(
             UpdateReferenceCommand(
                 displayName = body.displayName ?: stored.displayName,
                 description = body.description ?: stored.description,
+                // Absent: unchanged; `null`: clear; a name: set.
+                role = if (namesRole) body.role else stored.role,
             ),
         )
         val row = when (result) {

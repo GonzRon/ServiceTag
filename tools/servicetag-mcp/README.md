@@ -112,7 +112,16 @@ match, so turning reminders back on never re-sends a `LOCAL` row this tool left 
 **References (needs ServiceTag 1.3.0)** — `list_references`, `add_reference`, `update_reference`.
 A reference is a URI on an asset — a manual on the web, a note in Joplin — with no bytes of its
 own. `kind` is derived from the URI's scheme and returned read-only, so neither write tool takes
-one; nothing **deletes** a reference, because the API adds and amends and the phone removes.
+one; nothing **deletes** a reference, because the API adds and amends and the phone removes. Since
+#91 an `http` or `https` reference may carry a document `role` — `PURCHASE_INVOICE_OR_RECEIPT`,
+`USER_MANUAL` or `SERVICE_MANUAL` — given only by the caller, never guessed: `add_reference` and
+`update_reference` take `role`, and `update_reference` clears it by name, `clear_fields=["role"]`,
+sent as `"role": null` (its only clearable name; the description is still cleared by `""`). A role
+on any other link is `REFERENCE_ROLE_NOT_ALLOWED`. A role given or cleared needs a phone at schema
+17, refused below it with `APP_SCHEMA_TOO_OLD` and nothing sent; without one both tools reach any
+phone they always did. `list_references` rows carry `role` from schema 17 and never require it.
+`materialize_reference` with no `role` copies the reference's own, and `clear_fields=["role"]` saves
+the document with none; it keeps its schema-16 gate.
 
 **Seasons, condition and health (needs ServiceTag 1.4.0)** — `get_season`, `start_season`,
 `end_season`, `set_season_mode`, `set_maintenance_break`, `list_conditions`, `record_condition`,
@@ -353,12 +362,12 @@ the new target **and** clearing the old one in the same call.
 
 ### `import_merge`
 
-Takes a local path to a `ServiceTag-data-*.zip` of format **1–16** and merges it into the phone. A
+Takes a local path to a `ServiceTag-data-*.zip` of format **1–17** and merges it into the phone. A
 format-6 archive adds the maintenance groups, the schedules and the occurrence closures, format 7 the
 references, format 8 the season activations, the conditions and the health subjects, format 9 the
 owner's own categories, format 10 each attachment's document role, format 11 each asset's warranty
 reminder lead, format 12 the service cases and their timeline entries, format 13 the loans, format
-14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance; an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
+14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance, format 17 each reference's document role (an older archive's references are compared without it); an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
 - a row whose id is not on the phone is **inserted**, with its UUID preserved exactly;

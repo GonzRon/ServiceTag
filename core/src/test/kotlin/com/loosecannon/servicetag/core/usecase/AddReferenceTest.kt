@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
@@ -18,12 +19,14 @@ import com.loosecannon.servicetag.core.testing.RecordingUnitOfWork
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
  * The one place a reference is ever created, so the one place every refusal lives (I-2). The step
  * order is the contract: structural validity (I-10), then the length cap, then the tier, then the
- * name, then the owner, then the second identity — each arm has to stay reachable.
+ * role (#91, R91-1), then the name, then the owner, then the second identity — each arm has to stay
+ * reachable.
  */
 class AddReferenceTest {
 
@@ -49,11 +52,13 @@ class AddReferenceTest {
         name: String = "Deck belt",
         description: String = "",
         confirmed: Boolean = false,
+        role: DocumentRole? = null,
     ) = AddReferenceCommand(
         uri = uri,
         displayName = name,
         description = description,
         confirmedUnknownScheme = confirmed,
+        role = role,
     )
 
     private fun refusal(result: ReferenceResult<AssetReference>): ReferenceProblem {
@@ -273,12 +278,123 @@ class AddReferenceTest {
         assertEquals(0, uow.writesEntered)
     }
 
-    /** No `kind`, no `provenance`, and no owner: the command is these four fields and no others. */
+    /** No `kind`, no `provenance`, and no owner: the command is these five fields and no others (#91 adds `role`). */
     @Test
     fun theCommandCarriesNoKindForACallerToDisagreeWith() {
         assertEquals(
-            setOf("uri", "displayName", "description", "confirmedUnknownScheme"),
+            setOf("uri", "displayName", "description", "confirmedUnknownScheme", "role"),
             AddReferenceCommand::class.java.declaredFields.map { it.name }.toSet(),
         )
+    }
+
+    // --- #91: the document role (R91-1, C10, C25) ---------------------------------------------
+
+    /** Row 19: a role on an http or https link is stored exactly as the command gave it, each of the three. */
+    @Test
+    fun aRoleOnAWebLinkIsStoredExactly() = runTest {
+        haveAsset()
+        for (role in DocumentRole.entries) {
+            for (scheme in listOf("http", "https")) {
+                val uri = "$scheme://manuals.example.invalid/water-heater/${role.name.lowercase()}"
+                val row = saved(add.run(asset, cmd(uri, name = "Example Water Heater", role = role)))
+                assertEquals(role, row.role, uri)
+                assertEquals(ReferenceKind.WEB_URL, row.kind, uri)
+                assertEquals(role, references.rows.getValue(row.id.value).role, uri)
+            }
+        }
+        assertEquals(DocumentRole.entries.size * 2, references.upserts)
+    }
+
+    /** Row 19: the shipped create — a command that names no role writes a row with none. */
+    @Test
+    fun noRoleByDefault() = runTest {
+        haveAsset()
+        val row = saved(add.run(asset, AddReferenceCommand("https://manuals.example.invalid/a", "Example Water Heater")))
+        assertNull(row.role)
+        assertNull(references.rows.getValue(row.id.value).role)
+    }
+
+    /** Row 20: a role on a note link is refused, and nothing is generated or written (I-8). */
+    @Test
+    fun aRoleOnANoteLinkIsRefusedAndNothingIsWritten() = runTest {
+        haveAsset()
+        for (role in DocumentRole.entries) {
+            assertEquals(
+                ReferenceProblem.RoleNotAllowed,
+                refusal(add.run(asset, cmd("joplin://x-callback-url/openNote?id=example", role = role))),
+            )
+        }
+        assertEquals(0, references.upserts)
+        assertEquals(0, uow.writesEntered)
+        assertEquals(0, seq, "no id was minted")
+        assertTrue(references.rows.isEmpty())
+    }
+
+    /** Row 20: an unknown scheme the person confirmed classifies `OTHER`, so a role on it is refused after the confirmation. */
+    @Test
+    fun aRoleOnAConfirmedUnknownSchemeIsRefused() = runTest {
+        haveAsset()
+        val uri = "zotero://select/items/0"
+        assertEquals(
+            ReferenceProblem.UnknownSchemeNeedsConfirmation("zotero"),
+            refusal(add.run(asset, cmd(uri, role = DocumentRole.USER_MANUAL))),
+        )
+        assertEquals(
+            ReferenceProblem.RoleNotAllowed,
+            refusal(add.run(asset, cmd(uri, confirmed = true, role = DocumentRole.USER_MANUAL))),
+        )
+        assertEquals(0, references.upserts)
+        assertEquals(0, uow.writesEntered)
+    }
+
+    /** Row 21: the tier answers before the role, so a blocked scheme carrying a role is still `SchemeBlocked`. */
+    @Test
+    fun aBlockedSchemeWithARoleIsSchemeBlocked() = runTest {
+        haveAsset()
+        for (uri in blocked) {
+            assertEquals(
+                ReferenceProblem.SchemeBlocked,
+                refusal(add.run(asset, cmd(uri, role = DocumentRole.SERVICE_MANUAL))),
+                uri,
+            )
+        }
+        assertEquals(0, references.upserts)
+    }
+
+    /** Row 21: the role answers before the name — structural, length, tier, role, name, owner, identity. */
+    @Test
+    fun aBlankNameWithARoleOnANoteLinkIsRoleNotAllowed() = runTest {
+        haveAsset()
+        assertEquals(
+            ReferenceProblem.RoleNotAllowed,
+            refusal(
+                add.run(
+                    asset,
+                    cmd("joplin://x-callback-url/openNote?id=example", name = "   ", role = DocumentRole.USER_MANUAL),
+                ),
+            ),
+        )
+        assertEquals(0, references.upserts)
+    }
+
+    /**
+     * Row 22, C25 (AC3, AC7): no role is ever produced from a name, a description or a URI. Each of
+     * these says "manual" or "invoice" somewhere and names no role, so each row is stored with none.
+     */
+    @Test
+    fun noRoleIsEverInferred() = runTest {
+        haveAsset()
+        val names = listOf("User manual", "Service manual", "manual", "Invoice", "Purchase receipt")
+        val commands = names.mapIndexed { i, name ->
+            cmd("https://manuals.example.invalid/water-heater/$i", name = name)
+        } + names.mapIndexed { i, text ->
+            cmd("https://manuals.example.invalid/water-heater/d$i", name = "Example Water Heater", description = text)
+        } + cmd("https://manuals.example.invalid/water-heater/user-manual.pdf", name = "Example Water Heater")
+        for (command in commands) {
+            assertNull(command.role)
+            val row = saved(add.run(asset, command))
+            assertNull(row.role, "${row.displayName} / ${row.description} / ${row.uri}")
+            assertNull(references.rows.getValue(row.id.value).role)
+        }
     }
 }

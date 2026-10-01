@@ -13,9 +13,12 @@ import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentStorage
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.StoreState
+import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_DESCRIPTION_CHARS
 import com.loosecannon.servicetag.core.references.MAX_REFERENCE_NAME_CHARS
+import com.loosecannon.servicetag.core.references.ReferenceKinds
 import com.loosecannon.servicetag.core.references.ReferenceText
+import com.loosecannon.servicetag.core.references.takesRole
 import com.loosecannon.servicetag.core.transfer.AssetTransferredOut
 import com.loosecannon.servicetag.core.transfer.TransferPack
 import com.loosecannon.servicetag.core.usecase.AddAttachment
@@ -113,8 +116,16 @@ internal data class ShareIntakeState(
     val name: String = "",
     val description: String = "",
     val kind: AttachmentKind = AttachmentKind.OTHER,
-    /** #67 (R67-9): the chosen document role, on a byte share only; null is the no-role chip. */
+    /**
+     * #67 (R67-9), #91 (R91-4): the chosen document role, on a byte share or a web-link share only
+     * ([roleOffered]); null is the no-role chip.
+     */
     val role: DocumentRole? = null,
+    /**
+     * #91 (R91-4): whether the shared link is one that takes a role — decided once, when the share is
+     * classified, by the shipped scheme classifier and nothing else. False off the link path.
+     */
+    val linkTakesRole: Boolean = false,
     val storeReady: Boolean = true,
     /** A ratified sentence drawn beside the form; the person can still act. */
     val message: String? = null,
@@ -131,6 +142,9 @@ internal data class ShareIntakeState(
 ) {
     /** A byte share on a phone with no attachment folder: the sentence, and Save disabled. */
     val noFolder: Boolean get() = path == IntakePath.BYTES && !storeReady
+
+    /** #67 (R67-9), #91 (R91-4): the Role control is offered on a byte share and on a web-link share. */
+    val roleOffered: Boolean get() = path == IntakePath.BYTES || (path == IntakePath.LINK && linkTakesRole)
 
     /**
      * **Disabling Save is the intake behaviour** (spec §7), which is why no blank-name sentence is
@@ -176,6 +190,8 @@ internal class ShareIntakeViewModel(
     private val heldIds: suspend () -> Set<AssetId> = { emptySet() },
     /** #77 (C14 (0)): where a shared Transfer Pack is copied; null leaves every ZIP on the byte form. */
     private val packInbox: TransferPackInbox? = null,
+    /** #91 (C-4): reads a shared link's scheme for [ShareIntakeState.linkTakesRole]; stateless. */
+    private val linkPolicy: LinkLaunchPolicy = LinkLaunchPolicy(),
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ShareIntakeState())
@@ -264,11 +280,12 @@ internal class ShareIntakeViewModel(
     fun kind(value: AttachmentKind) = _state.update { it.copy(kind = value, message = null) }
 
     /**
-     * #67 (R67-9): a role is taken on a byte share only. A reference has no column for one and a
-     * note is a journal entry, so on those paths the choice is not recorded at all.
+     * #67 (R67-9), amended by #91 (R91-4): a role is taken where it is offered — a byte share or a
+     * web-link share. A note link or an unfamiliar scheme cannot carry one and a note is a journal
+     * entry, so on those paths the choice is not recorded at all.
      */
     fun role(value: DocumentRole?) = _state.update {
-        if (it.path == IntakePath.BYTES) it.copy(role = value, message = null) else it
+        if (it.roleOffered) it.copy(role = value, message = null) else it
     }
 
     /** Cancel, back and Close are the same fact: nothing was written and nothing will be. */
@@ -320,6 +337,7 @@ internal class ShareIntakeViewModel(
                     displayName = current.name,
                     description = current.description,
                     confirmedUnknownScheme = confirmedUnknownScheme,
+                    role = current.role.takeIf { current.roleOffered },
                 ),
             )
         } catch (_: AssetTransferredOut) {
@@ -340,6 +358,8 @@ internal class ShareIntakeViewModel(
                 ReferenceProblem.OwnerMissing,
                 ReferenceProblem.NoSuchReference,
                 ReferenceProblem.Unchanged,
+                // #91 (R91-14): the intake never sends a role a link cannot take.
+                ReferenceProblem.RoleNotAllowed,
                 -> ownerGone()
             }
         }
@@ -471,7 +491,10 @@ internal class ShareIntakeViewModel(
             is ShareContent.Link -> ShareIntakeState(
                 path = IntakePath.LINK,
                 received = content.uri,
+                // The suggested name feeds the name only, never the role (#91, C25).
                 name = content.suggestedName.orEmpty().take(MAX_REFERENCE_NAME_CHARS),
+                // #91 (R91-4): the kind `AddReference` will derive, asked whether it takes a role.
+                linkTakesRole = ReferenceKinds.inferFrom(linkPolicy.schemeOf(content.uri.trim())).takesRole,
             )
             is ShareContent.Bytes -> ShareIntakeState(
                 path = IntakePath.BYTES,

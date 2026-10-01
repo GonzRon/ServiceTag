@@ -15,6 +15,7 @@ import com.loosecannon.servicetag.core.references.MAX_REFERENCE_URI_CHARS
 import com.loosecannon.servicetag.core.references.ReferenceKinds
 import com.loosecannon.servicetag.core.references.ReferenceText
 import com.loosecannon.servicetag.core.references.ReferenceUris
+import com.loosecannon.servicetag.core.references.accepts
 
 /**
  * The only way a reference is ever created — a share, the "Add link" sheet, the loopback API and
@@ -22,9 +23,14 @@ import com.loosecannon.servicetag.core.references.ReferenceUris
  * carried its own copy of the scheme rule could be the one that forgot it.
  *
  * The step order is the contract, because each refusal has to stay reachable: structural validity
- * (I-10), the length cap, the tier, the name, the owner, then the second identity `(assetId, uri)`.
- * Nothing is generated or written before the last of them answers, so a refusal leaves no row, no
- * id and no transaction behind (I-8).
+ * (I-10), the length cap, the tier, the role, the name, the owner, then the second identity
+ * `(assetId, uri)`. Nothing is generated or written before the last of them answers, so a refusal
+ * leaves no row, no id and no transaction behind (I-8).
+ *
+ * The role step (#91, R91-1) asks the kind the scheme implies whether it takes the command's role
+ * — only a web link does — so a confirmed unknown scheme, which is `OTHER`, is refused a role after
+ * the confirmation. The row stores [AddReferenceCommand.role] exactly; nothing here produces a role
+ * from the URI, the name or the description (C25).
  *
  * [AddReferenceCommand.confirmedUnknownScheme] is set only by a UI that asked the person about an
  * unfamiliar scheme by name. The API and MCP never set it (plan §18.2), so over the wire an unknown
@@ -56,6 +62,8 @@ class AddReference(
             }
             LinkDecision.Allowed -> Unit
         }
+        val kind = ReferenceKinds.inferFrom(scheme)
+        if (!kind.accepts(cmd.role)) return ReferenceResult.Refused(ReferenceProblem.RoleNotAllowed)
         val displayName = ReferenceText.sanitiseName(cmd.displayName)
         if (displayName.isEmpty()) return ReferenceResult.Refused(ReferenceProblem.BlankName)
         if (assets.get(assetId) == null) {
@@ -69,7 +77,7 @@ class AddReference(
         val row = AssetReference(
             id = ReferenceId(ids.newId()),
             assetId = assetId,
-            kind = ReferenceKinds.inferFrom(scheme),
+            kind = kind,
             // Trimmed and nothing else: never re-encoded, never lowercased, never given a scheme
             // it did not arrive with (I-1). A query and a fragment survive byte for byte.
             uri = uri,
@@ -78,6 +86,7 @@ class AddReference(
             scheme = scheme,
             createdAt = now,
             updatedAt = now,
+            role = cmd.role,
         )
         uow.write { references.upsert(row) }
         return ReferenceResult.Ok(row)

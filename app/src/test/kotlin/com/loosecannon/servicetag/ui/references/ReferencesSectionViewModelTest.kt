@@ -9,12 +9,14 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentSource
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.fetch.HopPolicy
 import com.loosecannon.servicetag.core.fetch.HostResolver
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.references.takesRole
 import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.AddReferenceCommand
@@ -145,7 +147,7 @@ class ReferencesSectionViewModelTest {
     }
 
     /** A row written straight to the table, the way a restore or a merge puts one there. */
-    private suspend fun stored(id: String, uri: String, kind: ReferenceKind, name: String) {
+    private suspend fun stored(id: String, uri: String, kind: ReferenceKind, name: String, role: DocumentRole? = null) {
         graph.uow.write {
             graph.references.upsert(
                 AssetReference(
@@ -158,6 +160,7 @@ class ReferencesSectionViewModelTest {
                     scheme = uri.substringBefore(':'),
                     createdAt = 10L,
                     updatedAt = 10L,
+                    role = role,
                 ),
             )
         }
@@ -256,6 +259,92 @@ class ReferencesSectionViewModelTest {
     }
 
     /**
+     * Row 29 (#91, C15): each row carries its stored role, so the edit sheet's `role = row.role`
+     * keeps it on a rename; a row with none carries null. Nothing draws it until B3b.
+     */
+    @Test fun aRowCarriesItsStoredRole() = runTest {
+        hotTub()
+        stored("r1", MANUAL, ReferenceKind.WEB_URL, "Example Pool Pump manual", DocumentRole.SERVICE_MANUAL)
+        stored("r2", "https://manuals.example.invalid/pool-pump/parts.pdf", ReferenceKind.WEB_URL, "Example parts list")
+        stored("r3", "joplin://x-callback-url/openNote?id=example", ReferenceKind.NOTE_LINK, "Example note")
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+
+        val rows = vm.state.first { it.rows.size == 3 }.rows
+
+        assertEquals(
+            mapOf("r1" to DocumentRole.SERVICE_MANUAL, "r2" to null, "r3" to null),
+            rows.associate { it.id to it.role },
+        )
+        clearModels()
+    }
+
+    /** Row 43 (#91, C23): Add link's role reaches `AddReferenceCommand`, and so the stored row. */
+    @Test fun addLinkPassesTheRole() = runTest {
+        hotTub()
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+
+        vm.addLink(MANUAL, "Example Pool Pump manual", "", DocumentRole.USER_MANUAL)
+        val row = vm.state.first { it.rows.isNotEmpty() }.rows.single()
+
+        assertEquals(DocumentRole.USER_MANUAL, row.role)
+        assertEquals(DocumentRole.USER_MANUAL, graph.references.get(ReferenceId(row.id))!!.role)
+        clearModels()
+    }
+
+    /** Row 43 (#91, C22): the edit sheet's command carries its role through `save` — set, then cleared. */
+    @Test fun saveCarriesTheCommandsRole() = runTest {
+        hotTub()
+        stored("r1", MANUAL, ReferenceKind.WEB_URL, "Example Pool Pump manual")
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.rows.isNotEmpty() }
+
+        vm.save("r1", UpdateReferenceCommand("Example Pool Pump manual", "", role = DocumentRole.SERVICE_MANUAL))
+        vm.state.first { it.rows.single().role == DocumentRole.SERVICE_MANUAL }
+        assertEquals(DocumentRole.SERVICE_MANUAL, graph.references.get(ReferenceId("r1"))!!.role)
+
+        vm.save("r1", UpdateReferenceCommand("Example Pool Pump manual", "", role = null))
+        vm.state.first { it.rows.single().role == null }
+        assertNull(graph.references.get(ReferenceId("r1"))!!.role)
+        clearModels()
+    }
+
+    /**
+     * Row 43 (#91, C23, C-4): Add link's chips follow exactly the kind `AddReference` derives from
+     * the same text. Each text is saved through the use case and its row's kind asked the one
+     * question, so the view model's answer and the stored row's can never disagree.
+     */
+    @Test fun roleOfferedIsTheKindAddReferenceWouldDerive() = runTest {
+        hotTub()
+        val vm = model()
+        val expected = linkedMapOf(
+            "https://manuals.example.invalid/water-heater/manual.pdf" to true,
+            "http://manuals.example.invalid/water-heater" to true,
+            "  HTTPS://manuals.example.invalid/water-heater/service.pdf" to true,
+            "joplin://x-callback-url/openNote?id=example" to false,
+            "obsidian://open?vault=example" to false,
+            "zotero://select/items/0" to false,
+            "httpx://manuals.example.invalid/water-heater" to false,
+        )
+
+        expected.forEach { (text, offered) ->
+            assertEquals("roleOffered('$text')", offered, vm.roleOffered(text))
+            val saved = addReference.run(
+                assetId,
+                AddReferenceCommand(uri = text, displayName = "Example link", confirmedUnknownScheme = true),
+            )
+            assertEquals(
+                "the kind AddReference derived for '$text'",
+                offered,
+                (saved as ReferenceResult.Ok).value.kind.takesRole,
+            )
+        }
+        clearModels()
+    }
+
+    /**
      * I-3, asserted on the shape rather than on a drawing of it: a reference has no bytes, so the
      * row state may not grow a locator, a size, a sha256, a presence flag or a thumbnail. Copying
      * `AttachmentRowState` wholesale is exactly how it would.
@@ -267,7 +356,7 @@ class ReferencesSectionViewModelTest {
             .toSet()
 
         assertEquals(
-            setOf("id", "displayName", "description", "uri", "kind", "launchable", "materializable", "savedAsDocument"),
+            setOf("id", "displayName", "description", "uri", "kind", "launchable", "materializable", "savedAsDocument", "role"),
             fields,
         )
     }
@@ -303,7 +392,7 @@ class ReferencesSectionViewModelTest {
         val vm = model()
         backgroundScope.launch { vm.state.collect() }
 
-        vm.addLink("https://example-mower.invalid/manual", "Deck manual", "Section 4")
+        vm.addLink("https://example-mower.invalid/manual", "Deck manual", "Section 4", role = null)
         val inApp = vm.state.first { it.rows.isNotEmpty() }.rows.single()
 
         // The share path, called directly: the same command object, the same use case.
@@ -347,7 +436,7 @@ class ReferencesSectionViewModelTest {
         val vm = model()
         backgroundScope.launch { vm.state.collect() }
 
-        vm.addLink("zotero://select/items/0", "Pump teardown", "")
+        vm.addLink("zotero://select/items/0", "Pump teardown", "", role = null)
         assertEquals("zotero", vm.state.first { it.pendingConfirmation != null }.pendingConfirmation)
         assertTrue(graph.references.forAsset(assetId).isEmpty())
 
@@ -367,7 +456,7 @@ class ReferencesSectionViewModelTest {
         backgroundScope.launch { vm.state.collect() }
 
         val said = async(Dispatchers.Main) { vm.messages.first() }
-        vm.addLink("javascript:alert(1)", "Not happening", "")
+        vm.addLink("javascript:alert(1)", "Not happening", "", role = null)
 
         assertEquals("ServiceTag will not save that kind of link.", said.await())
         assertTrue(graph.references.forAsset(assetId).isEmpty())
@@ -381,11 +470,11 @@ class ReferencesSectionViewModelTest {
         hotTub()
         val vm = model()
         backgroundScope.launch { vm.state.collect() }
-        vm.addLink("https://example-mower.invalid/manual", "Deck manual", "")
+        vm.addLink("https://example-mower.invalid/manual", "Deck manual", "", role = null)
         vm.state.first { it.rows.size == 1 }
 
         val said = async(Dispatchers.Main) { vm.messages.first() }
-        vm.addLink("https://example-mower.invalid/manual", "Deck manual again", "")
+        vm.addLink("https://example-mower.invalid/manual", "Deck manual again", "", role = null)
 
         assertEquals("That link is already on this asset", said.await())
         assertEquals(1, graph.references.forAsset(assetId).size)
@@ -402,7 +491,7 @@ class ReferencesSectionViewModelTest {
         vm.state.first { it.rows.isNotEmpty() }
 
         val said = async(Dispatchers.Main) { vm.messages.first() }
-        vm.save("r1", UpdateReferenceCommand(displayName = "   ", description = "anything"))
+        vm.save("r1", UpdateReferenceCommand(displayName = "   ", description = "anything", role = null))
 
         assertEquals("Give the reference a name", said.await())
         assertEquals("Deck manual", graph.references.get(ReferenceId("r1"))!!.displayName)
@@ -421,7 +510,7 @@ class ReferencesSectionViewModelTest {
         backgroundScope.launch { vm.state.collect() }
         vm.state.first { it.rows.isNotEmpty() }
 
-        vm.save("r1", UpdateReferenceCommand("Deck manual (2026)", "Section 4 covers the seal"))
+        vm.save("r1", UpdateReferenceCommand("Deck manual (2026)", "Section 4 covers the seal", role = null))
         vm.state.first { it.rows.single().displayName == "Deck manual (2026)" }
 
         val after = graph.references.get(ReferenceId("r1"))!!
@@ -486,13 +575,13 @@ class ReferencesSectionViewModelTest {
 
         advanceUntilIdle()
         val beforeAdd = io.count
-        vm.addLink("https://example-mower.invalid/new", "New link", "")
+        vm.addLink("https://example-mower.invalid/new", "New link", "", role = null)
         vm.state.first { it.rows.size == 3 }
         assertTrue("an add dispatches on io", io.count > beforeAdd)
 
         advanceUntilIdle()
         val beforeEdit = io.count
-        vm.save("r1", UpdateReferenceCommand("Deck manual (2026)", ""))
+        vm.save("r1", UpdateReferenceCommand("Deck manual (2026)", "", role = null))
         vm.state.first { s -> s.rows.any { it.displayName == "Deck manual (2026)" } }
         assertTrue("an edit dispatches on io", io.count > beforeEdit)
 

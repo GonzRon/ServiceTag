@@ -182,14 +182,15 @@ class MaterializeViewModelTest {
         )
     }
 
-    /** The asset, its one web reference, and the reference's PDF served. */
-    private suspend fun poolPump(name: String = NAME, description: String = DESCRIPTION) {
+    /** The asset, its one web reference ([role] the owner gave it, none by default), and the reference's PDF served. */
+    private suspend fun poolPump(name: String = NAME, description: String = DESCRIPTION, role: DocumentRole? = null) {
         assetId = graph.createAsset.run(AssetCommand(name = "Example Pool Pump")).id
         graph.uow.write {
             graph.references.upsert(
                 AssetReference(
                     id = ReferenceId("ref-1"), assetId = assetId, kind = ReferenceKind.WEB_URL, uri = URI,
                     displayName = name, description = description, scheme = "https", createdAt = 10L, updatedAt = 10L,
+                    role = role,
                 ),
             )
         }
@@ -212,15 +213,17 @@ class MaterializeViewModelTest {
     private suspend fun rows() = graph.attachments.forAsset(assetId)
 
     @Test fun downloadsFirstThenReviews() = runTest {
-        poolPump()
+        poolPump(role = DocumentRole.SERVICE_MANUAL)
         val vm = model()
         assertEquals("the download starts at once", Downloading(HOST, 0L, null), vm.state.value)
 
         val review = vm.state.first { it is Review }
 
         assertEquals(
-            "prefill: the reference's name and description, the kind the type implies, no role",
-            Review(HOST, "PDF · ${PDF.size} B", NAME, AttachmentKind.DOCUMENT, null, DESCRIPTION, null),
+            "prefill: the reference's name, description and role (#91), the kind the type implies",
+            Review(
+                HOST, "PDF · ${PDF.size} B", NAME, AttachmentKind.DOCUMENT, DocumentRole.SERVICE_MANUAL, DESCRIPTION, null,
+            ),
             review,
         )
         assertEquals(listOf(URI), graph.documentTransport.requests)
@@ -230,18 +233,67 @@ class MaterializeViewModelTest {
     }
 
     /**
-     * The owner's designation invariant: a reference carries no role today, so the review starts with none,
-     * whatever its words say; the kind comes from the proven type, never from the text.
+     * The owner's designation invariant (#85, AC5–AC7 of #91): the review starts with exactly the reference's role,
+     * whatever its words say — none stays none, and a role stays that role, even under a name that says another;
+     * the kind comes from the proven type, never from the text.
      */
     @Test fun theReviewNeverGuessesARoleFromTheText() {
         assertEquals(
             MaterializeReview("Service manual", AttachmentKind.DOCUMENT, null, "Invoice"),
-            reviewPrefill(SourceSnapshot(URI, "Service manual", "Invoice", HOST), "application/pdf"),
+            reviewPrefill(SourceSnapshot(URI, "Service manual", "Invoice", HOST, role = null), "application/pdf"),
         )
         assertEquals(
             MaterializeReview("User manual", AttachmentKind.PHOTO, null, "Purchase invoice or receipt"),
-            reviewPrefill(SourceSnapshot(URI, "User manual", "Purchase invoice or receipt", HOST), "image/png"),
+            reviewPrefill(
+                SourceSnapshot(URI, "User manual", "Purchase invoice or receipt", HOST, role = null), "image/png",
+            ),
         )
+        assertEquals(
+            "a source role is copied exactly, never re-read from the name",
+            MaterializeReview("Service manual", AttachmentKind.DOCUMENT, DocumentRole.USER_MANUAL, "Invoice"),
+            reviewPrefill(
+                SourceSnapshot(URI, "Service manual", "Invoice", HOST, role = DocumentRole.USER_MANUAL),
+                "application/pdf",
+            ),
+        )
+    }
+
+    /**
+     * #91 row 33 (R91-9): the kind is the proven type's whatever the source role — a manual role never makes a PDF a
+     * Manual, nor a receipt role a photo a Receipt; the role and the kind stay orthogonal.
+     */
+    @Test fun theKindIsTheProvenTypesWhateverTheRole() {
+        for (role in listOf<DocumentRole?>(null) + DocumentRole.entries) {
+            val snapshot = SourceSnapshot(URI, NAME, DESCRIPTION, HOST, role = role)
+            assertEquals("a PDF with $role", AttachmentKind.DOCUMENT, reviewPrefill(snapshot, "application/pdf").kind)
+            assertEquals("a PNG with $role", AttachmentKind.PHOTO, reviewPrefill(snapshot, "image/png").kind)
+            assertEquals("the role with the PDF", role, reviewPrefill(snapshot, "application/pdf").role)
+        }
+    }
+
+    /**
+     * #91 row 31 (AC6): the copied role is only where the review starts — the owner can change it or clear it with the
+     * shipped chips before Save, and Save commits what the review holds, "No role" included.
+     */
+    @Test fun theCopiedRoleCanBeChangedOrClearedBeforeSave() = runTest {
+        poolPump(role = DocumentRole.SERVICE_MANUAL)
+        val vm = model()
+        val review = vm.state.first { it is Review } as Review
+        assertEquals("the review starts from the source role", DocumentRole.SERVICE_MANUAL, review.role)
+
+        vm.chooseRole(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT)
+        assertEquals(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT, (vm.state.value as Review).role)
+        vm.chooseRole(null)
+        assertEquals(null, (vm.state.value as Review).role)
+
+        vm.save()
+        vm.state.first { it == Done }
+
+        val row = rows().single()
+        assertEquals("No role, as the owner chose before Save", null, row.role)
+        assertEquals(AttachmentKind.DOCUMENT, row.kind)
+        assertEquals(NAME, row.displayName)
+        clearModels()
     }
 
     /** B2c/B3: `onProgress` carries the declared length, which a server can understate. */

@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.api
 
 import com.loosecannon.servicetag.core.backup.BackupCodec
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
 import com.loosecannon.servicetag.di.AppGraph
@@ -9,8 +10,13 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -21,8 +27,12 @@ private const val TOKEN = "ABCD2345"
 private const val FIRST_DAY = 1_770_000_000_000L
 private const val SECOND_DAY = FIRST_DAY + 86_400_000L
 
+/** #91 fixtures: fictional, `example.invalid` and an example note id. */
+private const val MANUAL = "https://manuals.example.invalid/water-heater/manual.pdf"
+private const val NOTE = "joplin://x-callback-url/openNote?id=example"
+
 /**
- * 1.3.0 (#43, B05) — the three `/v1` reference rows, the five codes and the `/v1/status` count,
+ * 1.3.0 (#43, B05) — the three `/v1` reference rows, the six codes (#91 adds one) and the `/v1/status` count,
  * over `FakeGraph`, on the JVM, with no socket and no emulator. `ApiRouterTest`'s shape exactly:
  * the production router, the production handlers, the production use cases and the production
  * serializers over an in-memory Room database.
@@ -98,10 +108,15 @@ class ReferenceRoutesTest {
         uri: String,
         displayName: String,
         description: String = "",
+        role: String? = null,
     ): ApiResponse = call(
         "POST",
         "/v1/references",
-        """{"assetId":"$assetId","uri":"$uri","displayName":"$displayName","description":"$description"}""",
+        if (role == null) {
+            """{"assetId":"$assetId","uri":"$uri","displayName":"$displayName","description":"$description"}"""
+        } else {
+            """{"assetId":"$assetId","uri":"$uri","displayName":"$displayName","description":"$description","role":$role}"""
+        },
     )
 
     // --- the list route ------------------------------------------------------------------------
@@ -336,11 +351,11 @@ class ReferenceRoutesTest {
         assertEquals(404, call("GET", "/v1/references/${row.id}/bytes").status)
     }
 
-    // --- the five codes ------------------------------------------------------------------------
+    // --- the six codes -------------------------------------------------------------------------
 
     /**
-     * Hazard: a code documented in `docs/api/v1.md` and never emitted. One case per code, five of
-     * them, each read off a live route.
+     * Hazard: a code documented in `docs/api/v1.md` and never emitted. One case per code, six of
+     * them (#91 adds `REFERENCE_ROLE_NOT_ALLOWED`), each read off a live route.
      *
      * Two of them carry a note. **`REFERENCE_NAME_REQUIRED`** is its own code and not
      * `REFERENCE_URI_INVALID`, which would be wrong on its face — the URI is valid, the name is
@@ -385,6 +400,11 @@ class ReferenceRoutesTest {
         val blankOnPatch = call("PATCH", "/v1/references/${row.id}", """{"displayName":"   "}""")
         assertEquals(422, blankOnPatch.status)
         assertEquals("REFERENCE_NAME_REQUIRED", blankOnPatch.error().code)
+
+        val roleOnANote = createReference(asset, NOTE, "Example note", role = "\"USER_MANUAL\"")
+        assertEquals(422, roleOnANote.status)
+        assertEquals("REFERENCE_ROLE_NOT_ALLOWED", roleOnANote.error().code)
+        assertEquals("role", roleOnANote.error().field)
     }
 
     /**
@@ -438,6 +458,7 @@ class ReferenceRoutesTest {
                 "DuplicateUri" to "REFERENCE_URI_TAKEN",
                 // Never emitted: a no-op amend is a 200 with the stored row, proved above.
                 "Unchanged" to "REFERENCE_UNCHANGED",
+                "RoleNotAllowed" to "REFERENCE_ROLE_NOT_ALLOWED",
             ),
             listOf(
                 ReferenceProblem.NoSuchReference,
@@ -449,8 +470,168 @@ class ReferenceRoutesTest {
                 ReferenceProblem.UnknownSchemeNeedsConfirmation("zotero"),
                 ReferenceProblem.DuplicateUri,
                 ReferenceProblem.Unchanged,
+                ReferenceProblem.RoleNotAllowed,
             ).associate { it::class.simpleName!! to referenceProblemCode(it) },
         )
+
+        // #91 (C2, C12): the status arm, read off the mapper itself — a body to change (422), naming
+        // the one key at fault, with G2's developer-facing message.
+        val refused = mapDomainFailure(ReferenceRefused(ReferenceProblem.RoleNotAllowed))
+        assertEquals(422, refused.status)
+        assertEquals(
+            ApiErrorDetail(
+                "REFERENCE_ROLE_NOT_ALLOWED", "a document role belongs on an http or https link", field = "role",
+            ),
+            refused.error(),
+        )
+    }
+
+    // --- #91: the document role on the reference routes (C13, C14, C15; R91-1, R91-3) -------
+
+    /** Row 26: a role on a web link is stored as given; the answer and the list both carry it. */
+    @Test fun aPostWithARoleIs201AndReadsBack() {
+        val asset = createAsset()
+        val created = createReference(asset, MANUAL, "Example Water Heater manual", role = "\"USER_MANUAL\"")
+        assertEquals(created.text(), 201, created.status)
+        val row = referenceIn(created)
+        assertEquals(DocumentRole.USER_MANUAL.name, row.role)
+        assertEquals(ReferenceKind.WEB_URL.name, row.kind)
+        assertEquals(listOf(row), referencesOn(asset))
+    }
+
+    /** Row 26: a role on a note link is the 422 naming `role`, and nothing is written. */
+    @Test fun aPostWithARoleOnANoteLinkIs422AndWritesNothing() {
+        val asset = createAsset()
+        val refused = createReference(asset, NOTE, "Example note", role = "\"SERVICE_MANUAL\"")
+        assertEquals(422, refused.status)
+        assertEquals("REFERENCE_ROLE_NOT_ALLOWED", refused.error().code)
+        assertEquals("role", refused.error().field)
+        assertEquals(emptyList<Any>(), referencesOn(asset))
+    }
+
+    /** Row 26: `role` is typed, so a name that is not a `DocumentRole` is the decoder's 400 on both verbs. */
+    @Test fun anUnknownRoleNameIs400() {
+        val asset = createAsset()
+        val refused = createReference(asset, MANUAL, "Example Water Heater manual", role = "\"OWNERS_MANUAL\"")
+        assertEquals(400, refused.status)
+        assertEquals("bad_request", refused.error().code)
+        assertEquals(emptyList<Any>(), referencesOn(asset))
+
+        val row = referenceIn(createReference(asset, MANUAL, "Example Water Heater manual"))
+        val patched = call("PATCH", "/v1/references/${row.id}", """{"role":"OWNERS_MANUAL"}""")
+        assertEquals(400, patched.status)
+        assertEquals("bad_request", patched.error().code)
+        assertEquals(listOf(row), referencesOn(asset))
+    }
+
+    /** Row 26: on a create, an explicit `null` is no role — the shipped create. */
+    @Test fun aPostWithANullRoleIsNoRole() {
+        val asset = createAsset()
+        val created = createReference(asset, MANUAL, "Example Water Heater manual", role = "null")
+        assertEquals(created.text(), 201, created.status)
+        assertNull(referenceIn(created).role)
+        assertNull(referencesOn(asset).single().role)
+    }
+
+    /** Row 27: a PATCH that does not name `role` leaves the stored one alone. */
+    @Test fun aPatchWithoutRoleLeavesItAlone() {
+        val asset = createAsset()
+        val row = referenceIn(createReference(asset, MANUAL, "Example Water Heater manual", role = "\"USER_MANUAL\""))
+        val patched = call("PATCH", "/v1/references/${row.id}", """{"displayName":"Example manual"}""")
+        assertEquals(patched.text(), 200, patched.status)
+        assertEquals("Example manual", referenceIn(patched).displayName)
+        assertEquals(DocumentRole.USER_MANUAL.name, referenceIn(patched).role)
+        assertEquals(DocumentRole.USER_MANUAL.name, referencesOn(asset).single().role)
+    }
+
+    /** Row 27: on a PATCH, `role: null` is a value — it clears — while the name and description it does not name stay. */
+    @Test fun aPatchWithANullRoleClearsIt() {
+        val asset = createAsset()
+        val row = referenceIn(
+            createReference(asset, MANUAL, "Example Water Heater manual", "the PDF", role = "\"USER_MANUAL\""),
+        )
+        graph.now = SECOND_DAY
+        val patched = call("PATCH", "/v1/references/${row.id}", """{"role":null}""")
+        assertEquals(patched.text(), 200, patched.status)
+        val after = referenceIn(patched)
+        assertNull(after.role)
+        assertEquals("Example Water Heater manual", after.displayName)
+        assertEquals("the PDF", after.description)
+        assertEquals(SECOND_DAY, after.updatedAt)
+        assertNull(referencesOn(asset).single().role)
+    }
+
+    /** Row 27: a name sets the role, and moves `updatedAt`. */
+    @Test fun aPatchWithARoleSetsIt() {
+        val asset = createAsset()
+        val row = referenceIn(createReference(asset, MANUAL, "Example Water Heater manual"))
+        graph.now = SECOND_DAY
+        val patched = call("PATCH", "/v1/references/${row.id}", """{"role":"PURCHASE_INVOICE_OR_RECEIPT"}""")
+        assertEquals(patched.text(), 200, patched.status)
+        assertEquals(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT.name, referenceIn(patched).role)
+        assertEquals(SECOND_DAY, referenceIn(patched).updatedAt)
+        assertEquals(DocumentRole.PURCHASE_INVOICE_OR_RECEIPT.name, referencesOn(asset).single().role)
+    }
+
+    /** Row 27: a role on a note row is the 422 naming `role`, and the row is untouched. */
+    @Test fun aRoleOnANoteRowIs422() {
+        val asset = createAsset()
+        val row = referenceIn(createReference(asset, NOTE, "Example note"))
+        val refused = call("PATCH", "/v1/references/${row.id}", """{"displayName":"Renamed","role":"USER_MANUAL"}""")
+        assertEquals(422, refused.status)
+        assertEquals("REFERENCE_ROLE_NOT_ALLOWED", refused.error().code)
+        assertEquals("role", refused.error().field)
+        assertEquals(listOf(row), referencesOn(asset))
+    }
+
+    /** Row 27: the stored role sent back alone is the no-op 200 with the stored row; `updatedAt` holds. */
+    @Test fun aRoleOnlyNoOpIs200TheStoredRowAndWritesNothing() {
+        val asset = createAsset()
+        val row = referenceIn(createReference(asset, MANUAL, "Example Water Heater manual", role = "\"SERVICE_MANUAL\""))
+        graph.now = SECOND_DAY
+        val again = call("PATCH", "/v1/references/${row.id}", """{"role":"SERVICE_MANUAL"}""")
+        assertEquals(again.text(), 200, again.status)
+        assertEquals(row, referenceIn(again))
+        assertEquals(FIRST_DAY, referencesOn(asset).single().updatedAt)
+    }
+
+    /**
+     * Fix round 1 (review MAJOR-1): a PATCH body with a key and no value is the shipped 400
+     * `bad_request` — never the 500 a raw map read would throw — and nothing is read or written.
+     */
+    @Test fun aMalformedPatchBodyIsStillA400() {
+        val asset = createAsset()
+        val row = referenceIn(createReference(asset, MANUAL, "Example Water Heater manual", role = "\"USER_MANUAL\""))
+        graph.now = SECOND_DAY
+        // Re-review R-1: the lenient typed decoder takes a missing comma; the presence read must still be a 400.
+        val missingComma = listOf(
+            """{"displayName":"a" "description":"b"}""",
+            """{"displayName":"Example manual" "role":"USER_MANUAL"}""",
+            """{"role":null "displayName":"a"}""",
+        )
+        for (body in listOf("""{"role":}""", """{"displayName": }""") + missingComma) {
+            val refused = call("PATCH", "/v1/references/${row.id}", body)
+            assertEquals(body + " " + refused.text(), 400, refused.status)
+            assertEquals(body, "bad_request", refused.error().code)
+        }
+        assertEquals(listOf(row), referencesOn(asset))
+        assertEquals(FIRST_DAY, referencesOn(asset).single().updatedAt)
+    }
+
+    /** Row 28: every listed row carries the `role` key — a name, or an explicit `null` when it has none. */
+    @Test fun theListCarriesRoleAndNullWhenNone() {
+        val asset = createAsset()
+        createReference(asset, MANUAL, "Alpha manual", role = "\"USER_MANUAL\"")
+        createReference(asset, "https://manuals.example.invalid/water-heater/parts", "Beta parts")
+        createReference(asset, NOTE, "Gamma note")
+
+        val rows = ApiJson.parseToJsonElement(call("GET", "/v1/assets/$asset/references").text())
+            .jsonObject.getValue("references").jsonArray.map { it.jsonObject }
+        assertEquals(3, rows.size)
+        assertTrue(rows.all { "role" in it })
+        assertEquals("USER_MANUAL", rows[0].getValue("role").jsonPrimitive.content)
+        assertEquals(JsonNull, rows[1].getValue("role"))
+        assertEquals(JsonNull, rows[2].getValue("role"))
     }
 
     // --- status and the archive ------------------------------------------------------------
@@ -545,7 +726,8 @@ class ReferenceRoutesTest {
         // range 1–14 — with no route, so the sub-resources stayed twenty — and #86's format 15 made the report
         // twenty tables, the range 1–15 and its succession read the twenty-first, and #85's format 16
         // moved the range to 1–16 (no route, no table); #92's attachment list and the replace offer, plan and apply
-        // made the sub-resources twenty-five (no table). These pins moved with the document.
+        // made the sub-resources twenty-five (no table), and #91's format 17 moved the range to 1–17 (no route,
+        // no table). These pins moved with the document.
         assertFalse(
             "the merge report is twenty tables now",
             listOf("eleven", "fourteen", "fifteen", "seventeen", "eighteen", "nineteen").any { "$it tables" in text },
@@ -553,17 +735,19 @@ class ReferenceRoutesTest {
         assertTrue("the merge report must say twenty tables", "twenty tables" in text)
         // The bare string, both sites: the document spells the emphasis two ways, and a pattern
         // pinned to one asterisk placement would leave the other stale and still report clean.
-        assertFalse("the import endpoints read format 1–16 now", "1–7" in text || "1–8" in text || "1–9" in text)
-        // "1–10" … "1–14" only in their two emphasis spellings, because a bare "1–10" is also the
+        assertFalse("the import endpoints read format 1–17 now", "1–7" in text || "1–8" in text || "1–9" in text)
+        // "1–10" … "1–16" only in their two emphasis spellings, because a bare "1–10" is also the
         // health weight's range.
         assertFalse(
-            "the import endpoints read format 1–16 now",
-            listOf("1–10", "1–11", "1–12", "1–13", "1–14", "1–15").any { "format **$it**" in text || "**format $it**" in text },
+            "the import endpoints read format 1–17 now",
+            listOf("1–10", "1–11", "1–12", "1–13", "1–14", "1–15", "1–16").any {
+                "format **$it**" in text || "**format $it**" in text
+            },
         )
         // Both emphasis spellings.
         assertTrue(
-            "the import endpoints must say 1–16",
-            "format **1–16**" in text && "**format 1–16**" in text,
+            "the import endpoints must say 1–17",
+            "format **1–17**" in text && "**format 1–17**" in text,
         )
 
         assertFalse(
@@ -599,11 +783,19 @@ class ReferenceRoutesTest {
             """^\| 422 \| `REFERENCE_URI_INVALID` \|""",
             """^\| 422 \| `REFERENCE_SCHEME_BLOCKED` \|""",
             """^\| 409 \| `REFERENCE_URI_TAKEN` \|""",
+            // #91 (C2, C-3a): the role refusal, in the table's own `| status | code | when |` shape.
+            """^\| 422 \| `REFERENCE_ROLE_NOT_ALLOWED` \|""",
         )) {
             assertTrue(
                 "docs/api/v1.md is missing a row matching $row",
                 Regex(row, RegexOption.MULTILINE).containsMatchIn(text),
             )
         }
+        // The table has no `field` column, so the role row's "when" cell names the one key it answers about.
+        assertTrue(
+            "the REFERENCE_ROLE_NOT_ALLOWED row must name `field` `role`",
+            Regex("""^\| 422 \| `REFERENCE_ROLE_NOT_ALLOWED` \|.*`field` `role`""", RegexOption.MULTILINE)
+                .containsMatchIn(text),
+        )
     }
 }

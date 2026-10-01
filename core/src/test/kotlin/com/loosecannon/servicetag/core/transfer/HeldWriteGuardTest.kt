@@ -409,7 +409,7 @@ class HeldWriteGuardTest {
                     .run(heater, AddReferenceCommand("https://example.com/parts", "Example parts page"))
             },
             "UpdateReference" to {
-                UpdateReference(references, uow, clock).run(ReferenceId("r1"), UpdateReferenceCommand("Example page", ""))
+                UpdateReference(references, uow, clock).run(ReferenceId("r1"), UpdateReferenceCommand("Example page", "", role = null))
             },
             "RemoveReference" to { RemoveReference(references, uow).run(ReferenceId("r1")) },
         )

@@ -143,9 +143,9 @@ def test_the_signatures_are_c27s() -> None:
         "asset_id", "file_path", "display_name", "mime_type", "kind", "role", "captured_on", "notes",
         "operation_key",
     ]
-    # R92-3: ids only, never a URL.
+    # R92-3: ids only, never a URL. #91 (R91-2): `clear_fields` clears the copied role.
     assert names(server_module.materialize_reference) == [
-        "asset_id", "reference_id", "display_name", "kind", "role", "notes",
+        "asset_id", "reference_id", "display_name", "kind", "role", "notes", "clear_fields",
     ]
 
 
@@ -609,6 +609,46 @@ def test_a_save_posts_the_given_keys_and_echoes_host_type_and_size(with_referenc
 
     server_module.materialize_reference(asset_id=ASSET, reference_id="r1")
     assert json.loads(with_reference.last().body) == {}
+
+
+def test_clearing_the_role_sends_an_explicit_null_and_a_schema_16_phone_takes_both_bodies(with_reference) -> None:
+    """#91 (R91-2): with no `role` key the phone copies the source reference's role; `clear_fields=["role"]` is
+    the explicit `"role": null`, no role whatever the reference carries. The gate stays 16 (R91-10): a schema-16
+    phone takes both bodies, since its references carry no role either way."""
+    saved = attachment_row(id="att-8", sourceUri=LINK)
+    with_reference.reply("POST", "/v1/references/r1/materialize", 201, {"attachment": saved})
+
+    assert server_module.materialize_reference(asset_id=ASSET, reference_id="r1", clear_fields=["role"])[
+        "decision"
+    ] == "CREATED"
+    assert json.loads(with_reference.last().body) == {"role": None}
+
+    server_module.materialize_reference(asset_id=ASSET, reference_id="r1", role=None, clear_fields=None)
+    assert json.loads(with_reference.last().body) == {}
+    assert [r.path for r in with_reference.requests if r.method == "POST"] == ["/v1/references/r1/materialize"] * 2
+    assert ("GET", "/v1/status") in paths(with_reference)
+
+
+def test_materialize_clears_only_the_role_and_never_a_role_it_was_also_given(with_reference) -> None:
+    """The shipped `clear_fields` rules, before anything is read or sent: the name, kind and notes still take the
+    prefill when absent and have no clear, and a role both given and cleared is two instructions."""
+    for clear, given in (
+        (["display_name"], {}),
+        (["kind"], {}),
+        (["notes"], {}),
+        (["role"], {"role": "USER_MANUAL"}),
+    ):
+        with pytest.raises(ToolError, match="clear_fields"):
+            server_module.materialize_reference(asset_id=ASSET, reference_id="r1", clear_fields=clear, **given)
+    assert with_reference.requests == []
+
+
+def test_the_materialize_docstring_says_an_absent_role_is_the_references_own() -> None:
+    """C18: limit 7's new meaning, said where the caller reads it — absent copies, `clear_fields` clears."""
+    doc = " ".join(inspect.getdoc(server_module.materialize_reference).split())
+    assert "the reference's own role (none before schema 17)" in doc
+    assert 'clear_fields=["role"]' in doc and '"role": null' in doc
+    assert "no role and the reference's description" not in doc
 
 
 def test_already_held_is_IDENTICAL_naming_the_row(with_reference) -> None:

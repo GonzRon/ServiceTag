@@ -408,12 +408,46 @@ class ShareIntakeViewModelTest {
     }
 
     /**
-     * #67, C7 (R67-9): a link has no role — the reference model has no column for one, so the
-     * choice is not taken and the save writes a reference and nothing else. A note is the same.
+     * #91, C21 (R91-4, amending #67's R67-9): a web-link share offers the Role control, and the role
+     * picked there reaches `AddReferenceCommand.role` and lands on the one reference the save writes.
      */
-    @Test fun aLinkShareHasNoRole() = runTest(scheduler) {
+    @Test fun aWebLinkShareCarriesTheChosenRole() = runTest(scheduler) {
         val id = mower()
         val vm = model(link(manualUrl))
+
+        vm.choose(id)
+        vm.role(DocumentRole.USER_MANUAL)
+        assertEquals(DocumentRole.USER_MANUAL, vm.state.value.role)
+        vm.saveAndSettle()
+
+        assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
+        assertEquals(DocumentRole.USER_MANUAL, graph.references.forAsset(assetId).single().role)
+        assertEquals(0, attachments())
+    }
+
+    /** #91, C21 (R91-4): an http or https share is offered the Role control on "No role". */
+    @Test fun aWebLinkShareStartsWithNoRole() = runTest(scheduler) {
+        mower()
+        val https = model(link(manualUrl)).state.value
+        val http = model(link("http://example-mower.invalid/xt1/parts")).state.value
+
+        listOf(https, http).forEach { state ->
+            assertTrue(state.linkTakesRole)
+            assertTrue(state.roleOffered)
+            assertNull(state.role)
+        }
+    }
+
+    /**
+     * #91, C21 (R91-4): only a web link takes a role, so a note link is offered no Role control,
+     * a pick is not recorded, and the save writes a reference with no role; an unfamiliar scheme
+     * is the same. A note share is a journal entry and takes none either.
+     */
+    @Test fun aNoteLinkShareOffersNoRoleAndRecordsNone() = runTest(scheduler) {
+        val id = mower()
+        val vm = model(link("joplin://x-callback-url/openNote?id=example"))
+        assertFalse(vm.state.value.linkTakesRole)
+        assertFalse(vm.state.value.roleOffered)
 
         vm.choose(id)
         vm.role(DocumentRole.USER_MANUAL)
@@ -421,12 +455,30 @@ class ShareIntakeViewModelTest {
         vm.saveAndSettle()
 
         assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
-        assertEquals(1, references())
+        assertNull(graph.references.forAsset(assetId).single().role)
         assertEquals(0, attachments())
 
+        assertFalse(model(link("zotero://select/items/0")).state.value.roleOffered)
+
         val note = model(ShareContent.PlainText("Replaced the drive belt, took an hour"))
+        assertFalse(note.state.value.roleOffered)
         note.role(DocumentRole.SERVICE_MANUAL)
         assertNull(note.state.value.role)
+    }
+
+    /** #91, C25: a shared page title fills the name and nothing else; the role stays "No role". */
+    @Test fun aSharedTitleNeverBecomesARole() = runTest(scheduler) {
+        val id = mower()
+        val vm = model(link(manualUrl, name = "Service manual"))
+        assertEquals("Service manual", vm.state.value.name)
+        assertNull(vm.state.value.role)
+
+        vm.choose(id)
+        vm.saveAndSettle()
+
+        val row = graph.references.forAsset(assetId).single()
+        assertEquals("Service manual", row.displayName)
+        assertNull(row.role)
     }
 
     @Test fun theTypeControlIsPrefilledFromTheDeclaredType() = runTest(scheduler) {

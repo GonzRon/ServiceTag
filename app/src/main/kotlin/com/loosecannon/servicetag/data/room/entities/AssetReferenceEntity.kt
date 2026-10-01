@@ -24,6 +24,10 @@ import androidx.room3.PrimaryKey
  * There is deliberately **no SQL `CHECK`** — Room does not model one in its schema hash, so it
  * would be invisible to migration validation — and no `provenance` column (D-21 C). The length
  * caps and the blank-name rule are the use case's, the same shape as `attachment`'s.
+ *
+ * Schema v17 (#91, C5; R91-6): `document_role` is the attachment column's name and shape — nullable
+ * `TEXT` holding a `DocumentRole` name, no CHECK and no index (nothing queries by role). A row written
+ * before #91 has none, and nothing is ever read off the kind, name or URI to fill it.
  */
 @Entity(
     tableName = "asset_reference",
@@ -50,4 +54,5 @@ data class AssetReferenceEntity(
     val scheme: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "document_role") val documentRole: String?,
 )

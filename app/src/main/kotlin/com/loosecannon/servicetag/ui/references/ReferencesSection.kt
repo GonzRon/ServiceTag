@@ -38,6 +38,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.links.NO_HANDLER_MESSAGE
+import com.loosecannon.servicetag.ui.attachments.label
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import kotlinx.coroutines.launch
@@ -133,7 +134,8 @@ fun ReferencesSection(
     }
     if (adding) {
         AddLinkSheet(
-            onSave = { uri, name, description -> model.addLink(uri, name, description) },
+            roleOffered = model::roleOffered,
+            onSave = { uri, name, description, role -> model.addLink(uri, name, description, role) },
             onDismiss = { adding = false; model.dismissUnknownScheme() },
         )
     }
@@ -197,8 +199,9 @@ internal fun ReferencesList(
 }
 
 /**
- * The name, the quiet kind label, and the description when there is one. No leading square: a
- * reference has no thumbnail and no presence to dim (I-3), so the row is text and its overflow.
+ * The name, the quiet kind label, the role when there is one (#91), and the description when there
+ * is one. No leading square: a reference has no thumbnail and no presence to dim (I-3), so the row
+ * is text and its overflow.
  */
 @Composable
 private fun ReferenceRow(
@@ -226,6 +229,8 @@ private fun ReferenceRow(
                 overflow = TextOverflow.Ellipsis,
             )
             QuietLine(row.kind.label())
+            // #91 C24 (R91-8): the role's own label on a line of its own; a row with none draws nothing.
+            if (row.role != null) QuietLine(row.role.label())
             // #85 C24 (R85-1): derived from this asset's files, never stored; the reference stays.
             if (row.savedAsDocument) QuietLine(MaterializeStrings.SAVED_AS_DOCUMENT)
             if (row.description.isNotEmpty()) {

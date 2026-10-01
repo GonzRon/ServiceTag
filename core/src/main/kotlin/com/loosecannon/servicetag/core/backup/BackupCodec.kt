@@ -28,7 +28,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
 /**
- * Backup format v15: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
+ * Backup format v17: a ZIP holding exactly two entries. This is the *data* archive; a format ≥5
  * backup set pairs it with an artifacts archive, and `backupSetId` is what ties the two together.
  *
  * ```
@@ -134,6 +134,14 @@ import kotlinx.serialization.json.JsonObject
  * (`attachmentSourceProblem`, the one home of the shape rule, on any owner), checked before the row is built. The
  * merge planner compares them like any other field, with no exception: provenance is only ever set on a new id.
  *
+ * **Format 17 (#91, C6) adds one reference field and no upgrade.** `role` on a reference — the same `DocumentRole`
+ * an attachment carries (R91-1: a web link only), written as an explicit null when unset, last in the row, and
+ * defaulting to null, so a format ≤16 archive decodes through the same strict decode with no role. No shipped
+ * writer put a role into a format ≤16 archive, so one whose reference carries a non-null role is a hand-built file
+ * and is refused (`FIRST_REFERENCE_ROLE_FORMAT`); an unknown name and a role on a note or other link are refused
+ * at decode. The merge's rule for an archive older than 17 against a row that gained a role since is the planner's
+ * (#91, C7), mirroring the attachment role's exception.
+ *
  * Two of schema 8's tables are deliberately absent from this format, and are named nowhere in this
  * package: the schedule's **derived** due state, which the recompute function rebuilds after any
  * import, and its **device-local** notification bookkeeping. Neither is ever exported and neither is
@@ -141,7 +149,7 @@ import kotlinx.serialization.json.JsonObject
  * at read time (inv. 111).
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 16
+    const val FORMAT_VERSION = 17
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -174,6 +182,12 @@ object BackupCodec {
 
     /** The first format that can carry an attachment's source provenance (#85). */
     private const val FIRST_SOURCE_FORMAT = 16
+
+    /**
+     * The first format that can carry a reference's document role (#91). Internal for the same reason as
+     * [FIRST_ROLE_FORMAT]: an older archive's references are compared without the role.
+     */
+    internal const val FIRST_REFERENCE_ROLE_FORMAT = 17
 
     /** Lowercase hex, 64 chars — the shape every attachment row promises for its bytes. */
     private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
@@ -372,6 +386,17 @@ object BackupCodec {
             }
         }
 
+        // #91, the same rule for a reference's role: the key did not exist before format 17, so a non-null one
+        // in an older archive was put there by hand. An explicit null is accepted.
+        if (manifest.formatVersion < FIRST_REFERENCE_ROLE_FORMAT) {
+            data.assetReferences.firstOrNull { it.role != null }?.let { tagged ->
+                throw BackupCorrupt(
+                    "assetReferences: a format ${manifest.formatVersion} archive cannot carry a document role " +
+                        "(reference ${tagged.id})",
+                )
+            }
+        }
+
         // #79, the same rule for the warranty reminder's lead: the key did not exist before format 11,
         // so a non-null one in an older archive was put there by hand. An explicit null is accepted.
         if (manifest.formatVersion < FIRST_LEAD_FORMAT) {
@@ -451,7 +476,7 @@ object BackupCodec {
     }
 
     /**
-     * The version dispatch: formats 8 to 16 decode strictly as they stand; formats 1–7 are rewritten as a
+     * The version dispatch: formats 8 to 17 decode strictly as they stand; formats 1–7 are rewritten as a
      * tree by [LegacyArchive] first and then go through the very same strict decode.
      * `SerializationException` is an `IllegalArgumentException`, and so is the malformed-number
      * failure a tree decode can raise, so one catch covers both.

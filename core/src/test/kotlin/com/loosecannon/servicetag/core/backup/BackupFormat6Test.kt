@@ -355,7 +355,7 @@ class BackupFormat6Test {
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(unreadable)) }
 
         // What a 1.1.x build sees: 14 is greater than the 5 it supported, so its gate fires too.
-        assertEquals(16, BackupCodec.FORMAT_VERSION)
+        assertEquals(17, BackupCodec.FORMAT_VERSION)
         assertTrue(BackupCodec.FORMAT_VERSION > LAST_1_1_X_FORMAT)
     }
 

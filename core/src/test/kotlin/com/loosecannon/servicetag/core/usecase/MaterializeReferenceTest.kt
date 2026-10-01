@@ -85,10 +85,11 @@ class MaterializeReferenceTest {
         uri: String = manualUri,
         kind: ReferenceKind = ReferenceKind.WEB_URL,
         name: String = "Example Pool Pump manual",
+        role: DocumentRole? = null,
     ) = AssetReference(
         id = ReferenceId(id), assetId = assetId, kind = kind, uri = uri, displayName = name,
         description = "Installation and care", scheme = uri.substringBefore(':').lowercase(),
-        createdAt = 1L, updatedAt = 1L,
+        createdAt = 1L, updatedAt = 1L, role = role,
     )
 
     private fun review(
@@ -328,7 +329,9 @@ class MaterializeReferenceTest {
         val ready = ready()
         assertEquals(pump, ready.assetId)
         assertEquals(
-            SourceSnapshot(manualUri, "Example Pool Pump manual", "Installation and care", "manuals.example.invalid"),
+            SourceSnapshot(
+                manualUri, "Example Pool Pump manual", "Installation and care", "manuals.example.invalid", role = null,
+            ),
             ready.snapshot,
         )
         assertEquals(7_500L, ready.retrievedAt)
@@ -349,6 +352,34 @@ class MaterializeReferenceTest {
         assertEquals(expected, row)
         assertEquals(listOf(expected), rows.forAsset(pump))
         assertContentEquals(pdf, store.files.getValue("assets/a1/att-1.pdf"))
+    }
+
+    /**
+     * #91 row 30 (C16, R91-2): `prepare` snapshots the reference's role exactly — each of the three, and none — so the
+     * review can start from it. Nothing else decides it: the name says "manual" on every one of them.
+     */
+    @Test
+    fun theSnapshotCarriesTheReferencesRole() = runTest {
+        val roles = listOf<DocumentRole?>(null) + DocumentRole.entries
+        val refs = roles.mapIndexed { i, role ->
+            reference("ref-$i", uri = "https://manuals.example.invalid/pool-pump/manual-$i.pdf", role = role)
+        }
+        seed(*refs.toTypedArray())
+        refs.forEach { transport.serve(it.uri, pdf, "application/pdf") }
+
+        for ((i, role) in roles.withIndex()) {
+            val ready = ready(referenceId = "ref-$i")
+            // The role first: `SourceSnapshot.toString` names the host only, so a whole-value failure would not say why.
+            assertEquals(role, ready.snapshot.role, "the snapshot of ref-$i")
+            assertEquals(
+                SourceSnapshot(
+                    "https://manuals.example.invalid/pool-pump/manual-$i.pdf", "Example Pool Pump manual",
+                    "Installation and care", "manuals.example.invalid", role = role,
+                ),
+                ready.snapshot,
+            )
+            materialize.discard(ready)
+        }
     }
 
     /** The kind the sheet pre-fills is the shipped inference; the review's kind is what is stored. */

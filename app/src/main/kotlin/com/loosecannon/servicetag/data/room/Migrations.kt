@@ -743,6 +743,19 @@ val MIGRATION_15_16: Migration = object : Migration(15, 16) {
 }
 
 /**
+ * Schema v16 -> v17: `asset_reference` gains `document_role` (#91, C5; R91-6). One nullable column with
+ * **no default, no index and no backfill**: a reference written before #91 has no role — nothing is read
+ * off its kind, name or URI — and no timestamp moves. No recreate and no copy. The statement is
+ * [MIGRATION_9_10]'s on this table, and the type is the one `17.json` records, so Room validates it on
+ * open.
+ */
+val MIGRATION_16_17: Migration = object : Migration(16, 17) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `asset_reference` ADD COLUMN `document_role` TEXT")
+    }
+}
+
+/**
  * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
  * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
  */
