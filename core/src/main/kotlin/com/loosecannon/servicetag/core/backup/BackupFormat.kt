@@ -693,9 +693,10 @@ data class InstalledComponentDto(
 
 /**
  * Format 19 (#47, C9; R47-17a). One composition entry, a child row of its installed component: carries no component
- * id, its owner is its position in the tree, as [SupplySpecificationDto] carries no `supplyId` of its owner. Its id
- * is unique across every installed component in the file. [quantity] is how many of [supplyId] one unit is made of,
- * in [unit] (`""` for none); nothing is counted, kept or used up by it.
+ * id, as [SupplySpecificationDto] carries no `supplyId` of its owner — its owner is the installed-component row it
+ * belongs to, whose `composition` holds it. Its id is unique across every installed component in the file.
+ * [quantity] is how many of [supplyId] one unit is made of, in [unit] (`""` for none); nothing is counted, kept or
+ * used up by it.
  */
 @Serializable
 data class CompositionEntryDto(

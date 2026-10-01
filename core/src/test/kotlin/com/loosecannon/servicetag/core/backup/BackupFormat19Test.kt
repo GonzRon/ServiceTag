@@ -59,7 +59,10 @@ class BackupFormat19Test {
     // The aggregate form: a pack made of 4 × the battery, replaced whole; its archived SKU and strap stay valid.
     private val packBefore = installedComponentOf(
         "c5", name = "Example Battery Pack", supplyId = "s2",
-        composition = listOf(compositionEntryOf("e1", "s1", 4.0, "ea", 0), compositionEntryOf("e2", "s3", 2.0, "ea", 1)),
+        composition = listOf(
+            compositionEntryOf("e1", "s1", 4.0, "ea", 0), compositionEntryOf("e2", "s3", 2.0, "ea", 1),
+            compositionEntryOf("e4", "s1", 1.0, "ea", 2),
+        ),
         installedOn = "2025-03-01", removedOn = "2026-05-01", sortOrder = 2,
     )
     private val pack = installedComponentOf(
@@ -273,7 +276,7 @@ class BackupFormat19Test {
             installedComponentOf("c9", assetId = "x2", name = "Example Filter Bowl", removedOn = "2026-03-01", replacesId = "c8"),
         )
 
-        assertNames(corrupt(rows + loop), "installedComponents", "c8", "back round")
+        assertNames(corrupt(rows + loop), "installedComponents", "c8", "replacement cycle")
     }
 
     /** R47-3: an archived SupplyItem stays a valid target for a direct link and for an entry. */
@@ -361,7 +364,7 @@ class BackupFormat19Test {
         val counts = BackupCodec.decode(archiveOf(data())).manifest.counts
 
         assertEquals(7, counts["installedComponents"])
-        assertEquals(3, counts["compositionEntries"])
+        assertEquals(4, counts["compositionEntries"])
         assertEquals(31, counts.size)
         val none = BackupCodec.decode(archiveOf(data(emptyList()))).manifest.counts
         assertEquals(listOf(0, 0), listOf("installedComponents", "compositionEntries").map { none[it] }, "present at zero")

@@ -225,8 +225,8 @@ object BackupCodec {
     internal const val FIRST_SUPPLY_FORMAT = 18
 
     /**
-     * The first format that can carry an installed component (#47). Internal, as [FIRST_SUPPLY_FORMAT] is, for the
-     * merge planner's reading of an older archive.
+     * The first format that can carry an installed component (#47): an archive below it that carries a row was built
+     * by hand, and the decode refuses it.
      */
     internal const val FIRST_INSTALLED_COMPONENT_FORMAT = 19
 
@@ -1037,18 +1037,19 @@ object BackupCodec {
         } catch (e: IllegalStateException) {
             throw BackupCorrupt("installedComponents: cycle in installed component parents")
         }
-        // Its own walk, one step per row at most: each row is replaced at most once (above), so a chain either ends or
-        // comes back to where it started.
+        // Its own walk, each row walked once: a chain that meets a row this walk already passed is a cycle, and one that
+        // ends, or meets a row an earlier walk settled, is not.
+        val settled = HashSet<String>(componentIds.size)
         componentIds.forEach { start ->
-            var next = componentsById.getValue(start).replacesId
-            var steps = 0
-            while (next != null && steps < componentIds.size) {
-                if (next == start) {
-                    throw BackupCorrupt("installedComponents: installed component $start is replaced back round to itself")
+            val path = LinkedHashSet<String>()
+            var next: String? = start
+            while (next != null && next !in settled) {
+                if (!path.add(next)) {
+                    throw BackupCorrupt("installedComponents: installed components ${path.joinToString()} form a replacement cycle")
                 }
                 next = componentsById[next]?.replacesId
-                steps += 1
             }
+            settled += path
         }
 
         // --- events ------------------------------------------------------------------------------
