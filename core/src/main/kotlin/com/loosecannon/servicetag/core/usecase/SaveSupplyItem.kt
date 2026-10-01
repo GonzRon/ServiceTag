@@ -15,7 +15,7 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * - **Text:** every field trimmed; the name may never be blank ([SupplyItemProblem.NameRequired]); per row, the label
  *   and the value may not be blank; the unit may (`""` is none).
  * - **Ids:** a row's id is kept only when this item owns it, and only once; anything else is minted fresh
- *   ([SaveProfile]'s rule). `sortOrder` is the row's index, so the command's order is the stored order.
+ *   ([SaveProfile]'s rule, made stricter: a repeat is a new row). `sortOrder` is the row's index, so the command's order is the stored order.
  * - **Keys (R15-11), the definition slug and never a second rule** ([KEY_PATTERN], [slugify], [dedupedKey]): a typed
  *   key must match the pattern and must not be another row's key in this command; a kept row with no typed key — or
  *   typed as the key it already holds — keeps its stored key, so a label edit never re-keys it; a new row with no
