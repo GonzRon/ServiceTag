@@ -11,6 +11,7 @@ import com.loosecannon.servicetag.core.usecase.AssetAlreadyLent
 import com.loosecannon.servicetag.core.usecase.AssetCycle
 import com.loosecannon.servicetag.core.usecase.AssetHasChildren
 import com.loosecannon.servicetag.core.usecase.AssetMembershipReferenced
+import com.loosecannon.servicetag.core.usecase.AssetSupplyProblem
 import com.loosecannon.servicetag.core.usecase.AssetValidation
 import com.loosecannon.servicetag.core.usecase.BadScheduleDate
 import com.loosecannon.servicetag.core.usecase.BreakStrandsPolicy
@@ -47,6 +48,7 @@ import com.loosecannon.servicetag.core.usecase.NoSuchLoan
 import com.loosecannon.servicetag.core.usecase.NoSuchProfile
 import com.loosecannon.servicetag.core.usecase.NoSuchSchedule
 import com.loosecannon.servicetag.core.usecase.NoSuchServiceCase
+import com.loosecannon.servicetag.core.usecase.NoSuchSupplyItem
 import com.loosecannon.servicetag.core.usecase.NotAGroupMember
 import com.loosecannon.servicetag.core.usecase.NotARequiredMember
 import com.loosecannon.servicetag.core.usecase.OccurrenceAlreadyClosed
@@ -72,6 +74,8 @@ import com.loosecannon.servicetag.core.usecase.SeasonProblem
 import com.loosecannon.servicetag.core.usecase.SeasonValidation
 import com.loosecannon.servicetag.core.usecase.ServiceCaseValidation
 import com.loosecannon.servicetag.core.usecase.StrandedSchedule
+import com.loosecannon.servicetag.core.usecase.SupplyItemProblem
+import com.loosecannon.servicetag.core.usecase.SupplyItemValidation
 import com.loosecannon.servicetag.core.usecase.UnknownTemplate
 import com.loosecannon.servicetag.core.usecase.WarrantyReminderValidation
 import kotlinx.serialization.DeserializationStrategy
@@ -561,6 +565,14 @@ internal fun mapDomainFailure(e: Exception): ApiResponse = when (e) {
     is LoanReturned -> errorResponse(
         409, "Conflict", "loan_returned", "this loan has been returned, and a returned loan never changes",
     )
+    // #15 (C2, C22): a SupplyItem's validation, under one arm in the `GroupValidation` shape — the first problem's
+    // code, sentence and key, and `problems` listing every problem by its domain name. `SUPPLY_ITEM_INVALID` is the
+    // unreachable fallback for a refusal naming no problem, documented as `GROUP_INVALID` is.
+    is SupplyItemValidation -> unprocessable(
+        e.problems.firstOrNull()?.let(::supplyItemRefusal) ?: Refusal(SUPPLY_ITEM_INVALID, "the supply item was refused"),
+        e.problems.map { it.toString() },
+    )
+    is NoSuchSupplyItem -> errorResponse(404, "Not Found", NO_SUCH_SUPPLY_ITEM, "no such supply item")
     // #92 (C24): defence — the replace route's own digest check raises it too, so one arm answers both.
     is ReplaceStale -> errorResponse(
         409, "Conflict", "REPLACE_STALE", "the asset or a row reviewed with it changed; nothing was replaced",
@@ -755,6 +767,66 @@ private fun scheduleProblemCode(problem: ScheduleProblem): String = when (proble
     ScheduleProblem.NegativeMeterLead -> "NEGATIVE_METER_LEAD"
     ScheduleProblem.PostponeNeedsTimeRule -> "POSTPONE_NEEDS_TIME_RULE"
     is ScheduleProblem.UnknownProvider -> "UNKNOWN_PROVIDER"
+}
+
+// --- #15, the SupplyItem and applicability codes (C2) --------------------------------------------
+//
+// Each code, status and `field` is C2's table and each sentence G1's, verbatim. Both mappers are exhaustive `when`s
+// over their sealed types with no `else`, so a problem added later is a compile error here rather than a refusal
+// with a code nobody documented. A line's `supplyId` naming no SupplyItem is not here: it is the shipped
+// `profile_validation` / `event_validation` family's `UnknownSupplyItem` arm (`ValidationRefusals.kt`), field
+// `consumables`.
+
+internal const val NO_SUCH_SUPPLY_ITEM: String = "NO_SUCH_SUPPLY_ITEM"
+internal const val SUPPLY_ITEM_INVALID: String = "SUPPLY_ITEM_INVALID"
+
+/** Every [SupplyItemProblem], each a 422: its code, G1's sentence, and its body key. */
+internal fun supplyItemRefusal(problem: SupplyItemProblem): Refusal = when (problem) {
+    SupplyItemProblem.NameRequired -> Refusal("SUPPLY_ITEM_NAME_REQUIRED", "a supply item needs a name", "name")
+    is SupplyItemProblem.SpecLabelRequired ->
+        Refusal("SPECIFICATION_LABEL_REQUIRED", "every specification needs a label", "specifications")
+    is SupplyItemProblem.SpecValueRequired ->
+        Refusal("SPECIFICATION_VALUE_REQUIRED", "every specification needs a value", "specifications")
+    is SupplyItemProblem.SpecKeyInvalid -> Refusal(
+        "SPECIFICATION_KEY_INVALID",
+        "a specification key must be lower-case letters, digits and underscores, starting with a letter, at most 40",
+        "specifications",
+    )
+    is SupplyItemProblem.SpecKeyTaken -> Refusal(
+        "SPECIFICATION_KEY_TAKEN", "another specification of this supply item already has that key", "specifications",
+    )
+}
+
+/**
+ * Every [AssetSupplyProblem] as the refusal the router answers (C2, C23): 404 for a row that is not there, 409 for
+ * one the store will not take (an archived item for a new row, a taken triple), 422 for a blank role. `OwnerMissing`
+ * answers the shipped `no_such_asset`, the references precedent. `problems` names the problem by its domain name.
+ *
+ * `Unchanged` is never emitted: the re-role answers 200 with the stored row before anything is mapped. Its arm keeps
+ * the `when` exhaustive and answers the shipped 500 `internal` — no code is invented for a refusal no route returns.
+ */
+internal fun assetSupplyFailure(problem: AssetSupplyProblem): ApiFailure {
+    val problems = listOf(problem.toString())
+    return when (problem) {
+        AssetSupplyProblem.OwnerMissing -> ApiFailure(404, "Not Found", "no_such_asset", "no such asset", problems)
+        AssetSupplyProblem.SupplyItemMissing ->
+            ApiFailure(404, "Not Found", NO_SUCH_SUPPLY_ITEM, "no such supply item", problems)
+        AssetSupplyProblem.SupplyItemArchived -> ApiFailure(
+            409, "Conflict", "SUPPLY_ITEM_ARCHIVED", "an archived supply item takes no new asset", problems,
+            field = "supplyId",
+        )
+        AssetSupplyProblem.RoleRequired -> ApiFailure(
+            422, "Unprocessable Content", "ASSET_SUPPLY_ROLE_REQUIRED", "an asset supply needs a role", problems,
+            field = "role",
+        )
+        AssetSupplyProblem.Taken -> ApiFailure(
+            409, "Conflict", "ASSET_SUPPLY_TAKEN", "this asset already takes that supply item in that role", problems,
+            field = "role",
+        )
+        AssetSupplyProblem.NoSuchAssetSupply ->
+            ApiFailure(404, "Not Found", "NO_SUCH_ASSET_SUPPLY", "no such applicability row", problems)
+        AssetSupplyProblem.Unchanged -> ApiFailure(500, "Internal Server Error", "internal", "Unchanged")
+    }
 }
 
 /** The same, per `GroupProblem`. `MEMBER_ALREADY_OPEN` is invariant 80's, named by §9.1. */

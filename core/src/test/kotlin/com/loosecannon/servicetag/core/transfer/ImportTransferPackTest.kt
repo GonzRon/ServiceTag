@@ -8,15 +8,21 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
+import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.PayloadFormat
+import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ReferenceId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.testing.activationOf
+import com.loosecannon.servicetag.core.testing.assetSupplyOf
 import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
+import com.loosecannon.servicetag.core.testing.specificationOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.ANODE
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.HEATER
 import com.loosecannon.servicetag.core.transfer.TransferPackTesting.Raw
@@ -184,6 +190,70 @@ class ImportTransferPackTest {
 
         assertEquals(manual, r.raw.references.get(ReferenceId("r1")), "the reference arrives with its role")
         assertEquals(DocumentRole.USER_MANUAL, r.raw.references.get(ReferenceId("r1"))?.role)
+    }
+
+    /**
+     * #15 (C13, row 29): a held asset's Supplies rows travel with it, and so does every SupplyItem a carried row names —
+     * applicability or a material line — specifications and links as they were; an item no carried row names stays home.
+     */
+    @Test
+    fun aHeldAssetsSuppliesAndLinksArriveThroughThePack() = runTest {
+        val s = suppliedSender()
+        val pack = heaterPack(s)
+        s.mark(pack)
+        val r = recipient()
+
+        assertIs<TransferImportResult.Imported>(r.import(pack.bytes))
+
+        assertEquals(s.raw.supplyItems.all().filter { it.id.value in setOf("s1", "s2") }, r.raw.supplyItems.all(), "s3 stays home")
+        assertEquals(s.raw.assetSupplies.all().filter { it.id in setOf("as1", "as2") }, r.raw.assetSupplies.all())
+        assertEquals(SupplyId("s2"), r.raw.profiles.get(ProfileId("p1"))!!.consumables.single().supplyId)
+        assertEquals(SupplyId("s1"), r.raw.events.get(EventId("e1"))!!.consumables.single().supplyId)
+    }
+
+    /**
+     * #15 (C13, C-4; row 67): the heater comes back with one Supplies row re-roled on the borrowing phone. The return
+     * plans its rows on a snapshot without the heater's stale ones, so the apply succeeds and every row lands — the
+     * re-roled one as the pack carries it, the other unchanged — and every SupplyItem here stays.
+     */
+    @Test
+    fun aReturningPackWithAReRoledSuppliesRowAppliesAndEveryRowLands() = runTest {
+        val s = suppliedSender()
+        val q1 = s.pack("pack-q1", HEATER)
+        s.mark(q1)
+        val r = TransferInstall("set-recipient")
+        assertIs<TransferImportResult.Imported>(r.import(q1.bytes))
+        val row = r.raw.assetSupplies.get("as1")!!
+        r.raw.assetSupplies.update(row.copy(role = "Spare anode kit", updatedAt = IMPORT_NOW + 1))
+        val q2 = r.pack("pack-q2", HEATER)
+        val items = s.raw.supplyItems.all()
+
+        val ready = s.ready(q2.bytes)
+        assertEquals(TransferImportOutcome.READY, ready.outcome, "${ready.plan.conflicts}")
+        assertIs<TransferImportResult.Imported>(s.importer.import(ready) { q2.bytes.inputStream() })
+
+        val back = s.raw.assetSupplies.all()
+        assertEquals(r.raw.assetSupplies.all(), back.filter { it.assetId.value in setOf(HEATER, ANODE) })
+        assertEquals("Spare anode kit", s.raw.assetSupplies.get("as1")!!.role)
+        assertEquals(listOf("as1", "as2", "as3"), back.map { it.id }, "no row lost; the compressor's untouched")
+        assertEquals(items, s.raw.supplyItems.all(), "every item here stays, s3 included")
+    }
+
+    /**
+     * The sender, seeded, with three SupplyItems (fictional): s1 the heater and its anode take, and the heater's
+     * completion line names; s2 only the heater's quick-action line names; s3 only the compressor takes.
+     */
+    private suspend fun suppliedSender(): TransferInstall = sender().also { s ->
+        s.raw.supplyItems.upsert(supplyItemOf("s1", "Example Anode Kit", listOf(specificationOf("sp1", "length", "Length", "40", "in"))))
+        s.raw.supplyItems.upsert(supplyItemOf("s2", "Example Descaler"))
+        s.raw.supplyItems.upsert(supplyItemOf("s3", "Example Intake Filter"))
+        s.raw.assetSupplies.insert(assetSupplyOf("as1", HEATER, "s1", "Anode kit"))
+        s.raw.assetSupplies.insert(assetSupplyOf("as2", ANODE, "s1", "Replacement"))
+        s.raw.assetSupplies.insert(assetSupplyOf("as3", "x1", "s3", "Intake filter"))
+        val quickAction = s.raw.profiles.get(ProfileId("p1"))!!
+        s.raw.profiles.upsert(quickAction.copy(consumables = quickAction.consumables.map { it.copy(supplyId = SupplyId("s2")) }))
+        val completion = s.raw.events.get(EventId("e1"))!!
+        s.raw.events.upsert(completion.copy(consumables = completion.consumables.map { it.copy(supplyId = SupplyId("s1")) }))
     }
 
     /** A pack whose second document's bytes changed after the preview: the first, already staged, is swept too. */

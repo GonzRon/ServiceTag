@@ -22,12 +22,14 @@ import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.usecase.ConditionCommand
 import com.loosecannon.servicetag.core.usecase.ConditionProblem
 import com.loosecannon.servicetag.core.usecase.ConsumableInput
@@ -48,6 +50,8 @@ import com.loosecannon.servicetag.ui.condition.EventOffers
 import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
 import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.condition.tapped
+import com.loosecannon.servicetag.ui.supplies.SupplyListRow
+import com.loosecannon.servicetag.ui.supplies.listRowsOf
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -83,11 +87,22 @@ data class FieldRow(
         }
 }
 
-/** One material line as typed. Quantity stays text until the use case parses it. */
+/**
+ * One material line as typed. Quantity stays text until the use case parses it.
+ *
+ * [supplyId] is the line's SupplyItem link (#15, C19): it arrives with the stored line or with the quick action's
+ * chip and stays with its row through every edit of the row's words. It goes to the save with its row — even once
+ * all three words are cleared, because a linked row is never taken for an untouched one (`submitted`), so the save
+ * names it rather than dropping it and its link unseen. It leaves the row only by the remove action (P15-23,
+ * [EventEntryViewModel.unlinkSupply]) or with the row. The form draws it as `SupplyLinkLine` and never makes one
+ * (C35, R15-8). It has no default, so a row built without saying what its link is does not compile; nothing here
+ * derives it from [name] (C37).
+ */
 data class ConsumableRow(
     val name: String,
     val quantity: String,
     val unit: String,
+    val supplyId: SupplyId?,
     val problem: Boolean = false,
 )
 
@@ -106,6 +121,11 @@ data class EventEntryState(
     val derivedRows: List<Reading> = emptyList(),
     val suggestions: List<ProfileConsumable> = emptyList(),
     val consumables: List<ConsumableRow> = emptyList(),
+    /**
+     * #15 (C35): every SupplyItem, archived included, by id — what a linked row's line names and marks archived. A
+     * link whose item is not here draws no line and is kept.
+     */
+    val supplies: Map<SupplyId, SupplyListRow> = emptyMap(),
     val notes: String = "",
     val editing: Boolean = false,
     val saving: Boolean = false,
@@ -170,6 +190,11 @@ class EventEntryViewModel(
      */
     private val pending: PendingCondition? = null,
     private val recordWithIncident: RecordConditionWithIncident? = null,
+    /**
+     * #15 (C35): the SupplyItem catalog, read only for the names a linked row draws. Production passes the graph's;
+     * without one no link line is drawn and every link is still kept and sent.
+     */
+    private val supplyItems: SupplyItemRepository? = null,
 ) : ViewModel() {
 
     init {
@@ -193,6 +218,7 @@ class EventEntryViewModel(
         graph.eventOffers,
         pending,
         graph.recordConditionWithIncident,
+        graph.supplyItems,
     )
 
     /** The zone the entry is being made in; stored on the event as `tzId` for the audit trail. */
@@ -261,12 +287,19 @@ class EventEntryViewModel(
                     derivedRows = derivedRows(fields),
                     suggestions = profile?.consumables.orEmpty(),
                     consumables = existing?.consumables.orEmpty().map {
-                        ConsumableRow(it.name, formatNumber(it.quantity), it.unit)
+                        ConsumableRow(it.name, formatNumber(it.quantity), it.unit, it.supplyId)
                     },
                     notes = existing?.notes ?: draft?.second.orEmpty(),
                     alsoRecords = pending?.condition,
                     loaded = true,
                 )
+            }
+        }
+        supplyItems?.let { catalog ->
+            viewModelScope.launch {
+                catalog.observeAll().collect { all ->
+                    _state.update { it.copy(supplies = listRowsOf(all).associateBy { row -> row.id }) }
+                }
             }
         }
     }
@@ -387,20 +420,24 @@ class EventEntryViewModel(
         current.copy(fields = fields, derivedRows = derivedRows(fields), firstProblem = null)
     }
 
-    /** A suggestion is a head start, not an entry: it arrives with its unit and an open quantity. */
+    /**
+     * A suggestion is a head start, not an entry: it arrives with its unit, an open quantity and the quick action
+     * line's SupplyItem link, if it has one (#15, C19).
+     */
     fun addSuggested(suggestion: ProfileConsumable) = _state.update { current ->
         current.copy(
             consumables = current.consumables + ConsumableRow(
                 name = suggestion.name,
                 quantity = suggestion.defaultQuantity?.let(::formatNumber).orEmpty(),
                 unit = suggestion.unit,
+                supplyId = suggestion.supplyId,
             ),
             firstProblem = null,
         )
     }
 
     fun addBlankConsumable() = _state.update { current ->
-        current.copy(consumables = current.consumables + ConsumableRow("", "", ""), firstProblem = null)
+        current.copy(consumables = current.consumables + ConsumableRow("", "", "", supplyId = null), firstProblem = null)
     }
 
     fun onConsumable(index: Int, name: String? = null, quantity: String? = null, unit: String? = null) =
@@ -421,6 +458,17 @@ class EventEntryViewModel(
                 firstProblem = null,
             )
         }
+
+    /**
+     * #15 (C35): the remove action (P15-23) — row [index] loses its SupplyItem link and nothing else; its words stay as typed. The
+     * form has no way to make a link (R15-8): a row is linked only by the chip it came from or the stored line.
+     */
+    fun unlinkSupply(index: Int) = _state.update { current ->
+        current.copy(
+            consumables = current.consumables.mapIndexed { i, row -> if (i == index) row.copy(supplyId = null, problem = false) else row },
+            firstProblem = null,
+        )
+    }
 
     fun removeConsumable(index: Int) = _state.update { current ->
         current.copy(
@@ -631,10 +679,16 @@ class EventEntryViewModel(
      * A row that has not been touched at all is not a material the user forgot to fill in — it is
      * one they added and changed their mind about, so it never reaches validation. The row's own
      * index travels with it, so [FieldProblem.BadConsumable] still marks the right line.
+     *
+     * A linked row is never untouched (#15, B8b): its link is a choice someone made, drawn under the row, so with
+     * its words cleared it still reaches validation and is named, rather than vanishing on Save with its link.
+     * Removing the link (P15-23) makes it an untouched row again.
      */
     private fun List<ConsumableRow>.submitted(): List<Pair<Int, ConsumableInput>> = withIndex()
-        .filterNot { (_, row) -> row.name.isBlank() && row.quantity.isBlank() && row.unit.isBlank() }
-        .map { (index, row) -> index to ConsumableInput(row.name, row.quantity, row.unit) }
+        .filterNot { (_, row) ->
+            row.name.isBlank() && row.quantity.isBlank() && row.unit.isBlank() && row.supplyId == null
+        }
+        .map { (index, row) -> index to ConsumableInput(row.name, row.quantity, row.unit, row.supplyId) }
 
     private companion object {
         const val TAG = "EventEntry"

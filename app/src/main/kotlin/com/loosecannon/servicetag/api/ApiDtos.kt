@@ -16,6 +16,7 @@ import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.DerivedFormula
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.ConsumableInput
@@ -174,8 +175,9 @@ internal data class MergeReportResponse(
     // reference an asset, and a health subject an asset and, softly, a schedule. #74's `categories`
     // follows here, as in the enum, though a merge writes categories **first** (`MergeWrites`), and
     // #79's `serviceCases` and `caseEntries` follow, as they follow in the enum, then #72's `loans`, #77's
-    // `transfers`, and #86's `successions` closes the list. Fifteen tables since format 9, seventeen since format
-    // 12, eighteen since 13, nineteen since 14, twenty since 15.
+    // `transfers`, #86's `successions`, and #15's `supplyItems` and `assetSupplies` close the list. Fifteen tables
+    // since format 9, seventeen since format 12, eighteen since 13, nineteen since 14, twenty since 15, twenty-two
+    // since 18.
     val assets: MergeTallyDto,
     val groups: MergeTallyDto,
     val definitions: MergeTallyDto,
@@ -201,6 +203,9 @@ internal data class MergeReportResponse(
     val transfers: MergeTallyDto,
     /** #86 — the successions (format 15). */
     val successions: MergeTallyDto,
+    /** #15 — the SupplyItems, then their applicability rows (format 18). */
+    val supplyItems: MergeTallyDto,
+    val assetSupplies: MergeTallyDto,
     /** Deterministic: table order, then id. Empty when [applicable]. */
     val conflicts: List<MergeDecisionDto>,
     val duplicateCandidates: List<DuplicateCandidateDto>,
@@ -238,6 +243,8 @@ internal fun MergeReport.toResponse() = MergeReportResponse(
     loans = loans.dto(),
     transfers = transfers.dto(),
     successions = successions.dto(),
+    supplyItems = supplyItems.dto(),
+    assetSupplies = assetSupplies.dto(),
     conflicts = conflicts.map { it.dto() },
     duplicateCandidates = duplicateCandidates.map { it.dto() },
 )
@@ -350,12 +357,18 @@ internal fun SaveDefinitionRequest.toCommand() = DefinitionCommand(
 @Serializable
 internal data class ProfileFieldRequest(val definitionId: String, val required: Boolean = false)
 
+/**
+ * One quick-action line. The last key is the line's SupplyItem (#15, C24): absent and `null` both mean unlinked,
+ * because the whole request is a full replace — an edit that leaves it off a line clears that line's link
+ * (limit 1, R15-12). A link is never inferred from [name] (C37).
+ */
 @Serializable
 internal data class ProfileConsumableRequest(
     val id: String? = null,
     val name: String,
     val defaultQuantity: Double? = null,
     val unit: String = "",
+    val supplyId: String? = null,
 )
 
 /** `SaveProfile.run(id, cmd)` as one body: [id] null creates, [id] set edits. */
@@ -377,17 +390,25 @@ internal fun SaveProfileRequest.toCommand() = ProfileCommand(
     defaultTitle = defaultTitle,
     fields = fields.map { ProfileFieldInput(DefinitionId(it.definitionId), it.required) },
     consumables = consumables.map {
-        ProfileConsumableInput(it.id, it.name, it.defaultQuantity, it.unit)
+        ProfileConsumableInput(it.id, it.name, it.defaultQuantity, it.unit, it.supplyId?.let(::SupplyId))
     },
 )
 
-/** A consumable line exactly as the entry form sends one: the quantity is text until validated. */
+/**
+ * A consumable line exactly as the entry form sends one: the quantity is text until validated. The last key is
+ * the line's SupplyItem (#15, C24), read as [ProfileConsumableRequest]'s is: absent and `null` both mean unlinked,
+ * and an edit is a full replace, so a line sent without it is an unlinked line (limit 1).
+ */
 @Serializable
 internal data class ConsumableRequest(
     val name: String,
     val quantity: String,
     val unit: String = "",
+    val supplyId: String? = null,
 )
+
+/** One line as the use cases take it, for an event and a completion alike (C19): the link travels with its row. */
+internal fun ConsumableRequest.toInput() = ConsumableInput(name, quantity, unit, supplyId?.let(::SupplyId))
 
 /**
  * One event, logged or edited. [values] is keyed by definition id, the text a person would type —
@@ -418,7 +439,7 @@ internal fun EventRequest.toCommand() = EventCommand(
     tzId = tzId,
     notes = notes,
     values = values.mapKeys { (id, _) -> DefinitionId(id) },
-    consumables = consumables.map { ConsumableInput(it.name, it.quantity, it.unit) },
+    consumables = consumables.map { it.toInput() },
 )
 
 /**

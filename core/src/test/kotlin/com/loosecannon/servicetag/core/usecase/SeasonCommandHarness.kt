@@ -15,6 +15,7 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
@@ -89,7 +90,7 @@ internal class SeasonCommandHarness(today: String = "2026-06-10") {
     )
     val saveSchedule =
         SaveSchedule(schedules, assets, groups, definitions, profiles, uow, ids, clock, recompute, healthSubjects)
-    val logEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock, recompute)
+    val logEvent = LogEvent(events, definitions, profiles, assets, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
 
     /** An asset stored as it is, with no command in between — the state a test starts from. */
     suspend fun asset(

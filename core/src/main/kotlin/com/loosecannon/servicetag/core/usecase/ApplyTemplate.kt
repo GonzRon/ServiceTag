@@ -99,7 +99,8 @@ class ApplyTemplate(
                     ProfileField(ids.newId(), byKey.getValue(key).id, required, j)
                 },
                 consumables = p.consumables.mapIndexed { j, c ->
-                    ProfileConsumable(ids.newId(), c.name, c.defaultQuantity, c.unit, j)
+                    // #15 (C21, R15-10): a template creates no link — it stays name-only.
+                    ProfileConsumable(ids.newId(), c.name, c.defaultQuantity, c.unit, j, supplyId = null)
                 },
             )
         }

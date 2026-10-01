@@ -149,6 +149,7 @@ import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import com.loosecannon.servicetag.ui.transfer.TransferStrings
 import com.loosecannon.servicetag.ui.transfer.TransferredBadge
 import com.loosecannon.servicetag.ui.replace.ReplaceStrings
+import com.loosecannon.servicetag.ui.supplies.AssetSuppliesSection
 import java.time.Instant
 import java.time.LocalDate
 import java.time.MonthDay
@@ -227,6 +228,8 @@ fun AssetDetailScreen(
     onTransfer: (assetId: String) -> Unit = {},
     /** #86 (C16): P86-1 in the overflow — the Replace screen for this asset. The tap writes nothing. */
     onReplace: (assetId: String) -> Unit = {},
+    /** #15 (C33, C-1): a Supplies row opens that SupplyItem's own detail. The tap writes nothing. */
+    onOpenSupply: (supplyId: String) -> Unit = {},
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -439,6 +442,15 @@ fun AssetDetailScreen(
                 onAddSchedule = if (current.offersWrites) ({ onAddSchedule(assetId) }) else null,
             )
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                // #15 (C33, R15-8): which SupplyItems this asset takes, and in what role — first in this column,
+                // directly above the child assets. A held asset draws its rows and offers no write.
+                AssetSuppliesSection(
+                    assetId = current.asset.id,
+                    graph = graph,
+                    snackbars = snackbars,
+                    onOpenSupply = onOpenSupply,
+                    readOnly = !current.offersWrites,
+                )
                 ComponentsSection(
                     components = current.components,
                     onOpenAsset = onOpenAsset,

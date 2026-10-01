@@ -10,9 +10,12 @@ import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.usecase.ArchiveProfile
 import com.loosecannon.servicetag.core.usecase.DeleteProfile
 import com.loosecannon.servicetag.core.usecase.ProfileCommand
@@ -22,6 +25,9 @@ import com.loosecannon.servicetag.core.usecase.ProfileProblem
 import com.loosecannon.servicetag.core.usecase.ProfileValidation
 import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.di.AppGraph
+import com.loosecannon.servicetag.ui.supplies.SUPPLY_ITEM_GONE
+import com.loosecannon.servicetag.ui.supplies.SupplyListRow
+import com.loosecannon.servicetag.ui.supplies.listRowsOf
 import com.loosecannon.servicetag.ui.journal.formatNumber
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,12 +58,19 @@ data class FieldPick(val definition: MeasurementDefinition, val required: Boolea
  * One consumable suggestion as the form holds it. [id] is the stored row's id when this came out of
  * the database and null for a row someone just added — that is what tells `SaveProfile` a rename is
  * a rename and not a delete plus an insert. The UI never mints one.
+ *
+ * [supplyId] is the line's SupplyItem link (#15, C19): loaded with the stored row, kept through every edit of the
+ * row's words, and sent back on the save, so a re-save never clears it. A row someone adds starts unlinked; a pick
+ * from the picker links it and the remove action (P15-23) unlinks it (C34: [ProfileEditViewModel.linkSupply],
+ * [ProfileEditViewModel.unlinkSupply]), and the editor draws it under the row as `SupplyLinkLine`. It has no default,
+ * so a row built without saying what its link is does not compile; nothing here derives it from [name] (C37).
  */
 data class ConsumableEdit(
     val id: String?,
     val name: String = "",
     val quantity: String = "",
     val unit: String = "",
+    val supplyId: SupplyId?,
 )
 
 /**
@@ -71,6 +84,10 @@ data class ConsumableEdit(
  * [available] is what "+ Add field" may offer: the asset's unarchived ENTERED definitions that are
  * not already chosen. A field the profile already carries stays in [fields] even once its
  * definition has been archived (spec §6) — it is shown with a badge rather than dropped.
+ *
+ * #15 (C34): [supplyChoices] is what the SupplyItem picker may offer — the unarchived SupplyItems only, in the
+ * Supplies list's order (R15-6; the filter is this host's). [supplies] is every SupplyItem, archived included, by
+ * id: what a linked row's line names and marks archived. Both follow the catalog live.
  */
 data class ProfileEditState(
     val assetName: String = "",
@@ -81,6 +98,8 @@ data class ProfileEditState(
     val fields: List<FieldPick> = emptyList(),
     val available: List<MeasurementDefinition> = emptyList(),
     val consumables: List<ConsumableEdit> = emptyList(),
+    val supplyChoices: List<SupplyListRow> = emptyList(),
+    val supplies: Map<SupplyId, SupplyListRow> = emptyMap(),
     val problems: Map<String, String> = emptyMap(),
     val editing: Boolean = false,
     val archived: Boolean = false,
@@ -98,6 +117,7 @@ class ProfileEditViewModel(
     private val profiles: ProfileRepository,
     private val definitions: DefinitionRepository,
     private val assets: AssetRepository,
+    private val supplyItems: SupplyItemRepository,
     private val saveProfile: SaveProfile,
     private val archiveProfile: ArchiveProfile,
     private val deleteProfile: DeleteProfile,
@@ -106,13 +126,16 @@ class ProfileEditViewModel(
 ) : ViewModel() {
 
     constructor(graph: AppGraph, assetId: String, profileId: String?) : this(
-        graph.profiles, graph.definitions, graph.assets,
+        graph.profiles, graph.definitions, graph.assets, graph.supplyItems,
         graph.saveProfile, graph.archiveProfile, graph.deleteProfile,
         AssetId(assetId), profileId?.let(::ProfileId),
     )
 
     /** Every definition of the asset, so a chosen field can name itself even once archived. */
     private var known: List<MeasurementDefinition> = emptyList()
+
+    /** #15 (C34): the catalog as last read, by id — where a pick looks its item up for the unit it may fill. */
+    private var catalog: Map<SupplyId, SupplyItem> = emptyMap()
 
     private val _state = MutableStateFlow(ProfileEditState(editing = profileId != null))
     val state: StateFlow<ProfileEditState> = _state.asStateFlow()
@@ -137,6 +160,17 @@ class ProfileEditViewModel(
                 loaded.withAvailable().copy(assetName = asset?.name.orEmpty(), loaded = true)
             }
         }
+        viewModelScope.launch {
+            supplyItems.observeAll().collect { all ->
+                catalog = all.associateBy { it.id }
+                _state.update { form ->
+                    form.copy(
+                        supplyChoices = listRowsOf(all.filter { it.archivedAt == null }),
+                        supplies = listRowsOf(all).associateBy { it.id },
+                    )
+                }
+            }
+        }
     }
 
     private fun ProfileEditState.filledFrom(row: EventProfile): ProfileEditState {
@@ -159,6 +193,7 @@ class ProfileEditViewModel(
                         name = it.name,
                         quantity = it.defaultQuantity?.let(::formatNumber).orEmpty(),
                         unit = it.unit,
+                        supplyId = it.supplyId,
                     )
                 },
             archived = row.archivedAt != null,
@@ -223,7 +258,7 @@ class ProfileEditViewModel(
     }
 
     fun addConsumable() = _state.update { form ->
-        form.copy(consumables = form.consumables + ConsumableEdit(id = null))
+        form.copy(consumables = form.consumables + ConsumableEdit(id = null, supplyId = null))
     }
 
     fun onConsumable(
@@ -244,6 +279,39 @@ class ProfileEditViewModel(
                     )
                 }
             },
+        )
+    }
+
+    /**
+     * #15 (C34): links row [index] to the SupplyItem the picker reported, looked up by [id] in this editor's own
+     * catalog. Besides the link, a pick fills the row's name only while it is blank and its unit — from the item's
+     * preferred unit — only while it is blank: nothing typed is overwritten and the quantity is never touched. An id
+     * the catalog does not hold (the picker never offers one) links nothing. Like typing, it clears the row's mark.
+     */
+    fun linkSupply(index: Int, id: SupplyId) = clearing(ProfileForm.consumable(index)) { form ->
+        val item = catalog[id] ?: return@clearing form
+        form.copy(
+            consumables = form.consumables.mapIndexed { i, row ->
+                if (i != index) {
+                    row
+                } else {
+                    row.copy(
+                        name = row.name.ifBlank { item.name },
+                        unit = row.unit.ifBlank { item.preferredUnit },
+                        supplyId = item.id,
+                    )
+                }
+            },
+        )
+    }
+
+    /**
+     * #15 (C34): the remove action (P15-23) — row [index] loses its link and nothing else; its words stay as they are. Like any
+     * edit of the row, it clears the row's mark.
+     */
+    fun unlinkSupply(index: Int) = clearing(ProfileForm.consumable(index)) { form ->
+        form.copy(
+            consumables = form.consumables.mapIndexed { i, row -> if (i == index) row.copy(supplyId = null) else row },
         )
     }
 
@@ -342,6 +410,7 @@ private fun ProfileEditState.command(assetId: AssetId, quantities: List<Double?>
             name = row.name,
             defaultQuantity = quantities[index],
             unit = row.unit,
+            supplyId = row.supplyId,
         )
     },
 )
@@ -359,6 +428,8 @@ private fun Throwable?.asProblems(): Map<String, String> {
             is ProfileProblem.BadConsumable ->
                 ProfileForm.consumable(problem.index) to
                     "Needs a name, and a quantity of 0 or more"
+            // #15 (C20, C-2): the line's SupplyItem is gone — P15-20, reused verbatim.
+            is ProfileProblem.UnknownSupplyItem -> ProfileForm.consumable(problem.index) to SUPPLY_ITEM_GONE
         }
     }
 }

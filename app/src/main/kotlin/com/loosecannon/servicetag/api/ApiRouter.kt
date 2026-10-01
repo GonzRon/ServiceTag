@@ -95,7 +95,7 @@ internal class ApiRouter(
     internal fun downloadInFlight(): Job? = download.current()
 
     /**
-     * The whole surface. Sixty-six path shapes over eighty method-and-path rows; anything
+     * The whole surface. Seventy-two path shapes over eighty-nine method-and-path rows; anything
      * else is a 404, and a known shape with the wrong verb is a 405 — except that an
      * `/v1/assets/{id}/…`, `/v1/groups/{id}/…`, `/v1/schedules/{id}/…` or `/v1/health-subjects/{id}/…`
      * sub-resource answers 404 for a verb it does not take. Written as an explicit `when` over the path's segments rather than a
@@ -162,6 +162,14 @@ internal class ApiRouter(
      * #92 (B3) added three rows over three shapes: the twenty-third to twenty-fifth `/v1/assets/{id}/…`
      * sub-resources, `replace-offer` (read), `replace-plan` (writes nothing) and `replace`, #86's one atomic write
      * behind the plan's digest (R92-1 supersedes R86-18).
+     *
+     * #15 added nine rows over six shapes: the five SupplyItem rows — `GET` and `POST /v1/supply-items`, `GET` and
+     * `PATCH /v1/supply-items/{id}`, `POST /v1/supply-items/{id}/archive` — beside the group triad; the twenty-sixth
+     * `/v1/assets/{id}/…` sub-resource, an asset's supplies, read only; and the applicability rows `POST
+     * /v1/asset-supplies`, `PATCH` and the one delete verb, `DELETE /v1/asset-supplies/{id}` (R15-5: an applicability
+     * row is configuration, not a record, so the references' "the API adds and amends, the phone removes" is
+     * deliberately not followed; `DELETE /v1/events/{id}` is the precedent). **Nothing deletes a SupplyItem**: it is
+     * archived, never removed, so no verb on its shapes does.
      */
     private suspend fun route(request: ApiRequest, generation: Job?): ApiResponse {
         // `removePrefix`, not `trim`: canonicalisation (dropping a trailing slash) happens exactly
@@ -233,6 +241,8 @@ internal class ApiRouter(
                 "replace-offer" to "GET" -> handlers.replace.offer(rest[1])
                 "replace-plan" to "POST" -> handlers.replace.plan(rest[1], request)
                 "replace" to "POST" -> handlers.replace.replace(rest[1], request)
+                // #15 — the twenty-sixth: the asset's supplies and each item they name once, read only.
+                "supply-items" to "GET" -> handlers.supplies.listForAsset(rest[1])
                 else -> throw ApiFailure.notFound(request.path)
             }
 
@@ -252,6 +262,34 @@ internal class ApiRouter(
                 "archive" to "POST" -> handlers.maintenance.archiveGroup(rest[1], request)
                 "schedules" to "GET" -> handlers.maintenance.listGroupSchedules(rest[1])
                 else -> throw ApiFailure.notFound(request.path)
+            }
+
+            // #15 — a SupplyItem is listed, created, read, amended by overlay and archived, and never deleted
+            // (R15-5): a verb a shape does not take is a 405, any other sub-path no shape at all.
+            rest == listOf("supply-items") -> when (method) {
+                "GET" -> handlers.supplies.list()
+                "POST" -> handlers.supplies.create(request)
+                else -> notAllowed(request)
+            }
+
+            rest.size == 2 && rest[0] == "supply-items" -> when (method) {
+                "GET" -> handlers.supplies.get(rest[1])
+                "PATCH" -> handlers.supplies.update(rest[1], request)
+                else -> notAllowed(request)
+            }
+
+            rest.size == 3 && rest[0] == "supply-items" && rest[2] == "archive" ->
+                if (method == "POST") handlers.supplies.archive(rest[1], request) else notAllowed(request)
+
+            // #15 — an applicability row is created, re-roled and removed (R15-5); an asset's rows are read through
+            // its sub-resource above, so neither shape answers a `GET`.
+            rest == listOf("asset-supplies") ->
+                if (method == "POST") handlers.supplies.addAssetSupply(request) else notAllowed(request)
+
+            rest.size == 2 && rest[0] == "asset-supplies" -> when (method) {
+                "PATCH" -> handlers.supplies.updateAssetSupply(rest[1], request)
+                "DELETE" -> handlers.supplies.removeAssetSupply(rest[1])
+                else -> notAllowed(request)
             }
 
             rest == listOf("schedules") -> when (method) {

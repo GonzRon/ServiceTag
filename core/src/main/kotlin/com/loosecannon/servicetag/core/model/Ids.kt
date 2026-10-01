@@ -32,3 +32,6 @@ value class ReferenceId(val value: String)
 
 @JvmInline
 value class HealthSubjectId(val value: String)
+
+@JvmInline
+value class SupplyId(val value: String)

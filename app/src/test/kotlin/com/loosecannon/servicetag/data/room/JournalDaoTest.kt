@@ -1,8 +1,18 @@
 package com.loosecannon.servicetag.data.room
 
 import android.database.SQLException
+import com.loosecannon.servicetag.core.model.AssetEvent
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.ConsumableUsage
 import com.loosecannon.servicetag.core.model.DefinitionId
+import com.loosecannon.servicetag.core.model.EventId
+import com.loosecannon.servicetag.core.model.EventKind
+import com.loosecannon.servicetag.core.model.EventProfile
+import com.loosecannon.servicetag.core.model.EventSource
+import com.loosecannon.servicetag.core.model.ProfileConsumable
+import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.data.room.entities.AssetEntity
 import com.loosecannon.servicetag.data.room.entities.AssetEventEntity
 import com.loosecannon.servicetag.data.room.entities.ConsumableUsageEntity
@@ -58,7 +68,7 @@ class JournalDaoTest {
 
     private fun suggestion(id: String, profileId: String, name: String) = ProfileConsumableEntity(
         id = id, profileId = profileId, name = name, defaultQuantity = null,
-        unit = "oz", sortOrder = 0,
+        unit = "oz", sortOrder = 0, supplyId = null,
     )
 
     private fun event(
@@ -82,7 +92,7 @@ class JournalDaoTest {
         )
 
     private fun usage(id: String, eventId: String, name: String) = ConsumableUsageEntity(
-        id = id, eventId = eventId, name = name, quantity = 1.0, unit = "oz", sortOrder = 0,
+        id = id, eventId = eventId, name = name, quantity = 1.0, unit = "oz", sortOrder = 0, supplyId = null,
     )
 
     @Test
@@ -337,6 +347,68 @@ class JournalDaoTest {
                 thrown is SQLException,
             )
             assertEquals(2, db.definitionDao().all().size)
+        } finally {
+            db.close()
+        }
+    }
+
+    /**
+     * #15 (C5; R15-4): a material line's soft `supply_id` is written and read back by both mappers — on a
+     * quick action's line and on an event's line — beside an unlinked line that stays unlinked, and the
+     * column holds the SupplyItem's id, never a copy of its name. There is no foreign key on the column;
+     * the SupplyItem row is written only so the fixture reads as it would on a phone.
+     */
+    @Test
+    fun aLinkedLineRoundTripsThroughRoomOnAProfileAndAnEvent() = runTest {
+        val db = inMemoryDb()
+        try {
+            db.assetDao().upsert(asset("a1"))
+            val linked = SupplyId("supply-prefilter")
+            RoomSupplyItemRepository(db.supplyItemDao()).upsert(
+                SupplyItem(
+                    id = linked, name = "Example Prefilter Cartridge", category = "Filters",
+                    manufacturer = "Example Filters Co.", model = "PF-10", partNumber = "PF-10-5UM",
+                    preferredUnit = "ea", notes = "", archivedAt = null, createdAt = 1L, updatedAt = 1L,
+                    specifications = emptyList(),
+                ),
+            )
+            val profiles = RoomProfileRepository(db.profileDao())
+            val events = RoomEventRepository(db.eventDao())
+
+            val profile = EventProfile(
+                id = ProfileId("p1"), assetId = AssetId("a1"), name = "Replace prefilter",
+                eventKind = EventKind.REPLACEMENT, defaultTitle = "Replace prefilter", templateKey = null,
+                sortOrder = 0, archivedAt = null, createdAt = 1L, updatedAt = 2L, fields = emptyList(),
+                consumables = listOf(
+                    ProfileConsumable("pc1", "Example Prefilter Cartridge", 1.0, "ea", 0, supplyId = linked),
+                    ProfileConsumable("pc2", "Example sealing ring", null, "", 1, supplyId = null),
+                ),
+            )
+            profiles.upsert(profile)
+            assertEquals(profile, profiles.get(ProfileId("p1")))
+
+            val event = AssetEvent(
+                id = EventId("e1"), assetId = AssetId("a1"), kind = EventKind.REPLACEMENT,
+                title = "Replace prefilter", profileId = ProfileId("p1"), occurredOn = "2026-09-30",
+                occurredTime = null, tzId = "UTC", notes = "", source = EventSource.MANUAL, sourceRef = null,
+                createdAt = 3L, updatedAt = 4L, measurements = emptyList(),
+                consumables = listOf(
+                    ConsumableUsage("cu1", "Example Prefilter Cartridge", 1.0, "ea", 0, supplyId = linked),
+                    ConsumableUsage("cu2", "Example sealing ring", 2.0, "ea", 1, supplyId = null),
+                ),
+            )
+            events.upsert(event)
+            assertEquals(event, events.get(EventId("e1")))
+
+            // the stored column is the id itself, on both tables
+            assertEquals(
+                listOf("supply-prefilter", null),
+                db.profileDao().byId("p1")!!.consumables.sortedBy { it.sortOrder }.map { it.supplyId },
+            )
+            assertEquals(
+                listOf("supply-prefilter", null),
+                db.eventDao().byId("e1")!!.consumables.sortedBy { it.sortOrder }.map { it.supplyId },
+            )
         } finally {
             db.close()
         }

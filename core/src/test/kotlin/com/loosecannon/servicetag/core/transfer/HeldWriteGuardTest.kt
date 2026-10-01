@@ -42,6 +42,7 @@ import com.loosecannon.servicetag.core.model.ScheduleId
 import com.loosecannon.servicetag.core.model.SeasonAction
 import com.loosecannon.servicetag.core.model.SeasonMode
 import com.loosecannon.servicetag.core.model.ServiceCaseId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.ValueType
@@ -49,11 +50,13 @@ import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
 import com.loosecannon.servicetag.core.testing.BackupInstall
 import com.loosecannon.servicetag.core.testing.InMemoryScheduleStateRepository
 import com.loosecannon.servicetag.core.testing.SAMPLE_LOOKUP_URI
+import com.loosecannon.servicetag.core.testing.assetSupplyOf
 import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
 import com.loosecannon.servicetag.core.testing.completionOf
@@ -65,6 +68,7 @@ import com.loosecannon.servicetag.core.testing.measurementOf
 import com.loosecannon.servicetag.core.testing.plainAssetOf
 import com.loosecannon.servicetag.core.testing.scheduleOf
 import com.loosecannon.servicetag.core.testing.subjectOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import com.loosecannon.servicetag.core.testing.transferOf
 import com.loosecannon.servicetag.core.usecase.AcceptImpairmentOffer
 import com.loosecannon.servicetag.core.usecase.AcceptOperationalOffer
@@ -72,6 +76,8 @@ import com.loosecannon.servicetag.core.usecase.AcceptSeasonOffer
 import com.loosecannon.servicetag.core.usecase.ActivationCommand
 import com.loosecannon.servicetag.core.usecase.AddAttachment
 import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
+import com.loosecannon.servicetag.core.usecase.AddAssetSupply
+import com.loosecannon.servicetag.core.usecase.AddAssetSupplyCommand
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.AddReferenceCommand
 import com.loosecannon.servicetag.core.usecase.AddServiceCaseEntry
@@ -82,8 +88,11 @@ import com.loosecannon.servicetag.core.usecase.ArchiveGroup
 import com.loosecannon.servicetag.core.usecase.ArchiveHealthSubject
 import com.loosecannon.servicetag.core.usecase.ArchiveProfile
 import com.loosecannon.servicetag.core.usecase.ArchiveSchedule
+import com.loosecannon.servicetag.core.usecase.ArchiveSupplyItem
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.AssetSettingsCommand
+import com.loosecannon.servicetag.core.usecase.AssetSupplyProblem
+import com.loosecannon.servicetag.core.usecase.AssetSupplyResult
 import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.BreakCommand
 import com.loosecannon.servicetag.core.usecase.CaseEntryCommand
@@ -118,6 +127,7 @@ import com.loosecannon.servicetag.core.usecase.RecordCondition
 import com.loosecannon.servicetag.core.usecase.RecordConditionWithIncident
 import com.loosecannon.servicetag.core.usecase.RecordSeasonActivation
 import com.loosecannon.servicetag.core.usecase.RelinkLoanContact
+import com.loosecannon.servicetag.core.usecase.RemoveAssetSupply
 import com.loosecannon.servicetag.core.usecase.RemoveReference
 import com.loosecannon.servicetag.core.usecase.RenameCategory
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
@@ -133,6 +143,7 @@ import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveHealthSubject
 import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
+import com.loosecannon.servicetag.core.usecase.SaveSupplyItem
 import com.loosecannon.servicetag.core.usecase.ScheduleCommand
 import com.loosecannon.servicetag.core.usecase.SeasonModeCommand
 import com.loosecannon.servicetag.core.usecase.ServiceCaseCommand
@@ -140,7 +151,10 @@ import com.loosecannon.servicetag.core.usecase.SetHealthPolicy
 import com.loosecannon.servicetag.core.usecase.SetMaintenanceBreak
 import com.loosecannon.servicetag.core.usecase.SetSeasonMode
 import com.loosecannon.servicetag.core.usecase.SetWarrantyReminder
+import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
+import com.loosecannon.servicetag.core.usecase.UpdateAssetSupply
+import com.loosecannon.servicetag.core.usecase.UpdateAssetSupplyCommand
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
@@ -183,7 +197,7 @@ class HeldWriteGuardTest {
         install.serviceCases, install.links,
     )
 
-    // The sixteen guarded ports, as AppGraph hands them to every use case.
+    // The seventeen guarded ports, as AppGraph hands them to every use case (#15's applicability the seventeenth).
     private val assets = guard.assets(install.assets)
     private val tags = guard.tags(install.tags)
     private val definitions = guard.definitions(install.definitions)
@@ -200,6 +214,7 @@ class HeldWriteGuardTest {
     private val cases = guard.cases(install.serviceCases)
     private val entries = guard.entries(install.caseEntries)
     private val loans = guard.loans(install.loans)
+    private val assetSupplies = guard.assetSupplies(install.assetSupplies)
 
     private val uow = install.uow
     private val states = InMemoryScheduleStateRepository()
@@ -350,7 +365,7 @@ class HeldWriteGuardTest {
             "DeleteDefinition" to { DeleteDefinition(definitions, events, profiles, uow).run(d9.id) },
             "ReorderDefinitions" to { ReorderDefinitions(definitions, uow, clock).run(heater, listOf(d9.id, DefinitionId("d1"))) },
             "SaveProfile" to {
-                SaveProfile(profiles, definitions, assets, uow, ids, clock).run(
+                SaveProfile(profiles, definitions, assets, install.supplyItems, uow, ids, clock).run(
                     ProfileId("p9"),
                     ProfileCommand(heater, "Descale", EventKind.MAINTENANCE, "Descale", emptyList(), emptyList()),
                 )
@@ -366,16 +381,16 @@ class HeldWriteGuardTest {
     @Test
     fun theJournalUseCasesAreRefused() = runTest {
         seed()
-        val log = LogEvent(events, definitions, profiles, assets, uow, ids, clock, recompute)
+        val log = LogEvent(events, definitions, profiles, assets, install.supplyItems, uow, ids, clock, recompute)
         refused(
             heater,
             "LogEvent" to { log.run(note(heater)) },
-            "UpdateEvent" to { UpdateEvent(events, definitions, profiles, uow, ids, clock, recompute).run(EventId("e3"), note(heater)) },
+            "UpdateEvent" to { UpdateEvent(events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute).run(EventId("e3"), note(heater)) },
             "DeleteEvent" to { DeleteEvent(events, attachments, install.storage, uow, recompute).run(EventId("e3")) },
             "RecordCondition" to { recordCondition.run(heater, ConditionCommand(OperationalCondition.OPERATIONAL, tzId = "UTC")) },
             "RecordConditionWithIncident" to {
                 RecordConditionWithIncident(
-                    events, definitions, profiles, assets, uow, ids, clock, recompute, conditions, today, recordCondition,
+                    events, definitions, profiles, assets, install.supplyItems, uow, ids, clock, recompute, conditions, today, recordCondition,
                 ).run(
                     heater, "c-held",
                     ConditionCommand(OperationalCondition.DOWN, occurredOn = "2026-09-24", tzId = "UTC", reason = "Leaking"),
@@ -431,11 +446,11 @@ class HeldWriteGuardTest {
                 ArchiveSchedule(schedules, uow, recompute, subjects, assets, clock).run(ScheduleId("s1"), archived = true)
             },
             "CompleteSchedule" to {
-                CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recompute)
+                CompleteSchedule(schedules, events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute)
                     .run(ScheduleId("s1"), CompletionCommand(occurredOn = "2026-09-24", tzId = "UTC"))
             },
             "CompleteGroupMembers" to {
-                CompleteGroupMembers(schedules, groups, events, closures, definitions, profiles, uow, ids, clock, recompute)
+                CompleteGroupMembers(schedules, groups, events, closures, definitions, profiles, install.supplyItems, uow, ids, clock, recompute)
                     .run(ScheduleId("sg"), listOf(heater), CompletionCommand(occurredOn = "2026-09-24", tzId = "UTC"))
             },
             "CloseRound" to { CloseRound(schedules, closures, uow, ids, clock, today, recompute).run(ScheduleId("sg")) },
@@ -617,7 +632,7 @@ class HeldWriteGuardTest {
         assertEquals(setOf(heater, anode), install.transfers.heldIds(), "still held: the records are the custody facts")
     }
 
-    /** Derived state is rebuilt for a held asset like any other: schedule state is not one of the sixteen ports. */
+    /** Derived state is rebuilt for a held asset like any other: schedule state is not one of the seventeen ports. */
     @Test
     fun derivedStateIsUnguarded() = runTest {
         seed()
@@ -737,7 +752,7 @@ class HeldWriteGuardTest {
     fun anEditKeepingAnEarlierReferencePasses() = runTest {
         seed()
         install.events.upsert(install.events.get(EventId("ex"))!!.copy(scheduleId = ScheduleId("s1"), occurrenceOn = "2026-02-01"))
-        val edited = UpdateEvent(events, definitions, profiles, uow, ids, clock, recompute).run(
+        val edited = UpdateEvent(events, definitions, profiles, install.supplyItems, uow, ids, clock, recompute).run(
             EventId("ex"), note(compressor).copy(title = "Example edited note", occurredOn = "2026-09-20"),
         )
         assertEquals("Example edited note", install.events.get(EventId("ex"))!!.title)
@@ -826,5 +841,122 @@ class HeldWriteGuardTest {
 
         uow.write { successions.append(successionOf("s3", predecessor = "o1", successor = "x1")) }
         assertEquals(listOf("s3"), install.successions.all().map { it.id })
+    }
+
+    // ---- #15 (C14, row 30): applicability is the asset's; the SupplyItem catalog is global ---------------------------
+
+    /** One SupplyItem (fictional), taken by the held heater (as1) and by the staying compressor (asx), laid down raw. */
+    private suspend fun seedSupplies() {
+        install.supplyItems.upsert(supplyItemOf("s1", "Example Anode Kit"))
+        install.assetSupplies.insert(assetSupplyOf("as1", "h1", "s1", "Anode kit"))
+        install.assetSupplies.insert(assetSupplyOf("asx", "x1", "s1", "Spare kit"))
+    }
+
+    /** A new row on a held asset, a re-role of its row, and a staying row moved onto it: each a write on it. */
+    @Test
+    fun addingApplicabilityToAHeldAssetThrows() = runTest {
+        seed()
+        seedSupplies()
+        val held = install.assetSupplies.get("as1")!!
+        val staying = install.assetSupplies.get("asx")!!
+
+        refused(
+            heater,
+            "insert on h1" to { uow.write { assetSupplies.insert(assetSupplyOf("as2", "h1", "s1", "Spare kit")) } },
+            "re-role h1's row" to { uow.write { assetSupplies.update(held.copy(role = "Other kit", updatedAt = 3_000L)) } },
+            "move x1's row onto h1" to { uow.write { assetSupplies.update(staying.copy(assetId = heater)) } },
+        )
+        refused(anode, "insert on h2, a child asset" to { uow.write { assetSupplies.insert(assetSupplyOf("as3", "h2", "s1")) } })
+        assertEquals(listOf(held, staying), install.assetSupplies.all(), "nothing was written")
+
+        uow.write { assetSupplies.insert(assetSupplyOf("as4", "x1", "s1", "Other kit")) }
+        assertEquals(listOf("as1", "as4", "asx"), install.assetSupplies.all().map { it.id }, "a staying asset's row writes as before")
+    }
+
+    /**
+     * Removing a held asset's row, and moving it off onto a staying asset: the stored row's asset counts as well as the
+     * row written (B1's review — `update` writes the whole row, so a row moved off a held asset is a write on it).
+     */
+    @Test
+    fun removingAHeldAssetsApplicabilityThrows() = runTest {
+        seed()
+        seedSupplies()
+        val held = install.assetSupplies.get("as1")!!
+
+        refused(
+            heater,
+            "delete h1's row" to { uow.write { assetSupplies.delete("as1") } },
+            "move h1's row onto x1" to { uow.write { assetSupplies.update(held.copy(assetId = compressor, updatedAt = 3_000L)) } },
+        )
+        assertEquals(held, install.assetSupplies.get("as1"), "the held row is as it was")
+
+        uow.write { assetSupplies.delete("asx") }
+        assertEquals(listOf("as1"), install.assetSupplies.all().map { it.id }, "a staying asset's row deletes as before")
+    }
+
+    /**
+     * The catalog is global, not asset-owned: the guard offers no SupplyItem port, and archiving, unarchiving or editing
+     * an item a held asset's row names writes no held row, so it passes — through the unwrapped port `AppGraph` hands out.
+     */
+    @Test
+    fun archivingAnItemAHeldAssetUsesIsAllowed() = runTest {
+        seed()
+        seedSupplies()
+        val held = install.assetSupplies.get("as1")!!
+        assertTrue(
+            HeldWriteGuard::class.java.declaredMethods.none { m -> m.parameterTypes.any { it == SupplyItemRepository::class.java } },
+            "no SupplyItem port is wrapped (C14)",
+        )
+
+        uow.write { install.supplyItems.setArchived(SupplyId("s1"), archivedAt = 3_000L, updatedAt = 3_000L) }
+        assertEquals(3_000L, install.supplyItems.get(SupplyId("s1"))!!.archivedAt)
+        uow.write { install.supplyItems.upsert(install.supplyItems.get(SupplyId("s1"))!!.copy(name = "Example Anode Kit, long", archivedAt = null)) }
+
+        assertEquals("Example Anode Kit, long", install.supplyItems.get(SupplyId("s1"))!!.name)
+        assertEquals(held, install.assetSupplies.get("as1"), "the held asset's row is untouched")
+        assertEquals(setOf(heater, anode), install.transfers.heldIds(), "still held")
+    }
+
+    /**
+     * B3 (C17 over C14): the applicability use cases on the guarded port. Each answers its own checks first and the
+     * write then meets the guard, so a held asset's add, re-role and remove throw and commit nothing — a child asset's
+     * add included. A re-role to the role the row already holds is `Unchanged` and writes nothing, so it never reaches
+     * the guard (the `UpdateReference` precedent). The catalog's own use cases take the unwrapped port and pass.
+     */
+    @Test
+    fun theSupplyUseCasesMeetTheGuardOnlyAtAHeldAssetsWrite() = runTest {
+        seed()
+        seedSupplies()
+        val add = AddAssetSupply(assets, install.supplyItems, assetSupplies, uow, ids, clock)
+        val update = UpdateAssetSupply(assetSupplies, uow, clock)
+        val remove = RemoveAssetSupply(assetSupplies, uow)
+        val held = install.assetSupplies.get("as1")!!
+
+        refused(
+            heater,
+            "AddAssetSupply on h1" to { add.run(AddAssetSupplyCommand(heater, SupplyId("s1"), "Spare kit")) },
+            "UpdateAssetSupply re-roles h1's row" to { update.run("as1", UpdateAssetSupplyCommand("Other kit")) },
+            "RemoveAssetSupply on h1's row" to { remove.run("as1") },
+        )
+        refused(anode, "AddAssetSupply on h2, a child asset" to { add.run(AddAssetSupplyCommand(anode, SupplyId("s1"), "Anode kit")) })
+        assertEquals(
+            AssetSupplyResult.Refused(AssetSupplyProblem.Unchanged),
+            update.run("as1", UpdateAssetSupplyCommand(" Anode  kit ")),
+            "a no-op re-role on a held asset is Unchanged, never the guard's refusal",
+        )
+        assertEquals(0, uow.commits)
+        assertEquals(held, install.assetSupplies.get("as1"), "the held row is as it was")
+
+        assertIs<AssetSupplyResult.Ok>(add.run(AddAssetSupplyCommand(compressor, SupplyId("s1"), "Other kit")), "a staying asset adds")
+        val save = SaveSupplyItem(install.supplyItems, uow, ids, clock)
+        val renamed = save.run(
+            SupplyId("s1"),
+            SupplyItemCommand("Example Anode Kit, long", "Filter", "Example Filters Co.", "PF-10", "EF-PF10-5", "ea", "", emptyList()),
+        )
+        assertEquals("Example Anode Kit, long", renamed.item.name)
+        ArchiveSupplyItem(install.supplyItems, uow, clock).run(SupplyId("s1"), archived = true)
+        assertNotNull(install.supplyItems.get(SupplyId("s1"))!!.archivedAt, "the item a held row names archives")
+        assertEquals(held, install.assetSupplies.get("as1"), "and the held row is still as it was")
+        assertEquals(setOf(heater, anode), install.transfers.heldIds(), "still held")
     }
 }

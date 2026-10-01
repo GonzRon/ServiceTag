@@ -54,11 +54,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.LedgerList
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.StatusBadge
+import com.loosecannon.servicetag.ui.supplies.SupplyItemPickerSheet
+import com.loosecannon.servicetag.ui.supplies.SupplyLinkLine
+import com.loosecannon.servicetag.ui.supplies.SupplyListRow
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
 import com.loosecannon.servicetag.ui.theme.MonoText
@@ -112,6 +116,8 @@ fun ProfileEditScreen(
 
     var confirming by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf(false) }
+    // #15 (C34): the Materials row whose link control (P15-21) opened the SupplyItem picker; null while it is closed.
+    var linking by remember { mutableStateOf<Int?>(null) }
 
     // The entry form's app bar shape (D12 §3): what this screen is, then what it is about.
     val eyebrow = listOf(
@@ -174,6 +180,16 @@ fun ProfileEditScreen(
                     picking = false
                     model.addField(it)
                 },
+            )
+        }
+        linking?.let { index ->
+            SupplyItemPickerSheet(
+                rows = state.supplyChoices,
+                onPick = { picked ->
+                    linking = null
+                    model.linkSupply(index, picked.id)
+                },
+                onDismiss = { linking = null },
             )
         }
 
@@ -246,10 +262,13 @@ fun ProfileEditScreen(
                     ConsumableRowEditor(
                         row = row,
                         problem = state.problems[ProfileForm.consumable(index)],
+                        supplies = state.supplies,
                         onChange = { name, quantity, unit ->
                             model.onConsumable(index, name, quantity, unit)
                         },
                         onRemove = { model.removeConsumable(index) },
+                        onLink = { linking = index },
+                        onUnlink = { model.unlinkSupply(index) },
                     )
                 }
                 AddRowButton(text = "Add material", enabled = true, onClick = model::addConsumable)
@@ -354,13 +373,20 @@ private fun FieldRow(
     }
 }
 
-/** A material this action suggests: what it is, how much of it, and in what (spec §9). */
+/**
+ * A material this action suggests: what it is, how much of it, and in what (spec §9). Under it, the row's
+ * SupplyItem link (#15, C34): the link control while it has none (P15-21), else what it is linked to and the remove
+ * action (P15-22, P15-23).
+ */
 @Composable
 private fun ConsumableRowEditor(
     row: ConsumableEdit,
     problem: String?,
+    supplies: Map<SupplyId, SupplyListRow>,
     onChange: (String?, String?, String?) -> Unit,
     onRemove: () -> Unit,
+    onLink: () -> Unit,
+    onUnlink: () -> Unit,
 ) {
     Column {
         Row(
@@ -400,6 +426,7 @@ private fun ConsumableRowEditor(
                 Icon(Icons.Outlined.Close, contentDescription = "Remove material")
             }
         }
+        SupplyLinkLine(supplyId = row.supplyId, supplies = supplies, onUnlink = onUnlink, onLink = onLink)
         problem?.let { Problem(it) }
     }
 }

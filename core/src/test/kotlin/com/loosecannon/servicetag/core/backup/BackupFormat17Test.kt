@@ -96,7 +96,7 @@ class BackupFormat17Test {
 
         val decoded = BackupCodec.decode(bytes)
 
-        assertEquals(17, decoded.manifest.formatVersion)
+        assertEquals(18, decoded.manifest.formatVersion)
         assertEquals(everyShape, decoded.data.assetReferences.map { it.toDomain() })
         val written = referencesWritten(bytes).associateBy { it.getValue("id").jsonPrimitive.content }
         assertEquals("PURCHASE_INVOICE_OR_RECEIPT", written.getValue("r1").getValue("role").jsonPrimitive.content)
@@ -212,14 +212,14 @@ class BackupFormat17Test {
 
     /** One format past this build's, over a tree no format could read: refused as newer before a row is parsed. */
     @Test
-    fun aFormat18ArchiveIsRefusedAsNewer() {
+    fun aFormat19ArchiveIsRefusedAsNewer() {
         val unreadable = dataTreeOf(archiveOf(data(listOf(userManual))))
             .editRows("assetReferences") { it.with("role", JsonPrimitive("NOT_A_ROLE")) }
-        val bytes = sealed(unreadable, formatVersion = 18)
+        val bytes = sealed(unreadable, formatVersion = 19)
 
         val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(bytes) }
 
-        assertEquals(18, refusal.found)
-        assertEquals(17, refusal.supported)
+        assertEquals(19, refusal.found)
+        assertEquals(18, refusal.supported)
     }
 }

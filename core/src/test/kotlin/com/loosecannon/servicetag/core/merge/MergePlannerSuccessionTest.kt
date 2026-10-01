@@ -208,6 +208,6 @@ class MergePlannerSuccessionTest {
 
         assertEquals(listOf(identical("s0"), insert("s1"), conflict("s2", MergeReason.CONTENT_DIFFERS, "s2")), plan.successions())
         assertEquals(MergeTally(insert = 1, identical = 1, conflict = 1, skipped = 0), plan.report().successions)
-        assertEquals(MergeTable.entries.last(), MergeTable.SUCCESSIONS)
+        assertEquals(MergeTable.entries[19], MergeTable.SUCCESSIONS)
     }
 }

@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -58,6 +59,7 @@ class RecordConditionWithIncident(
     private val definitions: DefinitionRepository,
     private val profiles: ProfileRepository,
     private val assets: AssetRepository,
+    private val supplyItems: SupplyItemRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -84,7 +86,7 @@ class RecordConditionWithIncident(
 
         val profile = resolveOwnedProfile(incident, definitions, profiles)
         val (event, eventProblems) = try {
-            buildEvent(incident, definitions, profile, existing = null, ids, clock.nowMillis()) to emptyList()
+            buildEvent(incident, definitions, supplyItems, profile, existing = null, ids, clock.nowMillis()) to emptyList()
         } catch (e: EventValidation) {
             null to e.problems
         }

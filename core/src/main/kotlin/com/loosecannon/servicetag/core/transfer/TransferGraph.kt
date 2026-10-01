@@ -7,8 +7,8 @@ import com.loosecannon.servicetag.core.model.AssetId
 
 /**
  * #77 (C1) — what a transfer does with each list of a [BackupData]. One table, one class per list; a
- * list the table does not name fails `TransferTableClassificationTest`, so a future table (#15's supply
- * items and stock among them) needs a decision before it can ship (AC 18).
+ * list the table does not name fails `TransferTableClassificationTest`, so a future table needs a
+ * decision before it can ship (AC 18). #15's supply items and their applicability are classified here (C13).
  */
 enum class TransferTableClass {
     /** Belongs to one asset and travels with it: the asset row itself and everything hanging off it. */
@@ -17,7 +17,10 @@ enum class TransferTableClass {
     /** Spans assets: travels only when **wholly** inside the pack ([TransferGraph.whollyIn]). */
     CROSS_ASSET,
 
-    /** Global rows keyed by name: only the rows a pack asset uses travel. */
+    /**
+     * Global rows: only the rows a pack asset uses travel — the categories its assets name, the supply items its
+     * rows name. Never dropped by [TransferGraph.retain].
+     */
     GLOBAL_IN_USE,
 
     /** The sender's own facts: never in a pack. */
@@ -56,6 +59,9 @@ object TransferTables {
         "transferRecords" to TransferTableClass.SENDER_ONLY,
         // #86 (C6; R86-16): a succession is this installation's own lineage; a pack never carries one.
         "assetSuccessions" to TransferTableClass.SENDER_ONLY,
+        // #15 (C13): a SupplyItem travels when a carried row names it, an applicability row with its asset.
+        "supplyItems" to TransferTableClass.GLOBAL_IN_USE,
+        "assetSupplies" to TransferTableClass.ASSET_OWNED,
     )
 
     /** Whether any row of [table] can be in a pack. An unclassified list never travels. */
@@ -139,9 +145,11 @@ object TransferGraph {
         group.members.isNotEmpty() && group.members.all { it.assetId in ids }
 
     /**
-     * C2 (AC 1–3; R77-6 to R77-10): [rootIds] plus every descendant (forced); their asset-owned rows;
-     * each group wholly in the selection with its schedules and closures; the custom categories the
-     * selection uses; soft links as they are. Loans, 2.6 links and the tags on them never travel.
+     * C2 (AC 1–3; R77-6 to R77-10): [rootIds] plus every descendant (forced); their asset-owned rows (#15's
+     * applicability rows among them); each group wholly in the selection with its schedules and closures; the
+     * custom categories the selection uses, and (#15, C13) every supply item a carried row names — an applicability
+     * row or a quick action's or an event's material line, archived or not; soft links as they are. Loans, 2.6
+     * links and the tags on them never travel.
      *
      * Refused, every reason collected: a group with a row naming a selected asset that is not wholly in
      * the selection ([TransferRefusal.MixedGroup], removed rows counted); a root whose parent is not
@@ -222,6 +230,12 @@ object TransferGraph {
         val cases = carry("serviceCases", data.serviceCases) { it.assetId in selected }
         val caseIds = cases.map { it.id }.toSet()
         val categoryKeys = data.assets.filter { it.id in selected }.mapNotNull { CategoryKey.of(it.category) }.toSet()
+        // #15 (C13): the applicability rows go with their asset; a SupplyItem goes only when a carried row names it —
+        // by naming row, as the categories go, so a later table that names one only adds itself here.
+        val assetSupplies = carry("assetSupplies", data.assetSupplies) { it.assetId in selected }
+        val supplyIdsInUse = assetSupplies.map { it.supplyId }.toSet() +
+            profiles.flatMap { p -> p.consumables.mapNotNull { it.supplyId } } +
+            events.flatMap { e -> e.consumables.mapNotNull { it.supplyId } }
         val pack = BackupData(
             assets = carry("assets", data.assets) { it.id in selected },
             // Only tags on a pack asset; a link's tag is a tombstone like the link (C1).
@@ -245,6 +259,8 @@ object TransferGraph {
             transferRecords = carry("transferRecords", data.transferRecords) { false },
             // #86 (C6): lineage never travels, and never forces a selection.
             assetSuccessions = carry("assetSuccessions", data.assetSuccessions) { false },
+            supplyItems = carry("supplyItems", data.supplyItems) { it.id in supplyIdsInUse },
+            assetSupplies = assetSupplies,
         ).sorted()
         return TransferSelection.Selected(
             rootIds = roots.map(::AssetId),
@@ -254,11 +270,13 @@ object TransferGraph {
     }
 
     /**
-     * C3 — the archive without [held]: the held assets and their asset-owned rows, each group wholly in
-     * [held] with its schedules and closures, and every tag, loan, succession (#86, either end) and 2.6 link
-     * naming a held asset (with the tags on those links). Exactly the held set: no descendant or group member is added to it. A row
-     * that stays and names a dropped row makes the whole answer [TransferRetention.Entangled], naming
-     * every such reference — a later archive of what stays must still decode.
+     * C3 — the archive without [held]: the held assets and their asset-owned rows (#15's applicability rows
+     * among them), each group wholly in [held] with its schedules and closures, and every tag, loan, succession
+     * (#86, either end) and 2.6 link naming a held asset (with the tags on those links). The categories and (#15,
+     * C13) the supply items are global and stay whole, an item only a held row names included. Exactly the held
+     * set: no descendant or group member is added to it. A row that stays and names a dropped row makes the whole
+     * answer [TransferRetention.Entangled], naming every such reference — a later archive of what stays must still
+     * decode.
      */
     fun retain(data: BackupData, held: Set<AssetId>): TransferRetention {
         val dropped = droppedBy(data, held)
@@ -291,6 +309,9 @@ object TransferGraph {
             assetSuccessions = data.assetSuccessions.filterNot {
                 it.predecessorAssetId in heldIds || it.successorAssetId in heldIds
             },
+            // #15 (C13): an applicability row goes with its asset; `supplyItems` is not named, so the copy keeps every
+            // one — a SupplyItem is global and never dropped, so nothing here can entangle on it.
+            assetSupplies = data.assetSupplies.filterNot { it.assetId in heldIds },
         )
 
         val refs = entangledRefs(kept, dropped)
@@ -378,7 +399,10 @@ object TransferGraph {
     private fun outside(assetId: String, table: String, rowId: String, targetId: String) =
         TransferRefusal.OutsideReference(AssetId(assetId), table, rowId, targetId)
 
-    /** Every list by id (categories by key), so equal selections are equal whatever the input order. */
+    /**
+     * Every list by id (categories by key), so equal selections are equal whatever the input order. A supply item's
+     * specifications stay in the order the archive holds them, `(sortOrder, id)`.
+     */
     private fun BackupData.sorted() = BackupData(
         assets = assets.sortedBy { it.id },
         nfcTags = nfcTags.sortedBy { it.id },
@@ -400,5 +424,7 @@ object TransferGraph {
         assetLoans = assetLoans.sortedBy { it.id },
         transferRecords = transferRecords.sortedBy { it.id },
         assetSuccessions = assetSuccessions.sortedBy { it.id },
+        supplyItems = supplyItems.sortedBy { it.id },
+        assetSupplies = assetSupplies.sortedBy { it.id },
     )
 }

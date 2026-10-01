@@ -56,6 +56,9 @@ import com.loosecannon.servicetag.ui.settings.SettingsScreen
 import com.loosecannon.servicetag.ui.setup.AssetSetupScreen
 import com.loosecannon.servicetag.ui.setup.DefinitionEditScreen
 import com.loosecannon.servicetag.ui.setup.ProfileEditScreen
+import com.loosecannon.servicetag.ui.supplies.SupplyDetailScreen
+import com.loosecannon.servicetag.ui.supplies.SupplyEditScreen
+import com.loosecannon.servicetag.ui.supplies.SupplyListScreen
 import kotlinx.coroutines.flow.SharedFlow
 
 /**
@@ -151,6 +154,7 @@ fun ServiceTagRoot(
                         onOpenSchedule = { backStack.add(Route.ScheduleDetail(it)) },
                         onOpenGroup = { backStack.add(Route.GroupDetail(it)) },
                         onNewGroup = { backStack.add(Route.GroupEdit(null)) },
+                        onOpenSupplies = { backStack.add(Route.Supplies) },
                         onReminderHealth = { backStack.add(Route.ReminderHealth) },
                         // F4 reuses the shipped routes for two of the three actions.
                         onScanTag = { backStack.add(Route.Scan) },
@@ -238,6 +242,8 @@ fun ServiceTagRoot(
                         onTransfer = { backStack.add(Route.TransferAssets(preselect = it)) },
                         // #86 (C18): P86-1 in the overflow opens Replace asset; the tap writes nothing.
                         onReplace = { backStack.add(Route.ReplaceAsset(it)) },
+                        // #15 (C33, C-1): a Supplies row opens the SupplyItem's detail; the tap writes nothing.
+                        onOpenSupply = { backStack.add(Route.SupplyDetail(it)) },
                     )
                 }
                 // #86 (C18): a finished replace swaps this entry for the new asset's detail, so Back returns to the
@@ -557,6 +563,39 @@ fun ServiceTagRoot(
                         onDone = { id ->
                             backStack.removeLastOrNull()
                             if (key.id == null) backStack.add(Route.GroupDetail(id))
+                        },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
+                }
+                // #15 (C29, C30): the Supplies list and one SupplyItem, pushed from Maintenance's fifth row. The add
+                // button and the detail's Edit push `Route.SupplyEdit`, the editor's key (C31).
+                entry<Route.Supplies> {
+                    SupplyListScreen(
+                        graph = graph,
+                        onBack = { backStack.removeLastOrNull() },
+                        onOpenSupply = { backStack.add(Route.SupplyDetail(it)) },
+                        onNewSupply = { backStack.add(Route.SupplyEdit(null)) },
+                    )
+                }
+                entry<Route.SupplyDetail> { key ->
+                    SupplyDetailScreen(
+                        graph = graph,
+                        supplyId = key.id,
+                        onBack = { backStack.removeLastOrNull() },
+                        onEdit = { backStack.add(Route.SupplyEdit(it)) },
+                        // A "Used by" row opens the real equipment's own screen, where its Supplies are edited (C33).
+                        onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
+                    )
+                }
+                // #15 (C31): the editor. A new item opens on its own detail and the form leaves the stack, exactly as
+                // a new group does; an edit simply goes back to the detail it came from.
+                entry<Route.SupplyEdit> { key ->
+                    SupplyEditScreen(
+                        graph = graph,
+                        supplyId = key.id,
+                        onDone = { id ->
+                            backStack.removeLastOrNull()
+                            if (key.id == null) backStack.add(Route.SupplyDetail(id))
                         },
                         onBack = { backStack.removeLastOrNull() },
                     )

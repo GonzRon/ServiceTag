@@ -54,7 +54,7 @@ class IncidentWorkflowRoomTest {
         }
         val record = RecordCondition(graph.assets, graph.events, refusing, graph.uow, graph.ids, graph.clock, graph.todayPort)
         val combined = RecordConditionWithIncident(
-            graph.events, graph.definitions, graph.profiles, graph.assets, graph.uow, graph.ids, graph.clock,
+            graph.events, graph.definitions, graph.profiles, graph.assets, graph.supplyItems, graph.uow, graph.ids, graph.clock,
             graph.recomputeSchedules, refusing, graph.todayPort, record,
         )
 

@@ -26,6 +26,7 @@ import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.HealthFixtures
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryCategoryRepository
@@ -93,9 +94,9 @@ internal class ConditionHealthHarness(today: String = "2026-09-24") {
 
     val recordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, todayPort)
     val acceptOperationalOffer = AcceptOperationalOffer(conditions, recordCondition, uow)
-    val logEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock, recompute)
+    val logEvent = LogEvent(events, definitions, profiles, assets, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
     val recordConditionWithIncident = RecordConditionWithIncident(
-        events, definitions, profiles, assets, uow, ids, clock, recompute, conditions, todayPort, recordCondition,
+        events, definitions, profiles, assets, InMemorySupplyItemRepository(), uow, ids, clock, recompute, conditions, todayPort, recordCondition,
     )
     val acceptImpairmentOffer = AcceptImpairmentOffer(conditions, recordCondition, uow)
 

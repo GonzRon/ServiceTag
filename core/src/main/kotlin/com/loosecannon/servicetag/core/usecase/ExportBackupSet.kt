@@ -14,6 +14,7 @@ import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.model.heldIds
 import com.loosecannon.servicetag.core.ports.AssetLoanRepository
 import com.loosecannon.servicetag.core.ports.AssetRepository
+import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.CategoryRepository
 import com.loosecannon.servicetag.core.ports.Clock
@@ -31,6 +32,7 @@ import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.SeasonActivationRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseEntryRepository
 import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
@@ -88,6 +90,9 @@ class ExportBackupSet(
     private val transfers: TransferRecordRepository,
     /** #86 — the successions (format 15): every row but those naming an asset held here (`retain` drops them). */
     private val successions: AssetSuccessionRepository,
+    /** #15 — the SupplyItems with their specifications, and their applicability (format 18). */
+    private val supplyItems: SupplyItemRepository,
+    private val assetSupplies: AssetSupplyRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -97,7 +102,7 @@ class ExportBackupSet(
     private val repos = BackupRepositories(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         seasonActivations, conditions, healthSubjects, categories, serviceCases, caseEntries, loans, transfers,
-        successions,
+        successions, supplyItems, assetSupplies,
     )
 
     /**
@@ -124,8 +129,9 @@ class ExportBackupSet(
 }
 
 /**
- * The twenty canonical stores an archive is read from, in `ExportBackupSet`'s order — one value to hand
- * [readSnapshot] instead of twenty ports (#77, mn-8; #86 adds the successions).
+ * The twenty-two canonical stores an archive is read from, in `ExportBackupSet`'s order — one value to hand
+ * [readSnapshot] instead of twenty-two ports (#77, mn-8; #86 adds the successions, #15 the SupplyItems and their
+ * applicability).
  */
 class BackupRepositories(
     val assets: AssetRepository,
@@ -150,6 +156,9 @@ class BackupRepositories(
     val transfers: TransferRecordRepository,
     /** #86 — the successions (format 15). */
     val successions: AssetSuccessionRepository,
+    /** #15 — the SupplyItems and their applicability (format 18). */
+    val supplyItems: SupplyItemRepository,
+    val assetSupplies: AssetSupplyRepository,
 )
 
 /**
@@ -189,6 +198,10 @@ suspend fun readSnapshot(repos: BackupRepositories): BackupData = with(repos) {
         transferRecords = transfers.all().map { it.toDto() },
         // Format 15: every succession; the export's `retain` drops a row naming a held asset (#86, C6).
         assetSuccessions = successions.all().map { it.toDto() },
+        // Format 18: every SupplyItem, archived included, with its specifications, and every applicability row;
+        // the export passes both lists to `retain`, which decides what a backup set carries (C10, C13).
+        supplyItems = supplyItems.all().map { it.toDto() },
+        assetSupplies = assetSupplies.all().map { it.toDto() },
     )
 }
 

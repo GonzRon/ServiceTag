@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -53,6 +54,7 @@ class CompleteSchedule(
     private val events: EventRepository,
     private val definitions: DefinitionRepository,
     private val profiles: ProfileRepository,
+    private val supplyItems: SupplyItemRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -102,6 +104,7 @@ class CompleteSchedule(
             val event = buildEvent(
                 cmd = eventCmd,
                 definitions = definitions,
+                supplyItems = supplyItems,
                 // A minimal completion is measured against no profile, so the form's required
                 // fields are not demanded of it; the event still names the profile it owes them to.
                 profile = if (detailsPending) null else profile,

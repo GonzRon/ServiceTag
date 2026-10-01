@@ -69,7 +69,12 @@ class ReferenceMigrationTest {
             fun List<String>.without(columns: Set<String>) = filterNot { it.substringBefore('=') in columns }
             assertEquals(
                 before.mapValues { (key, row) ->
-                    if (key.first == "maintenance_schedule") row.without(V7_SEASON_COLUMNS) else row
+                    when (key.first) {
+                        "maintenance_schedule" -> row.without(V7_SEASON_COLUMNS)
+                        // #15's v18 link on both material-line tables: a known delta, and NULL on every seeded line.
+                        in V18_LINE_TABLES -> row + V18_LINE_COLUMNS.map { "$it=NULL" }
+                        else -> row
+                    }
                 },
                 after.mapValues { (key, row) ->
                     when (key.first) {
@@ -102,7 +107,7 @@ class ReferenceMigrationTest {
                     assertEquals(
                         "UNTOUCHED must name every table the migration found",
                         m.tableNames() - REFERENCE - ROOM_INTERNAL - V8_TABLES - V9_TABLES - V11_TABLES - V12_TABLES - V13_TABLES -
-                            V14_TABLES - V15_TABLES,
+                            V14_TABLES - V15_TABLES - V18_TABLES,
                         UNTOUCHED,
                     )
                     assertEquals("asset_reference columns", f.columnsOf(REFERENCE), m.columnsOf(REFERENCE))

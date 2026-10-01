@@ -141,6 +141,12 @@ data class ProfileConsumableEntity(
     @ColumnInfo(name = "default_quantity") val defaultQuantity: Double?,
     val unit: String,
     @ColumnInfo(name = "sort_order") val sortOrder: Int,
+    /**
+     * Schema v18 (#15, C5; R15-4): the soft link to `supply_item` — nullable `TEXT` with **no foreign key, no
+     * index and no default** (the R79-4 precedent), so no recreate; the use cases, the codec and the merge hold
+     * it. `name` and `unit` stay the readable snapshot. A line written before #15 has none.
+     */
+    @ColumnInfo(name = "supply_id") val supplyId: String?,
 )
 
 /**
@@ -260,4 +266,6 @@ data class ConsumableUsageEntity(
     val quantity: Double,
     val unit: String,
     @ColumnInfo(name = "sort_order") val sortOrder: Int,
+    /** Schema v18 (#15): the same soft link as [ProfileConsumableEntity.supplyId], on the same terms. */
+    @ColumnInfo(name = "supply_id") val supplyId: String?,
 )

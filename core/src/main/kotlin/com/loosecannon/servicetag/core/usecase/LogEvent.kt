@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ProfileRepository
+import com.loosecannon.servicetag.core.ports.SupplyItemRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
@@ -26,6 +27,7 @@ class LogEvent(
     private val definitions: DefinitionRepository,
     private val profiles: ProfileRepository,
     private val assets: AssetRepository,
+    private val supplyItems: SupplyItemRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
@@ -34,7 +36,7 @@ class LogEvent(
     suspend fun run(cmd: EventCommand): AssetEvent = uow.write {
         assets.get(cmd.assetId) ?: throw NoSuchAsset(cmd.assetId)
         val profile = resolveOwnedProfile(cmd, definitions, profiles)
-        val event = buildEvent(cmd, definitions, profile, existing = null, ids, clock.nowMillis())
+        val event = buildEvent(cmd, definitions, supplyItems, profile, existing = null, ids, clock.nowMillis())
         events.upsert(event)
         recompute.forAsset(cmd.assetId)
         event

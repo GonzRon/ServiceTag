@@ -67,7 +67,7 @@ class BackupFormat9Test {
      */
     @Test
     fun theFormatMovedAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(17, BackupCodec.FORMAT_VERSION)
+        assertEquals(18, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 
@@ -99,7 +99,7 @@ class BackupFormat9Test {
         )
         assertEquals(
             listOf("assetCategories", "serviceCases", "serviceCaseEntries", "assetLoans", "transferRecords", "assetSuccessions"),
-            BackupData.serializer().descriptor.elementNames.toList().takeLast(6),
+            BackupData.serializer().descriptor.elementNames.toList().dropLast(2).takeLast(6),
         )
     }
 
@@ -113,11 +113,11 @@ class BackupFormat9Test {
     @Test
     fun aFormat8ArchiveDecodesWithNoCategories() {
         val encoded = archiveOf(data(emptyList()), formatVersion = 8)
-        val dataBytes = prettyJson.encodeToString(JsonObject.serializer(), dataTreeOf(encoded).without("assetCategories", "serviceCases", "serviceCaseEntries", "assetLoans"))
+        val dataBytes = prettyJson.encodeToString(JsonObject.serializer(), dataTreeOf(encoded).without("assetCategories", "serviceCases", "serviceCaseEntries", "assetLoans", "supplyItems", "assetSupplies"))
             .toByteArray(Charsets.UTF_8)
         val manifest = prettyJson.decodeFromString(
             BackupManifest.serializer(), String(zipEntries(encoded).getValue(BackupCodec.MANIFEST_ENTRY), Charsets.UTF_8),
-        ).let { it.copy(counts = it.counts - "assetCategories" - "serviceCases" - "serviceCaseEntries" - "assetLoans" - "transferRecords" - "assetSuccessions", dataSha256 = sha256Hex(dataBytes)) }
+        ).let { it.copy(counts = it.counts - "assetCategories" - "serviceCases" - "serviceCaseEntries" - "assetLoans" - "transferRecords" - "assetSuccessions" - "supplyItems" - "supplySpecifications" - "assetSupplies", dataSha256 = sha256Hex(dataBytes)) }
         val shipped = zipOf(
             BackupCodec.MANIFEST_ENTRY to prettyJson.encodeToString(BackupManifest.serializer(), manifest).toByteArray(Charsets.UTF_8),
             BackupCodec.DATA_ENTRY to dataBytes,

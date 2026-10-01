@@ -373,8 +373,11 @@ class MergePlannerReferenceTest {
             MergeTable.LOANS to report.loans,
             // #77: the transfer records follow them.
             MergeTable.TRANSFERS to report.transfers,
-            // #86: the successions close it.
+            // #86: the successions follow them.
             MergeTable.SUCCESSIONS to report.successions,
+            // #15: the supply items and their applicability close it.
+            MergeTable.SUPPLY_ITEMS to report.supplyItems,
+            MergeTable.ASSET_SUPPLIES to report.assetSupplies,
         )
         assertEquals(MergeTable.entries.toList(), byName.map { it.first })
         assertEquals(MergeTable.entries.map { plan.tally(it) }, byName.map { it.second })

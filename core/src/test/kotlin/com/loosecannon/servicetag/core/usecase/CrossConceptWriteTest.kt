@@ -2,6 +2,8 @@ package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.testing.InMemoryTransferRecordRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetSuccessionRepository
+import com.loosecannon.servicetag.core.testing.InMemoryAssetSupplyRepository
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.merge.MergePlan
@@ -261,7 +263,7 @@ class CrossConceptWriteTest {
     private val recordCondition = RecordCondition(assets, events, conditions, uow, ids, clock, today)
     private val acceptOperationalOffer = AcceptOperationalOffer(conditions, recordCondition, uow)
     private val recordConditionWithIncident = RecordConditionWithIncident(
-        events, definitions, profiles, assets, uow, ids, clock, recompute, conditions, today, recordCondition,
+        events, definitions, profiles, assets, InMemorySupplyItemRepository(), uow, ids, clock, recompute, conditions, today, recordCondition,
     )
     private val acceptImpairmentOffer = AcceptImpairmentOffer(conditions, recordCondition, uow)
     private val recordSeasonActivation =
@@ -286,8 +288,8 @@ class CrossConceptWriteTest {
     private val updateAsset = UpdateAsset(assets, schedules, uow, clock, recompute, promoteCategory)
     private val renameCategory = RenameCategory(categories, assets, uow, clock)
     private val deleteCategory = DeleteCategory(categories, assets, uow)
-    private val logEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock, recompute)
-    private val completeSchedule = CompleteSchedule(schedules, events, definitions, profiles, uow, ids, clock, recompute)
+    private val logEvent = LogEvent(events, definitions, profiles, assets, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
+    private val completeSchedule = CompleteSchedule(schedules, events, definitions, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
     private val openServiceCase = OpenServiceCase(assets, events, serviceCases, uow, ids, clock, today)
     private val updateServiceCase = UpdateServiceCase(events, serviceCases, uow, clock, today)
     private val addServiceCaseEntry = AddServiceCaseEntry(serviceCases, caseEntries, uow, ids, clock, today)
@@ -299,18 +301,18 @@ class CrossConceptWriteTest {
     private val buildMergePlan = BuildBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(),
-        InMemoryAssetSuccessionRepository(), storage, uow,
+        InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow,
     )
     private val applyMergePlan = ApplyBackupMergePlan(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(),
-        InMemoryAssetSuccessionRepository(), storage, uow,
+        InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow,
         rebuildAll = { recompute.all() },
     )
     private val importBackupReplace = ImportBackupReplace(
         assets, groups, tags, links, definitions, profiles, schedules, closures, events, attachments, references,
         activations, conditions, subjects, categories, serviceCases, caseEntries, loans, InMemoryTransferRecordRepository(),
-        InMemoryAssetSuccessionRepository(), storage, uow,
+        InMemoryAssetSuccessionRepository(), InMemorySupplyItemRepository(), InMemoryAssetSupplyRepository(), storage, uow,
         rebuildAll = { recompute.all() },
     )
 

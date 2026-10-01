@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.backup.toDomain
 import com.loosecannon.servicetag.core.model.AssetCategory
 import com.loosecannon.servicetag.core.model.CaseStatus
 import com.loosecannon.servicetag.core.testing.BackupInstall
+import com.loosecannon.servicetag.core.testing.SupplyEstate
 import com.loosecannon.servicetag.core.testing.caseEntryOf
 import com.loosecannon.servicetag.core.testing.caseOf
 import com.loosecannon.servicetag.core.testing.loanOf
@@ -44,7 +45,7 @@ class ExportBackupSetTest {
 
         val decoded = BackupCodec.decode(install.export.run().data)
 
-        assertEquals(17, decoded.manifest.formatVersion)   // this build's export: format 17 since #91
+        assertEquals(18, decoded.manifest.formatVersion)   // this build's export: format 18 since #15
         assertEquals(rows, decoded.data.assetCategories.map { it.toDomain() })
         assertEquals(2, decoded.manifest.counts["assetCategories"])
     }
@@ -328,6 +329,31 @@ class ExportBackupSetTest {
         assertEquals(listOf(staying), decoded.data.assetSuccessions.map { it.toDomain() })
         assertEquals(1, decoded.manifest.counts["assetSuccessions"])
         assertEquals(3, install.successions.all().size, "the rows stay here; only the export leaves them out")
+    }
+
+    /**
+     * #15 (C10, row 13): the export carries the catalog, its applicability and every line's link — the archived
+     * SupplyItem and the rows naming it included — read through `retain`'s copy, which keeps a list it does not name.
+     */
+    @Test
+    fun anExportCarriesSuppliesApplicabilityAndLinks() = runBlocking<Unit> {
+        val install = BackupInstall()
+        listOf(SupplyEstate.system, SupplyEstate.softener).forEach { install.assets.upsert(it) }
+        listOf(SupplyEstate.prefilter, SupplyEstate.membrane).forEach { install.supplyItems.upsert(it) }
+        listOf(SupplyEstate.prefilterOnSystem, SupplyEstate.membraneOnSoftener).forEach { install.assetSupplies.insert(it) }
+        install.profiles.upsert(SupplyEstate.quickAction)
+        install.events.upsert(SupplyEstate.change)
+
+        val decoded = BackupCodec.decode(install.export.run().data)
+
+        assertEquals(listOf(SupplyEstate.prefilter, SupplyEstate.membrane), decoded.data.supplyItems.map { it.toDomain() })
+        assertEquals(
+            listOf(SupplyEstate.prefilterOnSystem, SupplyEstate.membraneOnSoftener),
+            decoded.data.assetSupplies.map { it.toDomain() },
+        )
+        assertEquals(listOf(SupplyEstate.quickAction), decoded.data.eventProfiles.map { it.toDomain() })
+        assertEquals(listOf(SupplyEstate.change), decoded.data.assetEvents.map { it.toDomain() })
+        assertEquals(2, decoded.manifest.counts["assetSupplies"])
     }
 
     private companion object {

@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.AssetCondition
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.CaseCoverage
 import com.loosecannon.servicetag.core.model.CaseType
+import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.LoanReminderMode
 import com.loosecannon.servicetag.core.model.GroupId
 import com.loosecannon.servicetag.core.model.HealthDriver
@@ -30,6 +31,7 @@ import com.loosecannon.servicetag.core.usecase.CreateAsset
 import com.loosecannon.servicetag.core.usecase.OccurrenceAlreadyComplete
 import com.loosecannon.servicetag.core.usecase.SaveGroup
 import com.loosecannon.servicetag.core.usecase.SaveSchedule
+import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.coroutines.runBlocking
@@ -99,6 +101,7 @@ class MaintenanceRoutesTest {
             loanHandlersFor(graph),
             attachmentHandlersFor(graph),
             replaceHandlersFor(graph),
+            supplyHandlersFor(graph),
             appVersion = "1.2.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),
@@ -876,6 +879,40 @@ class MaintenanceRoutesTest {
     }
 
     /**
+     * Row 44 (#15, C24): a completion that **sends** a line may give it a `supplyId`, and the event it writes
+     * carries that link on that line (AC7). An absent key is an unlinked line. A completion sending no line
+     * writes no line at all, so it records no SupplyItem usage (limit 2).
+     */
+    @Test fun aCompletionLineCarriesItsLink() {
+        val asset = createAsset("Example RO System")
+        val schedule = createAssetSchedule(asset, title = "Replace prefilter")
+        val cartridge = runBlocking {
+            graph.saveSupplyItem.run(
+                null, SupplyItemCommand("Example Prefilter Cartridge", "", "", "", "", "", "", emptyList()),
+            ).item.id
+        }
+
+        val done = call(
+            "POST", "/v1/schedules/$schedule/complete",
+            """{"occurredOn":"2026-02-10","tzId":"UTC","consumables":[""" +
+                """{"name":"Prefilter cartridge","quantity":"1","unit":"ea","supplyId":"${cartridge.value}"},""" +
+                """{"name":"O-ring grease","quantity":"1","unit":"g"}]}""",
+        )
+        assertEquals(done.text(), 201, done.status)
+        val event = ApiJson.decodeFromString(CompletionResponse.serializer(), done.text()).event
+        assertEquals(
+            listOf("Prefilter cartridge" to cartridge.value, "O-ring grease" to null),
+            event.consumables.sortedBy { it.sortOrder }.map { it.name to it.supplyId },
+        )
+        runBlocking {
+            assertEquals(
+                listOf(cartridge, null),
+                graph.events.get(EventId(event.id))!!.consumables.sortedBy { it.sortOrder }.map { it.supplyId },
+            )
+        }
+    }
+
+    /**
      * D-25: **any valid past `occurredOn` is accepted**, and the date a caller sent is the date
      * stored — never today, and never refused for being in the past. A malformed date is a 422
      * naming the field.
@@ -1156,7 +1193,7 @@ class MaintenanceRoutesTest {
         )
         assertEquals(200, planned.status)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(17, report.formatVersion)
+        assertEquals(18, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.groups)
         assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), report.schedules)
@@ -1209,6 +1246,8 @@ class MaintenanceRoutesTest {
                 "transfers",
                 // #86 (format 15): table 20, the successions.
                 "successions",
+                // #15 (format 18): tables 21 and 22, the supply items and their applicability.
+                "supplyItems", "assetSupplies",
                 "conflicts", "duplicateCandidates",
             ),
             MergeReportResponse.serializer().descriptor.elementNames.toList(),
@@ -1279,9 +1318,9 @@ class MaintenanceRoutesTest {
         assertEquals(2, inserts("serviceCases"))
         assertEquals(3, inserts("caseEntries"))
         assertEquals(
-            "after categories, in table order, before #72's loans, #77's transfers and #86's successions",
+            "after categories, in table order, before #72's loans, #77's transfers, #86's successions and #15's two",
             listOf("serviceCases", "caseEntries", "loans"),
-            wire.keys.toList().dropLast(4).takeLast(3),
+            wire.keys.toList().dropLast(6).takeLast(3),
         )
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
@@ -1331,7 +1370,11 @@ class MaintenanceRoutesTest {
         fun inserts(key: String) = wire.getValue(key).jsonObject.getValue("insert").jsonPrimitive.content.toInt()
         assertEquals(2, inserts("assets"))
         assertEquals(5, inserts("loans"))
-        assertEquals("after the case entries, before #77's transfers and #86's successions", "loans", wire.keys.toList().dropLast(4).last())
+        assertEquals(
+            "after the case entries, before #77's transfers, #86's successions and #15's two",
+            "loans",
+            wire.keys.toList().dropLast(6).last(),
+        )
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
         runBlocking {
@@ -1485,7 +1528,7 @@ class MaintenanceRoutesTest {
      * (the succession table and the archive that carries the successions), and its B4 adds the `assetSuccessions`
      * count — none here; `SuccessionRoutesTest` counts appended ones.
      */
-    @Test fun statusReports17And17AndTheNewCounts() {
+    @Test fun statusReports18And18AndTheNewCounts() {
         val tub = createAsset("Hot tub")
         assertEquals(201, call("POST", "/v1/assets/$tub/conditions", """{"condition":"DOWN","tzId":"UTC"}""").status)
         assertEquals(
@@ -1502,8 +1545,8 @@ class MaintenanceRoutesTest {
         )
 
         val status = ApiJson.decodeFromString(StatusResponse.serializer(), call("GET", "/v1/status").text())
-        assertEquals(17, status.schemaVersion)
-        assertEquals(17, status.backupFormatVersion)
+        assertEquals(18, status.schemaVersion)
+        assertEquals(18, status.backupFormatVersion)
         assertEquals(1, status.counts["seasonActivations"])
         assertEquals(1, status.counts["assetConditions"])
         assertEquals(1, status.counts["healthSubjects"])
@@ -1534,11 +1577,11 @@ class MaintenanceRoutesTest {
     }
 
     /**
-     * Import-merge reads a **format-17** archive (this build's export) and reports **twenty** tables: the donor's
+     * Import-merge reads a **format-18** archive (this build's export) and reports **twenty-two** tables: the donor's
      * activation, condition and health subject each tally one INSERT on the wire, its two categories
      * (#74) two, and the apply writes each of them — an INSERT, never an update (spec §8.4).
      */
-    @Test fun importMergeReadsFormat17AndReportsTwentyTables() {
+    @Test fun importMergeReadsFormat18AndReportsTwentyTwoTables() {
         val archive = donorArchive()
         fun post(path: String) = router().handle(
             ApiRequest("POST", path, mapOf("authorization" to "Bearer $TOKEN", "content-type" to "application/zip"), archive),
@@ -1548,15 +1591,18 @@ class MaintenanceRoutesTest {
         assertEquals(planned.text(), 200, planned.status)
         val wire = ApiJson.parseToJsonElement(planned.text()).jsonObject
         val tallies = wire.keys.filter { key -> wire.getValue(key).let { it is JsonObject && "insert" in it } }
-        assertEquals(20, tallies.size)
+        assertEquals(22, tallies.size)
         val report = ApiJson.decodeFromString(MergeReportResponse.serializer(), planned.text())
-        assertEquals(17, report.formatVersion)
+        assertEquals(18, report.formatVersion)
         assertTrue(report.text(), report.applicable)
         val one = MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0)
         assertEquals(one, report.seasonActivations)
         assertEquals(one, report.conditions)
         assertEquals(one, report.healthSubjects)
         assertEquals(MergeTallyDto(insert = 2, identical = 0, conflict = 0, skipped = 0), report.categories)
+        // #15 (format 18): the two new tables are on the report, empty for a donor with no supply items.
+        val none = MergeTallyDto(insert = 0, identical = 0, conflict = 0, skipped = 0)
+        assertEquals(listOf(none, none), listOf(report.supplyItems, report.assetSupplies))
 
         assertEquals(200, post(IMPORT_MERGE_APPLY_PATH).status)
         runBlocking {

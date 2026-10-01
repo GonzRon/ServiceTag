@@ -46,6 +46,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.journal.Reading
 import com.loosecannon.servicetag.core.model.OperationalCondition
 import com.loosecannon.servicetag.core.model.ProfileConsumable
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.InstrumentEntryHeader
 import com.loosecannon.servicetag.ui.components.InstrumentEntryRow
@@ -58,6 +59,8 @@ import com.loosecannon.servicetag.ui.condition.ImpairmentOfferPrompt
 import com.loosecannon.servicetag.ui.condition.IncidentOfferDialog
 import com.loosecannon.servicetag.ui.condition.PendingCondition
 import com.loosecannon.servicetag.ui.condition.savingAlsoRecordsLine
+import com.loosecannon.servicetag.ui.supplies.SupplyLinkLine
+import com.loosecannon.servicetag.ui.supplies.SupplyListRow
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
@@ -214,10 +217,12 @@ fun EventEntryScreen(
             MaterialsBlock(
                 suggestions = state.suggestions,
                 rows = state.consumables,
+                supplies = state.supplies,
                 onSuggested = model::addSuggested,
                 onAdd = model::addBlankConsumable,
                 onChange = model::onConsumable,
                 onRemove = model::removeConsumable,
+                onUnlink = model::unlinkSupply,
             )
             OutlinedTextField(
                 value = state.notes,
@@ -303,15 +308,20 @@ private fun LoggedBlock(
 /**
  * What went in, kept in its own section (D12 §9). The profile's suggestions are chips that add a
  * row with its unit already filled; "+ Add material" opens an empty one for anything else.
+ *
+ * A linked row (#15, C35) — the link its chip carried, or the stored line's — says what it is linked to under it,
+ * with its remove action (P15-22, P15-23). The form never offers a link (P15-21): an unlinked row draws no line.
  */
 @Composable
 private fun MaterialsBlock(
     suggestions: List<ProfileConsumable>,
     rows: List<ConsumableRow>,
+    supplies: Map<SupplyId, SupplyListRow>,
     onSuggested: (ProfileConsumable) -> Unit,
     onAdd: () -> Unit,
     onChange: (Int, String?, String?, String?) -> Unit,
     onRemove: (Int) -> Unit,
+    onUnlink: (Int) -> Unit,
 ) {
     Column {
         SectionHeader(title = "Materials used")
@@ -368,6 +378,7 @@ private fun MaterialsBlock(
                     Icon(Icons.Outlined.Close, contentDescription = "Remove material")
                 }
             }
+            SupplyLinkLine(supplyId = row.supplyId, supplies = supplies, onUnlink = { onUnlink(index) })
         }
         OutlinedButton(
             onClick = onAdd,

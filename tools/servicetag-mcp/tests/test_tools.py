@@ -8,6 +8,7 @@ business (review finding 2), and every refusal a tool can raise now arrives as a
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import zipfile
@@ -96,6 +97,14 @@ EXPECTED_TOOLS = (
     "materialize_reference",
     "get_replace_offer",
     "replace_asset",
+    "list_supply_items",
+    "get_supply_item",
+    "create_supply_item",
+    "update_supply_item",
+    "archive_supply_item",
+    "list_asset_supplies",
+    "set_asset_supply",
+    "remove_asset_supply",
 )
 
 
@@ -109,17 +118,18 @@ def test_every_tool_the_design_names_is_registered() -> None:
         assert callable(getattr(server_module, name)), f"{name} is missing"
 
 
-def test_tool_names_are_seventy_six() -> None:
+def test_tool_names_are_eighty_four() -> None:
     """Spec §9.4: fourteen new tools took the 1.3 server's forty-one to fifty-five, 1.4.1's provider
     repair (#80) took it to fifty-six, #79's two warranty tools to fifty-eight, its five service-case
-    tools to sixty-three, #72's five loan tools to sixty-eight, #86's succession read to sixty-nine, and
-    #92's five attachment tools to seventy-four, and its two replace tools take it to seventy-six; `TOOL_NAMES`,
-    the registered tools and the guard's `expected_count` all agree."""
-    assert len(EXPECTED_TOOLS) == 76
-    assert len(server_module.TOOL_NAMES) == 76
+    tools to sixty-three, #72's five loan tools to sixty-eight, #86's succession read to sixty-nine,
+    #92's five attachment tools to seventy-four and its two replace tools to seventy-six, and #15's eight
+    supply tools take it to eighty-four; `TOOL_NAMES`, the registered tools and the guard's `expected_count`
+    all agree."""
+    assert len(EXPECTED_TOOLS) == 84
+    assert len(server_module.TOOL_NAMES) == 84
     registered = {tool.name for tool in server_module.mcp._tool_manager.list_tools()}
     assert registered == set(server_module.TOOL_NAMES)
-    assert len(registered) == 76
+    assert len(registered) == 84
 
 
 def test_pair_stores_the_code_upper_cased(api) -> None:
@@ -640,6 +650,160 @@ def test_update_event_has_no_default_at_all() -> None:
     assert all(p.default is inspect.Parameter.empty for p in params.values()), params
 
 
+# --- #15 (C27, row 56): a material line's supply link, gated on its presence ----------------------
+
+STATUS_17 = {"appVersion": "1.5.0", "apiVersion": 1, "schemaVersion": 17, "backupFormatVersion": 17, "counts": {}}
+STATUS_18 = dict(STATUS_17, schemaVersion=18, backupFormatVersion=18)
+LINE = {"name": "Example Prefilter Cartridge", "quantity": "1", "unit": "ea"}
+
+
+def _event_arguments(**overrides) -> dict:
+    arguments = {
+        "event_id": "e1", "asset_id": "a1", "kind": "MAINTENANCE", "occurred_on": "2026-09-21", "tz_id": "UTC",
+        "title": "Filter change", "profile_id": None, "occurred_time": None, "notes": "", "values": {},
+        "consumables": [dict(LINE)],
+    }
+    arguments.update(overrides)
+    return arguments
+
+
+def _too_old(raised, tool: str) -> None:
+    text = str(raised.value)
+    assert f"reports schema 17; {tool} needs schema 18" in text, text
+    assert "(a supply link on a material line)" in text, text
+
+
+def test_save_profile_with_a_link_refuses_schema_17(paired) -> None:
+    """A schema-17 phone's strict decoder answers 400 for `supplyId`, so the key is refused here by name."""
+    paired.reply("GET", "/v1/status", 200, STATUS_17)
+    with pytest.raises(ToolError, match="APP_SCHEMA_TOO_OLD") as raised:
+        server_module.save_profile(
+            asset_id="a1", name="Filter change", event_kind="MAINTENANCE",
+            consumables=[{"name": "Example Prefilter Cartridge", "defaultQuantity": 1, "unit": "ea",
+                          "supplyId": "si-1"}],
+        )
+    _too_old(raised, "save_profile")
+    assert [(r.method, r.path) for r in paired.requests] == [("GET", "/v1/status")]
+
+
+def test_log_event_with_an_explicit_null_supply_id_refuses_schema_17(paired) -> None:
+    """N-7: presence, not a non-null value — an explicit `null` is still a key a schema-17 phone refuses."""
+    paired.reply("GET", "/v1/status", 200, STATUS_17)
+    with pytest.raises(ToolError, match="APP_SCHEMA_TOO_OLD") as raised:
+        server_module.log_event(
+            asset_id="a1", kind="MAINTENANCE", occurred_on="2026-09-21", tz_id="UTC",
+            consumables=[dict(LINE, supplyId=None)],
+        )
+    _too_old(raised, "log_event")
+    assert [(r.method, r.path) for r in paired.requests] == [("GET", "/v1/status")]
+
+
+def test_update_event_with_a_link_refuses_schema_17_and_sends_it_to_schema_18(paired) -> None:
+    paired.reply("GET", "/v1/status", 200, STATUS_17)
+    with pytest.raises(ToolError, match="APP_SCHEMA_TOO_OLD") as raised:
+        server_module.update_event(**_event_arguments(consumables=[dict(LINE, supplyId="si-1")]))
+    _too_old(raised, "update_event")
+    assert [(r.method, r.path) for r in paired.requests] == [("GET", "/v1/status")]
+
+    server_module.device.schema_version = None
+    paired.reply("GET", "/v1/status", 200, STATUS_18)
+    server_module.update_event(**_event_arguments(consumables=[dict(LINE, supplyId="si-1")]))
+    assert (paired.last().method, paired.last().path) == ("PATCH", "/v1/events/e1")
+    assert body_of(paired.last())["consumables"] == [dict(LINE, supplyId="si-1")]
+
+
+def test_log_event_without_a_link_reaches_schema_17(paired) -> None:
+    """Without a `supplyId` key the line tools reach any phone they reached before #15, and send no key."""
+    paired.reply("GET", "/v1/status", 200, STATUS_17)
+    server_module.log_event(
+        asset_id="a1", kind="MAINTENANCE", occurred_on="2026-09-21", tz_id="UTC", consumables=[dict(LINE)],
+    )
+    server_module.update_event(**_event_arguments())
+    assert [(r.method, r.path) for r in paired.requests] == [
+        ("GET", "/v1/status"), ("POST", "/v1/events"), ("PATCH", "/v1/events/e1"),
+    ]
+    for recorded in paired.requests[1:]:
+        assert body_of(recorded)["consumables"] == [LINE]
+
+
+@pytest.mark.parametrize(
+    ("tool", "arguments", "method", "path"),
+    [
+        pytest.param(
+            "log_event",
+            {"asset_id": "a1", "kind": "MAINTENANCE", "occurred_on": "2026-09-21", "tz_id": "UTC"},
+            "POST", "/v1/events", id="log_event",
+        ),
+        pytest.param(
+            "update_event", {k: v for k, v in _event_arguments().items() if k != "consumables"},
+            "PATCH", "/v1/events/e1", id="update_event",
+        ),
+        pytest.param(
+            "complete_schedule",
+            {"schedule_id": "s1", "occurred_on": "2026-09-21", "tz_id": "UTC", "asset_id": None,
+             "occurred_time": None, "notes": "", "values": {}},
+            "POST", "/v1/schedules/s1/complete", id="complete_schedule",
+        ),
+    ],
+)
+def test_a_line_carrying_an_explicit_null_supply_id_passes_the_sdk(paired, tool, arguments, method, path) -> None:
+    """C27: the three event tools' line type admits an explicit `"supplyId": null` — what a line read back
+    from the phone carries when unlinked — through the SDK's own argument validation, not only a direct call."""
+    paired.reply("GET", "/v1/status", 200, STATUS_18)
+    lines = [dict(LINE, supplyId=None), dict(LINE, supplyId="si-1")]
+    result = asyncio.run(server_module.mcp.call_tool(tool, dict(arguments, consumables=lines)))
+    assert result.is_error is False, result
+    assert (paired.last().method, paired.last().path) == (method, path)
+    assert body_of(paired.last())["consumables"] == lines
+
+
+def test_kept_consumables_keep_supply_id_as_read(paired) -> None:
+    """The edit rebuilds each kept line from the row it read: `supplyId` travels exactly as read — a link, an
+    explicit `null`, or no key at all when the row had none — so an edit never clears a link by omission."""
+    paired.reply("GET", "/v1/status", 200, STATUS_18)
+    rows = [
+        {"id": "c1", "name": "Example Prefilter Cartridge", "defaultQuantity": 1.0, "unit": "ea",
+         "supplyId": "si-1", "sortOrder": 0},
+        {"id": "c2", "name": "Test strips", "defaultQuantity": None, "unit": "ea", "supplyId": None, "sortOrder": 1},
+        {"id": "c3", "name": "Gasket", "defaultQuantity": 1.0, "unit": "ea", "sortOrder": 2},
+    ]
+    paired.reply("GET", "/v1/assets/a1/profiles", 200, {"profiles": [_profile_row(consumables=rows)]})
+    server_module.save_profile(asset_id="a1", profile_id="p1", name="Filter change")
+    assert body_of(paired.last())["consumables"] == [
+        {"id": "c1", "name": "Example Prefilter Cartridge", "defaultQuantity": 1.0, "unit": "ea", "supplyId": "si-1"},
+        {"id": "c2", "name": "Test strips", "defaultQuantity": None, "unit": "ea", "supplyId": None},
+        {"id": "c3", "name": "Gasket", "defaultQuantity": 1.0, "unit": "ea"},
+    ]
+
+
+def test_a_schema_17_row_rebuild_sends_no_supply_id_key(paired) -> None:
+    """A schema-17 phone's rows carry no `supplyId`, so the rebuild sends none and the edit reaches that phone."""
+    paired.reply("GET", "/v1/status", 200, STATUS_17)
+    paired.reply("GET", "/v1/assets/a1/profiles", 200, {"profiles": [_profile_row()]})
+    server_module.save_profile(asset_id="a1", profile_id="p1", name="Water test (weekly)")
+    assert [(r.method, r.path) for r in paired.requests] == [
+        ("GET", "/v1/status"), ("GET", "/v1/assets/a1/profiles"), ("POST", "/v1/profiles"),
+    ]
+    assert body_of(paired.last())["consumables"] == [
+        {"id": "c1", "name": "Test strips", "defaultQuantity": 1.0, "unit": "ea"},
+    ]
+
+
+def test_a_kept_supply_id_that_is_not_text_is_refused_before_the_write(paired) -> None:
+    paired.reply("GET", "/v1/status", 200, STATUS_18)
+    rows = [{"id": "c1", "name": "Test strips", "defaultQuantity": 1.0, "unit": "ea", "supplyId": 7}]
+    paired.reply("GET", "/v1/assets/a1/profiles", 200, {"profiles": [_profile_row(consumables=rows)]})
+    with pytest.raises(ToolError, match=r"consumables\[0\]\.supplyId"):
+        server_module.save_profile(asset_id="a1", profile_id="p1", name="Filter change")
+    assert [r.method for r in paired.requests] == ["GET", "GET"]
+
+
+def test_the_line_tools_docstrings_say_how_a_line_names_its_supply_item() -> None:
+    for name in ("save_profile", "log_event", "update_event", "complete_schedule"):
+        doc = " ".join((getattr(server_module, name).__doc__ or "").split())
+        assert "`supplyId`" in doc and "schema 18" in doc and "`APP_SCHEMA_TOO_OLD`" in doc, name
+
+
 def an_archive(tmp_path):
     archive = tmp_path / "ServiceTag-data.zip"
     with zipfile.ZipFile(archive, "w") as zf:
@@ -798,23 +962,40 @@ def test_import_merge_returns_the_twenty_tallies_and_the_conflicts_as_sent(paire
     assert [r.path for r in paired.requests] == ["/v1/import-merge/plan"]
 
 
-def test_import_merge_docs_say_formats_1_to_17_twenty_tables_and_the_four_reasons() -> None:
-    """#77 (C24) and #86 (C21): the tool's docstring and the README's `import_merge` section name the range
-    1–17, the twenty tables, the `transfers` and `successions` tallies, the two reasons a transfer record
-    conflicts with and the two a succession does; the README lists the twenty tallies in the report's order."""
+TWENTY_TWO_TALLIES = TWENTY_TALLIES + ("supplyItems", "assetSupplies")
+"""#15 (format 18) appends the supply items, then their applicability rows, to the report's tallies."""
+
+
+def test_import_merge_docs_say_formats_1_to_18_twenty_two_tables_and_the_four_reasons() -> None:
+    """#77 (C24), #86 (C21) and #15 (C28): the tool's docstring and the README's `import_merge` section name the
+    range 1–18, the twenty-two tables, the `transfers`, `successions`, `supplyItems` and `assetSupplies` tallies,
+    the two reasons a transfer record conflicts with and the two a succession does; the README lists the
+    twenty-two tallies in the report's order."""
     doc = " ".join((server_module.import_merge.__doc__ or "").split())
-    assert "format 1–17" in doc
-    assert "twenty tables" in doc and "nineteen" not in doc
-    for word in ("`transfers`", "`successions`", "`ASSET_TRANSFERRED_OUT`", "`TRANSFER_DIVERGED`",
-                 "`SUCCESSION_TAKEN`", "`SUCCESSION_CYCLE`"):
+    assert "format 1–18" in doc and "1–17" not in doc
+    assert "twenty-two tables" in doc and "nineteen" not in doc and "twenty tables" not in doc
+    for word in ("`transfers`", "`successions`", "`supplyItems`", "`assetSupplies`", "`ASSET_TRANSFERRED_OUT`",
+                 "`TRANSFER_DIVERGED`", "`SUCCESSION_TAKEN`", "`SUCCESSION_CYCLE`"):
         assert word in doc, word
 
     readme = README.read_text(encoding="utf-8")
     section = readme.split("### `import_merge`", 1)[1].split("\n## ", 1)[0]
     flat = " ".join(section.split())
-    assert "format **1–17**" in flat
-    assert "each of **twenty** tables" in flat and "nineteen" not in flat
+    assert "format **1–18**" in flat and "1–17" not in flat
+    assert "each of **twenty-two** tables" in flat and "nineteen" not in flat
     for word in ("`ASSET_TRANSFERRED_OUT`", "`TRANSFER_DIVERGED`", "`SUCCESSION_TAKEN`", "`SUCCESSION_CYCLE`"):
         assert word in flat, word
-    listed = flat.split("each of **twenty** tables — ", 1)[1].split(".", 1)[0]
-    assert [name.strip(" `") for name in listed.split(",")] == list(TWENTY_TALLIES)
+    listed = flat.split("each of **twenty-two** tables — ", 1)[1].split(".", 1)[0]
+    assert [name.strip(" `") for name in listed.split(",")] == list(TWENTY_TWO_TALLIES)
+
+
+def test_the_readme_names_every_tool_and_the_supply_gate() -> None:
+    """C28: the README's tool list counts eighty-four and names each supply tool, the schema-18 gate and the
+    line key."""
+    readme = " ".join(README.read_text(encoding="utf-8").split())
+    tools = readme.split("## The tools", 1)[1]
+    assert tools.lstrip().startswith("Eighty-four:"), tools[:40]
+    for name in EXPECTED_TOOLS:
+        assert f"`{name}`" in readme, name
+    assert "The supply tools need schema 18." in readme
+    assert "`supplyId`" in tools and "`APP_SCHEMA_TOO_OLD`" in tools

@@ -5,9 +5,12 @@ import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.backup.BackupData
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.testing.assetSupplyOf
 import com.loosecannon.servicetag.core.testing.completionOf
 import com.loosecannon.servicetag.core.testing.groupOf
+import com.loosecannon.servicetag.core.testing.specificationOf
 import com.loosecannon.servicetag.core.testing.subjectOf
+import com.loosecannon.servicetag.core.testing.supplyItemOf
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.ANODE
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.COMPRESSOR
 import com.loosecannon.servicetag.core.transfer.TransferFixtures.EMPTY_GROUP
@@ -295,5 +298,89 @@ class TransferGraphTest {
         assertEquals(emptyList(), both.assetSuccessions, "both ends selected; the pack carries none")
         assertEquals(emptyList(), selected(lineage, OPENER).data.assetSuccessions, "one end of each selected; still none")
         BackupCodec.decode(encode(both))
+    }
+
+    // --- #15 (C13, rows 27–28): SupplyItems by naming row, applicability with its asset ------------------------------
+
+    /**
+     * The estate with four SupplyItems, fictional: s1 the heater and its anode take, s3 the compressor takes; s2 is
+     * named only by the heater's quick-action line and s4 only by its completion's line; s5 only by the compressor's
+     * completion line. Specifications travel inside their item. The compressor's loan is returned, so it may be a root.
+     */
+    private fun supplied(): BackupData = estate.copy(
+        assetLoans = estate.assetLoans.map { it.copy(returnedOn = it.returnedOn ?: "2026-09-21") },
+        eventProfiles = estate.eventProfiles.map { p ->
+            if (p.assetId == HEATER) p.copy(consumables = p.consumables.map { it.copy(supplyId = "s2") }) else p
+        },
+        assetEvents = estate.assetEvents.map { e ->
+            when (e.id) {
+                "e1" -> e.copy(consumables = e.consumables.map { it.copy(supplyId = "s4") })
+                "e3" -> e.copy(consumables = listOf(e1Line.copy(id = "cu3", supplyId = "s5")))
+                else -> e
+            }
+        },
+        supplyItems = listOf(
+            supplyItemOf("s1", specifications = listOf(specificationOf("sp1", "length", "Length", "10", "in"))),
+            supplyItemOf("s2", "Example Descaler"),
+            supplyItemOf("s3", "Example Intake Filter"),
+            supplyItemOf("s4", "Example Descaler Refill", archivedAt = 3_000L),
+            supplyItemOf("s5", "Example Compressor Oil"),
+        ).map { it.toDto() },
+        assetSupplies = listOf(
+            assetSupplyOf("as1", HEATER, "s1", "Anode kit"),
+            assetSupplyOf("as2", ANODE, "s1", "Replacement"),
+            assetSupplyOf("as3", COMPRESSOR, "s3", "Intake filter"),
+        ).map { it.toDto() },
+    )
+
+    private val e1Line get() = estate.assetEvents.first { it.id == "e1" }.consumables.single()
+
+    /** An applicability row travels with its asset, and a SupplyItem only when a carried row names it. */
+    @Test
+    fun aPackCarriesOnlyTheSupplyItemsItsRowsName() {
+        // No line linked: only the applicability rows name an item here.
+        val rowsOnly = supplied().let { data ->
+            data.copy(
+                supplyItems = data.supplyItems.filter { it.id in setOf("s1", "s3") },
+                eventProfiles = estate.eventProfiles,
+                assetEvents = estate.assetEvents,
+            )
+        }
+
+        val heater = selected(rowsOnly, HEATER).data
+        assertEquals(listOf("as1", "as2"), heater.assetSupplies.map { it.id }, "the heater's row and its anode's")
+        assertEquals(rowsOnly.supplyItems.filter { it.id == "s1" }, heater.supplyItems, "s1 with its specification; s3 stays home")
+        val compressor = selected(rowsOnly, COMPRESSOR).data
+        assertEquals(listOf("as3"), compressor.assetSupplies.map { it.id })
+        assertEquals(listOf("s3"), compressor.supplyItems.map { it.id })
+        assertEquals(heater, BackupCodec.decode(encode(heater)).data)
+    }
+
+    /** A SupplyItem no applicability row names travels when a carried quick-action or event line names it, archived too. */
+    @Test
+    fun anItemNamedOnlyByACarriedLineTravels() {
+        val data = supplied()
+
+        val pack = selected(data, HEATER).data
+
+        assertEquals(listOf("s1", "s2", "s4"), pack.supplyItems.map { it.id }, "s3 and s5 stay home: no carried row names them")
+        assertEquals(data.supplyItems.filter { it.id in setOf("s1", "s2", "s4") }, pack.supplyItems, "verbatim, archived included")
+        assertEquals(listOf("s3", "s5"), selected(data, COMPRESSOR).data.supplyItems.map { it.id }, "its row's item and its line's")
+        assertEquals(pack, BackupCodec.decode(encode(pack)).data, "every carried link resolves inside the pack")
+    }
+
+    /**
+     * C3 (C13): `retain` drops the held assets' applicability rows and keeps every SupplyItem — global, never dropped,
+     * even one only a held asset's rows name — so an export without the held graph still decodes.
+     */
+    @Test
+    fun retainDropsAHeldAssetsApplicabilityAndKeepsEveryItem() {
+        val data = supplied()
+
+        val kept = assertIs<TransferRetention.Retained>(TransferGraph.retain(data, setOf(AssetId(HEATER), AssetId(ANODE)))).data
+
+        assertEquals(listOf("as3"), kept.assetSupplies.map { it.id }, "only the compressor's row stays")
+        assertEquals(data.supplyItems, kept.supplyItems, "every item, s1, s2 and s4 included")
+        BackupCodec.decode(encode(kept))
     }
 }

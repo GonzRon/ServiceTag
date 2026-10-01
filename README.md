@@ -53,7 +53,7 @@ Transfer Packs, shipped in 1.5.0, cover cases such as selling a house where some
 
 ServiceTag 1.6.0 lets a paired workstation do the jobs that used to need the phone in hand — an Asset's documents, Save as document and Replace asset — gives a web link a document role, and starts a share into ServiceTag with the Assets tab's own searchable list ([release notes](docs/releases/1.6.0.md)).
 
-The next product phase is **supplies and consumables**: a canonical catalog for filters, batteries, belts, cartridges, chemicals, fluids and other service materials, with optional stock/reorder information and replacement-on-cadence workflows. After that, ServiceTag can attach manuals, receipts, photos, links and share-intake resources directly to those supply identities.
+The next product phase is **supplies and consumables**: a canonical catalog for filters, batteries, belts, cartridges, chemicals, fluids and other service materials, with their specifications, the assets they fit, and replacement-on-cadence through ordinary maintenance schedules. After that, ServiceTag can attach manuals, receipts, photos, links and share-intake resources directly to those supply identities.
 
 Larger ideas such as installed-component tracking, richer backup conflict resolution, telemetry/BLE ingestion, Home Assistant integrations, and LLM-assisted equipment research remain later work rather than prerequisites for the core maintenance app.
 

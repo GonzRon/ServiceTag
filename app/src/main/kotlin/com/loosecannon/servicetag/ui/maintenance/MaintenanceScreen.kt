@@ -32,6 +32,7 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.StatusBadge
+import com.loosecannon.servicetag.ui.supplies.SUPPLIES_SECTION
 import com.loosecannon.servicetag.ui.theme.LocalServiceTagSemanticColors
 
 /** The Maintenance destination's four RATIFIED section labels, and its empty state (§17.1f). */
@@ -49,9 +50,9 @@ const val REMINDERS_BLOCKED = "Reminders are off because notifications are block
  * The Maintenance destination (spec §2.6, master plan §11): the third tab, and the shell the rest
  * of 1.2's maintenance surfaces land inside.
  *
- * Four sections, each of which routes onward — **"Due work"** and **"Schedules"** to a schedule,
- * **"Maintenance groups"** to a group, **"Reminders"** to reminder health — plus F4's three
- * persistent quick actions above them. Due work is what needs attention, in the shared projection's
+ * Five sections, each of which routes onward — **"Due work"** and **"Schedules"** to a schedule,
+ * **"Maintenance groups"** to a group, #15's **"Supplies"** to the SupplyItem catalog (P15-1, C29),
+ * **"Reminders"** to reminder health — plus F4's three persistent quick actions above them. Due work is what needs attention, in the shared projection's
  * attention order; Schedules is every listed schedule, **the paused ones included**, because a
  * paused schedule is what an owner comes here to find and the dashboard is the surface that
  * deliberately omits it.
@@ -66,6 +67,8 @@ fun MaintenanceScreen(
     onOpenSchedule: (String) -> Unit,
     onOpenGroup: (String) -> Unit,
     onNewGroup: () -> Unit,
+    /** #15 (C29): the fifth section's one row, opening the Supplies list. */
+    onOpenSupplies: () -> Unit,
     onReminderHealth: () -> Unit,
     onScanTag: () -> Unit,
     onAddAsset: () -> Unit,
@@ -157,7 +160,13 @@ fun MaintenanceScreen(
                 onNewGroup = onNewGroup,
             )
 
-            // The fourth section is one row and needs no heading of its own: the row's name *is*
+            // #15's fifth section (C29), after the groups and before Reminders: one row, with no
+            // heading of its own for the reason Reminders has none — the row's name *is* the ratified
+            // section label (P15-1), and a heading above it would say the same word twice.
+            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            NavigatingRow(title = SUPPLIES_SECTION, onClick = onOpenSupplies)
+
+            // The last section is one row and needs no heading of its own: the row's name *is*
             // the ratified section label, and a heading above it would say the same word twice.
             HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
             NavigatingRow(title = REMINDERS_SECTION, onClick = onReminderHealth)

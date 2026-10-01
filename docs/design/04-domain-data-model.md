@@ -434,6 +434,9 @@ every schedule edit, every import, and in the daily job.
 
 ## 9. Supplies and stock (Phase 6)
 
+> **Amended 2026-10-01 (#15, Room schema 18).** What shipped of this section is a supply item's identity, its generic specifications and `asset_supply` applicability (no `notes`); `vendor_url` is #69's; every other column and table here is #95's and is not built. (As shipped, `asset_supply.supply_id` is FK RESTRICT — a SupplyItem is archived, never deleted — not the CASCADE drafted below.)
+> A supply item is archived, never deleted (R15-5), so §13's "Delete supply" row is superseded. The current model is [14-asset-model.md](14-asset-model.md).
+
 ### `supply_item`
 
 | Column | Notes |

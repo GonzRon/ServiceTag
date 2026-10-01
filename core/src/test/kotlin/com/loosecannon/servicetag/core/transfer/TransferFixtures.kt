@@ -119,7 +119,7 @@ object TransferFixtures {
             defaultTitle = "Flush", templateKey = null, sortOrder = 0, archivedAt = null, createdAt = 100L,
             updatedAt = 100L,
             fields = listOf(ProfileField("pf1", DefinitionId("d1"), required = true, sortOrder = 0)),
-            consumables = listOf(ProfileConsumable("pc1", "Example descaler", 1.0, "l", 0)),
+            consumables = listOf(ProfileConsumable("pc1", "Example descaler", 1.0, "l", 0, supplyId = null)),
         ),
     )
 
@@ -147,7 +147,7 @@ object TransferFixtures {
         completionOf("e1", "2026-03-01", "2026-03-01", assetId = HEATER, scheduleId = "s1", meter = "d1" to 5.0)
             .copy(
                 profileId = ProfileId("p1"),
-                consumables = listOf(ConsumableUsage("cu1", "Example descaler", 1.0, "l", 0)),
+                consumables = listOf(ConsumableUsage("cu1", "Example descaler", 1.0, "l", 0, supplyId = null)),
             ),
         completionOf("e2", "2026-02-01", "2026-02-01", assetId = ANODE, scheduleId = "sg"),
         completionOf("e3", "2026-04-01", "2026-04-01", assetId = COMPRESSOR, scheduleId = "s2", meter = "d2" to 7.0),

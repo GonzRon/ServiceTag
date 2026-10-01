@@ -4,14 +4,20 @@ import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
+import com.loosecannon.servicetag.core.model.AssetSupply
 import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.EventId
 import com.loosecannon.servicetag.core.model.PayloadFormat
+import com.loosecannon.servicetag.core.model.ProfileId
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
+import com.loosecannon.servicetag.core.model.SupplySpecification
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.usecase.AssetCommand
 import com.loosecannon.servicetag.core.usecase.CreateAsset
+import com.loosecannon.servicetag.core.usecase.SupplyItemCommand
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
@@ -62,6 +68,7 @@ class ApiRouterTest {
             loanHandlersFor(graph),
             attachmentHandlersFor(graph),
             replaceHandlersFor(graph),
+            supplyHandlersFor(graph),
             appVersion = "1.1.0",
             schemaVersion = 5,
         ),
@@ -465,6 +472,104 @@ class ApiRouterTest {
         runBlocking { assertEquals(null, graph.events.get(EventId(event.id))) }
     }
 
+    // --- #15 (C24): the line requests carry `supplyId` --------------------------------------
+
+    /** One SupplyItem through the use case (its routes are B5's), returned as its id. */
+    private fun supplyItem(name: String): String = runBlocking {
+        graph.saveSupplyItem.run(null, SupplyItemCommand(name, "", "", "", "", "", "", emptyList())).item.id.value
+    }
+
+    /**
+     * Row 44: a profile line's `supplyId` is stored and answered; absent and `null` both read as no link and
+     * answer `"supplyId":null`; an edit that leaves the key off a line clears its link (the request is a full
+     * replace, limit 1), and one that sends it keeps it.
+     */
+    @Test fun aProfileLineWithSupplyIdIsStoredAndAnswered() {
+        val id = createHotTub()
+        val cartridge = supplyItem("Example Filter Cartridge")
+
+        val saved = call(
+            "POST", "/v1/profiles",
+            """{"assetId":"$id","name":"Filter swap","eventKind":"REPLACEMENT","consumables":[""" +
+                """{"name":"Filter cartridge","defaultQuantity":1,"unit":"ea","supplyId":"$cartridge"},""" +
+                """{"name":"Sanitiser","unit":"ml","supplyId":null},""" +
+                """{"name":"O-ring"}]}""",
+        )
+        assertEquals(saved.text(), 200, saved.status)
+        val profile = ApiJson.decodeFromString(ProfileResponse.serializer(), saved.text()).profile
+        val lines = profile.consumables.sortedBy { it.sortOrder }
+        assertEquals(listOf(cartridge, null, null), lines.map { it.supplyId })
+        assertEquals(2, Regex(""""supplyId":null""").findAll(saved.text()).count())
+        runBlocking {
+            assertEquals(
+                listOf(SupplyId(cartridge), null, null),
+                graph.profiles.get(ProfileId(profile.id))!!.consumables.sortedBy { it.sortOrder }.map { it.supplyId },
+            )
+        }
+
+        val edited = call(
+            "POST", "/v1/profiles",
+            """{"id":"${profile.id}","assetId":"$id","name":"Filter swap","eventKind":"REPLACEMENT","consumables":[""" +
+                """{"id":"${lines[0].id}","name":"Filter cartridge","defaultQuantity":1,"unit":"ea"},""" +
+                """{"id":"${lines[1].id}","name":"Sanitiser","unit":"ml","supplyId":"$cartridge"}]}""",
+        )
+        assertEquals(edited.text(), 200, edited.status)
+        val after = ApiJson.decodeFromString(ProfileResponse.serializer(), edited.text()).profile
+        assertEquals(listOf(null, cartridge), after.consumables.sortedBy { it.sortOrder }.map { it.supplyId })
+        runBlocking {
+            assertEquals(
+                listOf(null, SupplyId(cartridge)),
+                graph.profiles.get(ProfileId(profile.id))!!.consumables.sortedBy { it.sortOrder }.map { it.supplyId },
+            )
+        }
+    }
+
+    /**
+     * Row 44: an event line's `supplyId` round-trips through `POST /v1/events`, the asset's list and
+     * `PATCH /v1/events/{id}`; the link travels with its line when the lines are resequenced, and an absent
+     * key is an unlinked line.
+     */
+    @Test fun anEventLineWithSupplyIdRoundTrips() {
+        val id = createHotTub()
+        val cartridge = supplyItem("Example Filter Cartridge")
+
+        val logged = call(
+            "POST", "/v1/events",
+            """{"assetId":"$id","kind":"REPLACEMENT","title":"Filter swap","occurredOn":"2026-09-21","tzId":"UTC",""" +
+                """"consumables":[{"name":"Filter cartridge","quantity":"1","unit":"ea","supplyId":"$cartridge"},""" +
+                """{"name":"Sanitiser","quantity":"50","unit":"ml","supplyId":null}]}""",
+        )
+        assertEquals(logged.text(), 201, logged.status)
+        val event = ApiJson.decodeFromString(EventResponse.serializer(), logged.text()).event
+        assertEquals(listOf(cartridge, null), event.consumables.sortedBy { it.sortOrder }.map { it.supplyId })
+        assertTrue(logged.text(), """"supplyId":null""" in logged.text())
+
+        val listed = ApiJson.decodeFromString(EventListResponse.serializer(), call("GET", "/v1/assets/$id/events").text())
+        assertEquals(
+            listOf(cartridge, null),
+            listed.events.single().consumables.sortedBy { it.sortOrder }.map { it.supplyId },
+        )
+
+        val edited = call(
+            "PATCH", "/v1/events/${event.id}",
+            """{"assetId":"$id","kind":"REPLACEMENT","title":"Filter swap","occurredOn":"2026-09-21","tzId":"UTC",""" +
+                """"consumables":[{"name":"Sanitiser","quantity":"50","unit":"ml"},""" +
+                """{"name":"Filter cartridge","quantity":"1","unit":"ea","supplyId":"$cartridge"}]}""",
+        )
+        assertEquals(edited.text(), 200, edited.status)
+        val after = ApiJson.decodeFromString(EventResponse.serializer(), edited.text()).event
+        assertEquals(
+            listOf("Sanitiser" to null, "Filter cartridge" to cartridge),
+            after.consumables.sortedBy { it.sortOrder }.map { it.name to it.supplyId },
+        )
+        runBlocking {
+            assertEquals(
+                listOf(null, SupplyId(cartridge)),
+                graph.events.get(EventId(event.id))!!.consumables.sortedBy { it.sortOrder }.map { it.supplyId },
+            )
+        }
+    }
+
     // --- tag bindings, read only -------------------------------------------------------------
 
     @Test fun tagBindingsAreReadableAndNotWritable() {
@@ -638,6 +743,7 @@ class ApiRouterTest {
                 loanHandlersFor(graph),
                 attachmentHandlersFor(graph),
                 replaceHandlersFor(graph),
+                supplyHandlersFor(graph),
                 appVersion = "1.1.0",
                 schemaVersion = 5,
             ),
@@ -730,6 +836,64 @@ class ApiRouterTest {
         assertEquals(200, again.status)
         assertEquals(MergeTallyDto(insert = 0, identical = 1, conflict = 0, skipped = 0), reportIn(again).assets)
         runBlocking { assertEquals(2, graph.assets.all().size) }
+    }
+
+    /**
+     * #15 (C11, row 20) — a merge inserting SupplyItems and the applicability naming them commits on Room. The apply
+     * writes each item, with its specifications, before the `asset_supply` rows whose `supply_id` foreign key needs
+     * it (RESTRICT), and after the asset those rows name. Two items and one row, so a report mirror wired to the
+     * wrong table fails on its value; the second apply is all IDENTICAL. The names are fictional.
+     */
+    @Test fun aMergeInsertingItemsAndTheirApplicabilityCommits() {
+        val donor = FakeGraph()
+        val (archive, items, rows) = try {
+            var n = 0
+            val disjoint = IdGenerator { "00000000-0000-4000-8000-9100%08d".format(++n) }
+            val createAsset = CreateAsset(
+                donor.assets, donor.uow, disjoint, donor.clock, donor.applyTemplate, donor.promoteCategory,
+            )
+            runBlocking {
+                val system = createAsset.run("Example RO System", "Water")
+                fun itemOf(id: String, name: String, archivedAt: Long?, specifications: List<SupplySpecification>) =
+                    SupplyItem(
+                        id = SupplyId(id), name = name, category = "Filter", manufacturer = "Example Filters Co.",
+                        model = "PF-10", partNumber = "EF-PF10-5", preferredUnit = "ea", notes = "",
+                        archivedAt = archivedAt, createdAt = 1_000L, updatedAt = 2_000L, specifications = specifications,
+                    )
+                donor.supplyItems.upsert(
+                    itemOf(
+                        "supply-prefilter", "Example Prefilter Cartridge", null,
+                        listOf(
+                            SupplySpecification("spec-length", "length", "Length", "10", "in", 0),
+                            SupplySpecification("spec-micron", "micron_rating", "Micron rating", "5", "um", 1),
+                        ),
+                    ),
+                )
+                donor.supplyItems.upsert(itemOf("supply-membrane", "Example RO Membrane", 3_000L, emptyList()))
+                donor.assetSupplies.insert(
+                    AssetSupply("supply-row-1", system.id, SupplyId("supply-prefilter"), "Prefilter", 1_000L, 2_000L),
+                )
+                Triple(donor.exportBackupSet.run().data, donor.supplyItems.all(), donor.assetSupplies.all())
+            }
+        } finally {
+            donor.close()
+        }
+        createHotTub()
+
+        val applied = postArchive(IMPORT_MERGE_APPLY_PATH, archive)
+
+        assertEquals(applied.text(), 200, applied.status)
+        assertEquals(MergeTallyDto(insert = 2, identical = 0, conflict = 0, skipped = 0), reportIn(applied).supplyItems)
+        assertEquals(MergeTallyDto(insert = 1, identical = 0, conflict = 0, skipped = 0), reportIn(applied).assetSupplies)
+        runBlocking {
+            assertEquals(items, graph.supplyItems.all())
+            assertEquals(rows, graph.assetSupplies.all())
+        }
+
+        val again = postArchive(IMPORT_MERGE_APPLY_PATH, archive)
+        assertEquals(200, again.status)
+        assertEquals(MergeTallyDto(insert = 0, identical = 2, conflict = 0, skipped = 0), reportIn(again).supplyItems)
+        assertEquals(MergeTallyDto(insert = 0, identical = 1, conflict = 0, skipped = 0), reportIn(again).assetSupplies)
     }
 
     /**

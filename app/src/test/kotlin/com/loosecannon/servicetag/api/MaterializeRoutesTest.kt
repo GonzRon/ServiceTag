@@ -114,6 +114,7 @@ class MaterializeRoutesTest {
                 references = graph.references, materializeReference = materializeOver(folder), prefill = prefill,
             ),
             replaceHandlersFor(graph),
+            supplyHandlersFor(graph),
             appVersion = "1.4.0",
             schemaVersion = AppGraph.SCHEMA_VERSION,
         ),

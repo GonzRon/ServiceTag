@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.schedule.DueStatus
 import com.loosecannon.servicetag.core.schedule.statusOf
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.servicetag.core.testing.InMemoryClosureRepository
@@ -91,11 +92,11 @@ class GroupCompletionTest {
         )
     private val postpone = PostponeSchedule(countedSchedules, uow, recompute)
     private val completeMembers = CompleteGroupMembers(
-        countedSchedules, groups, events, closures, defs, profiles, uow, ids, clock, recompute,
+        countedSchedules, groups, events, closures, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute,
     )
     private val closeRound =
         CloseRound(countedSchedules, closures, uow, ids, clock, todayPort, recompute)
-    private val logEvent = LogEvent(events, defs, profiles, assets, uow, ids, clock, recompute)
+    private val logEvent = LogEvent(events, defs, profiles, assets, InMemorySupplyItemRepository(), uow, ids, clock, recompute)
     private val archiveAsset = ArchiveAsset(assets, uow, clock) { recompute.forAsset(it) }
 
     private suspend fun seedAsset(id: String): AssetId {

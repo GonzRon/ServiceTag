@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetLoanId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetSuccession
+import com.loosecannon.servicetag.core.model.AssetSupply
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentOwner
@@ -33,6 +34,8 @@ import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.ServiceCase
 import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.ServiceCaseId
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TransferRecord
@@ -340,6 +343,54 @@ interface ReferenceRepository {
 }
 
 /**
+ * #15 (C4; R15-5). The SupplyItem catalog, an aggregate as [GroupRepository]'s is: one [upsert] writes the
+ * item row and **replaces** its specification rows, as [ProfileRepository] replaces a profile's lines — the
+ * ids come from the caller, so a specification that survived an edit keeps its identity.
+ *
+ * **Archive-only:** a SupplyItem is never deleted one by one, on this port or anywhere above the schema
+ * (R15-5); [setArchived] writes `archived_at` and the `updated_at` stamp and nothing else. [deleteAll] is the
+ * replace import's wipe, its only production caller (test helpers also wipe) — it runs after the Asset rows are wiped, whose CASCADE has taken
+ * every applicability row the RESTRICT would otherwise refuse it for. Every rule — the name, the
+ * specification keys — lives in the use cases, so nothing here decides anything.
+ */
+interface SupplyItemRepository {
+    suspend fun get(id: SupplyId): SupplyItem?
+    /** Every SupplyItem, archived included, by id. */
+    suspend fun all(): List<SupplyItem>
+    suspend fun upsert(item: SupplyItem)
+    suspend fun setArchived(id: SupplyId, archivedAt: Long?, updatedAt: Long)
+
+    /** The replace import's wipe, its only production caller (test helpers also wipe) — a SupplyItem is never deleted otherwise (R15-5). */
+    suspend fun deleteAll()
+
+    /** Every SupplyItem, live, archived included (the caller filters), by name case-insensitively, then id. */
+    fun observeAll(): Flow<List<SupplyItem>>
+}
+
+/**
+ * #15 (C4; R15-3, R15-5). Applicability rows: which SupplyItems an Asset takes, in which role. Owned by the
+ * Asset (its CASCADE takes them) and naming a SupplyItem the schema will not let go of (RESTRICT). A row is
+ * configuration, not history, so it is removable one by one; the caller re-roles and moves the stamp, and [update] writes the row whole.
+ * `(assetId, supplyId, role)` is unique — the use case refuses a second, and the schema's index is the last
+ * word. The write guard wraps this port (C14), not this file.
+ */
+interface AssetSupplyRepository {
+    suspend fun get(id: String): AssetSupply?
+    /** An Asset's rows, by `(role, id)`. */
+    suspend fun forAsset(assetId: AssetId): List<AssetSupply>
+    /** Every row naming a SupplyItem, by `(assetId, role, id)`. */
+    suspend fun forSupply(supplyId: SupplyId): List<AssetSupply>
+    /** Every row, by id. */
+    suspend fun all(): List<AssetSupply>
+    suspend fun insert(row: AssetSupply)
+    suspend fun update(row: AssetSupply)
+    suspend fun delete(id: String)
+
+    /** An Asset's rows, live, by `(role, id)`. */
+    fun observeForAsset(assetId: AssetId): Flow<List<AssetSupply>>
+}
+
+/**
  * 1.4. **Insert and query only**, the [ClosureRepository] shape: an activation row is an immutable
  * fact (inv. 89). There is no update, no delete and no `deleteAll`; a row leaves only by its
  * asset's CASCADE. Every list orders by `(occurredOn, createdAt, id)`.
@@ -403,7 +454,7 @@ interface CategoryRepository {
 /**
  * #79 (C13; R79-1). A service case's **header**: upsert and query. There is **no delete** — a case
  * leaves only by its asset's CASCADE, and CANCELLED is how an owner abandons one (R79-9). `deleteAll`
- * is the replace import's wipe, which is its only caller. Lists by asset order by
+ * is the replace import's wipe, which is its only production caller (test helpers also wipe). Lists by asset order by
  * `(openedOn descending, id)`; [all] orders by id.
  */
 interface ServiceCaseRepository {
@@ -433,7 +484,7 @@ interface ServiceCaseEntryRepository {
 /**
  * #72 (C1; R72-1, R72-17). The loans of an asset, one row per loan: upsert and query, and **no delete**
  * — "Mark returned" is a loan's only exit, a returned loan stays as history, and a loan leaves only by
- * its asset's CASCADE. `deleteAll` is the replace import's wipe, which is its only caller. An asset
+ * its asset's CASCADE. `deleteAll` is the replace import's wipe, which is its only production caller (test helpers also wipe). An asset
  * holds at most one open loan; the use cases refuse a second, and the schema's unique index is the
  * last word. Lists by asset order by `(lentOn descending, id)`; [all] and [open] order by id.
  */
@@ -456,7 +507,7 @@ interface AssetLoanRepository {
  * #77 (C6; R77-3, R77-12). The transfer records: **append and query only** — no update and no delete of
  * one row anywhere. [append] **aborts** on an id already held, never overwriting it. There is no foreign
  * key: a record names its asset softly and outlives it (`DeleteAsset` keeps it, R77-4). `deleteAll` is the
- * replace import's wipe, which is its only caller. [all] orders by id; [forAsset] by `(at, id)`.
+ * replace import's wipe, which is its only production caller (test helpers also wipe). [all] orders by id; [forAsset] by `(at, id)`.
  * [heldIds] is `heldIds(all())`, the one rule, asked in the caller's transaction.
  */
 interface TransferRecordRepository {
@@ -474,7 +525,7 @@ interface TransferRecordRepository {
  * #86 (C1, C2; R86-1, R86-15). The successions: **append and query only** — no update and no delete of one row
  * anywhere. [append] **aborts** on an id already held, and on a predecessor or a successor another row already
  * names (the two unique indexes, I2). A row leaves only by an endpoint's CASCADE: deleting either asset removes it,
- * with no refusal and no re-linking. `deleteAll` is the replace import's wipe, which is its only caller. [all]
+ * with no refusal and no re-linking. `deleteAll` is the replace import's wipe, which is its only production caller (test helpers also wipe). [all]
  * orders by id; [observeForAsset] is every row naming the asset at either end, by id.
  */
 interface AssetSuccessionRepository {

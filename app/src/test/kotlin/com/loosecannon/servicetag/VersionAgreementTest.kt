@@ -12,6 +12,7 @@ import com.loosecannon.servicetag.api.maintenanceHandlersFor
 import com.loosecannon.servicetag.api.referenceHandlersFor
 import com.loosecannon.servicetag.api.seasonHealthHandlersFor
 import com.loosecannon.servicetag.api.serviceCaseHandlersFor
+import com.loosecannon.servicetag.api.supplyHandlersFor
 import com.loosecannon.servicetag.api.warrantyHandlersFor
 import com.loosecannon.servicetag.core.backup.BackupCodec
 import com.loosecannon.servicetag.di.AppGraph
@@ -80,9 +81,9 @@ class VersionAgreementTest {
      * `versionName`/`versionCode` cases own — otherwise bumping the schema in one file only would
      * still pass here, which is the whole failure this class exists to catch.
      */
-    @Test fun theSchemaIsSeventeenAndTheFormatIsSeventeen() {
-        assertEquals(17, AppGraph.SCHEMA_VERSION)
-        assertEquals(17, BackupCodec.FORMAT_VERSION)
+    @Test fun theSchemaIsEighteenAndTheFormatIsEighteen() {
+        assertEquals(18, AppGraph.SCHEMA_VERSION)
+        assertEquals(18, BackupCodec.FORMAT_VERSION)
     }
 
     /**
@@ -133,6 +134,7 @@ class VersionAgreementTest {
                 loanHandlersFor(graph),
                 attachmentHandlersFor(graph),
                 replaceHandlersFor(graph),
+                supplyHandlersFor(graph),
                 appVersion = BuildConfig.VERSION_NAME,
                 schemaVersion = AppGraph.SCHEMA_VERSION,
             ),
@@ -150,8 +152,8 @@ class VersionAgreementTest {
             StatusResponse.serializer(), response.body.decodeToString(),
         )
         assertEquals("1.6.0", status.appVersion)
-        assertEquals(17, status.schemaVersion)
-        assertEquals(17, status.backupFormatVersion)
+        assertEquals(18, status.schemaVersion)
+        assertEquals(18, status.backupFormatVersion)
     }
 
     /**

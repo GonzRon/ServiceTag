@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.ScheduleRepository
 import com.loosecannon.servicetag.core.ports.Today
 import com.loosecannon.servicetag.core.testing.FakeAttachmentStorage
+import com.loosecannon.servicetag.core.testing.InMemorySupplyItemRepository
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryAttachmentRepository
@@ -88,7 +89,7 @@ class CloseRoundTest {
         )
     private val postpone = PostponeSchedule(countedSchedules, uow, recompute)
     private val completeMembers = CompleteGroupMembers(
-        countedSchedules, groups, events, closures, defs, profiles, uow, ids, clock, recompute,
+        countedSchedules, groups, events, closures, defs, profiles, InMemorySupplyItemRepository(), uow, ids, clock, recompute,
     )
     private val closeRound =
         CloseRound(countedSchedules, closures, uow, ids, clock, todayPort, recompute)

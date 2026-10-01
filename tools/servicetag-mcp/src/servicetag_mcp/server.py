@@ -163,6 +163,15 @@ TOOL_NAMES: tuple[str, ...] = (
     # total to 76.
     "get_replace_offer",
     "replace_asset",
+    # #15 — the supply items and which asset takes which, each at a schema-18 minimum. Eight, taking the total to 84.
+    "list_supply_items",
+    "get_supply_item",
+    "create_supply_item",
+    "update_supply_item",
+    "archive_supply_item",
+    "list_asset_supplies",
+    "set_asset_supply",
+    "remove_asset_supply",
 )
 """Every tool this server offers — `pair` plus one per API operation — written out so a dropped one
 is a test failure and not a surprise."""
@@ -212,6 +221,16 @@ refuses a phone below it, with nothing sent: a per-tool minimum on the attachmen
 when a role is sent** — without one both tools behave exactly as before against any phone (R91-10).
 `materialize_reference` keeps its schema-16 gate: its `role` is #92's, which a schema-16 phone already takes. The
 global write minimum stays 8."""
+
+_MIN_SUPPLY_SCHEMA_VERSION = 18
+"""The Room schema that carries the supply items, their applicability rows and each material line's link (#15).
+The eight supply tools speak routes an older app does not have, so each refuses — the reads too — a phone below
+it, with nothing sent. `save_profile`, `log_event`, `update_event` and `complete_schedule` refuse it **only when a
+line they will send carries a `supplyId` key at all** — `null` included, which an older app's strict decoder answers
+400 for as well (N-7); without one each reaches any phone it always did. The global write minimum stays 8."""
+
+_SUPPLY_LINK_FEATURE = "a supply link on a material line"
+"""The feature a line tool names when it refuses a `supplyId` to a phone below schema 18 (G3)."""
 
 _POSTS_THAT_WRITE_NOTHING: frozenset[str] = frozenset(
     {"/v1/import-merge/plan", "/v1/repairs/schedule-providers/plan"}
@@ -307,6 +326,17 @@ def _require_reference_role_schema(tool: str) -> None:
     """`add_reference` or `update_reference` sending a document role, given or cleared, to a phone below schema 17
     (#91). Never called without a role, so a reference written without one reaches any phone it always did."""
     _require_tool_schema(tool, _MIN_REFERENCE_ROLE_SCHEMA_VERSION, "the reference document role")
+
+
+def _require_supply_schema(tool: str, feature: str = "supply items") -> None:
+    """One of #15's eight supply tools, or a line tool sending a `supplyId` (`feature` then names the link), on a
+    phone below schema 18."""
+    _require_tool_schema(tool, _MIN_SUPPLY_SCHEMA_VERSION, feature)
+
+
+def _carries_supply_id(lines: Any) -> bool:
+    """Whether a material line about to be sent carries the `supplyId` key at all — presence, not a value (N-7)."""
+    return isinstance(lines, list) and any(isinstance(line, dict) and "supplyId" in line for line in lines)
 
 
 def _read_for_write(path: str) -> dict[str, Any]:
@@ -539,11 +569,13 @@ def status() -> dict[str, Any]:
     `healthSubjects`; since the durable category catalog also `assetCategories`; since #79's service
     cases also `serviceCases` and `serviceCaseEntries`; since #72's loans also `assetLoans`; since #77's
     transfers also `transferRecords`, every transfer record, OUT, IN and WITHDRAWN; since #86's
-    successions also `assetSuccessions`, every succession). Every write
+    successions also `assetSuccessions`, every succession; since #15's supply items also `supplyItems`, archived
+ones included, and `assetSupplies`). Every write
     tool reads `schemaVersion` once per pairing and refuses with `APP_SCHEMA_TOO_OLD` below 8 (ServiceTag
     1.4.0); `get_warranty` and `set_warranty_reminder` refuse below 11, the five service-case tools below
-    12, the five loan tools below 13, `get_asset_succession` below 15, and the five attachment tools and
-    the two replace tools (#92) below 16.
+    12, the five loan tools below 13, `get_asset_succession` below 15, the five attachment tools and
+    the two replace tools (#92) below 16, and the eight supply tools — and a material line carrying `supplyId` —
+    (#15) below 18.
 
     `installationId` (#92) is this ServiceTag installation's id: opaque, random and device-local — not a
     hardware, Android or adb identifier, not authentication material (the pairing code stays the only
@@ -969,6 +1001,14 @@ def save_profile(
     `currency` is. Each existing consumable's `id` travels with it when kept, which is what keeps
     its identity across the edit; a `consumables` list you pass yourself may include `id` the same
     way.
+
+    **A line may name a supply item** (#15) by its `"supplyId"`, given only by the caller — nothing links a
+    line by its name — with `null` or no key meaning unlinked; one naming no supply item, `""` included, is
+    `profile_validation` `UnknownSupplyItem(index=…)` with `[field=consumables]`. On an edit each kept line's
+    `supplyId` travels exactly as it was read, so a link survives an edit that does not pass `consumables`; a
+    `consumables` list you pass replaces every line, and a line in it without `supplyId` is unlinked. A line
+    carrying the key at all, `null` included, needs a phone at schema 18 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is written. Without one this tool reaches any phone it always did.
     """
     if profile_id is None:
         if name is None or event_kind is None:
@@ -1039,12 +1079,19 @@ def save_profile(
                     quantity = typed(quantity, of=quantity_of, kind=(int, float), label="a number")
                     if isinstance(quantity, bool):
                         raise ToolError(f"{quantity_of} was not a number")
-                kept.append({
+                line = {
                     "id": consumable_id,
                     "name": name_value,
                     "defaultQuantity": quantity,
                     "unit": unit,
-                })
+                }
+                # #15: the link travels exactly as read — a schema-17 row has no key, so none is sent.
+                if "supplyId" in entry:
+                    supply_id = entry["supplyId"]
+                    if supply_id is not None and not isinstance(supply_id, str):
+                        raise ToolError(f"{entry_of}.supplyId was not a string or null")
+                    line["supplyId"] = supply_id
+                kept.append(line)
             return kept
 
         kept_fields = kept_fields_from(current)
@@ -1058,6 +1105,8 @@ def save_profile(
             "fields": kept_fields if fields is None else fields,
             "consumables": kept_consumables if consumables is None else consumables,
         }
+    if _carries_supply_id(body.get("consumables")):
+        _require_supply_schema("save_profile", _SUPPLY_LINK_FEATURE)
     return _call("POST", "/v1/profiles", json_body=body, content_type="application/json")
 
 
@@ -1089,7 +1138,7 @@ def log_event(
     occurred_time: str | None = None,
     notes: str | None = None,
     values: dict[str, str] | None = None,
-    consumables: list[dict[str, str]] | None = None,
+    consumables: list[dict[str, str | None]] | None = None,
 ) -> dict[str, Any]:
     """Log a maintenance event with its readings and the materials that went in.
 
@@ -1097,9 +1146,16 @@ def log_event(
     `{"name", "quantity", "unit"}`. `kind` is one of MAINTENANCE, INSPECTION, MEASUREMENT,
     TREATMENT, INCIDENT, REPLACEMENT, SEASON_START, SEASON_END, NOTE, CUSTOM.
 
+    A line may also carry `supplyId` (#15), the id of the supply item it names, given only by the caller and
+    never inferred from the name; `null` is unlinked, and one naming no supply item, `""` included, is
+    `event_validation` `UnknownSupplyItem(index=…)`. A line carrying the key at all, `null` included, needs a
+    phone at schema 18 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is written.
+
     To record a failure with its Incident, log the `INCIDENT` here first, then pass the returned
     event's `id` to `record_condition` as `event_id` — two calls, two transactions.
     """
+    if _carries_supply_id(consumables):
+        _require_supply_schema("log_event", _SUPPLY_LINK_FEATURE)
     return _call(
         "POST",
         "/v1/events",
@@ -1131,7 +1187,7 @@ def update_event(
     occurred_time: str | None,
     notes: str,
     values: dict[str, str],
-    consumables: list[dict[str, str]],
+    consumables: list[dict[str, str | None]],
 ) -> dict[str, Any]:
     """Edit a logged event. **This replaces the whole event.**
 
@@ -1144,7 +1200,16 @@ def update_event(
     `values={}` / `consumables=[]` to clear the event's readings or consumables on purpose rather
     than by accident. `asset_id` must be the asset the event already belongs to — an edit never
     re-parents.
+
+    Each `consumables` line is `{"name", "quantity", "unit"}`, and since #15 may carry `"supplyId"` on
+    `log_event`'s terms. Lines are matched by position and the whole list is replaced, so a line sent without
+    `supplyId` is unlinked. A line read back from `list_events` cannot be passed back as it is: it carries `id`,
+    `sortOrder` and a numeric `quantity`, which this body does not take. A line carrying `supplyId` at all,
+    `null` included, needs a phone at schema 18 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and
+    nothing is written.
     """
+    if _carries_supply_id(consumables):
+        _require_supply_schema("update_event", _SUPPLY_LINK_FEATURE)
     return _call(
         "PATCH",
         f"/v1/events/{_path_id(event_id, field='event_id')}",
@@ -1180,7 +1245,7 @@ def list_tag_bindings() -> dict[str, Any]:
 def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     """Merge a ServiceTag **data** archive into the phone. It plans first, always.
 
-    Takes the local path to a `ServiceTag-data-*.zip` of format 1–17 (format 8, from ServiceTag
+    Takes the local path to a `ServiceTag-data-*.zip` of format 1–18 (format 8, from ServiceTag
     1.4.0, adds season activations, conditions and health subjects; format 9 adds the owner's own
     asset categories; format 10 adds each attachment's document role; an older archive's
     attachments are compared without the role and, when the phone's row carries one, without the
@@ -1209,7 +1274,12 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     format 16 adds each attachment's source provenance (#85), carried as it is on an inserted row; an
     older archive whose attachments carry any is corrupt; format 17 adds each reference's document role
     (#91), and an older archive's references are compared without it and, when the phone's row carries
-    one, without the last-modified stamp that giving it moved).
+    one, without the last-modified stamp that giving it moved; format 18 adds the supply items, their
+    specifications nested, the asset supplies — which asset takes which supply item in which role — and each
+    material line's `supplyId` (#15): a supply item is matched by its id, so the same id with different content
+    conflicts, an asset supply that a phone's row under another id already holds is IDENTICAL or SKIPPED rather
+    than inserted twice, and an older archive's quick actions and events are compared without the link and,
+    while a line on the phone carries one, without the `updatedAt` that giving it moved).
     The phone decides, per row, whether
     it is new (INSERT), already here and identical (IDENTICAL, a no-op), declined (SKIPPED) or
     contested (CONFLICT) — and **one conflict anywhere means nothing is written at all**. Rows are
@@ -1219,7 +1289,8 @@ def import_merge(archive_path: str, plan_only: bool = False) -> dict[str, Any]:
     `plan_only=True`, or when the plan does have conflicts, it stops and returns the plan — whose
     `conflicts` list names each one by table, id and a stable reason code, in a deterministic order.
     Read `applicable` to know which happened. The report tallies `{insert, identical, conflict,
-    skipped}` for each of twenty tables, `transfers` and then `successions` last.
+    skipped}` for each of twenty-two tables, `transfers`, `successions`, then `supplyItems` and `assetSupplies`
+    last.
 
     A Transfer Pack is not a data archive, and the phone refuses one here: packs are made, imported,
     marked and withdrawn on the phone only, and no tool does any of it. The `data.zip` inside a pack is
@@ -1863,7 +1934,7 @@ def complete_schedule(
     occurred_time: str | None,
     notes: str,
     values: dict[str, str],
-    consumables: list[dict[str, str]],
+    consumables: list[dict[str, str | None]],
 ) -> dict[str, Any]:
     """Record that the current occurrence was done. **The only way to log a completion.**
 
@@ -1884,6 +1955,12 @@ def complete_schedule(
     `{"name", "quantity", "unit"}`. You never send the occurrence key: the app stamps it from the
     schedule's own computed due date, which is what makes a repeat harmless rather than a duplicate.
 
+    Since #15 a line may carry `"supplyId"`, the supply item it names, on `log_event`'s terms. A link travels
+    only on a line this call sends: a completion with `consumables=[]` writes no line, so it names no supply
+    item. A line carrying `supplyId` at all, `null` included, needs a phone at schema 18 or later: an older one
+    is refused with `APP_SCHEMA_TOO_OLD` and nothing is written; without one this tool reaches any phone it
+    always did.
+
     A `FORM` schedule completed with no `values` and no `consumables` is accepted and recorded with
     `detailsPending: true` — the quick path exists, and the row still says the form is owed.
 
@@ -1892,9 +1969,12 @@ def complete_schedule(
     done after a round is closed is logged with `log_event`, with no schedule link, and that still
     succeeds.
     """
+    path = f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/complete"
+    if _carries_supply_id(consumables):
+        _require_supply_schema("complete_schedule", _SUPPLY_LINK_FEATURE)
     return _call(
         "POST",
-        f"/v1/schedules/{_path_id(schedule_id, field='schedule_id')}/complete",
+        path,
         json_body={
             "occurredOn": occurred_on,
             "occurredTime": occurred_time,
@@ -3533,6 +3613,217 @@ def replace_asset(
         "successor": _field(applied, "successor", of="the replacement's answer"),
         "succession": _field(applied, "succession", of="the replacement's answer"),
     }
+
+
+# --- #15, the supply items and their applicability (docs/api/v1.md, **Supply items (#15)**, **Asset supplies
+# (#15)**) -----------------------------------------------------------------------------------------------------
+#
+# Eight tools over the nine supply routes, each refusing a phone below schema 18 by name before anything is sent.
+# A supply item is one canonical product — a cartridge, a battery pack, a belt — with its identity fields and an
+# ordered list of generic specifications; an applicability row says which supply item an asset takes and in what
+# role. Nothing more: no quantity, no fitted position, date or serial, no file. The PATCH of a supply item is the
+# phone's own overlay, so `update_supply_item` sends only what it was given and clears by value (`""`, `[]`) —
+# there is no `clear_fields` here. Nothing deletes a supply item; only an applicability row is removable.
+
+
+@mcp.tool()
+def list_supply_items() -> dict[str, Any]:
+    """Every supply item on the phone, archived ones included: `GET /v1/supply-items` → `{supplyItems}`, by name
+    casefolded, then id. Each is `{id, name, category, manufacturer, model, partNumber, preferredUnit, notes,
+    archivedAt, createdAt, updatedAt, specifications}`, each specification `{id, key, label, value, unit,
+    sortOrder}`; an archived item carries its `archivedAt`.
+
+    A supply item is one canonical product — a cartridge, a battery pack, a belt — with its identity and its
+    generic specifications, and nothing else: no quantity, no fitted position and no file. A complete pack and an
+    item inside it are two unrelated supply items. Needs a phone at schema 18 or later: an older one is refused
+    with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    _require_supply_schema("list_supply_items")
+    return _call("GET", "/v1/supply-items")
+
+
+@mcp.tool()
+def get_supply_item(supply_id: str) -> dict[str, Any]:
+    """One supply item and every applicability row naming it: `GET /v1/supply-items/{id}` → `{supplyItem,
+    assetSupplies}`, the rows by `assetId`, `role`, then `id`, each `{id, assetId, supplyId, role, createdAt,
+    updatedAt}`. An unknown id is `NO_SUCH_SUPPLY_ITEM`. Needs a phone at schema 18 or later: an older one is
+    refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/supply-items/{_path_id(supply_id, field='supply_id')}"
+    _require_supply_schema("get_supply_item")
+    return _call("GET", path)
+
+
+@mcp.tool()
+def create_supply_item(
+    name: str,
+    category: str | None = None,
+    manufacturer: str | None = None,
+    model: str | None = None,
+    part_number: str | None = None,
+    preferred_unit: str | None = None,
+    notes: str | None = None,
+    specifications: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Create a supply item: `POST /v1/supply-items` → `{supplyItem}`. A create sent as given: an omitted text
+    field is the phone's `""` and an omitted `specifications` is none.
+
+    `name` is required and may not be blank (`SUPPLY_ITEM_NAME_REQUIRED`). `category` is free text, not the asset
+    catalog; `part_number` is the one field for an SKU or a part number. `specifications` is an ordered list of
+    `{"label", "value", "unit"?, "key"?}`: a blank label or value is `SPECIFICATION_LABEL_REQUIRED` or
+    `SPECIFICATION_VALUE_REQUIRED`; a row without a `key` takes its label's slug on the phone, a typed key outside
+    the reading key's rule is `SPECIFICATION_KEY_INVALID`, and one another row of this item holds is
+    `SPECIFICATION_KEY_TAKEN`. A value is plain text — no range, condition or interval. Each refusal is a 422
+    naming its body key in `[field=…]` and every problem by row; `SUPPLY_ITEM_INVALID` is the documented fallback
+    and never expected. Nothing links a material line to the new item: a line names one only by its `supplyId`.
+    Needs a phone at schema 18 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    _require_supply_schema("create_supply_item")
+    return _call(
+        "POST",
+        "/v1/supply-items",
+        json_body=_body(
+            name=name,
+            category=category,
+            manufacturer=manufacturer,
+            model=model,
+            partNumber=part_number,
+            preferredUnit=preferred_unit,
+            notes=notes,
+            specifications=specifications,
+        ),
+        content_type="application/json",
+    )
+
+
+@mcp.tool()
+def update_supply_item(
+    supply_id: str,
+    name: str | None = None,
+    category: str | None = None,
+    manufacturer: str | None = None,
+    model: str | None = None,
+    part_number: str | None = None,
+    preferred_unit: str | None = None,
+    notes: str | None = None,
+    specifications: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Edit a supply item: `PATCH /v1/supply-items/{id}` → `{supplyItem}`. **The phone's PATCH is the overlay**,
+    so this tool reads nothing first and sends only the arguments given; an omitted argument and one sent as
+    `null` both leave the stored value alone.
+
+    **Clearing is by value, so there is no `clear_fields`.** `""` clears `category`, `manufacturer`, `model`,
+    `part_number`, `preferred_unit` or `notes`; `name` is never blank — `""` is `SUPPLY_ITEM_NAME_REQUIRED`.
+    `specifications`, when given, is **the whole ordered list**: a stored row left out is removed, and `[]`
+    removes every row.
+
+    **A kept row must be sent with its `id` and its `key` — and its `unit` —** as `get_supply_item` answered them
+    (leave `sortOrder` off: the list's order is the order). A row without its `id` is a new row with a fresh id,
+    and one without its `unit` is stored with none: either is a content change, so an export taken before it then
+    re-plans this item `CONFLICT`. A row whose `id` the item holds keeps its id and its stored key even when its
+    label changes, unless a key is typed; a typed key outside the reading key's rule is
+    `SPECIFICATION_KEY_INVALID`, one another row of this item holds is `SPECIFICATION_KEY_TAKEN`, and a blank
+    label or value is `SPECIFICATION_LABEL_REQUIRED` or `SPECIFICATION_VALUE_REQUIRED`. An unknown id is
+    `NO_SUCH_SUPPLY_ITEM`. An edit that changes nothing answers the stored row and writes nothing; renaming or
+    editing an item never rewrites a material line that names it. Needs a phone at schema 18 or later: an older
+    one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/supply-items/{_path_id(supply_id, field='supply_id')}"
+    _require_supply_schema("update_supply_item")
+    body = _body(
+        name=name,
+        category=category,
+        manufacturer=manufacturer,
+        model=model,
+        partNumber=part_number,
+        preferredUnit=preferred_unit,
+        notes=notes,
+        specifications=specifications,
+    )
+    return _call("PATCH", path, json_body=body, content_type="application/json")
+
+
+@mcp.tool()
+def archive_supply_item(supply_id: str, archived: bool = True) -> dict[str, Any]:
+    """Archive or unarchive a supply item: `POST /v1/supply-items/{id}/archive` with `{"archived": …}` →
+    `{supplyItem}`. Archive is not delete, and nothing deletes a supply item: an archived item stays on the assets
+    that take it and on every material line that names it, takes no new applicability row
+    (`SUPPLY_ITEM_ARCHIVED`), and comes back with `archived=False`. An unknown id is `NO_SUCH_SUPPLY_ITEM`. Needs
+    a phone at schema 18 or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/supply-items/{_path_id(supply_id, field='supply_id')}/archive"
+    _require_supply_schema("archive_supply_item")
+    return _call("POST", path, json_body={"archived": archived}, content_type="application/json")
+
+
+@mcp.tool()
+def list_asset_supplies(asset_id: str) -> dict[str, Any]:
+    """The supply items one asset takes: `GET /v1/assets/{id}/supply-items` → `{assetSupplies, supplyItems}` —
+    the asset's applicability rows by `role`, then `id`, and each supply item they name once. Any asset may take
+    supply items, a child asset included. An unknown asset is `no_such_asset`. Needs a phone at schema 18 or
+    later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/assets/{_path_id(asset_id, field='asset_id')}/supply-items"
+    _require_supply_schema("list_asset_supplies")
+    return _call("GET", path)
+
+
+@mcp.tool()
+def set_asset_supply(
+    role: str,
+    asset_id: str | None = None,
+    supply_id: str | None = None,
+    asset_supply_id: str | None = None,
+) -> dict[str, Any]:
+    """Say that an asset takes a supply item in a role, or change that role.
+
+    **Create** (no `asset_supply_id`): `asset_id` and `supply_id` are required — `POST /v1/asset-supplies` with
+    `{assetId, supplyId, role}` → `{assetSupply}`. **Re-role** (`asset_supply_id` given): `PATCH
+    /v1/asset-supplies/{id}` with `{role}` → `{assetSupply}`. The role is the row's only editable field, so an
+    `asset_id` or a `supply_id` given with `asset_supply_id` is refused before any request: moving a row to
+    another asset or supply item is `remove_asset_supply` and a create.
+
+    The role is free text ("Prefilter", "Stage 2", "Spare"), stored cleaned — invisible characters dropped,
+    trimmed, every run of spaces made one — and blank once cleaned is `ASSET_SUPPLY_ROLE_REQUIRED`. The asset, the
+    supply item and the cleaned role are unique together, exactly: a second row in the same role is
+    `ASSET_SUPPLY_TAKEN`, while "Oil filter" and "oil filter" are two roles. An unknown asset is `no_such_asset`;
+    a `supply_id` naming no supply item — `""` included, which is not "none" — is `NO_SUCH_SUPPLY_ITEM`; an
+    archived supply item takes no new row (`SUPPLY_ITEM_ARCHIVED`), though its existing rows may be re-roled; an
+    unknown `asset_supply_id` is `NO_SUCH_ASSET_SUPPLY`; and a row of an asset transferred out from the phone is
+    `asset_transferred_out`. A re-role to the role the row already holds answers the stored row and writes
+    nothing. The row records the role and nothing else: no position, date or serial. Needs a phone at schema 18
+    or later: an older one is refused with `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    if asset_supply_id is None:
+        if asset_id is None or supply_id is None:
+            raise ToolError(
+                "asset_id and supply_id are required to add an asset supply (pass asset_supply_id to re-role one)"
+            )
+        method, path = "POST", "/v1/asset-supplies"
+        body: dict[str, Any] = {"assetId": asset_id, "supplyId": supply_id, "role": role}
+    else:
+        if asset_id is not None or supply_id is not None:
+            raise ToolError(
+                "a re-role with asset_supply_id changes the role only, so asset_id and supply_id are not taken — "
+                "remove the row and add another to move it"
+            )
+        method, path = "PATCH", f"/v1/asset-supplies/{_path_id(asset_supply_id, field='asset_supply_id')}"
+        body = {"role": role}
+    _require_supply_schema("set_asset_supply")
+    return _call(method, path, json_body=body, content_type="application/json")
+
+
+@mcp.tool()
+def remove_asset_supply(asset_supply_id: str) -> dict[str, Any]:
+    """Remove one applicability row: `DELETE /v1/asset-supplies/{id}` → 204, the asset and the supply item
+    staying. The row is configuration, not history, so it goes at once. An unknown id is `NO_SUCH_ASSET_SUPPLY`;
+    a row of an asset transferred out from the phone is `asset_transferred_out`. It is the supply surface's one
+    removal: nothing deletes a supply item. Needs a phone at schema 18 or later: an older one is refused with
+    `APP_SCHEMA_TOO_OLD` and nothing is sent.
+    """
+    path = f"/v1/asset-supplies/{_path_id(asset_supply_id, field='asset_supply_id')}"
+    _require_supply_schema("remove_asset_supply")
+    return _call("DELETE", path)
 
 
 _GUARD_PROBE_KEY = "__servicetag_guard_probe__"

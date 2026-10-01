@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetSuccession
+import com.loosecannon.servicetag.core.model.AssetSupply
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.DefinitionId
@@ -50,6 +51,7 @@ import com.loosecannon.servicetag.core.ports.ServiceCaseRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.TransferRecordRepository
 import com.loosecannon.servicetag.core.ports.AssetSuccessionRepository
+import com.loosecannon.servicetag.core.ports.AssetSupplyRepository
 
 /**
  * #77 (C12, R77-4) — an ordinary write reached a row that an asset transferred out from this phone owns, or would
@@ -64,9 +66,9 @@ class AssetTransferredOut(val assetId: AssetId) :
 /**
  * #77 (C12, R77-4; the owner's direction) — **the one home of the write guard**: a held asset (an open OUT in the
  * transfer records, `heldIds`) is inspectable and ordinarily immutable everywhere — the phone's use cases, the API,
- * and everything the MCP tools reach through it. It wraps the sixteen asset-owned repository ports, and #86's
- * successions; `AppGraph` hands every use case the wrapped ones, so no use case, screen or route needs a guard of its
- * own.
+ * and everything the MCP tools reach through it. It wraps the seventeen asset-owned repository ports (#15's
+ * applicability the seventeenth, C14), and #86's successions; `AppGraph` hands every use case the wrapped ones, so no
+ * use case, screen or route needs a guard of its own.
  *
  * Each write reads `heldIds` **in the caller's transaction** and, when that set is empty — the ordinary case — writes
  * exactly as before. Otherwise it throws [AssetTransferredOut] **before** the port writes when:
@@ -96,7 +98,9 @@ class AssetTransferredOut(val assetId: AssetId) :
  * - every port's `deleteAll` — the Replace restore's wipe, which wipes the records first (R77-13 refuses a held
  *   graph before anything is wiped).
  * - the derived and device-local tables (schedule state, the two delivery tables), the 2.6 link tombstones, the
- *   categories and the transfer records themselves: none of them is one of the sixteen ports.
+ *   categories and the transfer records themselves: none of them is one of the seventeen ports.
+ * - #15's SupplyItem catalog (C14): global, not asset-owned, so archiving or editing an item a held asset's rows name
+ *   writes no held row and passes. A material line's link rides the profile and event ports, already guarded.
  *
  * Marking (C8) writes its archives before it appends the OUTs, the merge apply appends records last, and C15's
  * return appends its IN first, so each passes without a special case. A bulk writer must **skip** held rows, never
@@ -139,6 +143,9 @@ class HeldWriteGuard(
     fun cases(port: ServiceCaseRepository): ServiceCaseRepository = GuardedCases(port, this)
     fun entries(port: ServiceCaseEntryRepository): ServiceCaseEntryRepository = GuardedEntries(port, this)
     fun loans(port: AssetLoanRepository): AssetLoanRepository = GuardedLoans(port, this)
+
+    /** #15 (C14): an Asset's applicability rows — the row written and the stored row it replaces or deletes. */
+    fun assetSupplies(port: AssetSupplyRepository): AssetSupplyRepository = GuardedAssetSupplies(port, this)
 
     /**
      * #86 (C6, I8; R86-16): no **new** succession may name a held asset at either end. The one writer that re-inserts
@@ -247,7 +254,7 @@ class HeldWriteGuard(
 /** An archive slice with no rows: each check below names the one list it fills. */
 private val NO_ROWS = BackupData(assets = emptyList(), nfcTags = emptyList(), externalLinks = emptyList())
 
-// ---- the sixteen wrapped ports: reads delegate, each write asks the guard first ----------------------------------
+// ---- the seventeen wrapped ports: reads delegate, each write asks the guard first --------------------------------
 
 private class GuardedAssets(private val port: AssetRepository, private val guard: HeldWriteGuard) :
     AssetRepository by port {
@@ -467,6 +474,26 @@ private class GuardedLoans(private val port: AssetLoanRepository, private val gu
     override suspend fun upsert(loan: AssetLoan) {
         guard.check { owned(TransferOwnership.of(loan) + port.get(loan.id)?.let(TransferOwnership::of).orEmpty()) }
         port.upsert(loan)
+    }
+}
+
+private class GuardedAssetSupplies(private val port: AssetSupplyRepository, private val guard: HeldWriteGuard) :
+    AssetSupplyRepository by port {
+    override suspend fun insert(row: AssetSupply) {
+        guard.check { owned(TransferOwnership.of(row)) }
+        port.insert(row)
+    }
+
+    // The port writes the row whole, so the stored row's asset counts too: a row moved off a held asset is a write
+    // on it.
+    override suspend fun update(row: AssetSupply) {
+        guard.check { owned(TransferOwnership.of(row) + port.get(row.id)?.let(TransferOwnership::of).orEmpty()) }
+        port.update(row)
+    }
+
+    override suspend fun delete(id: String) {
+        guard.check { owned(port.get(id)?.let(TransferOwnership::of).orEmpty()) }
+        port.delete(id)
     }
 }
 

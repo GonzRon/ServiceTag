@@ -721,7 +721,7 @@ class ReplaceRoutesTest {
         val action = profile("pr1", "p1").copy(
             templateKey = "pool_pump", sortOrder = 3, archivedAt = dayMillis("2026-02-01"),
             fields = listOf(ProfileField("pf1", DefinitionId("d1"), required = true, sortOrder = 0)),
-            consumables = listOf(ProfileConsumable("pc1", "Seal kit", 1.5, "ea", 0)),
+            consumables = listOf(ProfileConsumable("pc1", "Seal kit", 1.5, "ea", 0, supplyId = null)),
         )
         assertEquals(action, action.toDto().toDomain())
     }

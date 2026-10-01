@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.model.ProfileConsumable
 import com.loosecannon.servicetag.core.model.ProfileField
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.core.model.ScheduleId
+import com.loosecannon.servicetag.core.model.SupplyId
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.data.room.dao.EventWithParts
 import com.loosecannon.servicetag.data.room.dao.ProfileWithParts
@@ -112,6 +113,7 @@ fun ProfileWithParts.toDomain(): EventProfile = EventProfile(
             defaultQuantity = it.defaultQuantity,
             unit = it.unit,
             sortOrder = it.sortOrder,
+            supplyId = it.supplyId?.let(::SupplyId),
         )
     },
 )
@@ -144,6 +146,7 @@ fun ProfileConsumable.toEntity(profileId: ProfileId): ProfileConsumableEntity = 
     defaultQuantity = defaultQuantity,
     unit = unit,
     sortOrder = sortOrder,
+    supplyId = supplyId?.value,
 )
 
 fun EventWithParts.toDomain(): AssetEvent = AssetEvent(
@@ -177,6 +180,7 @@ fun EventWithParts.toDomain(): AssetEvent = AssetEvent(
             quantity = it.quantity,
             unit = it.unit,
             sortOrder = it.sortOrder,
+            supplyId = it.supplyId?.let(::SupplyId),
         )
     },
     scheduleId = event.scheduleId?.let(::ScheduleId),
@@ -220,4 +224,5 @@ fun ConsumableUsage.toEntity(eventId: EventId): ConsumableUsageEntity = Consumab
     quantity = quantity,
     unit = unit,
     sortOrder = sortOrder,
+    supplyId = supplyId?.value,
 )
