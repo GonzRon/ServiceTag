@@ -199,7 +199,7 @@ suspend fun readSnapshot(repos: BackupRepositories): BackupData = with(repos) {
         // Format 15: every succession; the export's `retain` drops a row naming a held asset (#86, C6).
         assetSuccessions = successions.all().map { it.toDto() },
         // Format 18: every SupplyItem, archived included, with its specifications, and every applicability row;
-        // the export's `retain` copies both lists whole (C10).
+        // the export passes both lists to `retain`, which decides what a backup set carries (C10, C13).
         supplyItems = supplyItems.all().map { it.toDto() },
         assetSupplies = assetSupplies.all().map { it.toDto() },
     )

@@ -1060,7 +1060,7 @@ class BackupCodecTest {
 
     /**
      * The numbers this tip carries: the format moved to 10 (#67), on to 11 (#79), on to 12 (#79b) and on
-     * to 13 (#72), on to 16 (#85) and on to 17 (#91), the legacy boundary did not.
+     * to 13 (#72), on to 16 (#85), on to 17 (#91) and on to 18 (#15), the legacy boundary did not.
      */
     @Test
     fun theFormatIsEighteenAndTheLegacyBoundaryStaysSeven() {

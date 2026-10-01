@@ -154,7 +154,7 @@ class Format7RestoreContractTest {
      * on the device's own schema). The re-export's plan is the golden's eleven decisions plus the
      * promoted category's; the golden has no category row, and its assets, already here, need none.
      */
-    @Test fun reExportIsFormat17AndPlansIdentical() {
+    @Test fun reExportIsFormat18AndPlansIdentical() {
         val bytes = golden()
         val graph = app.graph
         runBlocking { graph.importBackupReplace.run(bytes) }

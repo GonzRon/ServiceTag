@@ -390,7 +390,7 @@ class ImportBackupReplaceTest {
     /**
      * #15 (C10, row 13): a replace of a format-18 archive restores every SupplyItem, specification, applicability row
      * and line link byte-equal to the file, and leaves none of this install's own: the wipe takes the old catalog
-     * after the assets (whose CASCADE took the old applicability first), the writes land the catalog before its rows.
+     * after the assets (whose CASCADE took the old applicability first); the write order itself is read, not pinned here.
      */
     @Test
     fun aReplaceRestoresEverySupplyRowAndLinkByteEqual() = runBlocking<Unit> {
