@@ -595,6 +595,23 @@ class ReferenceRoutesTest {
         assertEquals(FIRST_DAY, referencesOn(asset).single().updatedAt)
     }
 
+    /**
+     * Fix round 1 (review MAJOR-1): a PATCH body with a key and no value is the shipped 400
+     * `bad_request` — never the 500 a raw map read would throw — and nothing is read or written.
+     */
+    @Test fun aMalformedPatchBodyIsStillA400() {
+        val asset = createAsset()
+        val row = referenceIn(createReference(asset, MANUAL, "Example Water Heater manual", role = "\"USER_MANUAL\""))
+        graph.now = SECOND_DAY
+        for (body in listOf("""{"role":}""", """{"displayName": }""")) {
+            val refused = call("PATCH", "/v1/references/${row.id}", body)
+            assertEquals(body + " " + refused.text(), 400, refused.status)
+            assertEquals(body, "bad_request", refused.error().code)
+        }
+        assertEquals(listOf(row), referencesOn(asset))
+        assertEquals(FIRST_DAY, referencesOn(asset).single().updatedAt)
+    }
+
     /** Row 28: every listed row carries the `role` key — a name, or an explicit `null` when it has none. */
     @Test fun theListCarriesRoleAndNullWhenNone() {
         val asset = createAsset()
