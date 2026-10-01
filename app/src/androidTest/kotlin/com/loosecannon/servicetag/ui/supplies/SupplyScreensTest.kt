@@ -27,6 +27,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.loosecannon.servicetag.ui.asset.MODEL_FIELD
 
 /**
  * #15 (C29–C31, row 61): the Supplies screens on the real back stack. What only a device shows is that the new
@@ -100,7 +101,9 @@ class SupplyScreensTest {
         rule.onNodeWithText("Example Carbon Block").assertIsDisplayed()
         rule.onNodeWithText("Example Filters Co. · PF-10").assertIsDisplayed()
         rule.onNodeWithText("CB-5").assertIsDisplayed()
-        rule.onAllNodesWithText("Archived").assertCountEquals(1)
+        // The badge draws its label upper-case; "Archived" is only its content description (the shipped badge tests).
+        rule.onNode(hasText("Example Carbon Block") and hasText("ARCHIVED")).assertIsDisplayed()
+        rule.onAllNodesWithText("ARCHIVED").assertCountEquals(1)
         rule.onNodeWithText(SUPPLY_ITEM).assertIsDisplayed()
         rule.onAllNodesWithText(NO_SUPPLIES_YET).assertCountEquals(0)
     }
@@ -145,7 +148,7 @@ class SupplyScreensTest {
         rule.onNodeWithText(USED_BY_SECTION).performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Stage 1").performScrollTo().assertIsDisplayed()
         // Only the fields that are there: no model was given, and neither empty line is drawn.
-        rule.onAllNodesWithText("Model").assertCountEquals(0)
+        rule.onAllNodesWithText(MODEL_FIELD).assertCountEquals(0)
         rule.onAllNodesWithText(NO_SPECIFICATIONS).assertCountEquals(0)
         rule.onAllNodesWithText(NOT_USED_BY_ANY_ASSET).assertCountEquals(0)
 
