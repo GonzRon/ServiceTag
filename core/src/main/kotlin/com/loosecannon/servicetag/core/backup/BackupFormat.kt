@@ -77,6 +77,7 @@ import com.loosecannon.servicetag.core.model.TransferRecord
 import com.loosecannon.servicetag.core.model.TimeBasis
 import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.model.accepts
+import com.loosecannon.servicetag.core.references.accepts
 import kotlinx.serialization.Serializable
 
 /**
@@ -400,8 +401,13 @@ data class AttachmentDto(
 )
 
 /**
- * Format 7. The `asset_reference` table's nine columns, in column order — **no `provenance`**
+ * Format 7. The `asset_reference` table's ten columns, in column order — **no `provenance`**
  * (D-21 C), and no byte-bearing field of any kind, because a reference has none (I-3).
+ *
+ * [role] is format 17's (#91, C6), appended last: a `DocumentRole` name or null, written as `"role": null`
+ * when unset (the codec encodes defaults). It defaults to null so a format ≤16 archive, which never had the
+ * key, still decodes; `BackupCodec` refuses a non-null one in such an archive, and [toDomain] refuses one on
+ * a row whose kind takes no role.
  */
 @Serializable
 data class AssetReferenceDto(
@@ -414,6 +420,7 @@ data class AssetReferenceDto(
     val scheme: String,
     val createdAt: Long,
     val updatedAt: Long,
+    val role: String? = null,
 )
 
 /**
@@ -1195,19 +1202,35 @@ fun AssetReference.toDto(): AssetReferenceDto = AssetReferenceDto(
     scheme = scheme,
     createdAt = createdAt,
     updatedAt = updatedAt,
+    role = role?.name,
 )
 
-fun AssetReferenceDto.toDomain(): AssetReference = AssetReference(
-    id = ReferenceId(id),
-    assetId = AssetId(assetId),
-    kind = enumOrCorrupt<ReferenceKind>(kind, "reference kind", "reference $id"),
-    uri = uri,
-    displayName = displayName,
-    description = description,
-    scheme = scheme,
-    createdAt = createdAt,
-    updatedAt = updatedAt,
-)
+/**
+ * The kind and the role are names first: each must be one of its enum's. Then the role must be one the
+ * row's stored kind takes (#91, R91-1: [accepts], the reference rule's one home) — so a role on a note link
+ * or an "other" link is a refusal naming the row. The kind read is the row's stored one, never re-derived from
+ * the uri. The decode's naming pass runs every row through here, so an archive breaking either rule is refused
+ * before anything is written.
+ */
+fun AssetReferenceDto.toDomain(): AssetReference {
+    val referenceKind = enumOrCorrupt<ReferenceKind>(kind, "reference kind", "reference $id")
+    val documentRole = role?.let { enumOrCorrupt<DocumentRole>(it, "document role", "reference $id") }
+    if (!referenceKind.accepts(documentRole)) {
+        throw BackupCorrupt("reference $id is not a web link and carries a document role; only an http or https link may")
+    }
+    return AssetReference(
+        id = ReferenceId(id),
+        assetId = AssetId(assetId),
+        kind = referenceKind,
+        uri = uri,
+        displayName = displayName,
+        description = description,
+        scheme = scheme,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        role = documentRole,
+    )
+}
 
 // --- format 8: season activations, conditions and health subjects ---------------------------------
 
