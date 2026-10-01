@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.loosecannon.servicetag.MainActivity
 import com.loosecannon.servicetag.core.model.CompletionMode
@@ -116,6 +117,7 @@ class MaintenanceShellTest {
                     onOpenSchedule = { record += "schedule:$it" },
                     onOpenGroup = { record += "group:$it" },
                     onNewGroup = { record += "new-group" },
+                    onOpenSupplies = { record += "supplies" },
                     onReminderHealth = { record += "health" },
                     onScanTag = { record += "scan" },
                     onAddAsset = { record += "asset" },
@@ -127,22 +129,21 @@ class MaintenanceShellTest {
     }
 
     /**
-     * **Four** navigations from one screen, one out of each section: a Due-work row and a
-     * Schedules-only row both to a schedule, a group row to its group, and the Reminders row to
-     * reminder health.
+     * **Five** navigations from one screen, one out of each section: a Due-work row and a
+     * Schedules-only row both to a schedule, a group row to its group, #15's Supplies row (P15-1,
+     * C29) to the Supplies list, and the Reminders row to reminder health.
      *
      * The two schedule taps are told apart by the id each one reports, which is why the second is
      * the **paused** schedule — it is listed under Schedules and nowhere else, so tapping it can
      * only have come from that section. Both call the same `onOpenSchedule` seam, as they should.
      */
-    @Test fun theFourSectionsEachReachSomething() {
+    @Test fun theFiveSectionsEachReachSomething() {
         val record = mutableListOf<String>()
         aStoreWithWork(record)
 
         rule.awaitText("Due work")
         rule.onNodeWithText("Schedules").assertIsDisplayed()
         rule.onNodeWithText("Maintenance groups").assertIsDisplayed()
-        rule.onNodeWithText("Reminders").assertIsDisplayed()
 
         // A due row. The title appears twice — once under Due work, once under Schedules — so the
         // first node is taken deliberately rather than by an ambiguous single-match lookup.
@@ -151,15 +152,19 @@ class MaintenanceShellTest {
         rule.awaitText("PAUSED")
         rule.onAllNodes(hasText("Winter service") and hasClickAction())[0].performClick()
         rule.onAllNodes(hasText("North run") and hasClickAction())[0].performClick()
-        rule.onNodeWithText("Reminders").performClick()
+        // The fifth section is one row after the groups and before Reminders, with no heading. The
+        // two last rows are scrolled to, because the fifth row moves Reminders down by one row.
+        rule.onNodeWithText("Supplies").performScrollTo().assertIsDisplayed().performClick()
+        rule.onNodeWithText("Reminders").performScrollTo().assertIsDisplayed().performClick()
 
         rule.runOnIdle {
-            check(record.size == 4) { "four navigations, not $record" }
+            check(record.size == 5) { "five navigations, not $record" }
             check(record[0].startsWith("schedule:")) { "the due row opens a schedule, not ${record[0]}" }
             check(record[1].startsWith("schedule:")) { "the schedules row opens a schedule, not ${record[1]}" }
             check(record[0] != record[1]) { "the two rows are different schedules: $record" }
             check(record[2].startsWith("group:")) { "the group row opens a group, not ${record[2]}" }
-            check(record[3] == "health") { "the Reminders row opens reminder health, not ${record[3]}" }
+            check(record[3] == "supplies") { "the Supplies row opens the Supplies list, not ${record[3]}" }
+            check(record[4] == "health") { "the Reminders row opens reminder health, not ${record[4]}" }
         }
     }
 
@@ -227,6 +232,7 @@ class MaintenanceShellTest {
                     onOpenSchedule = { record += "schedule:$it" },
                     onOpenGroup = { record += "group:$it" },
                     onNewGroup = { record += "new-group" },
+                    onOpenSupplies = { record += "supplies" },
                     onReminderHealth = { record += "health" },
                     onScanTag = {},
                     onAddAsset = {},
@@ -283,6 +289,7 @@ class MaintenanceShellTest {
                     onOpenSchedule = { record += "schedule:$it" },
                     onOpenGroup = { record += "group:$it" },
                     onNewGroup = { record += "new-group" },
+                    onOpenSupplies = { record += "supplies" },
                     onReminderHealth = { record += "health" },
                     onScanTag = {},
                     onAddAsset = {},
@@ -307,6 +314,7 @@ class MaintenanceShellTest {
                     onOpenSchedule = {},
                     onOpenGroup = {},
                     onNewGroup = {},
+                    onOpenSupplies = {},
                     onReminderHealth = {},
                     onScanTag = {},
                     onAddAsset = {},
