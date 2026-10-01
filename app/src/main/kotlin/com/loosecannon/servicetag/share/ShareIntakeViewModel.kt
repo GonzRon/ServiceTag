@@ -330,7 +330,7 @@ internal class ShareIntakeViewModel(
         if (it.roleOffered) it.copy(role = value, message = null) else it
     }
 
-    /** Cancel, back and Close are the same fact: nothing was written and nothing will be. */
+    /** Cancel, Close and Back on the picker are the same fact: nothing was written and nothing will be (Back on the form is `changeAsset()`, after which a choice and a save are still possible). */
     fun cancel() = _state.update { it.copy(confirming = null, cancelled = true) }
 
     fun dismissConfirmation() = _state.update { it.copy(confirming = null, saving = false) }
