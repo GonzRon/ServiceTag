@@ -51,9 +51,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * **Every user-visible word the intake screen draws, in one place and verbatim from spec §10.**
- * Nothing here is composed out of fragments and nothing is paraphrased: a sentence this object
- * does not carry is a finding for the controller, never a screen's to invent.
+ * **Every user-visible word the intake's own composables draw, in one place and verbatim from spec
+ * §10.** Nothing here is composed out of fragments and nothing is paraphrased: a sentence this object
+ * does not carry is a finding for the controller, never a screen's to invent. #93: the picker step's
+ * search box, controls, rows and empty sentences are drawn by `ui/asset`'s reused composables in their
+ * own words (ratified with #73 and #71), never re-spelled here.
  */
 internal object IntakeStrings {
     const val TITLE = "Save to ServiceTag"
@@ -84,6 +86,9 @@ internal object IntakeStrings {
     const val BLANK_REFERENCE_NAME = "Give the reference a name"
     const val CONFIRM_TITLE = "Save this link?"
 
+    /** #93 (R93-5, G1): the form's action back to the picker, trailing the chosen asset's name. */
+    const val CHANGE = "Change"
+
     fun confirmBody(scheme: String): String =
         "ServiceTag does not recognise \"$scheme\" links. It will be saved as written and opened " +
             "with whatever app claims it."
@@ -98,7 +103,10 @@ internal object IntakeStrings {
  */
 internal enum class IntakePath { LINK, BYTES, NOTE, TRANSFER_PACK }
 
-/** One chooser row. The id is carried as a string so the state holds no value class. */
+/**
+ * The chosen asset: the tapped picker row's id and name (#93, C4), and a row of the read-time snapshot. The id is
+ * carried as a string so the state holds no value class.
+ */
 internal data class AssetChoice(val id: String, val name: String)
 
 /**
@@ -111,8 +119,13 @@ internal data class ShareIntakeState(
     val path: IntakePath = IntakePath.LINK,
     /** What arrived, drawn under "Received". */
     val received: String = "",
+    /**
+     * The read-time eligible set — every asset not transferred out, read once with the share. #93 (C4): it decides
+     * the no-assets dead end and nothing else; it is not drawn, and a choice is never looked up in it.
+     */
     val assets: List<AssetChoice> = emptyList(),
-    val chosen: String? = null,
+    /** #93 (C4): the tapped row's `(id, name)`, exactly what every save arm reads; null on the picker step. */
+    val chosen: AssetChoice? = null,
     val name: String = "",
     val description: String = "",
     val kind: AttachmentKind = AttachmentKind.OTHER,
@@ -161,6 +174,24 @@ internal data class ShareIntakeState(
         path != IntakePath.TRANSFER_PACK
 
     val finished: Boolean get() = saved != null || cancelled
+
+    /** #93 (C5): the picker step is drawn — a loaded, live share with nothing chosen yet; the form otherwise. */
+    val picking: Boolean get() = !loading &&
+        deadEnd == null &&
+        saved == null &&
+        chosen == null &&
+        path != IntakePath.TRANSFER_PACK
+
+    /**
+     * #93 (R93-4): Back on the form returns to the picker. Off while saving — Back mid-save finishes the activity as
+     * today — and while confirming, where the dialog takes Back.
+     */
+    val backChangesAsset: Boolean get() = !loading &&
+        chosen != null &&
+        !saving &&
+        saved == null &&
+        deadEnd == null &&
+        confirming == null
 }
 
 /**
@@ -263,7 +294,18 @@ internal class ShareIntakeViewModel(
     private fun unreadable() =
         ShareIntakeState(loading = false, deadEnd = IntakeStrings.UNREADABLE)
 
-    fun choose(assetId: String) = _state.update { it.copy(chosen = assetId, message = null) }
+    /** #93 (C4): the tapped row, carried whole; nothing is looked up. */
+    fun choose(assetId: String, name: String) =
+        _state.update { it.copy(chosen = AssetChoice(assetId, name), message = null) }
+
+    /**
+     * #93 (C6): back to the picker — the choice and any refusal cleared, Name, Description, Type and Role kept (each
+     * came from the share, not the asset). "That is not a link." is not restored. A no-op unless
+     * [ShareIntakeState.backChangesAsset].
+     */
+    fun changeAsset() = _state.update {
+        if (it.backChangesAsset) it.copy(chosen = null, message = null) else it
+    }
 
     /**
      * **The field stops at its cap** rather than refusing after the fact, which is what spec §10
@@ -288,7 +330,7 @@ internal class ShareIntakeViewModel(
         if (it.roleOffered) it.copy(role = value, message = null) else it
     }
 
-    /** Cancel, back and Close are the same fact: nothing was written and nothing will be. */
+    /** Cancel, Close and Back on the picker are the same fact: nothing was written and nothing will be (Back on the form is `changeAsset()`, after which a choice and a save are still possible). */
     fun cancel() = _state.update { it.copy(confirming = null, cancelled = true) }
 
     fun dismissConfirmation() = _state.update { it.copy(confirming = null, saving = false) }
@@ -309,7 +351,7 @@ internal class ShareIntakeViewModel(
 
     private suspend fun commit(confirmedUnknownScheme: Boolean) {
         val current = _state.value
-        val choice = current.assets.firstOrNull { it.id == current.chosen }
+        val choice = current.chosen
         if (choice == null) {
             _state.update { it.copy(saving = false, deadEnd = IntakeStrings.NO_ASSETS) }
             return

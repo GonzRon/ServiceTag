@@ -72,8 +72,11 @@ class ShareIntakeViewModelTest {
         Dispatchers.resetMain()
     }
 
+    /** The fixture's name: #93 (C4) hands the save the tapped row's `(id, name)`, so every choice names it. */
+    private val mowerName = "Cub Cadet XT1"
+
     private suspend fun mower(): String {
-        val asset = graph.createAsset.run(AssetCommand(name = "Cub Cadet XT1"))
+        val asset = graph.createAsset.run(AssetCommand(name = mowerName))
         assetId = asset.id
         return asset.id.value
     }
@@ -174,7 +177,7 @@ class ShareIntakeViewModelTest {
         val id = mower()
         val vm = model(link(manualUrl))
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.saveAndSettle()
 
         assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
@@ -184,10 +187,10 @@ class ShareIntakeViewModelTest {
 
     @Test fun aDuplicateLinkSaysSoAndWritesNothingMore() = runTest(scheduler) {
         val id = mower()
-        model(link(manualUrl)).also { it.choose(id); it.saveAndSettle() }
+        model(link(manualUrl)).also { it.choose(id, mowerName); it.saveAndSettle() }
 
         val second = model(link(manualUrl, name = "Again"))
-        second.choose(id)
+        second.choose(id, mowerName)
         second.saveAndSettle()
 
         assertEquals("That link is already on this asset", second.state.value.message)
@@ -201,7 +204,7 @@ class ShareIntakeViewModelTest {
             "a".repeat(2_049 - "https://example-mower.invalid/".length)
         val vm = model(link(uri))
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.saveAndSettle()
 
         assertEquals("That link is too long to save.", vm.state.value.message)
@@ -217,7 +220,7 @@ class ShareIntakeViewModelTest {
         val id = mower()
         val vm = model(link("zotero://select/items/0", name = "A paper"))
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.saveAndSettle()
 
         assertEquals("zotero", vm.state.value.confirming)
@@ -234,7 +237,7 @@ class ShareIntakeViewModelTest {
         val id = mower()
         val vm = model(link("zotero://select/items/0"))
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.saveAndSettle()
         vm.dismissConfirmation()
         vm.cancel()
@@ -268,7 +271,7 @@ class ShareIntakeViewModelTest {
         var opened = 0
         val vm = model(bytes(size = 0L), source = { opened += 1; "".byteInputStream() })
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.saveAndSettle()
 
         assertEquals("That file is empty", vm.state.value.message)
@@ -289,7 +292,7 @@ class ShareIntakeViewModelTest {
             var opened = 0
             val vm = model(bytes(size = null), source = { opened += 1; "".byteInputStream() })
 
-            vm.choose(id)
+            vm.choose(id, mowerName)
             vm.saveAndSettle()
 
             assertEquals("That file is empty", vm.state.value.message)
@@ -309,7 +312,7 @@ class ShareIntakeViewModelTest {
         var opened = 0
         val vm = model(bytes(size = null), source = { opened += 1; "pdf".byteInputStream() })
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.saveAndSettle()
 
         assertNull(vm.state.value.message)
@@ -333,7 +336,7 @@ class ShareIntakeViewModelTest {
             source = { opened += 1; "x".byteInputStream() },
         )
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.saveAndSettle()
 
         assertEquals("That file is larger than 256 MB", vm.state.value.message)
@@ -347,7 +350,7 @@ class ShareIntakeViewModelTest {
         val id = mower()
         val vm = model(bytes(), source = { throw IOException("the provider is gone") })
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.saveAndSettle()
 
         assertEquals("Could not read what was shared", vm.state.value.message)
@@ -364,7 +367,7 @@ class ShareIntakeViewModelTest {
         val id = mower()
         val vm = model(bytes(size = null), source = { halfAStream() })
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.saveAndSettle()
 
         assertEquals("Could not read what was shared", vm.state.value.message)
@@ -376,7 +379,7 @@ class ShareIntakeViewModelTest {
         val id = mower()
         val vm = model(bytes(), source = { "pdf".byteInputStream() })
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.name("Deck belt diagram")
         vm.describe("Page 14 of the operator manual")
         vm.kind(AttachmentKind.MANUAL)
@@ -398,7 +401,7 @@ class ShareIntakeViewModelTest {
         val vm = model(bytes(), source = { "pdf".byteInputStream() })
         assertNull(vm.state.value.role)
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.role(DocumentRole.USER_MANUAL)
         vm.saveAndSettle()
 
@@ -415,7 +418,7 @@ class ShareIntakeViewModelTest {
         val id = mower()
         val vm = model(link(manualUrl))
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.role(DocumentRole.USER_MANUAL)
         assertEquals(DocumentRole.USER_MANUAL, vm.state.value.role)
         vm.saveAndSettle()
@@ -449,7 +452,7 @@ class ShareIntakeViewModelTest {
         assertFalse(vm.state.value.linkTakesRole)
         assertFalse(vm.state.value.roleOffered)
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.role(DocumentRole.USER_MANUAL)
         assertNull(vm.state.value.role)
         vm.saveAndSettle()
@@ -473,7 +476,7 @@ class ShareIntakeViewModelTest {
         assertEquals("Service manual", vm.state.value.name)
         assertNull(vm.state.value.role)
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.saveAndSettle()
 
         val row = graph.references.forAsset(assetId).single()
@@ -509,7 +512,7 @@ class ShareIntakeViewModelTest {
 
         var opened = 0
         val byteShare = model(bytes(), source = { opened += 1; "x".byteInputStream() })
-        byteShare.choose(id)
+        byteShare.choose(id, mowerName)
         byteShare.saveAndSettle()
 
         assertTrue(byteShare.state.value.noFolder)
@@ -519,7 +522,7 @@ class ShareIntakeViewModelTest {
         assertTrue(graph.attachmentStorage.store.files.isEmpty())
 
         val uriShare = model(link(manualUrl))
-        uriShare.choose(id)
+        uriShare.choose(id, mowerName)
 
         assertFalse(uriShare.state.value.noFolder)
         assertTrue(uriShare.state.value.saveEnabled)
@@ -538,7 +541,7 @@ class ShareIntakeViewModelTest {
 
         assertFalse("no asset chosen yet", vm.state.value.saveEnabled)
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         assertTrue(vm.state.value.saveEnabled)
 
         vm.name("   ")
@@ -558,7 +561,7 @@ class ShareIntakeViewModelTest {
         assertEquals("That is not a link.", vm.state.value.message)
         assertEquals(IntakePath.NOTE, vm.state.value.path)
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.saveAndSettle()
 
         assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
@@ -579,19 +582,27 @@ class ShareIntakeViewModelTest {
 
         model(link(manualUrl)).cancel()
 
-        model(link(manualUrl)).also { it.choose(id); it.cancel() }
+        model(link(manualUrl)).also { it.choose(id, mowerName); it.cancel() }
 
-        model(link(manualUrl)).also { it.choose(id); it.name("Typed a name"); it.cancel() }
+        model(link(manualUrl)).also { it.choose(id, mowerName); it.name("Typed a name"); it.cancel() }
 
         model(link("zotero://select/items/0")).also {
-            it.choose(id)
+            it.choose(id, mowerName)
             it.saveAndSettle()
             assertEquals("zotero", it.state.value.confirming)
             it.cancel()
         }
 
         model(bytes(), source = { error("cancelled intake must never open a stream") }).also {
-            it.choose(id)
+            it.choose(id, mowerName)
+            it.cancel()
+        }
+
+        // #93 (R93-4): a choice, then Change (Back on the form) back to the picker, then cancel there.
+        model(bytes(), source = { error("cancelled intake must never open a stream") }).also {
+            it.choose(id, mowerName)
+            it.name("Typed a name")
+            it.changeAsset()
             it.cancel()
         }
 
@@ -601,6 +612,157 @@ class ShareIntakeViewModelTest {
         assertEquals(0, attachments())
         assertEquals(0, events())
         assertTrue(graph.attachmentStorage.store.files.isEmpty())
+    }
+
+    // --- #93 (B2; C4–C6): the tapped row, the two steps, Change and Back -------------------------
+
+    /**
+     * C4: the save receives the tapped row's `(id, name)` — the picker's live row — and never a name looked up in the
+     * read-time snapshot: renamed after the read, the asset is saved to under the name the person tapped.
+     */
+    @Test fun theChosenRowsIdAndNameReachTheSave() = runTest(scheduler) {
+        val id = mower()
+        val vm = model(link(manualUrl))
+        graph.updateAsset.run(assetId, AssetCommand(name = "Cub Cadet XT1 Ultimate"))
+
+        vm.choose(id, "Cub Cadet XT1 Ultimate")
+        vm.saveAndSettle()
+
+        assertEquals("Saved to Cub Cadet XT1 Ultimate", vm.state.value.saved)
+        assertEquals(1, references())
+        assertEquals(manualUrl, graph.references.forAsset(assetId).single().uri)
+    }
+
+    /** Audit §0.1: an asset the read-time snapshot lacks is saved to, not refused with the no-assets sentence. */
+    @Test fun anAssetAddedAfterTheReadIsSavedToNotRefused() = runTest(scheduler) {
+        mower()
+        val vm = model(link(manualUrl))
+        val added = graph.createAsset.run(AssetCommand(name = "Example Snow Blower"))
+
+        vm.choose(added.id.value, "Example Snow Blower")
+        vm.saveAndSettle()
+
+        assertNull(vm.state.value.deadEnd)
+        assertEquals("Saved to Example Snow Blower", vm.state.value.saved)
+        assertEquals(1, graph.references.forAsset(added.id).size)
+        assertEquals(0, references())
+    }
+
+    /** C5: the picker is drawn only on a loaded, live share with nothing chosen. */
+    @Test fun pickingIsTrueOnlyWithNoChoiceOnALoadedLiveIntake() = runTest(scheduler) {
+        val id = mower()
+        val vm = model(link(manualUrl))
+        assertTrue("a loaded share with nothing chosen draws the picker", vm.state.value.picking)
+        vm.choose(id, mowerName)
+        assertFalse("a choice draws the form", vm.state.value.picking)
+        assertFalse(
+            "a refused share is a dead end, never the picker",
+            model(ShareContent.Refused(IntakeRefusal.SCHEME_BLOCKED)).state.value.picking,
+        )
+
+        val live = ShareIntakeState(loading = false)
+        assertTrue(live.picking)
+        assertFalse("loading", ShareIntakeState().picking)
+        assertFalse("a dead end", live.copy(deadEnd = IntakeStrings.NO_ASSETS).picking)
+        assertFalse("saved", live.copy(saved = IntakeStrings.savedTo(mowerName)).picking)
+        assertFalse("a Transfer Pack", live.copy(path = IntakePath.TRANSFER_PACK).picking)
+        assertFalse("chosen", live.copy(chosen = AssetChoice(id, mowerName)).picking)
+    }
+
+    /** C6: Change clears the choice and the refusal and keeps what came from the share — Name, Description, Type, Role. */
+    @Test fun changeAssetClearsTheChoiceAndMessageAndKeepsNameDescriptionTypeAndRole() = runTest(scheduler) {
+        val id = mower()
+        val vm = model(bytes(size = 0L), source = { "".byteInputStream() })
+        vm.choose(id, mowerName)
+        vm.name("Typed a name")
+        vm.describe("Typed a description")
+        vm.kind(AttachmentKind.MANUAL)
+        vm.role(DocumentRole.SERVICE_MANUAL)
+        vm.saveAndSettle()
+        assertEquals("That file is empty", vm.state.value.message)
+
+        vm.changeAsset()
+
+        val after = vm.state.value
+        assertNull(after.chosen)
+        assertNull(after.message)
+        assertTrue(after.picking)
+        assertEquals("Typed a name", after.name)
+        assertEquals("Typed a description", after.description)
+        assertEquals(AttachmentKind.MANUAL, after.kind)
+        assertEquals(DocumentRole.SERVICE_MANUAL, after.role)
+        assertEquals(0, attachments())
+    }
+
+    /** R93-4: Back on the form changes the asset — never while saving, once saved, on a dead end or under the dialog. */
+    @Test fun backChangesAssetIsFalseWhileSavingAfterSavedOnADeadEndAndWhileConfirming() = runTest(scheduler) {
+        val id = mower()
+        val vm = model(link(manualUrl))
+        assertFalse("on the picker, Back cancels as today", vm.state.value.backChangesAsset)
+        vm.choose(id, mowerName)
+        assertTrue("on the form, Back returns to the picker", vm.state.value.backChangesAsset)
+
+        vm.save()
+        assertTrue("the write is still running", vm.state.value.saving)
+        assertFalse("mid-save, Back finishes the activity as today", vm.state.value.backChangesAsset)
+        scheduler.advanceUntilIdle()
+        assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
+        assertFalse("saved", vm.state.value.backChangesAsset)
+
+        val asked = model(link("zotero://select/items/0"))
+        asked.choose(id, mowerName)
+        asked.saveAndSettle()
+        assertEquals("zotero", asked.state.value.confirming)
+        assertFalse("the dialog takes Back", asked.state.value.backChangesAsset)
+
+        val form = ShareIntakeState(loading = false, chosen = AssetChoice(id, mowerName))
+        assertTrue(form.backChangesAsset)
+        assertFalse("loading", form.copy(loading = true).backChangesAsset)
+        assertFalse("saving", form.copy(saving = true).backChangesAsset)
+        assertFalse("a dead end", form.copy(deadEnd = IntakeStrings.NO_ASSETS).backChangesAsset)
+    }
+
+    @Test fun changeAssetIsANoOpThen() = runTest(scheduler) {
+        val id = mower()
+        val chosen = AssetChoice(id, mowerName)
+
+        val vm = model(link(manualUrl))
+        vm.choose(id, mowerName)
+        vm.save()
+        vm.changeAsset()
+        assertEquals("mid-save the choice stays", chosen, vm.state.value.chosen)
+        scheduler.advanceUntilIdle()
+        assertEquals("Saved to Cub Cadet XT1", vm.state.value.saved)
+        vm.changeAsset()
+        assertEquals("saved, the choice stays", chosen, vm.state.value.chosen)
+        assertEquals(1, references())
+
+        val asked = model(link("zotero://select/items/0"))
+        asked.choose(id, mowerName)
+        asked.saveAndSettle()
+        asked.changeAsset()
+        assertEquals("zotero", asked.state.value.confirming)
+        assertEquals("under the dialog the choice stays", chosen, asked.state.value.chosen)
+
+        val refused = model(ShareContent.Refused(IntakeRefusal.SCHEME_BLOCKED))
+        val before = refused.state.value
+        refused.changeAsset()
+        assertEquals("a dead end is left as it is", before, refused.state.value)
+    }
+
+    /** R93-10: the note path's sentence shows on the picker, a choice clears it, and a Change does not restore it. */
+    @Test fun theNotALinkSentenceIsThereBeforeAChoiceAndGoneAfterAChange() = runTest(scheduler) {
+        val id = mower()
+        val vm = model(ShareContent.PlainText("Replaced the drive belt, took an hour"))
+        assertTrue(vm.state.value.picking)
+        assertEquals("That is not a link.", vm.state.value.message)
+
+        vm.choose(id, mowerName)
+        assertNull(vm.state.value.message)
+
+        vm.changeAsset()
+        assertTrue(vm.state.value.picking)
+        assertNull("a Change does not bring the sentence back", vm.state.value.message)
     }
 
 
@@ -724,7 +886,7 @@ class ShareIntakeViewModelTest {
         val id = mower()
         val vm = model(bytes(size = null), source = { throw SecurityException("the grant is gone") })
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.saveAndSettle()
 
         assertEquals("Could not read what was shared", vm.state.value.message)
@@ -766,7 +928,7 @@ class ShareIntakeViewModelTest {
             source = { "log".byteInputStream() },
         )
 
-        vm.choose(id)
+        vm.choose(id, mowerName)
         vm.saveAndSettle()
 
         val row = graph.attachments.forOwner(AttachmentOwner.OfAsset(assetId)).single()
@@ -790,6 +952,8 @@ class ShareIntakeViewModelTest {
             "That link is already on this asset", "That file is empty",
             "That file is larger than 256 MB", "Give the file a name",
             "Give the reference a name", "Save this link?",
+            // #93 (R93-5, G1): the form's Change action.
+            "Change",
         )
         val drawn = listOf(
             IntakeStrings.TITLE, IntakeStrings.RECEIVED, IntakeStrings.ATTACH_TO,
@@ -800,7 +964,7 @@ class ShareIntakeViewModelTest {
             IntakeStrings.URI_TOO_LONG, IntakeStrings.SCHEME_BLOCKED,
             IntakeStrings.DUPLICATE_URI, IntakeStrings.EMPTY_FILE, IntakeStrings.TOO_LARGE,
             IntakeStrings.BLANK_FILE_NAME, IntakeStrings.BLANK_REFERENCE_NAME,
-            IntakeStrings.CONFIRM_TITLE,
+            IntakeStrings.CONFIRM_TITLE, IntakeStrings.CHANGE,
         )
 
         assertEquals(ratified, drawn.toSet())
@@ -939,7 +1103,7 @@ class ShareIntakeViewModelTest {
     @Test fun aHeldTargetRefusalSaysP77_35() = runTest(scheduler) {
         val id = mower()
         val vm = packModel(link(manualUrl), null)
-        vm.choose(id)
+        vm.choose(id, mowerName)
         graph.transferRecords.append(heldOut(AssetId(id)))
 
         vm.saveAndSettle()

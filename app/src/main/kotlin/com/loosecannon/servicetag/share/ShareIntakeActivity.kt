@@ -8,11 +8,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.ServiceTagApp
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppearanceMode
+import com.loosecannon.servicetag.ui.asset.AssetsViewModel
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferDoor
 import com.loosecannon.servicetag.ui.transfer.`import`.TransferImportContent
@@ -30,7 +32,8 @@ import java.time.ZoneId
  * It builds the graph the way the shell does and draws one screen over the sharing app. Its empty
  * `taskAffinity` keeps it out of the shell's `singleTask` stack, so a running shell is neither
  * navigated, recreated nor scrolled; Save, Cancel, Close and back all end in `finish()`, which
- * returns to the app that shared, and **cancel and every refusal write nothing** (I-8).
+ * returns to the app that shared, and **cancel and every refusal write nothing** (I-8). #93 (R93-4):
+ * back on the form, once an asset is chosen, returns to the picker instead — never while saving.
  */
 class ShareIntakeActivity : ComponentActivity() {
 
@@ -98,9 +101,31 @@ class ShareIntakeActivity : ComponentActivity() {
                         modifier = Modifier.padding(top = 24.dp),
                     )
                 } else {
+                    // #93 (C9): the picker is the Assets tab's own list model, switched to drop held assets (C2). It
+                    // outlives the two steps, so the query and the controls survive a Change (R93-12).
+                    val picker = viewModel(key = "share-asset-picker") { AssetsViewModel(graph, excludeHeld = true) }
+                    val pickerState by picker.state.collectAsStateWithLifecycle()
+                    // The box draws from the model's own query holder, never `pickerState.query` (F3, the tab's shape).
+                    val pickerQuery by picker.query.collectAsStateWithLifecycle()
+                    // #71 (plan C2), the tab's resume refresh: the rows' health is re-derived on coming back (R93-7).
+                    LifecycleResumeEffect(picker) {
+                        picker.refresh()
+                        onPauseOrDispose { }
+                    }
+                    // R93-4: back on the form returns to the picker; off while saving or confirming, so back
+                    // mid-save finishes as it always has, and on the picker back cancels as today.
+                    BackHandler(enabled = state.backChangesAsset) { model.changeAsset() }
                     ShareIntakeScreen(
                         state = state,
+                        picker = pickerState,
+                        pickerQuery = pickerQuery,
+                        onQueryChange = picker::onQueryChange,
+                        onClearQuery = picker::clearQuery,
+                        onPickType = picker::pickType,
+                        onToggleComponents = picker::toggleComponents,
+                        onToggleArchived = picker::toggleArchived,
                         onChoose = model::choose,
+                        onChangeAsset = model::changeAsset,
                         onName = model::name,
                         onDescribe = model::describe,
                         onKind = model::kind,

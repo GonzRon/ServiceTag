@@ -40,7 +40,7 @@ Version: **1.3.0 / versionCode 15**, Room schema **7**, backup format **7** (§1
 The share sheet sends one item into ServiceTag, the owner picks the asset, names and describes it, and
 it is saved — **bytes as an ordinary #7 attachment, a URI as a new `asset_reference` row** — then shows
 on the asset and opens with the system. The owner's eight items: (1) `ACTION_SEND` intake; (2) an asset
-chooser; (3) a URL / web reference; (4) one document, PDF or image; (5) an editable display name and
+picker (#93: the intake's first step, the Assets tab's list narrowed to what can take the item); (3) a URL / web reference; (4) one document, PDF or image; (5) an editable display name and
 description on both paths; (6) external note links such as Joplin, through a generic scheme mechanism;
 (7) a place on the asset that shows and opens them; (8) hardened URI and grant handling, with the new
 metadata in backup and merge. Plus, under D-12 and D-21, a reference surface on the automation API and
@@ -64,8 +64,9 @@ an in-app "Add link" action.
 ## 2. The user flow
 
 **The happy path.** A browser on a fictional manual page `https://example-mower.invalid/xt1/manual.pdf`.
-Share → **ServiceTag** → the intake screen opens over the sharing app with what arrived, an asset
-chooser, a name prefilled from the page title, and an empty description. Choose "Cub Cadet XT1", type
+Share → **ServiceTag** → the intake screen opens over the sharing app on its first step, what arrived and the
+asset picker. Choose "Cub Cadet XT1"; the form follows, with a name prefilled from the page title and an
+empty description. Type
 "OEM parts lookup", **Save**. The screen finishes, the browser is back, and the reference is in the
 asset's **References** section.
 
@@ -438,8 +439,9 @@ re-inserts it, as it does for events).
 **"Add link"** is the section's own action (D-21 C), calling the same use case a share does and writing
 an identical row.
 
-**The intake screen** is one scrolling column: what arrived, the asset chooser, Name, Description, and
-for a byte share a Type control prefilled with `AttachmentKinds.inferFrom`. Save is disabled until an
+**The intake screen** is two steps (#93; it was one scrolling column with a chip cloud). The first step shows what
+arrived and the asset picker ("Choose asset"), with no Save. Choosing an asset opens the second: what arrived, the
+chosen asset's name with a way back to the picker (§10, the #93 amendment), Name, Description, and for a byte share a Type control prefilled with `AttachmentKinds.inferFrom`. Save is disabled until an
 asset is chosen and the name is non-blank — and, for a byte share with no folder, until there is one.
 Disabling Save *is* the intake behaviour, so the person never sees a blank-name line here; the two
 blank-name refusal strings in §10 belong to the use-case layer, which still answers the shipped picker
@@ -489,7 +491,7 @@ One test per hazard class. No acceptance procedure waits on a real-world delay.
 | Stream URI | a `file://` stream is refused; a `content://` naming ServiceTag's own `${applicationId}.files` is refused; any other scheme is refused; **each refusal happens before the `ByteSource` is constructed**, so nothing is opened — a JVM test over the `:core` scheme/authority predicate plus one `:app` test that the reader consults it first |
 | Policy | each allowed scheme launches; **each of the eight hard-blocked schemes** is refused at save and at launch; an unknown scheme takes one confirmation then saves; a missing handler is caught; a URI blocked after it was saved is shown, not launched |
 | Grants | the stream is copied and no persistable grant taken; over the cap refused before the copy; zero length refused in the intake layer; a failure mid-copy leaves no row and no partial file; a process recreation mid-intake either still reads the grant or refuses cleanly and writes nothing |
-| Intake | cancel at each step writes nothing; the no-assets state offers no save; **the no-store state on a byte share offers no save and stages nothing, while a URI share on the same phone saves normally**; a blank name refused at the use case; the sharing app is returned to; the running shell is undisturbed; cold and warm starts save the same row |
+| Intake | cancel at each step writes nothing; the no-assets state offers no save; **the no-store state on a byte share offers no save and stages nothing, while a URI share on the same phone saves normally**; a blank name refused at the use case; **a transferred-out (held) asset is never offered by the picker, whose model drops held rows before any control or count**; the sharing app is returned to; the running shell is undisturbed; cold and warm starts save the same row |
 | Model | `UNIQUE(asset_id, uri)` rejects a duplicate and permits the same URI on two assets; deleting an asset cascades; a reference on an archived asset still lists and opens; a reference is never a tag target; no code path reaches `external_link`; **`kind` is inferred from the scheme for all three values** |
 | Description | Name and Description round-trip through the byte path into `displayName`/`notes`, survive a backup round trip, and render as the second quiet line; **the line is suppressed when `present` is false**; a 2,000-character description ellipsises rather than wrapping the row |
 | Backup | every field round-trips byte-identically; a format-≤6 archive decodes with an empty list; a format-7 archive is refused by the version gate; `uniqueIds` rejects a duplicate id; a row whose `assetId` is absent from the archive is refused; the new `counts` key is correct; the artifacts archive is unchanged; **no `provenance` field appears anywhere in the DTO** |
@@ -568,6 +570,9 @@ receipt" · "User manual" · "Service manual". Ratified by the owner as #67's P6
 (#67 plan §6, §12), not re-spelled here: `IntakeStrings.ROLE` is initialised from the one home of
 "Role" in `ui/attachments`, and the chip labels are drawn through `DocumentRole?.label()`, as the Type
 labels are drawn through `AttachmentKind.label()`. Byte shares only (§7's amendment).
+
+**Amendment (#93, 2026-10-01): Change action** — "Change", on the form step beside the chosen asset's name, returns to
+the asset picker. Ratified by the owner as #93's R93-5 (#93 plan §5, G1); `IntakeStrings.CHANGE` carries it.
 
 **Unknown-scheme confirmation** — "Save this link?" · "ServiceTag does not recognise \"<scheme>\" links.
 It will be saved as written and opened with whatever app claims it." · "Save" · "Cancel".
