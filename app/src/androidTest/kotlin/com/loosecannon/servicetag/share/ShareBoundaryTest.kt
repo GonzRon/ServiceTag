@@ -53,7 +53,7 @@ class ShareBoundaryTest {
     private var mower: AssetId? = null
     private var intake: ShareIntakeActivity? = null
 
-    /** One asset, so the intake draws its form and not the no-assets dead end. */
+    /** One asset, so the intake draws its first step and not the no-assets dead end. */
     @Before fun seedOneAsset() {
         mower = runBlocking { graph.createAsset.run(name = "Mower").id }
     }
@@ -93,10 +93,10 @@ class ShareBoundaryTest {
 
     /**
      * Boundary: a `content://` URI from another package's `FileProvider`, carrying a real temporary
-     * read grant, is readable by the intake — the provider's own name for it arrives, and the byte
-     * form (the only one with a Type control) is drawn.
+     * read grant, is readable by the intake — the provider's own name for it arrives, and the intake's
+     * first step (the asset picker) is drawn.
      */
-    @Test fun anExternalStreamWithAGenuineGrantReachesTheByteForm() {
+    @Test fun anExternalStreamWithAGenuineGrantReachesTheIntake() {
         intake = TestSender.share(Command.SEND_FILE)
         awaitTheReadToLand()
 
@@ -104,7 +104,7 @@ class ShareBoundaryTest {
         rule.onNodeWithText(RECEIVED).assertIsDisplayed()
         // The Name field is pre-filled with the same name, so only the drawn line is matched.
         rule.onNode(hasTextExactly(FIXTURE_FILE, includeEditableText = false)).assertIsDisplayed()
-        rule.onNodeWithText(TYPE).assertIsDisplayed()
+        rule.onNodeWithText(CHOOSE_ASSET).assertIsDisplayed()
         rule.onAllNodesWithText(UNREADABLE).assertCountEquals(0)
     }
 
@@ -153,7 +153,7 @@ class ShareBoundaryTest {
         // What the screen draws, verbatim. `SectionHeader` uppercases its title.
         const val TITLE = "Save to ServiceTag"
         const val RECEIVED = "RECEIVED"
-        const val TYPE = "TYPE"
+        const val CHOOSE_ASSET = "Choose asset"
         const val CLOSE = "Close"
         const val UNREADABLE = "Could not read what was shared"
 

@@ -74,7 +74,7 @@ pyramid, top to bottom by count:
 4. **External-boundary smoke proofs — two or three per feature, at most.** They exist only to
    prove that Android delivered an intent or grant from **another UID** to the exported activity:
    an external text `ACTION_SEND` reaches the intake; an external `content://` stream with a
-   genuine temporary read grant reaches the byte-share form; optionally one bad grant is refused.
+   genuine temporary read grant reaches the intake; optionally one bad grant is refused.
    They choose no asset, type nothing, press nothing, count nothing. From 1.4 they come from a
    **test-only sender module** (`:share-test-sender`: its own package and UID, a `FileProvider`
    with fictional fixtures, three commands: `send_text`, `send_file`, `send_bad_grant`) — never

@@ -39,7 +39,8 @@ fire a real `ACTION_SEND` at `ShareIntakeActivity`, waits for the intake to resu
 Compose semantics. Its three cases are the whole of the external proof for share intake:
 
 1. an external `EXTRA_TEXT` share from another UID reaches the intake;
-2. an external `content://` stream with a genuine temporary read grant reaches the byte form;
+2. an external `content://` stream with a genuine temporary read grant reaches the intake, which draws the provider's
+   own name for it;
 3. the same stream without a grant, from a sharer that has never granted ServiceTag anything, is
    refused with "Could not read what was shared" at read time, not drawn as a form and not a
    crash. This case runs first (see the environment notes), so every run proves the shape #63
