@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.references
 
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceKind
 
 /**
@@ -21,3 +22,9 @@ object ReferenceKinds {
         }
     }
 }
+
+/** #91 (R91-1): only a web link — http or https — may carry a document role. */
+val ReferenceKind.takesRole: Boolean get() = this == ReferenceKind.WEB_URL
+
+/** The reference sibling of `AttachmentOwner.accepts`: no role at all, or a kind that takes one. */
+fun ReferenceKind.accepts(role: DocumentRole?): Boolean = role == null || takesRole
