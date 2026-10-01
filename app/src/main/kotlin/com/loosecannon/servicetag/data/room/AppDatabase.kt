@@ -8,6 +8,7 @@ import com.loosecannon.servicetag.data.room.dao.AssetDao
 import com.loosecannon.servicetag.data.room.dao.AssetLoanDao
 import com.loosecannon.servicetag.data.room.dao.TransferRecordDao
 import com.loosecannon.servicetag.data.room.dao.AssetSuccessionDao
+import com.loosecannon.servicetag.data.room.dao.AssetSupplyDao
 import com.loosecannon.servicetag.data.room.dao.AssetReferenceDao
 import com.loosecannon.servicetag.data.room.dao.AttachmentDao
 import com.loosecannon.servicetag.data.room.dao.DeadlineLocalDeliveryDao
@@ -25,6 +26,7 @@ import com.loosecannon.servicetag.data.room.dao.ScheduleStateDao
 import com.loosecannon.servicetag.data.room.dao.SeasonActivationDao
 import com.loosecannon.servicetag.data.room.dao.ServiceCaseDao
 import com.loosecannon.servicetag.data.room.dao.ServiceCaseEntryDao
+import com.loosecannon.servicetag.data.room.dao.SupplyItemDao
 import com.loosecannon.servicetag.data.room.entities.AssetCategoryEntity
 import com.loosecannon.servicetag.data.room.entities.AssetConditionEntity
 import com.loosecannon.servicetag.data.room.entities.AssetEntity
@@ -32,6 +34,7 @@ import com.loosecannon.servicetag.data.room.entities.AssetEventEntity
 import com.loosecannon.servicetag.data.room.entities.AssetLoanEntity
 import com.loosecannon.servicetag.data.room.entities.TransferRecordEntity
 import com.loosecannon.servicetag.data.room.entities.AssetSuccessionEntity
+import com.loosecannon.servicetag.data.room.entities.AssetSupplyEntity
 import com.loosecannon.servicetag.data.room.entities.AssetReferenceEntity
 import com.loosecannon.servicetag.data.room.entities.AssetSeasonActivationEntity
 import com.loosecannon.servicetag.data.room.entities.AttachmentEntity
@@ -54,6 +57,8 @@ import com.loosecannon.servicetag.data.room.entities.ScheduleProviderEntity
 import com.loosecannon.servicetag.data.room.entities.ScheduleStateEntity
 import com.loosecannon.servicetag.data.room.entities.ServiceCaseEntity
 import com.loosecannon.servicetag.data.room.entities.ServiceCaseEntryEntity
+import com.loosecannon.servicetag.data.room.entities.SupplyItemEntity
+import com.loosecannon.servicetag.data.room.entities.SupplySpecificationEntity
 
 @Database(
     entities = [
@@ -86,8 +91,11 @@ import com.loosecannon.servicetag.data.room.entities.ServiceCaseEntryEntity
         AssetLoanEntity::class,
         TransferRecordEntity::class,
         AssetSuccessionEntity::class,
+        SupplyItemEntity::class,
+        SupplySpecificationEntity::class,
+        AssetSupplyEntity::class,
     ],
-    version = 17,
+    version = 18,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -114,4 +122,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun assetLoanDao(): AssetLoanDao
     abstract fun transferRecordDao(): TransferRecordDao
     abstract fun assetSuccessionDao(): AssetSuccessionDao
+    abstract fun supplyItemDao(): SupplyItemDao
+    abstract fun assetSupplyDao(): AssetSupplyDao
 }

@@ -756,6 +756,60 @@ val MIGRATION_16_17: Migration = object : Migration(16, 17) {
 }
 
 /**
+ * Schema v17 -> v18 (#15, C6; R15-4, R15-5): the SupplyItem catalog — three new tables — and one soft link on
+ * each material-line table. Nothing existing moves: no row, no timestamp and no recreate, so a pre-upgrade
+ * export still re-plans IDENTICAL.
+ *
+ *  1. `supply_item`, the catalog: archived, never deleted (R15-5); no index.
+ *  2. `supply_specification`, its ordered children (`supply_id`, CASCADE), the key unique per SupplyItem.
+ *  3. `asset_supply`, applicability: owned by the asset (CASCADE), naming a SupplyItem (RESTRICT), the
+ *     `(asset_id, supply_id, role)` triple unique, and `supply_id` indexed for its foreign key.
+ *  4. `profile_consumable.supply_id` and `consumable_usage.supply_id`: nullable `TEXT` with **no foreign key,
+ *     no default, no index and no backfill** — the R79-4 soft link, so no recreate. A line written before #15
+ *     is unlinked, and nothing is read off its name to link it (C37).
+ *
+ * Each `CREATE` is copied verbatim from the exported `18.json`, and each `ALTER` is [MIGRATION_16_17]'s shape
+ * with the type `18.json` records, so Room validates the result on open.
+ */
+val MIGRATION_17_18: Migration = object : Migration(17, 18) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `supply_item` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                "`category` TEXT NOT NULL, `manufacturer` TEXT NOT NULL, `model` TEXT NOT NULL, " +
+                "`part_number` TEXT NOT NULL, `preferred_unit` TEXT NOT NULL, `notes` TEXT NOT NULL, " +
+                "`archived_at` INTEGER, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `supply_specification` (`id` TEXT NOT NULL, `supply_id` TEXT NOT NULL, " +
+                "`key` TEXT NOT NULL, `label` TEXT NOT NULL, `value` TEXT NOT NULL, `unit` TEXT NOT NULL, " +
+                "`sort_order` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
+                "FOREIGN KEY(`supply_id`) REFERENCES `supply_item`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_supply_specification_supply_id_key` " +
+                "ON `supply_specification` (`supply_id`, `key`)",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `asset_supply` (`id` TEXT NOT NULL, `asset_id` TEXT NOT NULL, " +
+                "`supply_id` TEXT NOT NULL, `role` TEXT NOT NULL, `created_at` INTEGER NOT NULL, " +
+                "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
+                "FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                "FOREIGN KEY(`supply_id`) REFERENCES `supply_item`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_asset_supply_asset_id_supply_id_role` " +
+                "ON `asset_supply` (`asset_id`, `supply_id`, `role`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_asset_supply_supply_id` ON `asset_supply` (`supply_id`)",
+        )
+        connection.execSQL("ALTER TABLE `profile_consumable` ADD COLUMN `supply_id` TEXT")
+        connection.execSQL("ALTER TABLE `consumable_usage` ADD COLUMN `supply_id` TEXT")
+    }
+}
+
+/**
  * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
  * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
  */

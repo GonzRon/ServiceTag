@@ -234,6 +234,7 @@ internal suspend fun buildEvent(
                 quantity = quantity,
                 unit = input.unit.trim(),
                 sortOrder = i,
+                supplyId = null,   // #15 placeholder (C19): the input carries the link (B4a)
             )
         }
     }

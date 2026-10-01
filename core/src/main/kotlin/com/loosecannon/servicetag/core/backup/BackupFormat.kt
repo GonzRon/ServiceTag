@@ -883,6 +883,7 @@ fun ProfileConsumableDto.toDomain(): ProfileConsumable = ProfileConsumable(
     defaultQuantity = defaultQuantity,
     unit = unit,
     sortOrder = sortOrder,
+    supplyId = null,   // #15 placeholder (C19): format 18 carries the link (B2a)
 )
 
 fun EventProfile.toDto(): EventProfileDto = EventProfileDto(
@@ -947,6 +948,7 @@ fun ConsumableUsageDto.toDomain(): ConsumableUsage = ConsumableUsage(
     quantity = quantity,
     unit = unit,
     sortOrder = sortOrder,
+    supplyId = null,   // #15 placeholder (C19): format 18 carries the link (B2a)
 )
 
 fun AssetEvent.toDto(): AssetEventDto = AssetEventDto(

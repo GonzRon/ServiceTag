@@ -9,6 +9,7 @@ import com.loosecannon.servicetag.core.model.AssetLoan
 import com.loosecannon.servicetag.core.model.AssetLoanId
 import com.loosecannon.servicetag.core.model.AssetReference
 import com.loosecannon.servicetag.core.model.AssetSuccession
+import com.loosecannon.servicetag.core.model.AssetSupply
 import com.loosecannon.servicetag.core.model.Attachment
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentOwner
@@ -33,6 +34,8 @@ import com.loosecannon.servicetag.core.model.SeasonActivation
 import com.loosecannon.servicetag.core.model.ServiceCase
 import com.loosecannon.servicetag.core.model.ServiceCaseEntry
 import com.loosecannon.servicetag.core.model.ServiceCaseId
+import com.loosecannon.servicetag.core.model.SupplyId
+import com.loosecannon.servicetag.core.model.SupplyItem
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TransferRecord
@@ -337,6 +340,43 @@ interface ReferenceRepository {
     suspend fun delete(id: ReferenceId)
     suspend fun deleteAll()
     fun observeForAsset(assetId: AssetId): Flow<List<AssetReference>>
+}
+
+/**
+ * #15 (C4; R15-5). The SupplyItem catalog, an aggregate as [GroupRepository]'s is: one [upsert] writes the
+ * item row and **replaces** its specification rows, as [ProfileRepository] replaces a profile's lines — the
+ * ids come from the caller, so a specification that survived an edit keeps its identity.
+ *
+ * **Archive-only:** there is no delete of a SupplyItem on this port or anywhere above the schema (R15-5);
+ * [setArchived] writes `archived_at` and the `updated_at` stamp and nothing else. Every rule — the name,
+ * the specification keys — lives in the use cases, so nothing here decides anything.
+ */
+interface SupplyItemRepository {
+    suspend fun get(id: SupplyId): SupplyItem?
+    /** Every SupplyItem, archived included, by id. */
+    suspend fun all(): List<SupplyItem>
+    suspend fun upsert(item: SupplyItem)
+    suspend fun setArchived(id: SupplyId, archivedAt: Long?, updatedAt: Long)
+}
+
+/**
+ * #15 (C4; R15-3, R15-5). Applicability rows: which SupplyItems an Asset takes, in which role. Owned by the
+ * Asset (its CASCADE takes them) and naming a SupplyItem the schema will not let go of (RESTRICT). A row is
+ * configuration, not history, so it is removable one by one; [update] moves the role and the stamp only.
+ * `(assetId, supplyId, role)` is unique — the use case refuses a second, and the schema's index is the last
+ * word. The write guard wraps this port (C14), not this file.
+ */
+interface AssetSupplyRepository {
+    suspend fun get(id: String): AssetSupply?
+    /** An Asset's rows, by `(role, id)`. */
+    suspend fun forAsset(assetId: AssetId): List<AssetSupply>
+    /** Every row naming a SupplyItem, by `(assetId, role, id)`. */
+    suspend fun forSupply(supplyId: SupplyId): List<AssetSupply>
+    /** Every row, by id. */
+    suspend fun all(): List<AssetSupply>
+    suspend fun insert(row: AssetSupply)
+    suspend fun update(row: AssetSupply)
+    suspend fun delete(id: String)
 }
 
 /**

@@ -22,7 +22,13 @@ enum class EventKind { MAINTENANCE, INSPECTION, MEASUREMENT, TREATMENT, INCIDENT
                        SEASON_START, SEASON_END, NOTE, CUSTOM }
 
 data class ProfileField(val id: String, val definitionId: DefinitionId, val required: Boolean, val sortOrder: Int)
-data class ProfileConsumable(val id: String, val name: String, val defaultQuantity: Double?, val unit: String, val sortOrder: Int)
+data class ProfileConsumable(
+    val id: String, val name: String, val defaultQuantity: Double?, val unit: String, val sortOrder: Int,
+    // #15 (C4; R15-4): the line's soft link to a SupplyItem, beside `name` and `unit`, which stay the readable
+    // snapshot. No default: every constructor site decides. Null = unlinked; a link exists only because a
+    // person chose it or a row carrying it was copied verbatim — never because a name matched (C37).
+    val supplyId: SupplyId?,
+)
 // Child rows carry durable ids of their own (seven tables, one identity rule): they survive backup
 // verbatim and 2B edits/reorders them by id. Import never generates replacement ids.
 
@@ -50,7 +56,10 @@ data class Measurement(
     val unit: String,           // SNAPSHOT of the definition's unit at entry
     val sortOrder: Int,
 )
-data class ConsumableUsage(val id: String, val name: String, val quantity: Double, val unit: String, val sortOrder: Int)
+data class ConsumableUsage(
+    val id: String, val name: String, val quantity: Double, val unit: String, val sortOrder: Int,
+    val supplyId: SupplyId?,        // #15: the same soft link as [ProfileConsumable.supplyId], the same rule
+)
 
 data class AssetEvent(              // aggregate root; saved and loaded with its children
     val id: EventId, val assetId: AssetId,
