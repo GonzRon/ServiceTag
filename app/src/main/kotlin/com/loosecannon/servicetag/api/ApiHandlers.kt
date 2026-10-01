@@ -66,7 +66,7 @@ import com.loosecannon.servicetag.di.AppGraph
  * schedule 409 `SEASON_MODE_STRANDS_POLICY` — which [mapDomainFailure] names. Condition is never in
  * it (#61 AC 9).
  *
- * **Twenty-nine collaborators plus two values, named one by one, with a `constructor(graph)` beside
+ * **Thirty-one collaborators plus two values, named one by one, with a `constructor(graph)` beside
  * them.** That is this app's pattern, stated at `AssetViewModels.kt:59`–`61`: *"Each takes the `AppGraph` members it
  * actually uses — the secondary constructor is what the Compose entry calls, the primary one is
  * what a test builds on a Room-backed fake graph."* It is the reason `ApiRouterTest` can drive the
@@ -168,6 +168,11 @@ internal class ApiHandlers(
      * `handlers.replace.*`, over #86's `ReplaceAsset` alone. No count comes with it: `assetSuccessions` is counted.
      */
     internal val replace: ReplaceHandlers,
+    /**
+     * #15's SupplyItem and applicability rows, on the same terms: one collaborator, reached from the router as
+     * `handlers.supplies.*`, and asked for the two counts `/v1/status` gained.
+     */
+    internal val supplies: SupplyHandlers,
     private val appVersion: String,
     private val schemaVersion: Int,
 ) {
@@ -185,6 +190,7 @@ internal class ApiHandlers(
         LoanHandlers(graph),
         AttachmentHandlers(graph),
         ReplaceHandlers(graph),
+        SupplyHandlers(graph),
         BuildConfig.VERSION_NAME, AppGraph.SCHEMA_VERSION,
     )
 
@@ -216,6 +222,10 @@ internal class ApiHandlers(
                 "transferRecords" to transferRecords.all().size,
                 // Format 15's (#86), under the archive's own list name: every succession row.
                 "assetSuccessions" to successions.all().size,
+                // Format 18's (#15), under the archive's own list names: every SupplyItem, archived included, and
+                // every applicability row. Specifications are nested in their item and not counted on their own.
+                "supplyItems" to supplies.itemCount(),
+                "assetSupplies" to supplies.assetSupplyCount(),
             ) + maintenance.counts() + seasonHealth.counts() + serviceCases.counts() + loans.counts(),
         ),
     )
