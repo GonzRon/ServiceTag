@@ -21,8 +21,9 @@ the one body key it is about, then the `problems` in parentheses.
   `repair_schedule_providers` needs **1.4.1 or later**; on an older build their routes are not there
   and every call answers 404. The two warranty tools need an app whose `schemaVersion` is **11 or
   later**, the five service-case tools one at **12 or later**, the five loan tools one at **13 or
-  later**, `get_asset_succession` one at **15 or later**, and #92's five attachment tools and two replace
-  tools one at **16 or later**; each checks it itself (below).
+  later**, `get_asset_succession` one at **15 or later**, #92's five attachment tools and two replace
+  tools one at **16 or later**, and #15's eight supply tools one at **18 or later**; each checks it itself
+  (below).
 - **Every write needs ServiceTag 1.4.0.** Before its first write under a pairing, the server reads
   `/v1/status` once and refuses to write to an app whose `schemaVersion` is below 8 — a `ToolError`
   carrying `APP_SCHEMA_TOO_OLD`, with nothing sent. The answer is kept for that pairing, and a new
@@ -46,8 +47,15 @@ the one body key it is about, then the `problems` in parentheses.
   `update_attachment`, `add_attachment` and `materialize_reference`) and `get_replace_offer` /
   `replace_asset` — the reads as well as the writes — refuse an app whose `schemaVersion` is below 16
   the same way, from the same read. #92 moved no schema, so a schema-16 app that predates the routes
-  answers `APP_ROUTE_MISSING`. The minima are therefore 8 for every write, 11 for the warranty tools,
-  12 for the case tools, 13 for the loan tools, 15 for the succession tool and 16 for the #92 tools.
+  answers `APP_ROUTE_MISSING`.
+- **The supply tools need schema 18.** `list_supply_items`, `get_supply_item`, `create_supply_item`,
+  `update_supply_item`, `archive_supply_item`, `list_asset_supplies`, `set_asset_supply` and
+  `remove_asset_supply` — the reads as well as the writes — refuse an app whose `schemaVersion` is below 18 the
+  same way, from the same read. `save_profile`, `log_event`, `update_event` and `complete_schedule` refuse it
+  **only when a material line they will send carries a `supplyId` key at all** (`null` included, which an older
+  app's strict decoder answers 400 for too); without one they reach any phone they always did. The minima are
+  therefore 8 for every write, 11 for the warranty tools, 12 for the case tools, 13 for the loan tools, 15 for
+  the succession tool, 16 for the #92 tools and 18 for the supply tools and a linked line.
 
 ## Using it
 
@@ -90,7 +98,7 @@ directory if that is not the repository root.
 
 ## The tools
 
-Seventy-six: `pair` plus one per API operation.
+Eighty-four: `pair` plus one per API operation.
 
 **Assets, readings, quick actions and the journal** — `pair`, `status`, `list_assets`, `get_asset`,
 `create_asset`, `update_asset`, `create_component`, `retire_asset`, `archive_asset`,
@@ -244,6 +252,28 @@ only as given. **Tags move by binding id only** (`moved_tag_ids`; an "all", a la
 here), and a move re-targets the binding row and never writes NFC. `docs/api/v1.md`'s **Replacing an asset
 (#92)** section is the contract.
 
+**Supply items (#15; needs schema 18)** — `list_supply_items`, `get_supply_item`, `create_supply_item`,
+`update_supply_item`, `archive_supply_item`, `list_asset_supplies`, `set_asset_supply`, `remove_asset_supply`:
+one tool per operation — `GET` and `POST /v1/supply-items`, `GET` and `PATCH /v1/supply-items/{id}`, `POST
+/v1/supply-items/{id}/archive`, `GET /v1/assets/{id}/supply-items`, `POST /v1/asset-supplies` and `PATCH` (both
+`set_asset_supply`) and `DELETE /v1/asset-supplies/{id}`. A **supply item** is one canonical product — a cartridge,
+a battery pack, a belt — with its identity (name, category, manufacturer, model, part number, preferred unit,
+notes) and an ordered list of generic specifications `{label, value, unit}`; an **asset supply** says which
+supply item an asset takes and in what role. Nothing more: no quantity, no fitted position, date or serial, no
+file, and a complete pack and an item inside it are two unrelated supply items. `update_supply_item` sends only
+the arguments given, because the phone's `PATCH` is itself the overlay: `""` clears a text field, `[]` removes
+every specification, `name` is never blank, and there is no `clear_fields`. A kept specification row is sent with
+its `id` and `key` — and its `unit` — as `get_supply_item` answered them, or the phone mints a new row and an
+earlier export re-plans the item `CONFLICT`. `set_asset_supply` creates without an `asset_supply_id` and re-roles
+with one; the role is cleaned and unique per asset and supply item, exactly. Nothing deletes a supply item — it is
+archived, and `archive_supply_item` takes `archived=False` to bring it back — while `remove_asset_supply` removes
+an applicability row. A material line names a supply item only by its `supplyId` on `save_profile`, `log_event`,
+`update_event` and `complete_schedule`, given by the caller and never inferred from a name; a line carrying the
+key at all needs schema 18 (`APP_SCHEMA_TOO_OLD` below it), and a link travels only on a line a call sends — a
+`complete_schedule` with `consumables=[]` writes no line, so it names no supply item. `save_profile`'s edit keeps
+each line's `supplyId` exactly as it read it. `docs/api/v1.md`'s **Supply items (#15)** and **Asset supplies
+(#15)** sections are the contract.
+
 ### The schedule's two forms, and the deprecated season arguments
 
 1.4 gives a schedule a **service policy** — `service_policy` (`CONTINUOUS`, `IN_SERVICE_AT_START`,
@@ -328,6 +358,7 @@ provenance.
 | `save_definition` | `unit` | `""` | `label`, `kind`, `value_type`; `key` (blank already means "keep") |
 | | `range_low`, `range_high`, `formula`, `source_a_id`, `source_b_id` | `null` | |
 | `save_profile` | — (its fields are text or lists, where `""` and `[]` already clear) | | |
+| `update_supply_item` | — (the phone's `PATCH` is the overlay: `""` clears a text field, `[]` the specifications) | | `name` |
 | `update_group` | `description` | `""` | `name` |
 | | `members` | `[]` — **every open membership is closed** | |
 | `update_schedule` | `description` | `""` | `title`; `time_basis`, `service_policy`, `season_behavior`, `completion_mode` (pass the new value); `lead_days`, `reminders_enabled` (pass `0`/`false`); `postponed_due_on` and `status`, which have their own tools |
@@ -362,12 +393,12 @@ the new target **and** clearing the old one in the same call.
 
 ### `import_merge`
 
-Takes a local path to a `ServiceTag-data-*.zip` of format **1–17** and merges it into the phone. A
+Takes a local path to a `ServiceTag-data-*.zip` of format **1–18** and merges it into the phone. A
 format-6 archive adds the maintenance groups, the schedules and the occurrence closures, format 7 the
 references, format 8 the season activations, the conditions and the health subjects, format 9 the
 owner's own categories, format 10 each attachment's document role, format 11 each asset's warranty
 reminder lead, format 12 the service cases and their timeline entries, format 13 the loans, format
-14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance, format 17 each reference's document role (an older archive's references are compared without it); an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
+14 the transfer records and format 15 the asset successions, format 16 each attachment's source provenance, format 17 each reference's document role (an older archive's references are compared without it), format 18 the supply items, the asset supplies and each material line's `supplyId` (an older archive's quick actions and events are compared without the link); an older archive simply has none of them. **It plans before it writes**, and it never overwrites or
 deletes anything:
 
 - a row whose id is not on the phone is **inserted**, with its UUID preserved exactly;
@@ -381,10 +412,11 @@ deletes anything:
   that closed the same round on the same day merge cleanly and a genuine disagreement about *when*
   a round was closed is a conflict for a person.
 
-The report carries a `{insert, identical, conflict, skipped}` tally for each of **twenty**
+The report carries a `{insert, identical, conflict, skipped}` tally for each of **twenty-two**
 tables — `assets`, `groups`, `definitions`, `profiles`, `schedules`, `closures`, `links`, `tags`,
 `events`, `attachments`, `references`, `seasonActivations`, `conditions`, `healthSubjects`,
-`categories`, `serviceCases`, `caseEntries`, `loans`, `transfers`, `successions`. A season activation, a condition and a case's timeline
+`categories`, `serviceCases`, `caseEntries`, `loans`, `transfers`, `successions`, `supplyItems`,
+`assetSupplies`. A season activation, a condition and a case's timeline
 entry are immutable facts: each is only ever inserted or found identical. A loan is never updated
 either: one returned, re-dated or relinked on one phone after the other received it conflicts, and an
 open loan whose asset already holds a different open loan here conflicts as `ASSET_ALREADY_LENT`. A
@@ -397,12 +429,18 @@ A Transfer Pack is not a data archive and the phone refuses it here; the `data.z
 an ordinary archive — no `IN` recorded, nothing replaced — so only the phone's own pack import brings an
 asset back.
 
-An asset succession (format 15, the last of the report's twenty tables) is an immutable fact too, only
+An asset succession (format 15) is an immutable fact too, only
 ever inserted: one whose old asset a succession on the phone already names as an old asset, or whose new
 asset one already names as a new asset, conflicts as `SUCCESSION_TAKEN`, one that would close a loop with the phone's successions as `SUCCESSION_CYCLE`, and one
 naming an asset transferred out from the phone as `ASSET_TRANSFERRED_OUT`. A merge never retires anything:
 a replacement made on another phone that retired its old asset there conflicts on that asset's row when
 this phone holds it unretired, and nothing lands — make the replacement on the phone that should keep it.
+
+A supply item (format 18) is matched by its id: the same id with different content — renamed, a specification
+changed, archived on one phone only — conflicts, and one conflict refuses the whole archive. An asset supply
+that a row on the phone under another id already holds is not inserted twice: it is IDENTICAL
+(`ASSET_SUPPLY_HELD_BY_AN_EQUIVALENT_LOCAL_ROW`) when the two agree field for field and SKIPPED
+(`ASSET_SUPPLY_HELD_BY_A_LOCAL_ROW`) when only their stamps differ.
 
 The tool asks for the plan and applies it only when the plan has no conflicts. Pass
 `plan_only=True` to stop after the plan. Either way the result has `applicable` and, when it is
@@ -425,6 +463,8 @@ Since #77 there is no tool that **makes, imports or marks a Transfer Pack**, **w
 record** or lists the records: each is the phone's alone. Since #86 there is no tool that **edits or
 removes a succession**: one is recorded only by a replacement (the phone's Replace asset or, since #92,
 `replace_asset`), `import_merge` only inserts an archive's rows, and `get_asset_succession` only reads.
+Since #15 there is no tool that **deletes a supply item** — one is archived — and none that links a material
+line to a supply item by its name.
 
 ## Tests
 
