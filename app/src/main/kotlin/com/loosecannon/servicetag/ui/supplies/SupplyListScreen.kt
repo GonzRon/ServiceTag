@@ -105,10 +105,11 @@ fun SupplyListScreen(
 
 /**
  * One SupplyItem: its name, the quiet identity line when there is one, and for an archived item the shipped
- * "Archived" badge — the distinction R15-6 asks for, in a word and a treatment rather than in colour alone.
+ * "Archived" badge — the distinction R15-6 asks for, in a word and a treatment rather than in colour alone. The
+ * SupplyItem picker draws its rows with this one too (C32).
  */
 @Composable
-private fun SupplyRow(row: SupplyListRow, onClick: () -> Unit) {
+internal fun SupplyRow(row: SupplyListRow, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),

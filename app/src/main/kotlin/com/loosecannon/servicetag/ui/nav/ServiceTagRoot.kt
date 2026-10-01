@@ -242,6 +242,8 @@ fun ServiceTagRoot(
                         onTransfer = { backStack.add(Route.TransferAssets(preselect = it)) },
                         // #86 (C18): P86-1 in the overflow opens Replace asset; the tap writes nothing.
                         onReplace = { backStack.add(Route.ReplaceAsset(it)) },
+                        // #15 (C33, C-1): a Supplies row opens the SupplyItem's detail; the tap writes nothing.
+                        onOpenSupply = { backStack.add(Route.SupplyDetail(it)) },
                     )
                 }
                 // #86 (C18): a finished replace swaps this entry for the new asset's detail, so Back returns to the

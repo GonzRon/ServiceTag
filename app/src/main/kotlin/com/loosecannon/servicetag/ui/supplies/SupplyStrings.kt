@@ -49,3 +49,21 @@ const val REMOVE_SPECIFICATION = "Remove specification"
 
 /** P15-12 — the editor, under the specification rows, after a save refused a row's label or value (C31). */
 const val SPECIFICATION_NEEDS_LABEL_AND_VALUE = "Each specification needs a label and a value."
+
+/** P15-13 — the asset section's add glyph, its accessibility label, and the add sheet's title (C33). */
+const val ADD_SUPPLY = "Add supply"
+
+/** P15-14 — the asset section, empty (C33; the shape of the child-asset section's empty line). */
+const val NO_SUPPLIES = "No supplies"
+
+/** P15-15 — the SupplyItem picker's title (C32). */
+const val CHOOSE_A_SUPPLY = "Choose a supply"
+
+/** P15-16 — the picker, when no unarchived SupplyItem exists: it points to the catalog rather than adding one (C32). */
+const val NO_SUPPLY_ITEMS_YET = "No supply items yet. Add one under Maintenance › Supplies."
+
+/** P15-17 — an asset row's overflow item and the role sheet's title when it re-roles a row (C33). */
+const val EDIT_ROLE = "Edit role"
+
+/** P15-18 — the role sheet, under the field, when the use case answers `Taken` (C33). */
+const val SUPPLY_ROLE_TAKEN = "This asset already has that supply in that role."

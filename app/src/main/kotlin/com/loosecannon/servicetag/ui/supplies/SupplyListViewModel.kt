@@ -42,11 +42,16 @@ class SupplyListViewModel(items: SupplyItemRepository) : ViewModel() {
 
     /** Null until the store has answered once, so an empty catalog's P15-3 is never drawn before it is true. */
     val rows: StateFlow<List<SupplyListRow>?> = items.observeAll()
-        .map { all ->
-            all.sortedWith(compareBy({ it.name.lowercase() }, { it.id.value })).map(::listRowOf)
-        }
+        .map(::listRowsOf)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), null)
 }
+
+/**
+ * [items] as the list's rows, in its `(name casefolded, id)` order. The SupplyItem picker's hosts pass their
+ * unarchived subset through this same function (C32, R15-6), so the picker reads in the list's order with its rows.
+ */
+internal fun listRowsOf(items: List<SupplyItem>): List<SupplyListRow> =
+    items.sortedWith(compareBy({ it.name.lowercase() }, { it.id.value })).map(::listRowOf)
 
 private fun listRowOf(item: SupplyItem) = SupplyListRow(
     id = item.id,
