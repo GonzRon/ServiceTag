@@ -370,7 +370,7 @@ interface SupplyItemRepository {
 /**
  * #15 (C4; R15-3, R15-5). Applicability rows: which SupplyItems an Asset takes, in which role. Owned by the
  * Asset (its CASCADE takes them) and naming a SupplyItem the schema will not let go of (RESTRICT). A row is
- * configuration, not history, so it is removable one by one; [update] moves the role and the stamp only.
+ * configuration, not history, so it is removable one by one; the caller re-roles and moves the stamp, and [update] writes the row whole.
  * `(assetId, supplyId, role)` is unique — the use case refuses a second, and the schema's index is the last
  * word. The write guard wraps this port (C14), not this file.
  */
