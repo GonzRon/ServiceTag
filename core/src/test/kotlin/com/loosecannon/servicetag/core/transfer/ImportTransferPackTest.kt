@@ -7,7 +7,9 @@ import com.loosecannon.servicetag.core.merge.MergeVerdict
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentSource
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.PayloadFormat
+import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.model.TransferKind
@@ -161,6 +163,27 @@ class ImportTransferPackTest {
         assertEquals(setOf("Example Water Heater", "Example Anode Rod"), ins.map { it.nameSnapshot }.toSet())
         assertEquals(emptySet(), r.raw.transfers.heldIds(), "an import holds nothing")
         assertEquals(1, r.rebuilds)
+    }
+
+    /**
+     * #91 (C8, row 18): the pack is the codec's archive and its import plans through the same merge, so a held asset's
+     * web link keeps the role the owner gave it — no code of its own, in the shape of #85's source check above.
+     */
+    @Test
+    fun aHeldAssetsReferenceCarriesItsRoleThroughThePack() = runTest {
+        val s = sender()
+        val manual = s.raw.references.get(ReferenceId("r1"))!!.copy(role = DocumentRole.USER_MANUAL)
+        s.raw.references.upsert(manual)
+        val pack = heaterPack(s)
+        s.mark(pack)
+        assertTrue(AssetId(HEATER) in s.raw.transfers.heldIds(), "the heater is held once it is marked transferred out")
+        assertEquals(manual, s.raw.references.get(ReferenceId("r1")), "holding it leaves the sender's row as it was")
+        val r = recipient()
+
+        assertIs<TransferImportResult.Imported>(r.import(pack.bytes))
+
+        assertEquals(manual, r.raw.references.get(ReferenceId("r1")), "the reference arrives with its role")
+        assertEquals(DocumentRole.USER_MANUAL, r.raw.references.get(ReferenceId("r1"))?.role)
     }
 
     /** A pack whose second document's bytes changed after the preview: the first, already staged, is swept too. */

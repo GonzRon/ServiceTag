@@ -7,6 +7,7 @@ import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
+import com.loosecannon.servicetag.core.model.DocumentRole
 import com.loosecannon.servicetag.core.model.ReferenceId
 import com.loosecannon.servicetag.core.model.ReferenceKind
 import kotlin.test.assertEquals
@@ -42,18 +43,20 @@ class MergePlannerReferenceTest {
         scheme: String = "https",
         createdAt: Long = 1_000L,
         updatedAt: Long = 2_000L,
+        role: DocumentRole? = null,
     ) = AssetReference(
         id = ReferenceId(id), assetId = AssetId(assetId), kind = kind, uri = uri,
         displayName = displayName, description = description, scheme = scheme,
-        createdAt = createdAt, updatedAt = updatedAt,
+        createdAt = createdAt, updatedAt = updatedAt, role = role,
     )
 
     private fun backupOf(
         assets: List<Asset> = emptyList(),
         references: List<AssetReference> = emptyList(),
+        formatVersion: Int = 7,
     ) = Backup(
         manifest = BackupManifest(
-            formatVersion = 7, appVersion = "1.3.0", schemaVersion = 7, createdAt = 1L,
+            formatVersion = formatVersion, appVersion = "1.3.0", schemaVersion = 7, createdAt = 1L,
             counts = emptyMap(), dataSha256 = "a".repeat(64), backupSetId = "set-incoming",
         ),
         data = BackupData(
@@ -410,5 +413,201 @@ class MergePlannerReferenceTest {
             listOf("r1", "r2", "r3"),
             first.decisions.filter { it.table == MergeTable.REFERENCES }.map { it.id },
         )
+    }
+
+    // --- #91: a web link's document role, under R91-7 (R67-12 option B, mirrored) -------------
+    //
+    // `MergePlannerTest`'s #67 role cases are the template. An archive older than format 17 cannot
+    // speak about a reference's role, so on **both** arms a row here that has one is compared without
+    // the role and without the stamp giving it moved; a format-17 archive compares the role like any
+    // field, and there is no update path either way.
+
+    private val pump = asset("a1")
+
+    /**
+     * [row] as it reads on this phone after the owner gave it [role] since the export: the role,
+     * and the last-modified stamp the save moved past the archive's `2_000`.
+     */
+    private fun givenARoleHere(row: AssetReference, role: DocumentRole, at: Long = 5_000L): AssetReference =
+        row.copy(role = role, updatedAt = at)
+
+    /** The decision for [row], an archive of it at [formatVersion] against a phone holding [local]. */
+    private fun roleDecision(row: AssetReference, formatVersion: Int, local: AssetReference): MergeDecision =
+        mergePlanOf(
+            backupOf(assets = listOf(pump), references = listOf(row), formatVersion = formatVersion),
+            snapshotOf(assets = listOf(pump), references = listOf(local)),
+        ).decision(row.id.value)
+
+    private fun identical() = MergeDecision(MergeTable.REFERENCES, "r1", MergeVerdict.IDENTICAL)
+
+    private fun differs() =
+        MergeDecision(MergeTable.REFERENCES, "r1", MergeVerdict.CONFLICT, MergeReason.CONTENT_DIFFERS, "r1")
+
+    private fun heldByAnEquivalent(holder: String) = MergeDecision(
+        MergeTable.REFERENCES, "r1", MergeVerdict.IDENTICAL,
+        MergeReason.REFERENCE_HELD_BY_AN_EQUIVALENT_LOCAL_ROW, holder,
+    )
+
+    private fun heldByALocalRow(holder: String) = MergeDecision(
+        MergeTable.REFERENCES, "r1", MergeVerdict.SKIPPED, MergeReason.REFERENCE_HELD_BY_A_LOCAL_ROW, holder,
+    )
+
+    /**
+     * Row 12 (R91-7, the id arm): a pre-#91 export re-planned against the same row, given a role here
+     * since, stays `IDENTICAL` — for every role and every format that carries references at all.
+     */
+    @Test
+    fun `a format-16 archive against a row later given a role is identical`() {
+        for (role in DocumentRole.entries) {
+            val here = givenARoleHere(reference("r1"), role)
+            for (format in listOf(16, 10, 7)) {
+                val plan = mergePlanOf(
+                    backupOf(assets = listOf(pump), references = listOf(reference("r1")), formatVersion = format),
+                    snapshotOf(assets = listOf(pump), references = listOf(here)),
+                )
+                assertEquals(identical(), plan.decision("r1"), "$role, format $format")
+                assertTrue(plan.applicable, "$role, format $format: ${plan.conflicts}")
+                assertEquals(MergeWrites(), plan.writes, "$role, format $format")
+            }
+        }
+    }
+
+    /**
+     * Row 13 (R91-7, the pair arm): the second identity compares the row too, so the exception holds
+     * there as well — the equivalent row under another id, given a role here since, still *is* this
+     * reference, and is not demoted to the diverged `SKIPPED`.
+     */
+    @Test
+    fun `a format-16 archive against an equivalent row under another id later given a role is identical`() {
+        for (role in DocumentRole.entries) {
+            val here = givenARoleHere(reference("local-1"), role)
+            for (format in listOf(16, 10, 7)) {
+                val plan = mergePlanOf(
+                    backupOf(assets = listOf(pump), references = listOf(reference("r1")), formatVersion = format),
+                    snapshotOf(assets = listOf(pump), references = listOf(here)),
+                )
+                assertEquals(heldByAnEquivalent("local-1"), plan.decision("r1"), "$role, format $format")
+                assertTrue(plan.applicable, "$role, format $format: ${plan.conflicts}")
+                assertEquals(MergeWrites(), plan.writes, "$role, format $format")
+            }
+        }
+    }
+
+    /** Row 14, the id arm: only the role and its stamp are set aside — every other field still counts. */
+    @Test
+    fun `a format-16 archive against a renamed row with a role is still a conflict`() {
+        val tagged = givenARoleHere(reference("r1"), DocumentRole.USER_MANUAL)
+        assertEquals(differs(), roleDecision(reference("r1"), 16, tagged.copy(displayName = "Parts list")))
+        assertEquals(differs(), roleDecision(reference("r1"), 16, tagged.copy(description = "belt only")))
+        assertEquals(differs(), roleDecision(reference("r1"), 16, tagged.copy(createdAt = 900L)))
+        // and a rename on the archive's side, against a row only given a role here, is one too
+        assertEquals(differs(), roleDecision(reference("r1", displayName = "Parts list"), 16, tagged))
+    }
+
+    /** Row 14, the pair arm: the same fields still tell a diverged holder apart, which stays `SKIPPED`. */
+    @Test
+    fun `a format-16 archive against a renamed row with a role under another id is still skipped`() {
+        val tagged = givenARoleHere(reference("local-1"), DocumentRole.SERVICE_MANUAL)
+        assertEquals(heldByALocalRow("local-1"), roleDecision(reference("r1"), 16, tagged.copy(displayName = "Parts list")))
+        assertEquals(heldByALocalRow("local-1"), roleDecision(reference("r1"), 16, tagged.copy(description = "belt only")))
+        assertEquals(heldByALocalRow("local-1"), roleDecision(reference("r1"), 16, tagged.copy(createdAt = 900L)))
+        assertEquals(heldByALocalRow("local-1"), roleDecision(reference("r1", displayName = "Parts list"), 16, tagged))
+    }
+
+    /**
+     * Row 15 (recorded limit 1): the exception applies only while the row here carries a role. A
+     * role given and then cleared leaves the stamp moved with no role, and that row compares its
+     * stamp as before — a `CONFLICT` on the id arm and the diverged `SKIPPED` on the pair arm.
+     */
+    @Test
+    fun `a format-16 archive against a row whose role was given then cleared is a conflict`() {
+        val cleared = givenARoleHere(reference("r1"), DocumentRole.USER_MANUAL).copy(role = null, updatedAt = 6_000L)
+        assertEquals(differs(), roleDecision(reference("r1"), 16, cleared))
+        assertEquals(heldByALocalRow("local-1"), roleDecision(reference("r1"), 16, cleared.copy(id = ReferenceId("local-1"))))
+    }
+
+    /** Row 16, format 17: the role compares like any field, and the same role matches. */
+    @Test
+    fun `same role is identical`() {
+        for (role in DocumentRole.entries) {
+            assertEquals(identical(), roleDecision(reference("r1", role = role), 17, reference("r1", role = role)), "$role")
+            val tagged = givenARoleHere(reference("r1"), role)
+            assertEquals(identical(), roleDecision(tagged, 17, tagged), "$role, re-imported after the role was given")
+        }
+        assertEquals(identical(), roleDecision(reference("r1"), 17, reference("r1")), "no role on either side")
+    }
+
+    /** Row 16, format 17: two roles disagree like two names do — a blocking conflict, nothing written. */
+    @Test
+    fun `a different role is a conflict`() {
+        val plan = mergePlanOf(
+            backupOf(
+                assets = listOf(pump),
+                references = listOf(reference("r1", role = DocumentRole.SERVICE_MANUAL)),
+                formatVersion = 17,
+            ),
+            snapshotOf(assets = listOf(pump), references = listOf(reference("r1", role = DocumentRole.USER_MANUAL))),
+        )
+        assertEquals(differs(), plan.decision("r1"))
+        assertFalse(plan.applicable)
+        assertEquals(MergeWrites(), plan.writes)
+    }
+
+    /** Row 16, format 17: a role on the incoming row against none here is a difference — a merge never updates. */
+    @Test
+    fun `a role against none is a conflict`() {
+        for (role in DocumentRole.entries) {
+            assertEquals(differs(), roleDecision(reference("r1", role = role), 17, reference("r1")), "$role")
+        }
+    }
+
+    /** Row 16, format 17: an archive that says "no role" against a role here disagrees with it. */
+    @Test
+    fun `none against a role is a conflict`() {
+        for (role in DocumentRole.entries) {
+            assertEquals(differs(), roleDecision(reference("r1"), 17, reference("r1", role = role)), "$role")
+            assertEquals(differs(), roleDecision(reference("r1"), 17, givenARoleHere(reference("r1"), role)), "$role, stamp moved")
+        }
+    }
+
+    /** Row 16, format 17 (D-18 C): the same pair under another id with another role is the diverged holder. */
+    @Test
+    fun `the same pair under another id with a different role is skipped`() {
+        val plan = mergePlanOf(
+            backupOf(
+                assets = listOf(pump),
+                references = listOf(reference("r1", role = DocumentRole.PURCHASE_INVOICE_OR_RECEIPT)),
+                formatVersion = 17,
+            ),
+            snapshotOf(
+                assets = listOf(pump),
+                references = listOf(reference("local-1", role = DocumentRole.USER_MANUAL)),
+            ),
+        )
+        assertEquals(heldByALocalRow("local-1"), plan.decision("r1"))
+        assertTrue(plan.applicable, "a skip must never block: ${plan.conflicts}")
+        assertEquals(MergeWrites(), plan.writes)
+        // a role against none, and none against a role, are the same diverged holder
+        assertEquals(
+            heldByALocalRow("local-1"),
+            roleDecision(reference("r1", role = DocumentRole.USER_MANUAL), 17, reference("local-1")),
+        )
+        assertEquals(
+            heldByALocalRow("local-1"),
+            roleDecision(reference("r1"), 17, reference("local-1", role = DocumentRole.USER_MANUAL)),
+        )
+    }
+
+    /** Row 17: a reference the destination does not have travels with its role — the one way a role moves. */
+    @Test
+    fun `a new reference with a role inserts with its role`() {
+        val manual = reference("r1", role = DocumentRole.USER_MANUAL)
+        val plan = mergePlanOf(
+            backupOf(assets = listOf(pump), references = listOf(manual), formatVersion = 17),
+            snapshotOf(assets = listOf(pump)),
+        )
+        assertEquals(MergeDecision(MergeTable.REFERENCES, "r1", MergeVerdict.INSERT), plan.decision("r1"))
+        assertEquals(listOf(manual), plan.writes.references)
+        assertEquals(DocumentRole.USER_MANUAL, plan.writes.references.single().role)
     }
 }
