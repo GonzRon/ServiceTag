@@ -272,10 +272,10 @@ private fun TypeChip(label: String?, choices: List<CategoryChoice>, onPick: (Str
  * the way (owner ruling §18.23, kept whole by R73-7), or saying honestly that nothing matched.
  */
 @Composable
-private fun EmptyList(
+internal fun EmptyList(
     reason: EmptyReason,
     archivedCount: Int,
-    onNewAsset: () -> Unit,
+    onNewAsset: (() -> Unit)?,
     onShowArchived: () -> Unit,
 ) {
     val line = when (reason) {
@@ -299,7 +299,7 @@ private fun EmptyList(
     ) {
         QuietLine(line)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onNewAsset, shape = ControlShape) { Text("Add asset") }
+            if (onNewAsset != null) Button(onClick = onNewAsset, shape = ControlShape) { Text("Add asset") }
             if (reason == EmptyReason.NO_ACTIVE_ASSETS) {
                 OutlinedButton(onClick = onShowArchived, shape = ControlShape) {
                     Text("Show archived")
