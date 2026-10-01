@@ -856,7 +856,7 @@ class HeldWriteGuardTest {
             "re-role h1's row" to { uow.write { assetSupplies.update(held.copy(role = "Other kit", updatedAt = 3_000L)) } },
             "move x1's row onto h1" to { uow.write { assetSupplies.update(staying.copy(assetId = heater)) } },
         )
-        refused(anode, "insert on h2, a component" to { uow.write { assetSupplies.insert(assetSupplyOf("as3", "h2", "s1")) } })
+        refused(anode, "insert on h2, a child asset" to { uow.write { assetSupplies.insert(assetSupplyOf("as3", "h2", "s1")) } })
         assertEquals(listOf(held, staying), install.assetSupplies.all(), "nothing was written")
 
         uow.write { assetSupplies.insert(assetSupplyOf("as4", "x1", "s1", "Other kit")) }
