@@ -67,3 +67,15 @@ const val EDIT_ROLE = "Edit role"
 
 /** P15-18 — the role sheet, under the field, when the use case answers `Taken` (C33). */
 const val SUPPLY_ROLE_TAKEN = "This asset already has that supply in that role."
+
+/** P15-21 — an unlinked Materials row on the quick-action editor: its link control, which opens the picker (C34). */
+const val LINK_SUPPLY = "Link supply"
+
+/**
+ * P15-22 — a linked Materials row on either editor (C34, C35); `%s` is the SupplyItem's name, filled once, where
+ * `SupplyLinkLine` draws it.
+ */
+const val LINKED_TO = "Linked to %s"
+
+/** P15-23 — a linked row's action on either editor: it clears the row's link and nothing else (C34, C35). */
+const val REMOVE_LINK = "Remove link"
