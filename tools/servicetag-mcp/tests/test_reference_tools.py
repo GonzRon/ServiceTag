@@ -1,14 +1,20 @@
-"""The three 1.3 tools: the method, the path and the body each one sends — and the two conventions
-a reference tool is most likely to get wrong.
+"""The three 1.3 tools: the method, the path and the body each one sends — and the conventions a
+reference tool is most likely to get wrong.
 
-One case per hazard, not per permutation. The two hazards carrying the most risk here are both
-about a field that is **not** an argument. `kind` is derived from the URI's scheme and is an unknown
-field on both API commands, so neither tool may offer one — a tool that did would send a field the
-phone answers 400 for, every time. And there is **no `clear_fields`** on either write tool:
+One case per hazard, not per permutation. Two hazards carrying the most risk here are about a field
+that is **not** an argument. `kind` is derived from the URI's scheme and is an unknown field on both
+API commands, so neither tool may offer one — a tool that did would send a field the phone answers
+400 for, every time. And **neither the name nor the description has a `clear_fields` name**:
 `display_name` cannot be cleared at all (the app requires it non-blank) and `description` is
 cleared **by value**, `description=""`, since it is a non-null column with an empty default. So
-`None` here means only "leave it alone", and the case below proves the wire carries nothing at all
+`None` there means only "leave it alone", and the case below proves the wire carries nothing at all
 for it.
+
+#91 adds a reference's one nullable field, its document role. `add_reference` has no `clear_fields`,
+since a create has nothing to clear; `update_reference` clears the role, and only the role, by name —
+`clear_fields=["role"]`, sent as `"role": null`, which the phone's PATCH reads as a clear where an
+absent `role` is "unchanged". A role given or cleared needs a phone at schema 17 and is refused below
+it with nothing sent; without one, both tools behave exactly as before against any phone (R91-10).
 """
 
 from __future__ import annotations
@@ -70,7 +76,10 @@ def test_nothing_deletes_a_reference_and_no_tool_takes_a_kind() -> None:
     for name in ("add_reference", "update_reference"):
         parameters = server_module.mcp._tool_manager.get_tool(name).parameters["properties"]
         assert "kind" not in parameters, name
-        assert "clear_fields" not in parameters, name
+    # #91 (R91-3): a create has nothing to clear; the edit clears the role, and only the role, by name.
+    assert "clear_fields" not in server_module.mcp._tool_manager.get_tool("add_reference").parameters["properties"]
+    assert "clear_fields" in server_module.mcp._tool_manager.get_tool("update_reference").parameters["properties"]
+    assert server_module._REFERENCE_CLEARABLE_FIELDS == frozenset({"role"})
 
 
 # --- the paths and the bodies ---------------------------------------------------------------------
@@ -249,3 +258,143 @@ def test_list_references_refuses_an_answer_it_cannot_read(paired) -> None:
     paired.reply("GET", "/v1/assets/a1/references", 200, {"references": ["nope"]})
     with pytest.raises(ToolError, match="was not an object"):
         server_module.list_references(asset_id="a1")
+
+
+# --- #91: the document role on a web reference (rows 34–36, 38) -----------------------------------
+
+LINK = "https://manuals.example.invalid/water-heater/manual.pdf"
+
+STATUS_16: dict = {
+    "appVersion": "1.5.0", "apiVersion": 1, "schemaVersion": 16, "backupFormatVersion": 16, "counts": {},
+}
+STATUS_17: dict = dict(STATUS_16, schemaVersion=17, backupFormatVersion=17)
+
+
+def reference_row(**overrides) -> dict:
+    """A schema-16 row — the nine fields and no `role` — unless an override adds one."""
+    row = {
+        "id": "r1", "assetId": "a1", "kind": "WEB_URL", "uri": LINK, "displayName": "Example Water Heater manual",
+        "description": "", "scheme": "https", "createdAt": 1, "updatedAt": 1,
+    }
+    row.update(overrides)
+    return row
+
+
+def paths(api) -> list[tuple[str, str]]:
+    return [(r.method, r.path) for r in api.requests]
+
+
+def test_add_reference_sends_a_role_it_was_given(paired) -> None:
+    paired.reply("GET", "/v1/status", 200, STATUS_17)
+    server_module.add_reference(
+        asset_id="a1", uri=LINK, display_name="Example Water Heater manual", role="USER_MANUAL"
+    )
+    assert paths(paired) == [("GET", "/v1/status"), ("POST", "/v1/references")]
+    assert body_of(paired.last()) == {
+        "assetId": "a1", "uri": LINK, "displayName": "Example Water Heater manual", "role": "USER_MANUAL",
+    }
+
+
+def test_without_a_role_both_writes_reach_a_schema_16_phone_with_no_role_key(paired) -> None:
+    """R91-10: the gate is the role's, not the tools'. With no role given or cleared, a schema-16 phone still
+    takes the create and the edit, and neither body names `role` — absent is no role on a create and
+    "unchanged" on an edit, and a schema-16 phone's strict decoder would answer 400 for the key."""
+    paired.reply("GET", "/v1/status", 200, STATUS_16)
+    server_module.add_reference(asset_id="a1", uri=LINK, display_name="Example Water Heater manual")
+    assert "role" not in body_of(paired.last())
+    server_module.update_reference(reference_id="r1", display_name="Heater manual", role=None, clear_fields=None)
+    assert body_of(paired.last()) == {"displayName": "Heater manual"}
+    assert paths(paired) == [
+        ("GET", "/v1/status"), ("POST", "/v1/references"), ("PATCH", "/v1/references/r1"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("tool", "call"),
+    [
+        pytest.param(
+            "add_reference",
+            lambda: server_module.add_reference(
+                asset_id="a1", uri=LINK, display_name="Example Water Heater manual", role="USER_MANUAL"
+            ),
+            id="add_reference-role",
+        ),
+        pytest.param(
+            "update_reference",
+            lambda: server_module.update_reference(reference_id="r1", role="SERVICE_MANUAL"),
+            id="update_reference-role",
+        ),
+        pytest.param(
+            "update_reference",
+            lambda: server_module.update_reference(reference_id="r1", clear_fields=["role"]),
+            id="update_reference-clear",
+        ),
+    ],
+)
+def test_a_role_refuses_schema_16_with_nothing_sent(paired, tool, call) -> None:
+    """C19: a role given or cleared is a key a schema-16 phone answers 400 for, so it is refused here by name,
+    with nothing sent but the pairing's one `/v1/status` read."""
+    paired.reply("GET", "/v1/status", 200, STATUS_16)
+    with pytest.raises(ToolError, match="APP_SCHEMA_TOO_OLD") as raised:
+        call()
+    text = str(raised.value)
+    assert f"reports schema 16; {tool} needs schema 17" in text, text
+    assert "the reference document role" in text, text
+    assert paths(paired) == [("GET", "/v1/status")]
+
+
+def test_update_reference_sends_a_role_it_was_given(paired) -> None:
+    paired.reply("GET", "/v1/status", 200, STATUS_17)
+    server_module.update_reference(reference_id="r1", role="SERVICE_MANUAL")
+    recorded = paired.last()
+    assert (recorded.method, recorded.path) == ("PATCH", "/v1/references/r1")
+    assert body_of(recorded) == {"role": "SERVICE_MANUAL"}
+
+
+def test_update_reference_clears_the_role_by_name_as_an_explicit_null(paired) -> None:
+    """R91-3: the phone's PATCH reads an absent `role` as "unchanged" and `null` as a clear, so the clear has to
+    reach the wire as the key with a `null` — the one place in this tool a `null` is sent at all."""
+    paired.reply("GET", "/v1/status", 200, STATUS_17)
+    server_module.update_reference(reference_id="r1", clear_fields=["role"])
+    recorded = paired.last()
+    assert (recorded.method, recorded.path) == ("PATCH", "/v1/references/r1")
+    assert body_of(recorded) == {"role": None}
+
+    server_module.update_reference(reference_id="r1", display_name="Heater manual", clear_fields=["role"])
+    assert body_of(paired.last()) == {"displayName": "Heater manual", "role": None}
+
+
+def test_update_reference_clears_only_the_role_and_never_a_role_it_was_also_given(paired) -> None:
+    """The shipped `clear_fields` rules: a name outside the clearable set, and a field both given and cleared,
+    are each refused before any request — the name and the description stay uncleared by name."""
+    for clear, given in (
+        (["description"], {}),
+        (["display_name"], {}),
+        (["kind"], {}),
+        (["role"], {"role": "USER_MANUAL"}),
+    ):
+        with pytest.raises(ToolError, match="clear_fields"):
+            server_module.update_reference(reference_id="r1", clear_fields=clear, **given)
+    assert paired.requests == []
+
+
+def test_list_references_reads_rows_with_and_without_a_role(paired) -> None:
+    """A schema-16 phone's rows carry no `role`; a schema-17 phone's carry one, a name or `null`. `role` is never
+    among the fields the read requires, so all three pass and the answer comes back exactly as sent."""
+    rows = [reference_row(id="r1"), reference_row(id="r2", role="USER_MANUAL"), reference_row(id="r3", role=None)]
+    paired.reply("GET", "/v1/assets/a1/references", 200, {"references": rows})
+    assert server_module.list_references(asset_id="a1") == {"references": rows}
+    assert len(server_module._REFERENCE_FIELDS) == 9 and "role" not in server_module._REFERENCE_FIELDS
+
+
+def test_the_reference_docstrings_name_the_role_and_how_to_clear_it() -> None:
+    """C20: what a caller reads before the call — the role is given, never guessed; it is cleared by name on the
+    edit; it needs schema 17; and the read's rows carry it from schema 17."""
+    add = " ".join((server_module.add_reference.__doc__ or "").split())
+    update = " ".join((server_module.update_reference.__doc__ or "").split())
+    listing = " ".join((server_module.list_references.__doc__ or "").split())
+    for doc in (add, update):
+        assert "`role`" in doc and "never guessed" in doc and "schema 17" in doc
+        assert "`REFERENCE_ROLE_NOT_ALLOWED`" in doc
+    assert 'clear_fields=["role"]' in update and '"role": null' in update
+    assert "`role`" in listing and "schema 17" in listing
