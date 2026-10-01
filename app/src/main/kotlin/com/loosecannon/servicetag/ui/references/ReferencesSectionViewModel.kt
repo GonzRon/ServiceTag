@@ -14,6 +14,8 @@ import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.ReferenceRepository
 import com.loosecannon.servicetag.core.references.LinkDecision
 import com.loosecannon.servicetag.core.references.LinkLaunchPolicy
+import com.loosecannon.servicetag.core.references.ReferenceKinds
+import com.loosecannon.servicetag.core.references.takesRole
 import com.loosecannon.servicetag.core.usecase.AddReference
 import com.loosecannon.servicetag.core.usecase.AddReferenceCommand
 import com.loosecannon.servicetag.core.usecase.ReferenceProblem
@@ -55,7 +57,7 @@ data class ReferenceRowState(
     val materializable: Boolean = false,
     /** #85 (C20, R85-1, R85-3): derived, never stored — an attachment on this asset has this URI as its source. */
     val savedAsDocument: Boolean = false,
-    /** #91 (C15): the stored role, so the edit sheet keeps it on a rename. Nothing draws it yet. */
+    /** #91 (C15, C22, C24): the stored role — the edit sheet's chips start from it, and the row draws its label. */
     val role: DocumentRole? = null,
 )
 
@@ -143,10 +145,20 @@ class ReferencesSectionViewModel(
     /**
      * "Add link", which calls **the same use case a share does** and writes an identical row: no
      * `provenance`, nothing set differently, the two indistinguishable afterwards (D-21 C).
+     *
+     * #91 (C23): [role] is the person's pick, or null; the sheet sends one only while [roleOffered]
+     * says the link takes it, so an unknown scheme's confirmed re-submit carries none by construction.
      */
-    fun addLink(uri: String, displayName: String, description: String) {
-        submit(AddReferenceCommand(uri = uri, displayName = displayName, description = description))
+    fun addLink(uri: String, displayName: String, description: String, role: DocumentRole?) {
+        submit(AddReferenceCommand(uri = uri, displayName = displayName, description = description, role = role))
     }
+
+    /**
+     * #91 (C23, R91-5, C-4): whether Add link draws the Role chips for [link] as typed — the kind
+     * `AddReference` will derive from the same text, asked whether it takes a role. The one
+     * classifier and the one rule; never a prefix test, and never a role guessed from the text.
+     */
+    fun roleOffered(link: String): Boolean = ReferenceKinds.inferFrom(policy.schemeOf(link.trim())).takesRole
 
     /** "Save this link?" answered with Save: the same command again, confirmed exactly once. */
     fun confirmUnknownScheme() {
