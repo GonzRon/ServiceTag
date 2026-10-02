@@ -743,7 +743,7 @@ class InstalledComponentRoutesTest {
         )) {
             assertTrue("docs/api/v1.md does not name $name", "`$name`" in text)
         }
-        assertFalse("the import range reads 1–19 now", "1–18" in text)
+        assertFalse("the import range reads 1–20 now", "1–19" in text)
         assertEquals(
             "both status lines say 19 since #47",
             2,

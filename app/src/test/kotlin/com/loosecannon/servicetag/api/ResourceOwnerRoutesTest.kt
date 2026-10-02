@@ -30,6 +30,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -455,5 +456,50 @@ class ResourceOwnerRoutesTest {
         assertTrue(runBlocking { graph.attachments.all() }.isEmpty())
         // A SupplyItem is never held, even while the asset whose component names it is.
         assertEquals(201, upload("/v1/supply-items/${w.battery}/attachments").status)
+    }
+
+    // --- row 45: C22 the document -----------------------------------------------------------------------------------
+
+    @Test fun everyNewRouteIsInV1md() {
+        val text = repoFile("docs/api/v1.md").readText()
+        val lines = text.lines()
+        val shapes = listOf(
+            "/v1/supply-items/{id}/references", "/v1/supply-items/{id}/attachments",
+            "/v1/installed-components/{id}/references", "/v1/installed-components/{id}/attachments",
+        )
+        // The six rows, each once, on the endpoint table's `| method | path |` shape.
+        for ((method, path) in listOf(
+            "GET" to shapes[0], "GET" to shapes[1], "POST" to shapes[1], "GET" to shapes[2], "GET" to shapes[3],
+            "POST" to shapes[3],
+        )) {
+            assertEquals("docs/api/v1.md must carry one $method $path row", 1, lines.count { it.startsWith("| `$method` | `$path` |") })
+        }
+        // Each new shape answers 405 for a verb it does not take, so the 405 row names it.
+        val notAllowed = lines.single { it.startsWith("| 405 |") }
+        for (shape in shapes) assertTrue("the 405 row must name $shape", "`$shape`" in notAllowed)
+        // The owner keys on both rows, the create's rule and its 400, the v3 derivation and its vectors.
+        for (name in listOf("supplyItemId", "installedComponentId", "ownerPrefix", "ownerVectors")) {
+            assertTrue("docs/api/v1.md does not name $name", "`$name`" in text)
+        }
+        assertTrue("exactly one is set" in text)
+        assertTrue("docs/api/v1.md must carry G1 verbatim", "`$G1`" in text)
+        assertTrue("servicetag:attachment-upload:v3" in text)
+        // Each reused 404 keeps exactly one row, widened to name the create's body key that can be at fault.
+        for ((code, key) in listOf("NO_SUCH_SUPPLY_ITEM" to "supplyItemId", "NO_SUCH_INSTALLED_COMPONENT" to "installedComponentId")) {
+            val rows = lines.filter { Regex("""^\| 404 \| `$code` \|""").containsMatchIn(it) }
+            assertEquals("docs/api/v1.md must carry exactly one $code row", 1, rows.size)
+            assertTrue("$code's row must name `$key`: ${rows.single()}", "`$key`" in rows.single())
+        }
+        // G2: the role refusal's sentence, owner-neutral.
+        val role = lines.single { it.startsWith("| 422 | `ATTACHMENT_ROLE_NOT_ALLOWED` |") }
+        assertTrue(role, "`a document role cannot go on an entry's attachment`" in role)
+        assertFalse("a document role belongs on an asset's attachment" in text)
+        // The import range and both status lines.
+        assertTrue("format **1–20**" in text && "**format 1–20**" in text)
+        assertFalse("1–19" in text)
+        assertEquals("both status lines say 20 since #69", 2, lines.count { "20 since #69 (resource owners)" in it })
+        // A move between owners is named among what has no endpoint.
+        val none = text.substringAfter("## What has no endpoint, deliberately").substringBefore("## Errors")
+        assertTrue("moving a link or a file to another owner has no endpoint", "to another owner" in none)
     }
 }

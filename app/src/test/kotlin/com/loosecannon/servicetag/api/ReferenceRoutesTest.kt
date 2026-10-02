@@ -735,7 +735,8 @@ class ReferenceRoutesTest {
         // made the sub-resources twenty-five (no table), and #91's format 17 moved the range to 1–17 (no route,
         // no table); #15's format 18 made the report twenty-two tables, the range 1–18 and its asset supply list
         // the twenty-sixth sub-resource, and #47's format 19 made the report twenty-three tables, the range 1–19
-        // and its installed component list the twenty-seventh. These pins moved with the document.
+        // and its installed component list the twenty-seventh; #69's format 20 moved the range to 1–20 (no table,
+        // and its four shapes are no asset sub-resource). These pins moved with the document.
         assertFalse(
             "the merge report is twenty-three tables now",
             listOf("eleven", "fourteen", "fifteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-two").any {
@@ -745,19 +746,19 @@ class ReferenceRoutesTest {
         assertTrue("the merge report must say twenty-three tables", "twenty-three tables" in text)
         // The bare string, both sites: the document spells the emphasis two ways, and a pattern
         // pinned to one asterisk placement would leave the other stale and still report clean.
-        assertFalse("the import endpoints read format 1–19 now", "1–7" in text || "1–8" in text || "1–9" in text)
-        // "1–10" … "1–18" only in their two emphasis spellings, because a bare "1–10" is also the
+        assertFalse("the import endpoints read format 1–20 now", "1–7" in text || "1–8" in text || "1–9" in text)
+        // "1–10" … "1–19" only in their two emphasis spellings, because a bare "1–10" is also the
         // health weight's range.
         assertFalse(
-            "the import endpoints read format 1–19 now",
-            listOf("1–10", "1–11", "1–12", "1–13", "1–14", "1–15", "1–16", "1–17", "1–18").any {
+            "the import endpoints read format 1–20 now",
+            listOf("1–10", "1–11", "1–12", "1–13", "1–14", "1–15", "1–16", "1–17", "1–18", "1–19").any {
                 "format **$it**" in text || "**format $it**" in text
             },
         )
         // Both emphasis spellings.
         assertTrue(
-            "the import endpoints must say 1–19",
-            "format **1–19**" in text && "**format 1–19**" in text,
+            "the import endpoints must say 1–20",
+            "format **1–20**" in text && "**format 1–20**" in text,
         )
 
         assertFalse(
