@@ -69,7 +69,7 @@ import kotlinx.coroutines.Dispatchers
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun MaterializeSheet(
-    /** #69 (C25): the reference's owner; the saved file lands on it, and its refusal lines name it. */
+    /** #69 (C25): the reference's owner; the saved file lands on it, and the already-have line names its kind. */
     owner: ReferenceOwner,
     row: ReferenceRowState,
     graph: AppGraph,

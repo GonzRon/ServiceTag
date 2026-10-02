@@ -63,6 +63,13 @@ internal fun openRefusal(launchable: Boolean, uri: String, open: (String) -> Boo
 }
 
 /**
+ * #69 (C25): the section's model key, one per owner — an asset, a SupplyItem and an installed component carrying the
+ * same id string never share a model, because the owner's directory names its kind.
+ */
+internal fun referencesModelKey(owner: ReferenceOwner): String =
+    "references-" + AttachmentLocator.dirFor(owner.asAttachmentOwner())
+
+/**
  * REFERENCES, the section below DOCUMENTS: what a share saved, and what "Add link" adds. It is a
  * separate section and not a mode on DOCUMENTS because the two fail differently — bytes on this
  * phone fail by losing their folder, a pointer elsewhere fails by having no handler (D-10).
@@ -83,10 +90,9 @@ fun ReferencesSection(
     /** #77 (C19, R77-4): a transferred-out asset's references open, and none is added, edited or removed. */
     readOnly: Boolean = false,
 ) {
-    val model: ReferencesSectionViewModel =
-        viewModel(key = "references-" + AttachmentLocator.dirFor(owner.asAttachmentOwner())) {
-            ReferencesSectionViewModel(graph, owner)
-        }
+    val model: ReferencesSectionViewModel = viewModel(key = referencesModelKey(owner)) {
+        ReferencesSectionViewModel(graph, owner)
+    }
     val state by model.state.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<String?>(null) }
     var removing by remember { mutableStateOf<String?>(null) }

@@ -6,8 +6,8 @@ import com.loosecannon.servicetag.ui.condition.displayDate
 import java.time.LocalDate
 
 /**
- * #85 §6 (RATIFIED 2026-09-29): **the one home of every Save-as-document literal**, P85-1 to P85-19, verbatim, one
- * constant or template per line. The reused lines (Cancel, Save, Close, the attachment sentences…) stay in their own
+ * #85 §6 (RATIFIED 2026-09-29): **the one home of every Save-as-document literal**, P85-1 to P85-19 and #69's
+ * already-have twins P69-15 and P69-16, verbatim, one constant or template per line. The reused lines (Cancel, Save, Close, the attachment sentences…) stay in their own
  * homes and are never quoted here. A sentence this object does not carry is a string-gate question, never a
  * screen's to invent.
  */

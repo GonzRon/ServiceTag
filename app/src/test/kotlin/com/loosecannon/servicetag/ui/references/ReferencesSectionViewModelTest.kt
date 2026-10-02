@@ -7,7 +7,6 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetReference
-import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.model.AttachmentSource
 import com.loosecannon.servicetag.core.model.DocumentRole
@@ -155,10 +154,7 @@ class ReferencesSectionViewModelTest {
                 )
             }
         }
-        return ViewModelProvider.create(store, factory)[
-            "references-" + AttachmentLocator.dirFor(owner.asAttachmentOwner()),
-            ReferencesSectionViewModel::class,
-        ]
+        return ViewModelProvider.create(store, factory)[referencesModelKey(owner), ReferencesSectionViewModel::class]
     }
 
     /** A row written straight to the table, the way a restore or a merge puts one there. */
@@ -671,6 +667,15 @@ class ReferencesSectionViewModelTest {
             mapOf(asset to listOf("r-asset"), supply to listOf("r-supply"), component to listOf("r-component")),
             listed,
         )
+        assertEquals(
+            "the production key is one per owner, never the id string alone",
+            3,
+            setOf(
+                referencesModelKey(ReferenceOwner.OfAsset(AssetId("x"))),
+                referencesModelKey(ReferenceOwner.OfSupplyItem(SupplyId("x"))),
+                referencesModelKey(ReferenceOwner.OfInstalledComponent(InstalledComponentId("x"))),
+            ).size,
+        )
         clearModels()
     }
 
@@ -701,6 +706,8 @@ class ReferencesSectionViewModelTest {
         sourced(supply.asAttachmentOwner(), MANUAL)
 
         onSupply.state.first { it.rows.single().savedAsDocument }
+        // Drain the component's flow too, so a read of every owner's files would have reached it by now.
+        advanceUntilIdle()
         assertFalse(
             "the SupplyItem's file never marks the component's link",
             onComponent.state.value.rows.single().savedAsDocument,
