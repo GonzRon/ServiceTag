@@ -4,7 +4,8 @@ One case per tool for its method, path and body, and one for a refusal arriving 
 carrying the app's code. The three that record a **new fact** — `start_season`, `end_season` and
 `record_condition` — are pinned to send exactly their arguments with nothing read first. Nothing
 here, or anywhere on this server, amends or deletes a condition or an activation, deletes a health
-subject, or writes a health value (inv. 127), and nothing names an installed component or reads
+subject, or writes a health value (inv. 127); nothing but #47's five installed-component tools names an
+installed component, and nothing reads
 stock (inv. 129).
 
 The schema check (master plan §20, dec. 25): before any write, the server confirms
@@ -79,14 +80,24 @@ def test_no_tool_deletes_or_amends_a_fact_or_subject() -> None:
 
 
 def test_no_tool_names_an_installed_component_or_reads_stock() -> None:
-    """Inv. 129, the tool half: no tool or argument name speaks of assemblies, installed components
+    """Inv. 129, the tool half, as #47 narrows it (C1, C23): only #47's five tools and their arguments speak of
+    installed components — the word is struck from their names alone before the check — and no tool or argument
+    name speaks of assemblies
     or stock."""
     pattern = re.compile(r"assembl|installed|stock", re.IGNORECASE)
+    built_by_47 = {
+        "list_installed_components", "add_installed_component", "update_installed_component",
+        "remove_installed_component", "replace_installed_component",
+    }
+
+    def spoken(name: str, text: str) -> bool:
+        return bool(pattern.search(text.replace("installed", "") if name in built_by_47 else text))
+
     for name in server_module.TOOL_NAMES:
-        assert not pattern.search(name), name
+        assert not spoken(name, name), name
         tool = server_module.mcp._tool_manager.get_tool(name)
         for argument in tool.parameters.get("properties", {}):
-            assert not pattern.search(argument), (name, argument)
+            assert not spoken(name, argument), (name, argument)
 
 
 # --- the three new facts: no overlay, every argument explicit -----------------------------------
