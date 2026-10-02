@@ -1529,7 +1529,8 @@ class ShareIntakeViewModelTest {
 
     /**
      * Row 53: counted RED — a navigation tap writes. Each tap that opens a level or goes back up, on a link share and on
-     * a file share whose stream must never be opened, leaves every owner without a link, a file, a note or a byte.
+     * a file share whose stream must never be opened, leaves the whole store without a link, a file, a note or a byte —
+     * every row on every owner is counted, not only the owners the taps pass through.
      */
     @Test fun browsingWritesNothing() = runTest(scheduler) {
         val id = mower()
@@ -1537,12 +1538,11 @@ class ShareIntakeViewModelTest {
         graph.addAssetSupply.run(AddAssetSupplyCommand(assetId, item.id, "Battery"))
         val tray = install("Example Battery Tray", supply = item)
         install("Position 1", parent = tray)
-        val owners = listOf(ShareDestination.Asset(id, mowerName).owner, componentOf(tray).owner, supplyOf(item).owner)
         suspend fun nothingWrittenAfter(tap: String) {
             scheduler.advanceUntilIdle()
-            assertEquals("$tap: no link", 0, owners.sumOf { linksOn(it) })
-            assertEquals("$tap: no file", 0, owners.sumOf { filesOn(it) })
-            assertEquals("$tap: no note", 0, events())
+            assertEquals("$tap: no link", 0, graph.references.all().size)
+            assertEquals("$tap: no file", 0, graph.attachments.all().size)
+            assertEquals("$tap: no note", 0, graph.events.all().size)
             assertTrue("$tap: no bytes", graph.attachmentStorage.store.files.isEmpty())
         }
         val shares = listOf(
