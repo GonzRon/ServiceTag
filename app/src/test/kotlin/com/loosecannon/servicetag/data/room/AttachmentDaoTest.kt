@@ -206,6 +206,7 @@ class AttachmentDaoTest {
             storageLocator = "assets/a1/x.pdf", capturedOn = null, notes = "",
             createdAt = 1L, updatedAt = 1L, documentRole = null,
             sourceUri = null, sourceResolvedUri = null, sourceRetrievedAt = null, sourceName = null,
+            supplyItemId = null, installedComponentId = null,
         )
         assertThrows(IllegalArgumentException::class.java) { both.requireExactlyOneOwner() }
 

@@ -26,7 +26,7 @@ class Migration10To11Test {
         migrating { file, before ->
             withConnection(file) { c ->
                 for (row in SEEDED) {
-                    val after = c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V16_ATTACHMENT_COLUMNS }
+                    val after = c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V16_ATTACHMENT_COLUMNS + V20_ATTACHMENT_COLUMNS }
                     val expected = if (row.table == "asset") {
                         before.getValue(row) + "warranty_reminder_lead_days=NULL"
                     } else {

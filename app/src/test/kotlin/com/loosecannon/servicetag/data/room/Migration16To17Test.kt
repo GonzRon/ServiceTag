@@ -25,7 +25,8 @@ class Migration16To17Test {
         migrating { file, before ->
             withConnection(file) { c ->
                 for (row in SEEDED) {
-                    val after = c.rowOf(row.table, row.id, row.key)
+                    // the chain runs on to v20, whose two owner columns `Migration19To20Test` owns
+                    val after = c.rowOf(row.table, row.id, row.key).filterNot { it.substringBefore('=') in V20_REFERENCE_COLUMNS }
                     val expected = if (row.table == "asset_reference") {
                         before.getValue(row) + V17_REFERENCE_COLUMNS.map { "$it=NULL" }
                     } else {
@@ -71,9 +72,9 @@ class Migration16To17Test {
                         // The one new column, last, nullable and with no default: nothing is backfilled.
                         assertEquals(
                             listOf("document_role TEXT notnull=0 default=- pk=0"),
-                            m.columnsOf("asset_reference").takeLast(V17_REFERENCE_COLUMNS.size),
+                            m.columnsOf("asset_reference").dropLast(V20_REFERENCE_COLUMNS.size).takeLast(V17_REFERENCE_COLUMNS.size),
                         )
-                        assertEquals(10, m.columnsOf("asset_reference").size)
+                        assertEquals(12, m.columnsOf("asset_reference").size)
                         assertEquals(
                             "no index on the role column",
                             emptyList<String>(),

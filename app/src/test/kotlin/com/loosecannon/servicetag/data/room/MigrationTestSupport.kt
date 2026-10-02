@@ -66,7 +66,7 @@ internal fun openMigrated(file: File): AppDatabase = Room
         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
         MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
         MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18,
-        MIGRATION_18_19,
+        MIGRATION_18_19, MIGRATION_19_20,
     )
     .build()
 
@@ -221,6 +221,12 @@ internal val V16_ATTACHMENT_COLUMNS = setOf("source_uri", "source_resolved_uri",
 
 /** The one column schema v17 appends to `asset_reference` (#91): nullable, never backfilled. */
 internal val V17_REFERENCE_COLUMNS = setOf("document_role")
+
+/** The two owner columns schema v20 appends to `attachment` (#69): nullable CASCADE keys, never backfilled. */
+internal val V20_ATTACHMENT_COLUMNS = setOf("supply_item_id", "installed_component_id")
+
+/** The two owner columns schema v20's rebuild appends to `asset_reference` (#69): nullable, never backfilled. */
+internal val V20_REFERENCE_COLUMNS = setOf("supply_item_id", "installed_component_id")
 
 /** The three tables schema v18 added (#15): the SupplyItem catalog, its specifications, and applicability. */
 internal val V18_TABLES = setOf("supply_item", "supply_specification", "asset_supply")

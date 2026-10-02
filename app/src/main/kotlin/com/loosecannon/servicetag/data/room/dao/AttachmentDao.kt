@@ -29,6 +29,14 @@ interface AttachmentDao {
     @Query("SELECT * FROM attachment WHERE event_id = :eventId ORDER BY display_name COLLATE NOCASE")
     suspend fun forEvent(eventId: String): List<AttachmentEntity>
 
+    /** Schema v20 (#69): a SupplyItem's own files, in [forAsset]'s order. */
+    @Query("SELECT * FROM attachment WHERE supply_item_id = :supplyItemId ORDER BY display_name COLLATE NOCASE")
+    suspend fun forSupplyItem(supplyItemId: String): List<AttachmentEntity>
+
+    /** Schema v20 (#69): an installed component's own files, in [forAsset]'s order. */
+    @Query("SELECT * FROM attachment WHERE installed_component_id = :installedComponentId ORDER BY display_name COLLATE NOCASE")
+    suspend fun forInstalledComponent(installedComponentId: String): List<AttachmentEntity>
+
     @Query("SELECT * FROM attachment ORDER BY created_at")
     suspend fun all(): List<AttachmentEntity>
 
@@ -40,6 +48,12 @@ interface AttachmentDao {
 
     @Query("SELECT * FROM attachment WHERE event_id = :eventId ORDER BY display_name COLLATE NOCASE")
     fun observeForEvent(eventId: String): Flow<List<AttachmentEntity>>
+
+    @Query("SELECT * FROM attachment WHERE supply_item_id = :supplyItemId ORDER BY display_name COLLATE NOCASE")
+    fun observeForSupplyItem(supplyItemId: String): Flow<List<AttachmentEntity>>
+
+    @Query("SELECT * FROM attachment WHERE installed_component_id = :installedComponentId ORDER BY display_name COLLATE NOCASE")
+    fun observeForInstalledComponent(installedComponentId: String): Flow<List<AttachmentEntity>>
 
     @Query("DELETE FROM attachment WHERE id = :id")
     suspend fun delete(id: String)

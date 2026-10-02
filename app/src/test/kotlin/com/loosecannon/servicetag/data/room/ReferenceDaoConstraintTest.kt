@@ -39,6 +39,7 @@ class ReferenceDaoConstraintTest {
     ) = AssetReferenceEntity(
         id = id, assetId = assetId, kind = "WEB_URL", uri = uri, displayName = displayName,
         description = "", scheme = "https", createdAt = 10L, updatedAt = 20L, documentRole = null,
+        supplyItemId = null, installedComponentId = null,
     )
 
     /**

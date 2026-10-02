@@ -160,11 +160,13 @@ fun ExternalLink.toEntity(): ExternalLinkEntity = ExternalLinkEntity(
 /**
  * D4 §11's exactly-one-owner rule, enforced where the row enters the table. The domain's
  * `AttachmentOwner` already makes both-at-once unrepresentable; this guards rows built any other
- * way, and it is the reason the schema carries no `CHECK` (spec §11.5).
+ * way, and it is the reason the schema carries no `CHECK` (spec §11.5). Since schema v20 (#69) it
+ * counts four owner columns.
  */
 fun AttachmentEntity.requireExactlyOneOwner(): AttachmentEntity = apply {
-    require((assetId == null) != (eventId == null)) {
-        "attachment '$id' must name exactly one owner, found asset_id=$assetId event_id=$eventId"
+    require(listOfNotNull(assetId, eventId, supplyItemId, installedComponentId).size == 1) {
+        "attachment '$id' must name exactly one owner, found asset_id=$assetId event_id=$eventId " +
+            "supply_item_id=$supplyItemId installed_component_id=$installedComponentId"
     }
 }
 
@@ -220,6 +222,8 @@ fun Attachment.toEntity(): AttachmentEntity = AttachmentEntity(
     sourceResolvedUri = source?.resolvedUri,
     sourceRetrievedAt = source?.retrievedAt,
     sourceName = source?.name,
+    supplyItemId = null,
+    installedComponentId = null,
 )
 
 // #74: a catalog row passes through unchanged in both directions; its key rule lives in core.

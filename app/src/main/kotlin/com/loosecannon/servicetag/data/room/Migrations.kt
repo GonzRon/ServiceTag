@@ -869,6 +869,83 @@ val MIGRATION_18_19: Migration = object : Migration(18, 19) {
 }
 
 /**
+ * Schema v19 -> v20 (#69, C6–C8; R69-1, R69-5): a file or a link may belong to a SupplyItem or to an installed
+ * component as well as to its shipped owners. No table is added and no row is re-owned or derived: every v19 row
+ * keeps its owner, and both new columns are NULL on it.
+ *
+ *  1. `attachment` (C6) gains `supply_item_id` and `installed_component_id`, each a nullable CASCADE foreign key
+ *     appended by `ALTER TABLE … ADD COLUMN` (SQLite admits a REFERENCES column that way only with a NULL default —
+ *     [MIGRATION_5_6]'s `asset_event` precedent), and an index on each.
+ *  2. `asset_reference` (C7) is rebuilt the 12-step way ([MIGRATION_7_8]'s precedent), because no `ALTER` can make
+ *     `asset_id` nullable: the v20 table is created beside it, every v19 column is copied by name with NULL for the two
+ *     new owners, the old table is dropped and the new one renamed, and the four indices are recreated — `(asset_id,
+ *     uri)` unique and `asset_id` as before, and `(supply_item_id, uri)` and `(installed_component_id, uri)` unique,
+ *     one per owner since SQLite treats NULLs as distinct. Safe because no table points at `asset_reference`, and
+ *     because Room turns `PRAGMA foreign_keys` off for `migrate` and runs `foreign_key_check` after it
+ *     ([MIGRATION_3_4]).
+ *
+ * Each statement is copied verbatim from the exported `20.json`, so Room validates the result on open.
+ */
+val MIGRATION_19_20: Migration = object : Migration(19, 20) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        // 1. attachment: two owners appended, in the entity's column order
+        connection.execSQL(
+            "ALTER TABLE `attachment` ADD COLUMN `supply_item_id` TEXT " +
+                "REFERENCES `supply_item`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE",
+        )
+        connection.execSQL(
+            "ALTER TABLE `attachment` ADD COLUMN `installed_component_id` TEXT " +
+                "REFERENCES `installed_component`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_attachment_supply_item_id` ON `attachment` (`supply_item_id`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_attachment_installed_component_id` " +
+                "ON `attachment` (`installed_component_id`)",
+        )
+
+        // 2. asset_reference, rebuilt
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `_new_asset_reference` (`id` TEXT NOT NULL, `asset_id` TEXT, " +
+                "`kind` TEXT NOT NULL, `uri` TEXT NOT NULL, `display_name` TEXT NOT NULL, " +
+                "`description` TEXT NOT NULL, `scheme` TEXT NOT NULL, `created_at` INTEGER NOT NULL, " +
+                "`updated_at` INTEGER NOT NULL, `document_role` TEXT, `supply_item_id` TEXT, " +
+                "`installed_component_id` TEXT, PRIMARY KEY(`id`), " +
+                "FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                "FOREIGN KEY(`supply_item_id`) REFERENCES `supply_item`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                "FOREIGN KEY(`installed_component_id`) REFERENCES `installed_component`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "INSERT INTO `_new_asset_reference` (`id`, `asset_id`, `kind`, `uri`, `display_name`, " +
+                "`description`, `scheme`, `created_at`, `updated_at`, `document_role`, `supply_item_id`, " +
+                "`installed_component_id`) " +
+                "SELECT `id`, `asset_id`, `kind`, `uri`, `display_name`, `description`, `scheme`, " +
+                "`created_at`, `updated_at`, `document_role`, NULL, NULL FROM `asset_reference`",
+        )
+        connection.execSQL("DROP TABLE `asset_reference`")
+        connection.execSQL("ALTER TABLE `_new_asset_reference` RENAME TO `asset_reference`")
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_asset_reference_asset_id_uri` " +
+                "ON `asset_reference` (`asset_id`, `uri`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_asset_reference_asset_id` ON `asset_reference` (`asset_id`)",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_asset_reference_supply_item_id_uri` " +
+                "ON `asset_reference` (`supply_item_id`, `uri`)",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_asset_reference_installed_component_id_uri` " +
+                "ON `asset_reference` (`installed_component_id`, `uri`)",
+        )
+    }
+}
+
+/**
  * Step 2 of [MIGRATION_8_9]. The whole `SELECT` is read into a list and its statement closed before
  * the first write: the step updates the table it reads, which the 7 -> 8 copy never did.
  */

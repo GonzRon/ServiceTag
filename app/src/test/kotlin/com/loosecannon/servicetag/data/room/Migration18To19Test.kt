@@ -132,7 +132,9 @@ class Migration18To19Test {
             assertEquals("the v18 tables", 32, before.size)
             assertTrue("the v18 catalog tables", before.keys.containsAll(V18_TABLES))
             withConnection(file) { m ->
-                for ((table, snapshot) in before) {
+                // the chain runs on to v20, which reshapes `attachment` and `asset_reference` (#69); their rows are
+                // `Migration19To20Test`'s, and every other v18 table is held whole here
+                for ((table, snapshot) in before - V20_RESHAPED_TABLES) {
                     assertEquals("$table", snapshot, m.snapshotOf(table))
                 }
                 // the seeded rows are there, the links on both material lines with them
@@ -242,6 +244,9 @@ class Migration18To19Test {
     private companion object {
         /** Room's own bookkeeping, which is not a table of the schema. */
         val ROOM_INTERNAL = setOf("room_master_table", "android_metadata", "sqlite_sequence")
+
+        /** The two tables schema v20 reshapes (#69), measured by `Migration19To20Test`. */
+        val V20_RESHAPED_TABLES = setOf("attachment", "asset_reference")
 
         /**
          * What a 1.6.0 install can hold where #47's tables will hang: two assets, a SupplyItem with a specification

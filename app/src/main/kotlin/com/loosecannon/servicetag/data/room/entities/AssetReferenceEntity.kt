@@ -12,14 +12,20 @@ import androidx.room3.PrimaryKey
  * `external_link` is untouched beside it: this is a new table with a new name, id type and shape,
  * and that both hold a URI is not a reason to reuse a tombstone (I-5).
  *
- * `asset_id` is the only foreign key a reference has, CASCADE so deleting the asset takes the row
- * with it — there are no bytes for a delete use case to sweep first. Only an asset owns a
- * reference, and it can never change owner (I-6).
+ * Since schema v20 (#69, C7) a reference has three possible owners, each a nullable foreign key,
+ * CASCADE so deleting the owner takes the row with it — there are no bytes for a delete use case to
+ * sweep first: `asset_id` (an asset), `supply_item_id` (a SupplyItem) and `installed_component_id`
+ * (an installed component). Exactly one is set — enforced on every Room write by
+ * [com.loosecannon.servicetag.data.room.requireExactlyOneOwner], since there is no `CHECK` (below) —
+ * and a reference never changes owner (I-6). The owner model is D14's (`docs/design/14-asset-model.md`).
  *
- * `(asset_id, uri)` is unique (I-7): one asset holds a URI once, and the **same** URI on two
- * different assets is ordinary. The second index on `asset_id` alone is a left prefix of the first
- * and so redundant to the query planner; it is declared because spec §3.2 declares it, and because
- * a Room entity whose `indices` disagree with the exported schema will not open.
+ * A URI is unique **per owner** (I-7): one owner holds a URI once, and the **same** URI on two
+ * different owners is ordinary. That takes one unique index per owner column — `(asset_id, uri)`,
+ * `(supply_item_id, uri)`, `(installed_component_id, uri)` — because SQLite treats NULLs as distinct,
+ * so no single index over the three columns could hold. The second index on `asset_id` alone is a
+ * left prefix of the first and so redundant to the query planner; it is declared because spec §3.2
+ * declares it, and because a Room entity whose `indices` disagree with the exported schema will not
+ * open. The two newer owner columns get no single-column twin: each unique pair's left prefix serves.
  *
  * There is deliberately **no SQL `CHECK`** — Room does not model one in its schema hash, so it
  * would be invisible to migration validation — and no `provenance` column (D-21 C). The length
@@ -38,15 +44,29 @@ import androidx.room3.PrimaryKey
             childColumns = ["asset_id"],
             onDelete = ForeignKey.CASCADE,
         ),
+        ForeignKey(
+            entity = SupplyItemEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["supply_item_id"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+        ForeignKey(
+            entity = InstalledComponentEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["installed_component_id"],
+            onDelete = ForeignKey.CASCADE,
+        ),
     ],
     indices = [
         Index(value = ["asset_id", "uri"], unique = true),
         Index("asset_id"),
+        Index(value = ["supply_item_id", "uri"], unique = true),
+        Index(value = ["installed_component_id", "uri"], unique = true),
     ],
 )
 data class AssetReferenceEntity(
     @PrimaryKey val id: String,
-    @ColumnInfo(name = "asset_id") val assetId: String,
+    @ColumnInfo(name = "asset_id") val assetId: String?,
     val kind: String,
     val uri: String,
     @ColumnInfo(name = "display_name") val displayName: String,
@@ -55,4 +75,6 @@ data class AssetReferenceEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
     @ColumnInfo(name = "document_role") val documentRole: String?,
+    @ColumnInfo(name = "supply_item_id") val supplyItemId: String?,
+    @ColumnInfo(name = "installed_component_id") val installedComponentId: String?,
 )

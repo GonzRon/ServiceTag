@@ -100,7 +100,7 @@ import com.loosecannon.servicetag.data.room.entities.SupplySpecificationEntity
         InstalledComponentEntity::class,
         InstalledComponentCompositionEntity::class,
     ],
-    version = 19,
+    version = 20,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

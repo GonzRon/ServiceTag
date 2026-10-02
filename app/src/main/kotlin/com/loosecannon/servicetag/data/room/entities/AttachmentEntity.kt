@@ -27,6 +27,11 @@ import androidx.room3.PrimaryKey
  *
  * Schema v16 (#85, C2) appends the four `source_*` columns: nullable, no default, no index, never
  * backfilled — a row that was not saved from a reference has none. Write-once; there is no `reference_id`.
+ *
+ * Schema v20 (#69, C6) appends two more owners, each a nullable CASCADE foreign key with its own index:
+ * `supply_item_id` for a file about a SupplyItem and `installed_component_id` for one about an installed
+ * component. The exactly-one rule above now counts four columns; the owner model is D14's
+ * (`docs/design/14-asset-model.md`).
  */
 @Entity(
     tableName = "attachment",
@@ -43,11 +48,25 @@ import androidx.room3.PrimaryKey
             childColumns = ["event_id"],
             onDelete = ForeignKey.CASCADE,
         ),
+        ForeignKey(
+            entity = SupplyItemEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["supply_item_id"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+        ForeignKey(
+            entity = InstalledComponentEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["installed_component_id"],
+            onDelete = ForeignKey.CASCADE,
+        ),
     ],
     indices = [
         Index("asset_id"),
         Index("event_id"),
         Index(value = ["storage_provider", "storage_locator"], unique = true),
+        Index("supply_item_id"),
+        Index("installed_component_id"),
     ],
 )
 data class AttachmentEntity(
@@ -71,4 +90,6 @@ data class AttachmentEntity(
     @ColumnInfo(name = "source_resolved_uri") val sourceResolvedUri: String?,
     @ColumnInfo(name = "source_retrieved_at") val sourceRetrievedAt: Long?,
     @ColumnInfo(name = "source_name") val sourceName: String?,
+    @ColumnInfo(name = "supply_item_id") val supplyItemId: String?,
+    @ColumnInfo(name = "installed_component_id") val installedComponentId: String?,
 )
