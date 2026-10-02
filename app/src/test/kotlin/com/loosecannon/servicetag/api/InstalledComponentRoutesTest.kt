@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.backup.InstalledComponentDto
 import com.loosecannon.servicetag.core.backup.SupplyItemDto
 import com.loosecannon.servicetag.core.backup.toDto
 import com.loosecannon.servicetag.core.model.AssetId
+import com.loosecannon.servicetag.core.model.InstalledComponent
 import com.loosecannon.servicetag.core.model.InstalledComponentId
 import com.loosecannon.servicetag.core.model.TransferKind
 import com.loosecannon.servicetag.core.model.TransferRecord
@@ -348,6 +349,29 @@ class InstalledComponentRoutesTest {
         assertEquals(before, stored(before.id))
     }
 
+    @Test fun aRestoredFutureInstallDateTakesANotesOnlyPatch() {
+        val ups = api.asset("Example UPS")
+        // As a restore carries it: an install date later than this phone's today (2026-02-10), stored unjudged.
+        val restored = InstalledComponent(
+            id = InstalledComponentId("restored-tray"), assetId = AssetId(ups), parentId = null,
+            name = "Example Battery Tray", supplyId = null, composition = emptyList(), serialOrLot = "",
+            installedOn = "2026-03-01", removedOn = null, replacesId = null, sortOrder = 0, notes = "",
+            createdAt = 1_000L, updatedAt = 1_000L,
+        )
+        runBlocking { graph.installedComponents.insert(restored) }
+        graph.now = 5_000L
+
+        // The overlay re-sends the stored date, and an unchanged date is not judged again.
+        val after = patched(restored.id.value, """{"notes":"Checked"}""")
+        assertEquals(restored.toDto().copy(notes = "Checked", updatedAt = 5_000L), after)
+        assertEquals(after, stored(restored.id.value))
+        // Moving it to another future day is still the 422.
+        val moved = patch(restored.id.value, """{"installedOn":"2026-03-02"}""")
+        assertEquals(moved.text(), 422, moved.status)
+        assertEquals("INSTALLED_COMPONENT_DATE_AFTER_TODAY", moved.error().code)
+        assertEquals("installedOn", moved.error().field)
+    }
+
     // --- row 42: remove and replace ----------------------------------------------------------------------
 
     @Test fun removeIs200WithTheClosedSubtree() {
@@ -574,6 +598,8 @@ class InstalledComponentRoutesTest {
 
         refused(call("GET", "/v1/installed-components/no-such-row"), 404, "NO_SUCH_INSTALLED_COMPONENT", null)
         refused(installCall(ups, """"name":"x","parentId":"no-such-row""""), 404, "NO_SUCH_INSTALLED_COMPONENT", "parentId")
+        // `parentId` is read as sent, as an asset's `parentAssetId` is: `""` names no row, never "top level".
+        refused(installCall(ups, """"name":"x","parentId":"""""), 404, "NO_SUCH_INSTALLED_COMPONENT", "parentId")
         refused(installCall(ups, """"name":"  """"), 422, "INSTALLED_COMPONENT_NAME_REQUIRED", "name")
         refused(installCall(ups, """"name":"x","installedOn":"2025-13-01""""), 422, "INSTALLED_COMPONENT_DATE_INVALID", "installedOn")
         refused(remove(tray.id, "June"), 422, "INSTALLED_COMPONENT_DATE_INVALID", "removedOn")
@@ -604,9 +630,11 @@ class InstalledComponentRoutesTest {
                 "COMPOSITION_QUANTITY_INVALID", "composition",
             )
         }
-        // A sent sort order outside 0..1000000 names no use-case problem: the fallback, keyed to the field.
-        refused(installCall(ups, """"name":"x","sortOrder":-1"""), 422, "INSTALLED_COMPONENT_INVALID", "sortOrder")
-        refused(patch(tray.id, """{"sortOrder":1000001}"""), 422, "INSTALLED_COMPONENT_INVALID", "sortOrder")
+        // A sent sort order outside 0..1000000 is the decoder's 400: a value that does not fit its field.
+        for (outside in listOf(installCall(ups, """"name":"x","sortOrder":-1"""), patch(tray.id, """{"sortOrder":1000001}"""))) {
+            refused(outside, 400, "bad_request", null)
+            assertEquals("sortOrder must be a whole number between 0 and 1000000", outside.error().message)
+        }
         // The reused codes, with the body key that caused them.
         refused(installCall("no-such-asset", """"name":"x""""), 404, "no_such_asset", null)
         refused(installCall(ups, """"name":"x","supplyId":"no-such-item""""), 404, "NO_SUCH_SUPPLY_ITEM", "supplyId")

@@ -232,12 +232,12 @@ internal class ApiHandlers(
                 // every applicability row. Specifications are nested in their item and not counted on their own.
                 "supplyItems" to supplies.itemCount(),
                 "assetSupplies" to supplies.assetSupplyCount(),
-                // Format 19's (#47), under the archive's own manifest keys: every row, current and removed, and every
-                // composition entry — counted, unlike a SupplyItem's specifications, so a client can check what a
-                // load landed.
-                "installedComponents" to installedComponents.rowCount(),
-                "compositionEntries" to installedComponents.entryCount(),
-            ) + maintenance.counts() + seasonHealth.counts() + serviceCases.counts() + loans.counts(),
+            ) + installedComponents.counts().let { installed ->
+                // Format 19's (#47), under the archive's own manifest keys and from one read of the table: every row,
+                // current and removed, and every composition entry — counted, unlike a SupplyItem's specifications,
+                // so a client can check what a load landed.
+                mapOf("installedComponents" to installed.rows, "compositionEntries" to installed.entries)
+            } + maintenance.counts() + seasonHealth.counts() + serviceCases.counts() + loans.counts(),
         ),
     )
 

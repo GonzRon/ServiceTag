@@ -40,7 +40,8 @@ import com.loosecannon.servicetag.di.AppGraph
  *   copied, so the new row carries exactly what the caller sent.
  * - **Nothing deletes an installed component**: a row is removed (closed) or replaced, and stays as history.
  *
- * `""` for an optional date or id is none here, before any command: the use case reads `""` as a bad date.
+ * `""` for `supplyId` or an optional date is none here, before any command: the use case reads `""` as a bad date.
+ * `parentId` is read as sent, as an asset's `parentAssetId` is, so `""` names no row: 404 with `field` `parentId`.
  *
  * Built as `ApiHandlers`' collaborator, in [SupplyHandlers]' shape, so the Developer API screen's wiring is untouched:
  * production builds it from `AppGraph` through `constructor(graph)`.
@@ -160,11 +161,12 @@ internal class InstalledComponentHandlers(
 
     // --- status ---------------------------------------------------------------------------------
 
-    /** `/v1/status`' `installedComponents` count: every row, current and removed, under the archive's list name. */
-    suspend fun rowCount(): Int = installedComponents.all().size
-
-    /** `/v1/status`' `compositionEntries` count: every composition entry of every row, as the manifest counts them. */
-    suspend fun entryCount(): Int = installedComponents.all().sumOf { it.composition.size }
+    /**
+     * `/v1/status`' two counts from one read of the table: every row, current and removed (`installedComponents`),
+     * and every composition entry of every row (`compositionEntries`), as the manifest counts them.
+     */
+    suspend fun counts(): InstalledComponentCounts =
+        installedComponents.all().let { rows -> InstalledComponentCounts(rows.size, rows.sumOf { it.composition.size }) }
 
     // --- plumbing -------------------------------------------------------------------------------
 
@@ -186,3 +188,6 @@ internal class InstalledComponentHandlers(
         val BY_NAME: Comparator<SupplyItem> = compareBy<SupplyItem> { it.name.lowercase() }.thenBy { it.id.value }
     }
 }
+
+/** `/v1/status`' two installed-component counts, read together. */
+internal data class InstalledComponentCounts(val rows: Int, val entries: Int)

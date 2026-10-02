@@ -137,11 +137,18 @@ internal data class ReplaceInstalledComponentRequest(
 internal const val MAX_INSTALLED_COMPONENT_SORT_ORDER: Int = 1_000_000
 
 /**
- * A sent `sortOrder`, bounded to `0..`[MAX_INSTALLED_COMPONENT_SORT_ORDER]; out of range is the 422 fallback,
- * [installedComponentInvalid] with `field` `sortOrder`, since no use-case problem names it.
+ * A sent `sortOrder`, bounded to `0..`[MAX_INSTALLED_COMPONENT_SORT_ORDER]: out of range is the decoder's 400, a value
+ * that does not fit its field, in [enumOr400]'s sentence shape. No use-case problem names it.
  */
 internal fun boundedSortOrder(sent: Int): Int =
-    if (sent in 0..MAX_INSTALLED_COMPONENT_SORT_ORDER) sent else throw installedComponentInvalid("sortOrder")
+    if (sent in 0..MAX_INSTALLED_COMPONENT_SORT_ORDER) {
+        sent
+    } else {
+        throw ApiFailure.badRequest("sortOrder must be a whole number between 0 and $MAX_INSTALLED_COMPONENT_SORT_ORDER")
+    }
 
-/** `""` means none for an optional id or date, so it never reaches a command as a value. */
+/**
+ * `""` means none for `supplyId` and an optional date, so it never reaches a command as a value. Not for `parentId`,
+ * which is read as sent.
+ */
 internal fun String?.orNone(): String? = this?.takeIf { it.isNotEmpty() }

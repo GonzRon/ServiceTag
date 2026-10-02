@@ -840,13 +840,11 @@ internal fun assetSupplyFailure(problem: AssetSupplyProblem): ApiFailure {
 internal const val INSTALLED_COMPONENT_INVALID: String = "INSTALLED_COMPONENT_INVALID"
 
 /**
- * The 422 fallback: a refusal naming no use-case problem. The use cases always name one; the one route that answers
- * it is a sent `sortOrder` outside its bound ([boundedSortOrder]), with [field] `sortOrder`.
+ * The 422 fallback for a refusal naming no problem: **unreachable**, since every use-case refusal names at least one,
+ * and kept, as `SUPPLY_ITEM_INVALID` is, so the mapper answers every list.
  */
-internal fun installedComponentInvalid(field: String? = null, problems: List<String> = emptyList()): ApiFailure =
-    ApiFailure(
-        422, "Unprocessable Content", INSTALLED_COMPONENT_INVALID, "the installed component was refused", problems, field,
-    )
+internal fun installedComponentInvalid(problems: List<String> = emptyList()): ApiFailure =
+    ApiFailure(422, "Unprocessable Content", INSTALLED_COMPONENT_INVALID, "the installed component was refused", problems)
 
 /**
  * Every [InstalledComponentProblem] as the refusal the router answers (C2, C21): 404 for a row that is not there (the
