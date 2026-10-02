@@ -395,14 +395,14 @@ class InstalledComponentsSectionViewModel(
     fun onNotes(text: String) = form { it.copy(notes = text) }
 
     /** "Link supply" (P15-21): the picker, offered the unarchived SupplyItems only. */
-    fun startLinkPick() = form { it.copy(picking = PickFor.LINK) }
+    fun startLinkPick() = form { it.copy(picking = PickFor.LINK, pickingEntry = null) }
 
     /** "Add supply" (P15-13) under the composition: the picker, offered the unarchived SupplyItems only; a pick appends. */
     fun startAddEntry() = form { it.copy(picking = PickFor.ENTRY, pickingEntry = null) }
 
     /**
      * An entry's SupplyItem tapped: the picker for that entry, so it can be swapped in place — an archived draft entry
-     * is removed or replaced (C-1). The entry keeps its quantity, its unit and its id.
+     * is removed or replaced (C-1). The entry keeps its quantity, its typed unit and its id.
      */
     fun startEntryPick(index: Int) = form { f ->
         if (index in f.composition.indices) f.copy(picking = PickFor.ENTRY, pickingEntry = index) else f

@@ -47,6 +47,7 @@ import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.supplies.ADD_SUPPLY
 import com.loosecannon.servicetag.ui.supplies.LINKED_TO
+import com.loosecannon.servicetag.ui.supplies.SupplyItemPickerSheet
 import com.loosecannon.servicetag.ui.supplies.SupplyLinkLine
 import com.loosecannon.servicetag.ui.supplies.SupplyListRow
 import com.loosecannon.servicetag.ui.theme.ControlShape
@@ -174,6 +175,63 @@ internal fun ComponentFormSheet(
                 onDismiss = onDismiss,
             )
         }
+    }
+}
+
+/**
+ * The install, edit or replace sheet with its [CompositionEditor], or — while [ComponentFormState.picking] is set —
+ * the SupplyItem picker in its place: one sheet at a time, the Supplies section's shape. The form gives way to the
+ * picker and comes back with the pick applied, its fields kept by the caller; taking the form's sheet out of
+ * composition reports no [onDismiss]. [supplies] holds every SupplyItem, archived included (C-1), for the form's link
+ * and composition lines; [choices] holds the unarchived ones only (R47-3), for the picker.
+ */
+@Composable
+internal fun ComponentFormOrPicker(
+    form: ComponentFormState,
+    supplies: Map<SupplyId, SupplyListRow>,
+    choices: List<SupplyListRow>,
+    onName: (String) -> Unit,
+    onLink: () -> Unit,
+    onUnlink: () -> Unit,
+    onSerialOrLot: (String) -> Unit,
+    onDate: (String) -> Unit,
+    onNotes: (String) -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+    onQuantity: (Int, String) -> Unit,
+    onUnit: (Int, String) -> Unit,
+    onPickEntry: (Int) -> Unit,
+    onRemoveEntry: (Int) -> Unit,
+    onAddEntry: () -> Unit,
+    onPick: (SupplyListRow) -> Unit,
+    onDismissPicker: () -> Unit,
+) {
+    if (form.picking != null) {
+        SupplyItemPickerSheet(rows = choices, onPick = onPick, onDismiss = onDismissPicker)
+    } else {
+        ComponentFormSheet(
+            form = form,
+            supplies = supplies,
+            onName = onName,
+            onLink = onLink,
+            onUnlink = onUnlink,
+            onSerialOrLot = onSerialOrLot,
+            onDate = onDate,
+            onNotes = onNotes,
+            onSave = onSave,
+            onDismiss = onDismiss,
+            composition = {
+                CompositionEditor(
+                    form = form,
+                    supplies = supplies,
+                    onQuantity = onQuantity,
+                    onUnit = onUnit,
+                    onPickEntry = onPickEntry,
+                    onRemove = onRemoveEntry,
+                    onAdd = onAddEntry,
+                )
+            },
+        )
     }
 }
 
