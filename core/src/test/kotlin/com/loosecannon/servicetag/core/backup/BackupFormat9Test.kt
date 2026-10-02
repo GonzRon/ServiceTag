@@ -67,7 +67,7 @@ class BackupFormat9Test {
      */
     @Test
     fun theFormatMovedAndTheLegacyBoundaryStaysSeven() {
-        assertEquals(19, BackupCodec.FORMAT_VERSION)
+        assertEquals(20, BackupCodec.FORMAT_VERSION)
         assertEquals(7, LegacyArchive.LAST_LEGACY_FORMAT)
     }
 

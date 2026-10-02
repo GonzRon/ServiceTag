@@ -197,10 +197,11 @@ class BackupFormat7Test {
     }
 
     /**
-     * Hazard: DTO field-set drift. The ten element names are pinned in order, and `"provenance"`
+     * Hazard: DTO field-set drift. The twelve element names are pinned in order, and `"provenance"`
      * is asserted absent — the assertion that actually carries D-21 C, since an in-app "Add link"
      * and a share write identical rows and nothing in the product distinguishes them. Format 17
-     * (#91, C6) appended the tenth, `"role"`, last: the nine columns before it never moved.
+     * (#91, C6) appended the tenth, `"role"`, and format 20 (#69, C9) the two owner keys after it:
+     * the nine columns before them never moved.
      *
      * `BackupData`'s own new member is pinned last for the same reason, and the two 2.6 tombstone
      * fields are pinned where they have always been.
@@ -211,11 +212,11 @@ class BackupFormat7Test {
         assertEquals(
             listOf(
                 "id", "assetId", "kind", "uri", "displayName", "description", "scheme",
-                "createdAt", "updatedAt", "role",
+                "createdAt", "updatedAt", "role", "supplyItemId", "installedComponentId",
             ),
             names,
         )
-        assertEquals(10, AssetReferenceDto.serializer().descriptor.elementsCount)
+        assertEquals(12, AssetReferenceDto.serializer().descriptor.elementsCount)
         assertTrue("provenance" !in names, "a reference carries no provenance (D-21 C)")
 
         val tables = BackupData.serializer().descriptor.elementNames.toList()

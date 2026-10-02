@@ -88,7 +88,8 @@ class BackupFormat17Test {
 
     /**
      * Hazard: a role dropped in transit. Each role travels by its name, an unset one as an explicit `"role": null`
-     * (never left out), as the tenth and last key of the row; and the domain rows read back equal, both ways round.
+     * (never left out), as the tenth key of the row, format 20's two owner keys after it; and the domain rows read
+     * back equal, both ways round.
      */
     @Test
     fun eachRoleAndNoneRoundTrips() {
@@ -96,7 +97,7 @@ class BackupFormat17Test {
 
         val decoded = BackupCodec.decode(bytes)
 
-        assertEquals(19, decoded.manifest.formatVersion)
+        assertEquals(20, decoded.manifest.formatVersion)
         assertEquals(everyShape, decoded.data.assetReferences.map { it.toDomain() })
         val written = referencesWritten(bytes).associateBy { it.getValue("id").jsonPrimitive.content }
         assertEquals("PURCHASE_INVOICE_OR_RECEIPT", written.getValue("r1").getValue("role").jsonPrimitive.content)
@@ -109,10 +110,10 @@ class BackupFormat17Test {
             assertEquals(
                 listOf(
                     "id", "assetId", "kind", "uri", "displayName", "description", "scheme",
-                    "createdAt", "updatedAt", "role",
+                    "createdAt", "updatedAt", "role", "supplyItemId", "installedComponentId",
                 ),
                 row.keys.toList(),
-                "the role is appended, the nine columns keep their order",
+                "the role is appended, the nine columns keep their order, format 20's two owner keys follow",
             )
         }
         for (role in DocumentRole.entries) {
@@ -212,14 +213,14 @@ class BackupFormat17Test {
 
     /** One format past this build's, over a tree no format could read: refused as newer before a row is parsed. */
     @Test
-    fun aFormat20ArchiveIsRefusedAsNewer() {
+    fun aFormat21ArchiveIsRefusedAsNewer() {
         val unreadable = dataTreeOf(archiveOf(data(listOf(userManual))))
             .editRows("assetReferences") { it.with("role", JsonPrimitive("NOT_A_ROLE")) }
-        val bytes = sealed(unreadable, formatVersion = 20)
+        val bytes = sealed(unreadable, formatVersion = 21)
 
         val refusal = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(bytes) }
 
-        assertEquals(20, refusal.found)
-        assertEquals(19, refusal.supported)
+        assertEquals(21, refusal.found)
+        assertEquals(20, refusal.supported)
     }
 }
