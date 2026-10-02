@@ -13,10 +13,13 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
  * composition, serial or lot, install date, notes and `sortOrder`. The command has no Asset, parent, removal date or
  * `replacesId`, so an edit never moves a row, reopens it or rewrites what it replaced.
  *
- * - **The command's shape first, before any transaction:** the name, the install date (an ISO day no later than
- *   [today]) and each entry's quantity, every problem collected. A refusal here opens none.
+ * - **The command's shape first, before any transaction:** the name, the install date as an ISO day and each
+ *   entry's quantity, every problem collected. A refusal here opens none.
  * - **Then, inside the one `uow.write` and before its first write:**
- *   [InstalledComponentProblem.NoSuchInstalledComponent]; then [InstalledComponentProblem.RemovedBeforeInstalled]
+ *   [InstalledComponentProblem.NoSuchInstalledComponent]; then [InstalledComponentProblem.AfterToday] (`installedOn`)
+ *   only when the command **changes** the install date to one after [today] — a stored date, written when it was
+ *   today's or carried by a restore as written, is never judged again; then
+ *   [InstalledComponentProblem.RemovedBeforeInstalled]
  *   (`installedOn`) when the row is removed and the command's install date falls after its stored removal date — the
  *   stored date itself is never judged against [today], since a restore may carry one later than this phone's; then
  *   the direct link and entries under R47-3: an archived SupplyItem is taken as the direct link only when the stored
@@ -36,12 +39,15 @@ class UpdateInstalledComponent(
     private val today: Today,
 ) {
     suspend fun run(id: InstalledComponentId, cmd: UpdateInstalledComponentCommand): InstalledComponentResult {
-        val shape = installedComponentProblems(cmd.name, cmd.installedOn, removedOn = null, today = today.localDate()) +
+        val shape = installedComponentProblems(cmd.name, cmd.installedOn, removedOn = null) +
             compositionInputProblems(cmd.composition)
         if (shape.isNotEmpty()) return InstalledComponentResult.Refused(shape)
 
         return uow.write {
             val row = installedComponents.get(id) ?: return@write refused(InstalledComponentProblem.NoSuchInstalledComponent)
+            if (cmd.installedOn != row.installedOn && installedAfterToday(cmd.installedOn)) {
+                return@write refused(InstalledComponentProblem.AfterToday(FIELD))
+            }
             if (installedAfterRemoval(cmd.installedOn, row.removedOn)) {
                 return@write refused(InstalledComponentProblem.RemovedBeforeInstalled(FIELD))
             }
@@ -75,6 +81,10 @@ class UpdateInstalledComponent(
             InstalledComponentResult.Ok(written, replaced = null, closed = emptyList())
         }
     }
+
+    /** A changed install date later than [today]; the shape check already refused one that is not a date. */
+    private fun installedAfterToday(installedOn: String?): Boolean =
+        installedOn?.let(::parseDate)?.let { it > today.localDate() } == true
 
     /** The command's install date after the stored removal date; a date not recorded, or a current row, is never. */
     private fun installedAfterRemoval(installedOn: String?, removedOn: String?): Boolean {

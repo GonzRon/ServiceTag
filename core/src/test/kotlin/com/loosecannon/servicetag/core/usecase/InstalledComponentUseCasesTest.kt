@@ -912,9 +912,6 @@ class InstalledComponentUseCasesTest {
         ) {
             update.run(InstalledComponentId("c404"), edit(name = "", installedOn = "25/09/2026", composition = listOf(entry("s1"), entry("s9", "-1"))))
         }
-        assertRefused(listOf(InstalledComponentProblem.AfterToday("installedOn")), transactions = 0) {
-            update.run(InstalledComponentId("u"), edit(installedOn = "2026-10-01"))
-        }
         assertRefused(listOf(InstalledComponentProblem.BadDate("installedOn")), transactions = 0) {
             update.run(InstalledComponentId("u"), edit(installedOn = ""))
         }
@@ -1041,6 +1038,33 @@ class InstalledComponentUseCasesTest {
         val thrown = assertFailsWith<AssetTransferredOut> { update.run(element.id, editOf(element).copy(notes = "checked")) }
         assertEquals(AssetId("h1"), thrown.assetId)
         assertEquals(before, tables(), "nothing written")
+    }
+
+    @Test
+    fun aRowInstalledAfterTodayOnAnotherPhoneTakesANotesOnlyEdit() = runTest {
+        seed()
+        // A restore carries the install date as written, even one after this phone's today: unchanged, it is not judged.
+        stored.insert(installedComponentOf("early", assetId = "x1", name = "Example Charger", installedOn = "2026-10-03"))
+        val row = stored.get(InstalledComponentId("early"))!!
+        now = 12_000L
+        val result = ok(update.run(row.id, editOf(row).copy(notes = "checked")))
+        assertEquals(row.copy(notes = "checked", updatedAt = 12_000L), result.row, "the stored install date is not judged again")
+        assertEquals(result.row, stored.get(row.id))
+    }
+
+    @Test
+    fun aChangedInstallDateAfterTodayIsStillRefused() = runTest {
+        seedTree()
+        stored.insert(installedComponentOf("early", assetId = "x1", name = "Example Charger", installedOn = "2026-10-03"))
+        // A changed date is judged against today; telling it from the stored one needs the row, so inside the write.
+        assertRefused(listOf(InstalledComponentProblem.AfterToday("installedOn")), transactions = 1) {
+            update.run(InstalledComponentId("u"), edit(installedOn = "2026-10-01"))
+        }
+        assertRefused(listOf(InstalledComponentProblem.AfterToday("installedOn")), transactions = 1) {
+            update.run(InstalledComponentId("early"), edit(name = "Example Charger", installedOn = "2026-10-04"))
+        }
+        val moved = ok(update.run(InstalledComponentId("early"), edit(name = "Example Charger", installedOn = "2026-09-30"))).row
+        assertEquals("2026-09-30", moved.installedOn, "a changed date of today or earlier is taken")
     }
 
     @Test

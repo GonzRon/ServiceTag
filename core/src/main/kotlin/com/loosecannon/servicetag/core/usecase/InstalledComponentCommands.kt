@@ -25,7 +25,11 @@ sealed interface InstalledComponentProblem {
     /** `INSTALLED_COMPONENT_DATE_AFTER_TODAY` (422, [field]): later than the phone's today. */
     data class AfterToday(val field: String) : InstalledComponentProblem
 
-    /** `INSTALLED_COMPONENT_REMOVED_BEFORE_INSTALLED` (422, [field]): a closing date before the install date. */
+    /**
+     * `INSTALLED_COMPONENT_REMOVED_BEFORE_INSTALLED` (422, [field]): a closing date before the install date.
+     * On an edit, [UpdateInstalledComponent] reports it with [field] `installedOn`: the install date after the stored
+     * removal date.
+     */
     data class RemovedBeforeInstalled(val field: String) : InstalledComponentProblem
 
     /** `COMPOSITION_QUANTITY_INVALID` (422, `composition`): entry [index]'s quantity is not a finite number above zero. */
