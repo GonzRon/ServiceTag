@@ -1277,3 +1277,162 @@ schema 19'` → 1); D14's `:30-32` sentence unchanged (`git diff <base> -U0 -- d
 **Untouched:** every source and test file, `docs/api`, `tools`. **Must NOT:** quote the owner's private data; promise a
 release or name a version; claim a journal link, a stock effect or a health binding. **Counted RED:** none
 (documents). **Caps:** 1 h / 2 h. **Size:** about 110 document lines. **Estimate:** 35 min.
+
+## 20. Errata (recorded after the merge, 2026-10-01)
+
+The plan executed as rev 1.1 (eba3d0ae). What the briefs, their task reviews and the whole-branch review found
+different from the text is listed here; the contracts above are left as written so the reasoning stays legible.
+The merged tip is `07e59246`. **The gate** (once, on 07e59246; its record in the ledger `.superpowers/sdd/2026-10-01-issue-47/gate/`): JVM whole green — core 1950 / app 1914, 0 failures, 0 skips; MCP 566 / 0; loader 154 / 0; the device loop 58 classes / 318 tests / 0 failures, every class reported — but not in one run: the headless host-GPU emulator died twice mid-loop (8, then 6 classes in; an environment failure, zero test failures), so the remaining 44 classes ran once more on an emulator the owner started from Android Studio ("fill 2", 9.6 min for 44 classes). A single-run wall time was therefore not measured; the three runs sum to 16.2 min inflated by two deaths and three emulator preparations, and the per-class rate differed between the two emulators, so the 14/15-minute lines (#90) are judged at the next clean single run, not here.
+
+**E-1. The double's same-asset parent check is a tripwire, not a schema rule (C5 / C-2; B1a NOTE-4).**
+- The double refuses a parent on another asset, and a self-parent.
+- This is a writers' rule (the use cases and C10), modelled as a tripwire.
+- Room's single-column `parent_id` FK holds no such rule.
+
+**E-2. §4 B1a's file list (B1a NOTE-10).** Add `CT/testing/InstalledComponentDoubleTest.kt`, which row 57 names.
+
+**E-3. §3's key-position row moves by 1, not 2.**
+- The row says "each position moves by 2" for `BackupFormat9Test:102`, `12Test:70`, `13Test:58`, `14Test:52` and
+  `15Test:52-53`.
+- These read `data.json` root keys or `BackupData` list names, so one appended list moves each **by 1**.
+- Only a manifest-key position would move by 2. The "by 2" cite is wrong.
+
+**E-4. The twins moved under the twin-pin rule, which §3 should list.**
+- B1b: `Migration17To18Test.kt:76`, the whole-chain set, which subtracts `V19_TABLES`.
+- B2a:
+  - `BackupFormat18Test:126`, a from-the-end list position;
+  - the full manifest-count maps `BackupCodecTest:262`, `:494`, `BackupFormat6Test:402`, `BackupFormat7Test:321` and
+    `BackupUseCasesTest:447`, each gaining the two keys at 0;
+  - `BackupFormat9Test:116`/`:120`, the strip lists.
+- B2b: `MaintenanceRoutesTest.theMergeReportWireMirrorCarriesEveryTallyInTableOrder`, its wire-key list.
+
+**E-5. Row 27 belongs to B2a2.** `TransferTableClassificationTest` clears with C11's class line, so §11's split text
+moves row 27 from B2a to B2a2.
+
+**E-6. C10.5 names a bad entry by index (B2a NOTE-1).** The bad entry is `QuantityInvalid(index=N)`, reported through
+the shipped `refuse` helper, not by its entry id. That follows from the no-`when`-in-`C/backup` ruling.
+
+**E-7. G2's two cycle messages.**
+- Parents: "installedComponents: cycle in installed component parents".
+- Replacements: "installedComponents: installed components … form a replacement cycle".
+
+**E-8. Migration18To19Test counts the v18 tables instead of listing them (B1b N-1).** It checks size 32 plus
+`containsAll(V18_TABLES)`, so no tombstone name lands in a test.
+
+**E-9. §4 B2c's file list.**
+- Add `TransferTableClassificationTest` (the `ASSET_OWNED` pin), `ExportBackupSetTest` (a held-export case) and
+  `TransferGraphRetainTest` (the fixture gains a component).
+- `TransferImportTesting.kt` lives in `CT/`, not `T/`.
+- The merge's transfer-back path takes the **guarded** port.
+
+**E-10. C12 Held (M2) and the one-line allowance.**
+- B2b wrote the M2 line with an inline `listOf<OwnerRef>(OwnerRef.OfAsset(it.assetId))`.
+- B2c held a one-line `C/merge` allowance to switch it to `TransferOwnership.of(it)` (done).
+- §4's B2c row should name that allowance.
+
+**E-11. C16's state steps stop at the first failing step; C18 follows.**
+- A missing or archived direct link answers alone.
+- Entry problems are collected among themselves.
+- One consequence: an archived link and an archived entry surface one Save at a time (B6c NOTE-6).
+
+**E-12. Three plan silences, decided by the controller.**
+- A negative `sortOrder` is accepted by core (ordering only).
+- A child's `installedOn` is not compared with its parent's.
+- An install on a **retired** asset is accepted. This is a recorded limit to mention at close.
+
+**E-13. An empty install date is a bad date in core.** `installedOn = ""` is `BadDate` in core. The API and the phone
+map an absent or `""` value to null before the command, and the PATCH's `""` clears.
+
+**E-14. §4 B3b's file list.** Add `C/usecase/InstalledComponentCommands.kt`: the shared helpers for the quantity
+parse, entry-id keeping, closing-date checks, the archived rule with keep parameters, and the current subtree.
+
+**E-15. C19's today rule (d725ba9f).**
+- An edit judges `installedOn` against today only when the command **changes** it.
+- A stored install or removal date is never re-judged against today.
+- So a restored row with a future date takes a notes-only edit.
+
+**E-16. Limit 5 widened (B3b N6, B6b).**
+- An edit renumbers composition `sortOrder` to list positions and trims text.
+- A hand-made archive row with gaps or untrimmed text therefore writes once on a no-op edit.
+- That row then re-plans `CONFLICT` against its own export.
+
+**E-17. C30.3's allowlist (B4 ruling 1).** It gains the five route literals `"installed-components"` and the five G1
+messages naming "installed component". The `\b` matches after the hyphen.
+
+**E-18. The "no `else ->`" rule covers the mapping `when`s only (C2 / C21).** The router's verb `when` keeps the
+shipped `else -> notAllowed` (405) convention.
+
+**E-19. G1 addendum: two developer-facing 400 sentences, for the owner's ratification at close.**
+- "every composition quantity must be a JSON number".
+- "sortOrder must be a whole number between 0 and 1000000".
+- The second carries a new bound: a sent `sortOrder` is 0..1,000,000 on the API. The core stays unbounded, and the
+  phone never sends one.
+
+**E-20. v1.md's "The #47 codes" has a `| 400 | bad_request |` row.** It is the first 400 row in any codes table. It is
+the shipped decoder refusal, with no new code.
+- My judgement: the shape is acceptable, because it documents the two sentences of E-19 where a client looks.
+- Row 45's grep (`^\| (404|409|422) \|`) does not count it.
+
+**E-21. Two shipped v1.md sentences edited so they no longer contradict #47 (B4b ruling 4).**
+- "What has no endpoint": "where one is fitted or when" (`:1755-1756`).
+- The merge report's "listed last" → "listed after them" (`:592`).
+
+**E-22. Status pin cite drift.** The status key-set pin is `ReferenceRoutesTest.kt:653-672` (moved at `:662-674`),
+not §3's `:744-767`.
+
+**E-23. Wire edges, now documented in v1.md.**
+- An entry's `sortOrder` key in a request is the 400.
+- `parentId: ""` is 404 `NO_SUCH_INSTALLED_COMPONENT` with `field` `parentId`, not "none".
+- A replace with no `name`, aimed at a missing row, is a 404 before any shape check.
+- A bad direct `supplyId` is reported alone.
+
+**E-24. The MCP drops an entry's `sortOrder` rather than refusing it (B5 ruling 2).** A composition read with
+`list_installed_components` passes back as it came. A quoted quantity is the phone's 400, surfaced as a `ToolError`.
+
+**E-25. §3's B5 row names the two twins.**
+- `test_season_health_tools.py:81-89` (+`:7`): Inv. 129, narrowed only for the five tools' "installed".
+- `test_succession_tools.py:91`: the replace-tool set.
+
+**E-26. C25's quiet line.** It names the direct link as "Linked to {name}" (P15-22), then the part number as its own
+" · " segment.
+
+**E-27. "Enter a date as YYYY-MM-DD" is a reused string.**
+- §5's reused list gains it (`ENTER_A_DATE_AS_YYYY_MM_DD`, `A/ui/asset/AssetViewModels.kt:2918`).
+- C26 moves `BadDate` out of the P47-19 list. A typed bad day is reachable through `DateField`.
+
+**E-28. C26's Save rule.** Remove and Replace stay disabled while their date is blank, because the date is required.
+
+**E-29. C26's entry row gains the re-pick clause.**
+- Tapping an entry's SupplyItem opens the picker for that entry.
+- A pick keeps the entry's id, quantity and typed unit, and fills the unit only when it is blank.
+
+**E-30. C26: one sheet at a time.** The picker **replaces** the form sheet (the Supplies section's pattern) and never
+stacks over it. The stateless `ComponentFormOrPicker` holds the swap.
+
+**E-31. §3's B7 rows: the relabel pins the audit missed.**
+- `GroupScreensTest.kt:162`, `AssetModelDeviceProofTest.kt:165` and `:186`, and `AssetsSearchTest.kt:70`.
+- Rev 1.1 already carries them in bold. B7 confirmed them, with no other twin.
+- `MaintenanceSheetViewModelTest.kt:338` is a class name, not a pin.
+
+**E-32. The comment-prose sweep is deferred to #98.** Unquoted "component(s)" meaning a child asset stays in KDoc and
+test comments, for example `AssetsScreen.kt:313` and `DashboardViewModel.kt:127`.
+
+**E-33. Row 53's Compose class has 18 cases.** The matrix said ~14, with a budget of up to ~18. Gate growth: 57 → 58
+classes.
+
+**E-34. B8's documents.**
+- D14 `:89` was relabelled although the plan did not cite it.
+- D14's old §5 is now §6.
+- The D04 block runs `:199-205`, not `:199-204`.
+
+**E-35. §7 N-16's grep must allow the six docstrings (mine, NOTE-2).** The child-Asset grep cannot be 0 while C1 and
+C23 require each MCP docstring to say "not `create_component`". It should exclude docstring lines or expect 6 `+`
+lines and 0 `-` lines.
+
+**E-36. Plan silence (mine, NOTE-4).** A remove or replace date may precede a **closed** descendant's removal date.
+Only the current subtree is judged, and the codec has no such rule. Recorded.
+
+**E-37. B2a2's `RestoreProofTest` change.** It gained one field and one import, a Room repository, to supply the new
+constructor argument. No assertion changed. §4's construction-site count should note it.
+
+**37 errata.**
